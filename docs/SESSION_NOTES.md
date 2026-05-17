@@ -1,5 +1,40 @@
 # Session Notes — Ghostties
 
+## May 15–16, 2026 — SEA-214 Perf Fix + PR
+
+### Headline
+
+Shipped the SEA-214 fix: `objectWillChange` churn in the activity timer suppressed. PR #23 open on `SeanSmithDesign/ghostties`.
+
+### Commits
+
+- `076e037cd` — feat(perf): OSSignposter + MetricKit instrumentation (SEA-213/214)
+- `32d79b002` — feat(perf): perf-triage.sh runbook
+- `e7f99d2f2` — feat(perf): stress injector + TaskStore perf baselines
+- `f739c649a` — **fix(perf): suppress objectWillChange churn in activity timer (SEA-214)** ← the fix
+- `51b38c788` — chore(dev): GHOSTTIES_STRESS_SESSIONS in Xcode scheme (disabled by default)
+- `5cd5d1ca9` — docs: plan corrections + task status updates
+
+### What Changed
+
+`SessionCoordinator.startActivityTimer()` fired `objectWillChange.send()` every second unconditionally while any Claude session was alive, invalidating 7 view types and all their row instances. Fixed by caching `[UUID: SessionIndicatorState]?` per tick and calling `Perf.publishIfChanged()` — send only fires on real state transitions.
+
+Supporting tooling added: `PerfSignpost.swift` OSSignposter wrapper (with `publishIfChanged()` used by the fix), MetricKit subscriber in AppDelegate, `scripts/perf-triage.sh` 7-step runbook, and `GHOSTTIES_STRESS_SESSIONS=N` debug env var + `injectStressLoad()` for pressure testing without real Claude agents.
+
+### Gotcha Logged
+
+`gh pr create` without `--repo` opened a PR against upstream `ghostty-org/ghostty` instead of the fork. It was auto-closed (no write access) but appeared publicly. Memory saved: always pass `--repo SeanSmithDesign/ghostties` explicitly. See `feedback-gh-pr-create-upstream-risk.md`.
+
+### Tickets
+
+- SSD-214 → Done (linked to PR #23)
+
+### Next
+
+PR #23 ready for merge to `main`. Branch: `experiment/empty-state-physics`.
+
+---
+
 ## May 3, 2026 — Session 2 (Traffic Light Alignment — structural fix attempt)
 
 ### Headline
