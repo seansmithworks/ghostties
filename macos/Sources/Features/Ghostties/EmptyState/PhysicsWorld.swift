@@ -1,5 +1,16 @@
 import SwiftUI
 
+/// Phase C carrier role for a ghost body.
+///
+/// `.drifting` is the default; non-drifting roles are assigned by `WordmarkWorld`
+/// during assembly and erosion cycles. `PhysicsCollision.resolvePair` skips
+/// ghost-ghost collision for any non-drifting body.
+enum GhostRole: Equatable {
+    case drifting
+    case approaching(pixelIndex: Int)
+    case ferrying(pixelIndex: Int, targetPosition: CGPoint)
+}
+
 /// One ghost body in the empty-state physics simulation.
 ///
 /// Velocity is expressed in points-per-frame at 60fps. Step functions multiply
@@ -12,6 +23,7 @@ struct GhostBody: Identifiable, Equatable {
     var radius: CGFloat
     let character: GhostCharacter
     var tint: Color
+    var role: GhostRole = .drifting
 
     static func == (lhs: GhostBody, rhs: GhostBody) -> Bool {
         lhs.id == rhs.id &&
@@ -19,7 +31,8 @@ struct GhostBody: Identifiable, Equatable {
         lhs.velocity.dx == rhs.velocity.dx &&
         lhs.velocity.dy == rhs.velocity.dy &&
         lhs.radius == rhs.radius &&
-        lhs.character == rhs.character
+        lhs.character == rhs.character &&
+        lhs.role == rhs.role
     }
 }
 

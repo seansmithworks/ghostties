@@ -31,7 +31,9 @@ enum PhysicsCollision {
     /// overlap, separate them along the contact normal and exchange the
     /// normal-component of their velocities. Tangential component is preserved.
     /// If they do not overlap, returns them unchanged.
+    /// Non-drifting bodies (Phase C carriers) pass through each other — R11.
     static func resolvePair(_ a: GhostBody, _ b: GhostBody) -> (GhostBody, GhostBody) {
+        guard a.role == .drifting, b.role == .drifting else { return (a, b) }
         var a = a
         var b = b
         let dx = b.position.x - a.position.x
