@@ -443,13 +443,12 @@ struct TaskRowView: View {
         }
     }
 
-    /// v0: all fixtures use `project: ghostties` — render a single sage dot
-    /// (`#8aa96a`, muted olive/sage). Desaturated from the original lime
-    /// `#7cb342` to sit more quietly against the warm chrome. Future
-    /// revisions will map project → color.
+    /// Source dot: color reflects the task's originating source (shell, linear,
+    /// github, sentry). Tokens live in `WorkspaceLayout` via `TaskSource.dotColor`.
     private var projectGlyph: some View {
         Circle()
-            .fill(Color(red: 0.541, green: 0.663, blue: 0.416))
+            .fill(task.source.dotColor)
+            .help(task.source.displayName)
     }
 
     private var statusSymbolName: String {

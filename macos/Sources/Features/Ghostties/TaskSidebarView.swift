@@ -149,30 +149,8 @@ struct TaskSidebarView: View {
     // MARK: - Footer
 
     private var footer: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(Color(red: 0.541, green: 0.663, blue: 0.416))
-                .frame(width: 5, height: 5)
-
-            Text("3 sources")
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-
-            Text("·").foregroundStyle(Color.primary.opacity(0.28))
-
-            Text("linear")
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-
-            Text("·").foregroundStyle(Color.primary.opacity(0.28))
-
-            Text("gh")
-                .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-
-            Text("·").foregroundStyle(Color.primary.opacity(0.28))
-
-            Text("sentry")
+        HStack(spacing: 0) {
+            Text("tasks · \(taskStore.tasks.count)")
                 .font(.system(size: 10.5, design: .monospaced))
                 .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
 
