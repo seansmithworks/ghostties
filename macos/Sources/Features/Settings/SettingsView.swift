@@ -13,10 +13,20 @@ struct SettingsView: View {
 
             VStack(alignment: .leading) {
                 Text("Coming Soon. 🚧").font(.title)
-                Text("You can't configure settings in the GUI yet. To modify settings, " +
-                     "edit the file at $HOME/.config/ghostty/config.ghostty and restart Ghostties.")
-                .multilineTextAlignment(.leading)
-                .lineLimit(nil)
+                Text("Settings live in a Ghostty config file (any standard search path, e.g. $HOME/.config/ghostty/config). Edit it and restart Ghostties.")
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(nil)
+                Text("Update channel — beta (pre-release) or stable:")
+                    .padding(.top, 6)
+                Text("defaults write com.seansmithdesign.ghostties ghostties.autoUpdateChannel tip")
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                Text("defaults write com.seansmithdesign.ghostties ghostties.autoUpdateChannel stable")
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                Text("(\"tip\" is the beta feed.)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding()
