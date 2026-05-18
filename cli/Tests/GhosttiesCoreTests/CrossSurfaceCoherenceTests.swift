@@ -40,12 +40,14 @@ final class CrossSurfaceCoherenceTests: XCTestCase {
         "severity",
         "pr",
         "pr-state",         // NOT prState
+        "pr-url",           // full URL written by set_task_fields MCP tool
         "ci",
         "completed",
         "updated",          // not read by macOS parser today but written by CLI + MCP
         "priority",         // not read by macOS parser today but written by MCP
         "project-path",     // NOT projectPath; macOS uses kebab-case for parity
-        "template"
+        "template",
+        "worktree"          // path to git worktree, written by set_task_fields MCP tool
     ]
 
     /// The on-disk `status:` values the macOS TaskStatus enum accepts. Mirrors
@@ -418,6 +420,62 @@ final class CrossSurfaceCoherenceTests: XCTestCase {
         // The sidebar exclusion rule: !isDone || !isExternal → admitted only if NOT done.
         XCTAssertFalse(!isDone, // would be true only if NOT done — i.e. admissible to Inbox
                        "a done task must NOT pass the inbox admission guard (status != .done)")
+    }
+
+    /// Write a fixture with `worktree` and `pr-url` fields (written by the
+    /// `set_task_fields` MCP tool after an agent creates a PR), reload it via
+    /// `TaskStore.loadFile`, and assert both fields survive the round-trip on
+    /// all three surfaces (GhosttiesCore store, raw frontmatter bytes, Frontmatter
+    /// key parser).
+    func test_coherence_worktreeAndPR_allSurfaces() throws {
+        let store = TaskStore(directory: tmpDir)
+        let pairs: [(String, String)] = [
+            ("title", "Worktree PR coherence task"),
+            ("source", "linear"),
+            ("source-id", "SEA-COHERENCE-2"),
+            ("project", "ghostties"),
+            ("created", "2026-05-18T10:00:00Z"),
+            ("status", "running"),
+            ("branch", "feat/linear-loop-worktree-schema"),
+            ("worktree", "/some/path"),
+            ("pr-url", "https://github.com/SeanSmithDesign/ghostties/pull/99")
+        ]
+        let url = try store.create(id: "worktree-pr-coherence", pairs: pairs, body: "\n")
+
+        // Surface (a): GhosttiesCore TaskStore — confirm the file was created.
+        guard let task = store.loadFile(at: url) else {
+            XCTFail("TaskStore.loadFile returned nil for a file we just created"); return
+        }
+        // Confirm the identity fields round-trip (worktree/pr-url are not yet
+        // modelled as typed fields in GhosttiesCore.Task, but the raw frontmatter
+        // pairs must survive intact for the macOS surface to read them).
+        XCTAssertEqual(task.id, "SEA-COHERENCE-2")
+        XCTAssertEqual(task.branch, "feat/linear-loop-worktree-schema")
+
+        // Surface (b): raw frontmatter bytes — exact key/value strings.
+        let raw = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(raw.contains("worktree: /some/path"),
+                      "on-disk frontmatter must contain 'worktree: /some/path'; got:\n\(raw)")
+        XCTAssertTrue(raw.contains("pr-url: https://github.com/SeanSmithDesign/ghostties/pull/99"),
+                      "on-disk frontmatter must contain the pr-url; got:\n\(raw)")
+
+        // Surface (c): Frontmatter key round-trip — confirm no casing drift.
+        let parsed = Frontmatter.split(raw)
+        XCTAssertNotNil(parsed, "Frontmatter.split must succeed on the written file")
+        let readWorktree = Frontmatter.value(for: "worktree", in: parsed!.pairs)
+        let readPRURL    = Frontmatter.value(for: "pr-url",   in: parsed!.pairs)
+        XCTAssertEqual(readWorktree, "/some/path",
+                       "Frontmatter.value(for: 'worktree') must return the verbatim path")
+        XCTAssertEqual(readPRURL, "https://github.com/SeanSmithDesign/ghostties/pull/99",
+                       "Frontmatter.value(for: 'pr-url') must return the verbatim URL")
+
+        // Verify both keys are in the known-to-macOS-parser set (guards against
+        // silent schema drift — if this fails, macOSOptionalKeys needs updating).
+        let knownKeys = Self.macOSRequiredKeys.union(Self.macOSOptionalKeys)
+        XCTAssertTrue(knownKeys.contains("worktree"),
+                      "'worktree' must be declared in macOSOptionalKeys")
+        XCTAssertTrue(knownKeys.contains("pr-url"),
+                      "'pr-url' must be declared in macOSOptionalKeys")
     }
 
     /// Write a fixture with Linear source fields, reload via `TaskStore.loadFile`,

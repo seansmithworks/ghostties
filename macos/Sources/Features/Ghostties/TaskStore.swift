@@ -500,7 +500,9 @@ enum TaskFixtureParser {
             severity: yaml["severity"],
             pr: yaml["pr"].flatMap(Int.init),
             prState: yaml["pr-state"],
+            prURL: yaml["pr-url"].flatMap { $0.isEmpty ? nil : $0 },
             ci: yaml["ci"],
+            worktree: yaml["worktree"].flatMap { $0.isEmpty ? nil : $0 },
             completed: yaml["completed"].flatMap(parseISODate),
             events: (events?.isEmpty == true) ? nil : events
         )

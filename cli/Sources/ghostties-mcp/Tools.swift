@@ -186,6 +186,7 @@ func allTools() -> [Tool] {
         appendTaskNotesTool(),
         writeSessionNotesTool(),
         getInboxTool(),
-        setTaskProjectTool()
+        setTaskProjectTool(),
+        setTaskFieldsTool()
     ]
 }

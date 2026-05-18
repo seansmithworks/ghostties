@@ -120,7 +120,15 @@ struct TaskItem: Identifiable, Codable, Equatable {
     let severity: String?
     let pr: Int?
     let prState: String?
+    /// Full URL of the pull request (e.g. `https://github.com/SeanSmithDesign/ghostties/pull/99`).
+    /// Written by the `set_task_fields` MCP tool after an agent creates a PR.
+    /// Read-only in the sidebar; not surfaced in UI yet but stored for future display use.
+    let prURL: String?
     let ci: String?
+    /// Absolute path to the git worktree for this task (e.g. `/some/path`).
+    /// Written by the `set_task_fields` MCP tool after an agent creates a worktree.
+    /// Read-only in the sidebar; stored for future display use.
+    let worktree: String?
     let completed: Date?
     let events: [TaskEvent]?
 
@@ -143,7 +151,9 @@ struct TaskItem: Identifiable, Codable, Equatable {
         case severity
         case pr
         case prState = "pr-state"
+        case prURL = "pr-url"
         case ci
+        case worktree
         case completed
         case events
     }
@@ -176,7 +186,9 @@ struct TaskItem: Identifiable, Codable, Equatable {
         severity = try c.decodeIfPresent(String.self, forKey: .severity)
         pr = try c.decodeIfPresent(Int.self, forKey: .pr)
         prState = try c.decodeIfPresent(String.self, forKey: .prState)
+        prURL = try c.decodeIfPresent(String.self, forKey: .prURL)
         ci = try c.decodeIfPresent(String.self, forKey: .ci)
+        worktree = try c.decodeIfPresent(String.self, forKey: .worktree)
         completed = try c.decodeIfPresent(Date.self, forKey: .completed)
         events = try c.decodeIfPresent([TaskEvent].self, forKey: .events)
     }
@@ -201,7 +213,9 @@ struct TaskItem: Identifiable, Codable, Equatable {
         severity: String?,
         pr: Int?,
         prState: String?,
+        prURL: String? = nil,
         ci: String?,
+        worktree: String? = nil,
         completed: Date?,
         events: [TaskEvent]?
     ) {
@@ -223,7 +237,9 @@ struct TaskItem: Identifiable, Codable, Equatable {
         self.severity = severity
         self.pr = pr
         self.prState = prState
+        self.prURL = prURL
         self.ci = ci
+        self.worktree = worktree
         self.completed = completed
         self.events = events
     }

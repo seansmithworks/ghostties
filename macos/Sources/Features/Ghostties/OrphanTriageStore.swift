@@ -205,7 +205,9 @@ final class OrphanTriageStore: ObservableObject {
                     severity: task.severity,
                     pr: task.pr,
                     prState: task.prState,
+                    prURL: task.prURL,
                     ci: task.ci,
+                    worktree: task.worktree,
                     completed: task.completed,
                     events: task.events
                 )

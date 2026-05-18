@@ -115,6 +115,32 @@ final class TaskModelTests: XCTestCase {
         XCTAssertEqual(TaskStatus.done.rawValue, "done")
     }
 
+    // MARK: - Worktree and PR URL fields
+
+    /// Parser test: a task file with `worktree` and `pr-url` frontmatter must
+    /// parse both fields correctly and expose them as non-nil with correct values.
+    func testParseWorktreeAndPRURLFields() {
+        let markdown = """
+        ---
+        title: Worktree PR task
+        source: linear
+        source-id: SEA-WORKTREE-1
+        branch: feat/linear-loop-worktree-schema
+        project: ghostties
+        created: 2026-05-18T10:00:00Z
+        status: running
+        worktree: /some/path
+        pr-url: https://github.com/SeanSmithDesign/ghostties/pull/99
+        ---
+        """
+        let item = TaskFixtureParser.parse(markdown: markdown, filename: "sea-worktree-1")
+        XCTAssertNotNil(item, "parser must succeed for a task with worktree and pr-url fields")
+        XCTAssertEqual(item?.worktree, "/some/path",
+                       "worktree field must be parsed from 'worktree:' frontmatter key")
+        XCTAssertEqual(item?.prURL, "https://github.com/SeanSmithDesign/ghostties/pull/99",
+                       "prURL field must be parsed from 'pr-url:' frontmatter key")
+    }
+
     // MARK: - Non-md file filtering via TaskStore
 
     func testStoreIgnoresNonMarkdownFiles() async throws {
