@@ -89,6 +89,9 @@ class BaseTerminalController: NSWindowController,
     /// Cancellable for aggregating bell state across all surfaces in this controller.
     private var bellStateCancellable: AnyCancellable?
 
+    /// Cancellable that watches update state to show the overlay on windows that lack a titlebar accessory pill.
+    private var updateStateCancellable: AnyCancellable?
+
     /// An override title for the tab/window set by the user via prompt_tab_title.
     /// When set, this takes precedence over the computed title from the terminal.
     var titleOverride: String? {
@@ -1155,6 +1158,28 @@ class BaseTerminalController: NSWindowController,
 
         // Set our update overlay state
         updateOverlayIsVisible = defaultUpdateOverlayVisibility()
+
+        // On window styles that lack a titlebar accessory pill (hidden titlebar, tabbed,
+        // etc.), defaultUpdateOverlayVisibility() returns false because it was designed
+        // for standard TerminalWindow. We need the overlay to activate whenever update
+        // state is non-idle so the user gets spinner → result feedback on any window style.
+        //
+        // Only subscribe when the window does NOT support the update accessory — standard
+        // TerminalWindows already render the pill in the titlebar and must not double-render.
+        let needsOverlayFallback: Bool = {
+            guard window.styleMask.contains(.titled) else { return true }
+            guard let terminalWin = window as? TerminalWindow else { return true }
+            return !terminalWin.supportsUpdateAccessory
+        }()
+
+        if needsOverlayFallback, let updateViewModel = (NSApp.delegate as? AppDelegate)?.updateViewModel {
+            updateStateCancellable = updateViewModel.$state
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] newState in
+                    guard let self else { return }
+                    self.updateOverlayIsVisible = !newState.isIdle
+                }
+        }
     }
 
     func defaultUpdateOverlayVisibility() -> Bool {

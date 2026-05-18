@@ -76,7 +76,10 @@ class UpdateDriver: NSObject, SPUUserDriver {
 
     func showUpdateNotFoundWithError(_ error: any Error,
                                      acknowledgement: @escaping () -> Void) {
-        viewModel.state = .notFound(.init(acknowledgement: acknowledgement))
+        let channel = (NSApp.delegate as? AppDelegate)?.ghostty.config.autoUpdateChannel
+        viewModel.state = .notFound(.init(
+            acknowledgement: acknowledgement,
+            channelIsStable: channel == .stable))
 
         if !hasUnobtrusiveTarget {
             standard.showUpdateNotFoundWithError(error, acknowledgement: acknowledgement)

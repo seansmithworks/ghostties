@@ -317,13 +317,26 @@ private struct NotFoundView: View {
     let notFound: UpdateState.NotFound
     let dismiss: DismissAction
 
+    private var title: String {
+        notFound.channelIsStable ? "No releases yet" : "You're up to date"
+    }
+
+    private var body_text: String {
+        if notFound.channelIsStable {
+            return "No releases on the stable channel yet — switch to the beta channel for pre-release builds."
+        } else {
+            let ver = notFound.displayVersion.isEmpty ? "" : " (v\(notFound.displayVersion))"
+            return "You're on the latest version\(ver) — beta channel."
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("No Updates Found")
+                Text(title)
                     .font(.system(size: 13, weight: .semibold))
 
-                Text("You're already running the latest version.")
+                Text(body_text)
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -32,8 +32,13 @@ class UpdateViewModel: ObservableObject {
             return String(format: "Preparing: %.0f%%", extracting.progress * 100)
         case .installing(let install):
             return install.isAutoUpdate ? "Restart to Complete Update" : "Installing…"
-        case .notFound:
-            return "No Updates Available"
+        case .notFound(let v):
+            if v.channelIsStable {
+                return "No stable releases yet"
+            } else {
+                let ver = v.displayVersion.isEmpty ? "" : " (v\(v.displayVersion))"
+                return "You're on the latest\(ver)"
+            }
         case .error(let err):
             return err.error.localizedDescription
         }
@@ -94,8 +99,13 @@ class UpdateViewModel: ObservableObject {
             return "Extracting and preparing the update"
         case let .installing(install):
             return install.isAutoUpdate ? "Restart to Complete Update" : "Installing update and preparing to restart"
-        case .notFound:
-            return "You are running the latest version"
+        case .notFound(let v):
+            if v.channelIsStable {
+                return "No releases on the stable channel yet — switch to the beta channel for pre-release builds."
+            } else {
+                let ver = v.displayVersion.isEmpty ? "" : " (v\(v.displayVersion))"
+                return "You're on the latest version\(ver) — beta channel."
+            }
         case .error:
             return "An error occurred during the update process"
         }
@@ -261,6 +271,8 @@ enum UpdateState: Equatable {
 
     struct NotFound {
         let acknowledgement: () -> Void
+        var channelIsStable: Bool = false
+        var displayVersion: String = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
     }
 
     struct PermissionRequest {
