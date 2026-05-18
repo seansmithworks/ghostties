@@ -657,13 +657,29 @@ extension Ghostty {
 
         var autoUpdateChannel: AutoUpdateChannel {
             let defaultValue = AutoUpdateChannel.tip
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "auto-update-channel"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return AutoUpdateChannel(rawValue: str) ?? defaultValue
+
+            // (a) Ghostties fork-controlled override. UserDefaults.standard
+            // resolves to the running app's bundle domain automatically
+            // (Release: com.seansmithdesign.ghostties,
+            //  Debug: com.seansmithdesign.ghostties.dev).
+            if let override = UserDefaults.standard.string(forKey: "ghostties.autoUpdateChannel"),
+               let channel = AutoUpdateChannel(rawValue: override) {
+                return channel
+            }
+
+            // (b) Upstream libghostty config, only if a config exists and sets it.
+            if let config = self.config {
+                var v: UnsafePointer<Int8>?
+                let key = "auto-update-channel"
+                if ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))),
+                   let ptr = v,
+                   let channel = AutoUpdateChannel(rawValue: String(cString: ptr)) {
+                    return channel
+                }
+            }
+
+            // (c) Band-aid default — keep beta updates working for standalone users.
+            return defaultValue
         }
 
         var autoSecureInput: Bool {
