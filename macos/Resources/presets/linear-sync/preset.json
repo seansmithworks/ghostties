@@ -1,0 +1,7 @@
+{
+  "name": "Linear Sync",
+  "description": "Syncs Linear issues into Ghostties tasks",
+  "icon": "arrow.triangle.2.circlepath",
+  "model": null,
+  "permissionMode": null
+}

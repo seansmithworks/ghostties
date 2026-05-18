@@ -107,19 +107,27 @@ struct InstallCommand: ParsableCommand {
             }
         }
 
-        // 4. Add the entry. `claude mcp add <name> -- <command>` is the
-        //    documented shape for stdio servers.
+        // 4. Ensure the global tasks directory exists before registering.
+        if !dryRun {
+            try TasksDirectory.findOrCreateGlobal()
+        }
+
+        // 5. Add the entry. `claude mcp add <name> -- <command>` is the
+        //    documented shape for stdio servers. Append --tasks-dir so the
+        //    MCP server always finds the canonical tasks location.
         let addArgs: [String] = [
             "mcp", "add",
             "--scope", scope.rawValue,
             "--transport", "stdio",
             Self.serverName,
-            "--", binaryPath
+            "--", binaryPath,
+            "--tasks-dir", TasksDirectory.globalDefault
         ]
 
         if dryRun {
             print("[dry-run] would run: \(claudeCLI) \(addArgs.joined(separator: " "))")
             print("[dry-run] target = claude-code · scope = \(scope.rawValue) · binary = \(binaryPath)")
+            print("[dry-run] tasks-dir = \(TasksDirectory.globalDefault)")
             return
         }
 

@@ -35,12 +35,14 @@ struct PresetLoader {
     // MARK: - Public API
 
     /// Current seed version. Bump this when bundled presets change to trigger re-seeding.
-    static let seedVersion = 1
+    static let seedVersion = 2
 
     /// Seed bundled presets to `~/.ghostties/presets/` using versioned seeding.
     ///
-    /// Checks a `.seed-version` marker file to determine if seeding is needed.
-    /// Only copies bundled files that don't already exist (additive, never overwrites user edits).
+    /// Recursively copies the `presets/` subdirectory from the app bundle into
+    /// `~/.ghostties/presets/`. After copying, rewrites any `${HOME}` literals
+    /// in `.json` files to the real home path. Only copies items that don't
+    /// already exist — never overwrites user edits.
     static func seedIfNeeded() {
         let signpostState = Perf.signposter.beginInterval("presets.seed")
         defer { Perf.signposter.endInterval("presets.seed", signpostState) }
@@ -61,7 +63,7 @@ struct PresetLoader {
         // Skip if already at or above the current seed version.
         guard currentVersion < seedVersion else { return }
 
-        // Create the directory if it doesn't exist.
+        // Create the destination directory if it doesn't exist.
         if !fm.fileExists(atPath: dirPath) {
             do {
                 try fm.createDirectory(atPath: dirPath, withIntermediateDirectories: true, attributes: [
@@ -73,22 +75,21 @@ struct PresetLoader {
             }
         }
 
-        // Copy bundled .md files from app Resources/Presets into the user directory.
-        // Only copy files that don't already exist — never overwrite user edits.
-        if let bundledURLs = Bundle.main.urls(forResourcesWithExtension: "md", subdirectory: "Presets") {
-            for url in bundledURLs {
-                let destPath = (dirPath as NSString).appendingPathComponent(url.lastPathComponent)
-                if !fm.fileExists(atPath: destPath) {
-                    do {
-                        try fm.copyItem(at: url, to: URL(fileURLWithPath: destPath))
-                    } catch {
-                        logger.error("Failed to copy preset \(url.lastPathComponent): \(error.localizedDescription)")
-                    }
-                }
-            }
-        } else {
-            logger.warning("No bundled preset files found in app bundle")
+        // Locate the bundled `presets/` resource directory.
+        guard let bundledPresetsURL = Bundle.main.resourceURL?.appendingPathComponent("presets") else {
+            logger.warning("No bundled presets directory found in app bundle")
+            // Write seed version marker anyway to avoid repeated attempts.
+            try? "\(seedVersion)".write(toFile: versionFilePath, atomically: true, encoding: .utf8)
+            return
         }
+
+        // Recursively copy subdirectories (folder-format presets).
+        let destURL = URL(fileURLWithPath: dirPath)
+        copyResourceDirectory(from: bundledPresetsURL, to: destURL, fm: fm)
+
+        // Rewrite ${HOME} literals in all .json files under the seeded directory.
+        let realHome = fm.homeDirectoryForCurrentUser.path
+        rewriteHomeInJSONFiles(in: destURL, home: realHome, fm: fm)
 
         // Write the new seed version marker.
         do {
@@ -98,10 +99,67 @@ struct PresetLoader {
         }
     }
 
-    /// Load all preset `.md` files from `~/.ghostties/presets/`.
+    // MARK: - Seed Helpers
+
+    /// Recursively copy `src` directory contents into `dest`, skipping items
+    /// that already exist (additive, never overwrites).
+    private static func copyResourceDirectory(from src: URL, to dest: URL, fm: FileManager) {
+        guard let items = try? fm.contentsOfDirectory(at: src, includingPropertiesForKeys: [.isDirectoryKey]) else {
+            logger.warning("Could not list bundled presets at \(src.path)")
+            return
+        }
+
+        for item in items {
+            let destItem = dest.appendingPathComponent(item.lastPathComponent)
+            var isDir: ObjCBool = false
+            let isDirectory = (try? item.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+
+            if isDirectory {
+                // Create the subdirectory if needed, then recurse.
+                if !fm.fileExists(atPath: destItem.path) {
+                    do {
+                        try fm.createDirectory(at: destItem, withIntermediateDirectories: true, attributes: [
+                            .posixPermissions: 0o700,
+                        ])
+                    } catch {
+                        logger.error("Failed to create preset subdirectory \(destItem.lastPathComponent): \(error.localizedDescription)")
+                        continue
+                    }
+                }
+                copyResourceDirectory(from: item, to: destItem, fm: fm)
+            } else {
+                // Copy file only if it doesn't already exist.
+                if !fm.fileExists(atPath: destItem.path, isDirectory: &isDir) {
+                    do {
+                        try fm.copyItem(at: item, to: destItem)
+                    } catch {
+                        logger.error("Failed to copy preset file \(item.lastPathComponent): \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Walk `directory` and rewrite `${HOME}` in any `.json` files to `home`.
+    private static func rewriteHomeInJSONFiles(in directory: URL, home: String, fm: FileManager) {
+        guard let enumerator = fm.enumerator(at: directory, includingPropertiesForKeys: nil) else { return }
+        for case let fileURL as URL in enumerator {
+            guard fileURL.pathExtension == "json" else { continue }
+            guard let content = try? String(contentsOf: fileURL, encoding: .utf8),
+                  content.contains("${HOME}") else { continue }
+            let rewritten = content.replacingOccurrences(of: "${HOME}", with: home)
+            try? rewritten.write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Load all presets from `~/.ghostties/presets/`.
+    ///
+    /// Handles two formats:
+    /// - **Flat `.md` files** with YAML frontmatter (legacy format).
+    /// - **Folder presets**: subdirectories containing `preset.json`.
     ///
     /// Returns an array of `AgentTemplate` objects with `isDefault: true` and `isGlobal: true`.
-    /// Templates have deterministic UUIDs generated from the filename so IDs persist across launches.
+    /// Templates have deterministic UUIDs generated from the filename/foldername so IDs persist across launches.
     static func loadPresets() -> [AgentTemplate] {
         let signpostState = Perf.signposter.beginInterval("presets.load")
         defer { Perf.signposter.endInterval("presets.load", signpostState) }
@@ -118,15 +176,37 @@ struct PresetLoader {
         }
 
         do {
-            let files = try fm.contentsOfDirectory(atPath: dirPath)
-            return files
-                .filter { $0.hasSuffix(".md") }
-                .sorted()
-                .compactMap { filename in
-                    let filePath = (dirPath as NSString).appendingPathComponent(filename)
-                    let url = URL(fileURLWithPath: filePath)
-                    return parsePreset(at: url, filename: filename)
+            let entries = try fm.contentsOfDirectory(atPath: dirPath)
+            var templates: [AgentTemplate] = []
+
+            // Flat .md presets (legacy format).
+            let mdFiles = entries.filter { $0.hasSuffix(".md") }.sorted()
+            for filename in mdFiles {
+                let filePath = (dirPath as NSString).appendingPathComponent(filename)
+                let url = URL(fileURLWithPath: filePath)
+                if let template = parsePreset(at: url, filename: filename) {
+                    templates.append(template)
                 }
+            }
+
+            // Folder-format presets: subdirectories containing preset.json.
+            let subdirs = entries
+                .filter { entry in
+                    var entryIsDir: ObjCBool = false
+                    let entryPath = (dirPath as NSString).appendingPathComponent(entry)
+                    fm.fileExists(atPath: entryPath, isDirectory: &entryIsDir)
+                    return entryIsDir.boolValue && !entry.hasPrefix(".")
+                }
+                .sorted()
+
+            for subdir in subdirs {
+                let folderURL = URL(fileURLWithPath: (dirPath as NSString).appendingPathComponent(subdir))
+                if let template = parseFolderPreset(at: folderURL) {
+                    templates.append(template)
+                }
+            }
+
+            return templates
         } catch {
             logger.error("Failed to read presets directory: \(error.localizedDescription)")
             return []
@@ -226,6 +306,69 @@ struct PresetLoader {
             templateDescription: description,
             icon: icon,
             accessLabel: access
+        )
+    }
+
+    // MARK: - Folder-format Preset
+
+    /// JSON manifest structure for folder-format presets (`preset.json`).
+    private struct FolderPresetManifest: Decodable {
+        let name: String
+        let description: String
+        let icon: String?
+        let model: String?
+        let permissionMode: String?
+    }
+
+    /// Parse a folder-format preset at `folderURL`.
+    ///
+    /// Expects the folder to contain:
+    /// - `preset.json` — required manifest (name, description, icon?, model?, permissionMode?)
+    /// - `system.md` — system prompt file (path stored; file may or may not exist yet)
+    /// - `mcp-servers.json` — optional MCP config
+    ///
+    /// Returns nil if `preset.json` doesn't exist or can't be decoded.
+    static func parseFolderPreset(at folderURL: URL) -> AgentTemplate? {
+        let fm = FileManager.default
+        let manifestURL = folderURL.appendingPathComponent("preset.json")
+        guard fm.fileExists(atPath: manifestURL.path),
+              let data = try? Data(contentsOf: manifestURL) else {
+            return nil
+        }
+
+        let manifest: FolderPresetManifest
+        do {
+            manifest = try JSONDecoder().decode(FolderPresetManifest.self, from: data)
+        } catch {
+            logger.warning("Failed to decode preset.json in \(folderURL.lastPathComponent): \(error.localizedDescription)")
+            return nil
+        }
+
+        let folderName = folderURL.lastPathComponent
+        let stableId = deterministicUUID(from: "folder:\(folderName)")
+
+        let systemPromptPath = folderURL.appendingPathComponent("system.md").path
+
+        let mcpConfigURL = folderURL.appendingPathComponent("mcp-servers.json")
+        let mcpConfigPath: String? = fm.fileExists(atPath: mcpConfigURL.path) ? mcpConfigURL.path : nil
+
+        let agentConfig = AgentTemplate.AgentConfig(
+            systemPromptFile: systemPromptPath,
+            model: manifest.model,
+            permissionMode: manifest.permissionMode
+        )
+
+        return AgentTemplate(
+            id: stableId,
+            name: manifest.name,
+            kind: .claudeCode,
+            command: "claude",
+            isDefault: true,
+            isGlobal: true,
+            agent: agentConfig,
+            templateDescription: manifest.description,
+            icon: manifest.icon ?? "",
+            mcpConfigPath: mcpConfigPath
         )
     }
 

@@ -408,12 +408,11 @@ final class TaskStore: ObservableObject {
             return found
         }
 
-        // 2. Dev convenience fallback — keeps the app usable during local
-        //    development when cwd is not inside the ghostties repo.
-        let home = fm.homeDirectoryForCurrentUser
-        let devFallback = home.appendingPathComponent("Code/ghostties/.ghostties/tasks", isDirectory: true)
-        if fm.fileExists(atPath: devFallback.path) {
-            return devFallback
+        // 2. Global default fallback — `~/.ghostties/tasks/`.
+        let globalPath = GhosttiesCore.TasksDirectory.globalDefault
+        let globalFallback = URL(fileURLWithPath: globalPath, isDirectory: true)
+        if fm.fileExists(atPath: globalFallback.path) {
+            return globalFallback
         }
 
         return nil

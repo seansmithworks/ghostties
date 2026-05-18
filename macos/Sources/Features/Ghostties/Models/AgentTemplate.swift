@@ -31,6 +31,12 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     // Agent config (nil for .shell)
     var agent: AgentConfig?
 
+    /// Path to a Claude MCP config file (`--mcp-config`), injected at launch.
+    ///
+    /// Set by folder-format presets that bundle an `mcp-servers.json`. nil for
+    /// built-in and flat-file presets.
+    var mcpConfigPath: String?
+
     // MARK: - Kind
 
     /// The type of session this template creates.
@@ -84,7 +90,8 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
         agent: AgentConfig? = nil,
         templateDescription: String? = nil,
         icon: String? = nil,
-        accessLabel: String? = nil
+        accessLabel: String? = nil,
+        mcpConfigPath: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -99,6 +106,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
         self.templateDescription = templateDescription
         self.icon = icon
         self.accessLabel = accessLabel
+        self.mcpConfigPath = mcpConfigPath
     }
 
     // MARK: - Built-in Templates (deterministic UUIDs)
@@ -266,6 +274,12 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
             parts.append(Self.shellEscape(flag))
         }
 
+        // Inject MCP config file if present and resolvable.
+        if let mcpConfigPath, FileManager.default.fileExists(atPath: mcpConfigPath) {
+            parts.append("--mcp-config")
+            parts.append(Self.shellEscape(mcpConfigPath))
+        }
+
         return parts.joined(separator: " ")
     }
 
@@ -319,6 +333,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
         case command, environmentVariables, workingDirectory
         case agent
         case templateDescription, icon, accessLabel
+        case mcpConfigPath
     }
 
     /// Custom decoder for backward compatibility with old SessionTemplate JSON.
@@ -343,6 +358,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
         self.templateDescription = try container.decodeIfPresent(String.self, forKey: .templateDescription)
         self.icon = try container.decodeIfPresent(String.self, forKey: .icon)
         self.accessLabel = try container.decodeIfPresent(String.self, forKey: .accessLabel)
+        self.mcpConfigPath = try container.decodeIfPresent(String.self, forKey: .mcpConfigPath)
 
         // Decode Kind using Kind's own safe decoder (falls back to .shell on unknown values).
         // Only handle nil case for old SessionTemplate migration.

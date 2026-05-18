@@ -3,6 +3,36 @@ import Foundation
 /// Locate `.ghostties/tasks/` by walking up from cwd, git-style. Stops at
 /// `$HOME` or `/` — no global fallback, no magic.
 public enum TasksDirectory {
+
+    /// Canonical global tasks directory: `~/.ghostties/tasks`.
+    ///
+    /// Used as the default for MCP server registration and app-level fallback
+    /// when no project-local `.ghostties/tasks/` is found.
+    public static let globalDefault: String = {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return home + "/.ghostties/tasks"
+    }()
+
+    /// Create `~/.ghostties/tasks/` with 0o700 permissions if it doesn't exist.
+    ///
+    /// Throws a `CLIError.io` if the directory cannot be created.
+    public static func findOrCreateGlobal() throws {
+        let path = globalDefault
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        if fm.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
+            return
+        }
+        do {
+            try fm.createDirectory(
+                atPath: path,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700 as NSNumber]
+            )
+        } catch {
+            throw CLIError.io("could not create \(path): \(error.localizedDescription)")
+        }
+    }
     /// Find an existing tasks directory. Returns nil if none is found up to
     /// $HOME or filesystem root.
     public static func find(startingAt cwd: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)) -> URL? {
