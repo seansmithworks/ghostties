@@ -45,7 +45,7 @@ The v0 manual flow looks like this in Claude Code:
 claude --append-system-prompt-file /Applications/Ghostties.app/Contents/Resources/presets/linear-sync/system.md
 ```
 
-A bundled "Linear Sync" template that does this automatically is planned but not yet wired into the sidebar's template picker.
+A bundled "Linear Sync" template that does this automatically is available in the sidebar's template picker.
 
 ### 3. Authenticate to Linear (first run only)
 
