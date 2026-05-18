@@ -1,5 +1,6 @@
 import Foundation
 import GhosttiesCore
+import SwiftUI
 
 /// Task priority levels. Bridged directly from `GhosttiesCore.TaskPriority`
 /// so the raw values, `Codable` conformance, and `CaseIterable` conformance
@@ -50,6 +51,28 @@ enum TaskSource: String, Codable {
         let container = try decoder.singleValueContainer()
         let raw = try container.decode(String.self)
         self = TaskSource(rawValue: raw.lowercased()) ?? .unknown
+    }
+
+    /// Human-readable label for the source. Used in chip text and tooltips.
+    var displayName: String {
+        switch self {
+        case .linear:  return "linear"
+        case .github:  return "github"
+        case .sentry:  return "sentry"
+        case .shell:   return "shell"
+        case .unknown: return "unknown"
+        }
+    }
+
+    /// Color for the source dot in sidebar rows. Tokens live in `WorkspaceLayout`.
+    var dotColor: Color {
+        switch self {
+        case .shell:   return WorkspaceLayout.sourceDotShell
+        case .linear:  return WorkspaceLayout.sourceDotLinear
+        case .github:  return WorkspaceLayout.sourceDotGitHub
+        case .sentry:  return WorkspaceLayout.sourceDotSentry
+        case .unknown: return WorkspaceLayout.sourceDotUnknown
+        }
     }
 }
 

@@ -82,15 +82,4 @@ struct GraveyardExpansionContent {
 }
 
 // MARK: - TaskSource display name
-
-private extension TaskSource {
-    var displayName: String {
-        switch self {
-        case .linear:  return "linear"
-        case .github:  return "github"
-        case .sentry:  return "sentry"
-        case .shell:   return "shell"
-        case .unknown: return "unknown"
-        }
-    }
-}
+// `displayName` is defined on `TaskSource` in `TaskModel.swift`.

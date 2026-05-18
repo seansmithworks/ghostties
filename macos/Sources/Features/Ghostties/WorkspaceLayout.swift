@@ -166,6 +166,27 @@ enum WorkspaceLayout {
     /// and project rows. Combined with `sidebarIconColumnWidth` this yields the
     /// common x-position for icons and labels.
     static let sidebarRowLeadingPadding: CGFloat = 8
+
+    // MARK: - Source-dot colors
+
+    /// Source-dot color for shell-spawned tasks. Muted sage — existing token,
+    /// kept consistent with the `statusSymbolColor` sage used in `TaskRowView`.
+    static let sourceDotShell = Color(red: 0.541, green: 0.663, blue: 0.416)
+
+    /// Source-dot color for Linear-originated tasks. Desaturated indigo.
+    static let sourceDotLinear = Color(red: 0.431, green: 0.416, blue: 0.682)
+
+    /// Source-dot color for GitHub-originated tasks. Neutral graphite.
+    static let sourceDotGitHub = Color(red: 0.541, green: 0.541, blue: 0.561)
+
+    /// Source-dot color for Sentry-originated tasks. Muted plum.
+    static let sourceDotSentry = Color(red: 0.604, green: 0.431, blue: 0.557)
+
+    /// Source-dot color when source is unknown. System tertiary label.
+    static let sourceDotUnknown = Color(nsColor: .tertiaryLabelColor)
+
+    /// Muted red for CI failure state — distinct from terracotta.
+    static let ciFailColor = Color(nsColor: .systemRed).opacity(0.7)
 }
 
 // MARK: - Animation Tokens (D18)
