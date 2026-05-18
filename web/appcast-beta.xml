@@ -4,6 +4,44 @@
     <title>Ghostties Beta Releases</title>
     <description>Beta and stable releases of Ghostties</description>
   <item>
+    <title>Ghostties v0.1.0-beta.16</title>
+    <pubDate>Sun, 18 May 2026 00:00:00 +0000</pubDate>
+    <sparkle:version>16528</sparkle:version>
+    <sparkle:shortVersionString>0.1.0-beta.16</sparkle:shortVersionString>
+    <sparkle:minimumSystemVersion>13.0.0</sparkle:minimumSystemVersion>
+    <description><![CDATA[
+  <h2>What's new in v0.1.0-beta.16</h2>
+  <p>The tasks sidebar is fully wired up, with six status zones, Linear preset support, and a complete <code>gt</code> CLI.</p>
+  <h3>Added</h3>
+  <ul>
+    <li>Six-zone task sidebar — Inbox, Backlog, Running, Needs You, Review, Graveyard</li>
+    <li>Linear Sync preset in the New Session template picker</li>
+    <li>Source dots — indigo for Linear tasks, sage for shell tasks</li>
+    <li><code>set_task_fields</code> MCP tool for agents to write back worktree/PR/branch</li>
+    <li>Sessions recents tab in the sidebar</li>
+    <li>New Session flyout now shows agent templates</li>
+    <li>Wordmark animation for empty terminal panes (opt-in via <code>defaults write</code>)</li>
+    <li><code>gt smoke</code> subcommand for automated task verification</li>
+  </ul>
+  <h3>Fixed</h3>
+  <ul>
+    <li>"Check for Updates" now shows progress and result in all window styles</li>
+    <li>Auto-update channel controllable via <code>defaults write ghostties.autoUpdateChannel beta</code></li>
+    <li><code>gt done</code> is faster with cleaner output</li>
+  </ul>
+  <h3>Performance</h3>
+  <ul>
+    <li>Suppressed 1Hz sidebar re-render when session states haven't changed</li>
+  </ul>
+  <p><a href="https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.16">Full release notes on GitHub</a></p>
+]]></description>
+    <enclosure
+      url="https://github.com/SeanSmithDesign/ghostties/releases/download/v0.1.0-beta.16/Ghostties.dmg"
+      type="application/octet-stream"
+      sparkle:edSignature="PLACEHOLDER_UPDATED_BY_CI"
+      length="0" />
+  </item>
+  <item>
     <title>Ghostties v0.1.0-beta.15</title>
     <pubDate>Tue, 05 May 2026 18:13:27 +0000</pubDate>
     <sparkle:version>16527</sparkle:version>

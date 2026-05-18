@@ -6,6 +6,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.1.0-beta.16] — 2026-05-18
+
+The tasks sidebar is now fully wired up, with six status zones, Linear preset support, and a complete `gt` CLI.
+
+### Added
+
+- **Six-zone task sidebar** — Inbox, Backlog, Running, Needs You, Review, and Graveyard lanes are all live. Done tasks no longer appear in Inbox.
+- **Linear Sync preset** — a "Linear Sync" template in the New Session picker pre-configures the MCP server with your Linear workspace. Source dots show indigo for Linear-sourced tasks, sage for shell tasks.
+- **`set_task_fields` MCP tool** — agents can write back worktree path, PR URL, branch name, and PR state directly into task files.
+- **Sessions tab** — sidebar now has a recents tab showing recent terminal sessions alongside tasks.
+- **New Session template picker** — flyout menu now shows available agent templates when starting a new session.
+- **Sidebar View submenu** — Sessions/Projects toggle moved to the View menu and grouped with other sidebar layout options.
+- **Wordmark animation** — assembly/erosion loop for empty terminal panes. Off by default; opt in with `defaults write com.seansmithdesign.ghostties ghostties.emptyStatePhysics.wordmark -bool true`.
+- **`gt smoke`** — new subcommand for automated task-state verification.
+- **Claude Code template default** — new sessions default to the Claude Code agent template.
+- **`install-gt.sh`** — installer script for the `gt` CLI with PATH setup guidance.
+
+### Fixed
+
+- **"Check for Updates" visibility** — progress and result messages now appear correctly in hidden-titlebar and tabbed windows (previously only showed in standard windows).
+- **Auto-update channel** — channel is now user-controllable via `defaults write com.seansmithdesign.ghostties ghostties.autoUpdateChannel beta` (or `stable` / `tip`). Previously hardcoded.
+- **`gt done` speed** — done command is noticeably faster with cleaner progress output.
+
+### Performance
+
+- Suppressed 1Hz sidebar re-render when session states haven't changed — reduces CPU overhead while Claude is running.
+
+---
+
 ## [0.1.0-beta.15] — 2026-05-05
 
 Polish and stability fixes following the beta.14 smoke test.
