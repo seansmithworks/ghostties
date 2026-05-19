@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Changelog — ghostties</title>
+  <link rel="icon" type="image/svg+xml" href="">
+  <script>
+    (function() {
+      var colors = ['#e84855','#8b5cf6','#22d3ee','#f472b6','#f59e0b','#eab308','#38bdf8','#7c6f9c'];
+      var c = colors[Math.floor(Math.random() * colors.length)];
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">'
+        + '<path d="M4 2h8v1h2v1h1v10h-1v-1h-1v-1h-1v2h-1v-2h-1v1h-1v1h-1v-2h-1v2h-1v-1h-1v1H4v-1H3V3h1z" fill="' + c + '"/>'
+        + '<rect x="5" y="5" width="2" height="3" fill="white"/>'
+        + '<rect x="9" y="5" width="2" height="3" fill="white"/>'
+        + '<rect x="6" y="6" width="1" height="2" fill="#1a1a2e"/>'
+        + '<rect x="10" y="6" width="1" height="2" fill="#1a1a2e"/>'
+        + '</svg>';
+      var link = document.querySelector('link[rel="icon"]');
+      link.href = 'data:image/svg+xml;base64,' + btoa(svg);
+    })();
+  </script>
+  <meta name="description" content="Changelog — what's new in each Ghostties release.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      min-height: 100%;
+      background: #1a1a2e;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 64px 24px 96px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    .content {
+      width: 100%;
+      max-width: 600px;
+    }
+
+    .back {
+      display: inline-block;
+      margin-bottom: 40px;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.35);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .back:hover {
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+
+    .lead {
+      font-size: 16px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.65);
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(255, 255, 255, 0.35);
+      margin-bottom: 10px;
+      margin-top: 36px;
+    }
+
+    p {
+      font-size: 15px;
+      line-height: 1.65;
+      color: rgba(255, 255, 255, 0.65);
+      margin-bottom: 12px;
+    }
+
+    code {
+      font-family: 'SFMono-Regular', 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.07);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    a {
+      color: rgba(255, 255, 255, 0.65);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    a:hover {
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .note {
+      margin-top: 36px;
+      padding: 16px 20px;
+      background: rgba(255, 255, 255, 0.04);
+      border-left: 2px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+    }
+
+    .note p {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.45);
+      margin-bottom: 0;
+    }
+
+    .release {
+      margin-top: 48px;
+      padding-bottom: 48px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .release:last-child {
+      border-bottom: none;
+    }
+
+    .release-heading {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .release-heading h3 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    .release-heading .date {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    .release-summary {
+      font-size: 15px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.55);
+      margin-bottom: 20px;
+    }
+
+    .release-section {
+      margin-top: 16px;
+    }
+
+    .release-section h4 {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: rgba(255, 255, 255, 0.3);
+      margin-bottom: 8px;
+    }
+
+    .release-section ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .release-section ul li {
+      font-size: 14px;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.6);
+      padding: 3px 0 3px 16px;
+      position: relative;
+    }
+
+    .release-section ul li::before {
+      content: '–';
+      position: absolute;
+      left: 0;
+      color: rgba(255, 255, 255, 0.25);
+    }
+
+    footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.25);
+    }
+
+    footer a {
+      color: rgba(255, 255, 255, 0.25);
+      transition: color 0.2s;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    footer svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+    }
+
+    @media (max-width: 480px) {
+      body { padding: 48px 16px 88px; }
+      h1 { font-size: 22px; }
+      footer { padding: 12px 16px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <a class="back" href="/">&larr; ghostties</a>
+
+    <h1>Changelog</h1>
+    <p class="lead">What&rsquo;s new in each Ghostties release, newest first.</p>
+
+    <div class="note">
+      <p><strong style="color:rgba(255,255,255,0.6)">Beta.15 and earlier:</strong> Add <code>auto-update-channel = tip</code> to <code>~/.config/ghostty/config</code> for auto-updates.</p>
+    </div>
+
+    <!-- beta.16 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.16</h3>
+        <span class="date">May 18, 2026</span>
+      </div>
+      <p class="release-summary">The tasks sidebar is now fully wired up, with six status zones, Linear preset support, and a complete <code>gt</code> CLI.</p>
+
+      <div class="release-section">
+        <h4>Added</h4>
+        <ul>
+          <li>Six-zone task sidebar &mdash; Inbox, Backlog, Running, Needs You, Review, and Graveyard lanes are all live. Done tasks no longer appear in Inbox.</li>
+          <li>Linear Sync preset &mdash; a template in the New Session picker pre-configures the MCP server with your Linear workspace. Source dots show indigo for Linear-sourced tasks, sage for shell tasks.</li>
+          <li><code>set_task_fields</code> MCP tool &mdash; agents can write back worktree path, PR URL, branch name, and PR state directly into task files.</li>
+          <li>Sessions tab &mdash; sidebar now has a recents tab showing recent terminal sessions alongside tasks.</li>
+          <li>New Session template picker &mdash; flyout menu now shows available agent templates when starting a new session.</li>
+          <li>Sidebar View submenu &mdash; Sessions/Projects toggle moved to the View menu and grouped with other sidebar layout options.</li>
+          <li>Wordmark animation &mdash; assembly/erosion loop for empty terminal panes (opt-in via <code>defaults write</code>).</li>
+          <li><code>gt smoke</code> &mdash; new subcommand for automated task-state verification.</li>
+          <li>Claude Code template default &mdash; new sessions default to the Claude Code agent template.</li>
+          <li><code>install-gt.sh</code> &mdash; installer script for the <code>gt</code> CLI with PATH setup guidance.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h4>Fixed</h4>
+        <ul>
+          <li>&ldquo;Check for Updates&rdquo; visibility &mdash; progress and result messages now appear correctly in hidden-titlebar and tabbed windows.</li>
+          <li>Auto-update channel &mdash; channel is now user-controllable via <code>defaults write</code>. Previously hardcoded.</li>
+          <li><code>gt done</code> speed &mdash; done command is noticeably faster with cleaner progress output.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h4>Performance</h4>
+        <ul>
+          <li>Suppressed 1Hz sidebar re-render when session states haven&rsquo;t changed &mdash; reduces CPU overhead while Claude is running.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- beta.15 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.15</h3>
+        <span class="date">May 5, 2026</span>
+      </div>
+      <p class="release-summary">Polish and stability fixes following the beta.14 smoke test.</p>
+
+      <div class="release-section">
+        <h4>Fixed</h4>
+        <ul>
+          <li>Dark mode titlebar now matches the canvas background color (previously showed a mismatched gray).</li>
+          <li>Fullscreen icon position in the toolbar corrected.</li>
+          <li>Canvas corner radius is now consistent on all four corners.</li>
+          <li>Shadow depth between the browser panel and terminal panel is now consistent.</li>
+          <li>Sparkle update-available toast is no longer shown in release builds (debug-only now).</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h4>Quality</h4>
+        <ul>
+          <li>All upstream Ghostty tests pass &mdash; full test suite is green.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- beta.14 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.14</h3>
+        <span class="date">April 30, 2026</span>
+      </div>
+      <p class="release-summary">First beta with a production-quality icon and an onboarding experience on first launch.</p>
+
+      <div class="release-section">
+        <h4>Added</h4>
+        <ul>
+          <li>New production app icon.</li>
+          <li>Debug builds use a distinct blueprint-style icon so it&rsquo;s easy to tell Dev from Release at a glance.</li>
+          <li>Onboarding sheet appears on first launch &mdash; includes welcome copy, links to send feedback, and a version footer.</li>
+          <li>Tasks panel now shows a &ldquo;preview&rdquo; callout card instead of an inline alert.</li>
+          <li>Honest placeholder copy in places that aren&rsquo;t fully wired up yet.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h4>Changed</h4>
+        <ul>
+          <li>Fresh installs now default to showing the project sidebar first (previously opened to an empty state).</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- beta.13 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.13</h3>
+        <span class="date">April 30, 2026</span>
+      </div>
+      <p class="release-summary">Window controls alignment and the first version of task row interaction.</p>
+
+      <div class="release-section">
+        <h4>Fixed</h4>
+        <ul>
+          <li>Traffic light buttons (close / minimize / zoom) are now correctly centered in the titlebar &mdash; previously they floated slightly off.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h4>Added</h4>
+        <ul>
+          <li>Sidebar row-click v0 &mdash; clicking a task row now lets you interact with it.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- beta.12 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.12</h3>
+        <span class="date">April 28, 2026</span>
+      </div>
+      <p class="release-summary">First distributable build. Ghostties can now be installed and kept up to date automatically.</p>
+
+      <div class="release-section">
+        <h4>Added</h4>
+        <ul>
+          <li>First full DMG bundle with notarization &mdash; Ghostties is now installable like any other Mac app.</li>
+          <li>Sparkle auto-update wired to ghostties.org &mdash; the app will notify you when a new beta is available.</li>
+          <li>Row-click interaction across the task list (12 interaction units shipped).</li>
+          <li>Privacy and support pages live at ghostties.org.</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <span>&copy; 2026 &nbsp;&middot;&nbsp; <a href="/changelog">Changelog</a> &nbsp;&middot;&nbsp; <a href="/privacy">Privacy</a> &nbsp;&middot;&nbsp; <a href="/support">Support</a> &nbsp;&middot;&nbsp; <a href="/licenses">Licenses</a></span>
+    <a href="https://x.com/seansmithbuilds" target="_blank" rel="noopener" aria-label="Twitter">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+      </svg>
+    </a>
+  </footer>
+</body>
+</html>
