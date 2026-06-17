@@ -534,6 +534,15 @@ class WorkspaceViewContainer: NSView {
                 .environmentObject(WorkspaceStore.shared)
                 .environmentObject(coordinator)
                 .ignoresSafeArea(.container, edges: .top)
+            // Pin to a concrete width so the nested LazyVStack inside
+            // WorkspaceSidebarView receives a definite cross-axis proposal.
+            // Without this the hosting view proposes .infinity, which sends
+            // LazyVStack.sizeThatFits into infinite measurement recursion —
+            // the same root cause fixed for taskFirst in sidebar-layout-hang-v0
+            // (commit 11530667b). Uses currentSidebarWidth so the user-resizable
+            // drag handle continues to work correctly.
+            .frame(width: currentSidebarWidth)
+            .frame(maxHeight: .infinity)
             hostingView.rootView = AnyView(view)
         }
     }
