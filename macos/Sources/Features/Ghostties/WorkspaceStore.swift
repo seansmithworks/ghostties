@@ -450,7 +450,13 @@ final class WorkspaceStore: ObservableObject {
     // MARK: - Session Status
 
     /// Update a single session's global status (called by coordinators).
+    ///
+    /// Writing `@Published` dict unconditionally fires `objectWillChange` even when
+    /// the value is unchanged. Guard first so 1 Hz timer ticks that see no transition
+    /// don't trigger downstream SwiftUI re-renders. (Belt-and-suspenders with the
+    /// `Perf.publishIfChanged` guard in `SessionCoordinator.startActivityTimer`.)
     func updateSessionStatus(id: UUID, status: SessionStatus) {
+        guard globalStatuses[id] != status else { return }
         globalStatuses[id] = status
     }
 
@@ -462,7 +468,13 @@ final class WorkspaceStore: ObservableObject {
     // MARK: - Indicator State (Menu Bar)
 
     /// Update a session's view-layer indicator state for menu bar consumption.
+    ///
+    /// Writing `@Published` dict unconditionally fires `objectWillChange` even when
+    /// the value is unchanged. Guard first so 1 Hz timer ticks that see no transition
+    /// don't trigger downstream SwiftUI re-renders. (Belt-and-suspenders with the
+    /// `Perf.publishIfChanged` guard in `SessionCoordinator.startActivityTimer`.)
     func updateIndicatorState(id: UUID, state: SessionIndicatorState) {
+        guard globalIndicatorStates[id] != state else { return }
         globalIndicatorStates[id] = state
     }
 

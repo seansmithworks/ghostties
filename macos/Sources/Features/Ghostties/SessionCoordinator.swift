@@ -965,24 +965,31 @@ final class SessionCoordinator: ObservableObject {
 
                     // SEA-214: Only send objectWillChange when state actually changed,
                     // suppressing the 7-view full-sidebar re-render that fired every second.
+                    //
+                    // Store writes (WorkspaceStore) are moved inside the same changed-branch
+                    // so the @Published dict assignments and updateProjectActivity only run
+                    // when the aggregate state actually shifted. The guards in
+                    // WorkspaceStore.updateIndicatorState / updateSessionStatus are a
+                    // belt-and-suspenders second layer but this avoids even the dict lookup
+                    // churn on no-change ticks.
                     Perf.publishIfChanged(
                         "sessionCoordinator.tick",
                         current: current,
                         cached: &self.cachedIndicatorStates
                     ) {
                         self.objectWillChange.send()
-                    }
 
-                    // Push each running session's indicator state to the global store
-                    // so the menu bar icon can reflect the aggregate status.
-                    for (id, state) in current {
-                        WorkspaceStore.shared.updateIndicatorState(id: id, state: state)
-                    }
+                        // Push each running session's indicator state to the global store
+                        // so the menu bar icon can reflect the aggregate status.
+                        for (id, state) in current {
+                            WorkspaceStore.shared.updateIndicatorState(id: id, state: state)
+                        }
 
-                    // Refresh the per-project grace-period tracker so projects
-                    // whose sessions emit output at <1Hz still keep their
-                    // `.activeNow` slot for the full grace window.
-                    WorkspaceStore.shared.updateProjectActivityFromIndicatorStates()
+                        // Refresh the per-project grace-period tracker so projects
+                        // whose sessions emit output at <1Hz still keep their
+                        // `.activeNow` slot for the full grace window.
+                        WorkspaceStore.shared.updateProjectActivityFromIndicatorStates()
+                    }
                     Perf.signposter.endInterval("sessionCoordinator.tick", tickState)
                 }
             }
