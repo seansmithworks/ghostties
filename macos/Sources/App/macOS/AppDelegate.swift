@@ -367,6 +367,9 @@ class AppDelegate: NSObject,
         setupMenuImages()
         setupWorkspaceMenuItems()
         setupTaskRowMenuItems()
+        #if DEBUG
+        setupDebugUpdateMenuItems()
+        #endif
 
         // U8 (SEA-164): ⌘⇧N new-task composer shortcut.
         // Uses a separate local monitor so it never touches MainMenu.xib —
@@ -736,6 +739,74 @@ class AppDelegate: NSObject,
         viewMenu.insertItem(NSMenuItem.separator(), at: 7)
 
     }
+
+    // MARK: - DEBUG-only update simulator menu
+
+    #if DEBUG
+    /// Builds a top-level "Debug" menu with a "Simulate Update" submenu that drives
+    /// UpdateViewModel directly — no Sparkle, no network, no signing required.
+    /// Each item maps to an UpdateSimulator scenario by tag (0–8).
+    private func setupDebugUpdateMenuItems() {
+        // Ordered to match UpdateSimulator cases (tag index == array index below).
+        let scenarios: [(title: String, scenario: UpdateSimulator)] = [
+            ("Happy Path",              .happyPath),
+            ("Not Found",               .notFound),
+            ("Error",                   .error),
+            ("Slow Download",           .slowDownload),
+            ("Permission Request",      .permissionRequest),
+            ("Cancel During Download",  .cancelDuringDownload),
+            ("Cancel During Checking",  .cancelDuringChecking),
+            ("Installing",              .installing),
+            ("Auto Update",             .autoUpdate),
+        ]
+
+        let simulateSubmenu = NSMenu(title: "Simulate Update")
+        for (index, entry) in scenarios.enumerated() {
+            let item = NSMenuItem(
+                title: entry.title,
+                action: #selector(debugSimulateUpdate(_:)),
+                keyEquivalent: ""
+            )
+            item.tag = index
+            simulateSubmenu.addItem(item)
+        }
+
+        let simulateParent = NSMenuItem(title: "Simulate Update", action: nil, keyEquivalent: "")
+        simulateParent.submenu = simulateSubmenu
+
+        let debugMenu = NSMenu(title: "Debug")
+        debugMenu.addItem(simulateParent)
+
+        let debugMenuItem = NSMenuItem(title: "Debug", action: nil, keyEquivalent: "")
+        debugMenuItem.submenu = debugMenu
+
+        NSApp.mainMenu?.addItem(debugMenuItem)
+    }
+
+    /// Action target for "Simulate Update" menu items.
+    /// Dispatches to the correct UpdateSimulator scenario by tag index.
+    @objc private func debugSimulateUpdate(_ sender: NSMenuItem) {
+        let scenarios: [UpdateSimulator] = [
+            .happyPath,
+            .notFound,
+            .error,
+            .slowDownload,
+            .permissionRequest,
+            .cancelDuringDownload,
+            .cancelDuringChecking,
+            .installing,
+            .autoUpdate,
+        ]
+
+        let index = sender.tag
+        guard scenarios.indices.contains(index) else { return }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            scenarios[index].simulate(with: self.updateViewModel)
+        }
+    }
+    #endif
 
     // MARK: - U8 (SEA-164): ⌘⇧N new-task composer shortcut
 
