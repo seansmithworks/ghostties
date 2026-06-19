@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.1.0-beta.18] — 2026-06-19
+
+The first build delivered to existing users over the air — it confirms auto-updates work end to end. No other changes from beta.17.
+
+---
+
 ## [0.1.0-beta.17] — 2026-06-19
 
 Auto-updates work now, and the workspace sidebar no longer freezes the app.
@@ -109,6 +115,7 @@ First distributable build. Ghostties can now be installed and kept up to date au
 
 ---
 
+[0.1.0-beta.18]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.18
 [0.1.0-beta.17]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.17
 [0.1.0-beta.16]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.16
 [0.1.0-beta.15]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.15
