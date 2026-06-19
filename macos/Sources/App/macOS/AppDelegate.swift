@@ -772,17 +772,6 @@ class AppDelegate: NSObject,
             simulateSubmenu.addItem(item)
         }
 
-        // Separator + "Standard Sparkle Dialog" option so the owner can A/B compare
-        // the custom branded pill (above) against Sparkle's native update alert panel.
-        simulateSubmenu.addItem(.separator())
-        let standardSparkleItem = NSMenuItem(
-            title: "Standard Sparkle Dialog",
-            action: #selector(debugShowStandardSparkleDialog(_:)),
-            keyEquivalent: ""
-        )
-        standardSparkleItem.target = self
-        simulateSubmenu.addItem(standardSparkleItem)
-
         let simulateParent = NSMenuItem(title: "Simulate Update", action: nil, keyEquivalent: "")
         simulateParent.submenu = simulateSubmenu
 
@@ -819,45 +808,6 @@ class AppDelegate: NSObject,
         }
     }
 
-    /// Shows Sparkle's native "update available" alert panel (with release notes, Skip/Dismiss/Install
-    /// buttons) using a synthetic appcast item and no network. This lets the owner A/B the standard
-    /// Sparkle dialog against the custom branded overlay pill driven by the Simulate Update scenarios.
-    @MainActor
-    @objc private func debugShowStandardSparkleDialog(_ sender: Any?) {
-        // Build a minimal fake appcast item. The deprecated dictionary initializer is available
-        // in the compiled framework; the deprecation warning is suppressed because this is
-        // intentional DEBUG-only usage. Keys mirror the Sparkle RSS parser conventions.
-        let itemDict: [String: Any] = [
-            "sparkle:version": "999",
-            "sparkle:shortVersionString": "99.0 (DEBUG)",
-            "title": "Ghostties 99.0 (DEBUG) — Standard Sparkle Dialog Test",
-        ]
-        guard let fakeItem = SUAppcastItem(dictionary: itemDict) else {
-            NSLog("[Ghostties DEBUG] Could not construct SUAppcastItem for standard Sparkle dialog test")
-            return
-        }
-
-        // Construct a SPUUserUpdateState (not-downloaded, user-initiated).
-        // The public class has no public initializer; we call the private
-        // initWithStage:userInitiated: that is declared in the bridging header
-        // (GhosttiesDebug category). The method exists in the compiled Sparkle
-        // framework at runtime — this is safe for DEBUG builds only.
-        guard let fakeState = SPUUserUpdateState(stage: .notDownloaded, userInitiated: true) else {
-            NSLog("[Ghostties DEBUG] Could not construct SPUUserUpdateState for standard Sparkle dialog test")
-            return
-        }
-
-        // Call showUpdateFound on the standard driver. The reply block is a no-op dismiss
-        // (we never actually download anything).
-        updateController.standardUserDriver.showUpdateFound(
-            with: fakeItem,
-            state: fakeState,
-            reply: { _ in
-                // No-op: we are not wired to a real Sparkle pipeline, so choices
-                // (Skip/Dismiss/Install) are acknowledged but not acted upon.
-            }
-        )
-    }
     #endif
 
     // MARK: - U8 (SEA-164): ⌘⇧N new-task composer shortcut

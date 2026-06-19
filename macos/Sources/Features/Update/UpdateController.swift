@@ -17,14 +17,6 @@ class UpdateController {
         userDriver.viewModel
     }
 
-    #if DEBUG
-    /// The underlying SPUStandardUserDriver. Exposed for DEBUG-only UI testing
-    /// (e.g. showing Sparkle's native update-found dialog without a real network check).
-    var standardUserDriver: SPUStandardUserDriver {
-        userDriver.standard
-    }
-    #endif
-
     /// True if we're installing an update.
     var isInstalling: Bool {
         installCancellable != nil
