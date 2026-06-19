@@ -1284,6 +1284,13 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             window.removeTitlebarAccessoryViewController(at: 0)
         }
 
+        // The titlebar update-accessory pill was just stripped above, so
+        // workspace windows no longer have a titlebar render path for updates.
+        // Wire the bottom-right overlay fallback instead so that any non-idle
+        // UpdateViewModel state (e.g. from Debug ▸ Simulate Update) surfaces
+        // the branded pill in the corner of the terminal view.
+        activateUpdateOverlayFallback()
+
         // NSToolbar approach for traffic light alignment was removed because
         // the enlarged titlebar hit area intercepts clicks on the "+" and
         // sidebar toggle buttons. Traffic light alignment will be revisited

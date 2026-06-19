@@ -1182,6 +1182,24 @@ class BaseTerminalController: NSWindowController,
         }
     }
 
+    /// Explicitly activates the overlay-fallback subscription for this window.
+    ///
+    /// Call this after any operation that strips the titlebar update-accessory pill (e.g.
+    /// `configureWorkspaceTitlebar()` in `TerminalController`) so that workspace windows still
+    /// receive update notifications via the bottom-right overlay rather than the titlebar band
+    /// that was removed.
+    ///
+    /// Safe to call multiple times — subsequent calls replace the previous subscription.
+    func activateUpdateOverlayFallback() {
+        guard let updateViewModel = (NSApp.delegate as? AppDelegate)?.updateViewModel else { return }
+        updateStateCancellable = updateViewModel.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newState in
+                guard let self else { return }
+                self.updateOverlayIsVisible = !newState.isIdle
+            }
+    }
+
     func defaultUpdateOverlayVisibility() -> Bool {
         guard let window else { return true }
 
