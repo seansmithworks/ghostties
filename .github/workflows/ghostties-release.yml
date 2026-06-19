@@ -112,6 +112,19 @@ jobs:
       - name: Xcode version
         run: xcodebuild -version
 
+      # Pin Xcode 26.3 for the Zig build. The macos-26 image's default Xcode
+      # moved to 26.5, whose SDK changed libSystem.tbd to reference arm64e-macos
+      # instead of aarch64-macos. Zig 0.15.2's linker can't match the two and
+      # fails GhosttyKit.xcframework with undefined libSystem symbols
+      # (_abort, _free, __availability_version_check, ...). 26.3 is the last
+      # SDK Zig 0.15.2 links cleanly against, and still ships all macOS 26 SDK
+      # types the Swift app build needs. Matches upstream ghostty-org/ghostty.
+      # Re-evaluate when Zig 0.16 ships (ziglang/zig#31658).
+      - name: Select Xcode 26.3 (Zig 0.15.2 SDK compatibility)
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app
+          xcodebuild -version
+
       # Install Zig 0.15.2 (matches build.zig.zon minimum_zig_version).
       # Required to build GhosttyKit.xcframework from source.
       - uses: mlugg/setup-zig@v2
