@@ -51,7 +51,7 @@ if [[ -f "$TARGET" ]]; then
 fi
 
 # ── Generate JSON via python3 ────────────────────────────────────────────────
-echo "    Generating workspace.json with 7 projects..."
+echo "    Generating workspace.json with 9 projects..."
 
 python3 - "$TARGET" <<'PYEOF'
 import sys
@@ -71,6 +71,8 @@ projects_spec = [
     ("switchboard",  "switchboard",  "pinky"),
     ("trove",        "trove",        "specter"),
     ("wren",         "wren",         "wisp"),
+    ("brukas",       "brukas",       "jinx"),
+    ("annotie",      "annotie",      "mist"),
 ]
 
 def new_uuid():
