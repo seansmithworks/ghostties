@@ -44,6 +44,9 @@ default.profraw
 .ghostties/worktrees/
 .vercel
 
+# Demo capture build output (refresh-demo.sh)
+.build-demo/
+
 # Local session artifacts
 .claude/scheduled_tasks.lock
 docs/Crash\ report/
