@@ -152,9 +152,9 @@ enum MenuBarIconRenderer {
         guard let state else { return nil }
         switch state {
         case .error:          return .systemRed
-        case .needsAttention: return NSColor(red: 0.659, green: 0.333, blue: 0.969, alpha: 1) // #A855F7
-        case .waiting:        return NSColor(red: 0.788, green: 0.451, blue: 0.314, alpha: 1) // #C97350
-        case .longRunning:    return .systemYellow
+        case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGoldNS // #FFC400
+        case .waiting:        return WorkspaceLayout.statusYourTurnBlueNS      // #5B8DEF
+        case .longRunning:    return .systemGreen
         case .processing:     return .systemGreen
         case .idle:           return NSColor.labelColor.withAlphaComponent(0.3)
         case .inactive:       return nil

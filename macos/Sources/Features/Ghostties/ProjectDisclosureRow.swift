@@ -399,9 +399,9 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     private var projectHeaderColor: Color {
         switch projectHeaderIndicator {
         case .error:          return Color(nsColor: .systemRed)
-        case .needsAttention: return WorkspaceLayout.needsAttentionPurple
-        case .waiting:        return WorkspaceLayout.waitingTerracotta
-        case .longRunning:    return Color(nsColor: .systemYellow)
+        case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
+        case .waiting:        return WorkspaceLayout.statusYourTurnBlue
+        case .longRunning:    return Color(nsColor: .systemGreen)
         case .processing:     return Color(nsColor: .systemGreen)
         case .idle:           return Color(.secondaryLabelColor)
         case .inactive:       return Color(.tertiaryLabelColor)
