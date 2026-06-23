@@ -401,7 +401,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         case .error:          return Color(nsColor: .systemRed)
         case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
         case .waiting:        return WorkspaceLayout.statusYourTurnBlue
-        case .longRunning:    return Color(nsColor: .systemGreen)
+        case .longRunning:    return WorkspaceLayout.statusLongRunningOrange
         case .processing:     return Color(nsColor: .systemGreen)
         case .idle:           return Color(.secondaryLabelColor)
         case .inactive:       return Color(.tertiaryLabelColor)

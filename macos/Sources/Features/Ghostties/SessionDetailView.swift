@@ -149,7 +149,7 @@ struct SessionRow: View {
     private var statusColor: Color {
         switch indicatorState {
         case .processing:     return Color(nsColor: .systemGreen)
-        case .longRunning:    return Color(nsColor: .systemGreen)
+        case .longRunning:    return WorkspaceLayout.statusLongRunningOrange
         case .waiting:        return WorkspaceLayout.statusYourTurnBlue
         case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
         case .idle:           return Color(.secondaryLabelColor)
