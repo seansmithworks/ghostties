@@ -39,6 +39,16 @@ extension Ghostty {
                         self?.progressReportTimer = nil
                     }
                 }
+
+                // MARK: - Ghostties fork fence (activity signal)
+                // Progress reports (OSC 9;4) are a reliable "still working" signal that fires
+                // while a TUI agent streams, even when the title isn't changing. Mirror it into
+                // the activity subject so the sidebar/menu-bar dot stays green. Cursor blink does
+                // NOT touch progressReport, so this can't false-positive at an idle prompt.
+                if progressReport != nil {
+                    lastOutputSubject.send()
+                }
+                // MARK: - End Ghostties fork fence
             }
         }
 

@@ -75,7 +75,10 @@ final class SessionCoordinator: ObservableObject {
     private var activityTimer: Timer?
 
     /// How long after the last output before a running session transitions from processing.
-    private static let activityThreshold: ContinuousClock.Duration = .seconds(2)
+    /// 5 s instead of 2 s: Claude Code agent title/progress updates arrive in bursts seconds
+    /// apart, so a 2 s window let the dot flicker gray between bursts. 5 s holds it green
+    /// across normal inter-burst gaps without leaving a finished agent looking busy for long.
+    private static let activityThreshold: ContinuousClock.Duration = .seconds(5)
 
     /// Whether each session is currently at a shell prompt (OSC 133;B received).
     /// Reset to false on any output activity. Used to distinguish idle vs waiting.
@@ -857,6 +860,7 @@ final class SessionCoordinator: ObservableObject {
     /// Subscribe to a session's root surface output activity via Combine.
     private func subscribeToOutput(surface: Ghostty.SurfaceView, sessionId: UUID) {
         outputSubscriptions[sessionId] = surface.lastOutputSubject
+            .throttle(for: .milliseconds(100), scheduler: RunLoop.main, latest: true)
             .sink { [weak self, weak surface] in
                 guard let self else { return }
                 self.lastOutputTimestamps[sessionId] = .now
