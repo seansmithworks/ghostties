@@ -142,6 +142,14 @@ enum WorkspaceLayout {
     /// NSColor variant of `statusNeedsDecisionGold` for AppKit/menu-bar layers.
     static let statusNeedsDecisionGoldNS = NSColor(red: 0xFF / 255.0, green: 0xC4 / 255.0, blue: 0x00 / 255.0, alpha: 1)
 
+    /// Session status dot: long-running / still working but taking a while.
+    /// Redder/deeper orange #F97316 — clearly distinct from the electric gold used
+    /// for needsDecision. Reads as "still going, heads up" vs. "act now."
+    static let statusLongRunningOrange = Color(red: 0xF9 / 255.0, green: 0x73 / 255.0, blue: 0x16 / 255.0)
+
+    /// NSColor variant of `statusLongRunningOrange` for AppKit/menu-bar layers.
+    static let statusLongRunningOrangeNS = NSColor(red: 0xF9 / 255.0, green: 0x73 / 255.0, blue: 0x16 / 255.0, alpha: 1)
+
     /// Purple accent (legacy — kept for reference only, no longer used for status dots).
     /// Previously used for "needs attention" indicator state. #A855F7
     /// @deprecated Use `statusNeedsDecisionGold` for session status indicators.

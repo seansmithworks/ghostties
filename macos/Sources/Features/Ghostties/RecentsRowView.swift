@@ -65,7 +65,7 @@ struct RecentsRowView: View {
         case .error:          return Color(.systemRed)
         case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
         case .waiting:        return WorkspaceLayout.statusYourTurnBlue
-        case .longRunning:    return Color(.systemGreen)
+        case .longRunning:    return WorkspaceLayout.statusLongRunningOrange
         case .processing:     return Color(.systemGreen)
         case .idle:           return Color.primary.opacity(0.30)
         case .inactive:       return Color.primary.opacity(0.12)

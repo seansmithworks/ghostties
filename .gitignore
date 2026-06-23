@@ -47,6 +47,9 @@ default.profraw
 # Demo capture build output (refresh-demo.sh)
 .build-demo/
 
+# Verify build output (xcodebuild -derivedDataPath .build-verify)
+.build-verify/
+
 # Local session artifacts
 .claude/scheduled_tasks.lock
 docs/Crash\ report/

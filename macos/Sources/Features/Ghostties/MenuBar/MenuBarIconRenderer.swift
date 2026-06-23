@@ -154,7 +154,7 @@ enum MenuBarIconRenderer {
         case .error:          return .systemRed
         case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGoldNS // #FFC400
         case .waiting:        return WorkspaceLayout.statusYourTurnBlueNS      // #5B8DEF
-        case .longRunning:    return .systemGreen
+        case .longRunning:    return WorkspaceLayout.statusLongRunningOrangeNS // #F97316
         case .processing:     return .systemGreen
         case .idle:           return NSColor.labelColor.withAlphaComponent(0.3)
         case .inactive:       return nil
