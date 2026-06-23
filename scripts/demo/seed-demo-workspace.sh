@@ -13,6 +13,12 @@
 #
 #   Idempotent / re-runnable. Any existing workspace.json is backed up to
 #   workspace.json.bak-<timestamp> before overwriting.
+#
+# NON-REPRODUCIBLE ITEMS (not handled here)
+#   - Branded shell prompt: `export PS1='ghostties ~/%1~ %% '`
+#     This is per-shell-session and must be set by hand at capture time.
+#     Making it persistent would require a demo-only ZDOTDIR override; that
+#     is out of scope for this script.
 # =============================================================================
 set -euo pipefail
 
@@ -76,6 +82,8 @@ now_base = datetime.datetime.utcnow()
 projects = []
 switchboard_id = None
 
+CLAUDE_CODE_TEMPLATE_ID = "00000000-0000-0000-0000-000000000002"
+
 for i, (name, subdir, ghost) in enumerate(projects_spec):
     uid = new_uuid()
     # Stagger timestamps slightly so they look like real usage history
@@ -83,14 +91,16 @@ for i, (name, subdir, ghost) in enumerate(projects_spec):
     proj = {
         "ghostCharacter": ghost,
         "id": uid,
-        "isPinned": False,
+        "isPinned": True,  # All projects pinned — renders control-tower disclosure rows
         "lastActiveAt": ts,
         "name": name,
         "rootPath": f"{demo_base}/{subdir}",
     }
-    projects.append(proj)
+    # Only switchboard gets the default template baked in
     if subdir == "switchboard":
+        proj["defaultTemplateId"] = CLAUDE_CODE_TEMPLATE_ID
         switchboard_id = uid
+    projects.append(proj)
 
 state = {
     "hasDismissedPinMigrationNotice": True,
@@ -118,18 +128,49 @@ python3 - "$TARGET" <<'PYEOF'
 import sys, json
 with open(sys.argv[1]) as f:
     data = json.load(f)
-print(f"    Project count : {len(data['projects'])}")
+projects = data['projects']
+print(f"    Project count : {len(projects)}")
 print(f"    sidebarMode   : {data['sidebarMode']}")
 print(f"    lastSelected  : {data['lastSelectedProjectId']}")
-switchboard = next((p for p in data['projects'] if p['name'] == 'switchboard'), None)
+
+# Confirm all projects are pinned
+all_pinned = all(p.get('isPinned') is True for p in projects)
+print(f"    All isPinned  : {all_pinned}")
+if not all_pinned:
+    not_pinned = [p['name'] for p in projects if not p.get('isPinned')]
+    print(f"    ERROR: unpinned projects: {not_pinned}")
+    sys.exit(1)
+
+switchboard = next((p for p in projects if p['name'] == 'switchboard'), None)
 if switchboard:
-    match = switchboard['id'] == data['lastSelectedProjectId']
+    id_match = switchboard['id'] == data['lastSelectedProjectId']
+    default_tmpl = switchboard.get('defaultTemplateId', '<missing>')
     print(f"    switchboard id: {switchboard['id']}")
-    print(f"    lastSelected == switchboard: {match}")
+    print(f"    lastSelected == switchboard: {id_match}")
+    print(f"    defaultTemplateId : {default_tmpl}")
+    if default_tmpl != "00000000-0000-0000-0000-000000000002":
+        print("    ERROR: defaultTemplateId does not match AgentTemplate.claudeCode.id!")
+        sys.exit(1)
 else:
     print("    ERROR: switchboard project not found!")
     sys.exit(1)
 PYEOF
+
+# ── UI feature flags (NSUserDefaults — NOT in workspace.json) ────────────────
+# These must be set via `defaults write` against the demo bundle ID.
+# They are NOT stored in workspace.json; the app reads them from NSUserDefaults.
+#
+# NOTE: sidebarViewMode is intentionally set to "projectFirst", NOT "taskFirst".
+# taskFirst mode routes through TaskStore which leaks real global sessions from
+# the release app — not safe for demo captures.
+echo ""
+echo "==> Writing UI feature flags for com.seansmithdesign.ghostties.demo..."
+defaults write com.seansmithdesign.ghostties.demo ghostties.hasSeenOnboarding -bool true
+defaults write com.seansmithdesign.ghostties.demo ghostties.sidebarViewMode -string projectFirst
+defaults write com.seansmithdesign.ghostties.demo ghostties.sidebarTab -string projects
+echo "    ghostties.hasSeenOnboarding  = true"
+echo "    ghostties.sidebarViewMode    = projectFirst"
+echo "    ghostties.sidebarTab         = projects"
 
 echo ""
 echo "==> Done. Seed complete:"
