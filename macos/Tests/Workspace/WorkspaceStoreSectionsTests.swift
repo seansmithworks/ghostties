@@ -690,6 +690,68 @@ struct WorkspaceStoreSectionsTests {
         #expect(cached.flatMap(\.1) == fresh.flatMap(\.1))
     }
 
+    // MARK: - Time-Only Cache Staleness (TTL, PR2 follow-up)
+    //
+    // The tests above all exercise mutation-driven invalidation (`didSet`).
+    // None of them cover the gap an adversarial review flagged: both
+    // `sectionedProjects` and `sessionGroups(forProject:)` bucket by
+    // wall-clock time (grace period / 24h recency window), so a cached result
+    // can go stale purely because time elapsed — with ZERO mutating calls in
+    // between to trip `didSet`. These tests use `_setTestClock(_:)` to
+    // advance fake time with no intervening mutation and confirm the next
+    // read reflects the expired window rather than the frozen-at-cache-time
+    // bucket.
+
+    @MainActor
+    @Test func sectionedProjectsCacheExpiresAfterTTLWithNoMutation() {
+        let p = makeProject(name: "Flapping")
+        let s = makeSession(projectId: p.id)
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s])
+
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        store._setTestClock { t0 }
+        store._setActiveSinceTimestamp(projectId: p.id, date: t0)
+
+        // Populate the cache while still within the 120s grace window.
+        let before = store.sectionedProjects
+        #expect(ids(in: .activeNow, of: before) == [p.id])
+
+        // Advance fake time past both the grace period (120s) and the cache
+        // TTL (2s) — no mutating calls happen between this and the read below.
+        store._setTestClock { t0.addingTimeInterval(200) }
+
+        let after = store.sectionedProjects
+        #expect(ids(in: .activeNow, of: after).isEmpty)
+    }
+
+    @MainActor
+    @Test func sessionGroupsCacheExpiresAfterTTLWithNoMutation() {
+        let p = makeProject(name: "Host")
+        let s = makeSession(
+            name: "Recent",
+            projectId: p.id,
+            lastActiveAt: Date(timeIntervalSince1970: 1_000_000)
+        )
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s])
+
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        store._setTestClock { t0 }
+
+        // Populate the cache: session's `lastActiveAt` is "now" → `.active`
+        // bucket is empty, `.recent` holds it (within the 24h window).
+        let before = store.sessionGroups(forProject: p.id)
+        #expect(before.first(where: { $0.0 == .recent })?.1.map(\.id) == [s.id])
+        #expect(before.first(where: { $0.0 == .idle }) == nil)
+
+        // Advance fake time past both the 24h recency window and the cache
+        // TTL (2s) — no mutating calls happen between this and the read below.
+        store._setTestClock { t0.addingTimeInterval(25 * 60 * 60) }
+
+        let after = store.sessionGroups(forProject: p.id)
+        #expect(after.first(where: { $0.0 == .idle })?.1.map(\.id) == [s.id])
+        #expect(after.first(where: { $0.0 == .recent }) == nil)
+    }
+
     @MainActor
     @Test func sessionGroupsCacheDoesNotLeakAcrossProjects() {
         // A mutation to one project's session must not affect a sibling
