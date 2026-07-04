@@ -377,6 +377,23 @@ final class TaskStore: ObservableObject {
         // empty, so every file compares as "changed" and this degrades to
         // exactly the old full-load behavior — no special-casing needed for
         // initial load.
+        //
+        // Known limitation: (mtime, size) is a cheap proxy for "did the
+        // content change", not a real content hash, so it cannot distinguish
+        // two specific same-size writes that land within the same mtime tick.
+        // E.g. `status: backlog` and `status: running` are both 7 characters,
+        // so a status flip between exactly those two lanes produces a file of
+        // identical size; if that write also happens to land within the
+        // filesystem's mtime tick resolution of the file's prior write, the
+        // signature comparison below (`fileSignatures[filename] != sig`)
+        // evaluates equal and the file is skipped as "unchanged" — the stale
+        // row then only resolves whenever some LATER edit changes the size or
+        // crosses a coarser mtime boundary. This is an accepted tradeoff, not
+        // a bug to fix by hashing content: closing the gap completely would
+        // require reading every file's content on every fs event, which is
+        // exactly the I/O cost this optimization exists to avoid. APFS's
+        // nanosecond-resolution timestamps make same-tick collisions rare in
+        // practice for normal multi-agent write patterns.
         var currentSignatures: [String: FileSignature] = [:]
         currentSignatures.reserveCapacity(mdFiles.count)
         var toReparse: [URL] = []
@@ -427,7 +444,15 @@ final class TaskStore: ObservableObject {
 
         // Stable ordering: newest created first within each lane. Lane grouping
         // is up to the view layer; here we just produce a deterministic list.
-        let loaded = taskItemsByFilename.values.sorted { $0.created > $1.created }
+        // Secondary tie-break on `id` keeps ordering deterministic when two
+        // tasks share an identical `created` timestamp — `taskItemsByFilename`
+        // is a Dictionary, whose `.values` iteration order is not guaranteed
+        // stable across incremental mutations, so `created` alone is no
+        // longer sufficient to fully pin down order the way directory
+        // enumeration order used to.
+        let loaded = taskItemsByFilename.values.sorted {
+            $0.created != $1.created ? $0.created > $1.created : $0.id < $1.id
+        }
         tasks = loaded
 
         // Collapse Graveyard expansion if the previously-expanded task is no

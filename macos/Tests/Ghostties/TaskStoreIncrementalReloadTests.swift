@@ -173,4 +173,47 @@ final class TaskStoreIncrementalReloadTests: XCTestCase {
         XCTAssertEqual(store.tasks.count, 4)
         XCTAssertTrue(store.needsYou.contains { $0.id == "add-task-new" })
     }
+
+    /// Regression coverage for the known (mtime, size) signature limitation:
+    /// `status: backlog` and `status: running` are both 7 characters, so a
+    /// status flip between exactly those two lanes rewrites the file at the
+    /// SAME byte size. The 3 tests above all happen to test size-changing
+    /// mutations, so none of them would catch a naive "skip if size matches"
+    /// bug. This test proves the common case — a same-size rewrite with any
+    /// real-world timing gap between writes — is still picked up, because
+    /// the diff also keys on `contentModificationDate`, which a real second
+    /// write always advances.
+    func testIncrementalReload_afterSameSizeStatusFlip_matchesFullReload() throws {
+        try writeFixture(id: "flip-task", status: "backlog", created: "2026-04-15T10:00:00Z")
+
+        let store = TaskStore()
+        XCTAssertEqual(store.tasks.count, 1)
+        XCTAssertTrue(store.backlog.contains { $0.id == "flip-task" })
+
+        // Guarantee an observable mtime delta between the two writes even on
+        // filesystems/machines with coarser mtime resolution than this
+        // process's wall clock — the point of this test is the common case
+        // (same-size transition with a real timing gap), not the sub-tick
+        // race, which is inherently untestable deterministically and is
+        // exactly Gap 1's documented, accepted limitation (see the comment
+        // at the signature-comparison site in loadFromDisk()).
+        Thread.sleep(forTimeInterval: 0.01)
+
+        // Same 7-char length as "backlog" — file size on disk is unchanged.
+        try writeFixture(id: "flip-task", status: "running", created: "2026-04-15T10:00:00Z")
+        store.loadFromDisk()
+
+        let freshStore = TaskStore()
+
+        XCTAssertEqual(store.tasks, freshStore.tasks)
+        XCTAssertEqual(store.active, freshStore.active)
+        XCTAssertEqual(store.backlog, freshStore.backlog)
+
+        // Sanity: the status flip must have actually been picked up rather
+        // than silently skipped because the file size didn't change.
+        XCTAssertTrue(store.active.contains { $0.id == "flip-task" },
+                      "Same-size status flip must migrate the task into the active/running lane")
+        XCTAssertFalse(store.backlog.contains { $0.id == "flip-task" },
+                       "Same-size status flip must remove the task from backlog")
+    }
 }
