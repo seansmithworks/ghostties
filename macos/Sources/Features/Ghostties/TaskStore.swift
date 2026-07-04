@@ -47,6 +47,33 @@ final class TaskStore: ObservableObject {
     private var watcher: TaskFileWatcher?
     private var watchedDirectory: URL?
 
+    // MARK: - Incremental reload cache (PR 3 of the multi-agent perf fix; see
+    // project_perf-activity-invalidation-storm in agent memory)
+    //
+    // `TaskFileWatcher` fires on ANY fs event anywhere in the tasks directory,
+    // so a single agent's write used to trigger a full re-read + re-parse of
+    // every task fixture ever created (done/graveyard included, never pruned).
+    // These two caches let `loadFromDisk()` skip files whose on-disk signature
+    // hasn't changed since the last successful load — only new/changed files
+    // pay for `String(contentsOf:)` + `TaskFixtureParser.parse`.
+
+    /// Cheap per-file identity: (mtime, size) from `URLResourceValues`, fetched
+    /// via prefetched keys on `contentsOfDirectory` so re-checking it later
+    /// costs no extra `stat()` call. Deliberately does NOT read file content.
+    private struct FileSignature: Equatable {
+        let modificationDate: Date?
+        let size: Int
+    }
+
+    /// Last-known signature per filename (e.g. `"task-abc123.md"`). Empty on
+    /// first load, which makes every file look "changed" — i.e. the first
+    /// pass is a full load, matching pre-existing behavior exactly.
+    private var fileSignatures: [String: FileSignature] = [:]
+
+    /// Last successfully parsed `TaskItem` per filename. Rebuilt into the
+    /// sorted `tasks` array at the end of every `loadFromDisk()` pass.
+    private var taskItemsByFilename: [String: TaskItem] = [:]
+
     private static let isoFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
@@ -305,52 +332,102 @@ final class TaskStore: ObservableObject {
             #if DEBUG
             print("[TaskStore] No tasks directory found; tasks=[]")
             #endif
+            fileSignatures.removeAll()
+            taskItemsByFilename.removeAll()
             tasks = []
             recomputeLanes()
             return
         }
 
         // If the resolved directory changed since last load (e.g. one directory
-        // was deleted and a different candidate now wins), rewire the watcher.
+        // was deleted and a different candidate now wins), rewire the watcher
+        // and drop the incremental cache — it described a different directory's
+        // files and would otherwise cause stale entries to survive the diff.
         if watchedDirectory != dir {
             rewireWatcher(to: dir)
+            fileSignatures.removeAll()
+            taskItemsByFilename.removeAll()
         }
 
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(at: dir,
-                                                       includingPropertiesForKeys: nil,
-                                                       options: [.skipsHiddenFiles]) else {
+        // Prefetch mtime + size alongside the directory listing — this is a
+        // cheap `stat()`-only pass (no file content read) and lets the
+        // `resourceValues(forKeys:)` calls below read from the already-fetched
+        // cache on each `URL` instead of hitting the filesystem again.
+        guard let entries = try? fm.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
             #if DEBUG
             print("[TaskStore] Could not enumerate \(dir.path); tasks=[]")
             #endif
+            fileSignatures.removeAll()
+            taskItemsByFilename.removeAll()
             tasks = []
             recomputeLanes()
             return
         }
 
         let mdFiles = entries.filter { $0.pathExtension.lowercased() == "md" }
-        var loaded: [TaskItem] = []
-        loaded.reserveCapacity(mdFiles.count)
+
+        // Incremental diff (PR 3 of the multi-agent perf fix): only files whose
+        // (mtime, size) signature differs from the last successful load get
+        // re-read + re-parsed. On the very first call `fileSignatures` is
+        // empty, so every file compares as "changed" and this degrades to
+        // exactly the old full-load behavior — no special-casing needed for
+        // initial load.
+        var currentSignatures: [String: FileSignature] = [:]
+        currentSignatures.reserveCapacity(mdFiles.count)
+        var toReparse: [URL] = []
 
         for url in mdFiles {
-            guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
-                #if DEBUG
-                print("[TaskStore] Failed to read \(url.lastPathComponent)")
-                #endif
-                continue
-            }
-            if let item = TaskFixtureParser.parse(markdown: raw, filename: url.deletingPathExtension().lastPathComponent) {
-                loaded.append(item)
-            } else {
-                #if DEBUG
-                print("[TaskStore] Failed to parse \(url.lastPathComponent)")
-                #endif
+            let filename = url.lastPathComponent
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+            let sig = FileSignature(
+                modificationDate: values?.contentModificationDate,
+                size: values?.fileSize ?? -1
+            )
+            currentSignatures[filename] = sig
+            if fileSignatures[filename] != sig {
+                toReparse.append(url)
             }
         }
 
+        // Files present at the last load but gone now — drop them from the
+        // in-memory map (mirrors the old behavior where a deleted file simply
+        // never showed up in `loaded`).
+        let removedFilenames = Set(fileSignatures.keys).subtracting(currentSignatures.keys)
+        for filename in removedFilenames {
+            taskItemsByFilename.removeValue(forKey: filename)
+        }
+
+        for url in toReparse {
+            let filename = url.lastPathComponent
+            guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
+                #if DEBUG
+                print("[TaskStore] Failed to read \(filename)")
+                #endif
+                // Unreadable now (e.g. a since-changed file that failed this
+                // pass) — drop any stale entry so it doesn't linger.
+                taskItemsByFilename.removeValue(forKey: filename)
+                continue
+            }
+            if let item = TaskFixtureParser.parse(markdown: raw, filename: url.deletingPathExtension().lastPathComponent) {
+                taskItemsByFilename[filename] = item
+            } else {
+                #if DEBUG
+                print("[TaskStore] Failed to parse \(filename)")
+                #endif
+                taskItemsByFilename.removeValue(forKey: filename)
+            }
+        }
+
+        fileSignatures = currentSignatures
+
         // Stable ordering: newest created first within each lane. Lane grouping
         // is up to the view layer; here we just produce a deterministic list.
-        loaded.sort { $0.created > $1.created }
+        let loaded = taskItemsByFilename.values.sorted { $0.created > $1.created }
         tasks = loaded
 
         // Collapse Graveyard expansion if the previously-expanded task is no
