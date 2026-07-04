@@ -12,8 +12,29 @@ final class WorkspaceStore: ObservableObject {
     /// Shared instance used by all windows. Created once on first access.
     static let shared = WorkspaceStore()
 
-    @Published private(set) var projects: [Project] = []
-    @Published private(set) var sessions: [AgentSession] = []
+    /// `sectionedProjects`/`sessionGroups(forProject:)` below are memoized —
+    /// invalidating on every mutation via `didSet` (rather than scattering
+    /// invalidation calls across each mutating method) means a future mutation
+    /// site can never forget to bust the cache. But both computations are also
+    /// functions of wall-clock time (grace period, 24h recency window) — a
+    /// project can drift out of `.activeNow`/`.recent` with **no** `@Published`
+    /// input changing at all, purely because time passed. `didSet` alone can't
+    /// catch that, so each cache also carries a `cachedAt` timestamp and is
+    /// treated as stale once `Self.cacheTTL` elapses, forcing a recompute on
+    /// the next read even absent any mutation. This is NOT parity with the old
+    /// always-recompute behavior — it's a bounded approximation: a bucket
+    /// transition can lag by up to `cacheTTL` seconds after a mutation-free
+    /// read. `didSet` still gives immediate invalidation for genuine data
+    /// changes; the TTL only closes the "nothing mutated but time elapsed" gap.
+    @Published private(set) var projects: [Project] = [] {
+        didSet { invalidateSectionedProjectsCache() }
+    }
+    @Published private(set) var sessions: [AgentSession] = [] {
+        didSet {
+            sessionGroupsCache.removeAll()
+            invalidateSectionedProjectsCache()
+        }
+    }
     @Published private(set) var templates: [AgentTemplate] = []
 
     /// Global session status — shared across all windows so that a session
@@ -24,7 +45,12 @@ final class WorkspaceStore: ObservableObject {
     /// Global indicator states — the view-layer state for each running session.
     /// Updated by SessionCoordinator's activity timer; consumed by MenuBarController
     /// to render the aggregate status dot in the menu bar.
-    @Published private(set) var globalIndicatorStates: [UUID: SessionIndicatorState] = [:]
+    @Published private(set) var globalIndicatorStates: [UUID: SessionIndicatorState] = [:] {
+        didSet {
+            sessionGroupsCache.removeAll()
+            invalidateSectionedProjectsCache()
+        }
+    }
 
     /// Current sidebar mode. Persisted across launches.
     /// `.overlay` is transient — always saved as `.closed`.
@@ -65,6 +91,33 @@ final class WorkspaceStore: ObservableObject {
         guard !hasDismissedPinMigrationNotice else { return }
         hasDismissedPinMigrationNotice = true
         persist()
+    }
+
+    #if DEBUG
+    /// Test-only clock override for exercising the sidebar caches' TTL expiry
+    /// without real sleeps. `nil` in production (and by default in tests) —
+    /// when set, both the TTL staleness check and the underlying bucketing
+    /// computation's own `now()` read through this closure, so a test can
+    /// advance fake time and deterministically observe a mutation-free
+    /// recompute. See `_setTestClock(_:)`.
+    private var testClock: (() -> Date)?
+
+    /// Test hook — install a fake clock for TTL-expiry tests. Pass `nil` to
+    /// restore the real clock.
+    func _setTestClock(_ clock: (() -> Date)?) {
+        testClock = clock
+    }
+    #endif
+
+    /// Current time as seen by the sidebar caches — routes through
+    /// `testClock` under DEBUG so tests can control TTL expiry without real
+    /// sleeps; always `Date()` in release builds.
+    private func currentTime() -> Date {
+        #if DEBUG
+        return testClock?() ?? Date()
+        #else
+        return Date()
+        #endif
     }
 
     /// Test-only initializer. Bypasses disk persistence and preset loading so
@@ -137,25 +190,72 @@ final class WorkspaceStore: ObservableObject {
     /// `.needsAttention`). Drives the grace-period tail of `.activeNow`.
     ///
     /// Ephemeral — not persisted. Populated by `updateProjectActivityFromIndicatorStates()`.
-    private var activeSinceTimestamps: [UUID: Date] = [:]
+    private var activeSinceTimestamps: [UUID: Date] = [:] {
+        didSet { invalidateSectionedProjectsCache() }
+    }
 
     /// When non-nil, `sectionedProjects` returns this snapshot verbatim instead
     /// of recomputing. Views freeze/release to prevent the list from reordering
     /// while the user is working in the sidebar.
     private var frozenSnapshot: SectionedProjects?
 
+    /// TTL for both sidebar caches (`sectionedProjectsCache` and
+    /// `sessionGroupsCache`), layered on top of the `didSet` invalidation
+    /// above. Both memoized computations read wall-clock time internally
+    /// (grace period, 24h recency window), so a cache entry can go stale
+    /// purely because time elapsed — no `@Published` input changed, so
+    /// `didSet` never fires. 2s is short enough that a stale bucket
+    /// assignment is imperceptible to a user, but long enough to still
+    /// collapse the bursts of rapid redraws this cache targets (which land
+    /// within tens/hundreds of ms of each other) into a single shared
+    /// computation, preserving the perf win the cache exists for.
+    private static let cacheTTL: TimeInterval = 2
+
+    /// Memoized `sectionedProjects` result, used whenever there's no active
+    /// freeze. `computeSectionedProjects` is O(projects + sessions) and was
+    /// previously re-run on every read (every `objectWillChange` fire cascades
+    /// into a `WorkspaceSidebarView.body` re-evaluation, which reads this
+    /// property). A single cache slot (not keyed per-project) is sufficient —
+    /// unlike `sessionGroups`, this computation already iterates every project
+    /// in one pass, so there's no per-item granularity to preserve. Invalidated
+    /// at every mutation site below that can change section membership or
+    /// intra-section order (`projects`, `sessions`, `globalIndicatorStates`,
+    /// or `activeSinceTimestamps`), and additionally treated as stale once
+    /// `cacheTTL` elapses since `sectionedProjectsCachedAt` (see the TTL note
+    /// on `cacheTTL` above).
+    private var sectionedProjectsCache: SectionedProjects?
+
+    /// Wall-clock time `sectionedProjectsCache` was last populated. `nil`
+    /// whenever the cache itself is `nil`.
+    private var sectionedProjectsCachedAt: Date?
+
+    private func invalidateSectionedProjectsCache() {
+        sectionedProjectsCache = nil
+        sectionedProjectsCachedAt = nil
+    }
+
     /// Four-section sidebar layout: `.pinned`, `.activeNow`, `.recent`, `.all`.
     /// Empty sections are dropped. While a freeze snapshot is held, returns the
     /// snapshot verbatim (mutations update internal state but not layout).
     var sectionedProjects: SectionedProjects {
         if let frozen = frozenSnapshot { return frozen }
-        return Self.computeSectionedProjects(
+        let now = currentTime()
+        if let cached = sectionedProjectsCache,
+           let cachedAt = sectionedProjectsCachedAt,
+           now.timeIntervalSince(cachedAt) < Self.cacheTTL {
+            return cached
+        }
+        let computed = Self.computeSectionedProjects(
             projects: projects,
             sessions: sessions,
             indicatorStates: globalIndicatorStates,
             activeSinceTimestamps: activeSinceTimestamps,
-            gracePeriod: Self.activeGracePeriod
+            gracePeriod: Self.activeGracePeriod,
+            now: { now }
         )
+        sectionedProjectsCache = computed
+        sectionedProjectsCachedAt = now
+        return computed
     }
 
     /// Flat list of projects in the visual (sectioned) order users see in the
@@ -174,15 +274,35 @@ final class WorkspaceStore: ObservableObject {
         flatProjectsInVisualOrder.map(\.id)
     }
 
+    /// Memoized `sessionGroups(forProject:)` results, keyed by project id,
+    /// each paired with the wall-clock time it was computed at. `computeSessionGroups`
+    /// buckets by `lastActiveAt` recency too, so — same as `sectionedProjectsCache`
+    /// above — an entry is also treated as stale once `cacheTTL` elapses since
+    /// its `cachedAt`, not just on `didSet`-driven invalidation.
+    /// `ProjectDisclosureRow.body` previously called this on every evaluation
+    /// for every expanded project — an uncached O(sessions) filter+sort each
+    /// time. Cleared wholesale (all projects, not just one) by the `sessions`
+    /// / `globalIndicatorStates` `didSet` observers above, since both are the
+    /// only inputs `computeSessionGroups` reads.
+    private var sessionGroupsCache: [UUID: (result: [(SessionBucket, [AgentSession])], cachedAt: Date)] = [:]
+
     /// Session grouping for an expanded project. Returns `(bucket, sessions)`
     /// pairs for the non-empty buckets, in order `.active` → `.recent` → `.idle`.
     /// Sessions are alphabetical within each bucket.
     func sessionGroups(forProject projectId: UUID) -> [(SessionBucket, [AgentSession])] {
-        Self.computeSessionGroups(
+        let now = currentTime()
+        if let cached = sessionGroupsCache[projectId],
+           now.timeIntervalSince(cached.cachedAt) < Self.cacheTTL {
+            return cached.result
+        }
+        let computed = Self.computeSessionGroups(
             projectId: projectId,
             sessions: sessions,
-            indicatorStates: globalIndicatorStates
+            indicatorStates: globalIndicatorStates,
+            now: { now }
         )
+        sessionGroupsCache[projectId] = (computed, now)
+        return computed
     }
 
     #if DEBUG

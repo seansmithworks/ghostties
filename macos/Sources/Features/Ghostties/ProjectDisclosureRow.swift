@@ -2,12 +2,45 @@ import SwiftUI
 
 /// A project row in the disclosure list that expands to show sessions inline.
 ///
-/// Absorbs functionality from the former IconRailView (context menu, settings popover)
-/// and SessionDetailView (session list, rename, drag/drop, new session button).
+/// Thin wrapper around `ProjectDisclosureRowContent`, the actual row body.
+/// `WorkspaceStore`/`SessionCoordinator` publish `objectWillChange` far more
+/// often than any single project's own data changes (activity signal, indicator
+/// timer ticks, sibling-project mutations) — without a gate, every expanded row
+/// redid its session grouping and activity scans on every fire, regardless of
+/// whether *this* project changed. Wrapping the content in `.equatable()` lets
+/// SwiftUI skip re-rendering a row whose own inputs are unchanged.
+///
+/// `coordinator.activeSessionId` is read here, not inside the content's own
+/// `init`, because `@EnvironmentObject` isn't resolved yet inside a view's
+/// initializer — this wrapper's `body` still runs on every pass (SwiftUI can't
+/// gate the wrapper itself without moving the `.equatable()` boundary up to the
+/// call site), but that's just a cheap struct construction, so reading it live
+/// here costs nothing.
 struct ProjectDisclosureRow: View {
     let project: Project
     @Binding var isExpanded: Bool
     @Binding var selectedProjectId: UUID?
+
+    @EnvironmentObject private var coordinator: SessionCoordinator
+
+    var body: some View {
+        ProjectDisclosureRowContent(
+            project: project,
+            isExpanded: $isExpanded,
+            selectedProjectId: $selectedProjectId,
+            activeSessionId: coordinator.activeSessionId
+        )
+        .equatable()
+    }
+}
+
+/// Absorbs functionality from the former IconRailView (context menu, settings popover)
+/// and SessionDetailView (session list, rename, drag/drop, new session button).
+private struct ProjectDisclosureRowContent: View, Equatable {
+    let project: Project
+    @Binding var isExpanded: Bool
+    @Binding var selectedProjectId: UUID?
+    let activeSessionId: UUID?
 
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -20,6 +53,61 @@ struct ProjectDisclosureRow: View {
     @State private var isHeaderHovered = false
     @State private var isNewSessionHovered = false
     @FocusState private var renameFieldFocused: Bool
+
+    /// Snapshot of this project's session/indicator data, captured at
+    /// construction (not read inside `==`). `store`/`coordinator` are live
+    /// references — both the retained "old" row value and the freshly
+    /// constructed "new" one point at the same singleton, so comparing via a
+    /// method call at equality-check time would always see "now" on both
+    /// sides and never detect a change. Capturing a value snapshot here, once
+    /// per reconstruction, gives Equatable a genuine before/after diff.
+    /// Reads `WorkspaceStore.shared` directly (same pattern as
+    /// `MenuBarDropdownView`/`SessionCoordinator`) rather than the
+    /// `@EnvironmentObject`, which isn't resolved yet inside `init`.
+    private let sessionSignature: [AgentSession]
+    private let indicatorSignature: [UUID: SessionIndicatorState]
+
+    init(
+        project: Project,
+        isExpanded: Binding<Bool>,
+        selectedProjectId: Binding<UUID?>,
+        activeSessionId: UUID?
+    ) {
+        self.project = project
+        self._isExpanded = isExpanded
+        self._selectedProjectId = selectedProjectId
+        self.activeSessionId = activeSessionId
+
+        let flatSessions = WorkspaceStore.shared.sessionGroups(forProject: project.id).flatMap { $0.1 }
+        self.sessionSignature = flatSessions
+        self.indicatorSignature = flatSessions.reduce(into: [:]) { result, session in
+            result[session.id] = WorkspaceStore.shared.globalIndicatorStates[session.id]
+        }
+    }
+
+    /// This project's own inputs — session set/order/name/`lastActiveAt`,
+    /// indicator states, expansion, selection, and the globally active
+    /// session (so switching focus off *this* row's highlighted session still
+    /// refreshes it even when nothing else here changed).
+    ///
+    /// Intentionally compares the raw `activeSessionId`, not a bool narrowed
+    /// to "does the active session belong to this row." A narrowed bool stays
+    /// `true` across a focus switch between two sessions in the *same*
+    /// project when that switch lands inside `WorkspaceStore.recordActivity`'s
+    /// 5-second granularity guard (no `sessions`/`projects` mutation, so
+    /// `sessionSignature`/`indicatorSignature` don't change either) — Equatable
+    /// then reports "unchanged" and the active-session highlight silently goes
+    /// stale. Comparing the raw id means the row correctly re-renders whenever
+    /// the active session changes anywhere in the app, not only when it moves
+    /// into or out of this specific row.
+    static func == (lhs: ProjectDisclosureRowContent, rhs: ProjectDisclosureRowContent) -> Bool {
+        lhs.project == rhs.project
+            && lhs.isExpanded == rhs.isExpanded
+            && lhs.selectedProjectId == rhs.selectedProjectId
+            && lhs.activeSessionId == rhs.activeSessionId
+            && lhs.sessionSignature == rhs.sessionSignature
+            && lhs.indicatorSignature == rhs.indicatorSignature
+    }
 
     var body: some View {
         VStack(spacing: 2) {

@@ -601,6 +601,175 @@ struct WorkspaceStoreSectionsTests {
         #expect(groups.map(\.0) == [.active, .recent, .idle])
     }
 
+    // MARK: - Session Groups Cache (instance-level, PR2 perf)
+    //
+    // `WorkspaceStore.sessionGroups(forProject:)` memoizes its result per
+    // project id. These tests exercise the *instance* method (not the pure
+    // `computeSessionGroups` helper above) to confirm the cache is invalidated
+    // correctly by every mutation that changes its output, and that its
+    // result always matches a fresh uncached computation over the same state.
+
+    @MainActor
+    @Test func sessionGroupsCacheReflectsAddedSession() {
+        let p = makeProject(name: "Proj")
+        let s1 = makeSession(name: "One", projectId: p.id)
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s1])
+
+        let before = store.sessionGroups(forProject: p.id)
+        #expect(before.flatMap(\.1).map(\.name) == ["One"])
+
+        let s2 = store.addSession(name: "Two", templateId: template.id, projectId: p.id)
+
+        let after = store.sessionGroups(forProject: p.id)
+        #expect(Set(after.flatMap(\.1).map(\.id)) == Set([s1.id, s2.id]))
+    }
+
+    @MainActor
+    @Test func sessionGroupsCacheReflectsRemovedSession() {
+        let p = makeProject(name: "Proj")
+        let s1 = makeSession(name: "One", projectId: p.id)
+        let s2 = makeSession(name: "Two", projectId: p.id)
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s1, s2])
+
+        _ = store.sessionGroups(forProject: p.id)  // populate cache
+        store.removeSession(id: s1.id)
+
+        let after = store.sessionGroups(forProject: p.id)
+        #expect(after.flatMap(\.1).map(\.id) == [s2.id])
+    }
+
+    @MainActor
+    @Test func sessionGroupsCacheReflectsRenamedSession() {
+        let p = makeProject(name: "Proj")
+        let s = makeSession(name: "Zebra", projectId: p.id)
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s])
+
+        _ = store.sessionGroups(forProject: p.id)  // populate cache
+        store.renameSession(id: s.id, name: "Alpha")
+
+        let after = store.sessionGroups(forProject: p.id)
+        #expect(after.flatMap(\.1).map(\.name) == ["Alpha"])
+    }
+
+    @MainActor
+    @Test func sessionGroupsCacheReflectsIndicatorStateChange() {
+        let p = makeProject(name: "Proj")
+        let s = makeSession(name: "One", projectId: p.id)
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s])
+
+        let before = store.sessionGroups(forProject: p.id)
+        #expect(before.map(\.0) == [.idle])
+
+        store.updateIndicatorState(id: s.id, state: .processing)
+
+        let after = store.sessionGroups(forProject: p.id)
+        #expect(after.map(\.0) == [.active])
+    }
+
+    @MainActor
+    @Test func sessionGroupsCacheMatchesUncachedComputationAfterMutations() {
+        // Regression guard: the memoized instance-level result must always
+        // equal a fresh static computation over the same live state, even
+        // after a mix of add/rename/indicator mutations.
+        let p = makeProject(name: "Proj")
+        let s1 = makeSession(name: "Alpha", projectId: p.id)
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s1])
+
+        _ = store.sessionGroups(forProject: p.id)  // populate cache
+        let s2 = store.addSession(name: "Beta", templateId: template.id, projectId: p.id)
+        store.updateIndicatorState(id: s2.id, state: .processing)
+        store.renameSession(id: s1.id, name: "Zulu")
+
+        let cached = store.sessionGroups(forProject: p.id)
+        let fresh = WorkspaceStore.computeSessionGroups(
+            projectId: p.id,
+            sessions: store.sessions,
+            indicatorStates: store.globalIndicatorStates
+        )
+        #expect(cached.map(\.0) == fresh.map(\.0))
+        #expect(cached.flatMap(\.1) == fresh.flatMap(\.1))
+    }
+
+    // MARK: - Time-Only Cache Staleness (TTL, PR2 follow-up)
+    //
+    // The tests above all exercise mutation-driven invalidation (`didSet`).
+    // None of them cover the gap an adversarial review flagged: both
+    // `sectionedProjects` and `sessionGroups(forProject:)` bucket by
+    // wall-clock time (grace period / 24h recency window), so a cached result
+    // can go stale purely because time elapsed — with ZERO mutating calls in
+    // between to trip `didSet`. These tests use `_setTestClock(_:)` to
+    // advance fake time with no intervening mutation and confirm the next
+    // read reflects the expired window rather than the frozen-at-cache-time
+    // bucket.
+
+    @MainActor
+    @Test func sectionedProjectsCacheExpiresAfterTTLWithNoMutation() {
+        let p = makeProject(name: "Flapping")
+        let s = makeSession(projectId: p.id)
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s])
+
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        store._setTestClock { t0 }
+        store._setActiveSinceTimestamp(projectId: p.id, date: t0)
+
+        // Populate the cache while still within the 120s grace window.
+        let before = store.sectionedProjects
+        #expect(ids(in: .activeNow, of: before) == [p.id])
+
+        // Advance fake time past both the grace period (120s) and the cache
+        // TTL (2s) — no mutating calls happen between this and the read below.
+        store._setTestClock { t0.addingTimeInterval(200) }
+
+        let after = store.sectionedProjects
+        #expect(ids(in: .activeNow, of: after).isEmpty)
+    }
+
+    @MainActor
+    @Test func sessionGroupsCacheExpiresAfterTTLWithNoMutation() {
+        let p = makeProject(name: "Host")
+        let s = makeSession(
+            name: "Recent",
+            projectId: p.id,
+            lastActiveAt: Date(timeIntervalSince1970: 1_000_000)
+        )
+        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s])
+
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        store._setTestClock { t0 }
+
+        // Populate the cache: session's `lastActiveAt` is "now" → `.active`
+        // bucket is empty, `.recent` holds it (within the 24h window).
+        let before = store.sessionGroups(forProject: p.id)
+        #expect(before.first(where: { $0.0 == .recent })?.1.map(\.id) == [s.id])
+        #expect(before.first(where: { $0.0 == .idle }) == nil)
+
+        // Advance fake time past both the 24h recency window and the cache
+        // TTL (2s) — no mutating calls happen between this and the read below.
+        store._setTestClock { t0.addingTimeInterval(25 * 60 * 60) }
+
+        let after = store.sessionGroups(forProject: p.id)
+        #expect(after.first(where: { $0.0 == .idle })?.1.map(\.id) == [s.id])
+        #expect(after.first(where: { $0.0 == .recent }) == nil)
+    }
+
+    @MainActor
+    @Test func sessionGroupsCacheDoesNotLeakAcrossProjects() {
+        // A mutation to one project's session must not affect a sibling
+        // project's cached entry.
+        let p1 = makeProject(name: "One")
+        let p2 = makeProject(name: "Two")
+        let s1 = makeSession(name: "Mine", projectId: p1.id)
+        let s2 = makeSession(name: "Other", projectId: p2.id)
+        let store = WorkspaceStore(testingProjects: [p1, p2], testingSessions: [s1, s2])
+
+        let p2Before = store.sessionGroups(forProject: p2.id)
+        store.updateIndicatorState(id: s1.id, state: .processing)
+        let p2After = store.sessionGroups(forProject: p2.id)
+
+        #expect(p2Before.map(\.0) == p2After.map(\.0))
+        #expect(p2After.flatMap(\.1).map(\.id) == [s2.id])
+    }
+
     // MARK: - Freeze / Release (instance-level integration)
 
     @MainActor
