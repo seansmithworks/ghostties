@@ -600,16 +600,21 @@ extension Ghostty {
                 lastOutputSubjectFlushTimer = nil
                 lastOutputSubjectSentAt = now
                 lastOutputSubject.send()
-            } else if lastOutputSubjectFlushTimer == nil {
+            } else {
                 // Trailing-edge flush: this event was suppressed by the
-                // throttle, so schedule a one-shot fire for the remainder of
-                // the window to guarantee the final state of this burst is
-                // still delivered. If a flush is already pending, it will
-                // fire and pick up the latest state (the sink reads
-                // surface?.title live), so we don't need to reschedule.
-                let remaining = max(0, (Duration.milliseconds(250) - (now - lastOutputSubjectSentAt!)).timeInterval)
+                // throttle. Debounce relative to the LAST suppressed event
+                // (invalidate + reschedule on every one) rather than
+                // anchoring once to the start of the window — otherwise a
+                // late-arriving event in a burst can be flushed before its
+                // title actually commits. `titleChangeTimer` below coalesces
+                // rapid title writes and only commits `self.title` 75ms
+                // after the last setTitle call, so the flush must fire
+                // after that: 100ms gives 75ms + margin, guaranteeing the
+                // sink reads the true final title of the burst rather than
+                // a stale intermediate one.
+                lastOutputSubjectFlushTimer?.invalidate()
                 lastOutputSubjectFlushTimer = Timer.scheduledTimer(
-                    withTimeInterval: remaining,
+                    withTimeInterval: 0.1,
                     repeats: false
                 ) { [weak self] _ in
                     guard let self else { return }
