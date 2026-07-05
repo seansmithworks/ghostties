@@ -6,6 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.1.0-beta.19] — 2026-07-05
+
+The workspace stays responsive when several agents are running at once.
+
+### Fixed
+
+- **Running multiple agents no longer pins the CPU.** With a few Claude Code sessions streaming at the same time, the workspace could peg a core and beachball the app until you force-quit it. The sidebar was rebuilding itself on every terminal-title change — many times a second, per session — and redoing that work for every project row whether or not anything had actually changed. Activity updates are now throttled, and the sidebar only redraws the rows that changed. The app keeps up under real multi-agent load.
+
+### Performance
+
+- Task list reloads incrementally — only the task files that changed are re-read, instead of re-parsing every task on any file-system event.
+
+---
+
 ## [0.1.0-beta.18] — 2026-06-19
 
 The first build delivered to existing users over the air — it confirms auto-updates work end to end. No other changes from beta.17.

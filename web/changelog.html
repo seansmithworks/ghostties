@@ -238,6 +238,55 @@
       <p><strong style="color:rgba(255,255,255,0.6)">Beta.15 and earlier:</strong> Auto-updates aren't reliable yet in early betas. Download the latest release manually from the <a href="/download">download page</a>.</p>
     </div>
 
+    <!-- beta.19 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.19</h3>
+        <span class="date">July 5, 2026</span>
+      </div>
+      <p class="release-summary">The workspace stays responsive when several agents are running at once.</p>
+
+      <div class="release-section">
+        <h4>Fixed</h4>
+        <ul>
+          <li>Running multiple agents no longer pins the CPU &mdash; the sidebar was rebuilding itself on every terminal-title change and redoing that work for every project row whether or not anything had changed, which could peg a core and beachball the app until you force-quit it. Activity updates are now throttled and the sidebar only redraws the rows that changed.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h4>Performance</h4>
+        <ul>
+          <li>Task list reloads incrementally &mdash; only the task files that changed are re-read, instead of re-parsing every task on any file-system event.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- beta.18 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.18</h3>
+        <span class="date">June 19, 2026</span>
+      </div>
+      <p class="release-summary">The first build delivered to existing users over the air &mdash; it confirms auto-updates work end to end.</p>
+    </div>
+
+    <!-- beta.17 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.17</h3>
+        <span class="date">June 19, 2026</span>
+      </div>
+      <p class="release-summary">Auto-updates work now, and the workspace sidebar no longer freezes the app.</p>
+
+      <div class="release-section">
+        <h4>Fixed</h4>
+        <ul>
+          <li>Auto-updates now work &mdash; &ldquo;Check for Updates&rdquo; was silently doing nothing in beta.16, and the in-app update notification never rendered in the workspace window. Ghostties now checks for updates in the background and shows a notification pill when a new version is ready.</li>
+          <li>Sidebar no longer freezes the app &mdash; opening the project sidebar could peg the CPU and beachball the window.</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- beta.16 -->
     <div class="release">
       <div class="release-heading">
