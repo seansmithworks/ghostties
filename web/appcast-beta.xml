@@ -4,21 +4,21 @@
     <title>Ghostties Beta Releases</title>
     <description>Beta and stable releases of Ghostties</description>
   <item>
-    <title>Ghostties v0.1.0-beta.18</title>
-    <pubDate>Fri, 19 Jun 2026 16:35:06 +0000</pubDate>
-    <sparkle:version>16570</sparkle:version>
-    <sparkle:shortVersionString>0.1.0-beta.18</sparkle:shortVersionString>
+    <title>Ghostties v0.1.0-beta.19</title>
+    <pubDate>Sun, 05 Jul 2026 20:57:16 +0000</pubDate>
+    <sparkle:version>16575</sparkle:version>
+    <sparkle:shortVersionString>0.1.0-beta.19</sparkle:shortVersionString>
     <sparkle:minimumSystemVersion>13.0.0</sparkle:minimumSystemVersion>
     <description><![CDATA[
-      <h1>Ghostties v0.1.0-beta.18</h1>
-      <p>Built from commit <a href="https://github.com/SeanSmithDesign/ghostties/commits/8eb471203563eaf8e5e98e0ef5db4be0bc22f2d1">8eb471203</a>.</p>
-      <p>See <a href="https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.18">release notes</a> on GitHub.</p>
+      <h1>Ghostties v0.1.0-beta.19</h1>
+      <p>Built from commit <a href="https://github.com/SeanSmithDesign/ghostties/commits/c26ec63ec832b8deb71fd65fce72659daa8759f3">c26ec63ec</a>.</p>
+      <p>See <a href="https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.19">release notes</a> on GitHub.</p>
     ]]></description>
     <enclosure
-      url="https://github.com/SeanSmithDesign/ghostties/releases/download/v0.1.0-beta.18/Ghostties.dmg"
+      url="https://github.com/SeanSmithDesign/ghostties/releases/download/v0.1.0-beta.19/Ghostties.dmg"
       type="application/octet-stream"
-      sparkle:edSignature="A/b4xEuSNhWW16vhlpTgC5+5QvFEj6x1Y5iU9U4cvjNT9ILUkmTuT4+8FtafjcsafeSaA/az6643aiRUcU1NCQ=="
-      length="161066150" />
+      sparkle:edSignature="DIb6mkRUSmqOa+GAKo65nwQ+S6RBle8tPMytkOlaqD9lZ4jfKM5Mh0NPCV5IcAUNi6u97WDzjNZrH8SMOWMVCA=="
+      length="153592040" />
   </item>
   </channel>
 </rss>
