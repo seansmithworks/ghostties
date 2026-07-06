@@ -176,6 +176,117 @@ final class WorkspaceStore: ObservableObject {
         // Order: presets first, then built-in defaults, then custom templates.
         let customTemplates = state.templates.filter { !$0.isDefault }
         self.templates = presets + AgentTemplate.defaults + customTemplates
+
+        // `sessions` is never pruned — every agent session ever spawned stays
+        // in workspace.json forever, so this list grows unbounded over the
+        // app's lifetime (a few KB now, but it's a slow leak). Prune exactly
+        // once here, at the tail end of the real disk-load init, never on any
+        // runtime mutation path: at launch nothing has a live runtime yet, so
+        // pruning can never delete an in-flight session, whereas pruning
+        // during normal operation risks deleting a session that's actually
+        // running. This MUST be a method call (not inlined statements) — see
+        // `pruneStaleSessionsAtLaunch()` for why.
+        pruneStaleSessionsAtLaunch()
+    }
+
+    // MARK: - Session Pruning
+
+    /// Retention window for `pruneStaleSessionsAtLaunch()` — a session younger
+    /// than this (by `lastActiveAt`) is always kept, regardless of how many
+    /// other sessions its project has.
+    static let sessionRetentionWindow: TimeInterval = 30 * 24 * 60 * 60
+
+    /// Per-project floor for `pruneStaleSessionsAtLaunch()` — the most-recent
+    /// N sessions in a project are always kept, regardless of age. Together
+    /// with `sessionRetentionWindow` this gives a keep-if-**either** rule: a
+    /// session survives if it's recent enough OR it's one of its project's
+    /// top-N most-recently-active sessions. Only a session that fails BOTH
+    /// checks (stale *and* outside its project's recency floor) gets dropped.
+    /// This guarantees pruning can never touch a project's most useful recent
+    /// history even if that project has been dormant for months.
+    static let maxRetainedSessionsPerProject = 15
+
+    /// One-time launch prune for `sessions`. Called as the LAST statement of
+    /// the real (disk-load) `init()` — deliberately a plain method call
+    /// rather than inline statements in `init()`'s body. By the time `init()`
+    /// can call a method on `self`, the instance is fully initialized, so
+    /// this method's `self.sessions = ...` assignment goes through normal
+    /// "phase 2" semantics (the `didSet` on `sessions` fires exactly like it
+    /// does everywhere else in this class, and `persist()`'s capture list
+    /// picks up the pruned array). Doing this inline in `init()` instead would
+    /// leave it ambiguous whether `didSet` fires reliably given `sessions`
+    /// already has a declaration-site default.
+    ///
+    /// Policy (see `sessionRetentionWindow` / `maxRetainedSessionsPerProject`
+    /// above): a session is kept if EITHER (1) its `lastActiveAt` is within
+    /// the retention window (a `nil` `lastActiveAt` fails this condition —
+    /// treated as "never active"), OR (2) it ranks among its own project's
+    /// most-recent `maxRetainedSessionsPerProject` sessions by `lastActiveAt`
+    /// descending (nil ranks last). A session is pruned only when both fail.
+    /// `globalIndicatorStates` and `activeSinceTimestamps` are both ephemeral,
+    /// runtime-only, and empty at launch, so there's nothing to clean up in
+    /// them here.
+    internal func pruneStaleSessionsAtLaunch() {
+        // Group session indices by project so the recency ranking (condition 2)
+        // is computed independently per project — one project's dormant
+        // history must not push another project's sessions out of their own
+        // top-N.
+        var indicesByProject: [UUID: [Int]] = [:]
+        for (index, session) in sessions.enumerated() {
+            indicesByProject[session.projectId, default: []].append(index)
+        }
+
+        let now = currentTime()
+
+        // Indices that survive on the strength of the per-project recency
+        // floor alone (condition 2), independent of age.
+        var keptByRecencyCap: Set<Int> = []
+        for (_, indices) in indicesByProject {
+            // Decorate-sort-undecorate: rank by lastActiveAt descending, nil
+            // last, ties broken by original array position (index) so the
+            // ordering is fully deterministic without relying on a stable sort.
+            let ranked = indices.sorted { lhsIndex, rhsIndex in
+                let lhs = sessions[lhsIndex].lastActiveAt
+                let rhs = sessions[rhsIndex].lastActiveAt
+                switch (lhs, rhs) {
+                case let (lhs?, rhs?):
+                    if lhs == rhs { return lhsIndex < rhsIndex }
+                    return lhs > rhs
+                case (_?, nil): return true
+                case (nil, _?): return false
+                case (nil, nil): return lhsIndex < rhsIndex
+                }
+            }
+            for index in ranked.prefix(Self.maxRetainedSessionsPerProject) {
+                keptByRecencyCap.insert(index)
+            }
+        }
+
+        // Final keep decision per session, preserving the original overall
+        // order of `sessions` — the grouping/ranking above only decides
+        // membership, not the array's final order.
+        let kept = sessions.enumerated().filter { index, session in
+            let withinRetentionWindow: Bool = {
+                guard let lastActiveAt = session.lastActiveAt else { return false }
+                return now.timeIntervalSince(lastActiveAt) <= Self.sessionRetentionWindow
+            }()
+            return withinRetentionWindow || keptByRecencyCap.contains(index)
+        }.map(\.element)
+
+        // Nothing to prune — skip the assignment and disk write entirely so
+        // a launch with no stale sessions doesn't churn workspace.json.
+        guard kept.count < sessions.count else { return }
+
+        // Safety net: this is a silent, automatic, irreversible deletion that
+        // runs on the first post-update launch. Back up the pre-prune
+        // workspace.json to a sibling `.pre-prune.bak` file BEFORE committing
+        // the in-memory removal, so a user can recover manually if the
+        // policy ever proves wrong. No-op when there's nothing on disk yet
+        // (fresh install, or the test-only in-memory init path).
+        WorkspacePersistence.backUpBeforePrune(prunedCount: sessions.count - kept.count)
+
+        self.sessions = kept
+        persist()
     }
 
     // MARK: - Smart Sections
