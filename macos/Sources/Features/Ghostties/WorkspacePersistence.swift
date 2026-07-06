@@ -265,6 +265,30 @@ struct WorkspacePersistence {
         try? FileManager.default.moveItem(at: url, to: backupURL)
     }
 
+    /// Safety net for `WorkspaceStore.pruneStaleSessionsAtLaunch()` — copies
+    /// the on-disk `workspace.json` to a sibling `workspace.json.pre-prune.bak`
+    /// (overwriting any previous backup) BEFORE the caller commits a
+    /// destructive prune. Unlike `backupCorruptFile(at:)` above, this uses
+    /// `copyItem` (not `moveItem`) — the original file must survive so the
+    /// caller's subsequent `persist()` call still overwrites it normally.
+    ///
+    /// Silent no-op if `workspace.json` doesn't exist yet on disk (fresh
+    /// install, or the test-only in-memory init path where
+    /// `persistenceDisabled` is `true` and nothing was ever written) — there's
+    /// nothing to back up.
+    static func backUpBeforePrune(prunedCount: Int) {
+        let url = fileURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let backupURL = url.appendingPathExtension("pre-prune.bak")
+        try? FileManager.default.removeItem(at: backupURL)
+        do {
+            try FileManager.default.copyItem(at: url, to: backupURL)
+            logger.notice("Pruned \(prunedCount) stale session(s) at launch — backed up prior workspace.json to \(backupURL.path, privacy: .public)")
+        } catch {
+            logger.error("Failed to back up workspace.json before session prune: \(error.localizedDescription)")
+        }
+    }
+
     static func save(_ state: State) {
         let signpostState = Perf.signposter.beginInterval("workspace.save")
         defer { Perf.signposter.endInterval("workspace.save", signpostState) }

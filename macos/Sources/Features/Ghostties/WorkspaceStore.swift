@@ -277,6 +277,14 @@ final class WorkspaceStore: ObservableObject {
         // a launch with no stale sessions doesn't churn workspace.json.
         guard kept.count < sessions.count else { return }
 
+        // Safety net: this is a silent, automatic, irreversible deletion that
+        // runs on the first post-update launch. Back up the pre-prune
+        // workspace.json to a sibling `.pre-prune.bak` file BEFORE committing
+        // the in-memory removal, so a user can recover manually if the
+        // policy ever proves wrong. No-op when there's nothing on disk yet
+        // (fresh install, or the test-only in-memory init path).
+        WorkspacePersistence.backUpBeforePrune(prunedCount: sessions.count - kept.count)
+
         self.sessions = kept
         persist()
     }

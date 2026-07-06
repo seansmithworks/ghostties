@@ -17,6 +17,12 @@ import Testing
 /// so these tests call `pruneStaleSessionsAtLaunch()` directly against a store built
 /// via the testing initializer, with `_setTestClock(_:)` pinning "now" for
 /// deterministic age math.
+///
+/// Coverage also includes the `nil` `lastActiveAt` path (sessions that predate
+/// the timestamp feature — always fails condition 1, ranks last in condition
+/// 2's per-project cap), the tie-break rule when multiple sessions share an
+/// identical `lastActiveAt`, and the exact `<=` boundary of
+/// `sessionRetentionWindow`.
 struct WorkspaceStorePruneTests {
     // MARK: - Fixtures
 
@@ -178,5 +184,134 @@ struct WorkspaceStorePruneTests {
 
         #expect(store.sessions.map(\.id) == idsBefore)
         #expect(store.sessions.count == sessions.count)
+    }
+
+    // MARK: - Nil `lastActiveAt` (sessions predating the timestamp feature)
+
+    /// 6. All-nil sessions in a project respect the cap deterministically: 20
+    /// sessions, every one with `lastActiveAt: nil` (always fails condition 1),
+    /// so the cap ranking is decided entirely by the tie-break (original array
+    /// index ascending, since there are no dates to differentiate). The first
+    /// 15 sessions in original array order survive; the last 5 are dropped.
+    @MainActor
+    @Test func allNilLastActiveAtSessionsKeepFirstFifteenByOriginalOrder() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let project = makeProject()
+        let sessions = (0..<20).map { i in
+            makeSession(name: "S\(i)", projectId: project.id, lastActiveAt: nil)
+        }
+        let store = WorkspaceStore(testingProjects: [project], testingSessions: sessions)
+        store._setTestClock { now }
+
+        store.pruneStaleSessionsAtLaunch()
+
+        #expect(store.sessions.count == 15)
+        let keptNames = Set(store.sessions.map(\.name))
+        let expectedKept = Set((0..<15).map { "S\($0)" })
+        #expect(keptNames == expectedKept)
+    }
+
+    /// 7. A mix of nil and recent-dated sessions in one project (>15 total)
+    /// ranks/prunes as intended: a concrete date always ranks ahead of nil
+    /// (see the `(_?, nil): return true` branch in the cap comparator), so the
+    /// 3 dated sessions occupy the top of the per-project cap ranking, and the
+    /// 17 nil sessions fill the remaining cap slots in original array order.
+    /// The dated sessions here are also RECENT (within the 30-day retention
+    /// window), so condition 1 keeps them independently too — proving the
+    /// final kept set matches the cap ranking exactly, whichever condition is
+    /// responsible.
+    @MainActor
+    @Test func mixedNilAndRecentDatedSessionsRankDatedAheadOfNilByIndex() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let project = makeProject()
+        let dated = (0..<3).map { i in
+            makeSession(
+                name: "D\(i)",
+                projectId: project.id,
+                lastActiveAt: now.addingTimeInterval(-Double(i + 1) * 24 * 60 * 60)
+            )
+        }
+        let nilSessions = (0..<17).map { i in
+            makeSession(name: "N\(i)", projectId: project.id, lastActiveAt: nil)
+        }
+        let store = WorkspaceStore(
+            testingProjects: [project],
+            testingSessions: dated + nilSessions
+        )
+        store._setTestClock { now }
+
+        store.pruneStaleSessionsAtLaunch()
+
+        // Cap ranking: all 3 dated sessions first, then nil sessions in
+        // original array order. Top 15 = the 3 dated + the first 12 nil
+        // sessions (N0...N11); the remaining 5 nil sessions (N12...N16) are
+        // dropped.
+        #expect(store.sessions.count == 15)
+        let keptNames = Set(store.sessions.map(\.name))
+        let expectedKept = Set(["D0", "D1", "D2"]).union((0..<12).map { "N\($0)" })
+        #expect(keptNames == expectedKept)
+    }
+
+    // MARK: - Boundary Conditions
+
+    /// 8. Identical `lastActiveAt` timestamps across a >15-session project
+    /// break ties deterministically by original array index. All 20 sessions
+    /// here share the exact same stale (60-day-old) timestamp — condition 1
+    /// fails for every one of them, so the cap ranking is decided entirely by
+    /// the index tie-break, not by date. The first 15 by original order
+    /// survive; the last 5 are dropped.
+    @MainActor
+    @Test func identicalLastActiveAtTimestampsBreakTiesByOriginalIndex() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let project = makeProject()
+        let staleDate = now.addingTimeInterval(-60 * 24 * 60 * 60)
+        let sessions = (0..<20).map { i in
+            makeSession(name: "S\(i)", projectId: project.id, lastActiveAt: staleDate)
+        }
+        let store = WorkspaceStore(testingProjects: [project], testingSessions: sessions)
+        store._setTestClock { now }
+
+        store.pruneStaleSessionsAtLaunch()
+
+        #expect(store.sessions.count == 15)
+        let keptNames = Set(store.sessions.map(\.name))
+        let expectedKept = Set((0..<15).map { "S\($0)" })
+        #expect(keptNames == expectedKept)
+    }
+
+    /// 9. A session whose `lastActiveAt` is EXACTLY `now - sessionRetentionWindow`
+    /// (30 days to the second) is kept — condition 1's boundary is inclusive
+    /// (`<=`). The 15 filler sessions here are all more recent, so they occupy
+    /// every slot of the per-project cap ahead of the boundary session, which
+    /// therefore ranks 16th (last) and fails condition 2 entirely. Its
+    /// survival can only come from condition 1's `<=` comparison landing
+    /// exactly on the boundary — this test exercises that exact-equality case,
+    /// which none of the other tests above (all comfortably inside or outside
+    /// the window) touch.
+    @MainActor
+    @Test func sessionExactlyAtRetentionWindowBoundaryIsKeptDespiteFailingCap() {
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let project = makeProject()
+        let fillers = (0..<WorkspaceStore.maxRetainedSessionsPerProject).map { i in
+            makeSession(
+                name: "Filler\(i)",
+                projectId: project.id,
+                lastActiveAt: now.addingTimeInterval(-Double(i + 1) * 60)
+            )
+        }
+        let boundary = makeSession(
+            name: "Boundary",
+            projectId: project.id,
+            lastActiveAt: now.addingTimeInterval(-WorkspaceStore.sessionRetentionWindow)
+        )
+        let store = WorkspaceStore(
+            testingProjects: [project],
+            testingSessions: fillers + [boundary]
+        )
+        store._setTestClock { now }
+
+        store.pruneStaleSessionsAtLaunch()
+
+        #expect(store.sessions.contains(where: { $0.id == boundary.id }))
     }
 }
