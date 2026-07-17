@@ -11,6 +11,10 @@ struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
 
+    @State private var editingSessionId: UUID?
+    @State private var editingName: String = ""
+    @FocusState private var renameFieldFocused: Bool
+
     var body: some View {
         VStack(spacing: 0) {
             newSessionRow
@@ -107,16 +111,40 @@ struct RecentsListView: View {
     // MARK: - Session Row
 
     private func sessionRow(for session: AgentSession) -> some View {
-        let projectName = store.projects
-            .first { $0.id == session.projectId }?.name ?? "Unknown"
+        let project = store.projects.first { $0.id == session.projectId }
+        let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
         return RecentsRowView(
             session: session,
             projectName: projectName,
             indicatorState: indicatorState,
             isActive: coordinator.activeSessionId == session.id,
-            onTap: { coordinator.focusSession(id: session.id) }
+            isEditing: editingSessionId == session.id,
+            editingName: editingSessionId == session.id ? $editingName : .constant(""),
+            isRenameFocused: $renameFieldFocused,
+            onTap: { coordinator.focusSession(id: session.id) },
+            onCommitRename: { commitRename(session: session) },
+            onCancelRename: { cancelRename() }
         )
+        .contextMenu {
+            Button("Rename") {
+                beginRename(session: session)
+            }
+            Divider()
+            if coordinator.isRunning(id: session.id) {
+                Button("Stop") {
+                    coordinator.closeSession(id: session.id)
+                }
+            } else {
+                Button("Relaunch") {
+                    relaunchSession(session, project: project)
+                }
+                Button("Remove", role: .destructive) {
+                    coordinator.clearRuntime(id: session.id)
+                    store.removeSession(id: session.id)
+                }
+            }
+        }
     }
 
     // MARK: - Empty State
@@ -164,6 +192,46 @@ struct RecentsListView: View {
         }()
         Task {
             await coordinator.createQuickSession(for: project, template: resolved)
+        }
+    }
+
+    // MARK: - Rename
+
+    private func beginRename(session: AgentSession) {
+        editingName = session.name
+        editingSessionId = session.id
+        DispatchQueue.main.async {
+            renameFieldFocused = true
+        }
+    }
+
+    private func commitRename(session: AgentSession) {
+        let trimmed = editingName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, trimmed != session.name {
+            store.renameSession(id: session.id, name: trimmed)
+        }
+        editingSessionId = nil
+    }
+
+    private func cancelRename() {
+        editingSessionId = nil
+    }
+
+    // MARK: - Relaunch
+
+    private func relaunchSession(_ session: AgentSession, project: Project?) {
+        guard let project,
+              let template = store.templates.first(where: { $0.id == session.templateId }) else {
+            // Template or project was deleted — cannot relaunch.
+            print("Warning: Template or project for session '\(session.name)' not found (templateId: \(session.templateId))")
+            return
+        }
+
+        // No pre-check needed — SessionCoordinator.createSession() calls
+        // buildCommand() itself and handles missing prompt files gracefully.
+        coordinator.clearRuntime(id: session.id)
+        Task {
+            await coordinator.createSession(session: session, template: template, project: project)
         }
     }
 
