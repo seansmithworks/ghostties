@@ -23,6 +23,14 @@ enum WorkspaceLayout {
     /// v0 feature toggle — selected via the `ghostties.sidebarViewMode` @AppStorage flag.
     static let taskSidebarWidth: CGFloat = 280
 
+    /// Minimum width the user can drag the sidebar to (either view mode).
+    /// First-pass value — tunable.
+    static let sidebarMinWidth: CGFloat = 180
+
+    /// Maximum width the user can drag the sidebar to (either view mode).
+    /// First-pass value — tunable.
+    static let sidebarMaxWidth: CGFloat = 480
+
     /// Height reserved at top for window traffic light controls.
     static let titlebarSpacerHeight: CGFloat = 28
 
