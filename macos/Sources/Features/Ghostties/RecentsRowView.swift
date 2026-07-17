@@ -10,7 +10,12 @@ struct RecentsRowView: View {
     let projectName: String
     let indicatorState: SessionIndicatorState
     let isActive: Bool
+    var isEditing: Bool = false
+    @Binding var editingName: String
+    var isRenameFocused: FocusState<Bool>.Binding
     let onTap: () -> Void
+    var onCommitRename: () -> Void = {}
+    var onCancelRename: () -> Void = {}
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var isHovered = false
@@ -25,10 +30,22 @@ struct RecentsRowView: View {
 
             // Session name + project name stacked
             VStack(alignment: .leading, spacing: 1) {
-                Text(session.name)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
+                if isEditing {
+                    TextField("Session name", text: $editingName)
+                        .font(.system(size: 12))
+                        .textFieldStyle(.plain)
+                        .focused(isRenameFocused)
+                        .onSubmit { onCommitRename() }
+                        .onExitCommand { onCancelRename() }
+                        .onChange(of: isRenameFocused.wrappedValue) { focused in
+                            if !focused, isEditing { onCommitRename() }
+                        }
+                } else {
+                    Text(session.name)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                }
 
                 Text(projectName)
                     .font(.system(size: 10))
@@ -52,7 +69,10 @@ struct RecentsRowView: View {
         .background(rowBackground)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture(perform: onTap)
+        .onTapGesture {
+            guard !isEditing else { return }
+            onTap()
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
