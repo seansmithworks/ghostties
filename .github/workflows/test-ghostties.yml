@@ -5,12 +5,15 @@
 # access to. This workflow covers the fork-only surfaces:
 #
 #   - Swift Package at `cli/` (gt CLI + ghostties-mcp server + GhosttiesCore)
-#   - macOS app tests for TaskStore + TaskFileWatcher + TaskFixtureParser
+#     — runs the real pure-Swift logic tests.
+#   - macOS app — compile-verifies the app and all test bundles
+#     (`build-for-testing`). App-hosted test *execution* is deferred: the
+#     XCTest host hangs on headless runners (see the macos-app job).
 #
-# Runs on macos-latest (Apple Silicon) because GhosttyKit.xcframework is
-# arm64-only. The xcframework is built fresh from source via Zig
-# (gitignored — not committed to the repo). Signing / notarization
-# happens in the separate release workflow (`ghostties-release.yml`).
+# Runs on Apple Silicon because GhosttyKit.xcframework is arm64-only. The
+# xcframework is built fresh from source via Zig (gitignored — not committed
+# to the repo). Signing / notarization happens in the separate release
+# workflow (`ghostties-release.yml`).
 
 name: Test (Ghostties fork)
 
@@ -56,7 +59,7 @@ jobs:
   # macOS App — Ghostties Xcode project tests
   # ---------------------------------------------------------------------------
   macos-app:
-    name: macOS App (xcodebuild test)
+    name: macOS App (build-for-testing)
     if: github.repository != 'ghostty-org/ghostty'
     # Pinned to macos-15 (not macos-latest): the macos-latest image moved to
     # macOS 26 / Xcode 26.6, whose SDK Zig 0.15.2 cannot link against —
@@ -128,46 +131,32 @@ jobs:
       # Xcode CLI will try to build universal and fail on linker misses.
       # (Xcode GUI masks this by defaulting ONLY_ACTIVE_ARCH=YES for Debug.)
       #
-      # The host app (`Ghostties Dev.app`) used to hang ~6 min in headless CI
-      # before XCTest could establish a connection because `ghostty_init` ran
-      # in main.swift and `Ghostty.App(configPath:)` ran in AppDelegate
-      # property init — both before any launch hook could short-circuit. The
-      # fix is in three layers: main.swift skips `ghostty_init` under
-      # XCTest, AppDelegate's `ghostty` / `updateController` are now `lazy`
-      # so they aren't constructed during property init, and the launch hooks
-      # short-circuit when `XCTestConfigurationFilePath` is set. Together
-      # those keep the test host from touching libghostty / Sparkle in a
-      # headless CI runner.
-      #
-      # Test scope is intentionally narrow: only the lightweight test classes
-      # that exercise pure-Swift fixture types. The broader suites need a
-      # window server / additional setup we don't have in headless CI yet.
-      - name: Test Ghostties
+      # We compile-verify with `build-for-testing`, not `test`. Running the
+      # app-hosted `GhosttyTests` requires launching `Ghostties Dev.app` as the
+      # XCTest host, and that host reliably hangs ~6 min on headless GitHub
+      # runners — "test runner hung before establishing connection" — then
+      # times out (exit 65). The three-layer XCTest short-circuit
+      # (main.swift skips `ghostty_cli_try_action`, AppDelegate's
+      # `ghostty` / `updateController` are `lazy`, and both launch hooks return
+      # early when `XCTestConfigurationFilePath` is set) makes the host launch
+      # fast *locally* (Cmd+U / `xcodebuild test` runs in seconds) but does not
+      # resolve the headless-runner connection hang. Rather than burn CI on a
+      # GUI-launch hang, we build the app AND every test bundle here — which
+      # catches compile-level regressions in both app and test code — while the
+      # `swift-package` job above runs the real pure-Swift logic suites
+      # (GhosttiesCore + ghostties-mcp) that don't need an app host. Local
+      # Cmd+U remains the gate for app-hosted test *execution*. Re-enabling
+      # `xcodebuild test` here is deferred until the headless host-launch hang
+      # is solved (e.g. a non-app-hosted logic test bundle).
+      - name: Build Ghostties (app + tests)
         working-directory: macos
         run: |
           set -o pipefail
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -scheme Ghostties \
             -configuration Debug \
             -destination 'platform=macOS' \
             ONLY_ACTIVE_ARCH=YES \
             ARCHS=arm64 \
             -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO \
-            -only-testing:GhosttyTests/TaskModelTests \
-            -only-testing:GhosttyTests/TaskFileWatcherTests \
-            -only-testing:GhosttyTests/ActiveZoneDedupTests \
-            -only-testing:GhosttyTests/TaskTypeBridgeTests \
-            -only-testing:GhosttyTests/RouterDebounceTests \
-            -only-testing:GhosttyTests/TaskStoreWriteTests \
-            -only-testing:GhosttyTests/RowClickRouterTests \
-            -only-testing:GhosttyTests/ExpandGraveyardTaskTests \
-            -only-testing:GhosttyTests/TriageOrphanTaskTests \
-            -only-testing:GhosttyTests/NewTaskComposerTests \
-            -only-testing:GhosttyTests/StartInboxTaskTests \
-            -only-testing:GhosttyTests/EmptyStatesTests \
-            -only-testing:GhosttyTests/FocusRunningTaskTests \
-            -only-testing:GhosttyTests/AccessibilityTests \
-            -only-testing:GhosttyTests/KeyboardShortcutsTests \
-            -only-testing:GhosttyTests/MultiWindowScopingTests \
-            -only-testing:GhosttyTests/WorkspaceAlignmentTests
+            CODE_SIGNING_ALLOWED=NO
