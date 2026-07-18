@@ -238,6 +238,31 @@
       <p><strong style="color:rgba(255,255,255,0.6)">Beta.15 and earlier:</strong> Auto-updates aren't reliable yet in early betas. Download the latest release manually from the <a href="/download">download page</a>.</p>
     </div>
 
+    <!-- beta.20 -->
+    <div class="release">
+      <div class="release-heading">
+        <h3>v0.1.0-beta.20</h3>
+        <span class="date">July 17, 2026</span>
+      </div>
+      <p class="release-summary">Make the workspace sidebar yours &mdash; resize it, cycle sessions from the keyboard, and manage recents with a right-click.</p>
+
+      <div class="release-section">
+        <h4>Added</h4>
+        <ul>
+          <li>Drag to resize the sidebar &mdash; grab its trailing edge and drag to the width you want. Each layout (project-first and task-first) remembers its own width, so switching modes restores the size you last set there.</li>
+          <li>Cycle between running sessions from the keyboard &mdash; &#8984;&#8679;] and &#8984;&#8679;[ move focus to the next or previous live session, in sidebar order, wrapping at the ends. Project cycling moves to &#8984;&#8963;] / &#8984;&#8963;[.</li>
+          <li>Right-click a recent session to rename, stop, relaunch, or remove it &mdash; the Sessions tab now has the same context menu as the project view, plus inline rename in place.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h4>Performance</h4>
+        <ul>
+          <li>The recents list no longer grows forever &mdash; it&rsquo;s now pruned once at launch, dropping sessions untouched for 30 days while always keeping each project&rsquo;s 15 most recent. This never touches real agent work; it only trims the sidebar&rsquo;s memory of old sessions so the list stays fast over time.</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- beta.19 -->
     <div class="release">
       <div class="release-heading">

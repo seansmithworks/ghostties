@@ -6,6 +6,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.1.0-beta.20] — 2026-07-17
+
+Make the workspace sidebar yours — resize it, cycle sessions from the keyboard, and manage recents with a right-click.
+
+### Added
+
+- **Drag to resize the sidebar.** Grab the sidebar's trailing edge and drag to the width you want. Each layout — project-first and task-first — remembers its own width, so switching modes restores the size you last set there. The width stays within sensible bounds so the terminal always keeps room.
+- **Cycle between running sessions from the keyboard.** Press `⌘⇧]` and `⌘⇧[` to move focus to the next or previous live session, in sidebar order, wrapping at the ends. In task-first mode the same shortcut steps through the task zones. Project cycling moves to `⌘⌃]` / `⌘⌃[`.
+- **Right-click a recent session to manage it.** Sessions-tab rows now have a context menu — Rename, Stop, Relaunch, Remove — matching the project view. Rename also works inline: the row's name becomes editable in place.
+
+### Performance
+
+- The recents list no longer grows forever. The sidebar used to keep a record of every session it had ever seen; it's now pruned once at launch — sessions untouched for 30 days drop off, while each project always keeps its 15 most recent. This never touches real agent work (commits, files, and terminal output all live elsewhere) — it only trims the sidebar's memory of old sessions, so the list stays fast the longer you use the app.
+
+---
+
 ## [0.1.0-beta.19] — 2026-07-05
 
 The workspace stays responsive when several agents are running at once.
