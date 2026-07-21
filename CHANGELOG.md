@@ -6,6 +6,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.1.0-beta.20] — 2026-07-20
+
+Quality-of-life improvements to the workspace sidebar — resize it, rename sessions in place, and jump between live agents from the keyboard.
+
+### Added
+
+- **Drag to resize the sidebar.** Grab the sidebar's trailing edge and drag to make it wider or narrower. Ghostties remembers your width separately for the Sessions and Tasks views, so each stays how you left it.
+- **Rename, stop, and relaunch sessions from the Sessions tab.** Right-click any row in the Sessions tab for a menu matching the project view — Rename, Stop, Relaunch, Remove. Renaming happens inline, right on the row.
+- **Cycle through live agents from the keyboard.** `Cmd+Shift+]` / `Cmd+Shift+[` now step through your running sessions in sidebar order (or through task zones in Tasks view). Project cycling moved to `Cmd+Ctrl+]` / `Cmd+Ctrl+[`.
+
+### Changed
+
+- **The Sessions list trims itself at launch.** It used to keep every agent session you ever started. It now keeps everything from the last 30 days plus each project's 15 most recent, so the list stays tidy without touching any of your actual work.
+
+---
+
 ## [0.1.0-beta.19] — 2026-07-05
 
 The workspace stays responsive when several agents are running at once.
