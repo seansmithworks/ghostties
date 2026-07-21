@@ -405,9 +405,9 @@ jobs:
           print(m.group(1) if m else sys.exit(1))
           ")
 
-          DMG_URL="https://github.com/SeanSmithDesign/ghostties/releases/download/v${GHOSTTIES_VERSION}/Ghostties.dmg"
+          DMG_URL="${{ github.server_url }}/${{ github.repository }}/releases/download/v${GHOSTTIES_VERSION}/Ghostties.dmg"
           NOW=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
-          REPO="https://github.com/SeanSmithDesign/ghostties"
+          REPO="${{ github.server_url }}/${{ github.repository }}"
 
           python3 - \
             "$GHOSTTIES_VERSION" \
@@ -558,7 +558,7 @@ jobs:
 
           gh release create "$TAG" \
             $PRERELEASE_FLAG \
-            --repo SeanSmithDesign/ghostties \
+            --repo ${{ github.repository }} \
             --title "Ghostties v${GHOSTTIES_VERSION}" \
             --notes "Ghostties v${GHOSTTIES_VERSION}" \
             Ghostties.dmg \
