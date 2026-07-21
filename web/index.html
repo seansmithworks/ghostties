@@ -277,6 +277,8 @@
 
     .product h2 span {
       display: block;
+      opacity: 0;
+      transform: translateY(16px);
     }
 
     /* Window card: glow behind, tilt + chrome + video on top */
@@ -298,7 +300,8 @@
     .product-card {
       position: relative;
       z-index: 1;
-      transform: rotate(-1.1deg);
+      opacity: 0;
+      transform: scale(0.94) rotate(-4deg) translateY(24px);
       border-radius: 10px;
       overflow: hidden;
       background: #0f0f1a;
@@ -329,6 +332,8 @@
       height: 10px;
       border-radius: 50%;
       display: block;
+      opacity: 0;
+      transform: scale(0.4);
     }
 
     .product-chrome-dots span:nth-child(1) { background: #ED6A5E; }
@@ -343,6 +348,7 @@
       background: rgba(0, 0, 0, 0.04);
       padding: 3px 12px;
       border-radius: 999px;
+      opacity: 0;
     }
 
     .product-card video {
@@ -356,6 +362,62 @@
       font-size: 12px;
       color: #C97350;
       margin-top: 12px;
+      opacity: 0;
+    }
+
+    /* --- Product boot-sequence entrance (scroll-triggered) --- */
+    .product.reveal h2 span:nth-child(1) {
+      animation: product-fade-up 0.5s ease-out forwards;
+    }
+
+    .product.reveal h2 span:nth-child(2) {
+      animation: product-fade-up 0.5s 0.15s ease-out forwards;
+    }
+
+    .product.reveal .product-card {
+      animation: product-card-in 0.6s 0.25s cubic-bezier(0.22, 0.75, 0.32, 1) forwards;
+    }
+
+    .product.reveal .product-chrome-dots span:nth-child(1) {
+      animation: product-dot-pop 0.3s 0.65s ease-out forwards;
+    }
+
+    .product.reveal .product-chrome-dots span:nth-child(2) {
+      animation: product-dot-pop 0.3s 0.71s ease-out forwards;
+    }
+
+    .product.reveal .product-chrome-dots span:nth-child(3) {
+      animation: product-dot-pop 0.3s 0.77s ease-out forwards;
+    }
+
+    .product.reveal .product-chrome-label {
+      animation: product-fade-in 0.4s 0.7s ease-out forwards;
+    }
+
+    .product.reveal .product-caption {
+      animation: product-fade-in 0.5s 0.9s ease-out forwards;
+    }
+
+    @keyframes product-fade-up {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes product-fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    @keyframes product-card-in {
+      0%   { opacity: 0; transform: scale(0.94) rotate(-4deg) translateY(24px); }
+      60%  { opacity: 1; transform: scale(1.01) rotate(-2.5deg) translateY(-3px); }
+      100% { opacity: 1; transform: scale(1) rotate(-1.1deg) translateY(0); }
+    }
+
+    @keyframes product-dot-pop {
+      0%   { opacity: 0; transform: scale(0.4); }
+      70%  { opacity: 1; transform: scale(1.15); }
+      100% { opacity: 1; transform: scale(1); }
     }
 
     /* --- Footer --- */
@@ -435,6 +497,16 @@
 
     @media (prefers-reduced-motion: reduce) {
       .bg-ghost { animation: none !important; }
+      .product h2 span,
+      .product-card,
+      .product-chrome-dots span,
+      .product-chrome-label,
+      .product-caption {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+      }
+      .product-card { transform: rotate(-1.1deg) !important; }
     }
 
     /* --- Mobile --- */
@@ -456,6 +528,19 @@
       .bg-ghost { width: 22px; height: 22px; }
     }
   </style>
+  <noscript>
+    <style>
+      .product h2 span,
+      .product-card,
+      .product-chrome-dots span,
+      .product-chrome-label,
+      .product-caption {
+        opacity: 1 !important;
+        transform: none !important;
+      }
+      .product-card { transform: rotate(-1.1deg) !important; }
+    </style>
+  </noscript>
 </head>
 <body>
   <div class="ghost-backdrop" aria-hidden="true">
@@ -571,7 +656,7 @@
           <span class="product-chrome-dots"><span></span><span></span><span></span></span>
           <span class="product-chrome-label">switchboard</span>
         </div>
-        <video src="/assets/product-combined.mp4" autoplay muted loop playsinline aria-label="Ghostties sidebar switching from four parallel Claude Code sessions to the gt list task-lane view, same window"></video>
+        <video src="/assets/product-combined.mp4" muted loop playsinline aria-label="Ghostties sidebar switching from four parallel Claude Code sessions to the gt list task-lane view, same window"></video>
       </div>
     </div>
     <div class="product-caption">four sessions &rarr; gt list, same window</div>
@@ -661,6 +746,36 @@
     // Don't scatter when clicking links
     ghLink.addEventListener('click', (e) => e.stopPropagation());
     dlLink.addEventListener('click', (e) => e.stopPropagation());
+  </script>
+
+  <script>
+    // Product section boot-sequence: reveal + restart video once scrolled into view.
+    (function() {
+      const product = document.querySelector('.product');
+      const video = product.querySelector('.product-card video');
+
+      function reveal() {
+        product.classList.add('reveal');
+        video.currentTime = 0;
+        video.play();
+      }
+
+      if (!('IntersectionObserver' in window)) {
+        reveal();
+        return;
+      }
+
+      const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            reveal();
+            obs.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.25 });
+
+      observer.observe(product);
+    })();
   </script>
 </body>
 </html>
