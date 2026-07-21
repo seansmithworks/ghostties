@@ -68,7 +68,7 @@ struct OnboardingSheet: View {
                             Text("GitHub:")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
-                            Link("github.com/SeanSmithDesign/ghostties", destination: URL(string: "https://github.com/SeanSmithDesign/ghostties")!)
+                            Link("github.com/SeanSmithWorks/ghostties", destination: URL(string: "https://github.com/SeanSmithWorks/ghostties")!)
                                 .font(.system(size: 12))
                         }
                     }

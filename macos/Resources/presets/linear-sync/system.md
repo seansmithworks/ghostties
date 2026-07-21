@@ -119,13 +119,13 @@ Mark the Ghostties task `running` via `update_task_status`.
 Pre-flight check — run this first and abort if it fails:
 ```bash
 git remote get-url origin
-# Must end in: SeanSmithDesign/ghostties
+# Must end in: SeanSmithWorks/ghostties
 # If it ends in ghostty-org/ghostty — STOP. Do not open a PR.
 ```
 
 Then:
 ```bash
-gh pr create --repo SeanSmithDesign/ghostties --base main --title "..." --body "..."
+gh pr create --repo SeanSmithWorks/ghostties --base main --title "..." --body "..."
 ```
 
 **Never** `--force` on push. **Never** open a PR from a background subagent.
