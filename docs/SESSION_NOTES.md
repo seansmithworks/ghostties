@@ -2571,3 +2571,29 @@ Pickup session: full test suite was already green on `main` (`a41d842eb`). Tagge
 - `29cb53256` — chore(appcast): update from v0.1.0-beta.16 [CI]
 - `7989451ba` — feat(web): changelog page + update beta.15 install note
 - `5b21ba418` — fix(web): honest auto-update copy — say download manually
+
+---
+
+## 2026-07-22 — beta.20 release + account-rename cleanup
+
+**Focus:** Merge the awaiting CI fix, ship beta.20, and clean up the SeanSmithDesign→SeanSmithWorks account rename. Orchestrator thread; phone-mode for the back half.
+
+### Shipped
+
+- **CI green on main** — merged PR **#47** (`c9ce88fc5`): macos-15 runner pin + `build-for-testing` (host-app XCTest hang) + stale MCP tool-count test. Supersedes #33 (still open — close attempt was permission-denied).
+- **`v0.1.0-beta.20` released** — changelog section merged (**#49**, `ccfa97a4b`), Sean pushed the tag, release CI green, release object live (prerelease) with DMG + zip + appcasts, body filled via `gh release edit`. Appcast build **16584 > beta.19's 16575**, so Sparkle offers the OTA. Ships sidebar PRs #42/#43/#44/#45.
+- **Account-rename cleanup** — #48 (web product-shots) merged (`3d2cefc57`); **#51** (`36ba41b4e`) rename-proofed the release workflow with `${{ github.repository }}`; **#52** (`fb4d2bec4`) updated 6 user-facing files (4 web pages + OnboardingSheet.swift + linear-sync preset), auto-deployed to prod ghostties.org.
+
+### Discovered / learned
+
+- **Security-scanner false-positive** on #52: it flagged the correct `SeanSmithWorks/ghostties` PR as a hard-rule violation because stale `SeanSmithDesign` text is still the scanner's "configured origin." Verified benign (`git remote -v` → origin=SeanSmithWorks; upstream push DISABLE'd). Memory: `feedback-scanner-false-positive-account-rename.md`.
+- **Shared-worktree branching gotcha:** #49's first cut inherited an unrelated branch's commit because the implementer branched from the shared tree's ambient HEAD, not main. Fixed by rebuilding in a scratch worktree. Lesson locked: instruct implementers to `git checkout -b <branch> origin/main` explicitly.
+
+### Carried to BACKLOG (2026-07-22)
+
+- Sweep remaining stale `SeanSmithDesign` refs from memory/docs (silences the scanner). Sean declined doing it this session.
+- Close PR #33.
+
+### Commits this session (all via merged PRs)
+
+- `c9ce88fc5` (#47), `ccfa97a4b` (#49), `36ba41b4e` (#51), `fb4d2bec4` (#52)
