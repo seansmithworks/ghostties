@@ -656,7 +656,7 @@
           <span class="product-chrome-dots"><span></span><span></span><span></span></span>
           <span class="product-chrome-label">switchboard</span>
         </div>
-        <video src="/assets/product-combined.mp4" muted loop playsinline aria-label="Ghostties sidebar switching from four parallel Claude Code sessions to the gt list task-lane view, same window"></video>
+        <video src="/assets/product-combined.mp4" muted loop playsinline preload="auto" aria-label="Ghostties sidebar switching from four parallel Claude Code sessions to the gt list task-lane view, same window"></video>
       </div>
     </div>
     <div class="product-caption">four sessions &rarr; gt list, same window</div>
@@ -759,12 +759,21 @@
       let inView = false;
       let revealed = false;
 
+      function restartVideo() {
+        try { video.currentTime = 0; } catch (e) {}
+        const playPromise = video.play();
+        if (playPromise && playPromise.catch) playPromise.catch(() => {});
+      }
+
       function tryReveal() {
         if (revealed || !heroDone || !inView) return;
         revealed = true;
         product.classList.add('reveal');
-        video.currentTime = 0;
-        video.play();
+        if (video.readyState >= 2) {
+          restartVideo();
+        } else {
+          video.addEventListener('canplay', restartVideo, { once: true });
+        }
       }
 
       setTimeout(() => { heroDone = true; tryReveal(); }, 10100);
