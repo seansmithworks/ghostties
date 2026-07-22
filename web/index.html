@@ -749,26 +749,37 @@
   </script>
 
   <script>
-    // Product section boot-sequence: reveal + restart video once scrolled into view.
+    // Product section boot-sequence: reveal only once the hero sequence has
+    // finished (10.1s, matching activateCarets' line-6 caret lock) AND the
+    // section has been scrolled into view. Whichever happens last triggers it.
     (function() {
       const product = document.querySelector('.product');
       const video = product.querySelector('.product-card video');
+      let heroDone = false;
+      let inView = false;
+      let revealed = false;
 
-      function reveal() {
+      function tryReveal() {
+        if (revealed || !heroDone || !inView) return;
+        revealed = true;
         product.classList.add('reveal');
         video.currentTime = 0;
         video.play();
       }
 
+      setTimeout(() => { heroDone = true; tryReveal(); }, 10100);
+
       if (!('IntersectionObserver' in window)) {
-        reveal();
+        inView = true;
+        // heroDone timer above will still call tryReveal() when it fires
         return;
       }
 
       const observer = new IntersectionObserver((entries, obs) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            reveal();
+            inView = true;
+            tryReveal();
             obs.unobserve(entry.target);
           }
         });
