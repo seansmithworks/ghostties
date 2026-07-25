@@ -379,6 +379,12 @@ class AppDelegate: NSObject,
         // propagate to Ghostty's new_window handler.
         setupNewTaskComposerShortcut()
 
+        // Reclaims ⌘⇧[ / ⌘⇧] for session cycling — see
+        // `setupSessionCyclingShortcut()` for why this needs its own monitor
+        // (Ghostty's default `previous_tab`/`next_tab` keybinds otherwise win
+        // the chord before our "Next/Previous Session" menu items ever fire).
+        setupSessionCyclingShortcut()
+
         // Setup signal handlers
         setupSignals()
 
@@ -871,6 +877,58 @@ class AppDelegate: NSObject,
 
             // D17: return nil to swallow — must not propagate to new_window.
             return nil
+        }
+    }
+
+    /// Reclaims ⌘⇧[ / ⌘⇧] for session cycling ("Next/Previous Session" in the
+    /// View menu) in every sidebar view.
+    ///
+    /// **Root cause of the Projects-view no-op bug this fixes:** Ghostty's
+    /// default keybinds (`src/config/Config.zig` around line 7038-7047) bind
+    /// these exact chords to `previous_tab`/`next_tab`. `NSWindow` asks its
+    /// content view hierarchy's `performKeyEquivalent(with:)` BEFORE it asks
+    /// `NSApp.mainMenu`, and `SurfaceView_AppKit.performKeyEquivalent` (see
+    /// that file, `override func performKeyEquivalent`) recognizes the chord
+    /// as a Ghostty binding, calls `self.keyDown(with:)` to run
+    /// `previous_tab`/`next_tab` itself, and returns `true` — so our "Next/
+    /// Previous Session" menu items (added in `setupWorkspaceMenuItems()`)
+    /// never get a turn. `NSEvent.addLocalMonitorForEvents` runs before
+    /// AppKit's key-equivalent dispatch entirely, so intercepting here and
+    /// returning `nil` reliably wins the race — same pattern as
+    /// `setupNewTaskComposerShortcut()` above, which solves the identical
+    /// problem for ⌘⇧N vs. `new_window`.
+    ///
+    /// Unlike the ⌘⇧N monitor, this one is NOT gated on sidebar view mode —
+    /// the whole point is that Cmd+Shift+[/] must cycle sessions identically
+    /// in the Projects tab, Sessions tab, and task-first mode, so the chord
+    /// is reclaimed unconditionally and dispatched through the responder
+    /// chain via `NSApp.sendAction`, exactly like a menu-item click would.
+    /// This is also why it can't regress on custom user keybinds: Ghostty's
+    /// config never gets a chance to see this chord at all, regardless of
+    /// what `previous_tab`/`next_tab` (or anything else) is bound to.
+    ///
+    /// Uses `characters(byApplyingModifiers: [])` rather than
+    /// `charactersIgnoringModifiers` to read the base key — `[`/`]` are
+    /// symbol keys, so `charactersIgnoringModifiers` still honors Shift and
+    /// would report `{`/`}` for this exact chord, not `[`/`]`.
+    private func setupSessionCyclingShortcut() {
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection([.command, .shift, .control, .option])
+                    == [.command, .shift]
+            else { return event }
+
+            switch event.characters(byApplyingModifiers: []) {
+            case "]":
+                NSApp.sendAction(#selector(TerminalController.selectNextSession(_:)), to: nil, from: nil)
+                return nil
+
+            case "[":
+                NSApp.sendAction(#selector(TerminalController.selectPreviousSession(_:)), to: nil, from: nil)
+                return nil
+
+            default:
+                return event
+            }
         }
     }
 
