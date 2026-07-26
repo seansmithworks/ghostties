@@ -185,6 +185,11 @@ private struct ProjectDisclosureRowContent: View, Equatable {
             Button("Rename") {
                 beginRename(session: session)
             }
+            if session.isNamePinned {
+                Button("Sync name automatically") {
+                    store.resetNamePin(id: session.id)
+                }
+            }
             Divider()
             if index > 0 {
                 Button("Move Up") {

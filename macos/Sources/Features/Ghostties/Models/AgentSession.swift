@@ -21,13 +21,21 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// Nil means this session predates the timestamp system or has never been touched.
     var lastActiveAt: Date?
 
+    /// True once the user has manually renamed this session via the sidebar
+    /// context menu. A pinned name is locked — incoming agent title updates
+    /// (see `SessionTitleSanitizer` / `SessionCoordinator`) stop overwriting it
+    /// until the pin is explicitly cleared. Defaults to `false` so existing
+    /// sessions keep syncing automatically.
+    var isNamePinned: Bool
+
     init(
         id: UUID = UUID(),
         name: String,
         templateId: UUID,
         projectId: UUID,
         sortOrder: Int? = nil,
-        lastActiveAt: Date? = nil
+        lastActiveAt: Date? = nil,
+        isNamePinned: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -35,10 +43,11 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = projectId
         self.sortOrder = sortOrder
         self.lastActiveAt = lastActiveAt
+        self.isNamePinned = isNamePinned
     }
 
-    // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt)
-    // load without error.
+    // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
+    // isNamePinned) load without error.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -47,6 +56,7 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = try container.decode(UUID.self, forKey: .projectId)
         self.sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
         self.lastActiveAt = try container.decodeIfPresent(Date.self, forKey: .lastActiveAt)
+        self.isNamePinned = try container.decodeIfPresent(Bool.self, forKey: .isNamePinned) ?? false
     }
 }
 

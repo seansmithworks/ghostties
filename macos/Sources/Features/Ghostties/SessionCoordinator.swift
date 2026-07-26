@@ -85,6 +85,19 @@ final class SessionCoordinator: ObservableObject {
     /// terminal output line when detecting "needs attention" prompts.
     private var lastSurfaceTitle: [UUID: String] = [:]
 
+    /// Wall-clock time each session last had its sidebar name synced from its
+    /// terminal title. Guards `nameSyncThrottle` below — see that constant for
+    /// why this exists.
+    private var lastNameSyncAt: [UUID: Date] = [:]
+
+    /// Throttle for `WorkspaceStore.syncSessionNameFromTitle`. Claude Code updates
+    /// the terminal title constantly while streaming (this is the exact signal
+    /// path documented in `project_perf-activity-invalidation-storm.md` — an
+    /// unthrottled write here reintroduces that storm). A session name has no
+    /// business updating more than once every few seconds, so this mirrors
+    /// `WorkspaceStore.recordActivity`'s 5s granularity guard.
+    private static let nameSyncThrottle: TimeInterval = 5
+
     /// When each session entered the processing state (continuous output).
     /// Cleared when the session returns to a prompt. Used for long-running detection.
     private var processingStartTimes: [UUID: ContinuousClock.Instant] = [:]
@@ -622,6 +635,7 @@ final class SessionCoordinator: ObservableObject {
         isAtPrompt.removeValue(forKey: id)
         processingStartTimes.removeValue(forKey: id)
         lastSurfaceTitle.removeValue(forKey: id)
+        lastNameSyncAt.removeValue(forKey: id)
         WorkspaceStore.shared.removeSessionStatus(id: id)
         WorkspaceStore.shared.removeIndicatorState(id: id)
     }
@@ -902,6 +916,7 @@ final class SessionCoordinator: ObservableObject {
                 // Used by isLikelyPromptingForInput to detect attention-needed state.
                 if let title = surface?.title, !title.isEmpty {
                     self.lastSurfaceTitle[sessionId] = title
+                    self.syncSessionNameIfDue(sessionId: sessionId, title: title)
                 }
                 // Push activity into the workspace store so per-project /
                 // per-session `lastActiveAt` and the grace-period tracker stay
@@ -915,6 +930,38 @@ final class SessionCoordinator: ObservableObject {
                     )
                 }
             }
+    }
+
+    /// Throttled entry point for Claude Code → sidebar name sync (one direction
+    /// only — nothing here ever writes back into the running agent's terminal).
+    ///
+    /// Guard #1 (throttle): skips entirely unless `nameSyncThrottle` seconds have
+    /// passed since this session's last sync attempt — this is the hot-path guard
+    /// against the title-change storm (titles change many times/sec while an
+    /// agent streams; see `project_perf-activity-invalidation-storm.md`).
+    /// Guard #2 (unchanged-value / pin): delegated to
+    /// `WorkspaceStore.syncSessionNameFromTitle`, which no-ops (no `@Published`
+    /// write, no `persist()`) when the session is pinned or the sanitized title
+    /// doesn't differ from the current name.
+    private func syncSessionNameIfDue(sessionId: UUID, title: String) {
+        let now = Date()
+        if let last = lastNameSyncAt[sessionId], now.timeIntervalSince(last) < Self.nameSyncThrottle {
+            return
+        }
+        lastNameSyncAt[sessionId] = now
+
+        let projectDirectoryName = WorkspaceStore.shared.sessions
+            .first(where: { $0.id == sessionId })
+            .flatMap { session in
+                WorkspaceStore.shared.projects.first(where: { $0.id == session.projectId })
+            }
+            .map { URL(fileURLWithPath: $0.rootPath).lastPathComponent }
+
+        WorkspaceStore.shared.syncSessionNameFromTitle(
+            id: sessionId,
+            title: title,
+            projectDirectoryName: projectDirectoryName
+        )
     }
 
     /// Observe `GHOSTTY_ACTION_COMMAND_FINISHED` to cache exit codes before surfaces close.
