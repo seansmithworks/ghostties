@@ -1094,7 +1094,19 @@ final class WorkspaceStore: ObservableObject {
     /// on a background thread to avoid blocking the main actor.
     private var persistTask: Task<Void, Never>?
 
+    #if DEBUG
+    /// Test-only invocation counter — increments on every `persist()` call
+    /// regardless of `persistenceDisabled`, so tests can assert a no-op path
+    /// (unchanged name, pinned session, etc.) never even attempts to persist.
+    /// "The write didn't fire" is exactly the assertion that would have
+    /// caught the storm incident in `project_perf-activity-invalidation-storm.md`.
+    private(set) var persistCallCount = 0
+    #endif
+
     private func persist() {
+        #if DEBUG
+        persistCallCount += 1
+        #endif
         guard !persistenceDisabled else { return }
         persistTask?.cancel()
         persistTask = Task { [projects, sessions, templates, sidebarMode, lastSelectedProjectId, hasShownPinMigrationNotice, hasDismissedPinMigrationNotice] in
