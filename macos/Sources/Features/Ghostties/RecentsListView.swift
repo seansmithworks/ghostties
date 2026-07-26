@@ -327,9 +327,14 @@ struct RecentsListView: View {
     ///   (a) `isArchiveSection` is true and `activeSessionsEmpty` is true —
     ///       nothing above it to show, so Archive can't be left collapsed
     ///       with the whole list hidden behind it.
-    ///   (b) `sectionContainsSelectedSession` is true — the section holding
-    ///       the currently-selected session is always visible, without
-    ///       relocating the session itself (see `belongsInActive`).
+    ///   (b) `isArchiveSection` is true and `sectionContainsSelectedSession`
+    ///       is true — a session that drops into a collapsed Archive stays
+    ///       visible, without relocating the session itself (see
+    ///       `belongsInActive`). This override is Archive-only: Active has no
+    ///       equivalent vanishing problem, and a selected, running session
+    ///       lives in Active essentially all the time during normal use, so
+    ///       applying the override there would make the Active header a dead
+    ///       control.
     /// Otherwise falls through to `storedPreference` unchanged.
     static func effectiveExpanded(
         storedPreference: Bool,
@@ -338,7 +343,7 @@ struct RecentsListView: View {
         sectionContainsSelectedSession: Bool
     ) -> Bool {
         if isArchiveSection && activeSessionsEmpty { return true }
-        if sectionContainsSelectedSession { return true }
+        if isArchiveSection && sectionContainsSelectedSession { return true }
         return storedPreference
     }
 

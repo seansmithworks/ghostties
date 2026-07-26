@@ -969,6 +969,24 @@ struct WorkspaceStoreSectionsTests {
         #expect(color == WorkspaceLayout.activityMutedForeground)
     }
 
+    @Test func ghostColorIsErrorRedWhenSessionErrors() {
+        // `.error` maps to systemRed at the project level — unlike the old
+        // section-bucketing `isActiveIndicatorState`, which excludes `.error`
+        // and lets it fall through to the recency tier, the ghost color must
+        // surface the error directly rather than hiding it behind a muted or
+        // normal recency color.
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let p = makeProject(name: "Errored", lastActiveAt: now.addingTimeInterval(-48 * 3600))
+        let s = makeSession(projectId: p.id)
+        let color = WorkspaceStore.projectGhostColor(
+            project: p,
+            sessions: [s],
+            indicatorStates: [s.id: .error],
+            now: { now }
+        )
+        #expect(color == Color(nsColor: .systemRed))
+    }
+
     @Test func ghostColorIgnoresSessionsBelongingToOtherProjects() {
         // A processing session in *another* project must not turn this
         // project's ghost green.

@@ -185,10 +185,12 @@ struct AgentSessionTests {
         #expect(sessionA.ghostCharacter == nil)
         #expect(sessionA.resolvedGhostCharacter == sessionB.resolvedGhostCharacter)
 
-        // Known-input → known-output: pins the exact byte-derivation so a
-        // future accidental change to the algorithm is caught, not just "is
-        // it internally consistent."
-        #expect(AgentSession.deterministicFallbackGhost(for: knownId) == sessionA.resolvedGhostCharacter)
+        // Known-input → known-output: pins the exact byte-derivation against a
+        // literal independently computed for this UUID, so a future accidental
+        // change to the algorithm is caught — comparing the function to itself
+        // (as the two lines above do) would move in lockstep with any change
+        // to the derivation and never catch a regression.
+        #expect(AgentSession.deterministicFallbackGhost(for: knownId) == .fang)
     }
 
     /// `abs(Int.min)` traps — the old hashValue-based fallback was one bad

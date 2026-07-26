@@ -116,7 +116,7 @@ struct WorkspaceStoreGhostTests {
 
         let twentyFifth = store.addSession(name: "25th", templateId: template.id, projectId: project.id)
 
-        #expect(GhostCharacter.allCases.contains(twentyFifth.ghostCharacter ?? .blinky))
+        #expect(twentyFifth.ghostCharacter != nil)
     }
 
     // MARK: - Least-Used Round Robin (FIX 11)
@@ -131,9 +131,20 @@ struct WorkspaceStoreGhostTests {
         var used = GhostCharacter.allCases
         used.append(.wraith)
 
+        // Feed each pick back into the multiset (as production does via
+        // `allAssignedGhosts()`) so successive calls actually round-robin
+        // instead of re-deriving the same tied-least-used pick every time —
+        // without feeding back, `allCases.min(by:)` is deterministic and every
+        // iteration returns the identical character, proving only that
+        // `.wraith` is excluded, not that assignment distributes.
+        var picks: [GhostCharacter] = []
         for _ in 0..<10 {
             let pick = GhostCharacter.randomUnused(excluding: used)
             #expect(pick != .wraith)
+            picks.append(pick)
+            used.append(pick)
         }
+
+        #expect(Set(picks).count == picks.count, "round-robin should visit distinct ghosts, not repeat one pick")
     }
 }

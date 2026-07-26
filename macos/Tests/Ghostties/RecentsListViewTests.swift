@@ -223,8 +223,8 @@ final class RecentsListViewTests: XCTestCase {
         ))
         XCTAssertTrue(RecentsListView.effectiveExpanded(
             storedPreference: false,
-            isArchiveSection: false,
-            activeSessionsEmpty: true,
+            isArchiveSection: true,
+            activeSessionsEmpty: false,
             sectionContainsSelectedSession: true
         ))
         // No override condition met — falls through to the stored preference.
@@ -234,6 +234,21 @@ final class RecentsListViewTests: XCTestCase {
             activeSessionsEmpty: false,
             sectionContainsSelectedSession: false
         ))
+    }
+
+    /// FIX (dead ACTIVE header): the selected-session override must be
+    /// Archive-only. A selected, running session lives in Active essentially
+    /// all the time during normal use, so applying the override there would
+    /// make the ACTIVE header collapse control permanently dead — tapping it
+    /// while a session is selected must actually collapse the section, honoring
+    /// the stored preference the same way as when nothing is selected.
+    func testActiveSectionRespectsStoredPreferenceEvenWhenItContainsSelectedSession() {
+        XCTAssertFalse(RecentsListView.effectiveExpanded(
+            storedPreference: false,
+            isArchiveSection: false,
+            activeSessionsEmpty: false,
+            sectionContainsSelectedSession: true
+        ), "Active must not force-expand for the selected session — only Archive gets that override")
     }
 
     // MARK: - Relative Time Labels
