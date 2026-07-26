@@ -21,13 +21,19 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// Nil means this session predates the timestamp system or has never been touched.
     var lastActiveAt: Date?
 
+    /// The pixel-art ghost character displayed for this session in the Sessions list.
+    /// Nil means this session predates the per-session ghost system (falls back to a
+    /// hash-derived ghost or a plain colored indicator — never re-rolled on render).
+    var ghostCharacter: GhostCharacter?
+
     init(
         id: UUID = UUID(),
         name: String,
         templateId: UUID,
         projectId: UUID,
         sortOrder: Int? = nil,
-        lastActiveAt: Date? = nil
+        lastActiveAt: Date? = nil,
+        ghostCharacter: GhostCharacter? = nil
     ) {
         self.id = id
         self.name = name
@@ -35,10 +41,11 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = projectId
         self.sortOrder = sortOrder
         self.lastActiveAt = lastActiveAt
+        self.ghostCharacter = ghostCharacter
     }
 
-    // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt)
-    // load without error.
+    // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
+    // ghostCharacter) load without error.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -47,6 +54,17 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = try container.decode(UUID.self, forKey: .projectId)
         self.sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
         self.lastActiveAt = try container.decodeIfPresent(Date.self, forKey: .lastActiveAt)
+        self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
+    }
+
+    /// Stable ghost for this session — the assigned `ghostCharacter` if present,
+    /// otherwise a hash-derived fallback so pre-existing sessions render sensibly
+    /// without ever being re-rolled.
+    var resolvedGhostCharacter: GhostCharacter {
+        if let ghostCharacter { return ghostCharacter }
+        let all = GhostCharacter.allCases
+        let index = abs(id.hashValue) % all.count
+        return all[index]
     }
 }
 

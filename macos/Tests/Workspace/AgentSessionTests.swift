@@ -144,6 +144,44 @@ struct AgentSessionTests {
         #expect(decoded.sortOrder == nil)
     }
 
+    @Test func sessionDecodingWithoutGhostCharacterDefaultsToNil() throws {
+        // Simulates a legacy workspace.json where sessions predate the per-session
+        // ghost system — must load without error, ghostCharacter defaults to nil.
+        let projectId = UUID()
+        let templateId = AgentTemplate.shell.id
+        let id = UUID()
+        let json = """
+        {
+            "id": "\(id.uuidString)",
+            "name": "Legacy Session",
+            "templateId": "\(templateId.uuidString)",
+            "projectId": "\(projectId.uuidString)"
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
+
+        #expect(decoded.ghostCharacter == nil)
+        // A nil ghostCharacter must still resolve to a stable, non-crashing ghost.
+        let resolved = decoded.resolvedGhostCharacter
+        #expect(decoded.resolvedGhostCharacter == resolved)
+    }
+
+    @Test func sessionCodableRoundTripPreservesGhostCharacter() throws {
+        let original = AgentSession(
+            name: "Ghosted Session",
+            templateId: AgentTemplate.claudeCode.id,
+            projectId: UUID(),
+            ghostCharacter: .wraith
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
+
+        #expect(decoded.ghostCharacter == .wraith)
+        #expect(decoded.resolvedGhostCharacter == .wraith)
+    }
+
     @Test func sessionDecodingMalformedLastActiveAtThrows() {
         // A string where a numeric/date is expected should fail loudly rather than
         // silently becoming nil. Protects against over-use of `try?` in the decoder.

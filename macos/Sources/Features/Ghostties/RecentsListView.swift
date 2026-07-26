@@ -15,6 +15,11 @@ struct RecentsListView: View {
     @State private var editingName: String = ""
     @FocusState private var renameFieldFocused: Bool
 
+    /// Section-collapse state, persisted across launches. Active defaults open
+    /// (the sessions the user is working with today); Archive defaults closed.
+    @AppStorage("ghostties.sessionsSection.active") private var isActiveExpanded = true
+    @AppStorage("ghostties.sessionsSection.archive") private var isArchiveExpanded = false
+
     var body: some View {
         VStack(spacing: 0) {
             newSessionRow
@@ -29,16 +34,20 @@ struct RecentsListView: View {
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         if !activeSessions.isEmpty {
-                            SessionSectionHeader(title: "Active")
-                            ForEach(activeSessions) { session in
-                                sessionRow(for: session)
+                            SessionSectionHeader(title: "Active", isExpanded: $isActiveExpanded)
+                            if isActiveExpanded {
+                                ForEach(activeSessions) { session in
+                                    sessionRow(for: session)
+                                }
                             }
                         }
 
                         if !archiveSessions.isEmpty {
-                            SessionSectionHeader(title: "Archive")
-                            ForEach(archiveSessions) { session in
-                                sessionRow(for: session)
+                            SessionSectionHeader(title: "Archive", isExpanded: $isArchiveExpanded)
+                            if isArchiveExpanded {
+                                ForEach(archiveSessions) { session in
+                                    sessionRow(for: session)
+                                }
                             }
                         }
                     }
@@ -165,17 +174,29 @@ struct RecentsListView: View {
 
     // MARK: - Data
 
-    /// Sessions with a live indicator state — process is alive or actively tracked.
+    /// Sessions with a live indicator state — process is alive or actively tracked —
+    /// plus the currently-selected session regardless of indicator state (see
+    /// `belongsInActive`). Without this guard, a session the user is watching would
+    /// vanish into a collapsed Archive the instant its agent goes quiet.
     var activeSessions: [AgentSession] {
         Self.sorted(sessions: store.sessions.filter {
-            (store.globalIndicatorStates[$0.id] ?? .inactive) != .inactive
+            Self.belongsInActive(
+                indicatorState: store.globalIndicatorStates[$0.id] ?? .inactive,
+                sessionId: $0.id,
+                selectedSessionId: coordinator.activeSessionId
+            )
         })
     }
 
-    /// Sessions that have exited, completed, or never had a live process this launch.
+    /// Sessions that have exited, completed, or never had a live process this launch —
+    /// excluding whichever session is currently selected.
     var archiveSessions: [AgentSession] {
         Self.sorted(sessions: store.sessions.filter {
-            (store.globalIndicatorStates[$0.id] ?? .inactive) == .inactive
+            !Self.belongsInActive(
+                indicatorState: store.globalIndicatorStates[$0.id] ?? .inactive,
+                sessionId: $0.id,
+                selectedSessionId: coordinator.activeSessionId
+            )
         })
     }
 
@@ -235,16 +256,38 @@ struct RecentsListView: View {
         }
     }
 
+    // MARK: - Section Membership (static so tests can call without a view instance)
+
+    /// Whether a session belongs in the Active section: it has a live indicator
+    /// state, OR it is the currently-selected session (guard against a watched
+    /// session vanishing into a collapsed Archive the instant its agent goes quiet).
+    static func belongsInActive(
+        indicatorState: SessionIndicatorState,
+        sessionId: UUID,
+        selectedSessionId: UUID?
+    ) -> Bool {
+        if sessionId == selectedSessionId { return true }
+        return indicatorState != .inactive
+    }
+
     // MARK: - Sorting (static so tests can call without a view instance)
 
-    /// Sort sessions most-recently-active first; nil `lastActiveAt` sinks to bottom.
+    /// Stable order: honor explicit `sortOrder` where present, falling back to
+    /// each session's existing position in the passed-in array (append/creation
+    /// order) — never resorts on `lastActiveAt`, which changes every few seconds
+    /// while an agent streams and would otherwise reshuffle rows under the cursor.
     static func sorted(sessions: [AgentSession]) -> [AgentSession] {
-        sessions.sorted { lhs, rhs in
-            switch (lhs.lastActiveAt, rhs.lastActiveAt) {
-            case (let l?, let r?): return l > r
-            case (.some, .none):   return true
-            case (.none, .some):   return false
-            case (.none, .none):   return false
+        let position = Dictionary(uniqueKeysWithValues: sessions.enumerated().map { ($0.element.id, $0.offset) })
+        return sessions.sorted { lhs, rhs in
+            switch (lhs.sortOrder, rhs.sortOrder) {
+            case let (l?, r?):
+                return l != r ? l < r : (position[lhs.id] ?? 0) < (position[rhs.id] ?? 0)
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                return (position[lhs.id] ?? 0) < (position[rhs.id] ?? 0)
             }
         }
     }
@@ -254,20 +297,39 @@ struct RecentsListView: View {
 
 private struct SessionSectionHeader: View {
     let title: String
+    @Binding var isExpanded: Bool
 
     var body: some View {
-        Text(title.uppercased())
-            .font(.system(size: 10, weight: .semibold))
-            .tracking(0.6)
-            .foregroundStyle(WorkspaceLayout.sectionHeaderForeground)
-            .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding
-                         + WorkspaceLayout.sidebarIconColumnWidth
-                         + WorkspaceLayout.sidebarIconLabelSpacing)
+        Button {
+            let animation: Animation? = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                ? nil
+                : .easeInOut(duration: 0.2)
+            withAnimation(animation) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+                PixelChevronView(color: WorkspaceLayout.sectionHeaderForeground, isExpanded: isExpanded)
+                    .frame(width: 10, height: 10)
+
+                Text(title.uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(WorkspaceLayout.sectionHeaderForeground)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
             .padding(.trailing, 12)
             .padding(.top, 8)
             .padding(.bottom, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityAddTraits(.isHeader)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel("\(title), \(isExpanded ? "expanded" : "collapsed")")
+        .accessibilityHint("Double-tap to \(isExpanded ? "collapse" : "expand")")
     }
 }
 

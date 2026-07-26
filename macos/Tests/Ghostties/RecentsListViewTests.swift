@@ -1,49 +1,73 @@
 import XCTest
 @testable import Ghostty
 
-/// Tests for the recents-list sorting logic in RecentsListView.
+/// Tests for the recents-list ordering + section-membership logic in RecentsListView.
 ///
-/// Exercises the static `sorted(sessions:)` helper and `relativeLabel(_:)`
-/// — both are pure functions with no SwiftUI or AppKit dependencies.
+/// Exercises the static `sorted(sessions:)` and `belongsInActive(...)` helpers plus
+/// `relativeLabel(_:)` — all are pure functions with no SwiftUI or AppKit dependencies.
 final class RecentsListViewTests: XCTestCase {
 
     // MARK: - Helpers
 
     private func session(
         name: String,
-        lastActiveAt: Date? = nil
+        lastActiveAt: Date? = nil,
+        sortOrder: Int? = nil
     ) -> AgentSession {
         AgentSession(
             name: name,
             templateId: UUID(),
             projectId: UUID(),
+            sortOrder: sortOrder,
             lastActiveAt: lastActiveAt
         )
     }
 
-    // MARK: - Sorting
+    // MARK: - Sorting (stable order — NOT recency-based)
 
-    func testSortsByLastActiveAtDescending() {
+    /// Recency (`lastActiveAt`) must NOT affect order — that was the bug (rows
+    /// reshuffling under the cursor as `recordActivity` bumps the timestamp
+    /// every ~5s during streaming). Position/creation order should win instead.
+    func testLastActiveAtDoesNotAffectOrder() {
         let early = session(name: "early", lastActiveAt: Date(timeIntervalSinceNow: -3600))
         let middle = session(name: "middle", lastActiveAt: Date(timeIntervalSinceNow: -1800))
         let recent = session(name: "recent", lastActiveAt: Date(timeIntervalSinceNow: -60))
 
-        let sorted = RecentsListView.sorted(sessions: [early, recent, middle])
+        // Passed in append/creation order: early, middle, recent.
+        let sorted = RecentsListView.sorted(sessions: [early, middle, recent])
 
-        XCTAssertEqual(sorted.map(\.name), ["recent", "middle", "early"])
+        XCTAssertEqual(sorted.map(\.name), ["early", "middle", "recent"])
     }
 
-    func testNilLastActiveAtSinksToBottom() {
-        let withDate = session(name: "withDate", lastActiveAt: Date(timeIntervalSinceNow: -300))
-        let noDate1 = session(name: "noDate1", lastActiveAt: nil)
-        let noDate2 = session(name: "noDate2", lastActiveAt: nil)
+    func testExplicitSortOrderWins() {
+        let a = session(name: "a", sortOrder: 2)
+        let b = session(name: "b", sortOrder: 0)
+        let c = session(name: "c", sortOrder: 1)
 
-        let sorted = RecentsListView.sorted(sessions: [noDate1, withDate, noDate2])
+        let sorted = RecentsListView.sorted(sessions: [a, b, c])
 
-        // withDate must be first; the two nil-date sessions can be in any order after.
-        XCTAssertEqual(sorted.first?.name, "withDate")
-        let tailNames = Set(sorted.dropFirst().map(\.name))
-        XCTAssertEqual(tailNames, ["noDate1", "noDate2"])
+        XCTAssertEqual(sorted.map(\.name), ["b", "c", "a"])
+    }
+
+    func testSessionsWithSortOrderComeBeforeNilSortOrder() {
+        let noOrder = session(name: "noOrder", sortOrder: nil)
+        let ordered = session(name: "ordered", sortOrder: 0)
+
+        let sorted = RecentsListView.sorted(sessions: [noOrder, ordered])
+
+        XCTAssertEqual(sorted.map(\.name), ["ordered", "noOrder"])
+    }
+
+    /// Nil `sortOrder` falls back to append/creation position (index in the
+    /// passed-in array), not any other ordering.
+    func testNilSortOrderFallsBackToAppendPosition() {
+        let first = session(name: "first", sortOrder: nil)
+        let second = session(name: "second", sortOrder: nil)
+        let third = session(name: "third", sortOrder: nil)
+
+        let sorted = RecentsListView.sorted(sessions: [first, second, third])
+
+        XCTAssertEqual(sorted.map(\.name), ["first", "second", "third"])
     }
 
     func testEmptySessionListReturnsEmpty() {
@@ -58,10 +82,52 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertEqual(sorted.first?.name, "only")
     }
 
-    func testAllNilTimestampsPreservesCount() {
-        let sessions = (0..<5).map { session(name: "s\($0)", lastActiveAt: nil) }
+    func testAllNilSortOrdersPreservesCount() {
+        let sessions = (0..<5).map { session(name: "s\($0)", sortOrder: nil) }
         let sorted = RecentsListView.sorted(sessions: sessions)
         XCTAssertEqual(sorted.count, 5)
+    }
+
+    // MARK: - Section Membership (selected-session guard)
+
+    func testInactiveSessionBelongsInArchiveByDefault() {
+        let id = UUID()
+        XCTAssertFalse(RecentsListView.belongsInActive(
+            indicatorState: .inactive,
+            sessionId: id,
+            selectedSessionId: nil
+        ))
+    }
+
+    func testLiveIndicatorStateBelongsInActive() {
+        let id = UUID()
+        XCTAssertTrue(RecentsListView.belongsInActive(
+            indicatorState: .processing,
+            sessionId: id,
+            selectedSessionId: nil
+        ))
+    }
+
+    /// The critical guard: a selected session with an `.inactive` indicator must
+    /// still stay in Active — it must not vanish into a collapsed Archive the
+    /// instant the agent goes quiet while the user is looking at it.
+    func testSelectedInactiveSessionStaysInActive() {
+        let id = UUID()
+        XCTAssertTrue(RecentsListView.belongsInActive(
+            indicatorState: .inactive,
+            sessionId: id,
+            selectedSessionId: id
+        ))
+    }
+
+    func testDeselectedInactiveSessionFallsToArchive() {
+        let sessionId = UUID()
+        let otherSelectedId = UUID()
+        XCTAssertFalse(RecentsListView.belongsInActive(
+            indicatorState: .inactive,
+            sessionId: sessionId,
+            selectedSessionId: otherSelectedId
+        ))
     }
 
     // MARK: - Relative Time Labels

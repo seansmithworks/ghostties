@@ -635,11 +635,13 @@ final class WorkspaceStore: ObservableObject {
     func addSession(name: String, templateId: UUID, projectId: UUID) -> AgentSession {
         let maxOrder = sessions.filter { $0.projectId == projectId }
             .compactMap(\.sortOrder).max() ?? -1
+        let usedGhosts = Set(sessions.map(\.resolvedGhostCharacter))
         let session = AgentSession(
             name: name,
             templateId: templateId,
             projectId: projectId,
-            sortOrder: maxOrder + 1
+            sortOrder: maxOrder + 1,
+            ghostCharacter: GhostCharacter.randomUnused(excluding: usedGhosts)
         )
         sessions.append(session)
         // Session creation is a user action and a fresh layout commit point —
