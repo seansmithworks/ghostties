@@ -194,4 +194,96 @@ final class SessionNameSyncTests: XCTestCase {
         )
         XCTAssertLessThanOrEqual(writeCount, 2, "at most one write per throttle interval — leading edge plus trailing edge, never one per signal")
     }
+
+    // MARK: - FIX 1: nameSyncSubscriptions teardown
+
+    /// `closeSession`'s "Stop" path must release the name-sync subscription
+    /// alongside `outputSubscriptions`, not just leave it to accumulate until
+    /// `clearRuntime` (Remove / Relaunch / project-delete) eventually cleans
+    /// it up. Uses the `seedEmptySessionTreeForTesting` seam since a real
+    /// `SplitTree<Ghostty.SurfaceView>` requires a live GhosttyKit app.
+    func testCloseSessionReleasesNameSyncSubscription() {
+        let project = makeProject()
+        let session = AgentSession(name: "Session 1", templateId: UUID(), projectId: project.id)
+        let store = WorkspaceStore(testingProjects: [project], testingSessions: [session])
+        let coordinator = SessionCoordinator()
+
+        coordinator.seedEmptySessionTreeForTesting(id: session.id)
+        let titleSubject = PassthroughSubject<String, Never>()
+        coordinator.subscribeNameSync(sessionId: session.id, titlePublisher: titleSubject, store: store)
+
+        XCTAssertEqual(coordinator.nameSyncSubscriptionCountForTesting, 1)
+
+        coordinator.closeSession(id: session.id)
+
+        XCTAssertEqual(
+            coordinator.nameSyncSubscriptionCountForTesting,
+            0,
+            "closeSession must release the name-sync subscription, not just outputSubscriptions"
+        )
+    }
+
+    // MARK: - FIX 2: manual title pins the session
+
+    /// A title that arrives via the manual "Set Title" dialog must rename
+    /// AND pin the session — pinning is what makes the state visible
+    /// (surfaces the "Sync name automatically" menu item) and reversible
+    /// (clearable via `resetNamePin`), instead of silently and permanently
+    /// killing agent-title sync with no indication why.
+    func testManualTitlePinsSessionAndPinIsClearable() {
+        let project = makeProject()
+        let session = AgentSession(name: "Session 1", templateId: UUID(), projectId: project.id)
+        let store = WorkspaceStore(testingProjects: [project], testingSessions: [session])
+        let coordinator = SessionCoordinator()
+
+        coordinator.performNameSync(sessionId: session.id, title: "My Window Title", store: store, isManualTitle: true)
+
+        XCTAssertEqual(store.sessions(for: project.id).first?.name, "My Window Title")
+        XCTAssertTrue(
+            store.sessions(for: project.id).first?.isNamePinned ?? false,
+            "a manually-set terminal title must pin the session name, the same as a sidebar rename"
+        )
+
+        store.resetNamePin(id: session.id)
+        XCTAssertFalse(store.sessions(for: project.id).first?.isNamePinned ?? true)
+
+        store.syncSessionNameFromTitle(id: session.id, title: "Refactoring the auth module")
+        XCTAssertEqual(
+            store.sessions(for: project.id).first?.name,
+            "Refactoring the auth module",
+            "clearing the pin must resume automatic agent-title sync"
+        )
+    }
+
+    // MARK: - FIX 3: initial empty title replay
+
+    /// `@Published` replays its current value on subscribe, and a brand-new
+    /// `SurfaceView`'s first emission is always "". That empty replay must
+    /// not consume the throttle's leading edge — the first REAL title must
+    /// land immediately, not be deferred by up to the full throttle interval.
+    func testFirstEmptyTitleReplayDoesNotDelayFirstRealTitle() {
+        let project = makeProject()
+        let session = AgentSession(name: "Session 1", templateId: UUID(), projectId: project.id)
+        let store = WorkspaceStore(testingProjects: [project], testingSessions: [session])
+        let coordinator = SessionCoordinator()
+
+        // CurrentValueSubject mimics @Published's replay-on-subscribe behavior:
+        // the subscriber sees "" immediately, exactly like a fresh SurfaceView.
+        let titleSubject = CurrentValueSubject<String, Never>("")
+        // Long interval on purpose: if the empty replay ate the leading edge,
+        // the real title below would be stuck behind this whole window.
+        coordinator.subscribeNameSync(sessionId: session.id, titlePublisher: titleSubject, interval: 10, store: store)
+
+        titleSubject.send("Reading files")
+
+        let fired = expectation(description: "first real title lands promptly")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { fired.fulfill() }
+        wait(for: [fired], timeout: 2.0)
+
+        XCTAssertEqual(
+            store.sessions(for: project.id).first?.name,
+            "Reading files",
+            "the first real title must not be delayed by the empty initial replay"
+        )
+    }
 }

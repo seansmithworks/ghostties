@@ -619,6 +619,8 @@ final class SessionCoordinator: ObservableObject {
         // Remove from our tracking first, then close surfaces via the controller.
         sessionTrees.removeValue(forKey: id)
         outputSubscriptions.removeValue(forKey: id)
+        nameSyncSubscriptions[id]?.cancel()
+        nameSyncSubscriptions.removeValue(forKey: id)
         setStatus(.killed, for: id)
         gcDraftIfPresent(for: id)
 
@@ -784,6 +786,8 @@ final class SessionCoordinator: ObservableObject {
                 if liveTree.isEmpty {
                     sessionTrees.removeValue(forKey: sessionId)
                     outputSubscriptions.removeValue(forKey: sessionId)
+                    nameSyncSubscriptions[sessionId]?.cancel()
+                    nameSyncSubscriptions.removeValue(forKey: sessionId)
                     setStatus(exitStatus, for: sessionId)
                     gcDraftIfPresent(for: sessionId)
                     switchToNextSession()
@@ -799,6 +803,8 @@ final class SessionCoordinator: ObservableObject {
                 if updated.isEmpty {
                     sessionTrees.removeValue(forKey: sessionId)
                     outputSubscriptions.removeValue(forKey: sessionId)
+                    nameSyncSubscriptions[sessionId]?.cancel()
+                    nameSyncSubscriptions.removeValue(forKey: sessionId)
                     setStatus(exitStatus, for: sessionId)
                     gcDraftIfPresent(for: sessionId)
                 } else {
@@ -945,7 +951,18 @@ final class SessionCoordinator: ObservableObject {
         // above — it does not piggyback on the output-activity signal path
         // that caused the June invalidation-storm incident. See
         // `nameSyncSubscriptions`'s doc comment for the mechanism.
-        subscribeNameSync(sessionId: sessionId, titlePublisher: surface.$title)
+        //
+        // `isManualTitle` reads `surface.isManuallyTitled` at fire time — true
+        // once the user has used the "Set Title" dialog on this surface (see
+        // `SurfaceView_AppKit.promptTitle()`), and sticky thereafter (the
+        // terminal is blocked from overwriting `title` once that happens). A
+        // manually-set title is captured by `weak surface` so this closure
+        // never keeps the surface alive.
+        subscribeNameSync(
+            sessionId: sessionId,
+            titlePublisher: surface.$title,
+            isManualTitle: { [weak surface] in surface?.isManuallyTitled ?? false }
+        )
     }
 
     /// Wires a session's title publisher into the Claude Code → sidebar name
@@ -968,13 +985,21 @@ final class SessionCoordinator: ObservableObject {
         sessionId: UUID,
         titlePublisher: P,
         interval: TimeInterval = SessionCoordinator.nameSyncThrottle,
-        store: WorkspaceStore = .shared
+        store: WorkspaceStore = .shared,
+        isManualTitle: @escaping () -> Bool = { false }
     ) where P.Output == String, P.Failure == Never {
         nameSyncSubscriptions[sessionId] = titlePublisher
+            // `@Published` replays its current value on subscribe, and a
+            // brand-new `SurfaceView`'s first emission is always "". Without
+            // this filter that empty value passes `removeDuplicates()` (there
+            // is nothing before it to compare against) and consumes the
+            // throttle's leading edge, deferring the first real title by up
+            // to the full throttle interval on every new session.
+            .filter { !$0.isEmpty }
             .removeDuplicates()
             .throttle(for: .seconds(interval), scheduler: DispatchQueue.main, latest: true)
             .sink { [weak self] title in
-                self?.performNameSync(sessionId: sessionId, title: title, store: store)
+                self?.performNameSync(sessionId: sessionId, title: title, store: store, isManualTitle: isManualTitle())
             }
     }
 
@@ -986,11 +1011,27 @@ final class SessionCoordinator: ObservableObject {
     /// regardless, so there's no reason to pay for the project lookup + URL
     /// construction below on every fire for a pinned session.
     ///
+    /// `isManualTitle` means this title came from the user's "Set Title"
+    /// dialog (`SurfaceView_AppKit.promptTitle()`), not from the terminal.
+    /// That's an explicit naming decision, so it's treated as a pin — via
+    /// `WorkspaceStore.renameSession`, the same call the sidebar's manual
+    /// rename UI uses — rather than a bare sync. This is also what keeps the
+    /// state visible and reversible: pinning surfaces the "Sync name
+    /// automatically" menu item, so the user can see sync stopped and turn
+    /// it back on, instead of a session silently and permanently losing
+    /// agent-title sync with no indication why.
+    ///
     /// Not `private` for the same testability reason as `subscribeNameSync`.
-    func performNameSync(sessionId: UUID, title: String, store: WorkspaceStore = .shared) {
+    func performNameSync(sessionId: UUID, title: String, store: WorkspaceStore = .shared, isManualTitle: Bool = false) {
         guard !title.isEmpty else { return }
-        guard let session = store.sessions.first(where: { $0.id == sessionId }),
-              !session.isNamePinned else { return }
+        guard let session = store.sessions.first(where: { $0.id == sessionId }) else { return }
+
+        if isManualTitle {
+            store.renameSession(id: sessionId, name: title)
+            return
+        }
+
+        guard !session.isNamePinned else { return }
 
         let projectDirectoryName = store.projects
             .first(where: { $0.id == session.projectId })
@@ -1228,5 +1269,19 @@ final class SessionCoordinator: ObservableObject {
             startActivityTimer()
         }
     }
+
+    /// Test-only seam for exercising the `nameSyncSubscriptions` teardown
+    /// paths (`closeSession`, `handleSurfaceClose`) without a live GhosttyKit
+    /// surface: an empty `SplitTree` satisfies `closeSession`'s
+    /// `sessionTrees[id] != nil` guard while iterating zero real surfaces.
+    /// Never used in production.
+    func seedEmptySessionTreeForTesting(id: UUID) {
+        sessionTrees[id] = SplitTree()
+    }
+
+    /// Test-only: current count of live name-sync subscriptions, so tests
+    /// can assert the dictionary shrinks after teardown without reaching
+    /// into a `private` property directly.
+    var nameSyncSubscriptionCountForTesting: Int { nameSyncSubscriptions.count }
 #endif
 }
