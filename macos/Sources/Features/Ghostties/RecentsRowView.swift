@@ -25,7 +25,7 @@ struct RecentsRowView: View {
             // Per-session ghost character, tinted by status — same color mapping
             // as MenuBarDropdownView.
             GhostCharacterView(character: session.resolvedGhostCharacter, color: dotColor)
-                .frame(width: 14, height: 14)
+                .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
                 .frame(width: WorkspaceLayout.sidebarIconColumnWidth, alignment: .center)
 
             // Session name + project name stacked

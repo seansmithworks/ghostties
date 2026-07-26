@@ -204,6 +204,11 @@ enum WorkspaceLayout {
     /// common x-position for icons and labels.
     static let sidebarRowLeadingPadding: CGFloat = 8
 
+    /// Render size of the per-session ghost glyph in `RecentsRowView` (Sessions
+    /// tab). Smaller than `sidebarIconColumnWidth` — the ghost sits centered
+    /// inside that column, not filling it.
+    static let sessionGhostSize: CGFloat = 14
+
     // MARK: - Source-dot colors
 
     /// Source-dot color for shell-spawned tasks. Muted sage — existing token,

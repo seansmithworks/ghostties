@@ -885,41 +885,58 @@ struct WorkspaceStoreSectionsTests {
         #expect(store._activeSinceTimestamp(for: ghostId) == nil)
     }
 
-    // MARK: - Project Activity Color (Unit 3)
+    // MARK: - Project Ghost Color (Unit 3, updated: terracotta retired from status)
 
-    @Test func activityColorIsTerracottaWhenAnySessionIsActive() {
+    @Test func ghostColorIsProcessingGreenWhenAnySessionIsActive() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let p = makeProject(name: "Live", lastActiveAt: now)
         let s = makeSession(projectId: p.id)
-        let color = WorkspaceStore.projectActivityColor(
+        let color = WorkspaceStore.projectGhostColor(
             project: p,
             sessions: [s],
             indicatorStates: [s.id: .processing],
             now: { now }
         )
-        #expect(color == WorkspaceLayout.waitingTerracotta)
+        #expect(color == Color(nsColor: .systemGreen))
     }
 
-    @Test func activityColorTerracottaWinsOverRecentTimestamp() {
+    @Test func ghostColorHighestPriorityStateWinsOverRecentTimestamp() {
         // Even if `lastActiveAt` is way in the past, a live active session
-        // overrides — the project is currently working.
+        // overrides — the project is currently working. `.waiting` maps to
+        // the "your turn" blue (same palette as session status dots).
         let now = Date(timeIntervalSince1970: 1_000_000)
         let p = makeProject(name: "Live", lastActiveAt: now.addingTimeInterval(-48 * 3600))
         let s = makeSession(projectId: p.id)
-        let color = WorkspaceStore.projectActivityColor(
+        let color = WorkspaceStore.projectGhostColor(
             project: p,
             sessions: [s],
             indicatorStates: [s.id: .waiting],
             now: { now }
         )
-        #expect(color == WorkspaceLayout.waitingTerracotta)
+        #expect(color == WorkspaceLayout.statusYourTurnBlue)
     }
 
-    @Test func activityColorIsNormalWhenRecentButNotActive() {
+    @Test func ghostColorAggregatesHighestPriorityAmongMultipleSessions() {
+        // .needsAttention outranks .processing (SessionIndicatorState.priority) —
+        // the project ghost must reflect the HIGHEST-priority child state.
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let p = makeProject(name: "Mixed", lastActiveAt: now)
+        let s1 = makeSession(projectId: p.id)
+        let s2 = makeSession(projectId: p.id)
+        let color = WorkspaceStore.projectGhostColor(
+            project: p,
+            sessions: [s1, s2],
+            indicatorStates: [s1.id: .processing, s2.id: .needsAttention],
+            now: { now }
+        )
+        #expect(color == WorkspaceLayout.statusNeedsDecisionGold)
+    }
+
+    @Test func ghostColorIsNormalWhenRecentButNotActive() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let p = makeProject(name: "Recent", lastActiveAt: now.addingTimeInterval(-3600))
         let s = makeSession(projectId: p.id)
-        let color = WorkspaceStore.projectActivityColor(
+        let color = WorkspaceStore.projectGhostColor(
             project: p,
             sessions: [s],
             indicatorStates: [s.id: .idle],
@@ -928,10 +945,10 @@ struct WorkspaceStoreSectionsTests {
         #expect(color == WorkspaceLayout.activityNormalForeground)
     }
 
-    @Test func activityColorIsMutedWhenStale() {
+    @Test func ghostColorIsMutedWhenStale() {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let p = makeProject(name: "Stale", lastActiveAt: now.addingTimeInterval(-48 * 3600))
-        let color = WorkspaceStore.projectActivityColor(
+        let color = WorkspaceStore.projectGhostColor(
             project: p,
             sessions: [],
             indicatorStates: [:],
@@ -940,10 +957,10 @@ struct WorkspaceStoreSectionsTests {
         #expect(color == WorkspaceLayout.activityMutedForeground)
     }
 
-    @Test func activityColorIsMutedWhenLastActiveIsNil() {
+    @Test func ghostColorIsMutedWhenLastActiveIsNil() {
         // Brand-new project, no timestamp yet → muted.
         let p = makeProject(name: "Brand New", lastActiveAt: nil)
-        let color = WorkspaceStore.projectActivityColor(
+        let color = WorkspaceStore.projectGhostColor(
             project: p,
             sessions: [],
             indicatorStates: [:],
@@ -952,14 +969,14 @@ struct WorkspaceStoreSectionsTests {
         #expect(color == WorkspaceLayout.activityMutedForeground)
     }
 
-    @Test func activityColorIgnoresSessionsBelongingToOtherProjects() {
+    @Test func ghostColorIgnoresSessionsBelongingToOtherProjects() {
         // A processing session in *another* project must not turn this
-        // project's ghost terracotta.
+        // project's ghost green.
         let now = Date(timeIntervalSince1970: 1_000_000)
         let p = makeProject(name: "Quiet", lastActiveAt: now.addingTimeInterval(-3600))
         let other = makeProject(name: "Other")
         let foreignSession = makeSession(projectId: other.id)
-        let color = WorkspaceStore.projectActivityColor(
+        let color = WorkspaceStore.projectGhostColor(
             project: p,
             sessions: [foreignSession],
             indicatorStates: [foreignSession.id: .processing],
@@ -968,7 +985,7 @@ struct WorkspaceStoreSectionsTests {
         #expect(color == WorkspaceLayout.activityNormalForeground)
     }
 
-    @Test func activityColorTwentyFourHourBoundaryIsInclusive() {
+    @Test func ghostColorTwentyFourHourBoundaryIsInclusive() {
         // Mirrors the section-bucketing rule — a project active exactly 24h
         // ago still reads as "recent" (normal color, not muted).
         let now = Date(timeIntervalSince1970: 1_000_000)
@@ -981,7 +998,7 @@ struct WorkspaceStoreSectionsTests {
             lastActiveAt: now.addingTimeInterval(-24 * 3600 - 1)
         )
         #expect(
-            WorkspaceStore.projectActivityColor(
+            WorkspaceStore.projectGhostColor(
                 project: exactly24h,
                 sessions: [],
                 indicatorStates: [:],
@@ -989,7 +1006,7 @@ struct WorkspaceStoreSectionsTests {
             ) == WorkspaceLayout.activityNormalForeground
         )
         #expect(
-            WorkspaceStore.projectActivityColor(
+            WorkspaceStore.projectGhostColor(
                 project: justOver,
                 sessions: [],
                 indicatorStates: [:],

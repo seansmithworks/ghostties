@@ -187,6 +187,12 @@ final class WorkspaceStore: ObservableObject {
         // running. This MUST be a method call (not inlined statements) — see
         // `pruneStaleSessionsAtLaunch()` for why.
         pruneStaleSessionsAtLaunch()
+
+        // One-time launch backfill for sessions that predate the per-session
+        // ghost system — see `backfillGhostCharactersAtLaunch()`. Runs after
+        // pruning so it never assigns (and persists) a ghost for a session
+        // that's about to be dropped.
+        backfillGhostCharactersAtLaunch()
     }
 
     // MARK: - Session Pruning
@@ -286,6 +292,33 @@ final class WorkspaceStore: ObservableObject {
         WorkspacePersistence.backUpBeforePrune(prunedCount: sessions.count - kept.count)
 
         self.sessions = kept
+        persist()
+    }
+
+    // MARK: - Ghost Backfill
+
+    /// One-time launch backfill: assign and PERSIST a `ghostCharacter` for
+    /// every session that predates the per-session ghost system
+    /// (`ghostCharacter == nil`). Without this, `resolvedGhostCharacter`'s
+    /// fallback would be the only ghost these sessions ever get — recomputed
+    /// (and, before the byte-derived fallback, effectively re-rolled) on
+    /// every launch forever — and `allAssignedGhosts()`'s uniqueness pool
+    /// would be built against fallback values that were never actually
+    /// reserved. Called as the LAST statement of the real (disk-load)
+    /// `init()`, same contract as `pruneStaleSessionsAtLaunch()` (see that
+    /// method's doc comment for why this must be a method call, not inlined).
+    internal func backfillGhostCharactersAtLaunch() {
+        guard sessions.contains(where: { $0.ghostCharacter == nil }) else { return }
+
+        var assigned = allAssignedGhosts()
+        var updated = sessions
+        for index in updated.indices where updated[index].ghostCharacter == nil {
+            let ghost = GhostCharacter.randomUnused(excluding: assigned)
+            updated[index].ghostCharacter = ghost
+            assigned.append(ghost)
+        }
+
+        self.sessions = updated
         persist()
     }
 
@@ -577,6 +610,25 @@ final class WorkspaceStore: ObservableObject {
             }
     }
 
+    // MARK: - Ghost Assignment
+
+    /// Every ghost currently assigned to a project OR a persisted session,
+    /// as a multiset (see `GhostCharacter.randomUnused(excluding:)`).
+    ///
+    /// Unified across BOTH pools — project ghosts and session ghosts must
+    /// share one exclusion set, otherwise a session can be assigned the same
+    /// ghost as its own parent project and render identically right beneath
+    /// it in the Projects tab (Sessions-tab rows and Projects-tab rows both
+    /// resolve a session's ghost through `session.resolvedGhostCharacter`, so
+    /// the same identity has to read the same everywhere).
+    ///
+    /// Only counts PERSISTED `ghostCharacter` values — never
+    /// `resolvedGhostCharacter`'s fallback, which is a transient render-time
+    /// value, not a real reservation.
+    private func allAssignedGhosts() -> [GhostCharacter] {
+        projects.compactMap(\.ghostCharacter) + sessions.compactMap(\.ghostCharacter)
+    }
+
     // MARK: - Project Actions
 
     func addProject(at url: URL) {
@@ -591,12 +643,11 @@ final class WorkspaceStore: ObservableObject {
             return
         }
 
-        let usedGhosts = Set(projects.compactMap(\.ghostCharacter))
         let project = Project(
             name: url.lastPathComponent,
             rootPath: path,
             isPinned: true,
-            ghostCharacter: GhostCharacter.randomUnused(excluding: usedGhosts)
+            ghostCharacter: GhostCharacter.randomUnused(excluding: allAssignedGhosts())
         )
         projects.append(project)
         // Adding a project is a fresh layout commit point — drop the freeze snapshot
@@ -635,13 +686,12 @@ final class WorkspaceStore: ObservableObject {
     func addSession(name: String, templateId: UUID, projectId: UUID) -> AgentSession {
         let maxOrder = sessions.filter { $0.projectId == projectId }
             .compactMap(\.sortOrder).max() ?? -1
-        let usedGhosts = Set(sessions.map(\.resolvedGhostCharacter))
         let session = AgentSession(
             name: name,
             templateId: templateId,
             projectId: projectId,
             sortOrder: maxOrder + 1,
-            ghostCharacter: GhostCharacter.randomUnused(excluding: usedGhosts)
+            ghostCharacter: GhostCharacter.randomUnused(excluding: allAssignedGhosts())
         )
         sessions.append(session)
         // Session creation is a user action and a fresh layout commit point —
@@ -835,18 +885,25 @@ final class WorkspaceStore: ObservableObject {
         })?.id
     }
 
-    // MARK: - Project Activity Color
+    // MARK: - Project Ghost Color
 
-    /// Three-state activity color for a project's ghost icon in the sidebar:
+    /// Color for a project's ghost icon in the sidebar.
     ///
-    /// - **Terracotta** (`WorkspaceLayout.waitingTerracotta`) when any session in
-    ///   the project is in an active indicator state
-    ///   (`.processing` / `.waiting` / `.longRunning` / `.needsAttention`).
-    /// - **Normal** (`WorkspaceLayout.activityNormalForeground`) when no active
-    ///   session but `lastActiveAt` is within 24h.
-    /// - **Muted** (`WorkspaceLayout.activityMutedForeground`) otherwise.
-    func projectActivityColor(for project: Project, now: () -> Date = Date.init) -> Color {
-        Self.projectActivityColor(
+    /// When any session in the project has a live/attention-worthy indicator
+    /// state, the ghost is colored by the HIGHEST-priority such state
+    /// (`SessionIndicatorState` is `Comparable` by priority for exactly this),
+    /// using the SAME status palette as session ghosts
+    /// (`RecentsRowView.dotColor` / `SessionRow.statusColor`) — a project's
+    /// ghost and its child session's ghost must never show two different
+    /// colors for one signal. Terracotta has retired from status entirely;
+    /// it remains a brand-chrome color elsewhere (callouts, task rows).
+    ///
+    /// Falls back to a two-tier recency read — **normal**
+    /// (`WorkspaceLayout.activityNormalForeground`) if `lastActiveAt` is
+    /// within 24h, else **muted** (`WorkspaceLayout.activityMutedForeground`)
+    /// — when no session is in a live state.
+    func projectGhostColor(for project: Project, now: () -> Date = Date.init) -> Color {
+        Self.projectGhostColor(
             project: project,
             sessions: sessions,
             indicatorStates: globalIndicatorStates,
@@ -854,25 +911,32 @@ final class WorkspaceStore: ObservableObject {
         )
     }
 
-    /// Pure-static variant of `projectActivityColor(for:)` for testing.
-    nonisolated static func projectActivityColor(
+    /// Pure-static variant of `projectGhostColor(for:)` for testing.
+    nonisolated static func projectGhostColor(
         project: Project,
         sessions: [AgentSession],
         indicatorStates: [UUID: SessionIndicatorState],
         now: () -> Date = Date.init
     ) -> Color {
-        let hasActive = sessions.contains { session in
-            session.projectId == project.id
-                && isActiveIndicatorState(indicatorStates[session.id])
-        }
-        if hasActive { return WorkspaceLayout.waitingTerracotta }
+        let highestState = sessions
+            .filter { $0.projectId == project.id }
+            .map { indicatorStates[$0.id] ?? .inactive }
+            .max() ?? .inactive
 
-        let recentWindow: TimeInterval = 24 * 60 * 60
-        if let lastActiveAt = project.lastActiveAt,
-           now().timeIntervalSince(lastActiveAt) <= recentWindow {
-            return WorkspaceLayout.activityNormalForeground
+        switch highestState {
+        case .error:          return Color(nsColor: .systemRed)
+        case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
+        case .waiting:        return WorkspaceLayout.statusYourTurnBlue
+        case .longRunning:    return WorkspaceLayout.statusLongRunningOrange
+        case .processing:     return Color(nsColor: .systemGreen)
+        case .idle, .inactive:
+            let recentWindow: TimeInterval = 24 * 60 * 60
+            if let lastActiveAt = project.lastActiveAt,
+               now().timeIntervalSince(lastActiveAt) <= recentWindow {
+                return WorkspaceLayout.activityNormalForeground
+            }
+            return WorkspaceLayout.activityMutedForeground
         }
-        return WorkspaceLayout.activityMutedForeground
     }
 
     // MARK: - Section Computation (pure helpers)
