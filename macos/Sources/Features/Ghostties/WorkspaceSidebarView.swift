@@ -247,37 +247,15 @@ struct WorkspaceSidebarView: View {
         expandedProjectIds.insert(targetId)
     }
 
-    /// All *running* sessions (`coordinator.isRunning(id:)`), flattened in
-    /// sidebar visual order: projects in `flatProjectsInVisualOrder`, then
-    /// each project's sessions in their displayed order
-    /// (`sessionGroups(forProject:)`, same helper `ProjectDisclosureRow` uses
-    /// to render its own rows).
-    private var liveSessionsInVisualOrder: [AgentSession] {
-        store.flatProjectsInVisualOrder.flatMap { project in
-            store.sessionGroups(forProject: project.id).flatMap { $0.1 }
-        }.filter { coordinator.isRunning(id: $0.id) }
-    }
-
-    /// Cmd+Shift+]/[ in project-first mode. Cycles focus through live
-    /// (running) sessions only, wrapping at both ends. No-ops (no beep, no
-    /// crash) when there are zero live sessions; is a no-op when there is
-    /// exactly one.
+    /// Cmd+Shift+]/[ in Projects/Sessions tabs. Cycles focus through every
+    /// session with a live surface (`store.sessionsInVisualOrder(coordinator:)`
+    /// — not just `.running` ones, so cycling matches the browser-tab mental
+    /// model and what's actually visible in the sidebar), wrapping at both
+    /// ends. No-ops (no beep, no crash) when there are zero live sessions; is
+    /// a no-op when there is exactly one.
     private func selectAdjacentLiveSession(offset: Int) {
-        let liveSessions = liveSessionsInVisualOrder
-        guard !liveSessions.isEmpty else { return }
-
-        guard let currentId = coordinator.activeSessionId,
-              let currentIndex = liveSessions.firstIndex(where: { $0.id == currentId }) else {
-            let target = offset > 0 ? liveSessions[0] : liveSessions[liveSessions.count - 1]
-            coordinator.focusSession(id: target.id)
-            expandedProjectIds.insert(target.projectId)
-            selectedProjectId = target.projectId
-            return
-        }
-
-        let newIndex = (currentIndex + offset + liveSessions.count) % liveSessions.count
-        let target = liveSessions[newIndex]
-        coordinator.focusSession(id: target.id)
+        let liveSessions = store.sessionsInVisualOrder(coordinator: coordinator)
+        guard let target = coordinator.focusAdjacentLiveSession(offset: offset, in: liveSessions) else { return }
         expandedProjectIds.insert(target.projectId)
         selectedProjectId = target.projectId
     }

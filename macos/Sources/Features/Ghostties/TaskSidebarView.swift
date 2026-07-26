@@ -28,9 +28,16 @@ struct TaskSidebarView: View {
     @EnvironmentObject private var coordinator: SessionCoordinator
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Cursor for Cmd+Shift+]/[ task cycling (task-first mode). Tracks the
-    /// last task moved to; independent of native SwiftUI row focus (see
-    /// `selectAdjacentTask(offset:proxy:)` for the limitation this implies).
+    /// Cursor for task cycling. Tracks the last task moved to; independent of
+    /// native SwiftUI row focus (see `selectAdjacentTask(offset:proxy:)` for
+    /// the limitation this implies).
+    ///
+    /// NOTE: Cmd+Shift+]/[ no longer drives this — that chord now cycles the
+    /// active terminal session in every sidebar view (see the
+    /// `.workspaceSelectNextSession` / `.workspaceSelectPreviousSession`
+    /// `.onReceive` handlers in `body`). `selectAdjacentTask` and its
+    /// `.workspaceSelectNextTask` / `.workspaceSelectPreviousTask` wiring stay
+    /// in place, unreachable until they're given their own binding.
     @State private var taskCyclingCursorId: String?
 
     var body: some View {
@@ -111,6 +118,22 @@ struct TaskSidebarView: View {
         // U8: Observe the notification that AppDelegate's ⌘⇧N monitor posts.
         .onReceive(NotificationCenter.default.publisher(for: .openNewTaskComposer)) { _ in
             composerStore.open(workspaceStore: workspaceStore)
+        }
+        // Cmd+Shift+]/[ session cycling (browser-tab mental model), same
+        // chord and same `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`
+        // helper `WorkspaceSidebarView` uses for the Projects/Sessions tabs.
+        // Task-first mode has no project rows to expand/select, so this just
+        // switches the active terminal — the task-cycling cursor below
+        // (`selectAdjacentTask`) no longer owns this chord.
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectNextSession)) { notification in
+            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
+            let liveSessions = workspaceStore.sessionsInVisualOrder(coordinator: coordinator)
+            _ = coordinator.focusAdjacentLiveSession(offset: 1, in: liveSessions)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectPreviousSession)) { notification in
+            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
+            let liveSessions = workspaceStore.sessionsInVisualOrder(coordinator: coordinator)
+            _ = coordinator.focusAdjacentLiveSession(offset: -1, in: liveSessions)
         }
     }
 

@@ -416,6 +416,17 @@ final class WorkspaceStore: ObservableObject {
         return computed
     }
 
+    /// All sessions with a live surface (visible in the sidebar, regardless of
+    /// running/completed/exited/killed status), flattened in the same visual
+    /// order as `flatProjectsInVisualOrder` + `sessionGroups(forProject:)`.
+    /// Powers Cmd+Shift+[/] session cycling — see
+    /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`.
+    func sessionsInVisualOrder(coordinator: SessionCoordinator) -> [AgentSession] {
+        flatProjectsInVisualOrder.flatMap { project in
+            sessionGroups(forProject: project.id).flatMap { $0.1 }
+        }.filter { coordinator.hasLiveSurface(id: $0.id) }
+    }
+
     #if DEBUG
     /// Test hook — seed the grace-period tracker directly. Production code must
     /// use `updateProjectActivityFromIndicatorStates()` instead.

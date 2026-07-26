@@ -545,6 +545,38 @@ final class SessionCoordinator: ObservableObject {
         (sessionTrees[id] != nil || browserManagers[id] != nil) && statuses[id] == .running
     }
 
+    /// Whether a session has a live surface tree or browser manager, regardless
+    /// of its running/completed/exited/killed status. Broader than `isRunning`
+    /// on purpose — used for Cmd+Shift+[/] session cycling so the list matches
+    /// what the sidebar actually shows (browser-tab mental model), not just
+    /// currently-running processes. Do not use in place of `isRunning`; other
+    /// call sites depend on its stricter running-only semantics.
+    func hasLiveSurface(id: UUID) -> Bool {
+        sessionTrees[id] != nil || browserManagers[id] != nil
+    }
+
+    /// Focuses the next/previous session in `sessions` relative to
+    /// `activeSessionId`, wrapping at both ends. No-ops (returns `nil`, no
+    /// beep, no crash) when `sessions` is empty. Shared by
+    /// `WorkspaceSidebarView` (Projects + Sessions tabs) and `TaskSidebarView`
+    /// (task-first mode) so Cmd+Shift+[/] cycles the active terminal
+    /// identically in all three sidebar views.
+    func focusAdjacentLiveSession(offset: Int, in sessions: [AgentSession]) -> AgentSession? {
+        guard !sessions.isEmpty else { return nil }
+
+        guard let currentId = activeSessionId,
+              let currentIndex = sessions.firstIndex(where: { $0.id == currentId }) else {
+            let target = offset > 0 ? sessions[0] : sessions[sessions.count - 1]
+            focusSession(id: target.id)
+            return target
+        }
+
+        let newIndex = (currentIndex + offset + sessions.count) % sessions.count
+        let target = sessions[newIndex]
+        focusSession(id: target.id)
+        return target
+    }
+
     /// Close a session's surface tree. All processes in the tree are terminated.
     func closeSession(id: UUID) {
         // Browser session path.
