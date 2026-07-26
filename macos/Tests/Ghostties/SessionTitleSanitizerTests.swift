@@ -56,6 +56,28 @@ final class SessionTitleSanitizerTests: XCTestCase {
         ))
     }
 
+    // MARK: - FIX 3: digit-before-suffix no longer exempts "$" or "#", and a
+    // `user@host` token is rejected regardless of trailing character.
+
+    func testDigitPrecededDollarPromptStillRejected() {
+        // bash's default `\u@\h:\w\$` prompt, with a directory name that
+        // happens to end in a digit — this must NOT be exempted by a
+        // trailing-digit check.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "sean@mbp:~/Code/ghostties2$",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testDigitPrecededHashPromptStillRejected() {
+        // A root prompt on a numbered host — "server1", "node2", "box3" are
+        // ubiquitous hostnames.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "root@server1#",
+            currentName: "Session 1"
+        ))
+    }
+
     func testOverlongTitleTruncatesOnWordBoundary() {
         let title = "Implementing the new session name sync feature across the whole sidebar and coordinator layer"
         let result = SessionTitleSanitizer.sanitize(title: title, currentName: "Session 1")
@@ -87,36 +109,50 @@ final class SessionTitleSanitizerTests: XCTestCase {
 
     // MARK: - FIX 2: character filtering
 
-    func testEmbeddedNewlineIsStripped() {
-        let result = SessionTitleSanitizer.sanitize(
+    func testEmbeddedNewlineIsRejected() {
+        // A title with an embedded newline isn't a meaningful session name —
+        // must be rejected outright, not spliced into "Refactoringrm -rf /".
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
             title: "Refactoring\nrm -rf /",
             currentName: "Session 1"
-        )
-        XCTAssertEqual(result, "Refactoringrm -rf /")
+        ))
     }
 
-    func testCarriageReturnIsStripped() {
-        let result = SessionTitleSanitizer.sanitize(
+    func testCarriageReturnIsRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
             title: "Safe title\rEVIL",
             currentName: "Session 1"
-        )
-        XCTAssertEqual(result, "Safe titleEVIL")
+        ))
     }
 
-    func testAnsiEscapeBytesAreStripped() {
-        let result = SessionTitleSanitizer.sanitize(
+    func testAnsiEscapeSequenceIsRejected() {
+        // Splicing out just the ESC byte would leave the visible garbage
+        // "[31mRed title[0m" — worse than the original unsanitized string.
+        // Must reject the whole title instead.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
             title: "\u{1B}[31mRed title\u{1B}[0m",
             currentName: "Session 1"
-        )
-        XCTAssertEqual(result, "[31mRed title[0m")
+        ))
     }
 
-    func testBelBackspaceNulAreStripped() {
-        let result = SessionTitleSanitizer.sanitize(
+    func testBelBackspaceNulAreRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
             title: "Title\u{07}\u{08}\u{00}x",
             currentName: "Session 1"
+        ))
+    }
+
+    func testZwjEmojiSequencesSurviveIntact() {
+        // U+200D (ZERO WIDTH JOINER) must NOT be blocklisted — it's what
+        // stitches multi-codepoint emoji into one glyph.
+        XCTAssertEqual(
+            SessionTitleSanitizer.sanitize(title: "👨‍💻 pairing session", currentName: "Session 1"),
+            "👨‍💻 pairing session"
         )
-        XCTAssertEqual(result, "Titlex")
+        XCTAssertEqual(
+            SessionTitleSanitizer.sanitize(title: "👨‍👩‍👧‍👦 family review", currentName: "Session 1"),
+            "👨‍👩‍👧‍👦 family review"
+        )
     }
 
     func testRtlOverrideIsStripped() {

@@ -113,37 +113,85 @@ final class SessionNameSyncTests: XCTestCase {
         )
     }
 
-    /// FIX 1: the debounce (via `TrailingEdgeDebouncer`, tested in isolation in
-    /// `TrailingEdgeDebouncerTests`) must, at fire time, read the title
-    /// supplied by the LATEST `scheduleNameSync` call — never a value sampled
-    /// earlier. This proves that end-to-end through the actual coordinator
-    /// entry point using a fast test interval instead of the real 5s.
-    func testScheduleNameSyncAppliesTheLatestTitleAtFireTime() {
+    /// THE regression this whole rewrite exists to fix: the deleted
+    /// `TrailingEdgeDebouncer` starved completely under a sustained,
+    /// unchanging signal (110 identical-title signals at the true 250ms
+    /// production ratio against a 5s debounce → zero fires). Drives the real
+    /// `subscribeNameSync` pipeline with a burst of IDENTICAL titles sent
+    /// faster than the throttle interval, and asserts an update lands during
+    /// that sustained burst — not only after signals stop.
+    ///
+    /// `removeDuplicates()` is what makes this possible: it collapses the
+    /// repeated-identical-title signal down to a single change event, so
+    /// `throttle(latest: true)` sees its leading edge immediately rather than
+    /// waiting for the burst to end.
+    func testSustainedIdenticalTitlesFireDuringActivityNotOnlyAfterQuiet() {
         let project = makeProject()
         let session = AgentSession(name: "Session 1", templateId: UUID(), projectId: project.id)
         let store = WorkspaceStore(testingProjects: [project], testingSessions: [session])
         let coordinator = SessionCoordinator()
 
-        // Simulate a burst: the title keeps changing right up until the last
-        // signal, mirroring Claude Code streaming tool-call titles.
+        let titleSubject = PassthroughSubject<String, Never>()
+        // Interval is longer than the whole burst below, on purpose: the old
+        // debounce would never fire in this scenario because the signal
+        // never actually goes quiet within the window.
+        coordinator.subscribeNameSync(sessionId: session.id, titlePublisher: titleSubject, interval: 1.0, store: store)
+
+        let burstStarted = Date()
+        let burstFinished = expectation(description: "sustained identical-title burst delivered")
+        var sent = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.005, repeats: true) { t in
+            // Every emission is the SAME string — mirrors Claude Code
+            // re-emitting an identical OSC 2 title on every render frame.
+            titleSubject.send("Compacting conversation 45%")
+            sent += 1
+            if sent >= 30 {
+                t.invalidate()
+                burstFinished.fulfill()
+            }
+        }
+        wait(for: [burstFinished], timeout: 2.0)
+        let burstElapsed = Date().timeIntervalSince(burstStarted)
+
+        XCTAssertLessThan(burstElapsed, 1.0, "sanity: the whole burst must complete inside the 1s throttle window")
+        XCTAssertEqual(
+            store.sessions(for: project.id).first?.name,
+            "Compacting conversation 45%",
+            "an update must land DURING the sustained-but-identical burst — the deleted TrailingEdgeDebouncer produced zero fires in exactly this scenario"
+        )
+    }
+
+    /// Distinct titles arriving faster than the throttle window must still
+    /// collapse to at most one write per interval, with the LAST value of the
+    /// burst winning (trailing edge) — mirroring Claude Code's real streaming
+    /// tool-call titles, which do actually change from call to call.
+    func testDistinctTitlesThrottleToAtMostOneWritePerIntervalWithLatestWinning() {
+        let project = makeProject()
+        let session = AgentSession(name: "Session 1", templateId: UUID(), projectId: project.id)
+        let store = WorkspaceStore(testingProjects: [project], testingSessions: [session])
+        let coordinator = SessionCoordinator()
+
+        let titleSubject = PassthroughSubject<String, Never>()
+        coordinator.subscribeNameSync(sessionId: session.id, titlePublisher: titleSubject, interval: 0.3, store: store)
+
+        var writeCount = 0
+        let cancellable = store.objectWillChange.sink { writeCount += 1 }
+        defer { cancellable.cancel() }
+
         let titles = ["Reading files", "Editing auth.swift", "Running tests"]
         for title in titles {
-            coordinator.scheduleNameSync(
-                sessionId: session.id,
-                titleProvider: { title },
-                interval: 0.05,
-                store: store
-            )
+            titleSubject.send(title)
         }
 
-        let expectation = expectation(description: "debounced sync applied")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { expectation.fulfill() }
-        wait(for: [expectation], timeout: 1.0)
+        let trailingEdgeFired = expectation(description: "trailing-edge write applied")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { trailingEdgeFired.fulfill() }
+        wait(for: [trailingEdgeFired], timeout: 2.0)
 
         XCTAssertEqual(
             store.sessions(for: project.id).first?.name,
             "Running tests",
-            "the debounce must apply the title from the LAST signal, never a stale earlier one"
+            "the latest title in the burst must win"
         )
+        XCTAssertLessThanOrEqual(writeCount, 2, "at most one write per throttle interval — leading edge plus trailing edge, never one per signal")
     }
 }

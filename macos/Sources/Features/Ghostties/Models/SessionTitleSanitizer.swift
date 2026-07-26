@@ -28,16 +28,27 @@ enum SessionTitleSanitizer {
     /// being sampled in the first place (see `SessionCoordinator`).
     private static let placeholderTitle = "👻"
 
-    /// Characters that must never appear in a sidebar session name: ASCII/C1
-    /// control characters (NUL, BEL, BS, ESC, CR, embedded newlines, ...),
-    /// bidi-override codepoints (can visually reverse the rendered string,
-    /// e.g. hiding a malicious extension behind an RTL override), and
-    /// zero-width characters (invisible padding/obfuscation). Stripped before
-    /// any shape checks below.
+    /// Characters that are invisible-but-not-illegal: safe to strip rather
+    /// than reject the whole title over. Bidi-override codepoints (can
+    /// visually reverse the rendered string, e.g. hiding a malicious
+    /// extension behind an RTL override) and zero-width padding/obfuscation
+    /// characters. Stripped before any shape checks below.
+    ///
+    /// Deliberately does NOT include U+200C (ZWNJ) or U+200D (ZWJ) — those
+    /// are load-bearing, not obfuscation: ZWJ is what stitches multi-codepoint
+    /// emoji into one glyph (👨‍💻, 👨‍👩‍👧‍👦), and ZWNJ is required for correct
+    /// rendering in Persian, Hindi, and Arabic text. Stripping either shatters
+    /// the sequence into separate, wrong-looking characters.
+    ///
+    /// Real control characters (NUL, BEL, BS, ESC, CR, embedded newlines,
+    /// C0/C1 controls) are handled separately in `sanitize(title:...)` — as a
+    /// hard reject, not a strip. Splicing around a control byte can produce
+    /// output that's worse than the unsanitized original (e.g. stripping the
+    /// ESC byte from "\u{1B}[31mTitle" leaves the visible garbage "[31mTitle").
     private static let disallowedCharacters: CharacterSet = {
-        var set = CharacterSet.controlCharacters
+        var set = CharacterSet()
         set.insert(charactersIn: "\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}")
-        set.insert(charactersIn: "\u{200B}\u{200C}\u{200D}\u{FEFF}")
+        set.insert(charactersIn: "\u{200B}\u{FEFF}")
         return set
     }()
 
@@ -59,12 +70,23 @@ enum SessionTitleSanitizer {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        // Strip control characters, bidi overrides, and zero-width characters
-        // before any shape check below sees the string. Re-trim afterward:
-        // removing an embedded control character can expose new leading/
-        // trailing whitespace (e.g. a title that was "\u{1B}[31mTitle" has
-        // only leading ANSI bytes, not whitespace, but this is cheap and safe
-        // either way).
+        // Reject outright — never splice — any title containing a real
+        // control character (Unicode General Category Cc: NUL, BEL, BS, ESC,
+        // CR, embedded LF, the C1 range). A title with an embedded newline or
+        // an ANSI escape sequence isn't a meaningful session name, and a
+        // spliced result (welding the words on either side of the removed
+        // byte together, or leaving a stray "[31m" behind) is worse than
+        // rejecting it. Checked via `generalCategory` rather than
+        // `CharacterSet.controlCharacters` so format characters (Cf) like
+        // ZWJ/ZWNJ and the bidi overrides — which are handled separately
+        // below as strip-not-reject — are never caught here.
+        guard !trimmed.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) else {
+            return nil
+        }
+
+        // Strip bidi overrides and zero-width obfuscation characters before
+        // any shape check below sees the string. Re-trim afterward: removing
+        // one of these can expose new leading/trailing whitespace.
         let cleaned = String(trimmed.unicodeScalars.filter { !disallowedCharacters.contains($0) })
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return nil }
@@ -98,19 +120,35 @@ enum SessionTitleSanitizer {
             if wordCount <= 3 { return nil }
         }
 
-        // Shell prompt: conventionally ends in "$", "%", or "#". But
-        // percent-terminated PROGRESS reports (compaction %, coverage %,
-        // build %) are a distinct, common agent-tooling shape that ends the
-        // same way — the two are distinguished by what immediately precedes
-        // the trailing character: a real prompt's trailing character follows
-        // a hostname/path/space, never a bare digit, while "45%" is a
-        // digit-percent pair. Reject only the non-digit-preceded case so
-        // "Compacting conversation 45%" survives while real prompts don't.
-        if cleaned.hasSuffix("$") || cleaned.hasSuffix("%") || cleaned.hasSuffix("#") {
+        // Shell prompt: conventionally ends in "$", "%", or "#". A digit
+        // immediately before the suffix does NOT prove innocence for "$" or
+        // "#" — real prompts routinely end with a numbered host/directory
+        // (`sean@mbp:~/Code/ghostties2$`, `root@server1#`), so those two
+        // suffixes are rejected unconditionally. "%" is the one suffix where
+        // a digit-preceded exemption is safe: percent-terminated PROGRESS
+        // reports (compaction %, coverage %, build %) are a distinct, common
+        // agent-tooling shape, and a shell prompt never legitimately ends in
+        // "<digit>%" (zsh/bash prompt characters are never "%" preceded by a
+        // bare digit in practice — a literal trailing "%" prompt is always
+        // preceded by a space or path character). This keeps "Compacting
+        // conversation 45%" passing while real prompts don't.
+        if cleaned.hasSuffix("$") || cleaned.hasSuffix("#") {
+            return nil
+        }
+        if cleaned.hasSuffix("%") {
             let beforeSuffix = cleaned.dropLast()
             if beforeSuffix.last?.isNumber != true {
                 return nil
             }
+        }
+
+        // `user@host` token: bash/zsh's default PS1 (`\u@\h:\w\$`) and every
+        // common SSH-style prompt embed this shape somewhere in the string
+        // regardless of what character the prompt happens to end with —
+        // reject on the token's presence alone rather than relying solely on
+        // the trailing-character heuristic above.
+        if cleaned.range(of: #"\S+@\S+"#, options: .regularExpression) != nil {
+            return nil
         }
 
         let sanitized = truncated(cleaned, maxLength: maxLength)

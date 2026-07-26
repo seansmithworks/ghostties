@@ -85,25 +85,27 @@ final class SessionCoordinator: ObservableObject {
     /// terminal output line when detecting "needs attention" prompts.
     private var lastSurfaceTitle: [UUID: String] = [:]
 
-    /// Wall-clock time each session last actually synced its sidebar name
-    /// from its terminal title. Not used to gate — the `TrailingEdgeDebouncer`
-    /// below already bounds fires to one per `nameSyncThrottle` of quiet per
-    /// session — kept as an observability/test hook so it's possible to
-    /// assert a sync actually happened without depending on real timers.
-    private var lastNameSyncAt: [UUID: Date] = [:]
+    /// Per-session Combine subscription for Claude Code → sidebar name sync.
+    /// Subscribes directly to `surface.$title` (see `subscribeNameSync`) —
+    /// `@Published` only ever emits a settled value (`SurfaceView_AppKit`'s
+    /// title-coalescing timer is the sole writer), so there is no
+    /// sampling-at-fire-time problem to solve, unlike the deleted
+    /// `TrailingEdgeDebouncer`. `removeDuplicates()` is what actually fixes
+    /// the starvation bug that debounce had: Claude Code re-emits an
+    /// identical OSC 2 title on every render frame (see
+    /// `src/termio/stream_handler.zig:995-1029`, which — unlike
+    /// `setMouseShape` two lines below it — does no dedupe), so without
+    /// `removeDuplicates()` a debounce/throttle downstream never sees a quiet
+    /// window during sustained activity. `throttle(latest: true)` gives
+    /// leading-edge (name updates the moment a new title appears after a
+    /// quiet spell) plus trailing-edge (the final title of a burst still
+    /// lands), bounded to one write per `nameSyncThrottle` while titles are
+    /// actively changing.
+    private var nameSyncSubscriptions: [UUID: AnyCancellable] = [:]
 
-    /// Per-session trailing-edge debouncer for `WorkspaceStore.syncSessionNameFromTitle`.
-    /// Claude Code updates the terminal title constantly while streaming (this
-    /// is the exact signal path documented in
-    /// `project_perf-activity-invalidation-storm.md` — an unthrottled write
-    /// here reintroduces that storm). Every output signal resets the timer;
-    /// it only actually reads `surface.title` and syncs once titles have gone
-    /// quiet for `nameSyncThrottle` seconds, which both bounds write frequency
-    /// and guarantees the title has settled — see `TrailingEdgeDebouncer`'s
-    /// doc comment for why sampling `surface.title` any earlier is wrong.
-    private var nameSyncDebouncers: [UUID: TrailingEdgeDebouncer] = [:]
-
-    /// How long title changes must go quiet before the sidebar name syncs.
+    /// How often the sidebar name may update while titles are actively
+    /// changing (throttle window). Not a "must go quiet" wait — see
+    /// `nameSyncSubscriptions` above.
     static let nameSyncThrottle: TimeInterval = 5
 
     /// When each session entered the processing state (continuous output).
@@ -643,9 +645,8 @@ final class SessionCoordinator: ObservableObject {
         isAtPrompt.removeValue(forKey: id)
         processingStartTimes.removeValue(forKey: id)
         lastSurfaceTitle.removeValue(forKey: id)
-        lastNameSyncAt.removeValue(forKey: id)
-        nameSyncDebouncers[id]?.cancel()
-        nameSyncDebouncers.removeValue(forKey: id)
+        nameSyncSubscriptions[id]?.cancel()
+        nameSyncSubscriptions.removeValue(forKey: id)
         WorkspaceStore.shared.removeSessionStatus(id: id)
         WorkspaceStore.shared.removeIndicatorState(id: id)
     }
@@ -927,11 +928,6 @@ final class SessionCoordinator: ObservableObject {
                 if let title = surface?.title, !title.isEmpty {
                     self.lastSurfaceTitle[sessionId] = title
                 }
-                // Reset this session's name-sync debounce on every signal.
-                // `surface.title` is read fresh at fire time (not now) — see
-                // `TrailingEdgeDebouncer` doc for why reading it here would
-                // be stale.
-                self.scheduleNameSync(sessionId: sessionId, surface: surface)
                 // Push activity into the workspace store so per-project /
                 // per-session `lastActiveAt` and the grace-period tracker stay
                 // current with real terminal output. The store handles the
@@ -944,56 +940,55 @@ final class SessionCoordinator: ObservableObject {
                     )
                 }
             }
+
+        // Name sync is its own subscription, independent of `lastOutputSubject`
+        // above — it does not piggyback on the output-activity signal path
+        // that caused the June invalidation-storm incident. See
+        // `nameSyncSubscriptions`'s doc comment for the mechanism.
+        subscribeNameSync(sessionId: sessionId, titlePublisher: surface.$title)
     }
 
-    /// Debounced entry point for Claude Code → sidebar name sync (one
-    /// direction only — nothing here ever writes back into the running
-    /// agent's terminal). Resets this session's `TrailingEdgeDebouncer` on
-    /// every call; `titleProvider` is evaluated only once the debounce
-    /// actually fires (see that type's doc for why this matters —
-    /// `surface.title` is not settled synchronously here).
+    /// Wires a session's title publisher into the Claude Code → sidebar name
+    /// sync pipeline (one direction only — nothing here ever writes back into
+    /// the running agent's terminal).
     ///
-    /// Not `private` so `@testable import` can drive it directly without a
-    /// live `Ghostty.SurfaceView`/GhosttyKit dependency. `store` defaults to
-    /// the real shared instance in production; tests inject an isolated
-    /// `WorkspaceStore(testingProjects:testingSessions:)` so exercising the
-    /// debounce never touches the real `workspace.json`.
-    func scheduleNameSync(sessionId: UUID, surface: Ghostty.SurfaceView?, store: WorkspaceStore = .shared) {
-        scheduleNameSync(sessionId: sessionId, titleProvider: { [weak surface] in surface?.title }, store: store)
-    }
-
-    /// Closure-based overload used by both `scheduleNameSync(sessionId:surface:)`
-    /// above and directly by tests — decouples the debounce mechanism from
-    /// needing a real `Ghostty.SurfaceView`.
-    func scheduleNameSync(
+    /// Generic over any `String`/`Never` publisher (not tied to
+    /// `Ghostty.SurfaceView.$title`) so `@testable import` can drive it
+    /// directly with a `PassthroughSubject<String, Never>` in unit tests,
+    /// with no live `Ghostty.SurfaceView`/GhosttyKit dependency. `store`
+    /// defaults to the real shared instance in production; tests inject an
+    /// isolated `WorkspaceStore(testingProjects:testingSessions:)` so
+    /// exercising this never touches the real `workspace.json`.
+    ///
+    /// `interval` is honored on every call — unlike the deleted
+    /// `scheduleNameSync(interval:)`, there is no "already exists, silently
+    /// ignore the new value" hazard here because this is called exactly once
+    /// per session, at subscription setup in `subscribeToOutput`.
+    func subscribeNameSync<P: Publisher>(
         sessionId: UUID,
-        titleProvider: @escaping () -> String?,
+        titlePublisher: P,
         interval: TimeInterval = SessionCoordinator.nameSyncThrottle,
         store: WorkspaceStore = .shared
-    ) {
-        let debouncer = nameSyncDebouncers[sessionId] ?? {
-            let created = TrailingEdgeDebouncer(interval: interval)
-            nameSyncDebouncers[sessionId] = created
-            return created
-        }()
-        debouncer.signal { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.performNameSync(sessionId: sessionId, title: titleProvider(), store: store)
+    ) where P.Output == String, P.Failure == Never {
+        nameSyncSubscriptions[sessionId] = titlePublisher
+            .removeDuplicates()
+            .throttle(for: .seconds(interval), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] title in
+                self?.performNameSync(sessionId: sessionId, title: title, store: store)
             }
-        }
     }
 
-    /// Reads the (by now settled) title and applies it to the sidebar name.
+    /// Applies an already-deduped, already-throttled title to the sidebar
+    /// name.
     ///
     /// Pin check comes first, before any lookup work: a pinned session's
     /// sync is going to be discarded by `WorkspaceStore.syncSessionNameFromTitle`
     /// regardless, so there's no reason to pay for the project lookup + URL
-    /// construction below on every debounce fire for a pinned session.
+    /// construction below on every fire for a pinned session.
     ///
-    /// Not `private` for the same testability reason as `scheduleNameSync`.
-    func performNameSync(sessionId: UUID, title: String?, store: WorkspaceStore = .shared) {
-        guard let title, !title.isEmpty else { return }
+    /// Not `private` for the same testability reason as `subscribeNameSync`.
+    func performNameSync(sessionId: UUID, title: String, store: WorkspaceStore = .shared) {
+        guard !title.isEmpty else { return }
         guard let session = store.sessions.first(where: { $0.id == sessionId }),
               !session.isNamePinned else { return }
 
@@ -1006,7 +1001,6 @@ final class SessionCoordinator: ObservableObject {
             title: title,
             projectDirectoryName: projectDirectoryName
         )
-        lastNameSyncAt[sessionId] = Date()
     }
 
     /// Observe `GHOSTTY_ACTION_COMMAND_FINISHED` to cache exit codes before surfaces close.
