@@ -85,6 +85,14 @@ final class SessionCoordinator: ObservableObject {
     /// terminal output line when detecting "needs attention" prompts.
     private var lastSurfaceTitle: [UUID: String] = [:]
 
+#if DEBUG
+    /// Test-only override for `isAgentKindSession`'s store lookup, so tests
+    /// can exercise the agent-kind branch of `indicatorState(for:)` against
+    /// an isolated `WorkspaceStore` instead of `WorkspaceStore.shared` (which
+    /// persists to the real `workspace.json`). nil in production.
+    var agentKindLookupStoreForTesting: WorkspaceStore?
+#endif
+
     /// Per-session Combine subscription for Claude Code → sidebar name sync.
     /// Subscribes directly to `surface.$title` (see `subscribeNameSync`) —
     /// `@Published` only ever emits a settled value (`SurfaceView_AppKit`'s
@@ -1196,7 +1204,17 @@ final class SessionCoordinator: ObservableObject {
             if isLikelyPromptingForInput(sessionId: sessionId) {
                 return .needsAttention
             }
-            // Silent but no strong signal of a prompt — generic waiting.
+            // Silent, not at a shell prompt, no prompt-shaped title. For plain
+            // shell sessions `isAtPrompt` is a trustworthy signal (driven by
+            // real OSC 133 markers), so silence-without-it genuinely means
+            // "waiting on something". Agent-kind sessions (Claude Code, custom
+            // agent CLIs) are full-screen TUIs that never emit OSC 133 — for
+            // those, `isAtPrompt` is permanently false and silence alone is not
+            // evidence the user is needed. Absence of evidence must fall back
+            // to the low-salience state, not an attention-seeking one.
+            if isAgentKindSession(sessionId) {
+                return .idle
+            }
             return .waiting
 
         case .completed, .exited, .killed:
@@ -1205,6 +1223,29 @@ final class SessionCoordinator: ObservableObject {
         case .error:
             return .error
         }
+    }
+
+    /// Whether a session's template is an agent CLI (Claude Code, custom) rather
+    /// than a plain shell.
+    ///
+    /// Plain shell sessions emit real OSC 133 prompt markers, so `isAtPrompt`
+    /// is trustworthy for them. Agent-kind sessions are full-screen TUIs that
+    /// never emit that marker, so `isAtPrompt` never becomes true for their
+    /// entire lifetime — the `.waiting` fallback in `indicatorState(for:)`
+    /// needs to treat their silence differently. Unknown/missing session or
+    /// template (lookup failure) returns `false`, preserving the historic
+    /// shell-like fallback rather than guessing.
+    private func isAgentKindSession(_ sessionId: UUID) -> Bool {
+        #if DEBUG
+        let store = agentKindLookupStoreForTesting ?? WorkspaceStore.shared
+        #else
+        let store = WorkspaceStore.shared
+        #endif
+        guard let session = store.sessions.first(where: { $0.id == sessionId }),
+              let template = store.templates.first(where: { $0.id == session.templateId }) else {
+            return false
+        }
+        return template.kind != .shell
     }
 
     /// Check if a session is likely blocked on user input based on its last output.
@@ -1283,5 +1324,29 @@ final class SessionCoordinator: ObservableObject {
     /// can assert the dictionary shrinks after teardown without reaching
     /// into a `private` property directly.
     var nameSyncSubscriptionCountForTesting: Int { nameSyncSubscriptions.count }
+
+    /// Test-only seam for exercising `indicatorState(for:)`'s decision tree
+    /// without live GhosttyKit surfaces. Sets exactly the internal state
+    /// `indicatorState(for:)` reads and nothing else. Never used in production.
+    func seedIndicatorStateForTesting(
+        id: UUID,
+        status: SessionStatus = .running,
+        lastOutputSecondsAgo: Int? = nil,
+        processingStartSecondsAgo: Int? = nil,
+        isAtPrompt: Bool = false,
+        lastSurfaceTitle: String? = nil
+    ) {
+        statuses[id] = status
+        if let lastOutputSecondsAgo {
+            lastOutputTimestamps[id] = ContinuousClock.now - .seconds(lastOutputSecondsAgo)
+        }
+        if let processingStartSecondsAgo {
+            processingStartTimes[id] = ContinuousClock.now - .seconds(processingStartSecondsAgo)
+        }
+        self.isAtPrompt[id] = isAtPrompt
+        if let lastSurfaceTitle {
+            self.lastSurfaceTitle[id] = lastSurfaceTitle
+        }
+    }
 #endif
 }
