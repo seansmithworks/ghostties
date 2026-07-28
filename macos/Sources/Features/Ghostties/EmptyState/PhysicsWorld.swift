@@ -47,12 +47,12 @@ struct PhysicsWorld {
             return PhysicsWorld(bodies: [])
         }
         let safe = bounds.insetBy(dx: radius, dy: radius)
-        var used: Set<GhostCharacter> = []
+        var used: [GhostCharacter] = []
         var bodies: [GhostBody] = []
         bodies.reserveCapacity(count)
         for _ in 0..<count {
             let char = GhostCharacter.randomUnused(excluding: used)
-            used.insert(char)
+            used.append(char)
             let angle = Double.random(in: 0..<(2 * .pi))
             let speed = CGFloat.random(in: 0.22...0.40)
             bodies.append(GhostBody(

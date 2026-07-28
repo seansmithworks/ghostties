@@ -22,10 +22,10 @@ struct RecentsRowView: View {
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Status dot — same color mapping as MenuBarDropdownView.
-            Circle()
-                .fill(dotColor)
-                .frame(width: 6, height: 6)
+            // Per-session ghost character, tinted by status — same color mapping
+            // as MenuBarDropdownView.
+            GhostCharacterView(character: session.resolvedGhostCharacter, color: dotColor)
+                .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
                 .frame(width: WorkspaceLayout.sidebarIconColumnWidth, alignment: .center)
 
             // Session name + project name stacked
@@ -83,9 +83,9 @@ struct RecentsRowView: View {
     private var dotColor: Color {
         switch indicatorState {
         case .error:          return Color(.systemRed)
-        case .needsAttention: return WorkspaceLayout.needsAttentionPurple
-        case .waiting:        return WorkspaceLayout.waitingTerracotta
-        case .longRunning:    return Color(.systemYellow)
+        case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
+        case .waiting:        return WorkspaceLayout.statusYourTurnBlue
+        case .longRunning:    return WorkspaceLayout.statusLongRunningOrange
         case .processing:     return Color(.systemGreen)
         case .idle:           return Color.primary.opacity(0.30)
         case .inactive:       return Color.primary.opacity(0.12)

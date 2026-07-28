@@ -164,7 +164,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         SessionRow(
             session: session,
             indicatorState: coordinator.indicatorState(for: session.id),
-            ghostCharacter: project.ghostCharacter,
+            ghostCharacter: session.resolvedGhostCharacter,
             isActive: coordinator.activeSessionId == session.id,
             isEditing: editingSessionId == session.id,
             agentTemplateName: agentTemplateName(for: session),
@@ -304,9 +304,12 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         } label: {
             HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
                 // Ghost icon — color reflects the project's aggregate activity
-                // state (terracotta = live work, primary = recent, muted = idle).
-                // The ghost collapses two signals (project identity + activity)
-                // into one mark, per the smart-sections design.
+                // state, mapped through the same status palette as session
+                // ghosts (green = processing, blue = your turn, gold = needs a
+                // decision, orange = long-running, red = error; primary =
+                // recent, muted = idle). The ghost collapses two signals
+                // (project identity + activity) into one mark, per the
+                // smart-sections design.
                 //
                 // The frame width matches `sidebarIconColumnWidth` so the
                 // ghost's x-center lines up with the section-header icon
@@ -315,7 +318,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
                     if let ghost = project.ghostCharacter {
                         GhostCharacterView(
                             character: ghost,
-                            color: store.projectActivityColor(for: project)
+                            color: store.projectGhostColor(for: project)
                         )
                         .frame(width: 12, height: 12)
                     }
@@ -404,9 +407,9 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     private var projectHeaderColor: Color {
         switch projectHeaderIndicator {
         case .error:          return Color(nsColor: .systemRed)
-        case .needsAttention: return WorkspaceLayout.needsAttentionPurple
-        case .waiting:        return WorkspaceLayout.waitingTerracotta
-        case .longRunning:    return Color(nsColor: .systemYellow)
+        case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
+        case .waiting:        return WorkspaceLayout.statusYourTurnBlue
+        case .longRunning:    return WorkspaceLayout.statusLongRunningOrange
         case .processing:     return Color(nsColor: .systemGreen)
         case .idle:           return Color(.secondaryLabelColor)
         case .inactive:       return Color(.tertiaryLabelColor)
