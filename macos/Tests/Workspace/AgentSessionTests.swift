@@ -144,6 +144,81 @@ struct AgentSessionTests {
         #expect(decoded.sortOrder == nil)
     }
 
+    @Test func sessionDecodingWithoutGhostCharacterDefaultsToNil() throws {
+        // Simulates a legacy workspace.json where sessions predate the per-session
+        // ghost system — must load without error, ghostCharacter defaults to nil.
+        let projectId = UUID()
+        let templateId = AgentTemplate.shell.id
+        let id = UUID()
+        let json = """
+        {
+            "id": "\(id.uuidString)",
+            "name": "Legacy Session",
+            "templateId": "\(templateId.uuidString)",
+            "projectId": "\(projectId.uuidString)"
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
+
+        #expect(decoded.ghostCharacter == nil)
+        // A nil ghostCharacter must still resolve to a valid ghost — no crash.
+        #expect(GhostCharacter.allCases.contains(decoded.resolvedGhostCharacter))
+    }
+
+    /// FIX 2 (the actual bug): `resolvedGhostCharacter`'s fallback must be
+    /// STABLE for a known UUID — not re-rolled per process. Swift's
+    /// `Hasher`/`UUID.hashValue` is randomly re-seeded every launch, so the
+    /// old implementation (`abs(id.hashValue) % count`) produced a different
+    /// index across launches for the identical UUID. The byte-derived
+    /// fallback must produce the SAME ghost for the SAME UUID, computed twice
+    /// independently in this one process (a stand-in for "across launches",
+    /// since the byte derivation has no process-lifetime state to vary).
+    @Test func resolvedGhostCharacterFallbackIsStableForKnownUUID() throws {
+        let knownId = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+        let projectId = UUID()
+        let templateId = AgentTemplate.shell.id
+
+        let sessionA = AgentSession(id: knownId, name: "A", templateId: templateId, projectId: projectId)
+        let sessionB = AgentSession(id: knownId, name: "A", templateId: templateId, projectId: projectId)
+
+        #expect(sessionA.ghostCharacter == nil)
+        #expect(sessionA.resolvedGhostCharacter == sessionB.resolvedGhostCharacter)
+
+        // Known-input → known-output: pins the exact byte-derivation against a
+        // literal independently computed for this UUID, so a future accidental
+        // change to the algorithm is caught — comparing the function to itself
+        // (as the two lines above do) would move in lockstep with any change
+        // to the derivation and never catch a regression.
+        #expect(AgentSession.deterministicFallbackGhost(for: knownId) == .fang)
+    }
+
+    /// `abs(Int.min)` traps — the old hashValue-based fallback was one bad
+    /// hash away from a crash. The byte-derived fallback never calls
+    /// `hashValue` at all, so this must simply not crash for any UUID,
+    /// including the all-zero / all-max edge cases.
+    @Test func deterministicFallbackGhostNeverTrapsOnEdgeUUIDs() {
+        let allZero = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        let allF = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
+        _ = AgentSession.deterministicFallbackGhost(for: allZero)
+        _ = AgentSession.deterministicFallbackGhost(for: allF)
+    }
+
+    @Test func sessionCodableRoundTripPreservesGhostCharacter() throws {
+        let original = AgentSession(
+            name: "Ghosted Session",
+            templateId: AgentTemplate.claudeCode.id,
+            projectId: UUID(),
+            ghostCharacter: .wraith
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
+
+        #expect(decoded.ghostCharacter == .wraith)
+        #expect(decoded.resolvedGhostCharacter == .wraith)
+    }
+
     @Test func sessionDecodingMalformedLastActiveAtThrows() {
         // A string where a numeric/date is expected should fail loudly rather than
         // silently becoming nil. Protects against over-use of `try?` in the decoder.

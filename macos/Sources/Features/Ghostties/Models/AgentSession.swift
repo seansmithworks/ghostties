@@ -13,7 +13,13 @@ struct AgentSession: Identifiable, Codable, Hashable {
     var projectId: UUID
 
     /// Explicit ordering within a project. Nil means this session predates
-    /// drag-and-drop reorder and will be sorted alphabetically.
+    /// drag-and-drop reorder and will be sorted alphabetically. This field is
+    /// scoped PER-PROJECT ONLY (`WorkspaceStore.sessions(for:)`/`moveSession`
+    /// number each project's sessions independently starting at 0) — never use
+    /// it as a sort key for a flat, cross-project list. `RecentsListView`'s
+    /// Sessions tab intentionally ignores it for exactly this reason: two
+    /// projects both numbering from 0 would otherwise interleave (A1, B1, A2,
+    /// B2, A3) instead of preserving each session's true creation order.
     var sortOrder: Int?
 
     /// The last moment this session produced output, was focused, or transitioned
@@ -21,13 +27,19 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// Nil means this session predates the timestamp system or has never been touched.
     var lastActiveAt: Date?
 
+    /// The pixel-art ghost character displayed for this session in the Sessions list.
+    /// Nil means this session predates the per-session ghost system (falls back to a
+    /// hash-derived ghost or a plain colored indicator — never re-rolled on render).
+    var ghostCharacter: GhostCharacter?
+
     init(
         id: UUID = UUID(),
         name: String,
         templateId: UUID,
         projectId: UUID,
         sortOrder: Int? = nil,
-        lastActiveAt: Date? = nil
+        lastActiveAt: Date? = nil,
+        ghostCharacter: GhostCharacter? = nil
     ) {
         self.id = id
         self.name = name
@@ -35,10 +47,11 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = projectId
         self.sortOrder = sortOrder
         self.lastActiveAt = lastActiveAt
+        self.ghostCharacter = ghostCharacter
     }
 
-    // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt)
-    // load without error.
+    // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
+    // ghostCharacter) load without error.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -47,6 +60,40 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = try container.decode(UUID.self, forKey: .projectId)
         self.sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
         self.lastActiveAt = try container.decodeIfPresent(Date.self, forKey: .lastActiveAt)
+        self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
+    }
+
+    /// Stable ghost for this session — the assigned `ghostCharacter` if present,
+    /// otherwise a byte-derived fallback so pre-existing sessions render
+    /// sensibly without ever being re-rolled.
+    ///
+    /// This fallback should only ever be visible transiently, between decode
+    /// and `WorkspaceStore`'s launch-time backfill (see
+    /// `WorkspaceStore.backfillGhostCharactersAtLaunch()`), which assigns and
+    /// persists a real `ghostCharacter` for every session that lacks one so
+    /// the value is written once and stable forever after.
+    var resolvedGhostCharacter: GhostCharacter {
+        if let ghostCharacter { return ghostCharacter }
+        return Self.deterministicFallbackGhost(for: id)
+    }
+
+    /// Deterministic fallback ghost derived from the UUID's raw bytes.
+    ///
+    /// Swift's `Hasher`/`UUID.hashValue` is randomly re-seeded every process
+    /// launch — the SAME hardcoded UUID has been observed to hash to four
+    /// different indices across four consecutive launches. Deriving from the
+    /// UUID's own bytes instead (never `hashValue`) makes this stable across
+    /// launches, processes, and machines.
+    static func deterministicFallbackGhost(for id: UUID) -> GhostCharacter {
+        let all = GhostCharacter.allCases
+        var accumulator: UInt64 = 0
+        withUnsafeBytes(of: id.uuid) { buffer in
+            for byte in buffer {
+                accumulator = accumulator &* 31 &+ UInt64(byte)
+            }
+        }
+        let index = Int(accumulator % UInt64(all.count))
+        return all[index]
     }
 }
 

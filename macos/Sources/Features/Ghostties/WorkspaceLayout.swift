@@ -122,7 +122,9 @@ enum WorkspaceLayout {
     /// warm. See `canvasBackgroundLight`.
     static let canvasBackgroundDark = NSColor(white: 0.18, alpha: 1)
 
-    /// Terracotta/warm rust accent for the "waiting" indicator state. #c97350
+    /// Terracotta/warm rust accent used as a brand/UI accent (pin notices, callout
+    /// cards, task-row highlights, browser-toggle tint). #c97350
+    /// NOTE: This is NOT the session-status "waiting" color — see `statusYourTurnBlue`.
     static let waitingTerracotta = Color(red: 0.788, green: 0.451, blue: 0.314)
 
     /// NSColor variant of `waitingTerracotta` for AppKit layers (e.g. button tints).
@@ -131,7 +133,34 @@ enum WorkspaceLayout {
     /// Minimum width for the terminal panel when browser is visible.
     static let terminalMinWidth: CGFloat = 300
 
-    /// Purple accent for the "needs attention" indicator state. #A855F7
+    // MARK: - Session Status-Dot Colors
+
+    /// Session status dot: "your turn" / waiting for input. Calm muted blue #5B8DEF.
+    /// Replaces the former terracotta — convention-led: blue = it's your move.
+    static let statusYourTurnBlue = Color(red: 0x5B / 255.0, green: 0x8D / 255.0, blue: 0xEF / 255.0)
+
+    /// NSColor variant of `statusYourTurnBlue` for AppKit/menu-bar layers.
+    static let statusYourTurnBlueNS = NSColor(red: 0x5B / 255.0, green: 0x8D / 255.0, blue: 0xEF / 255.0, alpha: 1)
+
+    /// Session status dot: "needs a decision" / urgent attention required.
+    /// Electric gold #FFC400 — loud, convention-led: yellow/gold = decide now.
+    /// Replaces the former purple.
+    static let statusNeedsDecisionGold = Color(red: 0xFF / 255.0, green: 0xC4 / 255.0, blue: 0x00 / 255.0)
+
+    /// NSColor variant of `statusNeedsDecisionGold` for AppKit/menu-bar layers.
+    static let statusNeedsDecisionGoldNS = NSColor(red: 0xFF / 255.0, green: 0xC4 / 255.0, blue: 0x00 / 255.0, alpha: 1)
+
+    /// Session status dot: long-running / still working but taking a while.
+    /// Redder/deeper orange #F97316 — clearly distinct from the electric gold used
+    /// for needsDecision. Reads as "still going, heads up" vs. "act now."
+    static let statusLongRunningOrange = Color(red: 0xF9 / 255.0, green: 0x73 / 255.0, blue: 0x16 / 255.0)
+
+    /// NSColor variant of `statusLongRunningOrange` for AppKit/menu-bar layers.
+    static let statusLongRunningOrangeNS = NSColor(red: 0xF9 / 255.0, green: 0x73 / 255.0, blue: 0x16 / 255.0, alpha: 1)
+
+    /// Purple accent (legacy — kept for reference only, no longer used for status dots).
+    /// Previously used for "needs attention" indicator state. #A855F7
+    /// @deprecated Use `statusNeedsDecisionGold` for session status indicators.
     static let needsAttentionPurple = Color(red: 0.659, green: 0.333, blue: 0.969)
 
     // MARK: - Activity / Section Foregrounds
@@ -174,6 +203,11 @@ enum WorkspaceLayout {
     /// and project rows. Combined with `sidebarIconColumnWidth` this yields the
     /// common x-position for icons and labels.
     static let sidebarRowLeadingPadding: CGFloat = 8
+
+    /// Render size of the per-session ghost glyph in `RecentsRowView` (Sessions
+    /// tab). Smaller than `sidebarIconColumnWidth` — the ghost sits centered
+    /// inside that column, not filling it.
+    static let sessionGhostSize: CGFloat = 14
 
     // MARK: - Source-dot colors
 

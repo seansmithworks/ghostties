@@ -1,49 +1,108 @@
 import XCTest
 @testable import Ghostty
 
-/// Tests for the recents-list sorting logic in RecentsListView.
+/// Tests for the recents-list ordering + section-membership logic in RecentsListView.
 ///
-/// Exercises the static `sorted(sessions:)` helper and `relativeLabel(_:)`
-/// — both are pure functions with no SwiftUI or AppKit dependencies.
+/// Exercises the static `sorted(sessions:)` and `belongsInActive(...)` helpers plus
+/// `relativeLabel(_:)` — all are pure functions with no SwiftUI or AppKit dependencies.
 final class RecentsListViewTests: XCTestCase {
 
     // MARK: - Helpers
 
     private func session(
         name: String,
-        lastActiveAt: Date? = nil
+        lastActiveAt: Date? = nil,
+        sortOrder: Int? = nil
     ) -> AgentSession {
         AgentSession(
             name: name,
             templateId: UUID(),
             projectId: UUID(),
+            sortOrder: sortOrder,
             lastActiveAt: lastActiveAt
         )
     }
 
-    // MARK: - Sorting
+    // MARK: - Sorting (stable order — NOT recency-based)
 
-    func testSortsByLastActiveAtDescending() {
+    /// Recency (`lastActiveAt`) must NOT affect order — that was the bug (rows
+    /// reshuffling under the cursor as `recordActivity` bumps the timestamp
+    /// every ~5s during streaming). Position/creation order should win instead.
+    func testLastActiveAtDoesNotAffectOrder() {
         let early = session(name: "early", lastActiveAt: Date(timeIntervalSinceNow: -3600))
         let middle = session(name: "middle", lastActiveAt: Date(timeIntervalSinceNow: -1800))
         let recent = session(name: "recent", lastActiveAt: Date(timeIntervalSinceNow: -60))
 
-        let sorted = RecentsListView.sorted(sessions: [early, recent, middle])
+        // Passed in append/creation order: early, middle, recent.
+        let sorted = RecentsListView.sorted(sessions: [early, middle, recent])
 
-        XCTAssertEqual(sorted.map(\.name), ["recent", "middle", "early"])
+        XCTAssertEqual(sorted.map(\.name), ["early", "middle", "recent"])
     }
 
-    func testNilLastActiveAtSinksToBottom() {
-        let withDate = session(name: "withDate", lastActiveAt: Date(timeIntervalSinceNow: -300))
-        let noDate1 = session(name: "noDate1", lastActiveAt: nil)
-        let noDate2 = session(name: "noDate2", lastActiveAt: nil)
+    /// FIX 3: `sortOrder` is scoped WITHIN a project and must never be used as
+    /// a cross-project key — the flat Sessions tab orders by array position
+    /// (append/creation order) alone, ignoring `sortOrder` entirely.
+    func testSortOrderDoesNotAffectFlatOrder() {
+        let a = session(name: "a", sortOrder: 2)
+        let b = session(name: "b", sortOrder: 0)
+        let c = session(name: "c", sortOrder: 1)
 
-        let sorted = RecentsListView.sorted(sessions: [noDate1, withDate, noDate2])
+        // Passed in append/creation order: a, b, c — sortOrder (2, 0, 1) must
+        // be ignored, or this would come back as b, c, a instead.
+        let sorted = RecentsListView.sorted(sessions: [a, b, c])
 
-        // withDate must be first; the two nil-date sessions can be in any order after.
-        XCTAssertEqual(sorted.first?.name, "withDate")
-        let tailNames = Set(sorted.dropFirst().map(\.name))
-        XCTAssertEqual(tailNames, ["noDate1", "noDate2"])
+        XCTAssertEqual(sorted.map(\.name), ["a", "b", "c"])
+    }
+
+    func testSessionsWithSortOrderDoNotComeBeforeNilSortOrder() {
+        let noOrder = session(name: "noOrder", sortOrder: nil)
+        let ordered = session(name: "ordered", sortOrder: 0)
+
+        // Append order is noOrder, ordered — sortOrder must not reorder this.
+        let sorted = RecentsListView.sorted(sessions: [noOrder, ordered])
+
+        XCTAssertEqual(sorted.map(\.name), ["noOrder", "ordered"])
+    }
+
+    /// FIX 3 (the concrete bug): two sessions in DIFFERENT projects both with
+    /// `sortOrder: 0` (exactly what `addSession` assigns independently per
+    /// project) must not interleave — append order wins, full stop.
+    func testSortOrderZeroInDifferentProjectsDoesNotInterleave() {
+        let projectA = UUID()
+        let projectB = UUID()
+        let a1 = AgentSession(name: "A1", templateId: UUID(), projectId: projectA, sortOrder: 0)
+        let b1 = AgentSession(name: "B1", templateId: UUID(), projectId: projectB, sortOrder: 0)
+        let a2 = AgentSession(name: "A2", templateId: UUID(), projectId: projectA, sortOrder: 1)
+
+        let sorted = RecentsListView.sorted(sessions: [a1, b1, a2])
+
+        XCTAssertEqual(sorted.map(\.name), ["A1", "B1", "A2"])
+    }
+
+    /// `sorted(sessions:)` must never trap on a duplicate session id (FIX 5) —
+    /// duplicate ids can appear in `workspace.json`, a file on disk written by
+    /// multiple windows.
+    func testSortedDoesNotTrapOnDuplicateSessionId() {
+        let sharedId = UUID()
+        let first = AgentSession(id: sharedId, name: "first", templateId: UUID(), projectId: UUID())
+        let duplicate = AgentSession(id: sharedId, name: "duplicate", templateId: UUID(), projectId: UUID())
+
+        let sorted = RecentsListView.sorted(sessions: [first, duplicate])
+
+        XCTAssertEqual(sorted.count, 2)
+        XCTAssertEqual(sorted.map(\.name), ["first", "duplicate"])
+    }
+
+    /// Nil `sortOrder` falls back to append/creation position (index in the
+    /// passed-in array), not any other ordering.
+    func testNilSortOrderFallsBackToAppendPosition() {
+        let first = session(name: "first", sortOrder: nil)
+        let second = session(name: "second", sortOrder: nil)
+        let third = session(name: "third", sortOrder: nil)
+
+        let sorted = RecentsListView.sorted(sessions: [first, second, third])
+
+        XCTAssertEqual(sorted.map(\.name), ["first", "second", "third"])
     }
 
     func testEmptySessionListReturnsEmpty() {
@@ -58,10 +117,138 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertEqual(sorted.first?.name, "only")
     }
 
-    func testAllNilTimestampsPreservesCount() {
-        let sessions = (0..<5).map { session(name: "s\($0)", lastActiveAt: nil) }
+    func testAllNilSortOrdersPreservesCount() {
+        let sessions = (0..<5).map { session(name: "s\($0)", sortOrder: nil) }
         let sorted = RecentsListView.sorted(sessions: sessions)
         XCTAssertEqual(sorted.count, 5)
+    }
+
+    // MARK: - Section Membership (indicator-state-only — FIX 6)
+
+    func testInactiveSessionBelongsInArchiveByDefault() {
+        XCTAssertFalse(RecentsListView.belongsInActive(indicatorState: .inactive))
+    }
+
+    func testLiveIndicatorStateBelongsInActive() {
+        XCTAssertTrue(RecentsListView.belongsInActive(indicatorState: .processing))
+    }
+
+    /// FIX 6: selection must NEVER promote a session into Active. Membership
+    /// depends only on indicator state — otherwise clicking an Archive row
+    /// makes it vanish from Archive and reappear in Active, shifting every
+    /// row below it under the cursor.
+    func testSelectionDoesNotAffectMembership() {
+        // Selected but inactive — must stay in Archive (no promotion).
+        XCTAssertFalse(RecentsListView.belongsInActive(indicatorState: .inactive))
+        // Never selected but active — still belongs in Active.
+        XCTAssertTrue(RecentsListView.belongsInActive(indicatorState: .waiting))
+    }
+
+    /// `belongsInActive` and its archive complement (`!belongsInActive`) must
+    /// be exact complements across the FULL `SessionIndicatorState` enum —
+    /// every session lands in exactly one section, never both, never neither.
+    func testBelongsInActiveAndArchiveAreExactComplementsAcrossFullEnum() {
+        let allStates: [SessionIndicatorState] = [
+            .inactive, .idle, .processing, .longRunning, .waiting, .needsAttention, .error,
+        ]
+        for state in allStates {
+            let inActive = RecentsListView.belongsInActive(indicatorState: state)
+            let inArchive = !RecentsListView.belongsInActive(indicatorState: state)
+            XCTAssertNotEqual(inActive, inArchive, "state \(state) must be in exactly one section")
+        }
+    }
+
+    // MARK: - Active/Archive Sessions (pure helpers)
+
+    /// FIX 1 (cold launch): every session resolves `.inactive` at cold
+    /// launch (no `globalIndicatorStates` entries yet) and nothing is
+    /// selected — sessions must still be visible, not silently hidden behind
+    /// an empty Active section and a collapsed Archive.
+    func testColdLaunchAllSessionsVisibleInArchive() {
+        let sessions = (0..<14).map { session(name: "s\($0)") }
+
+        let active = RecentsListView.activeSessions(from: sessions, indicatorStates: [:])
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:])
+
+        XCTAssertTrue(active.isEmpty)
+        XCTAssertEqual(archive.count, 14)
+
+        // And the auto-expand override forces Archive open in this exact
+        // scenario, regardless of the stored (default-collapsed) preference.
+        let archiveExpanded = RecentsListView.effectiveExpanded(
+            storedPreference: false,
+            isArchiveSection: true,
+            activeSessionsEmpty: active.isEmpty,
+            sectionContainsSelectedSession: false
+        )
+        XCTAssertTrue(archiveExpanded, "Archive must auto-expand when Active is empty, or all 14 sessions are invisible")
+    }
+
+    /// FIX 6 + FIX 1: a selected session that belongs in Archive stays in
+    /// Archive (no promotion) — but its section renders expanded via the
+    /// auto-expand override, so it's still visible without moving.
+    func testSelectedArchiveSessionStaysInArchiveButSectionExpands() {
+        let selected = session(name: "selected")
+        let other = session(name: "other")
+        let sessions = [selected, other]
+        // One session IS active, so the "Active empty" auto-expand condition
+        // does NOT apply here — only the "contains selection" condition should.
+        let indicatorStates: [UUID: SessionIndicatorState] = [other.id: .processing]
+
+        let active = RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates)
+
+        XCTAssertTrue(archive.contains { $0.id == selected.id }, "selected session must stay in Archive")
+        XCTAssertFalse(active.contains { $0.id == selected.id }, "selected session must NOT be promoted into Active")
+
+        let archiveExpanded = RecentsListView.effectiveExpanded(
+            storedPreference: false,
+            isArchiveSection: true,
+            activeSessionsEmpty: active.isEmpty,
+            sectionContainsSelectedSession: archive.contains { $0.id == selected.id }
+        )
+        XCTAssertTrue(archiveExpanded, "Archive must expand because it contains the selected session")
+    }
+
+    /// The auto-expand override is render-time only — it must never depend on
+    /// (or imply writing to) the stored `@AppStorage` preference. Passing a
+    /// `storedPreference` of `false` still yields `true` under an override
+    /// condition, proving the override doesn't require/mutate storage.
+    func testEffectiveExpandedOverrideIgnoresStoredPreferenceWhenTriggered() {
+        XCTAssertTrue(RecentsListView.effectiveExpanded(
+            storedPreference: false,
+            isArchiveSection: true,
+            activeSessionsEmpty: true,
+            sectionContainsSelectedSession: false
+        ))
+        XCTAssertTrue(RecentsListView.effectiveExpanded(
+            storedPreference: false,
+            isArchiveSection: true,
+            activeSessionsEmpty: false,
+            sectionContainsSelectedSession: true
+        ))
+        // No override condition met — falls through to the stored preference.
+        XCTAssertFalse(RecentsListView.effectiveExpanded(
+            storedPreference: false,
+            isArchiveSection: true,
+            activeSessionsEmpty: false,
+            sectionContainsSelectedSession: false
+        ))
+    }
+
+    /// FIX (dead ACTIVE header): the selected-session override must be
+    /// Archive-only. A selected, running session lives in Active essentially
+    /// all the time during normal use, so applying the override there would
+    /// make the ACTIVE header collapse control permanently dead — tapping it
+    /// while a session is selected must actually collapse the section, honoring
+    /// the stored preference the same way as when nothing is selected.
+    func testActiveSectionRespectsStoredPreferenceEvenWhenItContainsSelectedSession() {
+        XCTAssertFalse(RecentsListView.effectiveExpanded(
+            storedPreference: false,
+            isArchiveSection: false,
+            activeSessionsEmpty: false,
+            sectionContainsSelectedSession: true
+        ), "Active must not force-expand for the selected session — only Archive gets that override")
     }
 
     // MARK: - Relative Time Labels
