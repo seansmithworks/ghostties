@@ -216,6 +216,12 @@ extension Ghostty {
         // by the user, this is set to the prior value (which may be empty, but non-nil).
         private var titleFromTerminal: String?
 
+        // Ghostties: whether `title` was last set via the manual "Set Title"
+        // dialog (`promptTitle()`) rather than by the terminal. Read by
+        // `SessionCoordinator`'s name-sync subscriber to tell the two origins
+        // apart, since `title` itself carries no provenance.
+        var isManuallyTitled: Bool { titleFromTerminal != nil }
+
         // The cached contents of the screen.
         private(set) var cachedScreenContents: CachedValue<String>
         private(set) var cachedVisibleContents: CachedValue<String>

@@ -85,6 +85,29 @@ final class SessionCoordinator: ObservableObject {
     /// terminal output line when detecting "needs attention" prompts.
     private var lastSurfaceTitle: [UUID: String] = [:]
 
+    /// Per-session Combine subscription for Claude Code → sidebar name sync.
+    /// Subscribes directly to `surface.$title` (see `subscribeNameSync`) —
+    /// `@Published` only ever emits a settled value (`SurfaceView_AppKit`'s
+    /// title-coalescing timer is the sole writer), so there is no
+    /// sampling-at-fire-time problem to solve, unlike the deleted
+    /// `TrailingEdgeDebouncer`. `removeDuplicates()` is what actually fixes
+    /// the starvation bug that debounce had: Claude Code re-emits an
+    /// identical OSC 2 title on every render frame (see
+    /// `src/termio/stream_handler.zig:995-1029`, which — unlike
+    /// `setMouseShape` two lines below it — does no dedupe), so without
+    /// `removeDuplicates()` a debounce/throttle downstream never sees a quiet
+    /// window during sustained activity. `throttle(latest: true)` gives
+    /// leading-edge (name updates the moment a new title appears after a
+    /// quiet spell) plus trailing-edge (the final title of a burst still
+    /// lands), bounded to one write per `nameSyncThrottle` while titles are
+    /// actively changing.
+    private var nameSyncSubscriptions: [UUID: AnyCancellable] = [:]
+
+    /// How often the sidebar name may update while titles are actively
+    /// changing (throttle window). Not a "must go quiet" wait — see
+    /// `nameSyncSubscriptions` above.
+    static let nameSyncThrottle: TimeInterval = 5
+
     /// When each session entered the processing state (continuous output).
     /// Cleared when the session returns to a prompt. Used for long-running detection.
     private var processingStartTimes: [UUID: ContinuousClock.Instant] = [:]
@@ -596,6 +619,8 @@ final class SessionCoordinator: ObservableObject {
         // Remove from our tracking first, then close surfaces via the controller.
         sessionTrees.removeValue(forKey: id)
         outputSubscriptions.removeValue(forKey: id)
+        nameSyncSubscriptions[id]?.cancel()
+        nameSyncSubscriptions.removeValue(forKey: id)
         setStatus(.killed, for: id)
         gcDraftIfPresent(for: id)
 
@@ -622,6 +647,8 @@ final class SessionCoordinator: ObservableObject {
         isAtPrompt.removeValue(forKey: id)
         processingStartTimes.removeValue(forKey: id)
         lastSurfaceTitle.removeValue(forKey: id)
+        nameSyncSubscriptions[id]?.cancel()
+        nameSyncSubscriptions.removeValue(forKey: id)
         WorkspaceStore.shared.removeSessionStatus(id: id)
         WorkspaceStore.shared.removeIndicatorState(id: id)
     }
@@ -759,6 +786,8 @@ final class SessionCoordinator: ObservableObject {
                 if liveTree.isEmpty {
                     sessionTrees.removeValue(forKey: sessionId)
                     outputSubscriptions.removeValue(forKey: sessionId)
+                    nameSyncSubscriptions[sessionId]?.cancel()
+                    nameSyncSubscriptions.removeValue(forKey: sessionId)
                     setStatus(exitStatus, for: sessionId)
                     gcDraftIfPresent(for: sessionId)
                     switchToNextSession()
@@ -774,6 +803,8 @@ final class SessionCoordinator: ObservableObject {
                 if updated.isEmpty {
                     sessionTrees.removeValue(forKey: sessionId)
                     outputSubscriptions.removeValue(forKey: sessionId)
+                    nameSyncSubscriptions[sessionId]?.cancel()
+                    nameSyncSubscriptions.removeValue(forKey: sessionId)
                     setStatus(exitStatus, for: sessionId)
                     gcDraftIfPresent(for: sessionId)
                 } else {
@@ -915,6 +946,102 @@ final class SessionCoordinator: ObservableObject {
                     )
                 }
             }
+
+        // Name sync is its own subscription, independent of `lastOutputSubject`
+        // above — it does not piggyback on the output-activity signal path
+        // that caused the June invalidation-storm incident. See
+        // `nameSyncSubscriptions`'s doc comment for the mechanism.
+        //
+        // `isManualTitle` reads `surface.isManuallyTitled` at fire time — true
+        // once the user has used the "Set Title" dialog on this surface (see
+        // `SurfaceView_AppKit.promptTitle()`), and sticky thereafter (the
+        // terminal is blocked from overwriting `title` once that happens). A
+        // manually-set title is captured by `weak surface` so this closure
+        // never keeps the surface alive.
+        subscribeNameSync(
+            sessionId: sessionId,
+            titlePublisher: surface.$title,
+            isManualTitle: { [weak surface] in surface?.isManuallyTitled ?? false }
+        )
+    }
+
+    /// Wires a session's title publisher into the Claude Code → sidebar name
+    /// sync pipeline (one direction only — nothing here ever writes back into
+    /// the running agent's terminal).
+    ///
+    /// Generic over any `String`/`Never` publisher (not tied to
+    /// `Ghostty.SurfaceView.$title`) so `@testable import` can drive it
+    /// directly with a `PassthroughSubject<String, Never>` in unit tests,
+    /// with no live `Ghostty.SurfaceView`/GhosttyKit dependency. `store`
+    /// defaults to the real shared instance in production; tests inject an
+    /// isolated `WorkspaceStore(testingProjects:testingSessions:)` so
+    /// exercising this never touches the real `workspace.json`.
+    ///
+    /// `interval` is honored on every call — unlike the deleted
+    /// `scheduleNameSync(interval:)`, there is no "already exists, silently
+    /// ignore the new value" hazard here because this is called exactly once
+    /// per session, at subscription setup in `subscribeToOutput`.
+    func subscribeNameSync<P: Publisher>(
+        sessionId: UUID,
+        titlePublisher: P,
+        interval: TimeInterval = SessionCoordinator.nameSyncThrottle,
+        store: WorkspaceStore = .shared,
+        isManualTitle: @escaping () -> Bool = { false }
+    ) where P.Output == String, P.Failure == Never {
+        nameSyncSubscriptions[sessionId] = titlePublisher
+            // `@Published` replays its current value on subscribe, and a
+            // brand-new `SurfaceView`'s first emission is always "". Without
+            // this filter that empty value passes `removeDuplicates()` (there
+            // is nothing before it to compare against) and consumes the
+            // throttle's leading edge, deferring the first real title by up
+            // to the full throttle interval on every new session.
+            .filter { !$0.isEmpty }
+            .removeDuplicates()
+            .throttle(for: .seconds(interval), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] title in
+                self?.performNameSync(sessionId: sessionId, title: title, store: store, isManualTitle: isManualTitle())
+            }
+    }
+
+    /// Applies an already-deduped, already-throttled title to the sidebar
+    /// name.
+    ///
+    /// Pin check comes first, before any lookup work: a pinned session's
+    /// sync is going to be discarded by `WorkspaceStore.syncSessionNameFromTitle`
+    /// regardless, so there's no reason to pay for the project lookup + URL
+    /// construction below on every fire for a pinned session.
+    ///
+    /// `isManualTitle` means this title came from the user's "Set Title"
+    /// dialog (`SurfaceView_AppKit.promptTitle()`), not from the terminal.
+    /// That's an explicit naming decision, so it's treated as a pin — via
+    /// `WorkspaceStore.renameSession`, the same call the sidebar's manual
+    /// rename UI uses — rather than a bare sync. This is also what keeps the
+    /// state visible and reversible: pinning surfaces the "Sync name
+    /// automatically" menu item, so the user can see sync stopped and turn
+    /// it back on, instead of a session silently and permanently losing
+    /// agent-title sync with no indication why.
+    ///
+    /// Not `private` for the same testability reason as `subscribeNameSync`.
+    func performNameSync(sessionId: UUID, title: String, store: WorkspaceStore = .shared, isManualTitle: Bool = false) {
+        guard !title.isEmpty else { return }
+        guard let session = store.sessions.first(where: { $0.id == sessionId }) else { return }
+
+        if isManualTitle {
+            store.renameSession(id: sessionId, name: title)
+            return
+        }
+
+        guard !session.isNamePinned else { return }
+
+        let projectDirectoryName = store.projects
+            .first(where: { $0.id == session.projectId })
+            .map { URL(fileURLWithPath: $0.rootPath).lastPathComponent }
+
+        store.syncSessionNameFromTitle(
+            id: sessionId,
+            title: title,
+            projectDirectoryName: projectDirectoryName
+        )
     }
 
     /// Observe `GHOSTTY_ACTION_COMMAND_FINISHED` to cache exit codes before surfaces close.
@@ -1142,5 +1269,19 @@ final class SessionCoordinator: ObservableObject {
             startActivityTimer()
         }
     }
+
+    /// Test-only seam for exercising the `nameSyncSubscriptions` teardown
+    /// paths (`closeSession`, `handleSurfaceClose`) without a live GhosttyKit
+    /// surface: an empty `SplitTree` satisfies `closeSession`'s
+    /// `sessionTrees[id] != nil` guard while iterating zero real surfaces.
+    /// Never used in production.
+    func seedEmptySessionTreeForTesting(id: UUID) {
+        sessionTrees[id] = SplitTree()
+    }
+
+    /// Test-only: current count of live name-sync subscriptions, so tests
+    /// can assert the dictionary shrinks after teardown without reaching
+    /// into a `private` property directly.
+    var nameSyncSubscriptionCountForTesting: Int { nameSyncSubscriptions.count }
 #endif
 }

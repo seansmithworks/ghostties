@@ -27,6 +27,13 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// Nil means this session predates the timestamp system or has never been touched.
     var lastActiveAt: Date?
 
+    /// True once the user has manually renamed this session via the sidebar
+    /// context menu. A pinned name is locked — incoming agent title updates
+    /// (see `SessionTitleSanitizer` / `SessionCoordinator`) stop overwriting it
+    /// until the pin is explicitly cleared. Defaults to `false` so existing
+    /// sessions keep syncing automatically.
+    var isNamePinned: Bool
+
     /// The pixel-art ghost character displayed for this session in the Sessions list.
     /// Nil means this session predates the per-session ghost system (falls back to a
     /// hash-derived ghost or a plain colored indicator — never re-rolled on render).
@@ -39,6 +46,7 @@ struct AgentSession: Identifiable, Codable, Hashable {
         projectId: UUID,
         sortOrder: Int? = nil,
         lastActiveAt: Date? = nil,
+        isNamePinned: Bool = false,
         ghostCharacter: GhostCharacter? = nil
     ) {
         self.id = id
@@ -47,11 +55,12 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = projectId
         self.sortOrder = sortOrder
         self.lastActiveAt = lastActiveAt
+        self.isNamePinned = isNamePinned
         self.ghostCharacter = ghostCharacter
     }
 
     // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
-    // ghostCharacter) load without error.
+    // isNamePinned/ghostCharacter) load without error.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -60,6 +69,7 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = try container.decode(UUID.self, forKey: .projectId)
         self.sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
         self.lastActiveAt = try container.decodeIfPresent(Date.self, forKey: .lastActiveAt)
+        self.isNamePinned = try container.decodeIfPresent(Bool.self, forKey: .isNamePinned) ?? false
         self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
     }
 
