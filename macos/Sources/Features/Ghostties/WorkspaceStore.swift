@@ -418,6 +418,16 @@ final class WorkspaceStore: ObservableObject {
         flatProjectsInVisualOrder.map(\.id)
     }
 
+    #if DEBUG
+    /// Test-only counter — increments every time `sessionGroups(forProject:)`
+    /// actually recomputes (cache miss or TTL expiry), never on a cache hit.
+    /// Added solely for the `docs/perf/session-name-sync-cache-load.md`
+    /// measurement harness (`SessionNameSyncCacheLoadTests`) — read-only,
+    /// DEBUG-gated, and touched by no production path. Compiled out of
+    /// release builds entirely.
+    private(set) var _sessionGroupsRecomputeCount = 0
+    #endif
+
     /// Memoized `sessionGroups(forProject:)` results, keyed by project id,
     /// each paired with the wall-clock time it was computed at. `computeSessionGroups`
     /// buckets by `lastActiveAt` recency too, so — same as `sectionedProjectsCache`
@@ -446,6 +456,9 @@ final class WorkspaceStore: ObservableObject {
             now: { now }
         )
         sessionGroupsCache[projectId] = (computed, now)
+        #if DEBUG
+        _sessionGroupsRecomputeCount += 1
+        #endif
         return computed
     }
 
