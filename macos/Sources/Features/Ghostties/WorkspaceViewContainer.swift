@@ -552,6 +552,31 @@ class WorkspaceViewContainer: NSView {
             browserWidthConstraint.constant = clamped
         }
 
+        // Re-clamp the sidebar width when the window shrinks, mirroring the
+        // browser panel's resize clamp above. The sidebar previously never
+        // re-clamped on resize, so a sidebar sitting near its max could
+        // exceed the available space once the window got small enough.
+        // Pinned mode only — closed mode is always width 0, and overlay
+        // floats over the terminal rather than sharing its space.
+        if sidebarMode == .pinned {
+            let inset = WorkspaceLayout.terminalInset
+            let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
+            let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
+            let reclamped = min(max(currentSidebarWidth, WorkspaceLayout.sidebarMinWidth), upperBound)
+            if reclamped != sidebarWidthConstraint.constant {
+                // Update the constraint, the stored per-mode width, and the
+                // SwiftUI frame pin together (same three writes as
+                // `handleSidebarDrag`) so they never diverge. Deliberately
+                // does NOT call `persistSidebarWidth()` — that only fires on
+                // drag mouseUp so an intentional user-chosen width isn't
+                // overwritten by a transient window shrink; growing the
+                // window back out doesn't restore a resize-clamped value.
+                sidebarWidthConstraint.constant = reclamped
+                currentSidebarWidth = reclamped
+                widthModel.width = reclamped
+            }
+        }
+
         // Explicit shadow paths eliminate per-frame offscreen rendering.
         // Without these, Core Animation rasterizes the entire layer to compute
         // the shadow shape every frame — expensive for a terminal that redraws at 60fps.
