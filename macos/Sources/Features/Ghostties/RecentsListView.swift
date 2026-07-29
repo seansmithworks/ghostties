@@ -264,6 +264,7 @@ struct RecentsListView: View {
     }
 
     private func cancelRename() {
+        editingName = ""
         editingSessionId = nil
     }
 

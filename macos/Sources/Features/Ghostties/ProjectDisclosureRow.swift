@@ -503,6 +503,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     }
 
     private func cancelRename() {
+        editingName = ""
         editingSessionId = nil
     }
 }
