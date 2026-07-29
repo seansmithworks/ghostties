@@ -1731,6 +1731,31 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 extension TerminalController {
     override func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
+        // "Next Project" / "Previous Project" only do anything in project-first
+        // mode — task-first mode has no project rows to select (see
+        // `TaskSidebarView`, which doesn't observe `.workspaceSelectNextProject`
+        // at all). Within project-first mode, `selectAdjacentProject(offset:)`
+        // in `WorkspaceSidebarView` reads `store.flatProjectsInVisualOrder` and
+        // wraps at both ends, so the only real no-op condition is zero
+        // projects — matched exactly here.
+        //
+        // NOTE: "Next Session" / "Previous Session" (`selectNextSession(_:)` /
+        // `selectPreviousSession(_:)`) have the identical bug (always enabled,
+        // silent no-op with zero live sessions) but are NOT fixed here.
+        // `selectAdjacentLiveSession` validates against
+        // `WorkspaceStore.sessionsInVisualOrder(coordinator:)`, which requires
+        // a `SessionCoordinator` reference. `TerminalController` has no path to
+        // the per-window `SessionCoordinator` — it's a private property on
+        // `WorkspaceViewContainer` (window `contentView`), out of scope for
+        // this change. Fixing it needs either a narrow visibility change on
+        // that property or a window-scoped bridge store (see the
+        // `RowFocusStore` pattern used elsewhere for AppKit-reads-SwiftUI-state).
+        case #selector(TerminalController.selectNextProject(_:)),
+            #selector(TerminalController.selectPreviousProject(_:)):
+            let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
+            guard mode == "projectFirst" else { return false }
+            return !WorkspaceStore.shared.flatProjectsInVisualOrder.isEmpty
+
         case #selector(showProjectsView(_:)):
             let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
             let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab") ?? "projects"
