@@ -255,6 +255,16 @@ class WorkspaceViewContainer: NSView {
     /// survives macOS version bumps and upstream titlebar refactors.
     private var sidebarToggleCenterYConstraint: NSLayoutConstraint!
 
+    /// True while a sidebar mode-transition animation (`transitionTo` or
+    /// `sidebarViewModeChanged`) is in flight. `layout()`'s resize reclamp
+    /// must not run while this is true: `sidebarWidthConstraint.animator()`
+    /// drives the constraint through intermediate values every frame during
+    /// the animation, and reclamping against those mid-flight values would
+    /// fight (or outright kill) the open/close animation. Set true right
+    /// before `NSAnimationContext.runAnimationGroup` starts, cleared in its
+    /// `completionHandler`.
+    private var isSidebarTransitionAnimating = false
+
     /// Stored constraints for animating sidebar show/hide and terminal insets.
     private var sidebarWidthConstraint: NSLayoutConstraint!
     private var shadowHostTopConstraint: NSLayoutConstraint!
@@ -533,8 +543,15 @@ class WorkspaceViewContainer: NSView {
 
     /// Total horizontal space available to the terminal + browser combined.
     /// Subtracts sidebar (when pinned) and the three inset gaps (leading, gap, trailing).
+    ///
+    /// Reads `widthModel.width` — the sidebar's actually-applied width —
+    /// rather than `currentSidebarWidth` (the user's desired width). The two
+    /// can diverge once the resize reclamp in `layout()` shrinks the applied
+    /// width below the desired one without touching the desired value (see
+    /// that reclamp's doc comment); the browser math needs the real width the
+    /// sidebar currently occupies on screen, not the user's stored preference.
     private var resizableWidth: CGFloat {
-        let sidebarWidth = sidebarMode == .pinned ? currentSidebarWidth : 0
+        let sidebarWidth = sidebarMode == .pinned ? widthModel.width : 0
         let inset = WorkspaceLayout.terminalInset
         // Three inset slots: leading of terminal, gap between panels, trailing of browser.
         return bounds.width - sidebarWidth - inset * 3
@@ -543,6 +560,53 @@ class WorkspaceViewContainer: NSView {
     override func layout() {
         super.layout()
 
+        // Re-clamp the sidebar width when the window shrinks. The sidebar
+        // previously never re-clamped on resize, so a sidebar sitting near
+        // its max could exceed the available space once the window got
+        // small enough. Pinned mode only — closed mode is always width 0,
+        // and overlay floats over the terminal rather than sharing its
+        // space. Runs BEFORE the browser split clamp below: the browser
+        // math reads `resizableWidth`, which reads the sidebar's live
+        // applied width, so the sidebar must be settled first or the
+        // browser gets one frame of stale width.
+        //
+        // `bounds.width > 0` guard: during teardown, tab merge/detach, and
+        // fullscreen intermediates `bounds.width` can transiently be 0,
+        // which would drive `maxByAvailableSpace` deeply negative and
+        // collapse the sidebar to `sidebarMinWidth`.
+        //
+        // `currentSidebarWidth` is the user's DESIRED width (the only
+        // in-memory record of what they dragged to — see its doc comment);
+        // it is never written here, only read. Only the applied
+        // width — `sidebarWidthConstraint.constant` / `widthModel.width` —
+        // is clamped. This mirrors the browser panel's own split: the
+        // desired value (`browserSplitRatio`) is untouched by its resize
+        // clamp below, only the applied `browserWidthConstraint.constant`
+        // is. Without this separation, shrinking the window below the
+        // user's chosen width permanently overwrites their preference —
+        // regrowing the window would never restore it.
+        //
+        // Guard witness is `widthModel.width`, not the animated
+        // `sidebarWidthConstraint.constant`: `transitionTo`/
+        // `sidebarViewModeChanged` drive that constraint through animator()
+        // over ~0.2s, so mid-animation it holds transient intermediate
+        // values every frame. Comparing against those would make this
+        // block "correct" the constraint back to its target on every
+        // frame, fighting (or fully overriding) the open animation. We
+        // also bail outright while a mode-transition animation is in
+        // flight — the animation itself is already driving the constraint
+        // to the right place.
+        if sidebarMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating {
+            let inset = WorkspaceLayout.terminalInset
+            let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
+            let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
+            let reclamped = min(max(currentSidebarWidth, WorkspaceLayout.sidebarMinWidth), upperBound)
+            if reclamped != widthModel.width {
+                sidebarWidthConstraint.constant = reclamped
+                widthModel.width = reclamped
+            }
+        }
+
         // Keep the terminal/browser split proportional when the window resizes.
         if isBrowserVisible {
             let available = resizableWidth
@@ -550,31 +614,6 @@ class WorkspaceViewContainer: NSView {
             let desired = available * browserSplitRatio
             let clamped = min(max(desired, WorkspaceLayout.browserMinWidth), max(maxBrowser, WorkspaceLayout.browserMinWidth))
             browserWidthConstraint.constant = clamped
-        }
-
-        // Re-clamp the sidebar width when the window shrinks, mirroring the
-        // browser panel's resize clamp above. The sidebar previously never
-        // re-clamped on resize, so a sidebar sitting near its max could
-        // exceed the available space once the window got small enough.
-        // Pinned mode only — closed mode is always width 0, and overlay
-        // floats over the terminal rather than sharing its space.
-        if sidebarMode == .pinned {
-            let inset = WorkspaceLayout.terminalInset
-            let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
-            let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
-            let reclamped = min(max(currentSidebarWidth, WorkspaceLayout.sidebarMinWidth), upperBound)
-            if reclamped != sidebarWidthConstraint.constant {
-                // Update the constraint, the stored per-mode width, and the
-                // SwiftUI frame pin together (same three writes as
-                // `handleSidebarDrag`) so they never diverge. Deliberately
-                // does NOT call `persistSidebarWidth()` — that only fires on
-                // drag mouseUp so an intentional user-chosen width isn't
-                // overwritten by a transient window shrink; growing the
-                // window back out doesn't restore a resize-clamped value.
-                sidebarWidthConstraint.constant = reclamped
-                currentSidebarWidth = reclamped
-                widthModel.width = reclamped
-            }
         }
 
         // Explicit shadow paths eliminate per-frame offscreen rendering.
@@ -676,7 +715,8 @@ class WorkspaceViewContainer: NSView {
         // closed mode the width is 0, in overlay mode the constraint follows
         // the overlay width which is also driven by currentSidebarWidth.
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        NSAnimationContext.runAnimationGroup { context in
+        isSidebarTransitionAnimating = true
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = reduceMotion ? 0 : 0.2
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             switch sidebarMode {
@@ -686,7 +726,9 @@ class WorkspaceViewContainer: NSView {
             case .closed:
                 break
             }
-        }
+        }, completionHandler: { [weak self] in
+            self?.isSidebarTransitionAnimating = false
+        })
         updateTrackingAreas()
         invalidateIntrinsicContentSize()
     }
@@ -1019,7 +1061,8 @@ class WorkspaceViewContainer: NSView {
 
         // 4. Animate constraints, widths, alphas.
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        NSAnimationContext.runAnimationGroup { context in
+        isSidebarTransitionAnimating = true
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = reduceMotion ? 0 : 0.2
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
 
@@ -1092,7 +1135,9 @@ class WorkspaceViewContainer: NSView {
                 browserShadowHostBottomConstraint.animator().constant = 0
                 browserShadowHostTrailingConstraint.animator().constant = 0
             }
-        }
+        }, completionHandler: { [weak self] in
+            self?.isSidebarTransitionAnimating = false
+        })
 
         // 5. Non-animatable properties.
         switch newMode {
