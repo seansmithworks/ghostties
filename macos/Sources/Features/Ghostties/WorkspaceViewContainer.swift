@@ -544,12 +544,15 @@ class WorkspaceViewContainer: NSView {
     /// Total horizontal space available to the terminal + browser combined.
     /// Subtracts sidebar (when pinned) and the three inset gaps (leading, gap, trailing).
     ///
-    /// Reads `widthModel.width` — the sidebar's actually-applied width —
+    /// Reads `widthModel.width` — the sidebar's applied width while pinned —
     /// rather than `currentSidebarWidth` (the user's desired width). The two
     /// can diverge once the resize reclamp in `layout()` shrinks the applied
     /// width below the desired one without touching the desired value (see
     /// that reclamp's doc comment); the browser math needs the real width the
     /// sidebar currently occupies on screen, not the user's stored preference.
+    /// Note: `widthModel.width` is stale in closed/overlay mode (it isn't
+    /// written when transitioning to `.closed`), which is fine because both
+    /// consumers here gate on `sidebarMode == .pinned` anyway.
     private var resizableWidth: CGFloat {
         let sidebarWidth = sidebarMode == .pinned ? widthModel.width : 0
         let inset = WorkspaceLayout.terminalInset
@@ -728,6 +731,11 @@ class WorkspaceViewContainer: NSView {
             }
         }, completionHandler: { [weak self] in
             self?.isSidebarTransitionAnimating = false
+            // The resize reclamp in `layout()` was deferred for the duration of
+            // this animation. Force one more layout pass now that the flag is
+            // clear, or a window shrink that happened mid-animation may never
+            // get re-clamped.
+            self?.needsLayout = true
         })
         updateTrackingAreas()
         invalidateIntrinsicContentSize()
@@ -1137,6 +1145,11 @@ class WorkspaceViewContainer: NSView {
             }
         }, completionHandler: { [weak self] in
             self?.isSidebarTransitionAnimating = false
+            // The resize reclamp in `layout()` was deferred for the duration of
+            // this animation. Force one more layout pass now that the flag is
+            // clear, or a window shrink that happened mid-animation may never
+            // get re-clamped.
+            self?.needsLayout = true
         })
 
         // 5. Non-animatable properties.
