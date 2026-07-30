@@ -1734,10 +1734,19 @@ extension TerminalController {
         // "Next Project" / "Previous Project" only do anything in project-first
         // mode — task-first mode has no project rows to select (see
         // `TaskSidebarView`, which doesn't observe `.workspaceSelectNextProject`
-        // at all). Within project-first mode, `selectAdjacentProject(offset:)`
-        // in `WorkspaceSidebarView` reads `store.flatProjectsInVisualOrder` and
-        // wraps at both ends, so the only real no-op condition is zero
-        // projects — matched exactly here.
+        // at all). Within project-first mode, this predicate is deliberately
+        // loose: it only greys out on zero projects, even though with exactly
+        // one project already selected and expanded, `selectAdjacentProject(offset:)`
+        // in `WorkspaceSidebarView` is also a no-op (mirrors the documented
+        // behavior of `selectAdjacentLiveSession` below). It can't be tightened
+        // to `count > 1` from here — `selectedProjectId` is per-window SwiftUI
+        // `@State` that `TerminalController` (AppKit) can't read. And a stale
+        // `selectedProjectId` (e.g. the selected project was deleted) makes
+        // `count > 1` actively wrong: `firstIndex(where:)` then returns nil and
+        // the action takes the meaningful reset-to-first branch at
+        // `WorkspaceSidebarView.swift:238-242`, which a tighter predicate would
+        // have greyed out. Staying loose is correct: greying a working command
+        // is worse than failing to grey a no-op one.
         //
         // NOTE: "Next Session" / "Previous Session" (`selectNextSession(_:)` /
         // `selectPreviousSession(_:)`) have the identical bug (always enabled,
