@@ -504,14 +504,23 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         if !trimmed.isEmpty, trimmed != session.name {
             store.renameSession(id: session.id, name: trimmed)
         }
-        renameFieldFocused = false
+        // Clear the sentinel before dropping focus: clearing focus itself
+        // triggers the onChange handler that schedules a deferred commit,
+        // so a re-entrant commit only sees the guard fail if the sentinel
+        // is already nil by the time that handler runs.
         editingSessionId = nil
+        renameFieldFocused = false
     }
 
     private func cancelRename() {
-        renameFieldFocused = false
-        editingName = ""
+        // Clear the sentinel before dropping focus: renameFieldFocused =
+        // false is itself a true→false transition that fires the same
+        // onChange handler this cancel is trying to defeat. The guard in
+        // commitRename only works if editingSessionId is already nil when
+        // that deferred handler runs.
         editingSessionId = nil
+        editingName = ""
+        renameFieldFocused = false
     }
 }
 
