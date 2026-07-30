@@ -39,7 +39,14 @@ struct SessionRow: View {
                     .onSubmit { onCommitRename() }
                     .onExitCommand { onCancelRename() }
                     .onChange(of: isRenameFocused.wrappedValue) { focused in
-                        if !focused, isEditing { onCommitRename() }
+                        // Deferred: Esc can drop focus (firing this) before
+                        // SwiftUI's onExitCommand runs cancelRename(). Dispatching
+                        // async lets cancelRename() clear editingSessionId first,
+                        // so the id guard in commitRename(session:) rejects this
+                        // call instead of writing a stale name to the store.
+                        if !focused, isEditing {
+                            DispatchQueue.main.async { onCommitRename() }
+                        }
                     }
             } else {
                 Text(session.name)

@@ -495,14 +495,21 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     }
 
     private func commitRename(session: AgentSession) {
+        // Guards against the Esc blur-commit race: cancelRename() clears
+        // editingSessionId synchronously, so a commit that was scheduled
+        // before the cancel ran (see SessionRow's deferred onChange) finds
+        // a stale/mismatched id here and bails instead of writing.
+        guard editingSessionId == session.id else { return }
         let trimmed = editingName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty, trimmed != session.name {
             store.renameSession(id: session.id, name: trimmed)
         }
+        renameFieldFocused = false
         editingSessionId = nil
     }
 
     private func cancelRename() {
+        renameFieldFocused = false
         editingName = ""
         editingSessionId = nil
     }
