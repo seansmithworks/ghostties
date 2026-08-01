@@ -53,3 +53,7 @@ default.profraw
 # Local session artifacts
 .claude/scheduled_tasks.lock
 docs/Crash\ report/
+.playwright-mcp/
+
+# Local-only handoff docs (published copy lives in memory, not in tracked git history)
+docs/handoffs/website-analytics.md

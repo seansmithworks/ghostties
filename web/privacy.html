@@ -190,12 +190,12 @@
     <p>None of this leaves your machine.</p>
 
     <h2>Network calls</h2>
-    <p>Ghostties checks for updates by fetching <code>appcast-beta.xml</code> or <code>appcast-stable.xml</code> from <code>ghostties.org</code>. That's the only network call the app makes on its own — no system info, no unique identifier, just an HTTP GET for the file.</p>
+    <p>Ghostties checks for updates by fetching <code>appcast-beta.xml</code> or <code>appcast-stable.xml</code> from <code>ghostties.org</code>. That's the only network call Ghostties itself makes — no system info, no unique identifier, just an HTTP GET for the file.</p>
     <p>You can turn updates off entirely with <code>auto-update = off</code> in your config.</p>
     <p>The <code>ghostties.org</code> server (Vercel) may log standard HTTP request metadata per <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel's privacy policy</a>.</p>
 
     <h2>The embedded browser</h2>
-    <p>Ghostties includes a Chromium-based browser panel. It only loads URLs you type into it — no home page, no background fetches. Tabs default to <code>about:blank</code>.</p>
+    <p>Ghostties includes a Chromium-based browser panel. It only loads URLs you type into it — no home page, no background fetches, and tabs default to <code>about:blank</code>. Once you navigate somewhere, that's ordinary web browsing: Chromium is making requests to that site, the same as any browser would, subject to that site's own privacy policy and tracking — not ours.</p>
 
     <h2>macOS permissions</h2>
     <p>When Ghostties asks for Accessibility, Screen Recording, or other permissions, those grants stay on your machine. Nothing is transmitted.</p>

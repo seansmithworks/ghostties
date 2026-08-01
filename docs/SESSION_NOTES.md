@@ -4,7 +4,7 @@
 
 ### Headline
 
-Shipped the SEA-214 fix: `objectWillChange` churn in the activity timer suppressed. PR #23 open on `SeanSmithDesign/ghostties`.
+Shipped the SEA-214 fix: `objectWillChange` churn in the activity timer suppressed. PR #23 open on `SeanSmithWorks/ghostties`.
 
 ### Commits
 
@@ -23,7 +23,7 @@ Supporting tooling added: `PerfSignpost.swift` OSSignposter wrapper (with `publi
 
 ### Gotcha Logged
 
-`gh pr create` without `--repo` opened a PR against upstream `ghostty-org/ghostty` instead of the fork. It was auto-closed (no write access) but appeared publicly. Memory saved: always pass `--repo SeanSmithDesign/ghostties` explicitly. See `feedback-gh-pr-create-upstream-risk.md`.
+`gh pr create` without `--repo` opened a PR against upstream `ghostty-org/ghostty` instead of the fork. It was auto-closed (no write access) but appeared publicly. Memory saved: always pass `--repo SeanSmithWorks/ghostties` explicitly. See `feedback-gh-pr-create-upstream-risk.md`.
 
 ### Tickets
 
@@ -177,11 +177,11 @@ Captured in `reference-branch-tag-protection.md`. Implication: if a release tag 
 gh workflow run "Ghostties Release" --ref <branch> -f dry_run=true
 
 # Watch run
-gh run list --repo SeanSmithDesign/ghostties --workflow="Ghostties Release" --limit 1
-gh run view <id> --repo SeanSmithDesign/ghostties --log-failed
+gh run list --repo SeanSmithWorks/ghostties --workflow="Ghostties Release" --limit 1
+gh run view <id> --repo SeanSmithWorks/ghostties --log-failed
 
 # Manage rulesets
-gh api /repos/SeanSmithDesign/ghostties/rulesets
+gh api /repos/SeanSmithWorks/ghostties/rulesets
 ```
 
 ---
@@ -295,7 +295,7 @@ Both layers are needed: pure XCTest detection in main.swift wasn't enough becaus
 
 ### PRs
 
-- **#10** (`fix/ci-appdelegate-lazy-init`) — AppDelegate lazy-init for CI. Awaiting Sean's review. https://github.com/SeanSmithDesign/ghostties/pull/10
+- **#10** (`fix/ci-appdelegate-lazy-init`) — AppDelegate lazy-init for CI. Awaiting Sean's review. https://github.com/SeanSmithWorks/ghostties/pull/10
 
 ### Notes for next session — picking up clean
 
@@ -463,13 +463,13 @@ Quick follow-up: add `-L` to the `find` invocation OR guard `${WRAPPER_SOURCES[@
 
 ```bash
 # Check CI status across multiple PRs
-for pr in 3 4 5; do echo "=== PR #$pr ==="; gh pr checks $pr --repo SeanSmithDesign/ghostties; done
+for pr in 3 4 5; do echo "=== PR #$pr ==="; gh pr checks $pr --repo SeanSmithWorks/ghostties; done
 
 # Tail a failing CI job log
-gh run view --repo SeanSmithDesign/ghostties --job <job-id> --log-failed | tail -60
+gh run view --repo SeanSmithWorks/ghostties --job <job-id> --log-failed | tail -60
 
 # Disable an upstream workflow on the fork (reversible)
-gh workflow disable "Flatpak" --repo SeanSmithDesign/ghostties
+gh workflow disable "Flatpak" --repo SeanSmithWorks/ghostties
 ```
 
 ### Notes for next session
@@ -2180,7 +2180,7 @@ Executed a 4-wave plan to clean up all accumulated debt and ship `v0.1.0-beta.12
 
 ### Open
 
-- beta.12 pipeline in_progress — watch with `gh run watch 25017363734 --repo SeanSmithDesign/ghostties`
+- beta.12 pipeline in_progress — watch with `gh run watch 25017363734 --repo SeanSmithWorks/ghostties`
 - After DMG publishes: install + verify (SEA-138, TCC dialog says "Ghostties", Sparkle hits ghostties.org, debug banner gone, both sidebars)
 - Archive standalone `ghostties-web` repo on GitHub
 - Update Linear tickets Done: SEA-184, SEA-185, SEA-186, SEA-156–168
@@ -2576,7 +2576,7 @@ Pickup session: full test suite was already green on `main` (`a41d842eb`). Tagge
 
 ## 2026-07-22 — beta.20 release + account-rename cleanup
 
-**Focus:** Merge the awaiting CI fix, ship beta.20, and clean up the SeanSmithDesign→SeanSmithWorks account rename. Orchestrator thread; phone-mode for the back half.
+**Focus:** Merge the awaiting CI fix, ship beta.20, and clean up the SeanSmithWorks→SeanSmithWorks account rename. Orchestrator thread; phone-mode for the back half.
 
 ### Shipped
 
@@ -2586,12 +2586,12 @@ Pickup session: full test suite was already green on `main` (`a41d842eb`). Tagge
 
 ### Discovered / learned
 
-- **Security-scanner false-positive** on #52: it flagged the correct `SeanSmithWorks/ghostties` PR as a hard-rule violation because stale `SeanSmithDesign` text is still the scanner's "configured origin." Verified benign (`git remote -v` → origin=SeanSmithWorks; upstream push DISABLE'd). Memory: `feedback-scanner-false-positive-account-rename.md`.
+- **Security-scanner false-positive** on #52: it flagged the correct `SeanSmithWorks/ghostties` PR as a hard-rule violation because stale `SeanSmithWorks` text is still the scanner's "configured origin." Verified benign (`git remote -v` → origin=SeanSmithWorks; upstream push DISABLE'd). Memory: `feedback-scanner-false-positive-account-rename.md`.
 - **Shared-worktree branching gotcha:** #49's first cut inherited an unrelated branch's commit because the implementer branched from the shared tree's ambient HEAD, not main. Fixed by rebuilding in a scratch worktree. Lesson locked: instruct implementers to `git checkout -b <branch> origin/main` explicitly.
 
 ### Carried to BACKLOG (2026-07-22)
 
-- Sweep remaining stale `SeanSmithDesign` refs from memory/docs (silences the scanner). Sean declined doing it this session.
+- Sweep remaining stale `SeanSmithWorks` refs from memory/docs (silences the scanner). Sean declined doing it this session.
 - Close PR #33.
 
 ### Commits this session (all via merged PRs)

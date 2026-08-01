@@ -32,7 +32,7 @@ Exact steps to flip the new sidebar on:
 
 1. Launch the built app:
    ```
-   open /Users/seansmith/Code/ghostties/macos/build/Build/Products/Release/Ghostties.app
+   open <repo>/macos/build/Build/Products/Release/Ghostties.app
    ```
    (Or double-click Ghostties.app in that folder.)
 2. A terminal window opens with the existing project-first sidebar (220pt wide).

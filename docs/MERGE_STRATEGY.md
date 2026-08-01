@@ -95,5 +95,5 @@ If you PR, do it sequentially — PR #1 merges, then rebase PR #2 onto new main 
 
 - **Don't cherry-pick from one branch to another.** The dependency chain is real; cherry-picks will create duplicate commits and make the history confusing.
 - **Don't force-push to any branch that's been pushed.** Every branch has been pushed to origin. Sean has a rule to not force-push unless explicitly requested.
-- **Don't merge to upstream.** `ghostty-org/ghostty` is read-only. Only `origin = SeanSmithDesign/ghostties`.
+- **Don't merge to upstream.** `ghostty-org/ghostty` is read-only. Only `origin = SeanSmithWorks/ghostties`.
 - **Don't skip the Phase 3 merge commit review.** The schema parity merge had a manual conflict resolution — worth one eyeball pass before landing.

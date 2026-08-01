@@ -2,7 +2,7 @@
 
 This is a fork of ghostty-org/ghostty that adds a multi-agent workspace sidebar.
 
-- **Origin**: `SeanSmithDesign/ghostties` — all PRs go here
+- **Origin**: `SeanSmithWorks/ghostties` — all PRs go here
 - **Upstream**: `ghostty-org/ghostty` — read-only reference. **NEVER** open PRs against upstream.
 
 ### Build
