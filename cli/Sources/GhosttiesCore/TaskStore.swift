@@ -112,6 +112,9 @@ public struct TaskStore {
     /// task complete with its full id completes in a single file read rather than
     /// a full directory scan.
     public func resolveByFilename(idOrPrefix needle: String) throws -> (task: Task, url: URL) {
+        guard !needle.contains("/"), !needle.contains(".."), !needle.hasPrefix("/") else {
+            throw CLIError.usage("invalid task id \"\(needle)\": must not contain \"/\" or \"..\"")
+        }
         let exact = directory.appendingPathComponent("\(needle).md")
         if FileManager.default.fileExists(atPath: exact.path),
            let task = loadFile(at: exact) {
