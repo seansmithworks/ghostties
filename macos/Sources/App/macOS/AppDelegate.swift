@@ -258,6 +258,13 @@ class AppDelegate: NSObject,
         // Store our start time
         applicationLaunchTime = ProcessInfo.processInfo.systemUptime
 
+        // Sweep stale per-session launcher scripts (>24h old) left behind by
+        // crashes or force-quits that skipped normal session teardown. Each
+        // script can carry session context, so they shouldn't accumulate.
+        DispatchQueue.global(qos: .utility).async {
+            SessionCoordinator.sweepStaleLauncherScripts()
+        }
+
         // Check if secure input was enabled when we last quit.
         if UserDefaults.ghostty.bool(forKey: "SecureInput") != SecureInput.shared.enabled {
             toggleSecureInput(self)

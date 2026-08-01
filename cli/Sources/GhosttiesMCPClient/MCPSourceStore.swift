@@ -1,9 +1,14 @@
 import Foundation
 import GhosttiesCore
 
-/// Persists the list of configured MCP sources to `.ghostties/mcp-sources.json`.
-/// Discovery walks up from cwd the same way `TasksDirectory.find` does — the
-/// MCP sources config lives alongside `.ghostties/tasks/`.
+/// Persists the list of configured MCP sources to `~/.ghostties/mcp-sources.json`.
+///
+/// This is intentionally the user's home directory ONLY — never a project-relative
+/// path. MCP source definitions name a binary to spawn; if discovery walked up from
+/// cwd, opening any cloned repo containing a committed `.ghostties/mcp-sources.json`
+/// could point Ghostties at an arbitrary binary the repo author chose. Loading only
+/// from `~/.ghostties/` means a source must be something the user configured
+/// themselves, never something a repo can plant.
 ///
 /// Pretty-printed JSON with sorted keys so the file diffs cleanly in git.
 public struct MCPSourceStore {
@@ -18,20 +23,11 @@ public struct MCPSourceStore {
         self.fileURL = fileURL
     }
 
-    /// Discover the `.ghostties/` state directory by walking up from cwd and
-    /// point at `mcp-sources.json`. Falls back to `./.ghostties/mcp-sources.json`
-    /// in the current working directory if no ancestor contains one yet.
-    public static func discover(
-        startingAt cwd: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-    ) -> MCPSourceStore {
-        // Reuse TasksDirectory's walk-up: if a tasks dir exists, its parent is
-        // our state dir. Otherwise default to ./.ghostties/ in cwd so a first
-        // `save()` bootstraps the structure without scanning siblings.
-        if let tasksDir = TasksDirectory.find(startingAt: cwd) {
-            let stateDir = TasksDirectory.stateDirectory(from: tasksDir)
-            return MCPSourceStore(fileURL: stateDir.appendingPathComponent(filename))
-        }
-        let state = cwd.appendingPathComponent(".ghostties", isDirectory: true)
+    /// Point at `~/.ghostties/mcp-sources.json`. Never walks the project tree —
+    /// MCP sources are user-level configuration, not project-level.
+    public static func discover() -> MCPSourceStore {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let state = home.appendingPathComponent(".ghostties", isDirectory: true)
         return MCPSourceStore(fileURL: state.appendingPathComponent(filename))
     }
 
