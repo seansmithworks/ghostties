@@ -145,11 +145,11 @@ First distributable build. Ghostties can now be installed and kept up to date au
 
 ---
 
-[0.1.0-beta.19]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.19
-[0.1.0-beta.18]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.18
-[0.1.0-beta.17]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.17
-[0.1.0-beta.16]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.16
-[0.1.0-beta.15]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.15
-[0.1.0-beta.14]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.14
-[0.1.0-beta.13]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.13
-[0.1.0-beta.12]: https://github.com/SeanSmithDesign/ghostties/releases/tag/v0.1.0-beta.12
+[0.1.0-beta.19]: https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.1.0-beta.19
+[0.1.0-beta.18]: https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.1.0-beta.18
+[0.1.0-beta.17]: https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.1.0-beta.17
+[0.1.0-beta.16]: https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.1.0-beta.16
+[0.1.0-beta.15]: https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.1.0-beta.15
+[0.1.0-beta.14]: https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.1.0-beta.14
+[0.1.0-beta.13]: https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.1.0-beta.13
+[0.1.0-beta.12]: https://github.com/SeanSmithWorks/ghostties/releases/tag/v0.1.0-beta.12
