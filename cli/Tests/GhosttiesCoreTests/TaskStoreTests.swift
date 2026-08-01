@@ -186,4 +186,40 @@ final class TaskStoreTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - resolveByFilename path traversal rejection
+
+    func testResolveByFilenameRejectsParentTraversal() throws {
+        XCTAssertThrowsError(try makeStore().resolveByFilename(idOrPrefix: "../../../etc/something")) { error in
+            guard case CLIError.usage(_) = error else {
+                XCTFail("expected usage error, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testResolveByFilenameRejectsLeadingSlash() throws {
+        XCTAssertThrowsError(try makeStore().resolveByFilename(idOrPrefix: "/etc/passwd")) { error in
+            guard case CLIError.usage(_) = error else {
+                XCTFail("expected usage error, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testResolveByFilenameRejectsEmbeddedSlash() throws {
+        XCTAssertThrowsError(try makeStore().resolveByFilename(idOrPrefix: "foo/bar")) { error in
+            guard case CLIError.usage(_) = error else {
+                XCTFail("expected usage error, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testResolveByFilenameStillResolvesOrdinaryId() throws {
+        _ = try writeFixture(id: "ordinary-task-123", title: "Ordinary")
+        let (task, _) = try makeStore().resolveByFilename(idOrPrefix: "ordinary-task-123")
+        XCTAssertEqual(task.id, "ordinary-task-123")
+        XCTAssertEqual(task.title, "Ordinary")
+    }
 }
