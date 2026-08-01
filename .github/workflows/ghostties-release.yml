@@ -48,6 +48,8 @@ jobs:
   # ---------------------------------------------------------------------------
   setup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.extract.outputs.version }}
       tag: ${{ steps.extract.outputs.tag }}
@@ -57,7 +59,7 @@ jobs:
       is_beta: ${{ steps.extract.outputs.is_beta }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # Full history required for accurate build number via rev-list --count
           fetch-depth: 0
@@ -101,13 +103,15 @@ jobs:
     # needing the type to exist at compile time.
     runs-on: macos-26
     timeout-minutes: 60
+    permissions:
+      contents: read
     env:
       GHOSTTIES_VERSION: ${{ needs.setup.outputs.version }}
       GHOSTTIES_BUILD: ${{ needs.setup.outputs.build }}
       GHOSTTIES_COMMIT: ${{ needs.setup.outputs.commit }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Xcode version
         run: xcodebuild -version
@@ -127,12 +131,12 @@ jobs:
 
       # Install Zig 0.15.2 (matches build.zig.zon minimum_zig_version).
       # Required to build GhosttyKit.xcframework from source.
-      - uses: mlugg/setup-zig@v2
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.15.2
 
       - name: Cache Zig
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/zig
@@ -148,7 +152,7 @@ jobs:
       # CEF (Chromium Embedded Framework) for the embedded browser feature.
       - name: Cache CEF
         id: cache-cef
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             vendor/cef
@@ -280,7 +284,7 @@ jobs:
         env:
           MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
         run: |
-          npm install --global create-dmg
+          npm install --global create-dmg@8.1.0
           create-dmg \
             --identity="$MACOS_CERTIFICATE_NAME" \
             ./macos/build/Release/Ghostties.app \
@@ -335,7 +339,7 @@ jobs:
           zip -9 -r --symlinks ../../../ghostties-macos-arm64.zip Ghostties.app
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos
           path: |
@@ -365,31 +369,46 @@ jobs:
       IS_BETA: ${{ needs.setup.outputs.is_beta }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: macos
 
+      # SPARKLE_SHA256 is the SHA-256 of the exact release zip below, computed
+      # by downloading the pinned artifact directly and running
+      # `shasum -a 256`. Verified 2026-08-01 — do not bump either value without
+      # re-verifying the hash against the new artifact.
       - name: Setup Sparkle CLI
         env:
-          SPARKLE_VERSION: 2.9.0
+          SPARKLE_VERSION: "2.9.0"
+          SPARKLE_SHA256: "44a0d5a00d5bfb6c2ad1755a92b694d948876d61ad44f35a0119eb0e7ace4b65"
         run: |
           mkdir -p .action/sparkle
           cd .action/sparkle
-          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-for-Swift-Package-Manager.zip" > sparkle.zip
+          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-for-Swift-Package-Manager.zip" -o sparkle.zip
+          echo "${SPARKLE_SHA256}  sparkle.zip" | shasum -a 256 -c -
           unzip sparkle.zip
           echo "$(pwd)/bin" >> $GITHUB_PATH
 
       - name: Sign DMG and generate appcasts
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          # Write private key, sign the DMG, then immediately remove the key file
-          echo "$SPARKLE_PRIVATE_KEY" > signing.key
-          sign_update -f signing.key Ghostties.dmg > sign_update.txt
-          rm signing.key
+          # Write private key to a temp path outside the checkout (never the
+          # repo working dir), lock down permissions, sign, then remove it.
+          # Cleanup also runs in a dedicated `if: always()` step below in case
+          # this step fails after the key is written.
+          SPARKLE_KEY_FILE="$(mktemp)"
+          echo "SPARKLE_KEY_FILE=$SPARKLE_KEY_FILE" >> "$GITHUB_ENV"
+          umask 077
+          echo "$SPARKLE_PRIVATE_KEY" > "$SPARKLE_KEY_FILE"
+          chmod 600 "$SPARKLE_KEY_FILE"
+          sign_update -f "$SPARKLE_KEY_FILE" Ghostties.dmg > sign_update.txt
+          rm -f "$SPARKLE_KEY_FILE"
 
           # Parse EdDSA signature and file length from sign_update output
           SIGNATURE=$(python3 -c "
@@ -405,9 +424,9 @@ jobs:
           print(m.group(1) if m else sys.exit(1))
           ")
 
-          DMG_URL="${{ github.server_url }}/${{ github.repository }}/releases/download/v${GHOSTTIES_VERSION}/Ghostties.dmg"
+          DMG_URL="${SERVER_URL}/${REPOSITORY}/releases/download/v${GHOSTTIES_VERSION}/Ghostties.dmg"
           NOW=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
-          REPO="${{ github.server_url }}/${{ github.repository }}"
+          REPO="${SERVER_URL}/${REPOSITORY}"
 
           python3 - \
             "$GHOSTTIES_VERSION" \
@@ -484,8 +503,12 @@ jobs:
               f.write(stable_xml)
           PYEOF
 
+      - name: Remove Sparkle signing key
+        if: always()
+        run: rm -f "$SPARKLE_KEY_FILE"
+
       - name: Upload appcast artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: appcasts
           path: |
@@ -512,7 +535,7 @@ jobs:
 
           # Update version strings in web HTML files. DMG size is passed
           # so the meta line on /download stays in sync with the binary.
-          python3 scripts/update-web-version.py "${{ github.ref_name }}" "$DMG_SIZE_BYTES"
+          python3 scripts/update-web-version.py "$TAG_NAME" "$DMG_SIZE_BYTES"
 
           git add web/appcast-beta.xml web/appcast-stable.xml scripts/update-web-version.py web/index.html web/download.html
           if git diff --cached --quiet; then
@@ -523,6 +546,7 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
 
   # ---------------------------------------------------------------------------
   # release: Create the GitHub Release with all artifacts attached
@@ -532,24 +556,27 @@ jobs:
     # Skip GitHub Release creation on dry-run — DMG stays as a CI artifact only.
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       TAG: ${{ needs.setup.outputs.tag }}
       IS_BETA: ${{ needs.setup.outputs.is_beta }}
       GHOSTTIES_VERSION: ${{ needs.setup.outputs.version }}
     steps:
       - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: macos
 
       - name: Download appcast artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: appcasts
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           PRERELEASE_FLAG=""
           if [[ "$IS_BETA" == "true" ]]; then
@@ -558,7 +585,7 @@ jobs:
 
           gh release create "$TAG" \
             $PRERELEASE_FLAG \
-            --repo ${{ github.repository }} \
+            --repo "$REPOSITORY" \
             --title "Ghostties v${GHOSTTIES_VERSION}" \
             --notes "Ghostties v${GHOSTTIES_VERSION}" \
             Ghostties.dmg \
