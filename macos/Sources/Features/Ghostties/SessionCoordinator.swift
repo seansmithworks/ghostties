@@ -206,7 +206,7 @@ final class SessionCoordinator: ObservableObject {
             guard let cmd = resolvedCommand else { return nil }
             guard let banner = template.launchBanner else { return cmd }
 
-            let scriptDir = ("~/.ghostties/cache/launchers" as NSString).expandingTildeInPath
+            let scriptDir = Self.launcherScriptDir
             let fm = FileManager.default
             if !fm.fileExists(atPath: scriptDir) {
                 try? fm.createDirectory(atPath: scriptDir, withIntermediateDirectories: true, attributes: [
@@ -623,6 +623,7 @@ final class SessionCoordinator: ObservableObject {
         nameSyncSubscriptions.removeValue(forKey: id)
         setStatus(.killed, for: id)
         gcDraftIfPresent(for: id)
+        Self.removeLauncherScript(for: id)
 
         // If this was the active session, switch to another running session.
         if activeSessionId == id {
@@ -896,6 +897,48 @@ final class SessionCoordinator: ObservableObject {
         }
 
         return command
+    }
+
+    // MARK: - Launcher Script Lifecycle
+
+    /// `~/.ghostties/cache/launchers` — per-session wrapper scripts written by
+    /// `createSession`. Each one leaks its session's task context (banner text,
+    /// command line) to anything that can read the directory, so scripts must
+    /// not accumulate indefinitely.
+    nonisolated static var launcherScriptDir: String {
+        ("~/.ghostties/cache/launchers" as NSString).expandingTildeInPath
+    }
+
+    /// Delete a single session's launcher script at teardown. A no-op if the
+    /// session never got one (e.g. templates without a `launchBanner`).
+    nonisolated static func removeLauncherScript(for sessionId: UUID) {
+        let path = (launcherScriptDir as NSString).appendingPathComponent("\(sessionId.uuidString).sh")
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
+    /// Sweep `~/.ghostties/cache/launchers` on app launch for `*.sh` scripts
+    /// older than 24h, catching any left behind by a crash or force-quit that
+    /// skipped `closeSession`'s per-session cleanup. Scoped to exactly this
+    /// directory and this extension; does not follow symlinks out of it.
+    nonisolated static func sweepStaleLauncherScripts() {
+        let fm = FileManager.default
+        let dir = launcherScriptDir
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return }
+
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        for name in entries {
+            guard name.hasSuffix(".sh") else { continue }
+            let path = (dir as NSString).appendingPathComponent(name)
+
+            // Use a symlink-aware stat so a planted symlink can't redirect the
+            // deletion (or the age check) outside this directory.
+            guard let attrs = try? fm.attributesOfItem(atPath: path),
+                  attrs[.type] as? FileAttributeType == .typeRegular,
+                  let modified = attrs[.modificationDate] as? Date,
+                  modified < cutoff else { continue }
+
+            try? fm.removeItem(atPath: path)
+        }
     }
 
     /// Find which session owns a given surface by searching all stored trees.
