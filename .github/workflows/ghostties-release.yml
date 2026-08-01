@@ -382,8 +382,8 @@ jobs:
       # re-verifying the hash against the new artifact.
       - name: Setup Sparkle CLI
         env:
-          SPARKLE_VERSION: "2.9.0"
-          SPARKLE_SHA256: "44a0d5a00d5bfb6c2ad1755a92b694d948876d61ad44f35a0119eb0e7ace4b65"
+          SPARKLE_VERSION: "2.9.4"
+          SPARKLE_SHA256: "cb6fdbdc8884f15d62a616e79face92b08322410fd2d425edc6596ccbf4ba3b0"
         run: |
           mkdir -p .action/sparkle
           cd .action/sparkle
