@@ -265,9 +265,9 @@ concludes from this document that the system is finished.
 
 - No focus styling is authored anywhere. The browser default is intact, so
   this is a gap rather than a removal — but a design system should own it.
-- `prefers-reduced-motion` is honoured on `/404` (the ghost skips straight to
-  its end state) and by exactly one rule on the homepage (`.bg-ghost`).
-  Seventeen homepage animations still run under `reduce`.
+- `prefers-reduced-motion` is honoured on `/404` (the ghost fades in already
+  fallen — gentler, not zero) and by exactly one rule on the homepage
+  (`.bg-ghost`). Seventeen homepage animations still run under `reduce`.
 - Four footer variants across seven pages. `style.css` now holds the document
   footer; the homepage keeps a mono override. Collapsing them to one is a
   taste call, and deleting the override is all it takes.
