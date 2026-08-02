@@ -8,8 +8,20 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Technical 5/20 — "Critical" band.** Six mechanical bugs found in this same audit (changelog 404, missing custom 404 page, dead X link, robots/sitemap, 1.5 MB orphaned assets, asset cache policy) already shipped in PR #77 and are deliberately absent below.
 
-### Structural — do this first, it gates everything else
-- **`web/` has no design system.** 67 distinct hard-coded color literals across 7 pages. Six of seven pages define **zero** CSS custom properties (only `task-flows.html` has a `:root` token block, which no other page uses). 85 duplicated CSS lines between `download.html` and `changelog.html`; `privacy.html`'s CSS is a **strict subset** of `support.html`'s — all 87 lines; 81 lines appear in 4+ pages. Near-duplicate clusters: 8 near-black surfaces (`#1a1a2e` ×20, `#1a1a1a` ×3, `#0f0f0f` ×2, `#0f0f1a`, `#1a1a33`, `#1a1a2a`, `#1a2433`, `#222`), 2 body greys (`#e5e5e5` ×16 / `#e0e0e0` ×5), a 16-step white-alpha ramp. Fix = a real `web/style.css` plus a `web/DESIGN.md` (the existing root `DESIGN.md` documents the **macOS app**, not the site). Until this exists every item below is a five-file edit. | web | project
+### Structural — DONE 2026-08-02 (PR pending)
+- ~~**`web/` has no design system.**~~ **Shipped.** `web/style.css` (tokens +
+  reset + base elements + shared components + footer) and `web/DESIGN.md` (the
+  site's spec, distinct from the root `DESIGN.md` which documents the macOS
+  app). All 7 pages now link the stylesheet and keep only page-specific rules:
+  805 lines of duplicated CSS deleted, 75 added. `privacy.html` has no page CSS
+  at all. Colour literals in the seven page blocks went 131 occurrences / 29
+  distinct → 6, each a genuine one-off, commented and listed in `DESIGN.md` §6. Verified by before/after screenshot diff at 1280 and 375:
+  changelog, download, licenses, privacy and support are **pixel-identical**;
+  index is within animation noise (an unmodified-vs-unmodified control diffs
+  more); `/404`'s `h1` intentionally adopts the shared heading treatment
+  (white + tighter tracking) so it matches every other page. `task-flows.html`
+  was deliberately left out of the system pending the `/flows` decision below.
+  **Every item below is now a one-file edit.** | web | project
 
 ### Accessibility — scored 1/4
 - **`prefers-reduced-motion` is ~19% honored.** Only rule is `.bg-ghost { animation: none }` at `index.html:410`. Measured under `reduce`: 26 animations on the page, **17 still running, 8 still infinite** (`float-g0`…`float-g7`), plus the full ~10s entrance and typewriter sequence.
