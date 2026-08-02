@@ -1,17 +1,28 @@
-# Developing Ghostty
+# Building from source
 
-This document describes the technical details behind Ghostty's development.
-If you'd like to open any pull requests or would like to implement new features
-into Ghostty, please make sure to read our ["Contributing to Ghostty"](CONTRIBUTING.md)
-document first.
+This document describes how to build and develop the terminal core. It is
+Ghostty's, kept largely as upstream wrote it, because that is what it describes
+— Ghostties does not modify the build system, the Zig core, or the renderer.
 
-To start development on Ghostty, you need to build Ghostty from a Git checkout,
-which is very similar in process to [building Ghostty from a source tarball](http://ghostty.org/docs/install/build). One key difference is that obviously
-you need to clone the Git repository instead of unpacking the source tarball:
+Two things to know before you start:
+
+- **Ghostties is macOS-only.** Sections below covering Linux, FreeBSD, GTK, Flatpak,
+  Snap, and Nix describe upstream Ghostty. They are not built, shipped, or tested
+  here.
+- **Read [CONTRIBUTING.md](CONTRIBUTING.md) first** if you're planning to send a
+  change. Code pull requests aren't being accepted on this fork right now, and it
+  explains what to do instead.
+
+For the workspace sidebar, the `gt` CLI, and the MCP server — the parts this fork
+adds — see [AGENTS.md](AGENTS.md) and [TESTING.md](TESTING.md).
+
+To start development, clone the repository and build from a Git checkout. The
+process is very similar to [building Ghostty from a source tarball](http://ghostty.org/docs/install/build),
+except that you clone instead of unpacking:
 
 ```shell
-git clone https://github.com/ghostty-org/ghostty
-cd ghostty
+git clone https://github.com/SeanSmithWorks/ghostties
+cd ghostties
 ```
 
 > [!NOTE]
