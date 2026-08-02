@@ -20,7 +20,7 @@ Objective (locked): repo documentation + correct Ghostty-vs-Ghostties calibratio
 
 Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Technical 5/20 — "Critical" band.** Six mechanical bugs found in this same audit (changelog 404, missing custom 404 page, dead X link, robots/sitemap, 1.5 MB orphaned assets, asset cache policy) already shipped in PR #77 and are deliberately absent below.
 
-### Structural — DONE 2026-08-02 (PR pending)
+### Structural — SHIPPED to main 2026-08-02 (PR #81, `cff9bc345`)
 - ~~**`web/` has no design system.**~~ **Shipped.** `web/style.css` (tokens +
   reset + base elements + shared components + footer) and `web/DESIGN.md` (the
   site's spec, distinct from the root `DESIGN.md` which documents the macOS
@@ -34,6 +34,19 @@ Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Te
   (white + tighter tracking) so it matches every other page. `task-flows.html`
   was deliberately left out of the system pending the `/flows` decision below.
   **Every item below is now a one-file edit.** | web | project
+
+### `/404` polish — SHIPPED to main 2026-08-02 (PR #82, `6fa61089f`)
+- Ghost drops in, teeters, topples onto its side, eyes become pixel X's. Also
+  fixed centring: the page set `justify-content: center` but `min-height: 100%`
+  never resolved, so the column had no free space and the content sat at the
+  top. Now `100dvh`. Easing is set per keyframe so the fall accelerates
+  (40 → 1022 deg/s) and each rebound decelerates; a single curve across the
+  sequence read as a flip. Measured 239 frames, avg 8.33ms, zero over 20ms,
+  transform/opacity only. `prefers-reduced-motion` fades the already-fallen
+  ghost in rather than hard-cutting. Added `--ease-out`/`--ease-in` to
+  `style.css`; `DESIGN.md` §5 documents the motion vocabulary **and** the
+  gotcha that `var()` is silently ignored for `animation-timing-function`
+  inside `@keyframes`. | web | project
 
 ### Accessibility — scored 1/4
 - **`prefers-reduced-motion` is ~19% honored.** Only rule is `.bg-ghost { animation: none }` at `index.html:410`. Measured under `reduce`: 26 animations on the page, **17 still running, 8 still infinite** (`float-g0`…`float-g7`), plus the full ~10s entrance and typewriter sequence.
