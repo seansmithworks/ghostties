@@ -16,6 +16,40 @@ Objective (locked): repo documentation + correct Ghostty-vs-Ghostties calibratio
 
 - [ ] **Idea-log prune** — 10 of 31 captures in `tease-capture.md` are older than 30 days and unacted-on, which is that file's own documented prune threshold (1 from May, 9 from June). Surfaced at `/wrap` 2026-08-02, nothing deleted. Spans projects, so it is not this thread's objective. | ops | needs-Sean
 
+## 2026-08-02 — repo branch/PR cleanup (next objective)
+
+State captured at the end of the website thread. **42 remote branches, 7 open PRs.**
+Website branches were already cleaned this session (9 deleted on origin, 8 locally).
+
+- **7 open PRs, none merged since #59 on 2026-07-30.** #59 `fix/grey-cycling-menu-items`,
+  #58 `fix/reclamp-sidebar-on-window-shrink`, #57 `fix/esc-cancels-inline-rename`,
+  #56 `fix/agent-session-idle-fallback`, #50 `feat/website-boot-sequence`,
+  #46 `docs/beta.20-changelog`, #37 `chore/gitignore-zig-pkg` (oldest, 2026-06-19).
+  #57/#58/#59 all carry ⛔ human-only runtime merge gates — see the 2026-07-29 section. | ops | session
+- **PR #50 will now conflict with the design system.** Scroll-triggered boot-sequence
+  entrance, 143 lines in `web/index.html`, untouched since 2026-07-22, opened before
+  the `style.css` refactor (#81) rewrote that file's `<style>` block. Decide: rebase
+  onto the new structure, or close it. | web | needs-Sean
+- **9 remote branches have no PR at all** and need a keep-or-delete call:
+  `1.1.x`, `1.2.x`, `tristan957/gtk-ng` (all three are upstream Ghostty branches —
+  probably keep), `claude/happy-morse-62ea22`, `feat/demo-capture-instance`,
+  `feat/ghostties-animation`, `fix/stale-mcp-tools-test`,
+  `test/session-cache-load-harness`. | ops | quick
+- **Stale local branches whose upstream is gone** (squash-merged, safe to `-D`):
+  `docs/changelog-beta.20`, `feat/session-cycling-shortcut`,
+  `feat/sessions-tab-context-menu`, `feat/sidebar-resize`,
+  `fix/ci-green-macos15-and-stale-mcp-test`, `fix/session-cycling-all-views`,
+  plus `docs/web-backlog-status`. Carried from the 2026-07-26 entry — `git branch -D`
+  was permission-denied again this session, so it needs Sean's shell or an allowlist
+  entry. | ops | quick
+- **`security/web-docs-hygiene` cannot be deleted locally** — it is checked out in a
+  worktree. Remove the worktree first or leave it. | ops | quick
+- **Squash-merge breaks stacked PRs.** Recorded in memory as
+  `reference_stacked-pr-squash-merge-conflict` — squash-merging the base orphans the
+  child, retargeting balloons the diff and conflicts. Resolve by merging main in and
+  taking the branch version; never force-push. Relevant if any of the 7 open PRs are
+  stacked. | ops | session
+
 ## 2026-08-02 — ghostties.org audit (impeccable full sweep)
 
 Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Technical 5/20 — "Critical" band.** Six mechanical bugs found in this same audit (changelog 404, missing custom 404 page, dead X link, robots/sitemap, 1.5 MB orphaned assets, asset cache policy) already shipped in PR #77 and are deliberately absent below.
