@@ -4,6 +4,18 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-02 — documentation IA + case study
+
+Objective (locked): repo documentation + correct Ghostty-vs-Ghostties calibration. All five refresh waves are merged to `main`; this wave adds the design layer that was missing.
+
+- [ ] **PR #80 — `docs/INFORMATION-ARCHITECTURE.md` + `docs/case-study-documentation-refresh.md`.** Open, MERGEABLE, CI green 4/4. Records the IA the refresh produced (audience model, the disambiguation-not-topic-tree principle, decay model per file, five questions before adding a doc) and the narrative of how it was arrived at, including that it was emergent rather than designed up front. Entry points added in `CONTRIBUTING.md` for humans and `AGENTS.md` for agents. | docs | ready-to-merge
+- [ ] **Should the case-study visuals live in the repo? — STRAWMAN: no, kill it.** GitHub markdown cannot render the CSS/SVG figures, so putting them in the repo means exporting PNGs. Images cannot be diffed, so they would go stale silently and break the decay-model rule the IA doc itself sets. Recommendation: repo docs stay textual; the visual version stays an Artifact for job and portfolio use. Only revisit if the repo docs are meant to carry imagery. | docs | decide-or-kill
+- [ ] **Visual case study lives only as an Artifact.** `https://claude.ai/code/artifact/8bda1349-3010-4780-bee8-88ffe72e5c0c` — six figures (inherited-scale receipt, the auto-close trap, the routing fork, six entry points, the 3.8:1 deletion bar, CONTRIBUTING before/after) plus the inlined demo GIF. Private to Sean's account; it is not backed up in the repo and would need rebuilding from `docs/case-study-documentation-refresh.md` if lost. | docs | reference
+
+**Off-objective, parked deliberately:**
+
+- [ ] **Idea-log prune** — 10 of 31 captures in `tease-capture.md` are older than 30 days and unacted-on, which is that file's own documented prune threshold (1 from May, 9 from June). Surfaced at `/wrap` 2026-08-02, nothing deleted. Spans projects, so it is not this thread's objective. | ops | needs-Sean
+
 ## 2026-08-01 — ghostties.org docs section (parked)
 
 - [ ] **ghostties.org — high-level docs section (P3).** Add a docs overview page to the marketing site with high-level concepts, linking to the GitHub repo for depth. Blocked on the repo-documentation work happening in a separate thread — needs the real doc URLs to land first so the links aren't dead. | web | needs-docs
