@@ -136,6 +136,29 @@ Sean hit this testing a real build: **can't paste into the URL bar, and none of 
 - [ ] **Esc doesn't cancel inline session rename** (#43 polish) — right-click → Rename → type → `Esc` keeps the typed value instead of reverting; only `Enter` commits and re-typing reverts. Wire up Escape-to-cancel. Minor, out of scope of beta.20 verify. | craft | quick
 - [ ] **Phase 1 file-watch not live-verified** — blocked by TCC: the ad-hoc `Ghostties Demo` build lacks Files & Folders permission ("Data Access Blocked"), so it can't read `examples/demo-workspace/*/.ghostties/tasks/`. Needs Sean to grant it in System Settings → Privacy → Files & Folders, OR accept the Phase 1 close on code verification. | build | needs-Sean
 - [ ] **`.gitignore` build-output dirs** — `.build-demo/` and `.build-verify/` are untracked build artifacts sitting in the repo root; add to `.gitignore`. (`.build-demo/` gitignore already noted in ORCHESTRATOR demo-capture entry.) | build | quick
+- [ ] **Stale updater test on main** — `GhosttyTests/UpdateViewModelTests.testNotFoundText()` expects `"No Updates Available"` but the shipped `.notFound` copy (changed in fork PR #34, in beta.19) is `"You're on the latest"` / `"No stable releases yet"`. Pre-existing, unrelated to beta.20; our red CI never caught it. One-line fix: update the test's expected string to match current copy. | quality | quick
+- [ ] **Perf track (contextMenu render cost, #1/#2)** — confirmed this session the per-row `.contextMenu`/`.popover`/`.draggable` modifiers are still present in `ProjectDisclosureRow.swift` (not code-fixed). Full state + the one remaining interaction-under-load check live in ORCHESTRATOR In-Flight Work. Separate objective from beta.20 verify. | perf | session
+
+## 2026-08-01 — repo documentation refresh
+
+Objective: get the GitHub repo presentable for incoming interest, with correct Ghostty-vs-Ghostties calibration. Plan: `docs/plans/repo-documentation-refresh.html`.
+
+**All five waves are now in PRs awaiting review.** Merge order matters: #74 before #76, because the copy of `CONTRIBUTING.md` on `main` still links to the `AI_POLICY.md` that #76 deletes.
+
+- [x] **Wave 1 — governance purge** — PR #71. 19 files, 4,524 deletions: CODEOWNERS, VOUCHED.td, 5 vouch workflows, 2 discussion templates, 8 dead upstream pipelines.
+- [x] **Wave 2 — licensing & attribution** — PR #73. LICENSE stacked copyright + `THIRD-PARTY-NOTICES.md`, and the notice now ships inside the `.app` (verified by build: lands in `Contents/Resources/`, byte-identical). Corrections to the original plan: nerd-fonts is MIT (`font-patcher.py`), not OFL; swift-argument-parser (Apache-2.0) was missing entirely; Sparkle's LICENSE bundles four more licenses.
+- [x] **Wave 3 — README rewrite** — PR #75. 68 lines, uncropped hero (Sean's call), 332K inline demo GIF (GitHub won't render `<video>` from a repo-relative path), plain Ghostty credit + non-affiliation, fixed the License copyright mismatch.
+- [x] **Wave 4 — intake & support docs** — PR #74. CONTRIBUTING rewrite, SECURITY, CODE_OF_CONDUCT (Covenant 2.1), TESTING (written against real runs: 110 cli tests, 673 app tests, both green), YAML issue forms. 6 area labels created directly on the repo.
+- [x] **Wave 5 — inherited-doc cleanup** — PR #76. Deleted `PACKAGING.md` + `AI_POLICY.md`, rewrote `AGENTS.md`, fixed the `HACKING.md` header (it cloned upstream's URL).
+- [ ] **Wave 0 — repo settings (Sean's hands, GATED on Wave 1 merging to main)** — enable Issues + Discussions (Q&A and Ideas only, delete other categories), private vulnerability reporting, Dependabot alerts. Set description, 10 topics (currently empty), and a 1280x640 social preview. **Do not enable Issues before the merge** — `issues`-triggered workflows run from the default branch, so the inherited auto-close vouching workflow is still armed on `main`. | docs | needs-Sean
+- [ ] **`blank_issues_enabled: false`** — the Wave 4 plan called for this; left `true` so people who don't fit either form still have a route in. Flip it if the untemplated issues turn out to be noise. | docs | quick
+- [ ] **`.github/dependabot.yml` retarget** — listed in the Wave 5 plan, not done; it was out of the doc-prune scope and belongs with a CI pass. | build | quick
+- [ ] **Dark-mode hero capture — deferred** — hero is light-only, and a light screenshot on GitHub's dark theme reads as broken. `<picture>` theme-swapping needs a dark capture. Not worth a session on its own; do it next time Ghostties is open with Screen Recording granted. | design | deferred
+- [ ] **Stale comment in `ghostties-release.yml`** — line 6 reads `# Key differences from upstream release-tag.yml:`, but that file was deleted in Wave 1. Comment only, no functional reference. Left untouched because the security work-stream owns that file. | build | quick
+
+**Off-objective, parked here deliberately (do NOT carry into the docs thread):**
+
+- [ ] **Public-repo hygiene** — `docs/SESSION_NOTES.md` (158KB of internal notes), `docs/handoffs/`, `docs/brainstorms/`, `docs/PR_DRAFTS.md`, `drafts/`, `todos/`, `BACKLOG.md` are all publicly readable. Wave D already untracked one file for the same reason. Untracking stops the bleeding but does not clear already-public history — see the private memory for prior art and the real fix. Deliberately NOT folded into a documentation branch. | security | needs-Sean
 
 ## Deferred / low priority
 
