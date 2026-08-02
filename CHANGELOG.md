@@ -6,6 +6,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.1.0-beta.21] — 2026-08-01
+
+The Sessions tab gets its own character, names that keep themselves current, and a round of security hardening.
+
+### Added
+
+- **Session names that keep themselves current.** A session's name in the sidebar now follows the title Claude Code sets, so a row tells you what that agent is actually working on instead of showing a generic label. Rename a session yourself and your name wins — Ghostties stops syncing that one. Right-click and choose **Sync name automatically** to hand it back.
+- **A ghost for every session.** Each session in the Sessions tab now has its own ghost character, tinted by status, in place of the plain dot. A session keeps its ghost across relaunches.
+- **Collapsible Active and Archive sections.** The Sessions tab splits into Active and Archive, and each one folds away. Ghostties remembers which you left open.
+
+### Changed
+
+- **The Sessions list holds still.** Rows used to reshuffle themselves by most recent activity, so the list rearranged under you while you were reading it. Order is now stable.
+- **Status colors across the sidebar.** Green means working, blue means your turn, gold means a decision is waiting, orange means long-running, red means something went wrong.
+
+### Fixed
+
+- **`Cmd+Shift+[` and `Cmd+Shift+]` cycle sessions again.** The shortcut only worked when focus was outside the terminal — which is almost never, in practice. The terminal was claiming the key combination for its own tab switching before the menu ever saw it.
+
+### Security
+
+- **Updated Sparkle to 2.9.4**, which fixes two vulnerabilities in the update framework (CVE-2026-47121 and CVE-2026-47122).
+- **MCP server discovery now reads only your own configuration.** Ghostties also used to look for MCP configuration inside the project folder you opened, so opening someone else's repository could offer to launch a program that repository shipped. It now reads from `~/.ghostties/` only.
+- **Narrowed what the app is permitted to do.** The shipping build no longer requests two hardened-runtime exceptions it never needed.
+- **Session launcher scripts are cleaned up** when a session ends, and anything left behind for more than a day is swept away at launch.
+- **Fixed a path-handling flaw in `gt done`** that let a crafted task name reach files outside the task directory.
+
+---
+
 ## [0.1.0-beta.20] — 2026-07-20
 
 Quality-of-life improvements to the workspace sidebar — resize it, rename sessions in place, and jump between live agents from the keyboard.
