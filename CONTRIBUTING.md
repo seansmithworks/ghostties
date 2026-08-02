@@ -36,6 +36,10 @@ issue and I'll credit you when it ships.
 Documentation corrections are the exception — if something here is wrong or out of
 date, a small PR is welcome.
 
+If you're adding a document rather than fixing one,
+[docs/INFORMATION-ARCHITECTURE.md](docs/INFORMATION-ARCHITECTURE.md) explains how
+these files are organized and the questions to answer before adding another.
+
 ## Filing a good issue
 
 - Which version you're on (About Ghostties in the menu bar, or `gt --version`) and
