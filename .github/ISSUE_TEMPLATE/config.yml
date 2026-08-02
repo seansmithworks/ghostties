@@ -3,3 +3,6 @@ contact_links:
   - name: Upstream Ghostty terminal questions
     url: https://github.com/ghostty-org/ghostty/discussions/new/choose
     about: For questions about the core Ghostty terminal — rendering, config syntax, shell integration, keybindings. NOT for Ghostties sidebar, CLI, or MCP issues (file those as a regular issue here).
+  - name: Report a security vulnerability
+    url: https://github.com/SeanSmithWorks/ghostties/security/advisories/new
+    about: Please report security issues privately, not as a public issue. See SECURITY.md.

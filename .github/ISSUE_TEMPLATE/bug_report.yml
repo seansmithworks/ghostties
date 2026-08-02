@@ -1,0 +1,92 @@
+name: Bug report
+description: Something in Ghostties is broken
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this.
+
+        **Before you continue:** if the problem is with the terminal itself —
+        rendering, fonts, config syntax, keybindings, shell integration, escape
+        sequences — it belongs to upstream
+        [Ghostty](https://github.com/ghostty-org/ghostty/issues), not here.
+        Ghostties doesn't modify any of that.
+
+        If you're not sure, file it here anyway and I'll route it.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it show up?
+      options:
+        - Sidebar (tasks, agents, workspace)
+        - CLI (`gt`)
+        - MCP server
+        - Install, launch, or auto-update
+        - Embedded browser panel
+        - Not sure / something else
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Ghostties version
+      description: About Ghostties in the menu bar, or `gt --version`.
+      placeholder: v0.1.0-beta.21
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: macOS 26.1
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, in order?
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+      description: Screenshots and screen recordings help a lot for sidebar issues.
+    validations:
+      required: true
+
+  - type: textarea
+    id: crash
+    attributes:
+      label: Crash report
+      description: >
+        If Ghostties crashed, attach the report from
+        `~/Library/Logs/DiagnosticReports/` — look for a file starting with
+        `Ghostties` or `Ghostty`.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+    validations:
+      required: false

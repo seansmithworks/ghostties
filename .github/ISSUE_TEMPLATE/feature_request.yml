@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest something Ghostties should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ghostties is a personal project with a narrow focus: running multiple
+        AI agents side by side in one organized window. Ideas that sharpen that
+        are the most likely to land.
+
+        Requests about the terminal itself belong upstream at
+        [Ghostty](https://github.com/ghostty-org/ghostty/discussions).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: >
+        What are you trying to do, and what gets in the way? Describe the
+        situation rather than the feature — it often leads somewhere better.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: How would you like it to work?
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What are you doing instead today?
+      description: Workarounds you've tried, or other approaches you considered.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything that helps illustrate it?
+      description: Screenshots, mockups, links.
+    validations:
+      required: false
