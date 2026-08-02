@@ -1,0 +1,295 @@
+/* ==========================================================================
+   ghostties.org — shared stylesheet
+
+   Loaded by every page before its own <style> block, so page rules always
+   win at equal specificity. Spec and rationale: web/DESIGN.md
+
+   Contents:
+     1. Tokens
+     2. Reset + document
+     3. Typography
+     4. Layout
+     5. Components
+     6. Footer
+     7. Responsive
+   ========================================================================== */
+
+/* 1. Tokens ================================================================ */
+
+:root {
+  /* --- Surfaces --- */
+  --bg: #1a1a2e;
+  --surface-raised: rgba(255, 255, 255, 0.04); /* .note, pre */
+  --surface-inline: rgba(255, 255, 255, 0.07); /* inline <code> */
+
+  /* --- Text ramp (white on --bg) ---
+     Roles, densest to faintest. Several fail WCAG AA today; see DESIGN.md §3. */
+  --text-heading: #fff;
+  --text-primary: rgba(255, 255, 255, 0.85); /* body default */
+  --text-body: rgba(255, 255, 255, 0.65); /* prose, links */
+  --text-note: rgba(255, 255, 255, 0.45); /* callout copy */
+  --text-meta: rgba(255, 255, 255, 0.4); /* file size, release links */
+  --text-label: rgba(255, 255, 255, 0.35); /* eyebrows, back link, dates */
+  --text-label-quiet: rgba(255, 255, 255, 0.3); /* changelog subsections */
+  --text-faint: rgba(255, 255, 255, 0.25); /* footer, timestamps, bullets */
+  --text-heading-soft: rgba(255, 255, 255, 0.9); /* licenses section titles */
+
+  /* --- Text hover pairs --- */
+  --text-body-hover: rgba(255, 255, 255, 0.9);
+  --text-meta-hover: rgba(255, 255, 255, 0.65);
+  --text-label-hover: rgba(255, 255, 255, 0.6);
+  --text-faint-hover: rgba(255, 255, 255, 0.5);
+
+  /* --- Lines --- */
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --line-faint: rgba(255, 255, 255, 0.07);
+
+  /* --- Accent ---
+     Terracotta. Dropped as an app brand color but still shipping on the web
+     in two places (product captions, 404 home link). See DESIGN.md §3. */
+  --accent: #c97350;
+
+  /* --- Hero + product surfaces (index.html) ---
+     The homepage terminal is its own small palette: a lighter foreground than
+     the prose ramp, plus the red/green diff pair. The JS at the bottom of
+     index.html re-states --diff-add-* inline; see DESIGN.md §6. */
+  --surface-card: #0f0f1a; /* product window behind the video */
+  --terminal-fg: #e0e0e0;
+  --diff-add-fg: rgba(100, 220, 120, 0.9);
+  --diff-add-bg: rgba(80, 210, 100, 0.13);
+  --diff-del-fg: rgba(255, 100, 100, 0.7);
+  --diff-del-bg: rgba(255, 80, 80, 0.13);
+
+  /* --- Type --- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:
+    "SFMono-Regular", "SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono",
+    monospace;
+
+  --size-caption: 12px;
+  --size-small: 13px;
+  --size-meta: 14px;
+  --size-body: 15px;
+  --size-lead: 16px;
+  --size-title-sm: 22px; /* h1 under 480px */
+  --size-title: 28px;
+
+  --leading-snug: 1.6;
+  --leading-body: 1.65;
+
+  /* --- Radii --- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* --- Motion --- */
+  --transition: 0.2s;
+}
+
+/* 2. Reset + document ====================================================== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--bg);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 64px 24px 96px;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+}
+
+/* 3. Typography ============================================================ */
+
+h1 {
+  font-size: var(--size-title);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+  color: var(--text-heading);
+}
+
+/* Section eyebrow. licenses.html overrides this with a larger title style. */
+h2 {
+  font-size: var(--size-small);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-label);
+  margin-bottom: 10px;
+  margin-top: 36px;
+}
+
+p {
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
+  color: var(--text-body);
+  margin-bottom: 12px;
+}
+
+.lead {
+  font-size: var(--size-lead);
+  line-height: var(--leading-snug);
+  color: var(--text-body);
+  margin-bottom: 40px;
+}
+
+ul {
+  list-style: none;
+  margin-bottom: 12px;
+}
+
+ul li {
+  font-size: var(--size-body);
+  line-height: var(--leading-body);
+  color: var(--text-body);
+  padding-left: 16px;
+  position: relative;
+  margin-bottom: 4px;
+}
+
+ul li::before {
+  content: "–";
+  position: absolute;
+  left: 0;
+  color: var(--text-faint);
+}
+
+a {
+  color: var(--text-body);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: var(--text-body-hover);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: var(--size-small);
+  background: var(--surface-inline);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+pre {
+  font-family: var(--font-mono);
+  font-size: var(--size-caption);
+  line-height: 1.7;
+  color: var(--text-note);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-top: 16px;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 4. Layout ================================================================ */
+
+.content {
+  width: 100%;
+  max-width: 600px;
+}
+
+/* 5. Components ============================================================ */
+
+/* Back-to-home link at the top of every document page */
+.back {
+  display: inline-block;
+  margin-bottom: 40px;
+  font-size: var(--size-small);
+  color: var(--text-label);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.back:hover {
+  color: var(--text-label-hover);
+}
+
+/* Quiet callout box */
+.note {
+  margin-top: 36px;
+  padding: 16px 20px;
+  background: var(--surface-raised);
+  border-left: 2px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.note p {
+  font-size: var(--size-small);
+  color: var(--text-note);
+  margin-bottom: 0;
+}
+
+/* "Last updated …" timestamp */
+.updated {
+  margin-top: 48px;
+  font-size: var(--size-caption);
+  color: var(--text-faint);
+}
+
+/* 6. Footer ================================================================ */
+
+footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  font-family: var(--font-ui);
+  font-size: var(--size-small);
+  color: var(--text-faint);
+}
+
+footer a {
+  color: var(--text-faint);
+  transition: color var(--transition);
+  text-decoration: none;
+}
+
+footer a:hover {
+  color: var(--text-faint-hover);
+}
+
+footer svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* 7. Responsive ============================================================ */
+
+@media (max-width: 480px) {
+  body {
+    padding: 48px 16px 88px;
+  }
+
+  h1 {
+    font-size: var(--size-title-sm);
+  }
+
+  footer {
+    padding: 12px 16px;
+    font-size: var(--size-caption);
+  }
+}

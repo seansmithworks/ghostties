@@ -25,19 +25,15 @@
   <meta property="og:description" content="A multi-agent workspace terminal. Now in beta.">
   <meta property="og:image" content="/assets/poster.png">
   <meta property="og:type" content="website">
+  <link rel="stylesheet" href="/style.css">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* Homepage only. Shared tokens, reset, and footer base: /style.css */
 
     html, body {
       height: 100%;
-      background: #1a1a2e;
     }
 
     body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
       padding: 24px;
     }
 
@@ -108,11 +104,11 @@
 
     /* --- Terminal text --- */
     .terminal {
-      font-family: 'SFMono-Regular', 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 18px;
       font-weight: 600;
       line-height: 2;
-      color: #E0E0E0;
+      color: var(--terminal-fg);
       width: 46ch;
       max-width: calc(100vw - 48px);
       margin: 0 auto;
@@ -150,11 +146,11 @@
 
     /* Caret blink states */
     .animate .line-1.caret-visible {
-      border-right-color: #E0E0E0;
+      border-right-color: var(--terminal-fg);
     }
 
     .animate .line-2.caret-visible {
-      border-right-color: #E0E0E0;
+      border-right-color: var(--terminal-fg);
     }
 
     .animate .line-6.caret-blink {
@@ -208,20 +204,20 @@
     @keyframes type-line6 { from { width: 0; } to { width: 16ch; } }
 
     @keyframes reveal-line3 {
-      to { color: rgba(255, 100, 100, 0.7); background: rgba(255, 80, 80, 0.13); }
+      to { color: var(--diff-del-fg); background: var(--diff-del-bg); }
     }
 
     @keyframes reveal-line-green {
-      to { color: rgba(100, 220, 120, 0.9); background: rgba(80, 210, 100, 0.13); }
+      to { color: var(--diff-add-fg); background: var(--diff-add-bg); }
     }
 
     @keyframes blink-caret-green {
-      0%, 100% { border-right-color: rgba(100, 220, 120, 0.9); }
+      0%, 100% { border-right-color: var(--diff-add-fg); }
       50%       { border-right-color: transparent; }
     }
 
     .terminal a.gh-link {
-      color: #E0E0E0;
+      color: var(--terminal-fg);
       text-decoration: none;
       cursor: pointer;
     }
@@ -265,11 +261,14 @@
       text-align: center;
     }
 
+    /* Display heading — opts out of the shared uppercase eyebrow h2. */
     .product h2 {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--font-ui);
       font-size: 30px;
       font-weight: 700;
-      color: #E0E0E0;
+      color: var(--terminal-fg);
+      text-transform: none;
+      margin-top: 0;
       margin-bottom: 40px;
       letter-spacing: -0.01em;
       line-height: 1.25;
@@ -312,7 +311,7 @@
       z-index: 1;
       border-radius: 10px;
       overflow: hidden;
-      background: #0f0f1a;
+      background: var(--surface-card);
       box-shadow:
         0 34px 80px -22px rgba(0, 0, 0, 0.7),
         0 6px 18px rgba(0, 0, 0, 0.35);
@@ -326,35 +325,17 @@
     }
 
     .product-caption {
-      font-family: 'SFMono-Regular', 'SF Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 12px;
-      color: #C97350;
+      color: var(--accent);
       margin-top: 12px;
     }
 
-    /* --- Footer --- */
+    /* --- Footer (homepage variant: mono, smaller) --- */
     footer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
       padding: 14px 24px;
-      font-family: 'SFMono-Regular', 'SF Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 11px;
-      color: rgba(255, 255, 255, 0.25);
-    }
-
-    footer a {
-      color: rgba(255, 255, 255, 0.25);
-      text-decoration: none;
-      transition: color 0.2s;
-    }
-
-    footer a:hover {
-      color: rgba(255, 255, 255, 0.5);
     }
 
     .footer-icons {
@@ -366,7 +347,6 @@
     footer svg {
       width: 14px;
       height: 14px;
-      display: block;
     }
 
     /* --- Ambient ghost backdrop (passive, low-opacity, behind all content) --- */
