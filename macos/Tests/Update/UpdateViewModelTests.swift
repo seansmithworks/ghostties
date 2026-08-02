@@ -60,8 +60,21 @@ struct UpdateViewModelTests {
 
     @Test func testNotFoundText() {
         let viewModel = UpdateViewModel()
-        viewModel.state = .notFound(.init(acknowledgement: {}))
-        #expect(viewModel.text == "No Updates Available")
+
+        viewModel.state = .notFound(.init(acknowledgement: {}, channelIsStable: true))
+        #expect(viewModel.text == "No stable releases yet")
+
+        viewModel.state = .notFound(.init(
+            acknowledgement: {},
+            channelIsStable: false,
+            displayVersion: "1.2.3"))
+        #expect(viewModel.text == "You're on the latest (v1.2.3)")
+
+        viewModel.state = .notFound(.init(
+            acknowledgement: {},
+            channelIsStable: false,
+            displayVersion: ""))
+        #expect(viewModel.text == "You're on the latest")
     }
 
     @Test func testErrorText() {
