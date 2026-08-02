@@ -16,6 +16,65 @@ Objective (locked): repo documentation + correct Ghostty-vs-Ghostties calibratio
 
 - [ ] **Idea-log prune** — 10 of 31 captures in `tease-capture.md` are older than 30 days and unacted-on, which is that file's own documented prune threshold (1 from May, 9 from June). Surfaced at `/wrap` 2026-08-02, nothing deleted. Spans projects, so it is not this thread's objective. | ops | needs-Sean
 
+## 2026-08-02 — ghostties.org audit (impeccable full sweep)
+
+Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Technical 5/20 — "Critical" band.** Six mechanical bugs found in this same audit (changelog 404, missing custom 404 page, dead X link, robots/sitemap, 1.5 MB orphaned assets, asset cache policy) already shipped in PR #77 and are deliberately absent below.
+
+### Structural — do this first, it gates everything else
+- **`web/` has no design system.** 67 distinct hard-coded color literals across 7 pages. Six of seven pages define **zero** CSS custom properties (only `task-flows.html` has a `:root` token block, which no other page uses). 85 duplicated CSS lines between `download.html` and `changelog.html`; `privacy.html`'s CSS is a **strict subset** of `support.html`'s — all 87 lines; 81 lines appear in 4+ pages. Near-duplicate clusters: 8 near-black surfaces (`#1a1a2e` ×20, `#1a1a1a` ×3, `#0f0f0f` ×2, `#0f0f1a`, `#1a1a33`, `#1a1a2a`, `#1a2433`, `#222`), 2 body greys (`#e5e5e5` ×16 / `#e0e0e0` ×5), a 16-step white-alpha ramp. Fix = a real `web/style.css` plus a `web/DESIGN.md` (the existing root `DESIGN.md` documents the **macOS app**, not the site). Until this exists every item below is a five-file edit. | web | project
+
+### Accessibility — scored 1/4
+- **`prefers-reduced-motion` is ~19% honored.** Only rule is `.bg-ghost { animation: none }` at `index.html:410`. Measured under `reduce`: 26 animations on the page, **17 still running, 8 still infinite** (`float-g0`…`float-g7`), plus the full ~10s entrance and typewriter sequence.
+- **Contrast failures, all computed and all failing WCAG AA:** 2.27:1 `rgba(255,255,255,0.25)` footer text and links on **every page** (worst value on the site); 2.70:1 changelog `<h4>` section labels; 3.03:1 `#666` on flows lane names; 3.21:1 `.back` link; 3.22:1 homepage `.line-3`; 3.78:1 `.download-meta` / `.all-releases`; 4.27–4.43:1 download/changelog body note. Raising the white-alpha floor to `0.55` yields 5.96:1. Note `#C97350` captions **pass** at 4.92:1 — not a finding.
+- No `<h1>` on `index.html`; no `<main>` landmark on any of the 7 pages; no skip link.
+- `changelog.html` skips heading levels H1 → H3, six times.
+- The ghost-scatter interaction is mouse-only — `<div class="ghosts">` with a click listener at `index.html:637`, no `tabindex`, `role`, or key handler. Not reachable in a tab sweep.
+- 8 foreground ghost SVGs have no `aria-hidden`, `role="img"`, or `<title>`.
+- `/flows` has 0 focusable elements and 6 mermaid SVGs with no accessible name.
+- No focus styling authored anywhere (`:focus`/`outline` = zero hits across all 7 pages). The Chromium UA default is intact, so this is a gap, not a removal.
+- All six terminal lines are in the DOM from load, only clipped by `width: 0` — a screen reader announces `- ghostties % install soon` as fact. The joke is visual-only. | web | project
+
+### Responsive — scored 1/4
+- **Horizontal overflow at 10 of 14 tested widths, from two independent causes.** (1) 320–560px: `.terminal` is clamped by `max-width: calc(100vw - 48px)` but its `.line` children are `white-space: nowrap` and animate to hard-coded `ch` widths, so they escape the parent; only visible after ~7s because the typewriter delays run to 9.7s. (2) 700–900px: `.product-window::before { inset: -10%; filter: blur(40px) }` escapes because `.product` has no `overflow: hidden` — arithmetic confirmed at 768/820/900px. **Cause 2 shipped in PR #72 and is live.**
+- `/support` overflows +11px and `/privacy` +22px at 320px (`CODE` elements don't wrap).
+- **All 48 interactive elements are under 44×44 at 375px; zero pass in both dimensions.** Footer icons are 14×14 (index) and 16×16 (subpages). The `/download` primary CTA is 280.8×41 — 3px short.
+- Breakpoint coverage is a single `max-width: 480px` query on six of seven pages; nothing addresses 481–719px on index, which is exactly where the overflows live.
+- All font sizes are `px` literals — no `rem`/`em`, so text scaling breaks layouts. | web | project
+
+### Conversion and trust
+- **The homepage CTA is gated behind ~10.1s of animation** with no skip. `.line-6` types at 9.7s (`index.html:196-201`); JS locks the caret at 10100ms. Median bounce is well under that. Fix should compress the schedule (the delays are hand-authored) and add a persistent download affordance outside the animated scene — the hero's choreography stays as-is.
+- **`/download` has no trust signals at the highest-risk moment.** A 147MB DMG from an unknown developer, with no mention of Developer ID signing, notarization, Gatekeeper, or a checksum — **even though the build genuinely is notarized**. It names no author, and it is the only page in the funnel with no product image.
+- The homepage has no `<h1>`, no wordmark, and no prose. The product name appears only inside `cd ~/ghostties` and a GitHub URL.
+- The site never says this is a fork of Ghostty until `/licenses`, the last footer link.
+- No Download link in any subpage footer — the funnel dead-ends on every page it can reach.
+- `og:image` is relative (`index.html:26`) and may not resolve for crawlers. No `og:url`, `twitter:card`, or `twitter:image`. **Zero OG tags on all five subpages** — sharing the download link produces a bare URL, which matters for a product distributed by link-sharing. | web | session
+
+### Content staleness
+- `changelog.html`'s newest entry is **beta.19**; the site ships **beta.21** — two releases undocumented.
+- `/support` says "Last updated April 26, 2026" and its `<meta description>` advertises a known-issues section the page does not contain.
+- The release version is hand-synced across 4+ locations, two of which are character counts (`steps(N)` and `Nch`). Bumping to a longer version string clips or trails the primary CTA. Wants build-time substitution. | web | quick
+
+### Footer consistency
+- **Four distinct footer variants across seven pages**; `task-flows.html` has none. Same link labeled `aria-label="X / Twitter"` on index vs `"Twitter"` on subpages.
+- Footers are `position: fixed` with no background, so on any page taller than the viewport they render on top of body text. Confirmed on `/support` mobile colliding with a code span. | web | quick
+
+### `/flows` — needs a decision
+- `task-flows.html` is an internal spec, publicly routed at `vercel.json`, linked from nowhere. Its subtitle is "Review before building further" and its bottom third is a grid of red `GAP` cards enumerating unbuilt features. It also loads `mermaid@11` from jsdelivr as a **render-blocking, unpinned, no-SRI** third-party script on the same origin that serves the Sparkle appcast. Decide: pull it from `web/`, or give it the site's design language and rewrite the GAP grid as a roadmap. | web | needs-Sean
+
+### Security headers
+- `vercel.json` sets HSTS and `nosniff`. Missing: `Content-Security-Policy` (relevant given the unpinned CDN script above), `X-Frame-Options` / `frame-ancestors`, `Referrer-Policy`, `Permissions-Policy`. | security | quick
+
+### Performance
+- No `preload` attribute on any `<video>`; the full file is fetched even when playback never starts. Media dropped 582KB → 262KB in PR #72, so this is now smaller but still eager.
+- Zero lazy loading site-wide — no `loading=`, `decoding=`, or `preload` anywhere. | web | quick
+
+### Small / polish
+- The favicon randomizes color on every load, so a pinned tab is never recognizable. Deliberate call needed. | web | needs-Sean
+- `<link rel="icon" href="">` on all pages fires a request against the current document URL before the JS runs.
+- `.product-window::before` uses `rgba(201,115,80,0.3)` — terracotta, explicitly dropped as a brand color. It's the only chromatic accent below the hero while the actual 8-ghost palette sits unused.
+- `.line-6` anchor text is `+ [download now]` — the diff marker is inside the link, so screen readers announce "plus bracket download now bracket".
+- The mobile `.ghost` override is still `64px` while the base is now `72px` (shipped in PR #78) — only an 8px step down. Probably wants revisiting or removing. | web | quick
+
 ## 2026-08-01 — ghostties.org docs section (parked)
 
 - [ ] **ghostties.org — high-level docs section (P3).** Add a docs overview page to the marketing site with high-level concepts, linking to the GitHub repo for depth. Blocked on the repo-documentation work happening in a separate thread — needs the real doc URLs to land first so the links aren't dead. | web | needs-docs
