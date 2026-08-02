@@ -191,9 +191,26 @@ reads better here. The values in use form a loose 4px scale: 4, 8, 10, 12, 16,
 Radius: `--radius-sm` 4px (`.note`, `code`), `--radius-md` 6px (`pre`),
 `--radius-lg` 8px (`.download-btn`). The product card uses 10px directly.
 
-Motion: `--transition: 0.2s` for every colour transition. The homepage's
-entrance, float, typewriter, scatter, and drift animations are hand-authored
-in its own block and are not tokenised.
+Motion: `--transition: 0.2s` for every colour transition, plus a mirrored
+quartic easing pair — `--ease-out` (`cubic-bezier(0.25, 1, 0.5, 1)`) for
+arrivals and `--ease-in` (`cubic-bezier(0.5, 0, 0.75, 0)`) for acceleration
+under gravity. There is deliberately **no spring or overshoot curve**: it dates
+a page quickly and draws attention to the motion instead of the thing moving.
+
+Two things to know before authoring motion here:
+
+- **Set easing per keyframe, not once on the shorthand.** A single curve across
+  a multi-phase sequence reads as a flip. `animation-timing-function` inside a
+  keyframe block applies to the segment *starting* at that keyframe — that is
+  how `/404`'s topple decelerates into its teeter, accelerates through the
+  fall, and decelerates on each rebound.
+- **Those per-keyframe curves must be literal `cubic-bezier()`.** `var()` is
+  not substituted for `animation-timing-function` inside `@keyframes`, and it
+  fails *silently* by falling back to the shorthand's curve. Verified in
+  Chromium. Keep the literals in sync with the two tokens by hand.
+
+The homepage's entrance, float, typewriter, scatter, and drift animations
+predate these tokens and are hand-authored in its own block.
 
 Only one breakpoint is shared: `max-width: 480px`. The homepage adds
 `max-width: 720px` for the product windows. **Nothing addresses 481–719px**,

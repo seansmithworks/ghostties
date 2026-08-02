@@ -33,14 +33,23 @@
       text-align: center;
     }
 
-    /* Ghost drops in, teeters, topples onto its side, eyes go X.
+    /* Ghost drops in, breathes, topples onto its side, eyes go X.
        Drop lives on the wrapper and the topple on the svg so the two
-       transforms compose instead of one clobbering the other. */
+       transforms compose instead of one clobbering the other.
+
+       Easing is set per keyframe, not once on the shorthand: a topple
+       decelerates into the teeter, accelerates through the fall, then
+       decelerates on each rebound. One curve across all of it reads as a
+       flip. The shorthand curve is the fallback for each unset segment.
+
+       These must be literal cubic-beziers: var() is NOT substituted for
+       animation-timing-function inside @keyframes, and fails silently by
+       falling back to the shorthand. Values mirror --ease-out / --ease-in. */
     .not-found-ghost {
       width: 120px;
       height: 120px;
       margin-bottom: 24px;
-      animation: ghost-drop 0.75s cubic-bezier(0.34, 1.32, 0.64, 1) both;
+      animation: ghost-drop 0.9s var(--ease-out) both;
     }
 
     .not-found-ghost svg {
@@ -48,28 +57,44 @@
       height: 100%;
       display: block;
       transform-origin: 50% 100%;
-      animation: ghost-topple 1s ease-in 1.25s both;
+      animation: ghost-topple 0.85s var(--ease-in) 0.9s both;
     }
 
     /* Pixel X's, swapped in on the frame it lands — no cross-fade. */
     .eyes-x {
-      animation: eyes-x-in 0.01s steps(1) 1.9s both;
+      animation: eyes-x-in 0.01s steps(1) 1.39s both;
     }
 
+    /* Falls in, settles, then one small lift so it reads as alive before
+       it goes over. */
     @keyframes ghost-drop {
-      from { transform: translateY(-320px); opacity: 0; }
-      55%  { opacity: 1; }
-      to   { transform: translateY(0); opacity: 1; }
+      0%   { transform: translateY(-340px); opacity: 0;
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      40%  { opacity: 1;
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      55%  { transform: translateY(0);
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      78%  { transform: translateY(-7px);
+             animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0); }
+      100% { transform: translateY(0); }
     }
 
-    /* Rotating about the base sends the ghost right and down; the translate
-       pulls it back to centre and leaves it resting 12px lower than upright. */
+    /* Rotating about the base sends the ghost right and down by half its
+       width; the paired translate pulls it back to centre and leaves it
+       resting 12px below upright. Rebounds damp 12deg -> 4deg. */
     @keyframes ghost-topple {
-      0%   { transform: translate(0, 0) rotate(0deg); }
-      18%  { transform: translate(0, 0) rotate(-11deg); }
-      62%  { transform: translate(-60px, -48px) rotate(90deg); }
-      74%  { transform: translate(-60px, -48px) rotate(78deg); }
-      86%  { transform: translate(-60px, -48px) rotate(93deg); }
+      0%   { transform: translate(0, 0) rotate(0deg);
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      15%  { transform: translate(0, 0) rotate(-12deg);
+             animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0); }
+      58%  { transform: translate(-60px, -48px) rotate(90deg);
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      71%  { transform: translate(-60px, -48px) rotate(78deg);
+             animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0); }
+      84%  { transform: translate(-60px, -48px) rotate(90deg);
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      92%  { transform: translate(-60px, -48px) rotate(86deg);
+             animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0); }
       100% { transform: translate(-60px, -48px) rotate(90deg); }
     }
 
