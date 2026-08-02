@@ -34,7 +34,7 @@ day-long stale window, which would serve a stale stylesheet after a deploy.
 | `changelog.html` | `.release*` group |
 | `support.html` | `.known-issue` |
 | `licenses.html` | `h2` title override |
-| `404.html` | Centred layout, ghost, `.home-link` |
+| `404.html` | Centred layout, ghost topple animation, `.home-link` |
 | `privacy.html` | **None** — the shared sheet covers the whole page |
 | `task-flows.html` | Out of system entirely; see §7 |
 
@@ -248,8 +248,9 @@ concludes from this document that the system is finished.
 
 - No focus styling is authored anywhere. The browser default is intact, so
   this is a gap rather than a removal — but a design system should own it.
-- `prefers-reduced-motion` is honoured by exactly one rule (`.bg-ghost`).
-  Seventeen animations still run under `reduce`.
+- `prefers-reduced-motion` is honoured on `/404` (the ghost skips straight to
+  its end state) and by exactly one rule on the homepage (`.bg-ghost`).
+  Seventeen homepage animations still run under `reduce`.
 - Four footer variants across seven pages. `style.css` now holds the document
   footer; the homepage keeps a mono override. Collapsing them to one is a
   taste call, and deleting the override is all it takes.
