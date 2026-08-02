@@ -7,7 +7,8 @@
     { "source": "/support", "destination": "/support.html" },
     { "source": "/download", "destination": "/download.html" },
     { "source": "/licenses", "destination": "/licenses.html" },
-    { "source": "/flows", "destination": "/task-flows.html" }
+    { "source": "/flows", "destination": "/task-flows.html" },
+    { "source": "/changelog", "destination": "/changelog.html" }
   ],
   "headers": [
     {
@@ -18,6 +19,15 @@
           "value": "max-age=31536000; includeSubDomains"
         },
         { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        }
       ]
     }
   ]
