@@ -27,6 +27,10 @@ shipped, or tested here.
 See [TESTING.md](TESTING.md) for what each suite covers and the two xcodebuild
 flags you need from the command line.
 
+Editing docs? [docs/INFORMATION-ARCHITECTURE.md](docs/INFORMATION-ARCHITECTURE.md)
+says who each file is for and how each one is meant to stay true. Do not add a new
+document without answering the questions in it.
+
 ## Directory structure
 
 - `src/` — shared Zig core (upstream's terminal)
