@@ -161,7 +161,7 @@ rm -rf macos/build && zig build run -Doptimize=ReleaseFast
 
 ## Related Documentation
 
-- [Merge plan](/Users/seansmith/.claude/plans/peaceful-orbiting-valiant.md) — Full merge strategy
+- Merge plan (local plan file, not tracked in-repo) — Full merge strategy
 - [Nib window subclass titlebar hiding](../architecture/nib-window-subclass-titlebar-hiding.md) — Why `windowNibName` is forced to `"Terminal"`
 - [Sidebar 3-state machine](../architecture/sidebar-3-state-machine-overlay-pattern.md) — WorkspaceViewContainer architecture
 - [C union Swift interop fix](../runtime-errors/c-union-swift-interop-fallthrough-fix.md) — Relevant to `action.zig` changes

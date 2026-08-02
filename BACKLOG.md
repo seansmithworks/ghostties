@@ -1,17 +1,131 @@
-# Ghostties Backlog
+# Ghostties — Backlog
 
-Greppable parking lot for open items that survive context resets. Newest dated section on top.
+Parked items that survive context resets. Prune at `/wrap`.
 
-## 2026-07-22
+> Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
-- [ ] **Sweep stale `SeanSmithDesign` references from memory files + docs** — the account renamed to `SeanSmithWorks` (2026-07-21). Code refs are fixed (PRs #51/#52), but lingering `SeanSmithDesign` strings in memory/docs (and possibly a cached "configured origin") make the harness security scanner FALSE-POSITIVE on every correct PR to `SeanSmithWorks/ghostties`. Harmless but noisy. Sweep to silence it. Intentionally left: test-fixture/doc-comment example URLs (`CrossSurfaceCoherenceTests.swift`, `TaskModelTests.swift`, `TaskModel.swift` — illustrative `pull/99` examples) and `web/appcast-beta.xml` (CI-regenerated). See memory `feedback-scanner-false-positive-account-rename.md`. | ops | quick
-- [ ] **Close PR #33** — superseded by the merged #47 CI fix; close attempt was permission-denied this session. | ops | quick
+## 2026-08-01 — ghostties.org docs section (parked)
 
-## 2026-07-21
+- [ ] **ghostties.org — high-level docs section (P3).** Add a docs overview page to the marketing site with high-level concepts, linking to the GitHub repo for depth. Blocked on the repo-documentation work happening in a separate thread — needs the real doc URLs to land first so the links aren't dead. | web | needs-docs
 
-- [ ] **Merge PR #48** (`feat/website-product-shots`) — ghostties.org refresh: product section, single-window video, ambient ghost drift, top-clipping fix, black-video fix, GitHub-rename doc fix. Awaiting Sean's review + merge. Two red CI checks (`Swift Package (cli/)`, `macOS App (xcodebuild test)`) look like pre-existing app-test flakiness unrelated to this web-only diff — shouldn't block the merge button (branch protection only blocks force-push/deletion). Vercel preview passed, so merge → should auto-deploy to production. | web | needs-Sean
-- [ ] **Approve or edit the 4 social drafts** at `drafts/ghostties-social-question-series.md` — question-hook posts paired with the site's two hero visuals. Drafted and shown to Sean, not yet reacted to. | content | needs-Sean
-- [ ] **Ghost physics playground — full port, deferred** — the fuller interactive playground (drift physics, drag-throw, trading-card hover) from the sibling `2026-web-playground` repo was explicitly parked in favor of the lighter ambient-drift-only version that shipped in PR #48. Repo isn't cloned on this machine. Revisit only if Sean asks for the fuller version specifically. | web | deferred
+## 2026-07-31 — In-app browser has no keyboard support (new, from Sean's testing)
+
+Sean hit this testing a real build: **can't paste into the URL bar, and none of the normal browser keyboard shortcuts work.** Static trace done (read-only explore agent); the two obvious suspects were both RULED OUT.
+
+- **Not the Edit menu.** `MainMenu.xib:245-268` wires Copy/Paste/Select All to the standard responder selectors (`copy:`/`paste:`/`selectAll:`), not to terminal-specific actions. The menu is not stealing Cmd+V.
+- **Not an event monitor.** Every `.keyDown` monitor in the app was enumerated. The only ones that swallow (`return nil`) are Cmd+Shift+N (`AppDelegate.swift:860`) and Cmd+Shift+[/] (`AppDelegate.swift:915-932`). Nothing touches plain Cmd+V. `BaseTerminalController.swift:222` is `.flagsChanged` only; `SurfaceView_AppKit.swift:351` is `.keyUp`/`.leftMouseDown` only.
+- **Live hypothesis: the URL field never becomes first responder.** `BrowserNavigationBar.swift:31-39` is a plain NSTextField with no custom key handling. Its delegate (`WorkspaceViewContainer`, set at `:845`) implements only `insertNewline` (`:1543-1567`) and returns false for everything else. Nothing in the codebase calls `makeFirstResponder` on it. **Needs a runtime probe to confirm — cannot be settled by reading.**
+- **Separately: the shortcuts were never built.** No handler exists anywhere for Cmd+L (focus URL bar), Cmd+R (reload), or back/forward. This is not a regression; the panel shipped without keyboard support. Nav buttons also have no target/action until `embedBrowserInPanel()` runs (`WorkspaceViewContainer.swift:837-844`).
+- **CORRECTION — plain Cmd+[ / Cmd+] do NOT collide.** Verified in `src/config/Config.zig:7038-7048`: macOS binds `cmd+shift+[` / `cmd+shift+]` to previous_tab/next_tab, and plain brackets are unbound. Sean's user config (`~/.config/ghostty/config:49`) has exactly one keybind (`cmd+alt+t`). So Cmd+[/] is free for back/forward with no gate needed. The chords that DO collide are Cmd+T (`new_tab`) and Cmd+W — those need the browser-focus gate.
+- **Multi-tab browsing is fully built but structurally UNREACHABLE.** `BrowserTabManager.swift` implements create/close/switch/closeAll with a separate CEFBrowserView (own Chromium process) per tab, and `BrowserTabBar.swift` is a real tab strip with per-tab close buttons and a "+" button (`:251`). But `BrowserTabBar.swift:156` sets `alphaValue = tabs.count > 1 ? 1 : 0` — and the only way to create a second tab is the "+" inside that hidden bar. Chicken-and-egg: you can never reach two tabs, so the bar never appears. Sessions each get one tab seeded to google.com (`SessionCoordinator.swift:320-321`). Note `alphaValue = 0` does not stop hit-testing or collapse layout, so there is an invisible-but-clickable strip taking `barHeight` above the content area. **Needs Sean's call: make tabs reachable, or accept single-tab and delete the strip.**
+- Unresolved without a build: whether CEF's internal C++ consumes events before the NSTextField sees them, and whether `SurfaceView.focused` correctly goes false when the browser panel is shown. | craft | session
+
+## 2026-07-29 — UI fix wave (PRs #57 / #58 / #59)
+
+### ⛔ MERGE GATES — runtime checks only a human can run
+- **PR #57 — the whole fix reduces to one untested boolean: does `.onExitCommand` fire at all?** If AppKit's field editor *handles* `cancelOperation:` it consumes the message and it never reaches SwiftUI, in which case nothing clears `editingSessionId`, the deferred commit passes the guard, and the original bug ships unchanged — deterministically. Ordering C explains the original symptom exactly as well as the orderings the fix was designed against. **Test (90s, project-first mode):** rename a session → type `zzz` → Esc → row must show the ORIGINAL name → right-click that row again and confirm **"Sync name automatically" is ABSENT** (it only appears once `isNamePinned` is true, so its presence proves a store write slipped through and the fix is inert). Then: rename → type `abc` → click another row → must commit. Then: rename → Esc → rename again → field must accept keystrokes. **If the second check fails,** replace `.onExitCommand` with an Esc catcher that runs at `performKeyEquivalent:` time — a zero-size `Button` with `.keyboardShortcut(.cancelAction)` beside the TextField, or `.onKeyPress(.escape)`. Both guarantee the ordering by construction and remove the premise. Do NOT pre-apply; the test decides. Failure mode is binary, not a timing race — passes once means passes always.
+- **PR #58 — five checks, ~3 min.** Build the branch (`open macos/Ghostties.xcodeproj`, scheme Ghostties, Cmd+R).
+  1. **Width restore.** Wide window, drag sidebar near max. Tile to half-screen — sidebar visibly narrows, terminal stops shrinking. Un-tile. **Sidebar must return to the original width.** If it stays narrow, Blocker 1 is not fixed.
+  2. **Open animation.** Reduce Motion **OFF** (Settings → Accessibility → Display). Toggle sidebar closed → open. **Must slide over ~0.2s, not snap** — should feel identical to the close direction.
+  3. **The re-review defect (decisive check).** Close the sidebar *first*, THEN shrink the window to ~700pt, THEN open the sidebar. **It should come in already narrowed.** If it opens full-width and squeezes the terminal, correcting only after you nudge the window edge, the `needsLayout` re-trigger didn't take.
+  4. **Browser budget.** Sidebar pinned wide, open the browser panel, shrink until the sidebar clamps. **No gap between the terminal card and browser card.** A phantom gap means `resizableWidth` reads the wrong width.
+  5. **Beachball watch.** Activity Monitor on Ghostties. Drag the window edge slowly left/right ~10s through the clamping range. CPU should look like a normal resize and **return to idle immediately on mouse-up**. Sustained pegging after release is the old failure signature.
+- **PR #57 CI** — the `macOS App (build-for-testing)` job was still in progress at review time. `Swift Package (cli/)` green. Don't merge until the macOS job lands.
+
+### Accepted-and-deferred in this wave (disclosed in PR bodies)
+- **PR #58 does NOT fix terminal crushing.** `maxByAvailableSpace` ignores the browser panel's width budget: with the browser open at its 320pt minimum in a 900pt window, the sidebar may stay at 480 and leave the terminal **76pt** — a quarter of `terminalMinWidth`. Left alone deliberately, because the identical formula appears in `handleSidebarDrag` (~line 825) and **changing one without the other makes the resize clamp fight live drags**. Fix both together or neither. Arguably the more visible bug than the window-shrink one #58 does fix. | craft | session
+- **PR #57 behavior changes.** (a) Editing session A then starting a rename on session B without an intervening blur now DISCARDS A's pending commit instead of committing it — Finder semantics say the first rename should commit, so this is a mild regression. (b) Quitting (⌘Q) in the same runloop turn as a blur loses the commit rather than delaying it. Both low severity, both disclosed.
+- **PR #58 cosmetics, non-blocking.** `intrinsicContentSize` still reads `currentSidebarWidth`, which can now exceed the applied width — only consumed by `defaultSize.apply` at window creation when the two are equal, so no impact today. And a stray 1pt nudge of the drag handle in a narrow window still collapses the desired width to the clamped one via `handleSidebarDrag` — pre-existing shape, worth fixing when that formula is revisited.
+- **`isSidebarTransitionAnimating` is arguably redundant.** The re-reviewer found the guard-witness change alone kills the animation-clobber (an `ObservableObject` has no `animator()` proxy, so `widthModel.width` structurally cannot hold intermediates). The flag prevents a failure the witness already prevents, and introduced the missing-`needsLayout` defect in doing so. Deleting it is the smallest *correct* patch; we took the smallest *safe* one. Revisit if this file is touched again.
+
+### Follow-up: session-cycling menu validation
+- **Greying the session menu items will NOT disable ⌘⇧[/] — a validation-only fix is a trap.** `AppDelegate.setupSessionCyclingShortcut()` (`AppDelegate.swift:915-935`) intercepts that chord in an `NSEvent.addLocalMonitorForEvents` handler that calls `NSApp.sendAction(_:to: nil, from: nil)` — which **does not consult `validateMenuItem`** — and returns `nil` unconditionally, swallowing the event. So after a naive fix the menu row greys while the keyboard chord still fires the same silent no-op AND still eats the keystroke instead of falling through to Ghostty's `next_tab`/`previous_tab`. The session fix must apply the same predicate *inside that monitor* and `return event` when it fails. Anyone who ships session validation without this will believe they fixed it and will not have. | craft | session
+- **Unblock is `WorkspaceViewContainer.swift:69` — drop `private` from `let coordinator: SessionCoordinator`.** `TerminalController` already reaches the container via `window?.contentView as? WorkspaceViewContainer` at four existing sites. Cost: one keyword + a ~4-line validation case calling `store.sessionsInVisualOrder(coordinator:)`. Correct by construction — it resolves the coordinator for the window being validated.
+- **Do NOT use a `RowFocusStore`-style bridge for this.** Reviewed and rejected: `RowFocusStore` holds the most-recently-focused item *across all windows* (`RowFocusStore.swift:13-20`). Menu validation must answer for the key window; with two workspace windows open a global bridge greys or enables based on the wrong window's session set — reintroducing the exact "greyed while the action would have worked" failure the ticket set out to avoid.
+- Project cycling's predicate is deliberately loose and should stay that way: with exactly one project already selected + expanded, ⌘⌃] is still a no-op, but tightening to `count > 1` would be actively wrong (a stale `selectedProjectId` makes the action take its meaningful branch). `selectedProjectId` is per-window SwiftUI `@State` AppKit cannot read, so a tight predicate is impossible from `TerminalController`.
+
+### Build environment
+- **A fresh `git worktree` cannot build this repo without help.** `GhosttyKit.xcframework`, `zig-out/`, and `vendor/{cef,cef-build}` are all gitignored, so `xcodebuild` fails immediately in a new worktree. All three agents in this wave hit it independently. Copy/symlink those from the main tree before building; `zig build` is not an option (broken on macOS 26). Worth a `docs/solutions/` note and a line in the delegation template. | build | quick
+
+### Design-system drift (surfaced 2026-07-29, see artifact)
+- **`DESIGN.md` never learned the June 2026 status palette.** §4 still documents three activity states with terracotta as "waiting"; the code ships four named status colors (`statusYourTurnBlue` #5B8DEF, `statusNeedsDecisionGold` #FFC400, `statusLongRunningOrange` #F97316, plus green) that the spec never mentions. This single omission is the root of the terracotta contradiction — DESIGN.md:102 says terracotta is reserved exclusively for `waiting`, WorkspaceLayout.swift:126 says it is explicitly NOT the status waiting color, and all 21 uses across 9 files are the accent uses the spec forbids. **Needs Sean's call: update the spec to match the code, or move the code to match the spec.**
+- `titlebarSpacerHeight` — spec says 38pt, code ships 28pt. Flat numeric drift.
+- Ten of fifteen layout tokens exist only in code, never documented.
+- Source-dot palette (`sourceDotShell`/`Linear`/`GitHub`/`Sentry`) entirely undocumented in the spec.
+- `needsAttentionPurple` — 1 reference in the repo (its own definition), already `@deprecated`. Safe deletion, no decision needed.
+
+## 2026-07-28 (later) — from Phase 0 + PR #56 review
+
+### Blocking the truthful-status work
+- **Replace the template-kind proxy with a real foreground-TUI signal.** PR #56 keys on `template.kind != .shell`, which misses 46 of 84 live sessions — the ones started by opening a Shell and typing `claude`. Correct discriminator is "is a full-screen TUI in the foreground of this PTY": read the PTY foreground process group, or read Claude Code's session JSON (already the authoritative source). Closes the coverage gap AND backfills the "silent when Claude actually blocks" regression in one move.
+- **Launcher-script coverage fix** — `SessionCoordinator.swift:184` only writes the launcher when a template has a banner. Always write it when `resolvedCommand != nil` (~5 lines). Takes every agent-template session to an exact Claude↔Ghostties join via the UUID in argv.
+- **Rewrite the plan doc's phases around the launcher-UUID join.** Strategy B (cwd→project + title match) is dead — the plan as written is materially wrong from "Join strategies, ranked" onward.
+
+### Test + hygiene
+- `UpdateViewModelTests.testNotFoundText()` fails on clean main — the fork customized the Sparkle "no update" copy and never updated the upstream test. Makes every suite run red and trains people to ignore it. **Precise fix:** test expects `"No Updates Available"`; shipped `.notFound` copy (changed in fork PR #34, in beta.19) is `"You're on the latest"` / `"No stable releases yet"`. One-line string update. | quality | quick
+- PR #56's shell regression guard is vacuous (passes even if the body is `return false`). Needs a `.custom`-kind test and a missing-session test. Nothing covers `.custom` or `.browser`.
+- PR #56: flip the unknown-template fallback to `.idle` for internal consistency; rename `isAgentKindSession` → `isNonShellSession`; document that `.browser` is swept in; refresh the stale `indicatorState(for:)` header doc.
+- `~/.ghostties/cache/launchers/` accumulates scripts with no cleanup. Harmless now; becomes load-bearing if the join depends on those paths.
+
+### Design
+- `WorkspaceLayout.swift:126` `waitingTerracotta` and `needsAttentionPurple` match neither the documented green/blue/gold/orange status-dot palette nor the decision that terracotta is not a brand color.
+- The `.waiting` → `.idle` flip is a **layout** change, not a color change — silent sessions leave Active for Recent, and projects reorder in the sidebar seconds after going quiet. Wants eyeballing on screen before it lands.
+
+### Measurement gap (not closed)
+- The cache-load harness measured store recompute (~181ms over 50 simulated min of 6-agent load — fine) but **not** the SwiftUI re-render cascade that made the June storm expensive. The `project_perf-contextmenu-render-cost.md` 2→4→6 ramp is still the missing data. **Confirmed 2026-07-22:** the per-row `.contextMenu`/`.popover`/`.draggable` modifiers are still present in `ProjectDisclosureRow.swift` — not code-fixed. | perf | session
+
+## 2026-07-28 — Switchboard status-engine integration (new track)
+
+### Uncommitted on disk
+- `docs/plans/switchboard-status-engine-integration.html` — the reviewed plan, decisions answered. Commit to main when convenient. (Was blocked by the main worktree sitting on a website branch; unblocked 2026-07-29.)
+
+### Decided (review session `sess_d3105e5d`, 2026-07-28)
+- **Vendor `AgentStatusCore`, don't take an SPM dependency.** Note the reasoning correction: SPM is NOT risky here — Ghostties already ships Sparkle + swift-argument-parser as remote SPM packages (`project.pbxproj:1566`). Vendoring wins on sequencing, not safety. Shared-package extraction is Phase 5, once the join is proven.
+- **Switchboard keeps existing and will be released.** The vendored copy is an explicit temporary fork; it needs a provenance header naming the source commit.
+- **Run phases 0→3 autonomously**, each gated on its own tests + a separate reviewer agent.
+
+### Open
+- **Naming collision — needs a strawman before any code.** Both codebases define `AgentSession` AND `SessionStatus` with different shapes. Proposed: prefix vendored types `Claude*` (`ClaudeSession`, `ClaudeSessionStatus`). Cheap to decide now, touches every call site later.
+- **`foregroundPID` / `ttyName` are stubbed to `return nil`** (`Ghostty.Surface.swift:96-116`) — the C symbols exist (`include/ghostty.h:1118`) but postdate the local `GhosttyKit.xcframework`, and zig 0.15.2 can't relink on macOS 26. This blocks the exact process-ancestry join. Superseded in practice by the launcher-UUID join (see 07-28 later), but the stub itself is still there.
+
+## 2026-07-27 — Sessions sidebar + name sync (PRs #54, #55)
+
+### Resolved this session
+- **Ghosts approved by eye** — Sean reviewed a real Release build of #55 (all 82 sessions backfilled, 24 characters, ~4 sessions each). Verdict: "others seem to be ok." Legibility at 14pt is fine; the 4× repeat is fine.
+- **`ACTIVE 0` taste call is moot** — live state showed `ACTIVE 3 / ARCHIVE 79`. The empty-ACTIVE header only appears on a genuinely cold launch.
+- **PR #55 merged** to main as `3c6f59a83` (squash, branch deleted).
+- **PR #54 brought up to date** — merged `origin/main` into the branch (NOT rebased, to avoid a force-push) as `8d8935bc1`. One conflict, `AgentSession.swift`, resolved additively; both `ghostCharacter` and `isNamePinned` survive with both decoder lines. Full unfiltered suite: **674 run, 673 passed**, 1 known pre-existing failure.
+
+### Still open
+- **Measure #54 under 5-7 real agents.** Each name write clears `sessionGroupsCache` for ALL projects via the `didSet` at `WorkspaceStore.swift:32-37`, bypassing the PR #39 memoization store-wide. Bounded to one write per 5s per session (~20× below the June storm rate) and almost certainly fine — but it is a NEW steady-state cost on the exact path that caused the beachball, and the reviewer's call was "measure, don't reason." **Cannot be driven from an agent session.** Agreed substitute: a synthetic harness at the real cadence — exercises the mechanism, not the real load. Not yet built.
+- **Follow-up after both land:** #54 could not add the "Sync name automatically" menu item to `RecentsListView` (parallel PR owned that file). Small, needs doing.
+
+### Confirmed this session
+- **The June status-dot palette was never merged.** Logged "SHIPPED ✅" in `ORCHESTRATOR.md` for a month while `main` kept the dropped purple/terracotta. Cherry-picked into #55. See `feedback-shipped-means-merged-to-main`.
+
+## 2026-07-26
+
+### Ship / release
+- **Cmd+Shift+[/] fix is on `main` but NOT in a release.** Merged as `af726311b` (PR #53). Users on beta.20 still have the broken shortcut until the next tag. Fold into next beta.
+- **PR #33 still open** — superseded by #47; close attempt was permission-denied earlier. | ops | quick
+
+### Repo hygiene
+- **Delete merged local branches** (permission-denied during wrap):
+  `git branch -D feat/sessions-tab-context-menu feat/session-cycling-shortcut feat/sidebar-resize`
+- **Branch protection does not gate on CI.** PR #53 merged instantly with `--auto` while the macOS build + Swift package checks were still in progress. If checks should block merges, that's a branch-protection setting — the merge command can't enforce it. (Post-merge run came back green.)
+- **Sweep stale `SeanSmithDesign` refs from memory files + docs** — the account renamed to `SeanSmithWorks` (2026-07-21). Code refs are fixed (PRs #51/#52), but lingering `SeanSmithDesign` strings in memory/docs (and possibly a cached "configured origin") make the harness security scanner FALSE-POSITIVE on every correct PR to `SeanSmithWorks/ghostties`. Harmless but noisy. Intentionally left: test-fixture/doc-comment example URLs (`CrossSurfaceCoherenceTests.swift`, `TaskModelTests.swift`, `TaskModel.swift` — illustrative `pull/99` examples) and `web/appcast-beta.xml` (CI-regenerated). See memory `feedback-scanner-false-positive-account-rename.md`. Carried from 2026-07-22. | ops | quick
+
+### Task view (unspecified)
+- **Sean flagged "issues with tasks" during the 2026-07-26 session but did not specify them.** Needs his description before it can be scoped. Do not guess.
+- Known from PR #44 review: task-first cycling scrolls but doesn't move the visual focus ring, and can't scroll to Active-zone rows (`"task:<id>"`-prefixed ForEach identity → silent no-op). May or may not be what he meant.
+
+### Docs
+- **`docs/solutions/` note not written** for the `performKeyEquivalent` focus-gate gotcha (offered, no answer). Worth capturing: a fork keybind that collides with an upstream Ghostty binding fails *only while a terminal surface has focus* (`SurfaceView_AppKit.swift:1307` `if !focused { return false }`), which makes the collision look intermittent and defeats casual testing. Fix pattern is a local `NSEvent` monitor.
+
+### Parked from earlier waves
+- Window-shrink doesn't re-clamp sidebar width (same gap as browser panel).
+- Menu-item validation — no greying when zero live sessions/projects.
+- Retro-fit visuals into PR bodies #43/#44/#45 (merged before the UI-PR-visuals rule landed).
 
 ## 2026-07-18
 
@@ -27,17 +141,26 @@ Greppable parking lot for open items that survive context resets. Newest dated s
 
 ## 2026-08-01 — repo documentation refresh
 
-Objective: get the GitHub repo presentable for incoming interest, with correct Ghostty-vs-Ghostties calibration. Wave 1 shipped; branch `docs/repo-documentation-refresh` pushed, no PR. Plan: `docs/plans/repo-documentation-refresh.html`.
+Objective: get the GitHub repo presentable for incoming interest, with correct Ghostty-vs-Ghostties calibration. Plan: `docs/plans/repo-documentation-refresh.html`.
 
+**All five waves are now in PRs awaiting review.** Merge order matters: #74 before #76, because the copy of `CONTRIBUTING.md` on `main` still links to the `AI_POLICY.md` that #76 deletes.
+
+- [x] **Wave 1 — governance purge** — PR #71. 19 files, 4,524 deletions: CODEOWNERS, VOUCHED.td, 5 vouch workflows, 2 discussion templates, 8 dead upstream pipelines.
+- [x] **Wave 2 — licensing & attribution** — PR #73. LICENSE stacked copyright + `THIRD-PARTY-NOTICES.md`, and the notice now ships inside the `.app` (verified by build: lands in `Contents/Resources/`, byte-identical). Corrections to the original plan: nerd-fonts is MIT (`font-patcher.py`), not OFL; swift-argument-parser (Apache-2.0) was missing entirely; Sparkle's LICENSE bundles four more licenses.
+- [x] **Wave 3 — README rewrite** — PR #75. 68 lines, uncropped hero (Sean's call), 332K inline demo GIF (GitHub won't render `<video>` from a repo-relative path), plain Ghostty credit + non-affiliation, fixed the License copyright mismatch.
+- [x] **Wave 4 — intake & support docs** — PR #74. CONTRIBUTING rewrite, SECURITY, CODE_OF_CONDUCT (Covenant 2.1), TESTING (written against real runs: 110 cli tests, 673 app tests, both green), YAML issue forms. 6 area labels created directly on the repo.
+- [x] **Wave 5 — inherited-doc cleanup** — PR #76. Deleted `PACKAGING.md` + `AI_POLICY.md`, rewrote `AGENTS.md`, fixed the `HACKING.md` header (it cloned upstream's URL).
 - [ ] **Wave 0 — repo settings (Sean's hands, GATED on Wave 1 merging to main)** — enable Issues + Discussions (Q&A and Ideas only, delete other categories), private vulnerability reporting, Dependabot alerts. Set description, 10 topics (currently empty), and a 1280x640 social preview. **Do not enable Issues before the merge** — `issues`-triggered workflows run from the default branch, so the inherited auto-close vouching workflow is still armed on `main`. | docs | needs-Sean
-- [ ] **Wave 2 — licensing & attribution** — `LICENSE` stacked copyright (Sean above Mitchell) + new `THIRD-PARTY-NOTICES.md` (Ghostty MIT, CEF BSD-3 verbatim, Sparkle MIT, nerd-fonts OFL). Then verify the notice reaches the shipped `.app`, or add a Help-menu Acknowledgments item. The only genuine legal gap. | docs | session
-- [ ] **Wave 4 — intake & support docs** — rewrite `CONTRIBUTING.md` (~40 lines, no-code-PRs posture), new `SECURITY.md` + `CODE_OF_CONDUCT.md` + `TESTING.md`, convert issue templates to YAML forms (incl. the "does this happen in upstream Ghostty?" dropdown), `blank_issues_enabled: false`, prune to 6 labels. | docs | session
-- [ ] **Wave 3 — README rewrite** — ~90-120 lines, identity + Ghostty credit at line 3, install section (signed/notarized/Sparkle), cropped hero + `<video>` embed, known-limitations `<details>`, non-affiliation line in License. | docs | session
-- [ ] **Wave 5 — inherited-doc cleanup** — delete `PACKAGING.md` and `AI_POLICY.md`, trim `AGENTS.md` (cut upstream's "sad, dumb little AI driver" joke at line 67), add a Ghostties header to `HACKING.md`, retarget `.github/dependabot.yml`. | docs | session
-- [ ] **Hero crop decision** — cropped 2880x820 banner variant built and sent to Sean; keeps sidebar + active session, loses the bottom window frame. Not yet reacted to. Fallback is the uncropped original. | design | needs-Sean
+- [ ] **`blank_issues_enabled: false`** — the Wave 4 plan called for this; left `true` so people who don't fit either form still have a route in. Flip it if the untemplated issues turn out to be noise. | docs | quick
+- [ ] **`.github/dependabot.yml` retarget** — listed in the Wave 5 plan, not done; it was out of the doc-prune scope and belongs with a CI pass. | build | quick
 - [ ] **Dark-mode hero capture — deferred** — hero is light-only, and a light screenshot on GitHub's dark theme reads as broken. `<picture>` theme-swapping needs a dark capture. Not worth a session on its own; do it next time Ghostties is open with Screen Recording granted. | design | deferred
 - [ ] **Stale comment in `ghostties-release.yml`** — line 6 reads `# Key differences from upstream release-tag.yml:`, but that file was deleted in Wave 1. Comment only, no functional reference. Left untouched because the security work-stream owns that file. | build | quick
 
 **Off-objective, parked here deliberately (do NOT carry into the docs thread):**
 
 - [ ] **Public-repo hygiene** — `docs/SESSION_NOTES.md` (158KB of internal notes), `docs/handoffs/`, `docs/brainstorms/`, `docs/PR_DRAFTS.md`, `drafts/`, `todos/`, `BACKLOG.md` are all publicly readable. Wave D already untracked one file for the same reason. Untracking stops the bleeding but does not clear already-public history — see the private memory for prior art and the real fix. Deliberately NOT folded into a documentation branch. | security | needs-Sean
+
+## Deferred / low priority
+
+- [ ] **Ghost physics playground — full port** — the fuller interactive playground (drift physics, drag-throw, trading-card hover) from the sibling `2026-web-playground` repo was explicitly parked in favor of the lighter ambient-drift-only version that shipped in PR #48. Repo isn't cloned on this machine. Revisit only if Sean asks for the fuller version specifically. | web | deferred
+- [ ] **Approve or edit the 4 social drafts** at `drafts/ghostties-social-question-series.md` — question-hook posts paired with the site's two hero visuals. Drafted and shown to Sean, not yet reacted to. Note: social/content review happens in a separate dedicated thread, not the app orchestrator thread. | content | needs-Sean

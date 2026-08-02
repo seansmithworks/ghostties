@@ -42,6 +42,9 @@ default.profraw
 .ghostties/sessions.json
 .ghostties/sessions.json.tmp
 .ghostties/worktrees/
+
+# Per-developer task working state (Linear-sourced notes, absolute paths); never shared.
+.ghostties/tasks/
 .vercel
 
 # Demo capture build output (refresh-demo.sh)
