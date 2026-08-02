@@ -83,8 +83,14 @@
   --radius-md: 6px;
   --radius-lg: 8px;
 
-  /* --- Motion --- */
+  /* --- Motion ---
+     Mirrored quartic pair. --ease-out is the site's default arrival curve;
+     --ease-in is acceleration under gravity. Deliberately no spring or
+     overshoot curve: it dates a page fast and pulls attention to the motion
+     rather than the thing moving. */
   --transition: 0.2s;
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
 }
 
 /* 2. Reset + document ====================================================== */

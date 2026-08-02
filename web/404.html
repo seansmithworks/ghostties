@@ -25,21 +25,106 @@
   <style>
     /* 404 page only. Shared base: /style.css */
 
+    /* min-height:100% never resolves here (html has no definite height), so the
+       column had no free space and justify-content:center did nothing. */
     body {
+      min-height: 100dvh;
       justify-content: center;
       text-align: center;
     }
 
+    /* Ghost drops in, breathes, topples onto its side, eyes go X.
+       Drop lives on the wrapper and the topple on the svg so the two
+       transforms compose instead of one clobbering the other.
+
+       Easing is set per keyframe, not once on the shorthand: a topple
+       decelerates into the teeter, accelerates through the fall, then
+       decelerates on each rebound. One curve across all of it reads as a
+       flip. The shorthand curve is the fallback for each unset segment.
+
+       These must be literal cubic-beziers: var() is NOT substituted for
+       animation-timing-function inside @keyframes, and fails silently by
+       falling back to the shorthand. Values mirror --ease-out / --ease-in. */
     .not-found-ghost {
-      width: 72px;
-      height: 72px;
+      width: 120px;
+      height: 120px;
       margin-bottom: 24px;
+      animation: ghost-drop 0.9s var(--ease-out) both;
     }
 
     .not-found-ghost svg {
       width: 100%;
       height: 100%;
       display: block;
+      transform-origin: 50% 100%;
+      animation: ghost-topple 0.85s var(--ease-in) 0.9s both;
+    }
+
+    /* Pixel X's, swapped in on the frame it lands — no cross-fade. */
+    .eyes-x {
+      animation: eyes-x-in 0.01s steps(1) 1.39s both;
+    }
+
+    /* Falls in, settles, then one small lift so it reads as alive before
+       it goes over. */
+    @keyframes ghost-drop {
+      0%   { transform: translateY(-340px); opacity: 0;
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      40%  { opacity: 1;
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      55%  { transform: translateY(0);
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      78%  { transform: translateY(-7px);
+             animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0); }
+      100% { transform: translateY(0); }
+    }
+
+    /* Rotating about the base sends the ghost right and down by half its
+       width; the paired translate pulls it back to centre and leaves it
+       resting 12px below upright. Rebounds damp 12deg -> 4deg. */
+    @keyframes ghost-topple {
+      0%   { transform: translate(0, 0) rotate(0deg);
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      15%  { transform: translate(0, 0) rotate(-12deg);
+             animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0); }
+      58%  { transform: translate(-60px, -48px) rotate(90deg);
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      71%  { transform: translate(-60px, -48px) rotate(78deg);
+             animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0); }
+      84%  { transform: translate(-60px, -48px) rotate(90deg);
+             animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1); }
+      92%  { transform: translate(-60px, -48px) rotate(86deg);
+             animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0); }
+      100% { transform: translate(-60px, -48px) rotate(90deg); }
+    }
+
+    @keyframes eyes-x-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* Reduced motion is gentler, not zero: keep the fade (it aids
+       comprehension) and drop every position and rotation animation. The
+       ghost is already fallen with X eyes — the punchline without the fall. */
+    @keyframes ghost-fade-in {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .not-found-ghost {
+        animation: ghost-fade-in 0.3s var(--ease-out) both;
+      }
+
+      .not-found-ghost svg {
+        animation: none;
+        transform: translate(-60px, -48px) rotate(90deg);
+      }
+
+      .eyes-x {
+        animation: none;
+        opacity: 1;
+      }
     }
 
     h1 {
@@ -74,6 +159,7 @@
   <div class="not-found-ghost" aria-hidden="true">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF4136" shape-rendering="crispEdges">
       <rect x="12" y="0" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="8" height="8"/><rect x="20" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="8" height="4"/><rect x="12" y="40" width="8" height="4"/><rect x="28" y="40" width="8" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="16" y="44" width="4" height="4"/><rect x="28" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
+      <g class="eyes-x"><rect x="10" y="10" width="12" height="12" fill="#FF4136"/><rect x="26" y="10" width="12" height="12" fill="#FF4136"/><g fill="#1a1a2e"><rect x="11" y="11" width="2" height="2"/><rect x="19" y="11" width="2" height="2"/><rect x="13" y="13" width="2" height="2"/><rect x="17" y="13" width="2" height="2"/><rect x="15" y="15" width="2" height="2"/><rect x="13" y="17" width="2" height="2"/><rect x="17" y="17" width="2" height="2"/><rect x="11" y="19" width="2" height="2"/><rect x="19" y="19" width="2" height="2"/><rect x="27" y="11" width="2" height="2"/><rect x="35" y="11" width="2" height="2"/><rect x="29" y="13" width="2" height="2"/><rect x="33" y="13" width="2" height="2"/><rect x="31" y="15" width="2" height="2"/><rect x="29" y="17" width="2" height="2"/><rect x="33" y="17" width="2" height="2"/><rect x="27" y="19" width="2" height="2"/><rect x="35" y="19" width="2" height="2"/></g></g>
     </svg>
   </div>
   <h1>404 — page not found</h1>
