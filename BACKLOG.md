@@ -16,9 +16,20 @@ Investigation only, no code written. Findings in `reference_terminal-images-work
 
 Objective (locked): repo documentation + correct Ghostty-vs-Ghostties calibration. All five refresh waves are merged to `main`; this wave adds the design layer that was missing.
 
-- [ ] **PR #80 — `docs/INFORMATION-ARCHITECTURE.md` + `docs/case-study-documentation-refresh.md`.** Open, MERGEABLE, CI green 4/4. Records the IA the refresh produced (audience model, the disambiguation-not-topic-tree principle, decay model per file, five questions before adding a doc) and the narrative of how it was arrived at, including that it was emergent rather than designed up front. Entry points added in `CONTRIBUTING.md` for humans and `AGENTS.md` for agents. | docs | ready-to-merge
-- [ ] **Should the case-study visuals live in the repo? — STRAWMAN: no, kill it.** GitHub markdown cannot render the CSS/SVG figures, so putting them in the repo means exporting PNGs. Images cannot be diffed, so they would go stale silently and break the decay-model rule the IA doc itself sets. Recommendation: repo docs stay textual; the visual version stays an Artifact for job and portfolio use. Only revisit if the repo docs are meant to carry imagery. | docs | decide-or-kill
+- [x] ~~**PR #80** — `docs/INFORMATION-ARCHITECTURE.md` + `docs/case-study-documentation-refresh.md`.~~ **Merged 2026-08-02 as `1c2ff4e82`.** Records the IA the refresh produced (audience model, the disambiguation-not-topic-tree principle, decay model per file, five questions before adding a doc) and the narrative of how it was arrived at. Entry points in `CONTRIBUTING.md` for humans and `AGENTS.md` for agents.
+- [x] ~~**Should the case-study visuals live in the repo?**~~ **DECIDED 2026-08-03: no, killed.** GitHub markdown cannot render the CSS/SVG figures, so putting them in the repo means exporting PNGs, and images cannot be diffed — they would go stale silently and break the decay-model rule the IA doc itself sets. Repo docs stay textual; the visual version stays an Artifact. Do not re-open as a question.
 - [ ] **Visual case study lives only as an Artifact.** `https://claude.ai/code/artifact/8bda1349-3010-4780-bee8-88ffe72e5c0c` — six figures (inherited-scale receipt, the auto-close trap, the routing fork, six entry points, the 3.8:1 deletion bar, CONTRIBUTING before/after) plus the inlined demo GIF. Private to Sean's account; it is not backed up in the repo and would need rebuilding from `docs/case-study-documentation-refresh.md` if lost. | docs | reference
+
+## 2026-08-03 — Wave 0 repo settings ✅ COMPLETE
+
+Every Wave 0 item is applied and verified live. Issues, Discussions, private vulnerability reporting, Dependabot **alerts**, 10 topics, and the 1280×640 social preview. The long-standing "needs Sean's login" note was wrong on every count — `gh api` reached the settings, and Claude in Chrome reached the social preview, for which **no REST or GraphQL endpoint exists**.
+
+Two follow-ups, neither blocking:
+
+- [ ] **The social-preview card has no preserved source.** It was rendered from a standalone HTML file in a session scratchpad, which is gone. Rebuilding is required to change the version string, the tagline, or the layout. Decide whether that source belongs in the repo (e.g. `.github/assets/social-preview.html` + a render note) or whether the Paper artboard below becomes the canonical one instead. | docs | decide-or-kill
+- [ ] **Paper promo artboard carries the pre-rename URL.** The Paper file "Ghostties" has three promo artboards (1200×630, 1080×1080, 1000×400). The 1200×630 one reads `github.com/SeanSmithDesign/ghostties` — the org renamed to `SeanSmithWorks` on 2026-07-21. Old URLs still redirect so nothing breaks, but it must be fixed before that artboard is exported for anything public. Also note 1200×630 is the OpenGraph standard; GitHub's optimum is 1280×640. | design | needs-Sean
+
+**Deliberately NOT enabled:** Dependabot *security updates* (the auto-PR feature, `/automated-security-fixes`). `.github/dependabot.yml` is still the inherited upstream config pointing at upstream paths, so auto-PRs would file against the wrong targets until that retarget lands.
 
 **Off-objective, parked deliberately:**
 
