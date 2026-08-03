@@ -4,6 +4,14 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-02 — media previews in the terminal
+
+Investigation only, no code written. Findings in `reference_terminal-images-work-claude-code-doesnt.md`.
+
+- **Verify the fork renders Kitty graphics.** Only *upstream* Ghostty was tested (Sean was in the wrong app). The fork has the full implementation and doesn't touch the terminal core, so this is near-certain — but unproven. One command in a plain Ghostties tab closes it: `scratchpad/kitty-test.sh` (script is in a session scratchpad and will be GC'd; the one-liner is in the memory file).
+- **Sidebar preview pane (`QLPreviewView`).** The real gap: Claude Code hands you a file path when an agent produces a screenshot, and no terminal-side image support fixes that. QuickLook gets images, video, PDFs, and scrubbing at real resolution. Slots into the existing panel architecture alongside `BrowserPanelView.swift` / `BrowserTabManager`. Not scoped — wants a plan before code.
+- Rejected: a `PostToolUse` hook firing QuickLook on every image Read. Works today and takes ~20 min, but steals focus during autonomous runs. Only viable as a manual trigger.
+
 ## 2026-08-02 — documentation IA + case study
 
 Objective (locked): repo documentation + correct Ghostty-vs-Ghostties calibration. All five refresh waves are merged to `main`; this wave adds the design layer that was missing.
