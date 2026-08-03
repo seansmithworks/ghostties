@@ -73,7 +73,25 @@
     }
 
     @media (max-width: 480px) {
-      .download-btn { font-size: var(--size-meta); padding: 12px 22px; }
+      .download-btn {
+        font-size: var(--size-meta);
+        padding: 12px 22px;
+        /* 12px padding + ~14px line-height measured 41px tall, 3px short
+           of the 44px touch-target minimum. min-height guarantees 44px
+           regardless of font metrics without changing the padding that
+           sets the button's horizontal proportions. */
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      /* padding grows the tap target; the offsetting margin (base
+         margin-top 24px minus the new 15px padding-top = 9px, etc.) keeps
+         the visible link in the exact position it was in before. */
+      .all-releases {
+        padding: 15px 4px;
+        margin: 9px -4px -15px -4px;
+      }
     }
   </style>
 </head>

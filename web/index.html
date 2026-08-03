@@ -105,7 +105,7 @@
     /* --- Terminal text --- */
     .terminal {
       font-family: var(--font-mono);
-      font-size: 18px;
+      font-size: 1.125rem; /* 18px */
       font-weight: 600;
       line-height: 2;
       color: var(--terminal-fg);
@@ -113,6 +113,14 @@
       max-width: calc(100vw - 48px);
       margin: 0 auto;
       text-align: left;
+      /* .line children animate to hard-coded ch widths (e.g. 43ch for the
+         GitHub URL) that exceed this container below ~560px, since it's
+         already clamped narrower than 46ch there. Without this, the widest
+         .line escapes .terminal's own (correctly clamped) box and forces a
+         horizontal scrollbar on the whole page. This only clips content
+         that's already wider than the container — at desktop widths every
+         line fits inside 46ch, so nothing here changes what's rendered. */
+      overflow: hidden;
     }
 
     .line {
@@ -259,12 +267,18 @@
       margin: 0 auto;
       padding: 24px 32px 96px;
       text-align: center;
+      /* .product-window::before (the glow) uses inset:-10%, which escapes
+         past .product's own edge once the window is wide enough — confirmed
+         at 768/820/900px. .product's own width never exceeds its container
+         (100%, capped at 900px), so clipping overflow here can only remove
+         the escaping glow; it can never clip real content. */
+      overflow: hidden;
     }
 
     /* Display heading — opts out of the shared uppercase eyebrow h2. */
     .product h2 {
       font-family: var(--font-ui);
-      font-size: 30px;
+      font-size: 1.875rem; /* 30px */
       font-weight: 700;
       color: var(--terminal-fg);
       text-transform: none;
@@ -326,16 +340,25 @@
 
     .product-caption {
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 0.75rem; /* 12px */
       color: var(--accent);
       margin-top: 12px;
     }
 
-    /* --- Footer (homepage variant: mono, smaller) --- */
+    /* --- Footer (homepage variant: mono, smaller, pinned to the hero) ---
+       style.css made footer position:static for the document pages (a
+       fixed footer rendered on top of body text once a page ran past one
+       viewport). The homepage is a single, exactly-viewport-height hero
+       and is designed around the footer glued to its bottom edge, so it
+       re-pins here. */
     footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
       padding: 14px 24px;
       font-family: var(--font-mono);
-      font-size: 11px;
+      font-size: 0.6875rem; /* 11px */
     }
 
     .footer-icons {
@@ -402,18 +425,33 @@
     @media (max-width: 480px) {
       body { padding: 16px; }
       .scene { padding: 32px 20px 28px; }
-      .ghost { width: 64px; height: 64px; }
+      /* PR #78 bumped the base ghost from 100px to 72px but left this
+         override at 64px — an 8px step that reads as almost no reduction
+         (89% of base) when the original override was 64px against a
+         100px base (a 64% step). Restoring that ~2/3 ratio against the
+         new 72px base lands on 48px, which is also on the site's 4px
+         spacing scale. */
+      .ghost { width: 48px; height: 48px; }
       .ghost-row { gap: 10px; }
       .ghosts { gap: 10px; margin-bottom: 28px; }
-      .terminal { font-size: 16px; }
-      footer { padding: 12px 16px; font-size: 10px; }
+      .terminal { font-size: 1rem; } /* 16px */
+      footer { padding: 12px 16px; font-size: 0.625rem; } /* 10px */
       .product { padding: 16px 20px 72px; }
-      .product h2 { font-size: 22px; margin-bottom: 28px; }
+      .product h2 { font-size: 1.375rem; margin-bottom: 28px; } /* 22px */
       .product-window { margin-bottom: 28px; }
       .product-window--sessions .product-card,
       .product-window--flow .product-card { transform: none; }
-      .product-caption { font-size: 11px; margin-top: 8px; }
+      .product-caption { font-size: 0.6875rem; margin-top: 8px; } /* 11px */
       .bg-ghost { width: 22px; height: 22px; }
+
+      /* Touch target: the icon stays 14px, the anchor's clickable box
+         grows to 44x44 via padding around it. */
+      .footer-icons a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 15px;
+      }
     }
   </style>
 </head>
