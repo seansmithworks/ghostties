@@ -23,11 +23,9 @@
   <meta name="description" content="Ghostties — a multi-agent workspace terminal. Now in beta.">
   <meta property="og:title" content="ghostties">
   <meta property="og:description" content="A multi-agent workspace terminal. Now in beta.">
-  <meta property="og:image" content="https://ghostties.org/assets/poster.png">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ghostties.org/">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://ghostties.org/assets/poster.png">
+  <meta name="twitter:card" content="summary">
   <link rel="stylesheet" href="/style.css">
   <style>
     /* Homepage only. Shared tokens, reset, and footer base: /style.css */
@@ -108,7 +106,13 @@
     /* --- Terminal text --- */
     .terminal {
       font-family: var(--font-mono);
-      font-size: 1.125rem; /* 18px */
+      /* Fluid between 320px and 768px viewports; clamp()'s max caps it at
+         exactly 1.125rem for every viewport >= 768px, so desktop rendering
+         is byte-for-byte what it was before this was a clamp(). Below 768
+         the type shrinks enough that the 43ch GitHub-URL line (the widest
+         .line) fits inside .terminal's own clamped width without hitting
+         the overflow:hidden clip below, down to 320px. */
+      font-size: clamp(0.625rem, calc(0.625rem + (1.125rem - 0.625rem) * (100vw - 320px) / (768px - 320px)), 1.125rem);
       font-weight: 600;
       line-height: 2;
       color: var(--terminal-fg);
@@ -117,12 +121,13 @@
       margin: 0 auto;
       text-align: left;
       /* .line children animate to hard-coded ch widths (e.g. 43ch for the
-         GitHub URL) that exceed this container below ~560px, since it's
-         already clamped narrower than 46ch there. Without this, the widest
-         .line escapes .terminal's own (correctly clamped) box and forces a
-         horizontal scrollbar on the whole page. This only clips content
-         that's already wider than the container — at desktop widths every
-         line fits inside 46ch, so nothing here changes what's rendered. */
+         GitHub URL). The fluid font-size above keeps that line inside
+         .terminal's own (correctly clamped) box at every width this site
+         supports; this stays as a hard backstop in case a future edit
+         reintroduces a line wider than the container, so it can only ever
+         clip content that's already wider than the container — at desktop
+         widths every line fits inside 46ch, so nothing here changes what's
+         rendered. */
       overflow: hidden;
     }
 
@@ -351,9 +356,11 @@
     /* --- Footer (homepage variant: mono, smaller, pinned to the hero) ---
        style.css made footer position:static for the document pages (a
        fixed footer rendered on top of body text once a page ran past one
-       viewport). The homepage is a single, exactly-viewport-height hero
-       and is designed around the footer glued to its bottom edge, so it
-       re-pins here. */
+       viewport). The homepage is a scrolling page (2132px tall at
+       1280x900, well past one screen) but is designed around the footer
+       glued to the *viewport's* bottom edge regardless of scroll
+       position, so it re-pins to fixed here rather than following
+       style.css's in-flow footer. */
     footer {
       position: fixed;
       bottom: 0;
@@ -428,16 +435,12 @@
     @media (max-width: 480px) {
       body { padding: 16px; }
       .scene { padding: 32px 20px 28px; }
-      /* PR #78 bumped the base ghost from 100px to 72px but left this
-         override at 64px — an 8px step that reads as almost no reduction
-         (89% of base) when the original override was 64px against a
-         100px base (a 64% step). Restoring that ~2/3 ratio against the
-         new 72px base lands on 48px, which is also on the site's 4px
-         spacing scale. */
-      .ghost { width: 48px; height: 48px; }
+      .ghost { width: 64px; height: 64px; }
       .ghost-row { gap: 10px; }
       .ghosts { gap: 10px; margin-bottom: 28px; }
-      .terminal { font-size: 1rem; } /* 16px */
+      /* .terminal font-size is fluid (see its rule above) — no fixed
+         override here, or it would clobber the clamp() and reintroduce the
+         clipped GitHub URL this media query used to cause. */
       footer { padding: 12px 16px; font-size: 0.625rem; } /* 10px */
       .product { padding: 16px 20px 72px; }
       .product h2 { font-size: 1.375rem; margin-bottom: 28px; } /* 22px */
@@ -552,13 +555,17 @@
       </div>
       </div>
 
-      <div class="terminal" aria-hidden="true">
+      <div class="terminal">
       <!-- line-1: 14 chars: cd ~/ghostties -->
       <div class="line line-1">cd ~/ghostties</div>
       <!-- line-2: 43 chars: https://github.com/SeanSmithWorks/ghostties -->
-      <div class="line line-2"><a class="gh-link" href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener" tabindex="-1">https://github.com/SeanSmithWorks/ghostties</a></div>
+      <div class="line line-2"><a class="gh-link" href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener">https://github.com/SeanSmithWorks/ghostties</a></div>
       <!-- line-3: 26 chars: - ghostties % install soon -->
-      <div class="line line-3">- ghostties % install soon</div>
+      <!-- Joke line, not a fact about the product — the only line hidden from
+           assistive tech. Every other line in this terminal states something
+           real (repo URL, version, requirements, download link) and must stay
+           in the accessibility tree. -->
+      <div class="line line-3" aria-hidden="true">- ghostties % install soon</div>
       <!-- line-4: 28 chars: + ghostties % v0.1.0-beta.21 -->
       <div class="line line-4">+ ghostties % v0.1.0-beta.21</div>
       <!-- line-5: 39 chars: + 02Aug2026 · macOS 13+ · Apple Silicon -->
@@ -568,7 +575,7 @@
            ("+ [" / "]") sits outside the link so the accessible name is just
            "download now"; both spans render normally, so the visible text and
            the 16ch typing width are unchanged. -->
-      <div class="line line-6"><span aria-hidden="true">+ [</span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.21/Ghostties.dmg" download tabindex="-1">download now</a><span aria-hidden="true">]</span></div>
+      <div class="line line-6"><span aria-hidden="true">+ [</span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.21/Ghostties.dmg" download>download now</a><span aria-hidden="true">]</span></div>
       </div>
     </div>
 
@@ -576,14 +583,14 @@
       <h2><span>Multiple agents.</span><span>One window.</span></h2>
       <div class="product-window product-window--sessions">
         <div class="product-card">
-          <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" preload="auto" autoplay muted loop playsinline aria-label="Ghostties sidebar showing four parallel Claude Code agent sessions running in one window"></video>
+          <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" autoplay muted loop playsinline aria-label="Ghostties sidebar showing four parallel Claude Code agent sessions running in one window"></video>
         </div>
       </div>
       <div class="product-caption">four sessions, one window</div>
 
       <div class="product-window product-window--flow">
         <div class="product-card">
-          <video src="/assets/product-flow.mp4" poster="/assets/product-flow-poster.jpg" preload="auto" autoplay muted loop playsinline aria-label="gt list showing every task across projects organized into status lanes like needs-you and running"></video>
+          <video src="/assets/product-flow.mp4" poster="/assets/product-flow-poster.jpg" autoplay muted loop playsinline aria-label="gt list showing every task across projects organized into status lanes like needs-you and running"></video>
         </div>
       </div>
       <div class="product-caption">gt list &mdash; every task, one lane</div>

@@ -23,9 +23,13 @@
   --surface-inline: rgba(255, 255, 255, 0.07); /* inline <code> */
 
   /* --- Text ramp (white on --bg) ---
-     Roles, densest to faintest. Alphas raised 2026-08-03 to clear WCAG AA
-     (4.5:1 body text) against --bg; see DESIGN.md §3 for the audit numbers
-     and web/DESIGN.md history for the pre-fix values. */
+     Alphas raised 2026-08-03 to clear WCAG AA (4.5:1 body text) against
+     --bg; see DESIGN.md §3 for the audit numbers and web/DESIGN.md history
+     for the pre-fix values. No longer densest-to-faintest in this order —
+     --text-faint (0.55) ended up brighter than --text-note/--text-meta/
+     --text-label/--text-label-quiet below it once each was raised only as
+     far as its own AA requirement demanded. All still pass AA; this list is
+     grouped by role (prose ramp, then footer/timestamp ramp), not by value. */
   --text-heading: #fff;
   --text-primary: rgba(255, 255, 255, 0.85); /* body default */
   --text-body: rgba(255, 255, 255, 0.65); /* prose, links */
@@ -40,7 +44,7 @@
   --text-body-hover: rgba(255, 255, 255, 0.9);
   --text-meta-hover: rgba(255, 255, 255, 0.65);
   --text-label-hover: rgba(255, 255, 255, 0.6);
-  --text-faint-hover: rgba(255, 255, 255, 0.5);
+  --text-faint-hover: rgba(255, 255, 255, 0.65);
 
   /* --- Lines --- */
   --line: rgba(255, 255, 255, 0.08);
@@ -113,7 +117,7 @@
 
 html,
 body {
-  min-height: 100%;
+  min-height: 100dvh;
   background: var(--bg);
 }
 
@@ -121,7 +125,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 64px 24px 96px;
+  padding: 64px 24px 64px;
   font-family: var(--font-ui);
   color: var(--text-primary);
 }
@@ -328,6 +332,12 @@ footer {
      in the middle of the page instead of spanning edge to edge the way the
      old fixed/inset:0 footer did. Same reasoning as main's width:100% above. */
   width: 100%;
+  /* Pushes the footer to the bottom of the flex column: on short pages body's
+     min-height:100dvh gives the column room to grow into, and this margin
+     consumes it instead of leaving it as dead space below the footer. On
+     tall pages there's no free space to consume, so this is a no-op and the
+     footer sits right after the content, same as before. */
+  margin-top: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -357,7 +367,7 @@ footer svg {
 
 @media (max-width: 480px) {
   body {
-    padding: 48px 16px 88px;
+    padding: 48px 16px 48px;
   }
 
   h1 {
@@ -367,6 +377,13 @@ footer svg {
   footer {
     padding: 12px 16px;
     font-size: var(--size-caption);
+    /* The link row wraps to two lines at this width. Padding on footer a
+       below grows each link's tap target to ~44px tall without changing the
+       line's own layout height, so with the browser's default line-height
+       the two wrapped lines sat only ~14px apart — nowhere near enough to
+       keep two 44px-tall boxes from overlapping. This is the row gap: it
+       has to grow, not the padding, or bigger targets just collide harder. */
+    line-height: 3.8;
   }
 
   /* Touch targets: vertical padding on an inline element grows its
