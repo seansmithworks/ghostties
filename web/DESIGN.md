@@ -103,11 +103,14 @@ Hairlines: `--line` (0.08), `--line-strong` (0.12), `--line-faint` (0.07).
 
 ### Focus
 
-`:focus-visible` in `style.css` is the only focus styling on the site: a
+`:focus-visible` in `style.css` is the main focus styling on the site: a
 `2px solid var(--accent)` ring with a 2px offset and `--radius-sm` corners,
 applied globally rather than per-component. `:focus-visible` (not `:focus`)
 means it shows for keyboard navigation and never for a mouse or touch tap.
-`--accent` measures 4.916:1 against `--bg` here too.
+`--accent` measures 4.916:1 against `--bg` here too. The one exception is
+`.skip-link:focus`, which reveals the skip link itself on focus (a `:focus`,
+not `:focus-visible`, since the link is otherwise off-screen and needs to
+appear for any focus method that lands on it).
 
 ### Accent
 
@@ -179,10 +182,10 @@ Un-tokenised sizes, all single-use inside one page block: 0.6875rem/11px
 
 **The tokenised sizes above are now all `rem`**, converted in the
 2026-08-03 fix pass so they scale with the user's font-size setting instead
-of ignoring it. The un-tokenised sizes right above this are a mix: some
-converted with them (0.6875rem, 1.25rem), some are still raw `px` literals
-(18px, 30px) because each is single-use inside one page block and wasn't
-part of the shared token sweep.
+of ignoring it. The un-tokenised sizes right above this were converted too —
+all four are `rem` (0.6875rem, 1.25rem, 1.125rem, 1.875rem) — they just
+stayed out of the shared token sweep because each is single-use inside one
+page block.
 
 ### Headings
 
@@ -283,6 +286,8 @@ concludes from this document that the system is finished.
 - `prefers-reduced-motion` is honoured on `/404` (the ghost fades in already
   fallen — gentler, not zero) and by exactly one rule on the homepage
   (`.bg-ghost`). Seventeen homepage animations still run under `reduce`.
-- Four footer variants across seven pages. `style.css` now holds the document
-  footer; the homepage keeps a mono override. Collapsing them to one is a
-  taste call, and deleting the override is all it takes.
+- Two footer variants across seven pages. `style.css` now holds one identical
+  `.footer-links` block shared by the six document pages; the homepage keeps
+  its own variant (an icons span plus a three-link row, no Licenses link).
+  Collapsing them to one is a taste call, and deleting the homepage override
+  is all it takes.

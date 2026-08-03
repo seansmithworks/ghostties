@@ -386,7 +386,7 @@ footer svg {
    an item and its separator, never leave a dangling "·" at the end of a
    row. */
 .footer-links > * + *::before {
-  content: "\00B7";
+  content: "\00B7" / "";
   margin: 0 8px;
 }
 
