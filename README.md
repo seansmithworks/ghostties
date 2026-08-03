@@ -2,7 +2,7 @@
 
 **A terminal for running several AI agents at once. A fork of [Ghostty](https://github.com/ghostty-org/ghostty).**
 
-![Ghostties](web/assets/product-hero.png)
+![Ghostties](.github/assets/product-hero.png)
 
 > **Pre-1.0.** Active development, ships as a beta. Things move, and occasionally break.
 
