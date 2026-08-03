@@ -73,9 +73,10 @@ alpha, plus a single accent.
 
 ### Text ramp
 
-Densest to faintest. **The contrast column is from the 2026-08-02 audit,
-measured against `--bg`.** Everything from `--text-note` down fails WCAG AA
-for body-size text.
+Grouped by role (prose ramp, then footer/timestamp ramp), not strictly by
+value — see the ordering note on the token block in `style.css`. **The
+contrast column is from the 2026-08-03 fix pass, measured against `--bg`.**
+Everything below passes WCAG AA for body-size text.
 
 | Token | Alpha | Contrast | Use |
 | --- | --- | --- | --- |
@@ -83,22 +84,33 @@ for body-size text.
 | `--text-heading-soft` | 0.90 | — | Licenses section titles |
 | `--text-primary` | 0.85 | — | `body` default |
 | `--text-body` | 0.65 | pass | Prose, links, list items |
-| `--text-note` | 0.45 | 4.27–4.43 | Callout copy |
-| `--text-meta` | 0.40 | 3.78 | File size, "all releases" |
-| `--text-label` | 0.35 | 3.21 | Eyebrow `h2`, back link, dates |
-| `--text-label-quiet` | 0.30 | 2.70 | Changelog subsection labels |
-| `--text-faint` | 0.25 | **2.27** | Footer text and links, timestamps, bullets |
+| `--text-note` | 0.52 | 5.468 | Callout copy |
+| `--text-meta` | 0.50 | 5.156 | File size, "all releases" |
+| `--text-label` | 0.48 | 4.857 | Eyebrow `h2`, back link, dates |
+| `--text-label-quiet` | 0.46 | 4.570 | Changelog subsection labels |
+| `--text-faint` | 0.55 | 5.959 | Footer text and links, timestamps, bullets |
 
-`--text-faint` at 2.27:1 is the worst value on the site and it is the footer,
-which appears on all seven pages. The audit's note: raising the floor to 0.55
-yields 5.96:1. **That fix is now a single token edit** — it was the point of
-building this file. It is queued in `BACKLOG.md` under Accessibility and has
-not been applied here, because this pass was a refactor.
+`--text-faint` used to be the worst value on the site at 2.27:1 (0.25 alpha)
+— it was the footer, which appears on all seven pages. Raising the floor to
+0.55 fixed it in a single token edit, shipped 2026-08-03. `--diff-del-fg`
+(the hero terminal's red diff line) is 4.720:1 against its own
+`--diff-del-bg` composite. `--accent` is 4.916:1.
 
 Hover pairs: `--text-body-hover` (0.9), `--text-meta-hover` (0.65),
-`--text-label-hover` (0.6), `--text-faint-hover` (0.5).
+`--text-label-hover` (0.6), `--text-faint-hover` (0.65).
 
 Hairlines: `--line` (0.08), `--line-strong` (0.12), `--line-faint` (0.07).
+
+### Focus
+
+`:focus-visible` in `style.css` is the main focus styling on the site: a
+`2px solid var(--accent)` ring with a 2px offset and `--radius-sm` corners,
+applied globally rather than per-component. `:focus-visible` (not `:focus`)
+means it shows for keyboard navigation and never for a mouse or touch tap.
+`--accent` measures 4.916:1 against `--bg` here too. The one exception is
+`.skip-link:focus`, which reveals the skip link itself on focus (a `:focus`,
+not `:focus-visible`, since the link is otherwise off-screen and needs to
+appear for any focus method that lands on it).
 
 ### Accent
 
@@ -164,13 +176,16 @@ runs on — they resolve identically to what shipped before.
 
 Line height: `--leading-snug` 1.6, `--leading-body` 1.65.
 
-Un-tokenised sizes, all single-use inside one page block: 11px (changelog
-`h4`, homepage footer), 18px (licenses `h2`, hero terminal), 20px (changelog
-`h3`), 30px (product heading).
+Un-tokenised sizes, all single-use inside one page block: 0.6875rem/11px
+(changelog `h3`, homepage footer), 18px (licenses `h2`, hero terminal),
+1.25rem/20px (changelog `h2`), 30px (product heading).
 
-**Every size is a `px` literal.** Text scaling therefore breaks layouts —
-queued in `BACKLOG.md` under Responsive. Because the sizes are tokens now,
-converting the scale to `rem` is one block in `style.css`.
+**The tokenised sizes above are now all `rem`**, converted in the
+2026-08-03 fix pass so they scale with the user's font-size setting instead
+of ignoring it. The un-tokenised sizes right above this were converted too —
+all four are `rem` (0.6875rem, 1.25rem, 1.125rem, 1.875rem) — they just
+stayed out of the shared token sweep because each is single-use inside one
+page block.
 
 ### Headings
 
@@ -263,12 +278,16 @@ section goes with it.
 These are real and tracked in `BACKLOG.md`; they are listed here so nobody
 concludes from this document that the system is finished.
 
-- No focus styling is authored anywhere. The browser default is intact, so
-  this is a gap rather than a removal — but a design system should own it.
+- `task-flows.html` (routed at `/flows`, listed in `sitemap.xml`) still has
+  no `<main>` landmark, no skip link, no shared stylesheet, and no footer.
+  The `<main>`/skip-link/`<h1>` gap is fixed on the other six pages, not on
+  this one — it's out of system entirely per §7, and whether it stays on
+  the site at all is an open decision in `BACKLOG.md`.
 - `prefers-reduced-motion` is honoured on `/404` (the ghost fades in already
   fallen — gentler, not zero) and by exactly one rule on the homepage
   (`.bg-ghost`). Seventeen homepage animations still run under `reduce`.
-- Four footer variants across seven pages. `style.css` now holds the document
-  footer; the homepage keeps a mono override. Collapsing them to one is a
-  taste call, and deleting the override is all it takes.
-- No `<main>` landmark or skip link on any page; no `<h1>` on the homepage.
+- Two footer variants across seven pages. `style.css` now holds one identical
+  `.footer-links` block shared by the six document pages; the homepage keeps
+  its own variant (an icons span plus a three-link row, no Licenses link).
+  Collapsing them to one is a taste call, and deleting the homepage override
+  is all it takes.

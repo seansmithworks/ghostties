@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Changelog — ghostties</title>
-  <link rel="icon" type="image/svg+xml" href="">
+  <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
       var colors = ['#e84855','#8b5cf6','#22d3ee','#f472b6','#f59e0b','#eab308','#38bdf8','#7c6f9c'];
@@ -21,6 +21,11 @@
     })();
   </script>
   <meta name="description" content="Changelog — what's new in each Ghostties release.">
+  <meta property="og:title" content="Changelog — ghostties">
+  <meta property="og:description" content="Changelog — what's new in each Ghostties release.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ghostties.org/changelog">
+  <meta name="twitter:card" content="summary">
   <link rel="stylesheet" href="/style.css">
   <style>
     /* Changelog page only. Shared base: /style.css */
@@ -42,11 +47,14 @@
       margin-bottom: 8px;
     }
 
-    .release-heading h3 {
-      font-size: 20px;
+    .release-heading h2 {
+      font-size: 1.25rem; /* 20px */
       font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--text-heading);
+      text-transform: none;
+      margin-top: 0;
+      margin-bottom: 0;
     }
 
     .release-heading .date {
@@ -65,8 +73,8 @@
       margin-top: 16px;
     }
 
-    .release-section h4 {
-      font-size: 11px;
+    .release-section h3 {
+      font-size: 0.6875rem; /* 11px */
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.1em;
@@ -99,6 +107,8 @@
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <main id="main">
   <div class="content">
     <a class="back" href="/">&larr; ghostties</a>
 
@@ -109,23 +119,92 @@
       <p><strong style="color:rgba(255,255,255,0.6)">Beta.15 and earlier:</strong> Auto-updates aren't reliable yet in early betas. Download the latest release manually from the <a href="/download">download page</a>.</p>
     </div>
 
+    <!-- beta.21 -->
+    <div class="release">
+      <div class="release-heading">
+        <h2>v0.1.0-beta.21</h2>
+        <span class="date">August 1, 2026</span>
+      </div>
+      <p class="release-summary">The Sessions tab gets its own character, names that keep themselves current, and a round of security hardening.</p>
+
+      <div class="release-section">
+        <h3>Added</h3>
+        <ul>
+          <li>Session names that keep themselves current &mdash; a session&rsquo;s name in the sidebar now follows the title Claude Code sets, so a row shows what that agent is actually working on instead of a generic label. Rename a session yourself and your name wins; right-click and choose &ldquo;Sync name automatically&rdquo; to hand it back.</li>
+          <li>A ghost for every session &mdash; each session in the Sessions tab now has its own ghost character, tinted by status, in place of the plain dot. A session keeps its ghost across relaunches.</li>
+          <li>Collapsible Active and Archive sections &mdash; the Sessions tab splits into Active and Archive, and each one folds away. Ghostties remembers which you left open.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Changed</h3>
+        <ul>
+          <li>The Sessions list holds still &mdash; rows used to reshuffle by most recent activity, rearranging the list while you were reading it. Order is now stable.</li>
+          <li>Status colors across the sidebar &mdash; green means working, blue means your turn, gold means a decision is waiting, orange means long-running, red means something went wrong.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Fixed</h3>
+        <ul>
+          <li><code>Cmd+Shift+[</code> and <code>Cmd+Shift+]</code> cycle sessions again &mdash; the shortcut only worked when focus was outside the terminal, which is almost never in practice; the terminal was claiming the key combination for its own tab switching before the menu ever saw it.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Security</h3>
+        <ul>
+          <li>Updated Sparkle to 2.9.4, fixing two vulnerabilities in the update framework (CVE-2026-47121 and CVE-2026-47122).</li>
+          <li>MCP server discovery now reads only your own configuration &mdash; Ghostties used to also look inside the project folder you opened, so opening someone else&rsquo;s repository could offer to launch a program that repository shipped. It now reads from <code>~/.ghostties/</code> only.</li>
+          <li>Narrowed what the app is permitted to do &mdash; the shipping build no longer requests two hardened-runtime exceptions it never needed.</li>
+          <li>Session launcher scripts are cleaned up when a session ends, and anything left behind for more than a day is swept away at launch.</li>
+          <li>Fixed a path-handling flaw in <code>gt done</code> that let a crafted task name reach files outside the task directory.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- beta.20 -->
+    <div class="release">
+      <div class="release-heading">
+        <h2>v0.1.0-beta.20</h2>
+        <span class="date">July 20, 2026</span>
+      </div>
+      <p class="release-summary">Quality-of-life improvements to the workspace sidebar &mdash; resize it, rename sessions in place, and jump between live agents from the keyboard.</p>
+
+      <div class="release-section">
+        <h3>Added</h3>
+        <ul>
+          <li>Drag to resize the sidebar &mdash; grab the sidebar&rsquo;s trailing edge and drag to make it wider or narrower. Ghostties remembers your width separately for the Sessions and Tasks views, so each stays how you left it.</li>
+          <li>Rename, stop, and relaunch sessions from the Sessions tab &mdash; right-click any row for a menu matching the project view: Rename, Stop, Relaunch, Remove. Renaming happens inline, right on the row.</li>
+          <li>Cycle through live agents from the keyboard &mdash; <code>Cmd+Shift+]</code> / <code>Cmd+Shift+[</code> now step through your running sessions in sidebar order (or through task zones in Tasks view). Project cycling moved to <code>Cmd+Ctrl+]</code> / <code>Cmd+Ctrl+[</code>.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Changed</h3>
+        <ul>
+          <li>The Sessions list trims itself at launch &mdash; it used to keep every agent session you ever started. It now keeps everything from the last 30 days plus each project&rsquo;s 15 most recent, so the list stays tidy without touching any of your actual work.</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- beta.19 -->
     <div class="release">
       <div class="release-heading">
-        <h3>v0.1.0-beta.19</h3>
+        <h2>v0.1.0-beta.19</h2>
         <span class="date">July 5, 2026</span>
       </div>
       <p class="release-summary">The workspace stays responsive when several agents are running at once.</p>
 
       <div class="release-section">
-        <h4>Fixed</h4>
+        <h3>Fixed</h3>
         <ul>
           <li>Running multiple agents no longer pins the CPU &mdash; the sidebar was rebuilding itself on every terminal-title change and redoing that work for every project row whether or not anything had changed, which could peg a core and beachball the app until you force-quit it. Activity updates are now throttled and the sidebar only redraws the rows that changed.</li>
         </ul>
       </div>
 
       <div class="release-section">
-        <h4>Performance</h4>
+        <h3>Performance</h3>
         <ul>
           <li>Task list reloads incrementally &mdash; only the task files that changed are re-read, instead of re-parsing every task on any file-system event.</li>
         </ul>
@@ -135,7 +214,7 @@
     <!-- beta.18 -->
     <div class="release">
       <div class="release-heading">
-        <h3>v0.1.0-beta.18</h3>
+        <h2>v0.1.0-beta.18</h2>
         <span class="date">June 19, 2026</span>
       </div>
       <p class="release-summary">The first build delivered to existing users over the air &mdash; it confirms auto-updates work end to end.</p>
@@ -144,13 +223,13 @@
     <!-- beta.17 -->
     <div class="release">
       <div class="release-heading">
-        <h3>v0.1.0-beta.17</h3>
+        <h2>v0.1.0-beta.17</h2>
         <span class="date">June 19, 2026</span>
       </div>
       <p class="release-summary">Auto-updates work now, and the workspace sidebar no longer freezes the app.</p>
 
       <div class="release-section">
-        <h4>Fixed</h4>
+        <h3>Fixed</h3>
         <ul>
           <li>Auto-updates now work &mdash; &ldquo;Check for Updates&rdquo; was silently doing nothing in beta.16, and the in-app update notification never rendered in the workspace window. Ghostties now checks for updates in the background and shows a notification pill when a new version is ready.</li>
           <li>Sidebar no longer freezes the app &mdash; opening the project sidebar could peg the CPU and beachball the window.</li>
@@ -161,13 +240,13 @@
     <!-- beta.16 -->
     <div class="release">
       <div class="release-heading">
-        <h3>v0.1.0-beta.16</h3>
+        <h2>v0.1.0-beta.16</h2>
         <span class="date">May 18, 2026</span>
       </div>
       <p class="release-summary">The tasks sidebar is now fully wired up, with six status zones, Linear preset support, and a complete <code>gt</code> CLI.</p>
 
       <div class="release-section">
-        <h4>Added</h4>
+        <h3>Added</h3>
         <ul>
           <li>Six-zone task sidebar &mdash; Inbox, Backlog, Running, Needs You, Review, and Graveyard lanes are all live. Done tasks no longer appear in Inbox.</li>
           <li>Linear Sync preset &mdash; a template in the New Session picker pre-configures the MCP server with your Linear workspace. Source dots show indigo for Linear-sourced tasks, sage for shell tasks.</li>
@@ -183,7 +262,7 @@
       </div>
 
       <div class="release-section">
-        <h4>Fixed</h4>
+        <h3>Fixed</h3>
         <ul>
           <li>&ldquo;Check for Updates&rdquo; visibility &mdash; progress and result messages now appear correctly in hidden-titlebar and tabbed windows.</li>
           <li>Auto-update channel &mdash; channel is now user-controllable via <code>defaults write</code>. Previously hardcoded.</li>
@@ -192,7 +271,7 @@
       </div>
 
       <div class="release-section">
-        <h4>Performance</h4>
+        <h3>Performance</h3>
         <ul>
           <li>Suppressed 1Hz sidebar re-render when session states haven&rsquo;t changed &mdash; reduces CPU overhead while Claude is running.</li>
         </ul>
@@ -202,13 +281,13 @@
     <!-- beta.15 -->
     <div class="release">
       <div class="release-heading">
-        <h3>v0.1.0-beta.15</h3>
+        <h2>v0.1.0-beta.15</h2>
         <span class="date">May 5, 2026</span>
       </div>
       <p class="release-summary">Polish and stability fixes following the beta.14 smoke test.</p>
 
       <div class="release-section">
-        <h4>Fixed</h4>
+        <h3>Fixed</h3>
         <ul>
           <li>Dark mode titlebar now matches the canvas background color (previously showed a mismatched gray).</li>
           <li>Fullscreen icon position in the toolbar corrected.</li>
@@ -219,7 +298,7 @@
       </div>
 
       <div class="release-section">
-        <h4>Quality</h4>
+        <h3>Quality</h3>
         <ul>
           <li>All upstream Ghostty tests pass &mdash; full test suite is green.</li>
         </ul>
@@ -229,13 +308,13 @@
     <!-- beta.14 -->
     <div class="release">
       <div class="release-heading">
-        <h3>v0.1.0-beta.14</h3>
+        <h2>v0.1.0-beta.14</h2>
         <span class="date">April 30, 2026</span>
       </div>
       <p class="release-summary">First beta with a production-quality icon and an onboarding experience on first launch.</p>
 
       <div class="release-section">
-        <h4>Added</h4>
+        <h3>Added</h3>
         <ul>
           <li>New production app icon.</li>
           <li>Debug builds use a distinct blueprint-style icon so it&rsquo;s easy to tell Dev from Release at a glance.</li>
@@ -246,7 +325,7 @@
       </div>
 
       <div class="release-section">
-        <h4>Changed</h4>
+        <h3>Changed</h3>
         <ul>
           <li>Fresh installs now default to showing the project sidebar first (previously opened to an empty state).</li>
         </ul>
@@ -256,20 +335,20 @@
     <!-- beta.13 -->
     <div class="release">
       <div class="release-heading">
-        <h3>v0.1.0-beta.13</h3>
+        <h2>v0.1.0-beta.13</h2>
         <span class="date">April 30, 2026</span>
       </div>
       <p class="release-summary">Window controls alignment and the first version of task row interaction.</p>
 
       <div class="release-section">
-        <h4>Fixed</h4>
+        <h3>Fixed</h3>
         <ul>
           <li>Traffic light buttons (close / minimize / zoom) are now correctly centered in the titlebar &mdash; previously they floated slightly off.</li>
         </ul>
       </div>
 
       <div class="release-section">
-        <h4>Added</h4>
+        <h3>Added</h3>
         <ul>
           <li>Sidebar row-click v0 &mdash; clicking a task row now lets you interact with it.</li>
         </ul>
@@ -279,13 +358,13 @@
     <!-- beta.12 -->
     <div class="release">
       <div class="release-heading">
-        <h3>v0.1.0-beta.12</h3>
+        <h2>v0.1.0-beta.12</h2>
         <span class="date">April 28, 2026</span>
       </div>
       <p class="release-summary">First distributable build. Ghostties can now be installed and kept up to date automatically.</p>
 
       <div class="release-section">
-        <h4>Added</h4>
+        <h3>Added</h3>
         <ul>
           <li>First full DMG bundle with notarization &mdash; Ghostties is now installable like any other Mac app.</li>
           <li>Sparkle auto-update wired to ghostties.org &mdash; the app will notify you when a new beta is available.</li>
@@ -296,9 +375,16 @@
     </div>
 
   </div>
+  </main>
 
   <footer>
-    <span>&copy; 2026 &nbsp;&middot;&nbsp; <a href="/changelog">Changelog</a> &nbsp;&middot;&nbsp; <a href="/privacy">Privacy</a> &nbsp;&middot;&nbsp; <a href="/support">Support</a> &nbsp;&middot;&nbsp; <a href="/licenses">Licenses</a></span>
+    <span class="footer-links">
+      <span>&copy; 2026</span>
+      <a href="/changelog">Changelog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/licenses">Licenses</a>
+    </span>
   </footer>
 </body>
 </html>

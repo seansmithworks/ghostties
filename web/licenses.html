@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Licenses — ghostties</title>
-  <link rel="icon" type="image/svg+xml" href="">
+  <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
       var colors = ['#e84855','#8b5cf6','#22d3ee','#f472b6','#f59e0b','#eab308','#38bdf8','#7c6f9c'];
@@ -21,13 +21,18 @@
     })();
   </script>
   <meta name="description" content="Open-source licenses for Ghostties and its dependencies.">
+  <meta property="og:title" content="Licenses — ghostties">
+  <meta property="og:description" content="Open-source licenses for Ghostties and its dependencies.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ghostties.org/licenses">
+  <meta name="twitter:card" content="summary">
   <link rel="stylesheet" href="/style.css">
   <style>
     /* Licenses page only. Shared base: /style.css */
 
     /* Section title — opts out of the shared uppercase eyebrow h2. */
     h2 {
-      font-size: 18px;
+      font-size: 1.125rem; /* 18px */
       font-weight: 600;
       letter-spacing: -0.01em;
       color: var(--text-heading-soft);
@@ -42,6 +47,8 @@
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <main id="main">
   <div class="content">
     <a class="back" href="/">&larr; ghostties</a>
 
@@ -62,9 +69,16 @@
 
     <p class="updated">Last updated April 27, 2026</p>
   </div>
+  </main>
 
   <footer>
-    <span>&copy; 2026 &nbsp;&middot;&nbsp; <a href="/privacy">Privacy</a> &nbsp;&middot;&nbsp; <a href="/support">Support</a> &nbsp;&middot;&nbsp; <a href="/licenses">Licenses</a></span>
+    <span class="footer-links">
+      <span>&copy; 2026</span>
+      <a href="/changelog">Changelog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/licenses">Licenses</a>
+    </span>
   </footer>
 </body>
 </html>

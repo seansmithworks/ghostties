@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Download — ghostties</title>
-  <link rel="icon" type="image/svg+xml" href="">
+  <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
       var colors = ['#e84855','#8b5cf6','#22d3ee','#f472b6','#f59e0b','#eab308','#38bdf8','#7c6f9c'];
@@ -21,6 +21,11 @@
     })();
   </script>
   <meta name="description" content="Download Ghostties — a multi-agent workspace terminal for macOS.">
+  <meta property="og:title" content="Download — ghostties">
+  <meta property="og:description" content="Download Ghostties — a multi-agent workspace terminal for macOS.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ghostties.org/download">
+  <meta name="twitter:card" content="summary">
   <link rel="stylesheet" href="/style.css">
   <style>
     /* Download page only. Shared base: /style.css */
@@ -73,11 +78,31 @@
     }
 
     @media (max-width: 480px) {
-      .download-btn { font-size: var(--size-meta); padding: 12px 22px; }
+      .download-btn {
+        font-size: var(--size-meta);
+        padding: 12px 22px;
+        /* 12px padding + ~14px line-height measured 41px tall, 3px short
+           of the 44px touch-target minimum. min-height guarantees 44px
+           regardless of font metrics without changing the padding that
+           sets the button's horizontal proportions. */
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      /* padding grows the tap target; the offsetting margin (base
+         margin-top 24px minus the new 15px padding-top = 9px, etc.) keeps
+         the visible link in the exact position it was in before. */
+      .all-releases {
+        padding: 15px 4px;
+        margin: 9px -4px -15px -4px;
+      }
     }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <main id="main">
   <div class="content">
     <a class="back" href="/">&larr; ghostties</a>
 
@@ -90,7 +115,7 @@
         Download v0.1.0-beta.21 for macOS
       </a>
       <div class="download-meta">
-        v0.1.0-beta.21 &middot; August 2, 2026 &middot; 147 MB<br>
+        v0.1.0-beta.21 &middot; August 1, 2026 &middot; 147 MB<br>
         macOS 13 (Ventura) or later &middot; Apple Silicon
       </div>
     </div>
@@ -107,9 +132,16 @@
 
     <p class="updated">Last updated August 2, 2026</p>
   </div>
+  </main>
 
   <footer>
-    <span>&copy; 2026 &nbsp;&middot;&nbsp; <a href="/changelog">Changelog</a> &nbsp;&middot;&nbsp; <a href="/privacy">Privacy</a> &nbsp;&middot;&nbsp; <a href="/support">Support</a> &nbsp;&middot;&nbsp; <a href="/licenses">Licenses</a></span>
+    <span class="footer-links">
+      <span>&copy; 2026</span>
+      <a href="/changelog">Changelog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/licenses">Licenses</a>
+    </span>
   </footer>
 </body>
 </html>
