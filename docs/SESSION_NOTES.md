@@ -2597,3 +2597,42 @@ Pickup session: full test suite was already green on `main` (`a41d842eb`). Tagge
 ### Commits this session (all via merged PRs)
 
 - `c9ce88fc5` (#47), `ccfa97a4b` (#49), `36ba41b4e` (#51), `fb4d2bec4` (#52)
+
+---
+
+## 2026-08-02/03 — documentation IA merged, Wave 0 closed, README hero fixed
+
+**Focus:** Finish the repo-documentation objective — merge the information-architecture PR, then turn on the repo settings the whole refresh was building toward. Phone-mode for the back half.
+
+### Shipped
+
+- **PR #80 merged** (`1c2ff4e82`) — `docs/INFORMATION-ARCHITECTURE.md` + `docs/case-study-documentation-refresh.md`, with entry points in `CONTRIBUTING.md` (humans) and `AGENTS.md` (agents). It was **not** in the state the pickup claimed: `CONFLICTING`/`DIRTY`, not "MERGEABLE, CI green." `main` had moved and #79's audit section collided with the docs-IA section at the same insertion point. Resolved keeping both, verified the diff against main was purely additive (zero deletions), then squashed.
+- **PR #84 merged** (`a1941d3ac`) — restored the README hero image. See below; this was a live bug, not cleanup.
+- **Wave 0 fully closed.** Issues, Discussions, private vulnerability reporting, Dependabot **alerts**, 10 topics, and the 1280×640 social preview — all applied and verified live.
+
+### The README hero was broken in production
+
+`README.md` line 5 embedded `web/assets/product-hero.png`, which did not exist on `main`. **The repo front page had been rendering a broken image** since PR #77 merged.
+
+Cause: #75 (`d7bdf050e`) landed the README referencing that path; #77 (`3c97d5456`, "clear six live web bugs — orphaned assets") then deleted the file. It was not orphaned. The web audit checked the *site's* HTML for references and correctly found none — nothing checked the README.
+
+Fixed by restoring from history into `.github/assets/`, next to the `demo.gif` the README already used. Restoring it in place would have left the cause intact: `web/assets/` is owned by the website work-stream and is being actively pruned (#77, #81, more queued), so a README-only asset there invites the same deletion again.
+
+Then link-checked every relative link and image target across all 11 fork-owned docs: **1 broken before, 0 after.** `CHANGELOG.md` verified current with beta.21.
+
+### Discovered / learned
+
+- **"Needs Sean's login" was wrong on every Wave 0 item.** The repo settings were all reachable from the `gh` token (`has_issues`, `has_discussions`, `/private-vulnerability-reporting`, `/vulnerability-alerts`, `/topics`).
+- **Social preview: no API exists, but it is still automatable.** Verified against GitHub docs and two open community requests — no REST or GraphQL endpoint sets it. Uploaded it anyway via **Claude in Chrome**. Two gotchas worth keeping: use `file_upload` against the input's ref and **never click the file input** (that opens a native picker automation cannot see); and GitHub commits on file-select with no Save button, so verify by the `og:image` host flipping from `opengraph.githubassets.com` (default card) to `repository-images.githubusercontent.com` (custom upload) — the settings form renders a preview either way.
+- **Ordering that mattered:** `.github/ISSUE_TEMPLATE/config.yml` links to `/security/advisories/new`, which 404s unless private vulnerability reporting is on. Enabling Issues alone would have shipped a broken link on day one.
+- **Left off deliberately:** Dependabot *security updates* (auto-PRs). `.github/dependabot.yml` is still the inherited upstream config, so auto-PRs would target the wrong paths until that retarget lands.
+
+### Carried to BACKLOG (2026-08-03)
+
+- Social-preview card has no preserved source (rendered from a scratchpad HTML file, now gone) — decide whether it belongs in the repo.
+- Paper's 1200×630 promo artboard still carries the pre-rename `SeanSmithDesign` URL; must be fixed before that artboard is exported publicly.
+
+### Commits this session (both via merged PRs)
+
+- `1c2ff4e82` (#80) — docs: record the information architecture and how it was arrived at
+- `a1941d3ac` (#84) — fix(docs): restore the README hero image
