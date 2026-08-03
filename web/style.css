@@ -417,6 +417,19 @@ footer svg {
     padding: 13px 6px;
   }
 
+  /* No middot at mobile widths: a wrap can land at any point depending on
+     link count and viewport, so any separator scheme risks a dangling
+     leading or trailing "·" on some row. Dropping it removes the
+     possibility entirely; the flex gap above already separates items. */
+  .footer-links {
+    gap: 6px 12px;
+  }
+
+  .footer-links > * + *::before {
+    content: none;
+    margin: 0;
+  }
+
   .back {
     padding: 14px 4px;
     margin: -14px -4px 26px;
