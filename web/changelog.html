@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Changelog — ghostties</title>
-  <link rel="icon" type="image/svg+xml" href="">
+  <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
       var colors = ['#e84855','#8b5cf6','#22d3ee','#f472b6','#f59e0b','#eab308','#38bdf8','#7c6f9c'];
@@ -21,6 +21,13 @@
     })();
   </script>
   <meta name="description" content="Changelog — what's new in each Ghostties release.">
+  <meta property="og:title" content="Changelog — ghostties">
+  <meta property="og:description" content="Changelog — what's new in each Ghostties release.">
+  <meta property="og:image" content="https://ghostties.org/assets/poster.png">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ghostties.org/changelog">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://ghostties.org/assets/poster.png">
   <link rel="stylesheet" href="/style.css">
   <style>
     /* Changelog page only. Shared base: /style.css */
@@ -111,6 +118,75 @@
 
     <div class="note">
       <p><strong style="color:rgba(255,255,255,0.6)">Beta.15 and earlier:</strong> Auto-updates aren't reliable yet in early betas. Download the latest release manually from the <a href="/download">download page</a>.</p>
+    </div>
+
+    <!-- beta.21 -->
+    <div class="release">
+      <div class="release-heading">
+        <h2>v0.1.0-beta.21</h2>
+        <span class="date">August 1, 2026</span>
+      </div>
+      <p class="release-summary">The Sessions tab gets its own character, names that keep themselves current, and a round of security hardening.</p>
+
+      <div class="release-section">
+        <h3>Added</h3>
+        <ul>
+          <li>Session names that keep themselves current &mdash; a session&rsquo;s name in the sidebar now follows the title Claude Code sets, so a row shows what that agent is actually working on instead of a generic label. Rename a session yourself and your name wins; right-click and choose &ldquo;Sync name automatically&rdquo; to hand it back.</li>
+          <li>A ghost for every session &mdash; each session in the Sessions tab now has its own ghost character, tinted by status, in place of the plain dot. A session keeps its ghost across relaunches.</li>
+          <li>Collapsible Active and Archive sections &mdash; the Sessions tab splits into Active and Archive, and each one folds away. Ghostties remembers which you left open.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Changed</h3>
+        <ul>
+          <li>The Sessions list holds still &mdash; rows used to reshuffle by most recent activity, rearranging the list while you were reading it. Order is now stable.</li>
+          <li>Status colors across the sidebar &mdash; green means working, blue means your turn, gold means a decision is waiting, orange means long-running, red means something went wrong.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Fixed</h3>
+        <ul>
+          <li><code>Cmd+Shift+[</code> and <code>Cmd+Shift+]</code> cycle sessions again &mdash; the shortcut only worked when focus was outside the terminal, which is almost never in practice; the terminal was claiming the key combination for its own tab switching before the menu ever saw it.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Security</h3>
+        <ul>
+          <li>Updated Sparkle to 2.9.4, fixing two vulnerabilities in the update framework (CVE-2026-47121 and CVE-2026-47122).</li>
+          <li>MCP server discovery now reads only your own configuration &mdash; Ghostties used to also look inside the project folder you opened, so opening someone else&rsquo;s repository could offer to launch a program that repository shipped. It now reads from <code>~/.ghostties/</code> only.</li>
+          <li>Narrowed what the app is permitted to do &mdash; the shipping build no longer requests two hardened-runtime exceptions it never needed.</li>
+          <li>Session launcher scripts are cleaned up when a session ends, and anything left behind for more than a day is swept away at launch.</li>
+          <li>Fixed a path-handling flaw in <code>gt done</code> that let a crafted task name reach files outside the task directory.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- beta.20 -->
+    <div class="release">
+      <div class="release-heading">
+        <h2>v0.1.0-beta.20</h2>
+        <span class="date">July 21, 2026</span>
+      </div>
+      <p class="release-summary">Quality-of-life improvements to the workspace sidebar &mdash; resize it, rename sessions in place, and jump between live agents from the keyboard.</p>
+
+      <div class="release-section">
+        <h3>Added</h3>
+        <ul>
+          <li>Drag to resize the sidebar &mdash; grab the sidebar&rsquo;s trailing edge and drag to make it wider or narrower. Ghostties remembers your width separately for the Sessions and Tasks views, so each stays how you left it.</li>
+          <li>Rename, stop, and relaunch sessions from the Sessions tab &mdash; right-click any row for a menu matching the project view: Rename, Stop, Relaunch, Remove. Renaming happens inline, right on the row.</li>
+          <li>Cycle through live agents from the keyboard &mdash; <code>Cmd+Shift+]</code> / <code>Cmd+Shift+[</code> now step through your running sessions in sidebar order (or through task zones in Tasks view). Project cycling moved to <code>Cmd+Ctrl+]</code> / <code>Cmd+Ctrl+[</code>.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Changed</h3>
+        <ul>
+          <li>The Sessions list trims itself at launch &mdash; it used to keep every agent session you ever started. It now keeps everything from the last 30 days plus each project&rsquo;s 15 most recent, so the list stays tidy without touching any of your actual work.</li>
+        </ul>
+      </div>
     </div>
 
     <!-- beta.19 -->

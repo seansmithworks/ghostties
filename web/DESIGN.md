@@ -164,9 +164,9 @@ runs on — they resolve identically to what shipped before.
 
 Line height: `--leading-snug` 1.6, `--leading-body` 1.65.
 
-Un-tokenised sizes, all single-use inside one page block: 11px (changelog
-`h4`, homepage footer), 18px (licenses `h2`, hero terminal), 20px (changelog
-`h3`), 30px (product heading).
+Un-tokenised sizes, all single-use inside one page block: 0.6875rem/11px
+(changelog `h3`, homepage footer), 18px (licenses `h2`, hero terminal),
+1.25rem/20px (changelog `h2`), 30px (product heading).
 
 **Every size is a `px` literal.** Text scaling therefore breaks layouts —
 queued in `BACKLOG.md` under Responsive. Because the sizes are tokens now,
@@ -271,4 +271,3 @@ concludes from this document that the system is finished.
 - Four footer variants across seven pages. `style.css` now holds the document
   footer; the homepage keeps a mono override. Collapsing them to one is a
   taste call, and deleting the override is all it takes.
-- No `<main>` landmark or skip link on any page; no `<h1>` on the homepage.

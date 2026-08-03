@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ghostties</title>
-  <link rel="icon" type="image/svg+xml" href="">
+  <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
       var colors = ['#FF4136','#7C4DFF','#00BCD4','#FF80AB','#FF9800','#FFEB3B','#81D4FA','#7986CB'];
@@ -23,8 +23,11 @@
   <meta name="description" content="Ghostties — a multi-agent workspace terminal. Now in beta.">
   <meta property="og:title" content="ghostties">
   <meta property="og:description" content="A multi-agent workspace terminal. Now in beta.">
-  <meta property="og:image" content="/assets/poster.png">
+  <meta property="og:image" content="https://ghostties.org/assets/poster.png">
   <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ghostties.org/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://ghostties.org/assets/poster.png">
   <link rel="stylesheet" href="/style.css">
   <style>
     /* Homepage only. Shared tokens, reset, and footer base: /style.css */
@@ -573,14 +576,14 @@
       <h2><span>Multiple agents.</span><span>One window.</span></h2>
       <div class="product-window product-window--sessions">
         <div class="product-card">
-          <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" autoplay muted loop playsinline aria-label="Ghostties sidebar showing four parallel Claude Code agent sessions running in one window"></video>
+          <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" preload="auto" autoplay muted loop playsinline aria-label="Ghostties sidebar showing four parallel Claude Code agent sessions running in one window"></video>
         </div>
       </div>
       <div class="product-caption">four sessions, one window</div>
 
       <div class="product-window product-window--flow">
         <div class="product-card">
-          <video src="/assets/product-flow.mp4" poster="/assets/product-flow-poster.jpg" autoplay muted loop playsinline aria-label="gt list showing every task across projects organized into status lanes like needs-you and running"></video>
+          <video src="/assets/product-flow.mp4" poster="/assets/product-flow-poster.jpg" preload="auto" autoplay muted loop playsinline aria-label="gt list showing every task across projects organized into status lanes like needs-you and running"></video>
         </div>
       </div>
       <div class="product-caption">gt list &mdash; every task, one lane</div>
