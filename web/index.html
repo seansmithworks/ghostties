@@ -418,6 +418,7 @@
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <div class="ghost-backdrop" aria-hidden="true">
     <div class="bg-ghost bg-ghost-1">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF4136" shape-rendering="crispEdges">
@@ -451,12 +452,15 @@
     </div>
   </div>
 
-  <div class="scene animate">
-    <div class="ghosts">
+  <main id="main">
+    <h1 class="visually-hidden">Ghostties — a multi-agent workspace terminal for macOS</h1>
+
+    <div class="scene animate">
+      <div class="ghosts" aria-hidden="true">
       <!-- Row 1: blinky (red) -->
       <div class="ghost-row">
         <div class="ghost g0">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF4136" shape-rendering="crispEdges">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF4136" shape-rendering="crispEdges" aria-hidden="true">
             <rect x="12" y="0" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="8" height="8"/><rect x="20" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="8" height="4"/><rect x="12" y="40" width="8" height="4"/><rect x="28" y="40" width="8" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="16" y="44" width="4" height="4"/><rect x="28" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
           </svg>
         </div>
@@ -464,12 +468,12 @@
       <!-- Row 2: specter (purple), inky (cyan) -->
       <div class="ghost-row">
         <div class="ghost g1">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#7C4DFF" shape-rendering="crispEdges">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#7C4DFF" shape-rendering="crispEdges" aria-hidden="true">
             <rect x="12" y="0" width="24" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="8" height="4"/><rect x="16" y="12" width="16" height="4"/><rect x="40" y="12" width="8" height="4"/><rect x="0" y="16" width="4" height="4"/><rect x="16" y="16" width="16" height="4"/><rect x="44" y="16" width="4" height="4"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="8" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
           </svg>
         </div>
         <div class="ghost g2">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#00BCD4" shape-rendering="crispEdges">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#00BCD4" shape-rendering="crispEdges" aria-hidden="true">
             <rect x="12" y="0" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="12" height="8"/><rect x="32" y="12" width="12" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="4" height="4"/><rect x="8" y="40" width="8" height="4"/><rect x="20" y="40" width="8" height="4"/><rect x="32" y="40" width="8" height="4"/><rect x="44" y="40" width="4" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="12" y="44" width="4" height="4"/><rect x="32" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
           </svg>
         </div>
@@ -477,17 +481,17 @@
       <!-- Row 3: pinky (pink), clyde (orange), banshee (yellow) -->
       <div class="ghost-row">
         <div class="ghost g3">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF80AB" shape-rendering="crispEdges">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF80AB" shape-rendering="crispEdges" aria-hidden="true">
             <rect x="16" y="0" width="16" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="4" height="8"/><rect x="16" y="12" width="16" height="8"/><rect x="40" y="12" width="4" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="12" height="4"/><rect x="20" y="40" width="8" height="4"/><rect x="36" y="40" width="12" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
           </svg>
         </div>
         <div class="ghost g4">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF9800" shape-rendering="crispEdges">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF9800" shape-rendering="crispEdges" aria-hidden="true">
             <rect x="8" y="0" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="8" height="8"/><rect x="16" y="12" width="16" height="8"/><rect x="40" y="12" width="8" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="12" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="36" y="40" width="12" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
           </svg>
         </div>
         <div class="ghost g5">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FFEB3B" shape-rendering="crispEdges">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FFEB3B" shape-rendering="crispEdges" aria-hidden="true">
             <rect x="8" y="0" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="4" height="8"/><rect x="16" y="12" width="16" height="8"/><rect x="44" y="12" width="4" height="8"/><rect x="0" y="20" width="48" height="4"/><rect x="0" y="24" width="12" height="4"/><rect x="36" y="24" width="12" height="4"/><rect x="0" y="28" width="48" height="12"/><rect x="0" y="40" width="8" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
           </svg>
         </div>
@@ -495,23 +499,23 @@
       <!-- Row 4: chill (light blue, round), dusk (muted purple) -->
       <div class="ghost-row">
         <div class="ghost g6">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#81D4FA" shape-rendering="crispEdges">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#81D4FA" shape-rendering="crispEdges" aria-hidden="true">
             <rect x="16" y="0" width="16" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="0" y="12" width="48" height="4"/><rect x="0" y="16" width="12" height="8"/><rect x="20" y="16" width="8" height="8"/><rect x="36" y="16" width="12" height="8"/><rect x="0" y="24" width="48" height="12"/><rect x="4" y="36" width="40" height="4"/><rect x="8" y="40" width="32" height="4"/><rect x="16" y="44" width="16" height="4"/>
           </svg>
         </div>
         <div class="ghost g7">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#7986CB" shape-rendering="crispEdges">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#7986CB" shape-rendering="crispEdges" aria-hidden="true">
             <rect x="8" y="0" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="12" height="4"/><rect x="20" y="12" width="28" height="4"/><rect x="0" y="16" width="8" height="4"/><rect x="20" y="16" width="28" height="4"/><rect x="0" y="20" width="12" height="4"/><rect x="20" y="20" width="28" height="4"/><rect x="0" y="24" width="48" height="16"/><rect x="0" y="40" width="8" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
           </svg>
         </div>
       </div>
-    </div>
+      </div>
 
-    <div class="terminal">
+      <div class="terminal" aria-hidden="true">
       <!-- line-1: 14 chars: cd ~/ghostties -->
       <div class="line line-1">cd ~/ghostties</div>
       <!-- line-2: 43 chars: https://github.com/SeanSmithWorks/ghostties -->
-      <div class="line line-2"><a class="gh-link" href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener">https://github.com/SeanSmithWorks/ghostties</a></div>
+      <div class="line line-2"><a class="gh-link" href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener" tabindex="-1">https://github.com/SeanSmithWorks/ghostties</a></div>
       <!-- line-3: 26 chars: - ghostties % install soon -->
       <div class="line line-3">- ghostties % install soon</div>
       <!-- line-4: 28 chars: + ghostties % v0.1.0-beta.21 -->
@@ -519,27 +523,31 @@
       <!-- line-5: 39 chars: + 02Aug2026 · macOS 13+ · Apple Silicon -->
       <div class="line line-5">+ 02Aug2026 &middot; macOS 13+ &middot; Apple Silicon</div>
       <!-- line-6: 16 chars: + [download now] (clickable) -->
-      <!-- Hardcoded DMG URL — bump the version tag with each release -->
-      <div class="line line-6"><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.21/Ghostties.dmg" download>+ [download now]</a></div>
-    </div>
-  </div>
-
-  <section class="product">
-    <h2><span>Multiple agents.</span><span>One window.</span></h2>
-    <div class="product-window product-window--sessions">
-      <div class="product-card">
-        <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" autoplay muted loop playsinline aria-label="Ghostties sidebar showing four parallel Claude Code agent sessions running in one window"></video>
+      <!-- Hardcoded DMG URL — bump the version tag with each release. Decoration
+           ("+ [" / "]") sits outside the link so the accessible name is just
+           "download now"; both spans render normally, so the visible text and
+           the 16ch typing width are unchanged. -->
+      <div class="line line-6"><span aria-hidden="true">+ [</span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.21/Ghostties.dmg" download tabindex="-1">download now</a><span aria-hidden="true">]</span></div>
       </div>
     </div>
-    <div class="product-caption">four sessions, one window</div>
 
-    <div class="product-window product-window--flow">
-      <div class="product-card">
-        <video src="/assets/product-flow.mp4" poster="/assets/product-flow-poster.jpg" autoplay muted loop playsinline aria-label="gt list showing every task across projects organized into status lanes like needs-you and running"></video>
+    <section class="product">
+      <h2><span>Multiple agents.</span><span>One window.</span></h2>
+      <div class="product-window product-window--sessions">
+        <div class="product-card">
+          <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" autoplay muted loop playsinline aria-label="Ghostties sidebar showing four parallel Claude Code agent sessions running in one window"></video>
+        </div>
       </div>
-    </div>
-    <div class="product-caption">gt list &mdash; every task, one lane</div>
-  </section>
+      <div class="product-caption">four sessions, one window</div>
+
+      <div class="product-window product-window--flow">
+        <div class="product-card">
+          <video src="/assets/product-flow.mp4" poster="/assets/product-flow-poster.jpg" autoplay muted loop playsinline aria-label="gt list showing every task across projects organized into status lanes like needs-you and running"></video>
+        </div>
+      </div>
+      <div class="product-caption">gt list &mdash; every task, one lane</div>
+    </section>
+  </main>
 
   <footer>
     <span class="footer-icons">

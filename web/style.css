@@ -23,15 +23,17 @@
   --surface-inline: rgba(255, 255, 255, 0.07); /* inline <code> */
 
   /* --- Text ramp (white on --bg) ---
-     Roles, densest to faintest. Several fail WCAG AA today; see DESIGN.md §3. */
+     Roles, densest to faintest. Alphas raised 2026-08-03 to clear WCAG AA
+     (4.5:1 body text) against --bg; see DESIGN.md §3 for the audit numbers
+     and web/DESIGN.md history for the pre-fix values. */
   --text-heading: #fff;
   --text-primary: rgba(255, 255, 255, 0.85); /* body default */
   --text-body: rgba(255, 255, 255, 0.65); /* prose, links */
-  --text-note: rgba(255, 255, 255, 0.45); /* callout copy */
-  --text-meta: rgba(255, 255, 255, 0.4); /* file size, release links */
-  --text-label: rgba(255, 255, 255, 0.35); /* eyebrows, back link, dates */
-  --text-label-quiet: rgba(255, 255, 255, 0.3); /* changelog subsections */
-  --text-faint: rgba(255, 255, 255, 0.25); /* footer, timestamps, bullets */
+  --text-note: rgba(255, 255, 255, 0.52); /* callout copy */
+  --text-meta: rgba(255, 255, 255, 0.5); /* file size, release links */
+  --text-label: rgba(255, 255, 255, 0.48); /* eyebrows, back link, dates */
+  --text-label-quiet: rgba(255, 255, 255, 0.46); /* changelog subsections */
+  --text-faint: rgba(255, 255, 255, 0.55); /* footer, timestamps, bullets */
   --text-heading-soft: rgba(255, 255, 255, 0.9); /* licenses section titles */
 
   /* --- Text hover pairs --- */
@@ -58,7 +60,7 @@
   --terminal-fg: #e0e0e0;
   --diff-add-fg: rgba(100, 220, 120, 0.9);
   --diff-add-bg: rgba(80, 210, 100, 0.13);
-  --diff-del-fg: rgba(255, 100, 100, 0.7);
+  --diff-del-fg: rgba(255, 100, 100, 0.95); /* 4.72:1 against its own diff-del-bg composite; see DESIGN.md §3 */
   --diff-del-bg: rgba(255, 80, 80, 0.13);
 
   /* --- Type --- */
@@ -114,6 +116,44 @@ body {
   padding: 64px 24px 96px;
   font-family: var(--font-ui);
   color: var(--text-primary);
+}
+
+/* Keyboard focus. Replaces the browser default with a visible ring that
+   reads against --bg; :focus-visible means it never shows on mouse/touch. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Visually hidden until focused — skip link, and reused for the homepage h1 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  z-index: 100;
+  padding: 8px 16px;
+  background: var(--bg);
+  color: var(--text-primary);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 8px;
 }
 
 /* 3. Typography ============================================================ */
@@ -207,6 +247,16 @@ pre {
 }
 
 /* 4. Layout ================================================================ */
+
+/* Flex item in the body column. Explicit width keeps percentage-sized
+   children (e.g. .scene, .content) resolving against a real containing
+   block instead of main's shrink-to-fit default. */
+main {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 
 .content {
   width: 100%;
