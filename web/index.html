@@ -106,13 +106,7 @@
     /* --- Terminal text --- */
     .terminal {
       font-family: var(--font-mono);
-      /* Fluid between 320px and 768px viewports; clamp()'s max caps it at
-         exactly 1.125rem for every viewport >= 768px, so desktop rendering
-         is byte-for-byte what it was before this was a clamp(). Below 768
-         the type shrinks enough that the 43ch GitHub-URL line (the widest
-         .line) fits inside .terminal's own clamped width without hitting
-         the overflow:hidden clip below, down to 320px. */
-      font-size: clamp(0.625rem, calc(0.625rem + (1.125rem - 0.625rem) * (100vw - 320px) / (768px - 320px)), 1.125rem);
+      font-size: 1.125rem; /* 18px */
       font-weight: 600;
       line-height: 2;
       color: var(--terminal-fg);
@@ -121,13 +115,8 @@
       margin: 0 auto;
       text-align: left;
       /* .line children animate to hard-coded ch widths (e.g. 43ch for the
-         GitHub URL). The fluid font-size above keeps that line inside
-         .terminal's own (correctly clamped) box at every width this site
-         supports; this stays as a hard backstop in case a future edit
-         reintroduces a line wider than the container, so it can only ever
-         clip content that's already wider than the container — at desktop
-         widths every line fits inside 46ch, so nothing here changes what's
-         rendered. */
+         GitHub URL). At narrow widths that line can exceed .terminal's own
+         width; clipping it beats letting it force horizontal page scroll. */
       overflow: hidden;
     }
 
@@ -438,9 +427,7 @@
       .ghost { width: 64px; height: 64px; }
       .ghost-row { gap: 10px; }
       .ghosts { gap: 10px; margin-bottom: 28px; }
-      /* .terminal font-size is fluid (see its rule above) — no fixed
-         override here, or it would clobber the clamp() and reintroduce the
-         clipped GitHub URL this media query used to cause. */
+      .terminal { font-size: 1rem; } /* 16px */
       footer { padding: 12px 16px; font-size: 0.625rem; } /* 10px */
       .product { padding: 16px 20px 72px; }
       .product h2 { font-size: 1.375rem; margin-bottom: 28px; } /* 22px */
@@ -606,7 +593,12 @@
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
       </a>
     </span>
-    <span>&copy; 2026 &nbsp;&middot;&nbsp; <a href="/changelog">Changelog</a> &nbsp;&middot;&nbsp; <a href="/privacy">Privacy</a> &nbsp;&middot;&nbsp; <a href="/support">Support</a></span>
+    <span class="footer-links">
+      <span>&copy; 2026</span>
+      <a href="/changelog">Changelog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+    </span>
   </footer>
 
   <script>

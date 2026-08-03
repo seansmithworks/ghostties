@@ -25,11 +25,18 @@
   <style>
     /* 404 page only. Shared base: /style.css */
 
-    /* min-height:100% never resolves here (html has no definite height), so the
-       column had no free space and justify-content:center did nothing. */
-    body {
-      min-height: 100dvh;
+    /* Centering lives on <main>, not <body>: main is the flex:1 item that
+       claims the column's free space (style.css), and footer's own
+       margin-top:auto has nothing left to consume — so centering main's
+       content also leaves the footer sitting right after it, at the
+       bottom of the viewport on short pages and right below content on
+       tall ones. Centering on body instead would work today but breaks the
+       moment footer stops being the last flex child. */
+    main {
       justify-content: center;
+    }
+
+    body {
       text-align: center;
     }
 
@@ -170,7 +177,13 @@
   </main>
 
   <footer>
-    <span>&copy; 2026 &nbsp;&middot;&nbsp; <a href="/changelog">Changelog</a> &nbsp;&middot;&nbsp; <a href="/privacy">Privacy</a> &nbsp;&middot;&nbsp; <a href="/support">Support</a> &nbsp;&middot;&nbsp; <a href="/licenses">Licenses</a></span>
+    <span class="footer-links">
+      <span>&copy; 2026</span>
+      <a href="/changelog">Changelog</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+      <a href="/licenses">Licenses</a>
+    </span>
   </footer>
 </body>
 </html>

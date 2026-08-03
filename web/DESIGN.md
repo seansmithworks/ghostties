@@ -97,9 +97,17 @@ Everything below passes WCAG AA for body-size text.
 `--diff-del-bg` composite. `--accent` is 4.916:1.
 
 Hover pairs: `--text-body-hover` (0.9), `--text-meta-hover` (0.65),
-`--text-label-hover` (0.6), `--text-faint-hover` (0.5).
+`--text-label-hover` (0.6), `--text-faint-hover` (0.65).
 
 Hairlines: `--line` (0.08), `--line-strong` (0.12), `--line-faint` (0.07).
+
+### Focus
+
+`:focus-visible` in `style.css` is the only focus styling on the site: a
+`2px solid var(--accent)` ring with a 2px offset and `--radius-sm` corners,
+applied globally rather than per-component. `:focus-visible` (not `:focus`)
+means it shows for keyboard navigation and never for a mouse or touch tap.
+`--accent` measures 4.916:1 against `--bg` here too.
 
 ### Accent
 

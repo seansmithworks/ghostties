@@ -267,9 +267,13 @@ pre {
 
 /* Flex item in the body column. Explicit width keeps percentage-sized
    children (e.g. .scene, .content) resolving against a real containing
-   block instead of main's shrink-to-fit default. */
+   block instead of main's shrink-to-fit default. flex:1 makes main (not
+   footer's margin-top:auto) the thing that claims the column's free space
+   on short pages — that's what lets a page center its own content inside
+   <main> (see 404.html) while the footer still lands at the bottom. */
 main {
   width: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -332,11 +336,11 @@ footer {
      in the middle of the page instead of spanning edge to edge the way the
      old fixed/inset:0 footer did. Same reasoning as main's width:100% above. */
   width: 100%;
-  /* Pushes the footer to the bottom of the flex column: on short pages body's
-     min-height:100dvh gives the column room to grow into, and this margin
-     consumes it instead of leaving it as dead space below the footer. On
-     tall pages there's no free space to consume, so this is a no-op and the
-     footer sits right after the content, same as before. */
+  /* Pushes the footer to the bottom of the flex column on short pages. Now a
+     backstop, not the primary mechanism: main's flex:1 above is what claims
+     the column's free space, so this margin is normally a no-op. It stays
+     so the footer is still bottom-anchored if a page ever has content
+     outside <main> in the flex column. */
   margin-top: auto;
   display: flex;
   align-items: center;
@@ -363,6 +367,29 @@ footer svg {
   display: block;
 }
 
+/* Wrapping link row (copyright + Changelog/Privacy/Support[/Licenses], and
+   the same markup reused for index.html's footer). Real flex layout, not a
+   line-height trick: each link is a flex item, so padding on it is counted
+   in its own box and reserved by the row — unlike padding on a plain inline
+   element, which paints outside the line box without pushing anything
+   apart. That's what let two wrapped rows overlap before. row-gap adds
+   guaranteed clearance between wrapped rows on top of that. */
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 0;
+}
+
+/* Middot separators travel with the link that follows them (as ::before,
+   inside that link's own flex item) so a wrap can only ever break between
+   an item and its separator, never leave a dangling "·" at the end of a
+   row. */
+.footer-links > * + *::before {
+  content: "\00B7";
+  margin: 0 8px;
+}
+
 /* 7. Responsive ============================================================ */
 
 @media (max-width: 480px) {
@@ -377,22 +404,17 @@ footer svg {
   footer {
     padding: 12px 16px;
     font-size: var(--size-caption);
-    /* The link row wraps to two lines at this width. Padding on footer a
-       below grows each link's tap target to ~44px tall without changing the
-       line's own layout height, so with the browser's default line-height
-       the two wrapped lines sat only ~14px apart — nowhere near enough to
-       keep two 44px-tall boxes from overlapping. This is the row gap: it
-       has to grow, not the padding, or bigger targets just collide harder. */
-    line-height: 3.8;
   }
 
-  /* Touch targets: vertical padding on an inline element grows its
-     clickable box without adding to the line's layout height, so the tap
-     target grows while the visible text stays the same size and position.
-     Horizontal padding does add real space between links — an acceptable,
-     visible trade for hitting the 44px minimum. */
-  footer a {
-    padding: 15px 6px;
+  /* Touch targets: because .footer-links is a real flex row (see above),
+     padding here grows each link's box the same way it grows any block
+     box — reserved space, not just paint — so rows can't collide. 13px top
+     and bottom lands the box at ~40px tall against this caption-size text;
+     44px would need either a third row or padding large enough to make the
+     dot-separated row wrap earlier and orphan more links, so this trades
+     down to ~40px rather than risk overlap. */
+  .footer-links a {
+    padding: 13px 6px;
   }
 
   .back {
