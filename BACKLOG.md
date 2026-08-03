@@ -73,6 +73,8 @@ were squash-merged; PR state is the only reliable signal.
 
 Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Technical 5/20 — "Critical" band.** Six mechanical bugs found in this same audit (changelog 404, missing custom 404 page, dead X link, robots/sitemap, 1.5 MB orphaned assets, asset cache policy) already shipped in PR #77 and are deliberately absent below.
 
+**Most of this section is addressed in PR #86 (`fix/web-audit-remediation`, open, not yet merged — do not read "fixed" below as "on main").** Verified against `git diff origin/main -- web/`. New findings the remediation work surfaced are logged in a subsection at the end.
+
 ### Structural — SHIPPED to main 2026-08-02 (PR #81, `cff9bc345`)
 - ~~**`web/` has no design system.**~~ **Shipped.** `web/style.css` (tokens +
   reset + base elements + shared components + footer) and `web/DESIGN.md` (the
@@ -101,57 +103,65 @@ Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Te
   gotcha that `var()` is silently ignored for `animation-timing-function`
   inside `@keyframes`. | web | project
 
-### Accessibility — scored 1/4
-- **`prefers-reduced-motion` is ~19% honored.** Only rule is `.bg-ghost { animation: none }` at `index.html:410`. Measured under `reduce`: 26 animations on the page, **17 still running, 8 still infinite** (`float-g0`…`float-g7`), plus the full ~10s entrance and typewriter sequence.
-- **Contrast failures, all computed and all failing WCAG AA:** 2.27:1 `rgba(255,255,255,0.25)` footer text and links on **every page** (worst value on the site); 2.70:1 changelog `<h4>` section labels; 3.03:1 `#666` on flows lane names; 3.21:1 `.back` link; 3.22:1 homepage `.line-3`; 3.78:1 `.download-meta` / `.all-releases`; 4.27–4.43:1 download/changelog body note. Raising the white-alpha floor to `0.55` yields 5.96:1. Note `#C97350` captions **pass** at 4.92:1 — not a finding.
-- No `<h1>` on `index.html`; no `<main>` landmark on any of the 7 pages; no skip link.
-- `changelog.html` skips heading levels H1 → H3, six times.
-- The ghost-scatter interaction is mouse-only — `<div class="ghosts">` with a click listener at `index.html:637`, no `tabindex`, `role`, or key handler. Not reachable in a tab sweep.
-- 8 foreground ghost SVGs have no `aria-hidden`, `role="img"`, or `<title>`.
-- `/flows` has 0 focusable elements and 6 mermaid SVGs with no accessible name.
-- No focus styling authored anywhere (`:focus`/`outline` = zero hits across all 7 pages). The Chromium UA default is intact, so this is a gap, not a removal.
-- All six terminal lines are in the DOM from load, only clipped by `width: 0` — a screen reader announces `- ghostties % install soon` as fact. The joke is visual-only. | web | project
+### Accessibility — was 1/4, mostly fixed in PR #86 (open)
+- ~~`prefers-reduced-motion` is ~19% honored.~~ Not part of this pass — carried below unchanged where still open (see Small/polish and 07-29 items); the fixes below did not touch the entrance/typewriter animation set.
+- ~~**Contrast failures, all computed and all failing WCAG AA:** 2.27:1 footer text and links on every page (worst on the site); 2.70:1 changelog labels; 3.21:1 `.back` link; 3.22:1 homepage `.line-3`; 3.78:1 `.download-meta`/`.all-releases`; 4.27–4.43:1 body note.~~ **Fixed.** All six raised past AA (`--text-faint` 0.25→0.55 alpha = 5.96:1, the rest similarly), per-token contrast numbers now in `web/DESIGN.md` §3. **Not fixed:** 3.03:1 `#666` on flows lane names — lives in `task-flows.html`, which stayed out of the design-system migration pending the `/flows` decision below.
+- ~~No `<h1>` on `index.html`; no `<main>` landmark on any of the 7 pages; no skip link.~~ **Fixed** on all 7 pages: visually-hidden `<h1>` on the homepage, `<main id="main">` wrapping content, a skip link before it. `task-flows.html` still has none — see the `/flows` decision below.
+- ~~`changelog.html` skips heading levels H1 → H3, six times.~~ **Fixed** — release headings are now H2, section labels H3.
+- ~~The ghost-scatter interaction is mouse-only, not reachable in a tab sweep.~~ **Resolved as decorative, not by adding a control.** The scatter `<div class="ghosts">` and its 8 SVGs are now `aria-hidden="true"`; the click handler is unchanged (still mouse-only) but the element is out of the accessibility tree, so there's no longer an unreachable interactive element for AT users to miss.
+- ~~8 foreground ghost SVGs have no `aria-hidden`.~~ **Fixed**, same change as above.
+- `/flows` still has 0 focusable elements and 6 unlabeled mermaid SVGs — untouched, tracked under the `/flows` decision below.
+- ~~No focus styling authored anywhere.~~ **Fixed** — site-wide `:focus-visible` ring (`--accent`, 2px, keyboard-only), plus a `:focus` reveal on the new skip link.
+- ~~All six terminal lines are in the DOM from load... a screen reader announces `- ghostties % install soon` as fact.~~ **Fixed.** `.line-3` (the joke line) is now `aria-hidden="true"`; every line that states something real stays in the tree. `.line-6`'s `+ [` / `]` decoration is also now `aria-hidden`, so the link's accessible name is "download now," not "plus bracket download now bracket" (this was originally filed under Small/polish, fixed by the same change). | web | project
 
-### Responsive — scored 1/4
-- **Horizontal overflow at 10 of 14 tested widths, from two independent causes.** (1) 320–560px: `.terminal` is clamped by `max-width: calc(100vw - 48px)` but its `.line` children are `white-space: nowrap` and animate to hard-coded `ch` widths, so they escape the parent; only visible after ~7s because the typewriter delays run to 9.7s. (2) 700–900px: `.product-window::before { inset: -10%; filter: blur(40px) }` escapes because `.product` has no `overflow: hidden` — arithmetic confirmed at 768/820/900px. **Cause 2 shipped in PR #72 and is live.**
-- `/support` overflows +11px and `/privacy` +22px at 320px (`CODE` elements don't wrap).
-- **All 48 interactive elements are under 44×44 at 375px; zero pass in both dimensions.** Footer icons are 14×14 (index) and 16×16 (subpages). The `/download` primary CTA is 280.8×41 — 3px short.
-- Breakpoint coverage is a single `max-width: 480px` query on six of seven pages; nothing addresses 481–719px on index, which is exactly where the overflows live.
-- All font sizes are `px` literals — no `rem`/`em`, so text scaling breaks layouts. | web | project
+### Responsive — was 1/4, mostly fixed in PR #86 (open)
+- ~~**Horizontal overflow at 10 of 14 tested widths, from two independent causes.**~~ **Both fixed.** (1) 320–560px `.terminal` escape: `.terminal` now clips overflow and its `max-width` calc widened to account for body padding. (2) 700–900px `.product-window::before` glow escape: `.product` now has `overflow: hidden`. Cause 2 had already shipped in PR #72; cause 1 is new in #86.
+- ~~`/support` overflows +11px and `/privacy` +22px at 320px.~~ **Fixed** — `<code>` now has `overflow-wrap: anywhere` site-wide so long unbroken tokens (bundle IDs) wrap instead of forcing the container wider.
+- ~~All 48 interactive elements are under 44×44 at 375px.~~ **Fixed** for the CTA and footer icons — `/download`'s primary button gets `min-height: 44px`, and footer icon anchors get 15px padding to grow their tap box to 44×44 without changing the visible 14px icon.
+- **Breakpoint coverage is still a single `max-width: 480px` query on six of seven pages.** Not addressed by adding breakpoints — the overflow fixes above (clip + wrap + wider `calc()`) are width-independent, so the gap in 481–719px coverage no longer has a live overflow bug behind it. The breakpoint sparseness itself is unchanged.
+- ~~All font sizes are `px` literals.~~ **Fixed** — every sized value in `style.css` and the un-tokenised single-use sizes in each page are now `rem`. | web | project
 
-### Conversion and trust
-- **The homepage CTA is gated behind ~10.1s of animation** with no skip. `.line-6` types at 9.7s (`index.html:196-201`); JS locks the caret at 10100ms. Median bounce is well under that. Fix should compress the schedule (the delays are hand-authored) and add a persistent download affordance outside the animated scene — the hero's choreography stays as-is.
-- **`/download` has no trust signals at the highest-risk moment.** A 147MB DMG from an unknown developer, with no mention of Developer ID signing, notarization, Gatekeeper, or a checksum — **even though the build genuinely is notarized**. It names no author, and it is the only page in the funnel with no product image.
-- The homepage has no `<h1>`, no wordmark, and no prose. The product name appears only inside `cd ~/ghostties` and a GitHub URL.
-- The site never says this is a fork of Ghostty until `/licenses`, the last footer link.
-- No Download link in any subpage footer — the funnel dead-ends on every page it can reach.
-- `og:image` is relative (`index.html:26`) and may not resolve for crawlers. No `og:url`, `twitter:card`, or `twitter:image`. **Zero OG tags on all five subpages** — sharing the download link produces a bare URL, which matters for a product distributed by link-sharing. | web | session
+### Conversion and trust — mostly still open
+- **The homepage CTA is still gated behind ~10.1s of animation with no skip.** Untouched by PR #86.
+- **`/download` still has no trust signals at the highest-risk moment.** Untouched.
+- The homepage still has no `<h1>` a sighted user can see (the new `<h1>` added for a11y is `visually-hidden`), no visible wordmark, no prose.
+- The site still never says this is a fork of Ghostty until `/licenses`. Untouched.
+- Still no Download link in any subpage footer. Untouched.
+- ~~`og:image` is relative and may not resolve for crawlers. No `og:url`, `twitter:card`, or `twitter:image`. Zero OG tags on all five subpages.~~ **Partially fixed, one thing made worse on purpose.** `og:title`/`og:description`/`og:type`/`og:url`/`twitter:card` were added to all 7 pages (was zero on 5 of them). `og:image`/`twitter:image` were **removed**, not added — the only candidate image, `assets/poster.png`, is wrong for the job (dead GitHub URL, "install soon" copy, wrong aspect ratio for a Twitter large-image card; see the new item below). Shipping a broken share image was judged worse than shipping none. | web | session
 
-### Content staleness
-- `changelog.html`'s newest entry is **beta.19**; the site ships **beta.21** — two releases undocumented.
-- `/support` says "Last updated April 26, 2026" and its `<meta description>` advertises a known-issues section the page does not contain.
-- The release version is hand-synced across 4+ locations, two of which are character counts (`steps(N)` and `Nch`). Bumping to a longer version string clips or trails the primary CTA. Wants build-time substitution. | web | quick
+### Content staleness — mostly fixed in PR #86 (open)
+- ~~`changelog.html`'s newest entry is beta.19; the site ships beta.21.~~ **Fixed** — beta.20 and beta.21 entries added.
+- ~~`/support`'s `<meta description>` advertises a known-issues section the page does not contain.~~ **Fixed** — meta description corrected to match the page. **Not fixed:** the visible "Last updated April 26, 2026" text on the page itself is still stale; only the meta tag was touched.
+- **The release version is still hand-synced across 4+ locations**, two of which are character counts (`steps(N)` and `Nch`). Untouched — still wants build-time substitution. | web | quick
 
-### Footer consistency
-- **Four distinct footer variants across seven pages**; `task-flows.html` has none. Same link labeled `aria-label="X / Twitter"` on index vs `"Twitter"` on subpages.
-- Footers are `position: fixed` with no background, so on any page taller than the viewport they render on top of body text. Confirmed on `/support` mobile colliding with a code span. | web | quick
+### Footer consistency — fixed in PR #86 (open)
+- ~~**Four distinct footer variants across seven pages**; `task-flows.html` has none.~~ **Fixed for the six document pages** — one shared `.footer-links` markup/CSS block. The homepage keeps its own icon-row variant deliberately (see `web/DESIGN.md`). `task-flows.html` still has none — tracked under the `/flows` decision below.
+- ~~Same link labeled `aria-label="X / Twitter"` on index vs `"Twitter"` on subpages.~~ **Was already stale before this pass** — there is no Twitter/X link anywhere on the live site (removed earlier, per PR #77's dead-link fix). Nothing to do here.
+- ~~Footers are `position: fixed` with no background, so on any page taller than the viewport they render on top of body text.~~ **Fixed for the six document pages** — footer is now `position: static`, pushed to the bottom of a flex column via `main { flex: 1 }`. The homepage re-pins its footer to `fixed` deliberately (it's a single exactly-viewport-height hero designed around a footer glued to the bottom edge, not a scrolling document). | web | quick
 
-### `/flows` — needs a decision
-- `task-flows.html` is an internal spec, publicly routed at `vercel.json`, linked from nowhere. Its subtitle is "Review before building further" and its bottom third is a grid of red `GAP` cards enumerating unbuilt features. It also loads `mermaid@11` from jsdelivr as a **render-blocking, unpinned, no-SRI** third-party script on the same origin that serves the Sparkle appcast. Decide: pull it from `web/`, or give it the site's design language and rewrite the GAP grid as a roadmap. | web | needs-Sean
+### `/flows` — still needs a decision
+- `task-flows.html` is untouched by PR #86, deliberately — an internal spec, publicly routed, linked from nowhere, unpinned `mermaid@11` from jsdelivr, no design-system migration, no `<main>`/skip-link/`<h1>`/footer. Still needs Sean's call: pull it from `web/`, or bring it into the design system and rewrite the GAP grid as a roadmap. | web | needs-Sean
 
-### Security headers
-- `vercel.json` sets HSTS and `nosniff`. Missing: `Content-Security-Policy` (relevant given the unpinned CDN script above), `X-Frame-Options` / `frame-ancestors`, `Referrer-Policy`, `Permissions-Policy`. | security | quick
+### Security headers — fixed in PR #86 (open)
+- ~~`vercel.json` sets HSTS and `nosniff`. Missing: `Content-Security-Policy`, `X-Frame-Options`/`frame-ancestors`, `Referrer-Policy`, `Permissions-Policy`.~~ **Fixed** — all four added. | security | quick
 
-### Performance
-- No `preload` attribute on any `<video>`; the full file is fetched even when playback never starts. Media dropped 582KB → 262KB in PR #72, so this is now smaller but still eager.
-- Zero lazy loading site-wide — no `loading=`, `decoding=`, or `preload` anywhere. | web | quick
+### Performance — investigated, no change warranted
+- **No `preload` attribute on any `<video>`.** Investigated in PR #86 and deliberately left alone: both product videos are `autoplay`, so eager fetch is the correct behavior — `preload="none"`/`"metadata"` would just delay playback for no benefit. The finding was moot, not fixed.
+- **Zero lazy loading site-wide.** Investigated: there are zero `<img>` tags anywhere on the site (all imagery is inline SVG or CSS), so `loading=`/`decoding=` have nothing to attach to. Also moot. | web | quick
 
 ### Small / polish
-- The favicon randomizes color on every load, so a pinned tab is never recognizable. Deliberate call needed. | web | needs-Sean
-- `<link rel="icon" href="">` on all pages fires a request against the current document URL before the JS runs.
-- `.product-window::before` uses `rgba(201,115,80,0.3)` — terracotta, explicitly dropped as a brand color. It's the only chromatic accent below the hero while the actual 8-ghost palette sits unused.
-- `.line-6` anchor text is `+ [download now]` — the diff marker is inside the link, so screen readers announce "plus bracket download now bracket".
-- The mobile `.ghost` override is still `64px` while the base is now `72px` (shipped in PR #78) — only an 8px step down. Probably wants revisiting or removing. | web | quick
+- The favicon still randomizes color on every load. Untouched — still needs Sean's call. | web | needs-Sean
+- ~~`<link rel="icon" href="">` on all pages fires a request against the current document URL.~~ **Fixed** — the empty `href` attribute was removed entirely on all 7 pages.
+- **`.product-window::before` still uses terracotta** (`rgba(201,115,80,0.3)`), the only chromatic accent below the hero. Untouched. (Separately, terracotta is now also the site's focus-ring color — see the new item below.)
+- ~~`.line-6` anchor text is `+ [download now]` — the diff marker is inside the link.~~ **Fixed**, same change that resolved the terminal-announced-as-fact accessibility item above — the `+ [` / `]` decoration is now `aria-hidden`, so the accessible name is "download now."
+- **The mobile `.ghost` override is still `64px`** against a `72px` base. An agent changed it during this work; the change was deliberately reverted before merge. Still open. | web | quick
+
+### New findings from PR #86 (needs Sean)
+- **The site has no correct social-share image.** `web/assets/poster.png` contains the dead `SeanSmithDesign` GitHub URL and the text "install soon," and is 1080×1080 so a `summary_large_image` Twitter card crops all the text off. `og:image`/`twitter:image` were removed rather than ship it (see Conversion and trust above). Needs a real 1200×630 image. | web | needs-Sean
+- **`web/assets/poster.png` is unreferenced but still contains dead content.** It's not actually used as any `<video>`'s `poster` attribute (both product videos have their own `-poster.jpg` files) — it was only ever linked via the now-removed `og:image` tag. It's a dead asset with a dead GitHub URL sitting in the repo; low priority since nothing serves it, but worth deleting once the real 1200×630 replacement exists. | web | quick
+- **Terracotta `--accent` now doubles as the site's focus-ring color** (4.92:1, passes AA) on a site where terracotta was explicitly dropped as a brand color. Introduced by the new `:focus-visible` rule in PR #86. Deliberate or not, terracotta is now an interaction color, not just a caption accent. | web | needs-Sean
+- **The hero terminal clips the GitHub URL below 768px.** A fluid `clamp()` type scale fixes it but retunes the hero's type across the whole 320–767px range and reaches 10px monospace at 320px — a real design tradeoff, not a defect fix. Built and deliberately reverted before PR #86 merged. | web | needs-Sean
+- **The mobile footer is now ~2.5× its former height** (112px document / 106px homepage at ≤480px) because the 44×44 touch-target fix makes the tap boxes real. Reads fine, but on the homepage — which pins its footer `position: fixed` — it's now a permanently fixed ~13% of an 800px viewport. | web | needs-Sean
 
 ## 2026-08-01 — ghostties.org docs section (parked)
 
