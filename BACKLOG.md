@@ -4,6 +4,18 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-03 — ⚠️ UI fix wave merged to main WITHOUT its runtime gates
+
+**#57, #58, #59 are on `main`. Two of the three were never verified in the running app.** Sean merged on green CI, knowingly, after the risk was flagged. Recording it here so a future release does not assume these work.
+
+CI proves they *compile and pass unit tests*. It cannot prove either fix actually fires — both are behavioural fixes in SwiftUI event handling, which the test suite does not exercise.
+
+- [ ] **#57 (`d03d67a5c`) — Esc reverts inline rename. UNVERIFIED, and it is the risky one.** The entire fix reduces to one untested boolean: if `.onExitCommand` never fires on that field, the merge shipped the original bug unchanged while looking fixed. **Decisive check:** rename a session inline, press Esc, then right-click the row — **"Sync name automatically" must be ABSENT** from the context menu. If it is present, the fix is inert. | macos | needs-runtime-check
+- [ ] **#58 (`e3dd959fe`) — sidebar re-clamp on window shrink. UNVERIFIED.** **Decisive check, and the order matters:** close the sidebar FIRST, shrink the window to ~700pt, THEN open the sidebar — it must come in already narrowed. Testing in any other order passes trivially and proves nothing. | macos | needs-runtime-check
+- [x] **#59 (`cdb74ad4c`) — grey out Next/Previous Project menu items when empty.** No runtime gate; this one was always safe to land on CI alone.
+
+**Run both checks before cutting beta.22.** If either fails, the fix is inert and needs reopening — the merge did not close the underlying bug.
+
 ## 2026-08-02 — media previews in the terminal
 
 Investigation only, no code written. Findings in `reference_terminal-images-work-claude-code-doesnt.md`.
