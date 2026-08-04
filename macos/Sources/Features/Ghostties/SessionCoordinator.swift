@@ -1277,9 +1277,26 @@ final class SessionCoordinator: ObservableObject {
     }
 
     /// Update a session's status locally and in the global store.
+    ///
+    /// Terminal statuses (`.completed`/`.exited`/`.killed`) also clear the
+    /// cached indicator state: once a session stops being polled by the 1Hz
+    /// tick (which only iterates `statuses where status.isAlive`), nothing
+    /// else would ever recompute its indicator, leaving a stale live value
+    /// behind. Clearing the cache entry makes lookups fall back to
+    /// `.inactive` (the existing `?? .inactive` pattern at read sites), which
+    /// matches what `indicatorState(for:)` would compute for these statuses
+    /// anyway if it were called again. `.error` is intentionally left alone —
+    /// `indicatorState(for:)` returns `.error` for that status to keep failed
+    /// sessions visible.
     private func setStatus(_ status: SessionStatus, for id: UUID) {
         statuses[id] = status
         WorkspaceStore.shared.updateSessionStatus(id: id, status: status)
+        switch status {
+        case .completed, .exited, .killed:
+            WorkspaceStore.shared.removeIndicatorState(id: id)
+        case .running, .error:
+            break
+        }
     }
 
     deinit {
