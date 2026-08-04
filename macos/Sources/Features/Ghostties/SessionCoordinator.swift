@@ -1286,28 +1286,34 @@ final class SessionCoordinator: ObservableObject {
 
     /// Update a session's status locally and in the global store.
     ///
-    /// Terminal statuses (`.completed`/`.exited`/`.killed`) also clear the
-    /// cached indicator state, in both places it lives: once a session stops
-    /// being polled by the 1Hz tick (which only iterates
-    /// `statuses where status.isAlive`), nothing else would ever recompute
-    /// its indicator, leaving a stale live value behind.
+    /// Both the store's and the coordinator's own indicator caches must be
+    /// kept coherent here, because once a session stops being alive it drops
+    /// out of the 1Hz tick's `statuses where status.isAlive` loop — nothing
+    /// else will ever recompute or self-heal its cached indicator again:
     ///
     /// - `WorkspaceStore.shared`'s `globalIndicatorStates` is what every view
-    ///   reads. Clearing it makes lookups fall back to `.inactive` (the
-    ///   existing `?? .inactive` pattern at read sites).
+    ///   reads.
     /// - `cachedIndicatorStates` here is the change-comparator the 1Hz tick
-    ///   uses to decide whether to publish (`Perf.publishIfChanged`). If this
-    ///   entry isn't cleared too, a relaunch of the same session id computes
-    ///   the same pre-death state on the first post-relaunch tick, the
-    ///   comparator sees no change, and the publish (and the store write) is
-    ///   suppressed — leaving the store empty for a live, running session.
+    ///   uses to decide whether to publish (`Perf.publishIfChanged`), which
+    ///   swaps in `current` (built only from alive sessions) wholesale on
+    ///   every publish. A dead session's key survives in that comparator
+    ///   only until the *next* tick that actually runs a publish — but if
+    ///   this was the last alive session, `hasRunning` goes false and the
+    ///   tick body (including that swap) never runs again, freezing the
+    ///   stale entry indefinitely.
     ///
-    /// `.error` is intentionally left alone for now: `indicatorState(for:)`
-    /// is only ever called for sessions where `status.isAlive`, so once a
-    /// session reaches `.error` (not alive) its cached/stored indicator
-    /// simply keeps whatever value it last held before failing — typically
-    /// its last live state, not a distinct error indicator. Changing that is
-    /// an open design decision, not addressed here.
+    /// Terminal, non-error statuses (`.completed`/`.exited`/`.killed`) clear
+    /// both caches, so lookups fall back to `.inactive` (the existing
+    /// `?? .inactive` pattern at read sites) and the session drops to
+    /// ARCHIVE. `.error` writes `.error` into both caches instead of
+    /// clearing them, so the failed session gets a distinct error indicator
+    /// and stays visible in ACTIVE until relaunched or Removed. Writing
+    /// `cachedIndicatorStates` (not just the store) here matters for the
+    /// same reason the terminal-status clear does: without it, relaunching
+    /// the same session id could recompute a value that coincidentally
+    /// matches the stale pre-error cache entry, suppressing the publish and
+    /// leaving the store stuck on `.error` for a session that is actually
+    /// running again.
     private func setStatus(_ status: SessionStatus, for id: UUID) {
         statuses[id] = status
         WorkspaceStore.shared.updateSessionStatus(id: id, status: status)
@@ -1315,7 +1321,10 @@ final class SessionCoordinator: ObservableObject {
         case .completed, .exited, .killed:
             cachedIndicatorStates?.removeValue(forKey: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
-        case .running, .error:
+        case .error:
+            cachedIndicatorStates?[id] = .error
+            WorkspaceStore.shared.updateIndicatorState(id: id, state: .error)
+        case .running:
             break
         }
     }

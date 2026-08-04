@@ -69,6 +69,36 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
         )
     }
 
+    /// `.error` must write a distinct `.error` indicator (not silently retain
+    /// whatever live value the session held before failing) and the session
+    /// must stay in the ACTIVE zone so failed sessions keep nagging until the
+    /// user relaunches or Removes them.
+    func testErrorSessionIndicatorStateIsErrorAndStaysActive() {
+        let id = UUID()
+        let coordinator = SessionCoordinator()
+        addTeardownBlock {
+            WorkspaceStore.shared.removeSessionStatus(id: id)
+            WorkspaceStore.shared.removeIndicatorState(id: id)
+        }
+
+        // Seed a live-looking indicator, mirroring what the 1Hz tick would
+        // have written while the session was actually running.
+        WorkspaceStore.shared.updateIndicatorState(id: id, state: .processing)
+
+        coordinator.setStatusForTesting(.error(exitCode: 1), for: id)
+
+        let indicatorState = WorkspaceStore.shared.globalIndicatorStates[id] ?? .inactive
+        XCTAssertEqual(
+            indicatorState,
+            .error,
+            "an errored session's indicator must become .error, not keep its last live value"
+        )
+        XCTAssertTrue(
+            RecentsListView.belongsInActive(indicatorState: indicatorState),
+            "an errored session must stay in the ACTIVE zone until relaunched or removed"
+        )
+    }
+
     /// Regression test for the relaunch bug: closing a session must also
     /// clear `SessionCoordinator`'s own `cachedIndicatorStates` entry, not
     /// just the store's. If it doesn't, relaunching the same session id and
