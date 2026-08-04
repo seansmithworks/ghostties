@@ -2636,3 +2636,46 @@ Then link-checked every relative link and image target across all 11 fork-owned 
 
 - `1c2ff4e82` (#80) — docs: record the information architecture and how it was arrived at
 - `a1941d3ac` (#84) — fix(docs): restore the README hero image
+
+---
+
+## 2026-08-03/04 — web audit remediation wave
+
+**Focus:** Close out the ghostties.org design/technical audit (accessibility, responsive, security headers, social card). Verified live in production after both merges.
+
+### Shipped
+
+- **PR #86 merged** (`a34b59b80`) — accessibility (landmarks, skip links, `<h1>`, heading levels, `:focus-visible`, six contrast tokens to WCAG AA, worst 2.27:1 → 5.96:1), responsive (both horizontal-overflow causes, `<code>` wrapping, 44×44 tap targets, `px`→`rem`), security headers (CSP, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`), footers consolidated 4 variants → 2 and unpinned from `position: fixed`, changelog beta.20/21 added.
+- **PR #88 merged** (`b9dae122c`) — restored the social share card. New `web/assets/social-card.png` (2560×1280, from Sean's Paper artboard), `og:image`/`twitter:image` restored absolute on all 6 pages, `twitter:card` back to `summary_large_image`, dead `web/assets/poster.png` deleted.
+- **Verified live:** CSP/security headers serving on production, appcast still fresh at beta.21 (Sparkle unaffected), `/flows` still loads mermaid under the new CSP, all 7 routes return correct codes, social card 200, old poster 404.
+
+### Method
+
+Three implementer passes sequentially on one branch, not a parallel fan-out — every finding touched `style.css` and the same seven pages. Then three adversarial review rounds by a single reviewer agent resumed across rounds so it kept its baseline-vs-branch Playwright harness. Then a screenshot pass.
+
+### The load-bearing lesson
+
+Every review round found regressions introduced by the *previous* round's fixes — three for three, each an accessibility change causing an accessibility defect:
+
+1. `aria-hidden` on `.terminal` made the hero CTA keyboard-unreachable and stripped version/requirements/repo-URL from the a11y tree.
+2. The footer fix killed `/404` centring, regressing PR #82 from the day before, and made tap targets overlap so tapping "Changelog" navigated to Licenses.
+3. The footer rebuild's `::before` separators folded a middot into every footer link's accessible name; fixed with the CSS alt-text syntax `content: "\00B7" / ""`.
+
+Cross-reference memory `feedback_ui-fixes-regress-each-other`.
+
+**Measurement is not eyes-on.** After three measured rounds passed it, a screenshot pass found the mobile footer orphaning `· Licenses` on its own row with a leading separator — graded cosmetic by geometry, read as broken on sight. Fixed structurally by dropping separators at ≤480px rather than tuning.
+
+### Discovered / learned
+
+- `gh pr merge --delete-branch` silently did not delete the branches on either PR — verify with `git ls-remote` after merging, delete explicitly with `git push origin --delete`.
+- The `!` command prefix silently no-ops when Sean is on his phone — cost two rounds before it was diagnosed.
+
+### Carried to BACKLOG (2026-08-04)
+
+- New finding: `.terminal { max-width: calc(100vw - 112px) }` over-subtracts by 40px at ≤480px.
+- Reconciled resolved items from #88 (social card, poster deletion, og:image restoration, Paper artboard URL fix).
+
+### Commits this session (both via merged PRs)
+
+- `a34b59b80` (#86) — fix(web): ghostties.org accessibility, responsive, and hardening audit remediation
+- `b9dae122c` (#88) — feat(web): restore social share card
