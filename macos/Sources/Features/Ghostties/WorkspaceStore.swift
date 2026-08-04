@@ -817,7 +817,14 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Remove a session's indicator state entry (called on cleanup).
+    ///
+    /// Writing to the observed `globalIndicatorStates` dict unconditionally
+    /// fires `didSet` even for `removeValue(forKey:)` on a key that isn't
+    /// present, which busts `sessionGroupsCache` and the sectioned-projects
+    /// cache store-wide. Guard first so callers that remove an
+    /// already-absent (or already-removed) entry don't pay that cost.
     func removeIndicatorState(id: UUID) {
+        guard globalIndicatorStates[id] != nil else { return }
         globalIndicatorStates.removeValue(forKey: id)
     }
 

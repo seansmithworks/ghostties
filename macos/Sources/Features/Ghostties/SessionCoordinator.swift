@@ -1152,49 +1152,57 @@ final class SessionCoordinator: ObservableObject {
     private func startActivityTimer() {
         activityTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self else { return }
-                // Only fire objectWillChange if there are running sessions that could transition.
-                let hasRunning = self.statuses.values.contains { $0.isAlive }
-                if hasRunning {
-                    let runningCount = self.statuses.values.lazy.filter { $0.isAlive }.count
-                    let tickState = Perf.signposter.beginInterval("sessionCoordinator.tick", "\(runningCount) running sessions")
-
-                    // Compute current indicator states for all running sessions.
-                    var current: [UUID: SessionIndicatorState] = [:]
-                    for (id, status) in self.statuses where status.isAlive {
-                        current[id] = self.indicatorState(for: id)
-                    }
-
-                    // SEA-214: Only send objectWillChange when state actually changed,
-                    // suppressing the 7-view full-sidebar re-render that fired every second.
-                    //
-                    // Store writes (WorkspaceStore) are moved inside the same changed-branch
-                    // so the @Published dict assignments and updateProjectActivity only run
-                    // when the aggregate state actually shifted. The guards in
-                    // WorkspaceStore.updateIndicatorState / updateSessionStatus are a
-                    // belt-and-suspenders second layer but this avoids even the dict lookup
-                    // churn on no-change ticks.
-                    Perf.publishIfChanged(
-                        "sessionCoordinator.tick",
-                        current: current,
-                        cached: &self.cachedIndicatorStates
-                    ) {
-                        self.objectWillChange.send()
-
-                        // Push each running session's indicator state to the global store
-                        // so the menu bar icon can reflect the aggregate status.
-                        for (id, state) in current {
-                            WorkspaceStore.shared.updateIndicatorState(id: id, state: state)
-                        }
-
-                        // Refresh the per-project grace-period tracker so projects
-                        // whose sessions emit output at <1Hz still keep their
-                        // `.activeNow` slot for the full grace window.
-                        WorkspaceStore.shared.updateProjectActivityFromIndicatorStates()
-                    }
-                    Perf.signposter.endInterval("sessionCoordinator.tick", tickState)
-                }
+                self?.performActivityTick()
             }
+        }
+    }
+
+    /// The 1Hz tick body: recompute indicator states for all live sessions
+    /// and publish to the global store if anything changed. Extracted from
+    /// `startActivityTimer`'s timer closure so it can be invoked directly
+    /// (by the real timer, or synchronously by tests) without waiting on a
+    /// `Timer` fire.
+    private func performActivityTick() {
+        // Only fire objectWillChange if there are running sessions that could transition.
+        let hasRunning = self.statuses.values.contains { $0.isAlive }
+        if hasRunning {
+            let runningCount = self.statuses.values.lazy.filter { $0.isAlive }.count
+            let tickState = Perf.signposter.beginInterval("sessionCoordinator.tick", "\(runningCount) running sessions")
+
+            // Compute current indicator states for all running sessions.
+            var current: [UUID: SessionIndicatorState] = [:]
+            for (id, status) in self.statuses where status.isAlive {
+                current[id] = self.indicatorState(for: id)
+            }
+
+            // SEA-214: Only send objectWillChange when state actually changed,
+            // suppressing the 7-view full-sidebar re-render that fired every second.
+            //
+            // Store writes (WorkspaceStore) are moved inside the same changed-branch
+            // so the @Published dict assignments and updateProjectActivity only run
+            // when the aggregate state actually shifted. The guards in
+            // WorkspaceStore.updateIndicatorState / updateSessionStatus are a
+            // belt-and-suspenders second layer but this avoids even the dict lookup
+            // churn on no-change ticks.
+            Perf.publishIfChanged(
+                "sessionCoordinator.tick",
+                current: current,
+                cached: &self.cachedIndicatorStates
+            ) {
+                self.objectWillChange.send()
+
+                // Push each running session's indicator state to the global store
+                // so the menu bar icon can reflect the aggregate status.
+                for (id, state) in current {
+                    WorkspaceStore.shared.updateIndicatorState(id: id, state: state)
+                }
+
+                // Refresh the per-project grace-period tracker so projects
+                // whose sessions emit output at <1Hz still keep their
+                // `.activeNow` slot for the full grace window.
+                WorkspaceStore.shared.updateProjectActivityFromIndicatorStates()
+            }
+            Perf.signposter.endInterval("sessionCoordinator.tick", tickState)
         }
     }
 
@@ -1277,9 +1285,48 @@ final class SessionCoordinator: ObservableObject {
     }
 
     /// Update a session's status locally and in the global store.
+    ///
+    /// Both the store's and the coordinator's own indicator caches must be
+    /// kept coherent here, because once a session stops being alive it drops
+    /// out of the 1Hz tick's `statuses where status.isAlive` loop — nothing
+    /// else will ever recompute or self-heal its cached indicator again:
+    ///
+    /// - `WorkspaceStore.shared`'s `globalIndicatorStates` is what every view
+    ///   reads.
+    /// - `cachedIndicatorStates` here is the change-comparator the 1Hz tick
+    ///   uses to decide whether to publish (`Perf.publishIfChanged`), which
+    ///   swaps in `current` (built only from alive sessions) wholesale on
+    ///   every publish. A dead session's key survives in that comparator
+    ///   only until the *next* tick that actually runs a publish — but if
+    ///   this was the last alive session, `hasRunning` goes false and the
+    ///   tick body (including that swap) never runs again, freezing the
+    ///   stale entry indefinitely.
+    ///
+    /// Terminal, non-error statuses (`.completed`/`.exited`/`.killed`) clear
+    /// both caches, so lookups fall back to `.inactive` (the existing
+    /// `?? .inactive` pattern at read sites) and the session drops to
+    /// ARCHIVE. `.error` writes `.error` into both caches instead of
+    /// clearing them, so the failed session gets a distinct error indicator
+    /// and stays visible in ACTIVE until relaunched or Removed. Writing
+    /// `cachedIndicatorStates` (not just the store) here matters for the
+    /// same reason the terminal-status clear does: without it, relaunching
+    /// the same session id could recompute a value that coincidentally
+    /// matches the stale pre-error cache entry, suppressing the publish and
+    /// leaving the store stuck on `.error` for a session that is actually
+    /// running again.
     private func setStatus(_ status: SessionStatus, for id: UUID) {
         statuses[id] = status
         WorkspaceStore.shared.updateSessionStatus(id: id, status: status)
+        switch status {
+        case .completed, .exited, .killed:
+            cachedIndicatorStates?.removeValue(forKey: id)
+            WorkspaceStore.shared.removeIndicatorState(id: id)
+        case .error:
+            cachedIndicatorStates?[id] = .error
+            WorkspaceStore.shared.updateIndicatorState(id: id, state: .error)
+        case .running:
+            break
+        }
     }
 
     deinit {
@@ -1326,5 +1373,28 @@ final class SessionCoordinator: ObservableObject {
     /// can assert the dictionary shrinks after teardown without reaching
     /// into a `private` property directly.
     var nameSyncSubscriptionCountForTesting: Int { nameSyncSubscriptions.count }
+
+    /// Test-only seam for driving `setStatus(_:for:)` directly. Exercises the
+    /// same mutation `closeSession`/`handleSurfaceClose` use, including
+    /// `.exited`/`.completed` terminal statuses that `handleSurfaceClose`
+    /// reaches but which have no seam reachable without a live GhosttyKit
+    /// surface. Never used in production.
+    func setStatusForTesting(_ status: SessionStatus, for id: UUID) {
+        setStatus(status, for: id)
+    }
+
+    /// Test-only: seed a "live" session (running + producing recent output)
+    /// so `indicatorState(for:)` resolves `.processing`, without needing a
+    /// real GhosttyKit surface. Never used in production.
+    func seedRunningSessionForTesting(id: UUID) {
+        statuses[id] = .running
+        lastOutputTimestamps[id] = .now
+    }
+
+    /// Test-only: run one 1Hz activity tick synchronously, without waiting
+    /// for the real `Timer` to fire. Never used in production.
+    func runActivityTickForTesting() {
+        performActivityTick()
+    }
 #endif
 }
