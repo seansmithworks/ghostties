@@ -99,6 +99,54 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
         )
     }
 
+    /// Regression test for the `.error` mirror of the relaunch bug: an
+    /// errored session must also clear its way out of
+    /// `SessionCoordinator`'s own `cachedIndicatorStates`, not just get
+    /// written into the store. If `cachedIndicatorStates?[id] = .error` is
+    /// missing, the cache stays on the session's pre-error value
+    /// (`.processing`, seeded here by the first tick). On relaunch, the next
+    /// tick recomputes that same `.processing` value, `Perf.publishIfChanged`
+    /// sees no change against the stale cache, and the publish (and store
+    /// write) is suppressed — leaving the store stuck showing `.error` for a
+    /// session that is actually running again.
+    ///
+    /// This test fails without the `cachedIndicatorStates?[id] = .error`
+    /// line in `setStatus(_:for:)` and passes with it.
+    func testRelaunchedSessionPublishesIndicatorAfterError() {
+        let id = UUID()
+        let coordinator = SessionCoordinator()
+        addTeardownBlock {
+            WorkspaceStore.shared.removeSessionStatus(id: id)
+            WorkspaceStore.shared.removeIndicatorState(id: id)
+        }
+
+        // 1. Session starts running and producing output; the tick populates
+        //    both the store and the coordinator's own comparator cache with
+        //    .processing.
+        coordinator.seedRunningSessionForTesting(id: id)
+        coordinator.runActivityTickForTesting()
+        XCTAssertEqual(WorkspaceStore.shared.globalIndicatorStates[id], .processing)
+
+        // 2. The session exits non-zero.
+        coordinator.setStatusForTesting(.error(exitCode: 1), for: id)
+        XCTAssertEqual(
+            WorkspaceStore.shared.globalIndicatorStates[id],
+            .error,
+            "an errored session's indicator must become .error"
+        )
+
+        // 3. The same session id is relaunched and starts producing output
+        //    again before the next tick.
+        coordinator.seedRunningSessionForTesting(id: id)
+        coordinator.runActivityTickForTesting()
+
+        XCTAssertEqual(
+            WorkspaceStore.shared.globalIndicatorStates[id],
+            .processing,
+            "a relaunched session must publish its live indicator again, not stay stuck on .error"
+        )
+    }
+
     /// Regression test for the relaunch bug: closing a session must also
     /// clear `SessionCoordinator`'s own `cachedIndicatorStates` entry, not
     /// just the store's. If it doesn't, relaunching the same session id and
