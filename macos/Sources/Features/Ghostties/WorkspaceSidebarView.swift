@@ -247,17 +247,42 @@ struct WorkspaceSidebarView: View {
         expandedProjectIds.insert(targetId)
     }
 
-    /// Cmd+Shift+]/[ in Projects/Sessions tabs. Cycles focus through every
-    /// session with a live surface (`store.sessionsInVisualOrder(coordinator:)`
-    /// — not just `.running` ones, so cycling matches the browser-tab mental
-    /// model and what's actually visible in the sidebar), wrapping at both
-    /// ends. No-ops (no beep, no crash) when there are zero live sessions; is
-    /// a no-op when there is exactly one.
+    /// Cmd+Shift+]/[ in Projects/Sessions tabs. Cycles focus through the
+    /// sessions visible in whichever tab is active, wrapping at both ends.
+    /// No-ops (no beep, no crash) when there are zero live sessions; is a
+    /// no-op when there is exactly one.
+    ///
+    /// - Projects tab: every session with a live surface
+    ///   (`store.sessionsInVisualOrder(coordinator:)` — not just `.running`
+    ///   ones, so cycling matches the browser-tab mental model and what's
+    ///   actually visible in the sidebar).
+    /// - Sessions tab: the ACTIVE zone only, in exactly the order
+    ///   `RecentsListView` renders it (`RecentsListView.activeSessions`) —
+    ///   the same static both use, so render order and cycle order can never
+    ///   drift apart. Archive rows are skipped.
+    ///
+    /// `expandedProjectIds`/`selectedProjectId` are Projects-tab-only
+    /// concepts (disclosure expansion + the Projects list's own selection
+    /// cursor). Writing them from the Sessions tab is not just inert — it's
+    /// actively wrong: `selectedProjectId`'s `onChange` calls
+    /// `coordinator.focusLastSession(forProject:)`, which would immediately
+    /// re-focus that project's *last-active* session and stomp the session
+    /// we just cycled to. Scoped to the Projects-tab branch only.
     private func selectAdjacentLiveSession(offset: Int) {
-        let liveSessions = store.sessionsInVisualOrder(coordinator: coordinator)
+        let liveSessions: [AgentSession]
+        if sidebarTab == .sessions {
+            liveSessions = RecentsListView.activeSessions(
+                from: store.sessions,
+                indicatorStates: store.globalIndicatorStates
+            )
+        } else {
+            liveSessions = store.sessionsInVisualOrder(coordinator: coordinator)
+        }
         guard let target = coordinator.focusAdjacentLiveSession(offset: offset, in: liveSessions) else { return }
-        expandedProjectIds.insert(target.projectId)
-        selectedProjectId = target.projectId
+        if sidebarTab == .projects {
+            expandedProjectIds.insert(target.projectId)
+            selectedProjectId = target.projectId
+        }
     }
 }
 

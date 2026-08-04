@@ -251,6 +251,56 @@ final class RecentsListViewTests: XCTestCase {
         ), "Active must not force-expand for the selected session — only Archive gets that override")
     }
 
+    // MARK: - Sessions-tab Cmd+Shift+[/] cycle order (single shared source)
+
+    /// `WorkspaceSidebarView.selectAdjacentLiveSession(offset:)` feeds the
+    /// Sessions tab's Cmd+Shift+[/] cycle from
+    /// `RecentsListView.activeSessions(from:indicatorStates:)` — the exact
+    /// same static the tab renders the ACTIVE zone from — so cycle order can
+    /// never drift from render order. This exercises that composition end to
+    /// end: build the ACTIVE zone the same way the tab does, then cycle
+    /// through it via `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`,
+    /// asserting both forward and backward wraparound. Archive rows (no live
+    /// indicator state) must be skipped entirely.
+    @MainActor
+    func testSessionsTabCycleOrderMatchesActiveZoneRenderOrderWithWraparound() {
+        let project = Project(name: "p", rootPath: "~/p")
+        let a = AgentSession(name: "a", templateId: UUID(), projectId: project.id)
+        let b = AgentSession(name: "b", templateId: UUID(), projectId: project.id)
+        let c = AgentSession(name: "c", templateId: UUID(), projectId: project.id)
+        let archived = AgentSession(name: "archived", templateId: UUID(), projectId: project.id)
+
+        let indicatorStates: [UUID: SessionIndicatorState] = [
+            a.id: .processing,
+            b.id: .waiting,
+            c.id: .idle,
+            // archived.id intentionally absent -> resolves .inactive -> Archive, not Active.
+        ]
+
+        // Same call the Sessions tab renders from — the single shared source.
+        let activeZone = RecentsListView.activeSessions(
+            from: [a, b, c, archived],
+            indicatorStates: indicatorStates
+        )
+        XCTAssertEqual(activeZone.map(\.name), ["a", "b", "c"], "must match the ACTIVE zone RecentsListView renders")
+
+        let coordinator = SessionCoordinator()
+        for session in activeZone {
+            coordinator.seedEmptySessionTreeForTesting(id: session.id)
+        }
+
+        // No active session yet -> forward cycle starts at the first entry.
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: 1, in: activeZone)?.name, "a")
+        // Forward from a -> b -> c -> wraps back to a.
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: 1, in: activeZone)?.name, "b")
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: 1, in: activeZone)?.name, "c")
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: 1, in: activeZone)?.name, "a", "must wrap forward past the end")
+
+        // Backward from a -> wraps to c.
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: -1, in: activeZone)?.name, "c", "must wrap backward past the start")
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: -1, in: activeZone)?.name, "b")
+    }
+
     // MARK: - Relative Time Labels
 
     func testRelativeLabelJustNow() {
