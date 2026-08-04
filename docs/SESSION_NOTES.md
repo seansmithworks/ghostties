@@ -2679,3 +2679,81 @@ Cross-reference memory `feedback_ui-fixes-regress-each-other`.
 
 - `a34b59b80` (#86) — fix(web): ghostties.org accessibility, responsive, and hardening audit remediation
 - `b9dae122c` (#88) — feat(web): restore social share card
+
+---
+
+## 2026-08-04 — App lane: Sessions-tab cycling + indicator lifecycle
+
+Orchestrator thread, lane = **app + release** (set at boot). Ran concurrently with a website
+thread; both wrote `ORCHESTRATOR.md` and `main` in the same window.
+
+### Shipped
+
+- `f3d274a14` (#90) — fix(sidebar): Cmd+Shift+[/] cycles the Sessions tab's own order
+- `981fab47e` (#92) — fix(sessions): clear cached indicator state when a session's status goes terminal
+
+### #90 — cycling walked the wrong list
+
+Reported live on beta.21: on the Sessions tab, `Cmd+Shift+[/]` didn't move to the visually
+adjacent session. `WorkspaceSidebarView.selectAdjacentLiveSession` always cycled
+`store.sessionsInVisualOrder` (project-grouped, bucketed, alphabetical-within-bucket) regardless
+of which tab was active, while the Sessions tab renders a flat ACTIVE/ARCHIVE list whose
+`sorted()` is an identity function. Two source arrays, two orders. `sidebarTab` was available in
+the same view and never read. PR #44 had built this against the Projects tab; the Sessions tab
+predates it (May 9) and was never wired.
+
+Fix branches on `sidebarTab` and reuses `RecentsListView.activeSessions(...)` — the same static
+the view renders from — so the two orders come from one function.
+
+**Review caught a regression the fix introduced:** the Sessions branch filtered on
+`indicatorState != .inactive`, which guarantees nothing about liveness, while the Projects branch
+filtered on `hasLiveSurface`. Cycling onto a dead-but-ACTIVE session called `focusSession`, which
+bailed on a missing tree — but `focusAdjacentLiveSession` returned the target non-nil anyway, so
+forward cycling dead-ended permanently while backward kept working. Fixed with a
+`.filter { coordinator.hasLiveSurface(id: $0.id) }` (order-preserving, so cycle order stays a
+subset of render order).
+
+**Verified by Sean by hand**, against a build proven fresh: PID launch time 23:23:29 vs binary
+mtime 23:23:10.
+
+### #92 — stopped sessions never left ACTIVE
+
+Confirmed with process evidence, not just a screenshot: `Ghostties Dev` had exactly one live child
+surface while the sidebar rendered ACTIVE 3.
+
+`setStatus(_:for:)` — the single mutation point `handleSurfaceClose` and `closeSession` both funnel
+through — now clears the cached indicator state on `.completed`/`.exited`/`.killed`.
+
+**Review caught the mirror-image regression:** there are TWO caches, and the first cut cleared one.
+`SessionCoordinator.cachedIndicatorStates` is the `Perf.publishIfChanged` comparator, and the whole
+tick body including `cached = current` sits inside `if hasRunning` — so once the last session dies,
+the comparator freezes. Session ids are reused on relaunch, so a relaunched session could compute a
+value matching the frozen one, suppress the publish, and sit invisible in ARCHIVE for its entire
+run. Full mechanism in memory: `reference_indicator-state-two-cache-coupling.md`.
+
+`.error` was then changed to *write* a real error dot and stay in ACTIVE (Sean's call). Surfaced
+before locking it: `.error` is the max of `SessionIndicatorState`'s `Comparable` order and
+`MenuBarIconRenderer.aggregateState` takes `.max()`, so one failed session holds the **menu bar dot
+red** until relaunch or Remove. Confirmed wanted.
+
+### Process learnings
+
+- **Both PRs' first cut introduced a new bug that review caught.** `feedback_ui-fixes-regress-each-other`
+  was logged from web work; it now holds on Swift too. Neither regression was visible in the diff.
+- **The reviewer diffed the unauthorized `performActivityTick()` extraction mechanically** rather
+  than by eye — 36 lines vs 36, identical. That tick has a paid-for perf history.
+- **Two agent claims were false and caught by re-verification:** a "674 tests" figure that was a raw
+  log-line count (real: 629 unique, constant −49 offset — the unique count IS reliable), and a
+  confident contradiction of the diagnosis refuted by reading actual call order.
+- **A subagent stopped mid fail/pass proof left the production fix commented out** with 48 lines of
+  new test looking complete. Caught only because `/wrap` Step 0 runs before commits. New memory:
+  `feedback_subagent-verification-leaves-disabled-code.md`.
+- **Two cross-session collisions:** #57/#58/#59 were merged by another thread mid-session (my boot
+  snapshot went stale), and `ORCHESTRATOR.md` was rewritten by the website thread while I held it.
+
+### Open (all in BACKLOG.md under 2026-08-04)
+
+#56 is the only remaining app PR. #92 was never eyes-on'd — decisive check is stopping a session
+*while the app stays open*, since a cold launch shows correct zones even on unfixed code. The
+two-vs-three-zone Sessions-tab design question is deliberately deferred until ACTIVE is honest.
+**beta.22 not tagged.**

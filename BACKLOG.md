@@ -4,6 +4,38 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-04 — Sessions-tab cycling + indicator lifecycle (PRs #90, #92 shipped)
+
+Both merged to `main` and verified present in the merged code, not just merge-succeeded.
+
+- [ ] **#92 was never eyes-on'd.** #90 Sean tested by hand (Sessions-tab cycling, verified against
+  a build whose PID launch time postdated the binary). #92 passed code review + 629-test suite
+  only. **Decisive check before beta.22:** with the app running, start two sessions, stop one —
+  it must leave ACTIVE for ARCHIVE *without* relaunching the app. A cold launch shows correct
+  zones even on unfixed code (no cache yet → `.exited` → `.inactive`), so launching and looking
+  proves nothing. | macos | needs-runtime-check
+- [ ] **Sessions tab: two zones or three?** Open design question, deliberately deferred until
+  ACTIVE is honest. Sean's instinct was a third "Idle/Inactive" zone for stopped-but-warm
+  sessions; the counter is that ARCHIVE accumulates across launches (30-day retention, top-15
+  per project) so a just-stopped session lands in a 20–80 row pile. **Strawman if revived:** port
+  the Projects tab's existing three-bucket model — `computeSessionGroups` (`WorkspaceStore.swift`)
+  already does active / recent (`lastActiveAt` within 24h) / idle, and `SessionBucket` exists. Re-look
+  now that #92 makes ACTIVE truthful; if `ACTIVE 1 / ARCHIVE 23` reads fine, kill this. | craft | session
+- [ ] **`focusAdjacentLiveSession` returns a target it never focused** (`SessionCoordinator.swift`).
+  Returns `target` unconditionally even when `focusSession` bailed on a missing tree — the silent
+  lie that made the #90 cycling regression invisible at the call site. Durable fix, but touches
+  three call sites (`WorkspaceSidebarView`, `TaskSidebarView` ×2). Own PR. | macos | session
+- [ ] **ARCHIVE order is load order, not recency.** `RecentsListView.sorted(sessions:)` is an
+  identity function. Not a bug today, but it's why a just-stopped session is hard to find, and it
+  gates the zone decision above. **Decide or kill.** | craft | quick
+- [ ] **`clearRuntime` clears only the store cache, not `cachedIndicatorStates`** — same asymmetry
+  #92 fixed in `setStatus`. Unreachable (a removed session's UUID never returns), one line for
+  symmetry. | macos | quick
+- [ ] **Two contradictory test-isolation conventions** once #56 lands. #56 adds a `#if DEBUG`
+  injected-store seam so tests avoid `WorkspaceStore.shared`; #92's tests use `.shared` directly
+  (correctly declined — threading a store through `setStatus` would undermine the "single mutation
+  point" property the PR exists to make auditable). Pick one convention. | quality | quick
+
 ## 2026-08-03 — ⚠️ UI fix wave merged to main WITHOUT its runtime gates
 
 **#57, #58, #59 are on `main`. Two of the three were never verified in the running app.** Sean merged on green CI, knowingly, after the risk was flagged. Recording it here so a future release does not assume these work.
@@ -47,7 +79,11 @@ Two follow-ups, neither blocking:
 
 - [ ] **Idea-log prune** — 10 of 31 captures in `tease-capture.md` are older than 30 days and unacted-on, which is that file's own documented prune threshold (1 from May, 9 from June). Surfaced at `/wrap` 2026-08-02, nothing deleted. Spans projects, so it is not this thread's objective. | ops | needs-Sean
 
-## 2026-08-03 — stale live indicator in Sessions tab ACTIVE zone
+## 2026-08-03 — stale live indicator in Sessions tab ACTIVE zone ✅ FIXED 2026-08-04
+
+**Closed by PR #92 (`981fab47e`).** `setStatus(_:for:)` now clears both indicator caches on
+`.completed`/`.exited`/`.killed`, and writes `.error` to both so failed sessions stay visible.
+Original entry preserved below for the diagnosis.
 
 Found during PR #90 review (`fix/sessions-tab-cycle-order`). Exited sessions render
 in the Sessions tab's ACTIVE zone with a stale live indicator until relaunched or
