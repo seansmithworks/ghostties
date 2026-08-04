@@ -251,6 +251,108 @@ final class RecentsListViewTests: XCTestCase {
         ), "Active must not force-expand for the selected session — only Archive gets that override")
     }
 
+    // MARK: - Sessions-tab Cmd+Shift+[/] cycle order (single shared source)
+
+    /// `WorkspaceSidebarView.selectAdjacentLiveSession(offset:)` feeds the
+    /// Sessions tab's Cmd+Shift+[/] cycle from
+    /// `RecentsListView.activeSessions(from:indicatorStates:)` — the exact
+    /// same static the tab renders the ACTIVE zone from — so cycle order can
+    /// never drift from render order. This does NOT exercise that
+    /// composition end to end (the production method is private on a
+    /// SwiftUI view and isn't called here); it builds the ACTIVE zone with
+    /// the same static and cycles it directly via
+    /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`, asserting
+    /// both forward and backward wraparound. Archive rows (no live
+    /// indicator state) must be skipped entirely.
+    @MainActor
+    func testSessionsTabCycleOrderMatchesActiveZoneRenderOrderWithWraparound() {
+        let project = Project(name: "p", rootPath: "~/p")
+        let a = AgentSession(name: "a", templateId: UUID(), projectId: project.id)
+        let b = AgentSession(name: "b", templateId: UUID(), projectId: project.id)
+        let c = AgentSession(name: "c", templateId: UUID(), projectId: project.id)
+        let archived = AgentSession(name: "archived", templateId: UUID(), projectId: project.id)
+
+        let indicatorStates: [UUID: SessionIndicatorState] = [
+            a.id: .processing,
+            b.id: .waiting,
+            c.id: .idle,
+            // archived.id intentionally absent -> resolves .inactive -> Archive, not Active.
+        ]
+
+        // Same call the Sessions tab renders from — the single shared source.
+        let activeZone = RecentsListView.activeSessions(
+            from: [a, b, c, archived],
+            indicatorStates: indicatorStates
+        )
+        XCTAssertEqual(activeZone.map(\.name), ["a", "b", "c"], "must match the ACTIVE zone RecentsListView renders")
+
+        let coordinator = SessionCoordinator()
+        for session in activeZone {
+            coordinator.seedEmptySessionTreeForTesting(id: session.id)
+        }
+
+        // No active session yet -> forward cycle starts at the first entry.
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: 1, in: activeZone)?.name, "a")
+        // Forward from a -> b -> c -> wraps back to a.
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: 1, in: activeZone)?.name, "b")
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: 1, in: activeZone)?.name, "c")
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: 1, in: activeZone)?.name, "a", "must wrap forward past the end")
+
+        // Backward from a -> wraps to c.
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: -1, in: activeZone)?.name, "c", "must wrap backward past the start")
+        XCTAssertEqual(coordinator.focusAdjacentLiveSession(offset: -1, in: activeZone)?.name, "b")
+    }
+
+    /// Regression test for the dead-end-cycling bug: the ACTIVE zone
+    /// guarantees nothing about liveness (`RecentsListView.activeSessions`
+    /// filters only on indicator state, not on whether a session still has
+    /// a live surface), so a session can sit in ACTIVE with a stale
+    /// indicator after its surface has closed. `selectAdjacentLiveSession`
+    /// must filter the ACTIVE zone down to `coordinator.hasLiveSurface`
+    /// before cycling, matching what the Projects-tab branch already does
+    /// via `sessionsInVisualOrder`. Seeds live surfaces for `a` and `c` but
+    /// not `b`, so the production filter must drop `b` from the cycle.
+    ///
+    /// Asserts on `coordinator.activeSessionId`, not on
+    /// `focusAdjacentLiveSession`'s return value: `focusSession` bails via
+    /// `guard let tree = sessionTrees[id] else { return }` when the target
+    /// has no live surface, but the caller still returns the target
+    /// non-nil, so the return value alone can't tell success from a no-op.
+    @MainActor
+    func testSessionsTabCycleSkipsActiveZoneEntriesWithoutLiveSurface() {
+        let project = Project(name: "p", rootPath: "~/p")
+        let a = AgentSession(name: "a", templateId: UUID(), projectId: project.id)
+        let b = AgentSession(name: "b", templateId: UUID(), projectId: project.id)
+        let c = AgentSession(name: "c", templateId: UUID(), projectId: project.id)
+
+        let indicatorStates: [UUID: SessionIndicatorState] = [
+            a.id: .processing,
+            b.id: .waiting,
+            c.id: .idle,
+        ]
+
+        let coordinator = SessionCoordinator()
+        // b never gets a live surface -> stale indicator, exited session.
+        coordinator.seedEmptySessionTreeForTesting(id: a.id)
+        coordinator.seedEmptySessionTreeForTesting(id: c.id)
+
+        // The exact composition `selectAdjacentLiveSession` uses on the
+        // Sessions tab — calls through the production static, not a
+        // reimplementation of it.
+        let liveSessions = WorkspaceSidebarView.sessionsTabCycleOrder(
+            sessions: [a, b, c],
+            indicatorStates: indicatorStates,
+            coordinator: coordinator
+        )
+        XCTAssertEqual(liveSessions.map(\.name), ["a", "c"], "b has no live surface and must be excluded from the cycle")
+
+        _ = coordinator.focusAdjacentLiveSession(offset: 1, in: liveSessions)
+        XCTAssertEqual(coordinator.activeSessionId, a.id, "cycle starts at a")
+
+        _ = coordinator.focusAdjacentLiveSession(offset: 1, in: liveSessions)
+        XCTAssertEqual(coordinator.activeSessionId, c.id, "cycling forward from a must skip b and land on c")
+    }
+
     // MARK: - Relative Time Labels
 
     func testRelativeLabelJustNow() {

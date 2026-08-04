@@ -47,6 +47,18 @@ Two follow-ups, neither blocking:
 
 - [ ] **Idea-log prune** — 10 of 31 captures in `tease-capture.md` are older than 30 days and unacted-on, which is that file's own documented prune threshold (1 from May, 9 from June). Surfaced at `/wrap` 2026-08-02, nothing deleted. Spans projects, so it is not this thread's objective. | ops | needs-Sean
 
+## 2026-08-03 — stale live indicator in Sessions tab ACTIVE zone
+
+Found during PR #90 review (`fix/sessions-tab-cycle-order`). Exited sessions render
+in the Sessions tab's ACTIVE zone with a stale live indicator until relaunched or
+removed: `handleSurfaceClose` (`SessionCoordinator.swift`) removes the session tree
+and sets `.exited`/`.completed`/`.error` but never calls `removeIndicatorState`, and
+the 1 Hz tick only iterates statuses where `isAlive`, so the stale indicator never
+clears. Pre-existing display bug, not introduced by #90 — but it's what made the
+Cmd+Shift+[/] cycling regression reachable (a dead session sitting in ACTIVE with a
+live-looking indicator). Root-cause fix would clear indicator state on session exit;
+deferred because it touches what lands in Archive. | craft | quick
+
 ## 2026-08-03 — repo branch/PR cleanup ✅ COMPLETE
 
 Objective (locked): clean up ghostties branches and PRs. **Done.** Origin branches

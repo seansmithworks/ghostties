@@ -247,17 +247,62 @@ struct WorkspaceSidebarView: View {
         expandedProjectIds.insert(targetId)
     }
 
-    /// Cmd+Shift+]/[ in Projects/Sessions tabs. Cycles focus through every
-    /// session with a live surface (`store.sessionsInVisualOrder(coordinator:)`
-    /// — not just `.running` ones, so cycling matches the browser-tab mental
-    /// model and what's actually visible in the sidebar), wrapping at both
-    /// ends. No-ops (no beep, no crash) when there are zero live sessions; is
-    /// a no-op when there is exactly one.
+    /// Cmd+Shift+]/[ in Projects/Sessions tabs. Cycles focus through the
+    /// sessions visible in whichever tab is active, wrapping at both ends.
+    /// No-ops (no beep, no crash) when there are zero live sessions; is a
+    /// no-op when there is exactly one.
+    ///
+    /// - Projects tab: every session with a live surface
+    ///   (`store.sessionsInVisualOrder(coordinator:)` — not just `.running`
+    ///   ones, so cycling matches the browser-tab mental model and what's
+    ///   actually visible in the sidebar).
+    /// - Sessions tab: the ACTIVE zone only, in exactly the order
+    ///   `RecentsListView` renders it (`RecentsListView.activeSessions`) —
+    ///   the same static both use, so render order and cycle order can never
+    ///   drift apart. Archive rows are skipped.
+    ///
+    /// `expandedProjectIds`/`selectedProjectId` are Projects-tab-only
+    /// concepts. On the Sessions tab, writing them would be inert: nothing
+    /// there reads either — `RecentsListView` derives row highlight and
+    /// auto-expand from `coordinator.activeSessionId`. On the Projects tab,
+    /// writing them is redundant with `focusSession`, which already updates
+    /// `lastActiveSessionPerProject`. Scoped to the Projects-tab branch only.
     private func selectAdjacentLiveSession(offset: Int) {
-        let liveSessions = store.sessionsInVisualOrder(coordinator: coordinator)
+        let liveSessions: [AgentSession]
+        if sidebarTab == .sessions {
+            liveSessions = Self.sessionsTabCycleOrder(
+                sessions: store.sessions,
+                indicatorStates: store.globalIndicatorStates,
+                coordinator: coordinator
+            )
+        } else {
+            liveSessions = store.sessionsInVisualOrder(coordinator: coordinator)
+        }
         guard let target = coordinator.focusAdjacentLiveSession(offset: offset, in: liveSessions) else { return }
-        expandedProjectIds.insert(target.projectId)
-        selectedProjectId = target.projectId
+        if sidebarTab == .projects {
+            expandedProjectIds.insert(target.projectId)
+            selectedProjectId = target.projectId
+        }
+    }
+
+    /// The Sessions-tab cycle order: the ACTIVE zone in render order,
+    /// filtered to sessions that still have a live surface. Extracted as a
+    /// static so tests can call the exact composition `selectAdjacentLiveSession`
+    /// uses without instantiating a view inside SwiftUI's environment.
+    ///
+    /// `RecentsListView.activeSessions` guarantees nothing about liveness —
+    /// it filters on indicator state only, so an exited session can sit in
+    /// ACTIVE with a stale indicator (`handleSurfaceClose` doesn't clear it).
+    /// Without the `hasLiveSurface` filter, cycling onto such a session
+    /// bails inside `focusSession`'s live-tree guard while `activeSessionId`
+    /// never moves, permanently dead-ending forward cycling.
+    static func sessionsTabCycleOrder(
+        sessions: [AgentSession],
+        indicatorStates: [UUID: SessionIndicatorState],
+        coordinator: SessionCoordinator
+    ) -> [AgentSession] {
+        RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
+            .filter { coordinator.hasLiveSurface(id: $0.id) }
     }
 }
 
