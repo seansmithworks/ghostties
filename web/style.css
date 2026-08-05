@@ -402,7 +402,7 @@ footer svg {
   }
 
   footer {
-    padding: 12px 16px;
+    padding: 8px 16px;
     font-size: var(--size-caption);
   }
 
@@ -420,9 +420,12 @@ footer svg {
   /* No middot at mobile widths: a wrap can land at any point depending on
      link count and viewport, so any separator scheme risks a dangling
      leading or trailing "·" on some row. Dropping it removes the
-     possibility entirely; the flex gap above already separates items. */
+     possibility entirely; the flex gap above already separates items.
+     row-gap (the first value) is pure inter-row breathing room, not an
+     overlap guard — flex-wrap already reserves each row's full box height
+     regardless of gap, so this can go lower than the old 6px without risk. */
   .footer-links {
-    gap: 6px 12px;
+    gap: 4px 12px;
   }
 
   .footer-links > * + *::before {

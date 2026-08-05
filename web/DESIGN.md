@@ -112,6 +112,14 @@ means it shows for keyboard navigation and never for a mouse or touch tap.
 not `:focus-visible`, since the link is otherwise off-screen and needs to
 appear for any focus method that lands on it).
 
+**Decision (2026-08-05): the focus ring keeps `--accent`.** Terracotta being
+dropped as an *app brand* colour raised the question of whether it should
+still carry an *interaction* meaning on the web. It stays, for three
+reasons: it already passes AA (4.916:1), it is the site's only chromatic
+colour so there is nothing else to reach for, and inventing a second accent
+solely for focus would add a colour with no other purpose on the page. Don't
+reopen this without a concrete reason `--accent` itself is being replaced.
+
 ### Accent
 
 `--accent: #c97350` — terracotta. Two uses: product captions on the homepage,
