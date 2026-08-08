@@ -7,7 +7,6 @@
     { "source": "/support", "destination": "/support.html" },
     { "source": "/download", "destination": "/download.html" },
     { "source": "/licenses", "destination": "/licenses.html" },
-    { "source": "/flows", "destination": "/task-flows.html" },
     { "source": "/changelog", "destination": "/changelog.html" }
   ],
   "headers": [
