@@ -158,7 +158,8 @@ Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Te
   index is within animation noise (an unmodified-vs-unmodified control diffs
   more); `/404`'s `h1` intentionally adopts the shared heading treatment
   (white + tighter tracking) so it matches every other page. `task-flows.html`
-  was deliberately left out of the system pending the `/flows` decision below.
+  was deliberately left out of the system, and has since been pulled from
+  the public site entirely — see the `/flows` decision below.
   **Every item below is now a one-file edit.** | web | project
 
 ### `/404` polish — SHIPPED to main 2026-08-02 (PR #82, `6fa61089f`)
@@ -176,12 +177,12 @@ Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Te
 
 ### Accessibility — was 1/4, mostly fixed in PR #86 (open)
 - ~~`prefers-reduced-motion` is ~19% honored.~~ Not part of this pass — carried below unchanged where still open (see Small/polish and 07-29 items); the fixes below did not touch the entrance/typewriter animation set.
-- ~~**Contrast failures, all computed and all failing WCAG AA:** 2.27:1 footer text and links on every page (worst on the site); 2.70:1 changelog labels; 3.21:1 `.back` link; 3.22:1 homepage `.line-3`; 3.78:1 `.download-meta`/`.all-releases`; 4.27–4.43:1 body note.~~ **Fixed.** All six raised past AA (`--text-faint` 0.25→0.55 alpha = 5.96:1, the rest similarly), per-token contrast numbers now in `web/DESIGN.md` §3. **Not fixed:** 3.03:1 `#666` on flows lane names — lives in `task-flows.html`, which stayed out of the design-system migration pending the `/flows` decision below.
-- ~~No `<h1>` on `index.html`; no `<main>` landmark on any of the 7 pages; no skip link.~~ **Fixed** on all 7 pages: visually-hidden `<h1>` on the homepage, `<main id="main">` wrapping content, a skip link before it. `task-flows.html` still has none — see the `/flows` decision below.
+- ~~**Contrast failures, all computed and all failing WCAG AA:** 2.27:1 footer text and links on every page (worst on the site); 2.70:1 changelog labels; 3.21:1 `.back` link; 3.22:1 homepage `.line-3`; 3.78:1 `.download-meta`/`.all-releases`; 4.27–4.43:1 body note.~~ **Fixed.** All six raised past AA (`--text-faint` 0.25→0.55 alpha = 5.96:1, the rest similarly), per-token contrast numbers now in `web/DESIGN.md` §3. **Not fixed, now moot:** 3.03:1 `#666` on flows lane names — lived in `task-flows.html`, now pulled from the public site (see the `/flows` decision below).
+- ~~No `<h1>` on `index.html`; no `<main>` landmark on any of the 7 pages; no skip link.~~ **Fixed** on all 7 pages: visually-hidden `<h1>` on the homepage, `<main id="main">` wrapping content, a skip link before it. `task-flows.html` still has none, now moot — see the `/flows` decision below.
 - ~~`changelog.html` skips heading levels H1 → H3, six times.~~ **Fixed** — release headings are now H2, section labels H3.
 - ~~The ghost-scatter interaction is mouse-only, not reachable in a tab sweep.~~ **Resolved as decorative, not by adding a control.** The scatter `<div class="ghosts">` and its 8 SVGs are now `aria-hidden="true"`; the click handler is unchanged (still mouse-only) but the element is out of the accessibility tree, so there's no longer an unreachable interactive element for AT users to miss.
 - ~~8 foreground ghost SVGs have no `aria-hidden`.~~ **Fixed**, same change as above.
-- `/flows` still has 0 focusable elements and 6 unlabeled mermaid SVGs — untouched, tracked under the `/flows` decision below.
+- ~~`/flows` still has 0 focusable elements and 6 unlabeled mermaid SVGs — untouched, tracked under the `/flows` decision below.~~ **Moot.** `/flows` is no longer publicly routed — see the `/flows` decision below.
 - ~~No focus styling authored anywhere.~~ **Fixed** — site-wide `:focus-visible` ring (`--accent`, 2px, keyboard-only), plus a `:focus` reveal on the new skip link.
 - ~~All six terminal lines are in the DOM from load... a screen reader announces `- ghostties % install soon` as fact.~~ **Fixed.** `.line-3` (the joke line) is now `aria-hidden="true"`; every line that states something real stays in the tree. `.line-6`'s `+ [` / `]` decoration is also now `aria-hidden`, so the link's accessible name is "download now," not "plus bracket download now bracket" (this was originally filed under Small/polish, fixed by the same change). | web | project
 
@@ -207,12 +208,12 @@ Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Te
 - **The release version is still hand-synced across 4+ locations**, two of which are character counts (`steps(N)` and `Nch`). Untouched — still wants build-time substitution. | web | quick
 
 ### Footer consistency — fixed in PR #86 (open)
-- ~~**Four distinct footer variants across seven pages**; `task-flows.html` has none.~~ **Fixed for the six document pages** — one shared `.footer-links` markup/CSS block. The homepage keeps its own icon-row variant deliberately (see `web/DESIGN.md`). `task-flows.html` still has none — tracked under the `/flows` decision below.
+- ~~**Four distinct footer variants across seven pages**; `task-flows.html` has none.~~ **Fixed for the six document pages** — one shared `.footer-links` markup/CSS block. The homepage keeps its own icon-row variant deliberately (see `web/DESIGN.md`). `task-flows.html` still has none, now moot — see the `/flows` decision below.
 - ~~Same link labeled `aria-label="X / Twitter"` on index vs `"Twitter"` on subpages.~~ **Was already stale before this pass** — there is no Twitter/X link anywhere on the live site (removed earlier, per PR #77's dead-link fix). Nothing to do here.
 - ~~Footers are `position: fixed` with no background, so on any page taller than the viewport they render on top of body text.~~ **Fixed for the six document pages** — footer is now `position: static`, pushed to the bottom of a flex column via `main { flex: 1 }`. The homepage re-pins its footer to `fixed` deliberately (it's a single exactly-viewport-height hero designed around a footer glued to the bottom edge, not a scrolling document). | web | quick
 
-### `/flows` — still needs a decision
-- `task-flows.html` is untouched by PR #86, deliberately — an internal spec, publicly routed, linked from nowhere, unpinned `mermaid@11` from jsdelivr, no design-system migration, no `<main>`/skip-link/`<h1>`/footer. Still needs Sean's call: pull it from `web/`, or bring it into the design system and rewrite the GAP grid as a roadmap. | web | needs-Sean
+### `/flows` — decided, pulled from the public site
+- ~~`task-flows.html` is untouched by PR #86, deliberately — an internal spec, publicly routed, linked from nowhere, unpinned `mermaid@11` from jsdelivr, no design-system migration, no `<main>`/skip-link/`<h1>`/footer. Still needs Sean's call: pull it from `web/`, or bring it into the design system and rewrite the GAP grid as a roadmap.~~ **Decided: pulled.** `task-flows.html` moved to `docs/task-flows.html` (history preserved via `git mv`); the `/flows` rewrite dropped from `vercel.json` and the URL dropped from `sitemap.xml`. It stays an internal reference doc, unmigrated to the design system, no longer publicly routed or CSP-governed. | web | project
 
 ### Security headers — fixed in PR #86 (open)
 - ~~`vercel.json` sets HSTS and `nosniff`. Missing: `Content-Security-Policy`, `X-Frame-Options`/`frame-ancestors`, `Referrer-Policy`, `Permissions-Policy`.~~ **Fixed** — all four added. | security | quick

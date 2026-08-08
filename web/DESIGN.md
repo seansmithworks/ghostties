@@ -36,7 +36,6 @@ day-long stale window, which would serve a stale stylesheet after a deploy.
 | `licenses.html` | `h2` title override |
 | `404.html` | Centred layout, ghost topple animation, `.home-link` |
 | `privacy.html` | **None** — the shared sheet covers the whole page |
-| `task-flows.html` | Out of system entirely; see §7 |
 
 ---
 
@@ -270,27 +269,11 @@ Two more things this file does not fix:
 
 ---
 
-## 7. `/flows` is outside this system
-
-`task-flows.html` has its own `:root` block with a different background
-(`#0f0f0f`), a different body grey (`#e5e5e5`), and a different accent
-spelling (`#c97350` lowercase, same colour). It was not migrated, because
-whether the page stays on the site at all is an open decision in
-`BACKLOG.md`. If it stays, it should adopt these tokens. If it goes, this
-section goes with it.
-
----
-
-## 8. Known gaps
+## 7. Known gaps
 
 These are real and tracked in `BACKLOG.md`; they are listed here so nobody
 concludes from this document that the system is finished.
 
-- `task-flows.html` (routed at `/flows`, listed in `sitemap.xml`) still has
-  no `<main>` landmark, no skip link, no shared stylesheet, and no footer.
-  The `<main>`/skip-link/`<h1>` gap is fixed on the other six pages, not on
-  this one — it's out of system entirely per §7, and whether it stays on
-  the site at all is an open decision in `BACKLOG.md`.
 - `prefers-reduced-motion` is honoured on `/404` (the ghost fades in already
   fallen — gentler, not zero) and by exactly one rule on the homepage
   (`.bg-ghost`). Seventeen homepage animations still run under `reduce`.
