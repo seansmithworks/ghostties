@@ -303,9 +303,16 @@ extension Notification.Name {
     /// running sessions before the store deletes the project's records.
     static let workspaceProjectWillBeRemoved = Notification.Name("com.seansmithdesign.ghostties.workspace.projectWillBeRemoved")
 
-    /// Posted by TerminalController when the user presses Cmd+Shift+T.
+    /// Posted by TerminalController when the user presses Cmd+T.
     /// The notification object is the originating NSWindow.
     static let workspaceNewSession = Notification.Name("com.seansmithdesign.ghostties.workspace.newSession")
+
+    /// Posted by AppDelegate's Cmd+W local-event monitor, project-first
+    /// workspace mode only (see `AppDelegate.isProjectFirstWorkspaceWindow(_:)`).
+    /// The notification object is the originating NSWindow.
+    /// `WorkspaceSidebarView` observes this and calls
+    /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`.
+    static let workspaceCloseSession = Notification.Name("com.seansmithdesign.ghostties.workspace.closeSession")
 
     /// Posted by MenuBarDropdownView when the user clicks a session row.
     /// userInfo contains "sessionId" (UUID). SessionCoordinators observe this

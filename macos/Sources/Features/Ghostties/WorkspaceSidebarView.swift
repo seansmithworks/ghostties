@@ -136,6 +136,10 @@ struct WorkspaceSidebarView: View {
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             createNewSessionForSelectedProject()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceCloseSession)) { notification in
+            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
+            coordinator.closeCurrentSessionWithConfirmation()
+        }
         .sheet(isPresented: Binding(
             get: { !hasSeenOnboarding },
             set: { _ in }

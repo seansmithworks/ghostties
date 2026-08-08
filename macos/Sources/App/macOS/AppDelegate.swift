@@ -396,6 +396,10 @@ class AppDelegate: NSObject,
         // see `setupNewSessionShortcut()`.
         setupNewSessionShortcut()
 
+        // Reclaims ⌘W for "Close Session" in project-first workspace mode —
+        // see `setupCloseSessionShortcut()`.
+        setupCloseSessionShortcut()
+
         // Setup signal handlers
         setupSignals()
 
@@ -997,6 +1001,26 @@ class AppDelegate: NSObject,
             guard let window = NSApp.keyWindow, Self.isProjectFirstWorkspaceWindow(window) else { return event }
 
             NSApp.sendAction(#selector(TerminalController.newWorkspaceSession(_:)), to: nil, from: nil)
+            return nil
+        }
+    }
+
+    /// Reclaims ⌘W for "Close Session" in project-first workspace mode,
+    /// overriding Ghostty's native `close_surface` binding (which closes the
+    /// terminal surface with its own "Close Terminal?" confirmation and no
+    /// notion of a sidebar session). Posts `.workspaceCloseSession`;
+    /// `WorkspaceSidebarView` observes it and calls
+    /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`, which owns
+    /// the confirm / focus-neighbor / close-window logic.
+    private func setupCloseSessionShortcut() {
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
+                  event.charactersIgnoringModifiers?.lowercased() == "w"
+            else { return event }
+
+            guard let window = NSApp.keyWindow, Self.isProjectFirstWorkspaceWindow(window) else { return event }
+
+            NotificationCenter.default.post(name: .workspaceCloseSession, object: window)
             return nil
         }
     }
