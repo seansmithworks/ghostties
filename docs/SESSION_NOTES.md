@@ -2757,3 +2757,73 @@ red** until relaunch or Remove. Confirmed wanted.
 *while the app stays open*, since a cold launch shows correct zones even on unfixed code. The
 two-vs-three-zone Sessions-tab design question is deliberately deferred until ACTIVE is honest.
 **beta.22 not tagged.**
+
+---
+
+## 2026-08-07/08 — website lane: conversion/trust, /flows pull, footer tappability
+
+Orchestrator thread, lane = **website only** (ghostties.org). Ran concurrently with the app +
+release lane.
+
+### Shipped (merged to `main`, verified live)
+
+- `f06e4fdc2` (#93) — conversion + trust. `.terminal` max-width corrected to
+  `calc(100vw - 72px)` at ≤480px (measured 248px @320 and 303px @375; the `main` baseline was
+  208/263, confirming the old rule over-subtracted 40px). Mobile footer padding 12→8px,
+  `.footer-links` gap 6→4px. `/download` gets a notarisation trust line. Ghostty fork
+  attribution + "built by Sean Smith" added to homepage and `/download`. `web/DESIGN.md`
+  records the decision to keep terracotta `--accent` as the focus-ring colour.
+- `ef52a8e78` (#94) — `/flows` pulled from the public site. `web/task-flows.html` →
+  `docs/task-flows.html`; `/flows` rewrite dropped from `vercel.json`; URL dropped from
+  `sitemap.xml`. Rationale: an internal design spec with a "Current State + Gaps" section,
+  publicly routed and indexable, linked from nowhere, off the design system, and a maintenance
+  tax every wave.
+- `6bb98f57c` (#95) — homepage footer links were **visible but completely non-tappable** at
+  320/375/768. `.product { position: relative; z-index: 1 }` opened a stacking context above
+  `footer { position: fixed }`, which had no `z-index` of its own. Hit-testing ignores
+  transparency, so the footer rendered normally and silently ate every tap underneath it. Fixed
+  with `footer { z-index: 2; background: var(--bg) }` plus `.product` mobile bottom padding
+  72→112px to clear the footer's wrapped 96px height.
+- `0a05e8965` (#97) — BACKLOG reconciliation.
+- **#50 closed as superseded, not merged** — +143/−8 of scroll animation against an
+  `index.html` that #86/#88/#93 had since rewritten out from under it; flagged `CONFLICTING`
+  since 2026-07-22.
+
+### The methodological finding
+
+The first verification agent reported **PASS** on the highest-risk contract item while its own
+`results.json` contained `matched: false` for every `index.html` footer link, on both the branch
+and `main`. It had genuinely hit mismatches, correctly diagnosed a harness bug (sampling
+`elementFromPoint` at coordinates below the fold returns `null`), fixed it, and re-ran — then
+applied that single explanation to *all* remaining mismatches, including a class it never
+actually covered: `index.html`'s footer is `position: fixed` and therefore never below the fold.
+Those 90 mismatches were the real, live bug.
+
+An adversarial second round, explicitly told to refute the PASS and forbidden from reusing round
+1's script, found it in ~5 minutes and 70k tokens. Round 1 had spent 184k tokens reaching the
+wrong answer. Takeaway: **when an agent reports a FAIL→PASS transition it produced itself, grep
+the raw artifact before believing the verdict** — the summary reports the conclusion, not the
+set it was applied to.
+
+### Also worth recording
+
+- Verification used real `mouse.click()` dispatch, not just `getBoundingClientRect()` geometry —
+  that distinction is what caught the bug. 522 sample points across 7 pages × 2 widths found
+  **zero** adjacent-footer-link overlaps, so the specific regression that shipped twice in #86
+  did **not** recur; the actual defect was a different mechanism entirely.
+- #94 was verified on an **authenticated Vercel preview** before merge (preview URLs 302 behind
+  Deployment Protection; the Vercel MCP `web_fetch_vercel_url` / `get_access_to_vercel_url` tools
+  reach them).
+- `docs/task-flows.html` turned out to already exist as a **stale duplicate** committed on day
+  one (`4db0c5fea` added the page to both `web/` and `docs/`; only the `web/` copy kept
+  receiving updates). #94 replaced it rather than stacking a second file.
+- Accepted trade-off, Sean's explicit call: the now-opaque footer cleanly clips headings during
+  mobile scroll instead of letting them bleed through messily. Root cause is still open — the
+  homepage footer is `position: fixed` on a premise (hero exactly one viewport tall) that no
+  longer holds on mobile.
+
+### Open (all in BACKLOG.md)
+
+The hero half (CTA gated behind ~10.1s of animation; mobile terminal type scale); footer tap
+targets 13–16px at the 768px breakpoint (under WCAG 2.5.8's 24px floor); whether the homepage
+footer should go `static` below 480px; favicon randomisation; build-time version substitution.
