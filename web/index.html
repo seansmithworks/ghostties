@@ -362,12 +362,22 @@
        1280x900, well past one screen) but is designed around the footer
        glued to the *viewport's* bottom edge regardless of scroll
        position, so it re-pins to fixed here rather than following
-       style.css's in-flow footer. */
+       style.css's in-flow footer.
+
+       z-index:2 (> .product's z-index:1) so the footer wins hit-testing
+       where the two boxes overlap — without it .product's stacking
+       context painted on top and silently ate every tap on the footer's
+       links, even though the footer was still visibly rendered beneath.
+       The opaque background is required by the same fix: once the footer
+       stacks above .product, .product-caption would otherwise show
+       through a transparent footer as it scrolls under it. */
     footer {
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
+      z-index: 2;
+      background: var(--bg);
       padding: 14px 24px;
       font-family: var(--font-mono);
       font-size: 0.6875rem; /* 11px */
@@ -442,7 +452,13 @@
       .ghosts { gap: 10px; margin-bottom: 28px; }
       .terminal { font-size: 1rem; max-width: calc(100vw - 72px); } /* 16px; .scene 20px + body 16px per side at this width */
       footer { padding: 8px 16px; font-size: 0.625rem; } /* 10px; matches the document-page footer padding trim */
-      .product { padding: 16px 20px 72px; }
+      /* Bottom padding raised from 72px to clear the fixed footer's own
+         height (up to 96px once its icons + link row wrap at this width).
+         Needed only because the footer fix above (z-index:2, opaque
+         background) now paints over anything under it instead of the other
+         way around — previously the caption showed through a transparent
+         footer, so this padding didn't need to reach that far. */
+      .product { padding: 16px 20px 112px; }
       .product h2 { font-size: 1.375rem; margin-bottom: 28px; } /* 22px */
       .product-window { margin-bottom: 28px; }
       .product-window--sessions .product-card,
