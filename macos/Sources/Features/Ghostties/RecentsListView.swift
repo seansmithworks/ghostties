@@ -29,12 +29,6 @@ struct RecentsListView: View {
         let selectedId = coordinator.activeSessionId
 
         VStack(spacing: 0) {
-            newSessionRow
-
-            Rectangle()
-                .fill(Color.primary.opacity(0.10))
-                .frame(height: 1)
-
             if store.sessions.isEmpty {
                 emptyState
             } else {
@@ -97,52 +91,13 @@ struct RecentsListView: View {
         .background(.clear)
     }
 
-    // MARK: - New Session Row
-
-    private var newSessionRow: some View {
-        Menu {
-            ForEach(store.projects) { project in
-                let templates = availableTemplates(for: project)
-                if templates.count <= 1 {
-                    // Single template — tap creates directly, no submenu needed.
-                    Button(project.name) {
-                        startNewSession(in: project, template: templates.first)
-                    }
-                } else {
-                    // Multiple templates — submenu: project name → template list.
-                    Menu(project.name) {
-                        ForEach(templates) { template in
-                            Button(template.name) {
-                                startNewSession(in: project, template: template)
-                            }
-                        }
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .medium))
-                    .frame(width: WorkspaceLayout.sidebarIconColumnWidth, alignment: .center)
-                Text("New Session")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.primary)
-                Spacer(minLength: 4)
-            }
-            .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
-            .padding(.trailing, 10)
-            .frame(height: 36)
-            .contentShape(Rectangle())
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .disabled(store.projects.isEmpty)
-        .accessibilityLabel("New Session")
-    }
+    // MARK: - New Session (project-picker templates)
 
     /// Returns templates available for a given project: global templates plus
     /// any templates scoped to that project, with the project's default first.
-    private func availableTemplates(for project: Project) -> [AgentTemplate] {
+    /// Static so `NewSessionToolbarButton` (titlebar toolbar) can share the
+    /// exact same resolution logic without instantiating this view.
+    static func availableTemplates(for project: Project, store: WorkspaceStore) -> [AgentTemplate] {
         let candidates = store.templates.filter { $0.isGlobal || $0.projectId == project.id }
         // Lift the default template to the top of the list.
         if let defaultId = project.defaultTemplateId {
@@ -231,7 +186,9 @@ struct RecentsListView: View {
 
     // MARK: - Actions
 
-    private func startNewSession(in project: Project, template: AgentTemplate?) {
+    /// Static so `NewSessionToolbarButton` shares this exactly — see
+    /// `availableTemplates(for:store:)` above.
+    static func startNewSession(in project: Project, template: AgentTemplate?, store: WorkspaceStore, coordinator: SessionCoordinator) {
         let resolved: AgentTemplate = template ?? {
             if let defaultId = project.defaultTemplateId,
                let t = store.templates.first(where: { $0.id == defaultId }) {
@@ -386,6 +343,62 @@ struct RecentsListView: View {
     /// `workspace.json`, a file written by multiple windows).
     static func sorted(sessions: [AgentSession]) -> [AgentSession] {
         sessions
+    }
+}
+
+// MARK: - New Session Toolbar Button
+
+/// Labelled toolbar button for the Sessions tab, presented in
+/// `WorkspaceSidebarView.titlebarToolbar` right-aligned on the traffic-light
+/// row. Opens the same project-picker flyout menu the former `newSessionRow`
+/// showed inline in the list — see `RecentsListView.availableTemplates(for:store:)`
+/// and `RecentsListView.startNewSession(in:template:store:coordinator:)`, which
+/// this calls directly so the menu logic is never duplicated.
+struct NewSessionToolbarButton: View {
+    @EnvironmentObject private var store: WorkspaceStore
+    @EnvironmentObject private var coordinator: SessionCoordinator
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            ForEach(store.projects) { project in
+                let templates = RecentsListView.availableTemplates(for: project, store: store)
+                if templates.count <= 1 {
+                    // Single template — tap creates directly, no submenu needed.
+                    Button(project.name) {
+                        RecentsListView.startNewSession(in: project, template: templates.first, store: store, coordinator: coordinator)
+                    }
+                } else {
+                    // Multiple templates — submenu: project name → template list.
+                    Menu(project.name) {
+                        ForEach(templates) { template in
+                            Button(template.name) {
+                                RecentsListView.startNewSession(in: project, template: template, store: store, coordinator: coordinator)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .medium))
+                Text("New Session")
+                    .font(.system(size: 12, weight: .medium))
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        // `Menu` can otherwise claim more horizontal space than its label
+        // content needs; this keeps it hugging the icon+text so the
+        // trailing-aligned `Spacer()` in `WorkspaceSidebarView.titlebarToolbar`
+        // has room to push it flush against the sidebar's trailing edge.
+        .fixedSize()
+        .foregroundStyle(isHovered ? .primary : .secondary)
+        .onHover { isHovered = $0 }
+        .disabled(store.projects.isEmpty)
+        .accessibilityLabel("New Session")
     }
 }
 
