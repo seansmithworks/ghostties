@@ -118,11 +118,10 @@ were squash-merged; PR state is the only reliable signal.
 
 **Still open from this objective:**
 
-- **PR #50 — rebase onto the design system, or close.** Scroll-triggered boot-sequence
-  entrance, 143 lines in `web/index.html`, untouched since 2026-07-22, CONFLICTING since
-  #81 rewrote that file's `<style>` block. Sean parked the call 2026-08-03. Strawman if it
-  stays parked: close it, and rebuild on `style.css` tokens if the idea still appeals.
-  | web | decide-or-kill
+- ~~**PR #50 — rebase onto the design system, or close.**~~ **Closed 2026-08-08 as superseded**,
+  not merged. Its +143/−8 all landed in `web/index.html`, which #86/#88/#93 have since rewritten;
+  it had been `CONFLICTING` since 2026-07-22. The scroll-triggered boot-sequence idea is not
+  rejected — it should return as a fresh PR against current `main`. | web | decide-or-kill
 - **3 origin branches kept deliberately, no PR:** `feat/demo-capture-instance` (live handoff
   doc in memory), `feat/ghostties-animation` (the parked teaser landing page depends on it),
   `test/session-cache-load-harness` (Switchboard track is live; the 2→4→6 render-cascade ramp
@@ -191,14 +190,14 @@ Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Te
 - ~~`/support` overflows +11px and `/privacy` +22px at 320px.~~ **Fixed** — `<code>` now has `overflow-wrap: anywhere` site-wide so long unbroken tokens (bundle IDs) wrap instead of forcing the container wider.
 - ~~All 48 interactive elements are under 44×44 at 375px.~~ **Fixed** for the CTA and footer icons — `/download`'s primary button gets `min-height: 44px`, and footer icon anchors get 15px padding to grow their tap box to 44×44 without changing the visible 14px icon.
 - **Breakpoint coverage is still a single `max-width: 480px` query on six of seven pages.** Not addressed by adding breakpoints — the overflow fixes above (clip + wrap + wider `calc()`) are width-independent, so the gap in 481–719px coverage no longer has a live overflow bug behind it. The breakpoint sparseness itself is unchanged.
-- **`.terminal { max-width: calc(100vw - 112px) }` over-subtracts by 40px at ≤480px.** At that breakpoint `.scene`'s padding is 20px and `body`'s is 16px, not the 32/24 the value assumes — so the terminal renders 40px narrower than it needs to on phones, and the decorative GitHub-URL line shows ~49% of itself instead of ~64%. Correct value inside the `max-width: 480px` query is `calc(100vw - 72px)`. Cosmetic, on a non-interactive animated line whose link keeps its full accessible name. Found in the final review round of PR #86. | web | quick
+- ~~**`.terminal { max-width: calc(100vw - 112px) }` over-subtracts by 40px at ≤480px.**~~ **Shipped in #93** (`f06e4fdc2`) as `calc(100vw - 72px)`. Verified live: 248px @320, 303px @375. | web | quick
 - ~~All font sizes are `px` literals.~~ **Fixed** — every sized value in `style.css` and the un-tokenised single-use sizes in each page are now `rem`. | web | project
 
 ### Conversion and trust — mostly still open
 - **The homepage CTA is still gated behind ~10.1s of animation with no skip.** Untouched by PR #86.
-- **`/download` still has no trust signals at the highest-risk moment.** Untouched.
+- ~~**`/download` still has no trust signals at the highest-risk moment.**~~ **Shipped in #93.**
 - The homepage still has no `<h1>` a sighted user can see (the new `<h1>` added for a11y is `visually-hidden`), no visible wordmark, no prose.
-- The site still never says this is a fork of Ghostty until `/licenses`. Untouched.
+- ~~The site still never says this is a fork of Ghostty until `/licenses`.~~ **Shipped in #93** — fork attribution added on homepage and `/download`.
 - Still no Download link in any subpage footer. Untouched.
 - ~~`og:image` is relative and may not resolve for crawlers. No `og:url`, `twitter:card`, or `twitter:image`. Zero OG tags on all five subpages.~~ **Fixed.** `og:title`/`og:description`/`og:type`/`og:url`/`twitter:card` landed in PR #86; `og:image`/`twitter:image` were restored in PR #88 (`b9dae122c`) pointing at the new `assets/social-card.png`. | web | session
 
@@ -235,6 +234,29 @@ Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Te
 - **Terracotta `--accent` now doubles as the site's focus-ring color** (4.92:1, passes AA) on a site where terracotta was explicitly dropped as a brand color. Introduced by the new `:focus-visible` rule in PR #86. Deliberate or not, terracotta is now an interaction color, not just a caption accent. | web | needs-Sean
 - **The hero terminal clips the GitHub URL below 768px.** A fluid `clamp()` type scale fixes it but retunes the hero's type across the whole 320–767px range and reaches 10px monospace at 320px — a real design tradeoff, not a defect fix. Built and deliberately reverted before PR #86 merged. | web | needs-Sean
 - **The mobile footer is now ~2.5× its former height** (112px document / 106px homepage at ≤480px) because the 44×44 touch-target fix makes the tap boxes real. Reads fine, but on the homepage — which pins its footer `position: fixed` — it's now a permanently fixed ~13% of an 800px viewport. | web | needs-Sean
+
+## 2026-08-08 — web audit follow-up (PRs #93, #95)
+
+### New findings
+- **Footer tap targets fail WCAG 2.5.8 at the 768px breakpoint.** Measured: footer link height
+  is 13–16px at 768px, under the 24px minimum. Mobile widths are fine (38–41px tall at 320/375;
+  homepage icon links 44×44). Cause is `--size-small` (13px) typography at that breakpoint, not
+  any recent change — it's pre-existing and was explicitly out of scope for PRs #93 and #95.
+  Raising it is a type-scale decision, not a mechanical fix. | web | needs-Sean
+- **The homepage's fixed footer rests on a premise that is no longer true.** `web/index.html`
+  keeps `footer { position: fixed }` (the six document pages use a static in-flow footer via
+  `style.css`). That was designed for a hero that was exactly one viewport tall. On mobile the
+  homepage content now exceeds one viewport, so scrolling content passes under a fixed bar —
+  which is the root cause of the stacking bug fixed in #95, not an incidental detail. #95 fixed
+  the symptom correctly (footer raised to `z-index: 2` with an opaque `var(--bg)` background,
+  `.product` mobile bottom padding raised 72px→112px to clear it). Accepted trade-off, Sean's
+  explicit call: at mobile widths, headings are now cleanly clipped behind the opaque bar during
+  scroll instead of bleeding through it messily. Open question: should the homepage footer stay
+  fixed on mobile at all, or go static below 480px to match the other six pages. | web | needs-Sean
+
+### Shipped
+- ~~**Homepage footer links non-tappable on mobile.**~~ **Shipped in #95** (`6bb98f57c`), verified
+  with real click dispatch at 320/375/768.
 
 ## 2026-08-01 — ghostties.org docs section (parked)
 
