@@ -1,8 +1,10 @@
 # Homebrew Cask
 
-`ghostties.rb` is the Homebrew Cask for Ghostties. This file is the **canonical
-copy** — it lives in the main repo, not in a tap, so it stays versioned
-alongside the app it packages.
+`ghostties.rb` is the Homebrew Cask for Ghostties. This file is the **source
+template** it's generated from — versioned alongside the app it packages, but
+not a live mirror of what users install. The tap is what `brew install`
+actually resolves; see "The in-repo copy trails releases" below for how the
+two stay (or fall out of) sync.
 
 Target end-user UX, once the tap exists:
 
