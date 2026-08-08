@@ -1,0 +1,34 @@
+{
+  "name": "ghostties-install",
+  "version": "0.1.0",
+  "description": "Installer shim for Ghostties (macOS, Apple silicon). Downloads and verifies a pinned release build of Ghostties.app.",
+  "license": "MIT",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "bin": {
+    "ghostties-install": "bin/ghostties-install.js"
+  },
+  "files": [
+    "bin/ghostties-install.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SeanSmithWorks/ghostties.git",
+    "directory": "dist/ghostties/npm/ghostties-install"
+  },
+  "homepage": "https://ghostties.org",
+  "keywords": [
+    "ghostty",
+    "ghostties",
+    "terminal",
+    "installer"
+  ]
+}

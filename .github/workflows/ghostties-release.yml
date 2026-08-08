@@ -592,3 +592,83 @@ jobs:
             ghostties-macos-arm64.zip \
             appcast-stable.xml \
             appcast-beta.xml
+
+  # ---------------------------------------------------------------------------
+  # homebrew-cask: Bump the cask locally and PR it into the tap
+  #
+  # Inert until Sean creates the SeanSmithWorks/homebrew-tap repo and sets the
+  # HOMEBREW_TAP_REPO repository variable — see dist/ghostties/homebrew/README.md for
+  # the activation steps. Gated on `vars` (not `secrets`) at the job level
+  # because the `secrets` context isn't reliably readable in a job-level
+  # `if:`; the HOMEBREW_TAP_TOKEN secret itself is checked inside the job so
+  # a missing token fails loudly instead of silently skipping.
+  #
+  # This job deliberately never commits to `main`: it checks out `ghostties`
+  # read-only to run scripts/update-cask-version.sh and copy the bumped cask
+  # into the tap. The in-repo dist/ghostties/homebrew/ghostties.rb therefore
+  # trails the tap until someone runs the bump script by hand (documented in
+  # dist/ghostties/homebrew/README.md) — a deliberate trade against giving
+  # this pipeline a second unrelated write path to main, on a pipeline with
+  # an expensive bug history.
+  # ---------------------------------------------------------------------------
+  homebrew-cask:
+    needs: [setup, release]
+    if: ${{ vars.HOMEBREW_TAP_REPO != '' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.setup.outputs.tag }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: Verify HOMEBREW_TAP_TOKEN is set
+        run: |
+          if [[ -z "$HOMEBREW_TAP_TOKEN" ]]; then
+            echo "::error::HOMEBREW_TAP_REPO is set but the HOMEBREW_TAP_TOKEN secret is missing. Add a token with push access to ${HOMEBREW_TAP_REPO} — see dist/ghostties/homebrew/README.md." >&2
+            exit 1
+          fi
+
+      - name: Checkout ghostties
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Bump cask (local checkout only, not committed)
+        run: bash scripts/update-cask-version.sh "$TAG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout tap
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          repository: ${{ env.HOMEBREW_TAP_REPO }}
+          token: ${{ env.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Sync cask into tap and open PR
+        working-directory: tap
+        run: |
+          mkdir -p Casks
+          cp ../dist/ghostties/homebrew/ghostties.rb Casks/ghostties.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- Casks/ghostties.rb; then
+            echo "Tap cask already up to date with ${TAG}."
+            exit 0
+          fi
+
+          BRANCH="update-ghostties-${TAG}"
+          git checkout -b "$BRANCH"
+          git add Casks/ghostties.rb
+          git commit -m "chore(ghostties): update to ${TAG}"
+          git push origin "$BRANCH"
+          if ! gh pr view "$BRANCH" --repo "$HOMEBREW_TAP_REPO" >/dev/null 2>&1; then
+            gh pr create \
+              --repo "$HOMEBREW_TAP_REPO" \
+              --title "Update ghostties to ${TAG}" \
+              --body "Automated sync from SeanSmithWorks/ghostties release ${TAG}." \
+              --head "$BRANCH" \
+              --base main
+          fi
+        env:
+          GH_TOKEN: ${{ env.HOMEBREW_TAP_TOKEN }}
