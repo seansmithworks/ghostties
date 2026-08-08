@@ -567,18 +567,17 @@ class TerminalWindow: NSWindow {
         } else {
             isOpaque = true
 
+            // MARK: - Ghostties fork fence (titlebar bg sync)
+            // The window background shows through the transparent titlebar (and any
+            // uncovered window floor in workspace mode), so it must track the real
+            // terminal background — not a hardcoded design-system token — or the
+            // titlebar strip won't match the canvas for themes other than the one
+            // the token was tuned against. `preferredBackgroundColor` already reads
+            // the focused surface's live derived config, which itself already
+            // resolves light/dark via the user's Ghostty theme config.
             let backgroundColor = preferredBackgroundColor ?? NSColor(surfaceConfig.backgroundColor)
             self.backgroundColor = backgroundColor.withAlphaComponent(1)
-
-            // MARK: - Ghostties fork fence (titlebar bg sync)
-            // In workspace mode, the window background shows through the transparent titlebar.
-            // Override to the canvas background so the titlebar strip matches the canvas.
-            if self.contentView is WorkspaceViewContainer {
-                let isDark = self.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                self.backgroundColor = isDark
-                    ? WorkspaceLayout.canvasBackgroundDark
-                    : WorkspaceLayout.canvasBackgroundLight
-            }
+            // MARK: - End Ghostties fork fence (titlebar bg sync)
         }
     }
 
