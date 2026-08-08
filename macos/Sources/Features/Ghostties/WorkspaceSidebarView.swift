@@ -140,6 +140,11 @@ struct WorkspaceSidebarView: View {
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             coordinator.closeCurrentSessionWithConfirmation()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceFocusSessionAtIndex)) { notification in
+            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
+            guard let index = notification.userInfo?["index"] as? Int else { return }
+            focusVisibleSession(atIndex: index)
+        }
         .sheet(isPresented: Binding(
             get: { !hasSeenOnboarding },
             set: { _ in }
@@ -272,21 +277,63 @@ struct WorkspaceSidebarView: View {
     /// writing them is redundant with `focusSession`, which already updates
     /// `lastActiveSessionPerProject`. Scoped to the Projects-tab branch only.
     private func selectAdjacentLiveSession(offset: Int) {
-        let liveSessions: [AgentSession]
-        if sidebarTab == .sessions {
-            liveSessions = Self.sessionsTabCycleOrder(
-                sessions: store.sessions,
-                indicatorStates: store.globalIndicatorStates,
-                coordinator: coordinator
-            )
-        } else {
-            liveSessions = store.sessionsInVisualOrder(coordinator: coordinator)
-        }
+        let liveSessions = currentTabLiveSessions()
         guard let target = coordinator.focusAdjacentLiveSession(offset: offset, in: liveSessions) else { return }
         if sidebarTab == .projects {
             expandedProjectIds.insert(target.projectId)
             selectedProjectId = target.projectId
         }
+    }
+
+    /// The visible session list for whichever sidebar tab is showing right
+    /// now — shared by Cmd+Shift+[/] cycling (`selectAdjacentLiveSession`)
+    /// and Cmd+1-9 positional focus (`focusVisibleSession(atIndex:)`) so
+    /// both shortcuts always agree with what's actually on screen. See
+    /// `selectAdjacentLiveSession`'s doc comment for why the two tabs pull
+    /// from different sources.
+    private func currentTabLiveSessions() -> [AgentSession] {
+        if sidebarTab == .sessions {
+            return Self.sessionsTabCycleOrder(
+                sessions: store.sessions,
+                indicatorStates: store.globalIndicatorStates,
+                coordinator: coordinator
+            )
+        } else {
+            return store.sessionsInVisualOrder(coordinator: coordinator)
+        }
+    }
+
+    /// Cmd+1..8 focuses the Nth visible session (1-indexed); Cmd+9 always
+    /// focuses the LAST visible session regardless of how many there are.
+    /// Out-of-range (e.g. Cmd+7 with 4 sessions visible) is a no-op — no
+    /// wrap, no clamp, matching browser-tab convention. `index` is the raw
+    /// digit pressed (1-9).
+    private func focusVisibleSession(atIndex index: Int) {
+        let liveSessions = currentTabLiveSessions()
+        guard let target = index == 9
+            ? Self.lastSession(in: liveSessions)
+            : Self.session(at: index, in: liveSessions)
+        else { return }
+
+        coordinator.focusSession(id: target.id)
+        if sidebarTab == .projects {
+            expandedProjectIds.insert(target.projectId)
+            selectedProjectId = target.projectId
+        }
+    }
+
+    /// Pure index lookup for Cmd+1..8 — static so tests can call it without
+    /// a view instance, same pattern as `sessionsTabCycleOrder`. `index` is
+    /// 1-indexed; anything outside `1...liveSessions.count` is a no-op.
+    static func session(at index: Int, in liveSessions: [AgentSession]) -> AgentSession? {
+        guard index >= 1, index <= liveSessions.count else { return nil }
+        return liveSessions[index - 1]
+    }
+
+    /// Pure "last visible session" lookup for Cmd+9 — always the last entry
+    /// regardless of `liveSessions.count`. Nil for an empty list.
+    static func lastSession(in liveSessions: [AgentSession]) -> AgentSession? {
+        liveSessions.last
     }
 
     /// The Sessions-tab cycle order: the ACTIVE zone in render order,

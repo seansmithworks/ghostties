@@ -400,6 +400,10 @@ class AppDelegate: NSObject,
         // see `setupCloseSessionShortcut()`.
         setupCloseSessionShortcut()
 
+        // Reclaims ⌘1-9 for positional session focus in project-first
+        // workspace mode — see `setupSessionIndexShortcuts()`.
+        setupSessionIndexShortcuts()
+
         // Setup signal handlers
         setupSignals()
 
@@ -1021,6 +1025,33 @@ class AppDelegate: NSObject,
             guard let window = NSApp.keyWindow, Self.isProjectFirstWorkspaceWindow(window) else { return event }
 
             NotificationCenter.default.post(name: .workspaceCloseSession, object: window)
+            return nil
+        }
+    }
+
+    /// Reclaims ⌘1-9 for positional session focus in project-first workspace
+    /// mode, overriding Ghostty's native `goto_tab`/`last_tab` bindings
+    /// (which act on real NSWindow tabs — irrelevant here, the sidebar IS
+    /// the tab strip; see `TerminalController.relabelTabs()`). Posts
+    /// `.workspaceFocusSessionAtIndex` with the pressed digit in `userInfo`;
+    /// `WorkspaceSidebarView` resolves it against whichever list the current
+    /// sidebar tab renders. ⌘9 always means "last visible session", not
+    /// literally the 9th.
+    private func setupSessionIndexShortcuts() {
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
+                  let characters = event.charactersIgnoringModifiers,
+                  characters.count == 1,
+                  let digit = Int(characters), (1...9).contains(digit)
+            else { return event }
+
+            guard let window = NSApp.keyWindow, Self.isProjectFirstWorkspaceWindow(window) else { return event }
+
+            NotificationCenter.default.post(
+                name: .workspaceFocusSessionAtIndex,
+                object: window,
+                userInfo: ["index": digit]
+            )
             return nil
         }
     }

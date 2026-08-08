@@ -353,6 +353,111 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertEqual(coordinator.activeSessionId, c.id, "cycling forward from a must skip b and land on c")
     }
 
+    // MARK: - Cmd+1-9 positional session focus (index mapping)
+
+    /// `WorkspaceSidebarView.session(at:in:)` — Cmd+1..8. Pure index math:
+    /// 1-indexed, first visible session for Cmd+1.
+    func testSessionAtIndexOneReturnsFirstVisible() {
+        let a = session(name: "a")
+        let b = session(name: "b")
+        let c = session(name: "c")
+
+        XCTAssertEqual(WorkspaceSidebarView.session(at: 1, in: [a, b, c])?.name, "a")
+        XCTAssertEqual(WorkspaceSidebarView.session(at: 2, in: [a, b, c])?.name, "b")
+        XCTAssertEqual(WorkspaceSidebarView.session(at: 3, in: [a, b, c])?.name, "c")
+    }
+
+    /// Out-of-range is a no-op — not a wrap, not a clamp. Cmd+7 with only 4
+    /// sessions visible must return nil, never wrap to session 3 or clamp to
+    /// session 4.
+    func testSessionAtOutOfRangeIndexIsNoOp() {
+        let sessions = (0..<4).map { session(name: "s\($0)") }
+
+        XCTAssertNil(WorkspaceSidebarView.session(at: 7, in: sessions), "out-of-range must be a no-op, not a wrap or clamp")
+        XCTAssertNil(WorkspaceSidebarView.session(at: 0, in: sessions), "index 0 is out of range (1-indexed)")
+        XCTAssertNil(WorkspaceSidebarView.session(at: -1, in: sessions))
+        XCTAssertNil(WorkspaceSidebarView.session(at: 5, in: sessions), "one past the end must still be a no-op")
+    }
+
+    func testSessionAtIndexOnEmptyListIsNoOp() {
+        XCTAssertNil(WorkspaceSidebarView.session(at: 1, in: []))
+    }
+
+    /// `WorkspaceSidebarView.lastSession(in:)` — Cmd+9. Always the LAST
+    /// visible session, regardless of count — never literally "index 9".
+    func testLastSessionReturnsLastRegardlessOfCount() {
+        let three = (0..<3).map { session(name: "s\($0)") }
+        XCTAssertEqual(WorkspaceSidebarView.lastSession(in: three)?.name, "s2", "with 3 sessions, Cmd+9 must land on the 3rd, not no-op")
+
+        let twelve = (0..<12).map { session(name: "s\($0)") }
+        XCTAssertEqual(WorkspaceSidebarView.lastSession(in: twelve)?.name, "s11", "with 12 sessions, Cmd+9 must land on the 12th, not the 9th")
+    }
+
+    func testLastSessionOnEmptyListIsNoOp() {
+        XCTAssertNil(WorkspaceSidebarView.lastSession(in: []))
+    }
+
+    /// Sessions-tab composition: Cmd+1..9 must index the ACTIVE zone only —
+    /// Archive rows (no live indicator state) are excluded, same source as
+    /// the Cmd+Shift+[/] cycle (`sessionsTabCycleOrder`).
+    @MainActor
+    func testSessionAtIndexExcludesArchiveRowsOnSessionsTab() {
+        let project = Project(name: "p", rootPath: "~/p")
+        let a = AgentSession(name: "a", templateId: UUID(), projectId: project.id)
+        let b = AgentSession(name: "b", templateId: UUID(), projectId: project.id)
+        let archived = AgentSession(name: "archived", templateId: UUID(), projectId: project.id)
+
+        let indicatorStates: [UUID: SessionIndicatorState] = [
+            a.id: .processing,
+            b.id: .idle,
+            // archived.id intentionally absent -> resolves .inactive -> Archive.
+        ]
+
+        let coordinator = SessionCoordinator()
+        coordinator.seedEmptySessionTreeForTesting(id: a.id)
+        coordinator.seedEmptySessionTreeForTesting(id: b.id)
+        coordinator.seedEmptySessionTreeForTesting(id: archived.id)
+
+        let visible = WorkspaceSidebarView.sessionsTabCycleOrder(
+            sessions: [a, b, archived],
+            indicatorStates: indicatorStates,
+            coordinator: coordinator
+        )
+
+        XCTAssertEqual(WorkspaceSidebarView.session(at: 1, in: visible)?.name, "a")
+        XCTAssertEqual(WorkspaceSidebarView.session(at: 2, in: visible)?.name, "b")
+        // Only 2 visible sessions -> Cmd+3 is out of range even though a
+        // 3rd session exists in the Archive.
+        XCTAssertNil(WorkspaceSidebarView.session(at: 3, in: visible), "the archived session must not be reachable by index")
+        XCTAssertEqual(WorkspaceSidebarView.lastSession(in: visible)?.name, "b")
+    }
+
+    /// Projects-tab composition: Cmd+1..9 indexes
+    /// `WorkspaceStore.sessionsInVisualOrder(coordinator:)` — every session
+    /// with a live surface, not just running ones (browser-tab mental
+    /// model), matching what `selectAdjacentLiveSession`'s Projects-tab
+    /// branch already cycles through.
+    @MainActor
+    func testSessionAtIndexUsesVisualOrderOnProjectsTab() {
+        let project = Project(name: "p", rootPath: "~/p")
+        let store = WorkspaceStore(testingProjects: [project])
+        let a = store.addSession(name: "a", templateId: UUID(), projectId: project.id)
+        let b = store.addSession(name: "b", templateId: UUID(), projectId: project.id)
+        let noSurface = store.addSession(name: "noSurface", templateId: UUID(), projectId: project.id)
+
+        let coordinator = SessionCoordinator()
+        coordinator.seedEmptySessionTreeForTesting(id: a.id)
+        coordinator.seedEmptySessionTreeForTesting(id: b.id)
+        // noSurface never gets a live surface -> excluded from visual order.
+
+        let visible = store.sessionsInVisualOrder(coordinator: coordinator)
+
+        XCTAssertEqual(WorkspaceSidebarView.session(at: 1, in: visible)?.name, "a")
+        XCTAssertEqual(WorkspaceSidebarView.session(at: 2, in: visible)?.name, "b")
+        XCTAssertNil(WorkspaceSidebarView.session(at: 3, in: visible), "noSurface has no live surface and must not be reachable by index")
+        XCTAssertEqual(WorkspaceSidebarView.lastSession(in: visible)?.name, "b")
+    }
+
     // MARK: - Relative Time Labels
 
     func testRelativeLabelJustNow() {

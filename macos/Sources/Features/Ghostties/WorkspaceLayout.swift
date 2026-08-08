@@ -314,6 +314,14 @@ extension Notification.Name {
     /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`.
     static let workspaceCloseSession = Notification.Name("com.seansmithdesign.ghostties.workspace.closeSession")
 
+    /// Posted by AppDelegate's Cmd+1-9 local-event monitor, project-first
+    /// workspace mode only. The notification object is the originating
+    /// NSWindow; `userInfo["index"]` carries the digit pressed (1-9, where 9
+    /// always means "last visible session", not literally the 9th).
+    /// `WorkspaceSidebarView` resolves the index against whichever list the
+    /// active sidebar tab renders.
+    static let workspaceFocusSessionAtIndex = Notification.Name("com.seansmithdesign.ghostties.workspace.focusSessionAtIndex")
+
     /// Posted by MenuBarDropdownView when the user clicks a session row.
     /// userInfo contains "sessionId" (UUID). SessionCoordinators observe this
     /// to focus the tapped session and bring its window to the front.
