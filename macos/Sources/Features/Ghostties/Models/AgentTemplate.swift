@@ -155,8 +155,24 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
         icon: "globe"
     )
 
+    /// Codex CLI agent session.
+    ///
+    /// Uses `.custom` rather than a dedicated `Kind` case — see the design note
+    /// in the PR that introduced this template. `agent` (Claude-CLI-specific
+    /// flags: system prompt, model, permissions, `--mcp-config`) is intentionally
+    /// nil; those flags don't map to the `codex` CLI.
+    static let codex = AgentTemplate(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
+        name: "Codex",
+        kind: .custom,
+        command: "codex",
+        isDefault: true,
+        isGlobal: true,
+        icon: "chevron.left.forwardslash.chevron.right"
+    )
+
     /// All built-in templates, in display order.
-    static let defaults: [AgentTemplate] = [shell, claudeCode, orchestrator, browser]
+    static let defaults: [AgentTemplate] = [shell, claudeCode, codex, orchestrator, browser]
 
     // MARK: - CLI Construction
 
