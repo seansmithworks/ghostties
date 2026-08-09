@@ -2827,3 +2827,56 @@ set it was applied to.
 The hero half (CTA gated behind ~10.1s of animation; mobile terminal type scale); footer tap
 targets 13–16px at the 768px breakpoint (under WCAG 2.5.8's 24px floor); whether the homepage
 footer should go `static` below 480px; favicon randomisation; build-time version substitution.
+
+---
+
+## 2026-08-09 — Distribution lane: cask + npx install paths
+
+### Shipped
+
+- `dc7077711` (#99, squash-merged) — Homebrew cask + npx installer, +790/−0 across 9 files,
+  purely additive. Adds `dist/ghostties/homebrew/ghostties.rb`,
+  `dist/ghostties/npm/ghostties-install/`, `scripts/update-cask-version.sh`, and an inert
+  `homebrew-cask` job in `.github/workflows/ghostties-release.yml`. Six CI checks green.
+- `SeanSmithWorks/homebrew-tap` created (public), seeded at `06e14f771`. `Casks/ghostties.rb` is
+  byte-identical to `main`'s copy (same git blob `c8d01d21`). Verified working:
+  `brew install --cask seansmithworks/tap/ghostties` into a scratch appdir.
+- `ghostties-install@0.1.0` published to npm. `npx ghostties-install` verified end to end from
+  the registry: pinned zip downloaded, SHA256 verified, installed `0.1.0-beta.21`, `spctl` →
+  `accepted / source=Notarized Developer ID`, real Sparkle key present. Re-running refuses to
+  clobber without `--force` and doesn't start a download. `/Applications/Ghostties.app` untouched
+  throughout (identical inode and mtime).
+- #105 open, CI green — corrects docs that still claimed the package was unpublished, fixes
+  `repository.url` to the `git+` form, and records two parked items in BACKLOG.md.
+
+### What cost real time
+
+- The originating brief had the cask's `zap` target `com.mitchellh.ghostty` — that's **upstream**
+  Ghostty, installed here as the daily-driver terminal with live prefs under that domain.
+  Ghostties is `com.seansmithdesign.ghostties`. Shipping the brief as written would have let
+  `brew uninstall --zap` destroy real terminal config. The zap now uses exact literal paths only.
+- An independent reviewer found a **blocking** bug two builders and the orchestrator all missed:
+  `scripts/update-cask-version.sh` used BSD-only `mktemp -t` and `sed -i ''` while its CI job runs
+  on `ubuntu-latest` — would have failed a release run *after* the release was already public.
+  Fixed portably by construction.
+- Files were first placed at `dist/homebrew/` and `dist/npm/`, then relocated under
+  `dist/ghostties/` because `dist/` is upstream-owned and still actively changed upstream.
+  Relocated before review so the reviewed artifact was the shipped one.
+- The npm publish took three attempts and every error pointed at the wrong thing: an `E403`
+  because the account had been created minutes earlier by the login itself with 2FA off; then an
+  `E404 PUT` that was actually an auth failure, because **enabling 2FA revokes existing npm CLI
+  tokens** (`npm whoami` → `E401` diagnoses it in one command). Also, `npm login` cannot run
+  inside Claude Code — it blocks on an interactive prompt past the 120s cutoff, which detaches
+  stdin and kills it.
+- A pre-existing bug was found and logged, not fixed (BACKLOG.md, 2026-08-08): the release
+  workflow runs `create-dmg` **before** `xcrun stapler staple`, so the DMG ships an unstapled app
+  while the zip ships a stapled one — a cask install needs an online Gatekeeper check on first
+  launch.
+
+### Open (BACKLOG.md, 2026-08-09)
+
+CI cask auto-bump not activated, needs a fine-grained PAT; npm version bumps are manual.
+
+Durable learnings in project memory, referenced not restated:
+`reference_ghostties-vs-upstream-ghostty-domains.md`, `reference_homebrew-cask-gotchas.md`,
+`project_distribution-brew-npm.md`.
