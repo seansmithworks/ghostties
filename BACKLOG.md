@@ -4,6 +4,49 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-09 — App/UX wave: six PRs open, none merged
+
+Objective was to turn Sean's seven asks into reviewable PRs without merging. All seven closed.
+Distribution (#99) was the sibling thread's and is already on `main`.
+
+- [ ] **Merge the wave, in order.** `#102` **before** `#103` — both touch `WorkspaceSidebarView.swift`.
+  `#96` (titlebar), `#100` (hide Tasks), `#101` (Codex template) and `#104` (overlay card) are
+  independent of each other. | macos | carried
+- [ ] **#102 shipped WITHOUT its minimum-sidebar-width measurement.** Adding text labels to the
+  toolbar buttons widens them; the agent could not isolate its own Dev window to measure, and
+  correctly refused to force focus. **Nothing was pre-built for an overflow that was never
+  confirmed to exist.** 2-minute manual check is in the PR body — if the label truncates at
+  minimum width, an icon-only fallback is the fix. | macos | needs-runtime-check
+- [ ] **Screen Recording permission is NOT granted to this session's process.** `screencapture`
+  returns an all-black image and `osascript`/System Events is denied assistive access. Two
+  subagents and the orchestrator hit it independently — environmental, not agent error. **Every
+  visual acceptance criterion in this wave went unverified because of it**, and the parked
+  dark-mode hero capture is blocked on the same thing. Granting it once to the terminal
+  (System Settings → Privacy & Security → Screen Recording) unblocks the whole class. | ops | quick
+- [x] **~~#96's window-floor tradeoff~~ — dissolved, do not chase it.** Removing the
+  `TerminalController` override looked like it would let the gutter below the terminal card bleed
+  terminal colour instead of sidebar chrome. It does not: `WorkspaceViewContainer` paints its own
+  layer with `canvasBackgroundCGColor` in `.pinned`/`.closed` (lines 509, 1166, 1177), so
+  `window.backgroundColor` only ever shows in the titlebar strip. `.overlay` was the one exception
+  (`layer.backgroundColor = nil`, line 1188) and **#104 closes it** by making overlay paint its own.
+- **Sean's design call, 2026-08-09:** the canvas is **always** a shadowed card, including overlay.
+  Built as #104. Note a shadow needs the inset to be visible at all — a full-bleed view's shadow is
+  clipped — so inset, radius and shadow move together. This was never a persistence bug.
+
+### Method notes worth keeping
+
+- **`xcrun xcresulttool get test-results summary` is the fix for the recurring test-count
+  miscount.** Raw log lines overcount by a constant −49 in this repo; #103's agent reported "688
+  passed" against a real ~638. #104's agent used xcresulttool and hit the baseline exactly. Put it
+  in any brief that asks for totals.
+- **Verify PRs with `gh pr diff`, never `git diff main..branch`.** `main` moved repeatedly during
+  the wave, and a raw range diff made #100 look like it deleted the entire distribution lane. It
+  changed one file, +4/−10.
+- **A subagent typed into one of Sean's live sessions** — memory
+  `feedback_subagent-gui-automation-hit-live-session`. Every brief now carries: screen capture yes,
+  synthetic input never. Two later agents hit that wall and correctly stopped rather than route
+  around it.
+
 ## 2026-08-04 — Sessions-tab cycling + indicator lifecycle (PRs #90, #92 shipped)
 
 Both merged to `main` and verified present in the merged code, not just merge-succeeded.
