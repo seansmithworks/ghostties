@@ -607,18 +607,18 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         }
 
         // Call this last in case it uses any of the properties above.
+        //
+        // MARK: - Ghostties fork fence (titlebar bg sync)
+        // This used to be immediately followed by an override that forced
+        // window.backgroundColor to the static chrome token in workspace mode.
+        // That fought with TerminalWindow.syncAppearance's own real-theme
+        // computation (whichever ran last won), and neither was the terminal's
+        // actual background — hence the titlebar strip reading a fixed grey
+        // regardless of the active Ghostty theme. Do not reintroduce a static
+        // override here; window.backgroundColor must stay derived from the
+        // focused surface's real background (see TerminalWindow.syncAppearance).
         window.syncAppearance(surfaceConfig)
-
-        // In workspace mode the window floor (the strip below the terminal card)
-        // is chrome, not terminal content. Override window.backgroundColor so the
-        // bottom gutter matches the sidebar chrome instead of bleeding the terminal
-        // theme's pure black.
-        if window.contentView is WorkspaceViewContainer {
-            let isLight = window.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
-            window.backgroundColor = isLight
-                ? WorkspaceLayout.chromeBackgroundLight
-                : WorkspaceLayout.chromeBackgroundDark
-        }
+        // MARK: - End Ghostties fork fence (titlebar bg sync)
 
         terminalViewContainer?.ghosttyConfigDidChange(ghostty.config, preferredBackgroundColor: window.preferredBackgroundColor)
     }
