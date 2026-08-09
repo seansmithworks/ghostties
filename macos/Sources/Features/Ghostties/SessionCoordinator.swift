@@ -649,7 +649,15 @@ final class SessionCoordinator: ObservableObject {
     /// with no live session at all, closes the window — browser standard:
     /// closing your last tab closes the window.
     func closeCurrentSessionWithConfirmation() {
-        guard let id = activeSessionId else { return }
+        guard let id = activeSessionId else {
+            // Nothing to close, and nothing live left in this window — browser
+            // convention: ⌘W then closes the window. If live sessions DO exist but
+            // none is active, stay a no-op rather than closing out from under them.
+            if sessionTrees.isEmpty && browserManagers.isEmpty {
+                terminalController?.window?.close()
+            }
+            return
+        }
 
         let indicatorState = WorkspaceStore.shared.globalIndicatorStates[id] ?? .inactive
         let isActive = indicatorState != .inactive
