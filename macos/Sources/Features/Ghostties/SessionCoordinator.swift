@@ -637,6 +637,51 @@ final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// "Close Session" — Cmd+W, browser-tab semantics. Confirms via
+    /// `NSAlert` (never SwiftUI `confirmationDialog` — see
+    /// `BaseTerminalController.closeSurface(_:withConfirmation:)`'s doc
+    /// comment for why a Cmd+W handler can't risk a dialog that Cmd+W itself
+    /// can dismiss) when the current session is "active" — the same
+    /// live/inactive split `RecentsListView` already uses for its
+    /// Active/Archive sections (`indicatorState != .inactive`). Closing then
+    /// runs through the existing `closeSession(id:)`, which already focuses
+    /// a replacement session if one is running. If that leaves this window
+    /// with no live session at all, closes the window — browser standard:
+    /// closing your last tab closes the window.
+    func closeCurrentSessionWithConfirmation() {
+        guard let id = activeSessionId else {
+            // Nothing to close, and nothing live left in this window — browser
+            // convention: ⌘W then closes the window. If live sessions DO exist but
+            // none is active, stay a no-op rather than closing out from under them.
+            if sessionTrees.isEmpty && browserManagers.isEmpty {
+                terminalController?.window?.close()
+            }
+            return
+        }
+
+        let indicatorState = WorkspaceStore.shared.globalIndicatorStates[id] ?? .inactive
+        let isActive = indicatorState != .inactive
+
+        func performClose() {
+            closeSession(id: id)
+            if sessionTrees.isEmpty && browserManagers.isEmpty {
+                terminalController?.window?.close()
+            }
+        }
+
+        guard isActive, let controller = terminalController else {
+            performClose()
+            return
+        }
+
+        controller.confirmClose(
+            messageText: "Close Session?",
+            informativeText: "This session is still active. Closing it will stop the running process."
+        ) {
+            performClose()
+        }
+    }
+
     /// Clean up runtime state for a session (after removing from the store).
     func clearRuntime(id: UUID) {
         sessionTrees.removeValue(forKey: id)

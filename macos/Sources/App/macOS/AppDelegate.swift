@@ -392,6 +392,18 @@ class AppDelegate: NSObject,
         // the chord before our "Next/Previous Session" menu items ever fire).
         setupSessionCyclingShortcut()
 
+        // Reclaims ⌘T for "New Session" in project-first workspace mode —
+        // see `setupNewSessionShortcut()`.
+        setupNewSessionShortcut()
+
+        // Reclaims ⌘W for "Close Session" in project-first workspace mode —
+        // see `setupCloseSessionShortcut()`.
+        setupCloseSessionShortcut()
+
+        // Reclaims ⌘1-9 for positional session focus in project-first
+        // workspace mode — see `setupSessionIndexShortcuts()`.
+        setupSessionIndexShortcuts()
+
         // Setup signal handlers
         setupSignals()
 
@@ -718,14 +730,30 @@ class AppDelegate: NSObject,
         prevProjectItem.keyEquivalentModifierMask = [.command, .control]
         prevProjectItem.setImageIfDesired(systemSymbolName: "chevron.left.2")
 
-        // "New Session" — Cmd+Shift+T
+        // "New Session" — Cmd+T (browser-tab convention). Reclaimed from
+        // Ghostty's native `new_tab` in project-first workspace mode by
+        // `setupNewSessionShortcut()`'s local event monitor, which fires
+        // before AppKit's key-equivalent dispatch ever reaches this menu
+        // item or the terminal surface.
         let newSessionItem = NSMenuItem(
             title: "New Session",
             action: #selector(TerminalController.newWorkspaceSession(_:)),
             keyEquivalent: "t"
         )
-        newSessionItem.keyEquivalentModifierMask = [.command, .shift]
+        newSessionItem.keyEquivalentModifierMask = [.command]
         newSessionItem.setImageIfDesired(systemSymbolName: "plus.rectangle")
+
+        // Hidden duplicate: Cmd+Shift+T also creates a new session — kept as
+        // an alias so muscle memory from earlier betas (where Cmd+Shift+T was
+        // the only binding) still works, same pattern as `sidebarItemCmdS` above.
+        let newSessionItemCmdShiftT = NSMenuItem(
+            title: "New Session",
+            action: #selector(TerminalController.newWorkspaceSession(_:)),
+            keyEquivalent: "t"
+        )
+        newSessionItemCmdShiftT.keyEquivalentModifierMask = [.command, .shift]
+        newSessionItemCmdShiftT.isHidden = true
+        newSessionItemCmdShiftT.allowsKeyEquivalentWhenHidden = true
 
         // "Sidebar View" submenu — radio group for the sidebar views.
         // Tasks is intentionally hidden here (not deleted) — see
@@ -764,8 +792,9 @@ class AppDelegate: NSObject,
         viewMenu.insertItem(nextProjectItem, at: 5)
         viewMenu.insertItem(prevProjectItem, at: 6)
         viewMenu.insertItem(newSessionItem, at: 7)
-        viewMenu.insertItem(sidebarViewParent, at: 8)
-        viewMenu.insertItem(NSMenuItem.separator(), at: 9)
+        viewMenu.insertItem(newSessionItemCmdShiftT, at: 8)
+        viewMenu.insertItem(sidebarViewParent, at: 9)
+        viewMenu.insertItem(NSMenuItem.separator(), at: 10)
 
     }
 
@@ -930,6 +959,94 @@ class AppDelegate: NSObject,
             default:
                 return event
             }
+        }
+    }
+
+    // MARK: - Session Keyboard Navigation (⌘T / ⌘W / ⌘1-9)
+
+    /// Shared gate for the ⌘T/⌘W/⌘1-9 workspace-session shortcuts below:
+    /// only intercept in **project-first** workspace windows — the mode with
+    /// an actual session list (Projects tab or Sessions tab; see
+    /// `WorkspaceSidebarView`). `contentView is WorkspaceViewContainer` is
+    /// the same test the rest of the fork uses to distinguish workspace from
+    /// non-workspace windows (see `TerminalController.swift`), extended with
+    /// a `sidebarViewMode` check so task-first mode — which has no session
+    /// list these shortcuts could act on (`TaskSidebarView` doesn't observe
+    /// `.workspaceCloseSession` / `.workspaceFocusSessionAtIndex`) — falls
+    /// through to upstream Ghostty ⌘T/⌘W behavior instead of going silently
+    /// dead. Non-workspace windows (e.g. Quick Terminal) always fall through.
+    private static func isProjectFirstWorkspaceWindow(_ window: NSWindow) -> Bool {
+        guard window.contentView is WorkspaceViewContainer else { return false }
+        let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
+        return mode == "projectFirst"
+    }
+
+    /// Reclaims ⌘T for "New Session" in project-first workspace mode,
+    /// overriding Ghostty's native `new_tab` binding — which would otherwise
+    /// create a real NSWindow tab, or fall back to opening a whole new
+    /// window (see `TerminalController.newTab(_:)`), neither of which
+    /// matches the sidebar-session model. Same intercept-before-
+    /// `performKeyEquivalent` technique as `setupSessionCyclingShortcut()`
+    /// above — a local monitor runs before AppKit's key-equivalent dispatch
+    /// entirely, so it reliably wins the race regardless of what's bound in
+    /// `src/config/Config.zig` or the user's own keybinds.
+    private func setupNewSessionShortcut() {
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
+                  event.charactersIgnoringModifiers?.lowercased() == "t"
+            else { return event }
+
+            guard let window = NSApp.keyWindow, Self.isProjectFirstWorkspaceWindow(window) else { return event }
+
+            NSApp.sendAction(#selector(TerminalController.newWorkspaceSession(_:)), to: nil, from: nil)
+            return nil
+        }
+    }
+
+    /// Reclaims ⌘W for "Close Session" in project-first workspace mode,
+    /// overriding Ghostty's native `close_surface` binding (which closes the
+    /// terminal surface with its own "Close Terminal?" confirmation and no
+    /// notion of a sidebar session). Posts `.workspaceCloseSession`;
+    /// `WorkspaceSidebarView` observes it and calls
+    /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`, which owns
+    /// the confirm / focus-neighbor / close-window logic.
+    private func setupCloseSessionShortcut() {
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
+                  event.charactersIgnoringModifiers?.lowercased() == "w"
+            else { return event }
+
+            guard let window = NSApp.keyWindow, Self.isProjectFirstWorkspaceWindow(window) else { return event }
+
+            NotificationCenter.default.post(name: .workspaceCloseSession, object: window)
+            return nil
+        }
+    }
+
+    /// Reclaims ⌘1-9 for positional session focus in project-first workspace
+    /// mode, overriding Ghostty's native `goto_tab`/`last_tab` bindings
+    /// (which act on real NSWindow tabs — irrelevant here, the sidebar IS
+    /// the tab strip; see `TerminalController.relabelTabs()`). Posts
+    /// `.workspaceFocusSessionAtIndex` with the pressed digit in `userInfo`;
+    /// `WorkspaceSidebarView` resolves it against whichever list the current
+    /// sidebar tab renders. ⌘9 always means "last visible session", not
+    /// literally the 9th.
+    private func setupSessionIndexShortcuts() {
+        _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
+                  let characters = event.charactersIgnoringModifiers,
+                  characters.count == 1,
+                  let digit = Int(characters), (1...9).contains(digit)
+            else { return event }
+
+            guard let window = NSApp.keyWindow, Self.isProjectFirstWorkspaceWindow(window) else { return event }
+
+            NotificationCenter.default.post(
+                name: .workspaceFocusSessionAtIndex,
+                object: window,
+                userInfo: ["index": digit]
+            )
+            return nil
         }
     }
 
