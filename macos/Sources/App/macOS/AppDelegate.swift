@@ -755,7 +755,10 @@ class AppDelegate: NSObject,
         newSessionItemCmdShiftT.isHidden = true
         newSessionItemCmdShiftT.allowsKeyEquivalentWhenHidden = true
 
-        // "Sidebar View" submenu — radio group for the three sidebar views.
+        // "Sidebar View" submenu — radio group for the sidebar views.
+        // Tasks is intentionally hidden here (not deleted) — see
+        // TerminalController.toggleTaskView(_:) and the
+        // `ghostties.sidebarViewMode` defaults escape hatch.
         let projectsSubItem = NSMenuItem(
             title: "Projects",
             action: #selector(TerminalController.showProjectsView(_:)),
@@ -772,18 +775,9 @@ class AppDelegate: NSObject,
         sessionsSubItem.keyEquivalentModifierMask = [.command, .shift]
         sessionsSubItem.setImageIfDesired(systemSymbolName: "clock")
 
-        let tasksSubItem = NSMenuItem(
-            title: "Tasks",
-            action: #selector(TerminalController.toggleTaskView(_:)),
-            keyEquivalent: "v"
-        )
-        tasksSubItem.keyEquivalentModifierMask = [.command, .shift]
-        tasksSubItem.setImageIfDesired(systemSymbolName: "checklist")
-
         let sidebarViewSubmenu = NSMenu()
         sidebarViewSubmenu.addItem(projectsSubItem)
         sidebarViewSubmenu.addItem(sessionsSubItem)
-        sidebarViewSubmenu.addItem(tasksSubItem)
 
         let sidebarViewParent = NSMenuItem(title: "Sidebar View", action: nil, keyEquivalent: "")
         sidebarViewParent.submenu = sidebarViewSubmenu

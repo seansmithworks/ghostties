@@ -44,9 +44,20 @@ struct AgentTemplateTests {
         #expect(browser.templateDescription == "Embedded Chromium browser")
     }
 
+    @Test func builtInCodexTemplate() {
+        let codex = AgentTemplate.codex
+        #expect(codex.kind == .custom)
+        #expect(codex.command == "codex")
+        #expect(codex.agent == nil)
+        #expect(codex.isDefault == true)
+        #expect(codex.isGlobal == true)
+        #expect(codex.templateDescription == nil)  // stays in the BUILT-IN group, not PRESETS
+        #expect(codex.icon == "chevron.left.forwardslash.chevron.right")
+    }
+
     @Test func defaultsContainsAllBuiltIns() {
-        #expect(AgentTemplate.defaults.count == 4)
-        #expect(AgentTemplate.defaults.map(\.name) == ["Shell", "Claude Code", "Orchestrator", "Browser"])
+        #expect(AgentTemplate.defaults.count == 5)
+        #expect(AgentTemplate.defaults.map(\.name) == ["Shell", "Claude Code", "Codex", "Orchestrator", "Browser"])
     }
 
     @Test func deterministicUUIDs() {
@@ -55,6 +66,7 @@ struct AgentTemplateTests {
         #expect(AgentTemplate.claudeCode.id.uuidString == "00000000-0000-0000-0000-000000000002")
         #expect(AgentTemplate.orchestrator.id.uuidString == "00000000-0000-0000-0000-000000000003")
         #expect(AgentTemplate.browser.id.uuidString == "00000000-0000-0000-0000-000000000004")
+        #expect(AgentTemplate.codex.id.uuidString == "00000000-0000-0000-0000-000000000005")
     }
 
     // MARK: - Kind Enum Codable
@@ -277,6 +289,12 @@ struct AgentTemplateTests {
         #expect(cmd.contains("--model 'opus'"))
         #expect(cmd.contains("--permission-mode 'plan'"))
         #expect(cmd.contains("--effort 'max'"))
+    }
+
+    @Test func buildCommandCodex() {
+        let codex = AgentTemplate.codex
+        let cmd = codex.buildCommand()
+        #expect(cmd == "'codex'")  // no agent config -> just the command, shell-escaped
     }
 
     @Test func buildCommandCustomKind() {

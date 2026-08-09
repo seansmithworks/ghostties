@@ -160,9 +160,13 @@ struct WorkspaceSidebarView: View {
     private var titlebarToolbar: some View {
         HStack(spacing: 8) {
             Spacer()
-            // "+" only shown in Projects tab; Sessions view controls live in the content area.
+            // One labelled "new item" control per tab, right-aligned. Projects
+            // gets a plain action button; Sessions gets a menu-presenting
+            // button (project-picker flyout) — see `NewSessionToolbarButton`.
             if sidebarTab == .projects {
-                ToolbarIconButton(systemName: "plus", label: "Add project", action: presentFolderPicker)
+                ToolbarLabelButton(systemName: "plus", label: "New Project", action: presentFolderPicker)
+            } else {
+                NewSessionToolbarButton()
             }
         }
         .padding(.horizontal, 12)
@@ -489,10 +493,12 @@ private struct EmptyStateAddButton: View {
     }
 }
 
-// MARK: - Toolbar Icon Button
+// MARK: - Toolbar Label Button
 
-/// A small icon button with hover highlight for the sidebar toolbar.
-private struct ToolbarIconButton: View {
+/// A labelled icon+text button with hover feedback for the sidebar toolbar's
+/// primary "new item" action. Styled to match `EmptyStateAddButton` above
+/// (icon 10pt medium, text 12pt medium, 4pt spacing) per DESIGN.md.
+private struct ToolbarLabelButton: View {
     let systemName: String
     let label: String
     let action: () -> Void
@@ -501,16 +507,15 @@ private struct ToolbarIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .medium))
-                .frame(width: 24, height: 24)
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(isHovered ? Color.primary.opacity(0.08) : .clear)
-                )
+            HStack(spacing: 4) {
+                Image(systemName: systemName)
+                    .font(.system(size: 10, weight: .medium))
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+            }
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(isHovered ? .primary : .secondary)
         .focusable()
         .onHover { isHovered = $0 }
         .accessibilityLabel(label)
