@@ -3,11 +3,9 @@
 A zero-dependency installer shim for [Ghostties](https://ghostties.org). Downloads a
 pinned, checksum-verified build of `Ghostties.app` and places it on your Mac.
 
-**Not yet published to npm.** `npx ghostties-install` does not work today —
-this package has never been pushed to the registry (`npm view
-ghostties-install` returns 404). The command below is what will work once it
-is published; until then, run the installer directly from a local checkout
-(`node bin/ghostties-install.js`).
+**Published to npm.** `npx ghostties-install` downloads the pinned,
+checksum-verified `Ghostties.app` build and installs it — no separate `npm
+install` step needed.
 
 **Recommended install path: [Homebrew Cask](https://ghostties.org).** This npm shim
 exists for people who already live in `npx` and want a one-liner; it defers to the
@@ -76,12 +74,12 @@ self-heals immediately after install.
 
 **Bumping the pin is currently a manual step**, not automated in CI. The
 Homebrew cask's version bump is automated by a separate CI workflow in this repo;
-the npm package's is not, because this package has never been published to the npm
-registry (publishing needs explicit sign-off first). An auto-bump script that can't
-publish its result would just be dead code, so it wasn't built. If you're bumping
-this by hand: update `RELEASE.tag`, `RELEASE.assetName` (should stay the same name),
-and `RELEASE.sha256` in `bin/ghostties-install.js`, using the sha256 GitHub reports
-for the release asset.
+the npm package's is not — publishing a new pin means `npm publish` by hand.
+Because the app self-updates via Sparkle on first launch, a stale pin self-heals,
+so this is a deliberate trade rather than a gap to close urgently. If you're
+bumping this by hand: update `RELEASE.tag`, `RELEASE.assetName` (should stay the
+same name), and `RELEASE.sha256` in `bin/ghostties-install.js`, using the sha256
+GitHub reports for the release asset, then run `npm publish`.
 
 ## Zero dependencies
 

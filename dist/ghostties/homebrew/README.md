@@ -6,7 +6,7 @@ not a live mirror of what users install. The tap is what `brew install`
 actually resolves; see "The in-repo copy trails releases" below for how the
 two stay (or fall out of) sync.
 
-Target end-user UX, once the tap exists:
+The tap is live. End-user install:
 
 ```
 brew install --cask seansmithworks/tap/ghostties
@@ -43,15 +43,13 @@ Homebrew tap repo. It is a no-op today — it's gated on a repository variable
 that doesn't exist yet, so it skips cleanly on every release run without
 failing.
 
-To activate it:
+The tap repo `SeanSmithWorks/homebrew-tap` already exists and is seeded with
+the current cask. To activate CI auto-bump:
 
-1. **Create the tap repo** `SeanSmithWorks/homebrew-tap` (public, standard
-   Homebrew tap layout — a `Casks/` directory). This is a deliberate manual
-   step, not something CI does for you.
-2. **Add a repository variable** on `ghostties`: `HOMEBREW_TAP_REPO` =
+1. **Add a repository variable** on `ghostties`: `HOMEBREW_TAP_REPO` =
    `SeanSmithWorks/homebrew-tap`. (Settings → Secrets and variables → Actions
    → Variables.)
-3. **Add a repository secret**: `HOMEBREW_TAP_TOKEN` — a token with push
+2. **Add a repository secret**: `HOMEBREW_TAP_TOKEN` — a token with push
    access to the tap repo (a fine-grained PAT scoped to that one repo is
    enough; a classic PAT with `repo` scope also works). Add it under
    Secrets and variables → Actions → Secrets, on the `ghostties` repo (the
