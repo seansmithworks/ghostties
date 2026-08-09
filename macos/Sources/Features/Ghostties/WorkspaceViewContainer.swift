@@ -1126,11 +1126,14 @@ class WorkspaceViewContainer: NSView {
                 sidebarWidthConstraint.animator().constant = currentSidebarWidth
                 widthModel.width = currentSidebarWidth
                 sidebarHostingView.animator().alphaValue = 1
-                // Terminal stays full-width (leading to superview, no insets).
-                shadowHostTopConstraint.animator().constant = 0
-                shadowHostLeadingToSuperview.animator().constant = 0
-                shadowHostTrailingConstraint.animator().constant = 0
-                shadowHostBottomConstraint.animator().constant = 0
+                // Terminal floats as a carded, inset canvas — same outer inset
+                // as pinned/closed. The sidebar (z-order above the card) floats
+                // over its left edge rather than sharing space with it.
+                shadowHostTopConstraint.animator().constant = inset
+                shadowHostLeadingToSuperview.animator().constant = inset
+                shadowHostTrailingConstraint.animator().constant = -inset
+                shadowHostBottomConstraint.animator().constant = -inset
+                // Title row stays hidden in overlay — unchanged from before.
                 terminalTopConstraint.animator().constant = 0
                 titleLabel.animator().alphaValue = 0
                 sidebarToggleButton.animator().alphaValue = 0
@@ -1177,15 +1180,21 @@ class WorkspaceViewContainer: NSView {
             layer?.backgroundColor = canvasBackgroundCGColor
             sidebarOverlayBackground.layer?.shadowOpacity = 0
         case .overlay:
-            terminalContainer.layer?.cornerRadius = 0
+            // Same carded canvas treatment as pinned/closed — the terminal
+            // always reads as a floating card, even while the sidebar hovers.
+            terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-            terminalShadowHost.layer?.shadowOpacity = 0
-            terminalShadowHost.layer?.cornerRadius = 0
-            terminalShadowHost.layer?.backgroundColor = nil
+            terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
+            terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
+            terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
+            // Browser panel is force-collapsed on entry to overlay (see above);
+            // leave its own card styling untouched.
             browserShadowHost.layer?.cornerRadius = 0
             browserShadowHost.layer?.backgroundColor = nil
             browserShadowHost.layer?.shadowOpacity = 0
-            layer?.backgroundColor = nil
+            layer?.backgroundColor = canvasBackgroundCGColor
+            // The sidebar keeps its own separate shadow — it still genuinely
+            // floats over the terminal card, distinct from the card's shadow.
             sidebarOverlayBackground.layer?.shadowOpacity = 0.2
         }
 
@@ -1338,8 +1347,9 @@ class WorkspaceViewContainer: NSView {
         let initialMode = WorkspaceStore.shared.sidebarMode
         self.sidebarMode = initialMode
         let isPinned = initialMode == .pinned
-        // Both pinned and closed modes show the floating card with insets.
-        let hasCardInset = initialMode != .overlay
+        // All three modes show the floating card with insets — overlay floats
+        // the sidebar over the same carded terminal rather than a full-bleed one.
+        let hasCardInset = true
         let initialWidth: CGFloat = isPinned ? currentSidebarWidth : 0
         sidebarDragHandle.isHidden = !isPinned
 
@@ -1378,8 +1388,11 @@ class WorkspaceViewContainer: NSView {
         shadowHostLeadingToSuperview.isActive = !isPinned
 
         // Terminal top offset inside the shadow host — reserves title bar space
-        // when pinned or closed (card modes show title + toggle button).
-        let titlebarInset: CGFloat = hasCardInset ? WorkspaceLayout.terminalTitleBarHeight : 0
+        // when pinned or closed (those two card modes show title + toggle
+        // button). Overlay is carded now too, but keeps its title row hidden
+        // (unchanged from before this pass), so it's keyed on mode, not
+        // `hasCardInset`.
+        let titlebarInset: CGFloat = initialMode != .overlay ? WorkspaceLayout.terminalTitleBarHeight : 0
         terminalTopConstraint = terminalContainer.topAnchor.constraint(
             equalTo: terminalShadowHost.topAnchor, constant: titlebarInset)
 
