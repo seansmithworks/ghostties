@@ -202,6 +202,22 @@ instead and must opt out explicitly with `text-transform: none` *and* a `margin-
 reset: `.product h2` on the homepage and `h2` on `/licenses`. Forgetting
 either is the most likely way to break a page from this file.
 
+`.product h2` is a single line as of 2026-08-09 ("Multiple agent terminals,
+one window"). It used to be two `<span>`s each forced to `display: block` to
+break the line manually; that selector is gone along with the spans — don't
+reintroduce a two-line heading without also reintroducing the rule that
+breaks it.
+
+**Product window/caption spacing:** the gap between a product window and the
+*next* window belongs to `.product-caption`'s `margin-bottom` (56px, 28px
+below 480px), not `.product-window`'s. `.product-window` itself only carries
+a small `margin-bottom` (12px, 8px below 480px) down to its own caption.
+Putting the large gap on the window instead — as it shipped originally —
+makes every caption collapse against the *next* window and read as its
+header instead of its own video's label. The last caption in the section
+zeroes its own `margin-bottom` (`.product-caption:last-of-type`) so the
+56px doesn't stack with `.product`'s own bottom padding.
+
 ---
 
 ## 5. Spacing, radius, motion
@@ -263,9 +279,31 @@ Two more things this file does not fix:
   bottom of `index.html` locks the final download line by writing
   `rgba(100,220,120,0.9)` and `rgba(80,210,100,0.13)` as inline styles. Those
   duplicate `--diff-add-fg` and `--diff-add-bg`. Change one, change both.
-- **`pre` is styled in `style.css` but no page uses a `<pre>` today.** It was
-  authored on `/licenses` and left in place rather than deleted as part of a
-  refactor.
+- **`--diff-del-fg` / `--diff-del-bg` are unused as of the install-paths
+  update (2026-08-09).** They backed the hero terminal's one red ("install
+  soon") line, which is gone now that the terminal offers real install
+  commands. Left as tokens, not deleted — nothing here mandates every token
+  stay wired to a use, and re-adding a red diff state later shouldn't mean
+  re-deriving the contrast math in DESIGN.md §3.
+
+### `pre` / copy-button component
+
+`pre` (styled in `style.css`, previously authored for `/licenses` and never
+used) is genuinely in use as of 2026-08-09: `/download`'s two install
+commands (`brew install --cask …`, `npx ghostties-install`) each render in a
+`pre > code` with a `.copy-btn` beside it. `.copy-btn` and its `pre` layout
+overrides (`display: flex` to sit the button beside the command,
+`min-width: 0` on `code` so it can shrink instead of forcing horizontal
+scroll) live in `download.html`'s own `<style>` block — a one-page component,
+not promoted to `style.css`.
+
+The homepage hero has its own, unrelated copy-button component: `.term-btn`,
+nested inside `.line-4`/`.line-5` of the typewriter terminal (see the CSS
+comment on `.term-btn` in `index.html` for why it must stay a plain `<div
+class="line">` with the button nested inside, not a `.line` that *is* a
+button). Both components copy to the clipboard and announce via a
+`role="status" aria-live="polite"` region; they don't share code because
+they don't share layout.
 
 ---
 
