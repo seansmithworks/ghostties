@@ -160,11 +160,14 @@ final class RecentsListViewTests: XCTestCase {
 
     // MARK: - Active/Archive Sessions (pure helpers)
 
-    /// FIX 1 (cold launch): every session resolves `.inactive` at cold
-    /// launch (no `globalIndicatorStates` entries yet) and nothing is
-    /// selected — sessions must still be visible, not silently hidden behind
-    /// an empty Active section and a collapsed Archive.
-    func testColdLaunchAllSessionsVisibleInArchive() {
+    /// Sean hit this directly: at cold launch every session resolves
+    /// `.inactive` (no `globalIndicatorStates` entries yet), Active is empty,
+    /// nothing is selected, and Archive's stored preference is `false`
+    /// (its default). Archive must render COLLAPSED — an empty Active
+    /// section is not a reason to override the user's collapsed/expanded
+    /// choice for Archive. A bare sidebar in this state is the accepted
+    /// outcome; it is not this helper's job to prevent it.
+    func testColdLaunchArchiveStaysCollapsedWhenActiveIsEmpty() {
         let sessions = (0..<14).map { session(name: "s\($0)") }
 
         let active = RecentsListView.activeSessions(from: sessions, indicatorStates: [:])
@@ -173,26 +176,21 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertTrue(active.isEmpty)
         XCTAssertEqual(archive.count, 14)
 
-        // And the auto-expand override forces Archive open in this exact
-        // scenario, regardless of the stored (default-collapsed) preference.
         let archiveExpanded = RecentsListView.effectiveExpanded(
             storedPreference: false,
             isArchiveSection: true,
-            activeSessionsEmpty: active.isEmpty,
             sectionContainsSelectedSession: false
         )
-        XCTAssertTrue(archiveExpanded, "Archive must auto-expand when Active is empty, or all 14 sessions are invisible")
+        XCTAssertFalse(archiveExpanded, "Archive must honor the collapsed stored preference even when Active is empty")
     }
 
-    /// FIX 6 + FIX 1: a selected session that belongs in Archive stays in
-    /// Archive (no promotion) — but its section renders expanded via the
-    /// auto-expand override, so it's still visible without moving.
+    /// FIX 6: a selected session that belongs in Archive stays in Archive
+    /// (no promotion) — but its section renders expanded via the auto-expand
+    /// override, so it's still visible without moving.
     func testSelectedArchiveSessionStaysInArchiveButSectionExpands() {
         let selected = session(name: "selected")
         let other = session(name: "other")
         let sessions = [selected, other]
-        // One session IS active, so the "Active empty" auto-expand condition
-        // does NOT apply here — only the "contains selection" condition should.
         let indicatorStates: [UUID: SessionIndicatorState] = [other.id: .processing]
 
         let active = RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
@@ -204,7 +202,6 @@ final class RecentsListViewTests: XCTestCase {
         let archiveExpanded = RecentsListView.effectiveExpanded(
             storedPreference: false,
             isArchiveSection: true,
-            activeSessionsEmpty: active.isEmpty,
             sectionContainsSelectedSession: archive.contains { $0.id == selected.id }
         )
         XCTAssertTrue(archiveExpanded, "Archive must expand because it contains the selected session")
@@ -212,26 +209,18 @@ final class RecentsListViewTests: XCTestCase {
 
     /// The auto-expand override is render-time only — it must never depend on
     /// (or imply writing to) the stored `@AppStorage` preference. Passing a
-    /// `storedPreference` of `false` still yields `true` under an override
+    /// `storedPreference` of `false` still yields `true` under the override
     /// condition, proving the override doesn't require/mutate storage.
     func testEffectiveExpandedOverrideIgnoresStoredPreferenceWhenTriggered() {
         XCTAssertTrue(RecentsListView.effectiveExpanded(
             storedPreference: false,
             isArchiveSection: true,
-            activeSessionsEmpty: true,
-            sectionContainsSelectedSession: false
-        ))
-        XCTAssertTrue(RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            isArchiveSection: true,
-            activeSessionsEmpty: false,
             sectionContainsSelectedSession: true
         ))
         // No override condition met — falls through to the stored preference.
         XCTAssertFalse(RecentsListView.effectiveExpanded(
             storedPreference: false,
             isArchiveSection: true,
-            activeSessionsEmpty: false,
             sectionContainsSelectedSession: false
         ))
     }
@@ -246,7 +235,6 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertFalse(RecentsListView.effectiveExpanded(
             storedPreference: false,
             isArchiveSection: false,
-            activeSessionsEmpty: false,
             sectionContainsSelectedSession: true
         ), "Active must not force-expand for the selected session — only Archive gets that override")
     }
