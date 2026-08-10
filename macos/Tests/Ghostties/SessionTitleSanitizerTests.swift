@@ -45,6 +45,77 @@ final class SessionTitleSanitizerTests: XCTestCase {
         ))
     }
 
+    // MARK: - Directory-name-echo rejection (title is just the dir name plus
+    // boilerplate, e.g. Claude Code's "<repo> | Claude Code" terminal title)
+
+    func testProjectDirectoryNamePlusClaudeCodeSuffixRejected() {
+        // The reported bug: Claude Code emits "<repo> | Claude Code" and the
+        // old exact-equality check let it straight through.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "invented-project | Claude Code",
+            currentName: "Session 1",
+            projectDirectoryName: "invented-project"
+        ))
+    }
+
+    func testProjectDirectoryNameWithEmDashShellSuffixRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "invented-project — zsh",
+            currentName: "Session 1",
+            projectDirectoryName: "invented-project"
+        ))
+    }
+
+    func testProjectDirectoryNameWithSpacedHyphenInformativeSuffixKept() {
+        // A spaced hyphen introduces a genuinely informative segment — must
+        // survive, and the full title (not just the surviving segment) is
+        // what gets returned.
+        let result = SessionTitleSanitizer.sanitize(
+            title: "invented-project - fix the sidebar",
+            currentName: "Session 1",
+            projectDirectoryName: "invented-project"
+        )
+        XCTAssertEqual(result, "invented-project - fix the sidebar")
+    }
+
+    func testInformativeTitleMentioningUnrelatedDirNameKept() {
+        XCTAssertEqual(
+            SessionTitleSanitizer.sanitize(
+                title: "Refactoring the auth module",
+                currentName: "Session 1",
+                projectDirectoryName: "invented-project"
+            ),
+            "Refactoring the auth module"
+        )
+    }
+
+    func testHyphenatedDirectoryNameWithNoSeparatorKept() {
+        // Regression guard: a hyphenated project directory name that merely
+        // appears as a prefix, with no separator, must not be shredded into
+        // fragments by a bare (unspaced) hyphen — the whole string is one
+        // segment and it isn't equal to the bare directory name, so it's
+        // informative and must be kept.
+        XCTAssertEqual(
+            SessionTitleSanitizer.sanitize(
+                title: "invented-hyphenated auth refactor",
+                currentName: "Session 1",
+                projectDirectoryName: "invented-hyphenated"
+            ),
+            "invented-hyphenated auth refactor"
+        )
+    }
+
+    func testHyphenatedDirectoryNamePlusClaudeCodeSuffixRejected() {
+        // Same shape as the reported bug, but with a project directory name
+        // that itself contains bare hyphens — proves splitting on " - "
+        // (spaced) rather than "-" (bare) doesn't cause a false negative.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "invented-hyphenated-project | Claude Code",
+            currentName: "Session 1",
+            projectDirectoryName: "invented-hyphenated-project"
+        ))
+    }
+
     func testShellPromptRejected() {
         XCTAssertNil(SessionTitleSanitizer.sanitize(
             title: "sean@Seans-MacBook-Pro ghostties %",
