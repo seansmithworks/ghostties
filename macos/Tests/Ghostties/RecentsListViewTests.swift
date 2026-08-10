@@ -337,24 +337,74 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertTrue(inactive.isEmpty, "must not also land in Inactive")
     }
 
-    // MARK: - Ordering (Archive newest-first; Active/Inactive unchanged)
+    // MARK: - Ordering (Archive newest-first by lastActiveAt; Active/Inactive unchanged)
 
-    /// Archive renders newest-first (reverse append/creation order) — Sean's
-    /// call. Active and Inactive keep the existing append-order behavior
-    /// (see `testLastActiveAtDoesNotAffectOrder` etc. above) unchanged.
-    func testArchiveOrdersNewestFirst() {
-        let oldest = session(name: "oldest")
-        let middle = session(name: "middle")
-        let newest = session(name: "newest")
+    /// Archive renders newest-first by `lastActiveAt` — Sean's call. This
+    /// fixture deliberately inserts sessions in an order that DISAGREES with
+    /// reverse-insertion-order: append order is [twoHoursAgo, fiveMinAgo,
+    /// oneHourAgo], so a naive `Array(archived.reversed())` would produce
+    /// [oneHourAgo, fiveMinAgo, twoHoursAgo] — wrong. Only a real sort on
+    /// `lastActiveAt` produces the correct [fiveMinAgo, oneHourAgo,
+    /// twoHoursAgo]. Active and Inactive keep the existing append-order
+    /// behavior (see `testLastActiveAtDoesNotAffectOrder` etc. above)
+    /// unchanged.
+    func testArchiveOrdersNewestFirstByLastActiveAt() {
+        let twoHoursAgo = session(name: "twoHoursAgo", lastActiveAt: Date(timeIntervalSinceNow: -7200))
+        let fiveMinAgo = session(name: "fiveMinAgo", lastActiveAt: Date(timeIntervalSinceNow: -300))
+        let oneHourAgo = session(name: "oneHourAgo", lastActiveAt: Date(timeIntervalSinceNow: -3600))
 
-        // Passed in append/creation order: oldest, middle, newest.
+        // Append/creation order: twoHoursAgo, fiveMinAgo, oneHourAgo —
+        // NOT chronological, so reverse-insertion-order and newest-first
+        // disagree here.
         let archive = RecentsListView.archiveSessions(
-            from: [oldest, middle, newest],
+            from: [twoHoursAgo, fiveMinAgo, oneHourAgo],
             indicatorStates: [:],
             sessionIdsWithLiveSurface: []
         )
 
-        XCTAssertEqual(archive.map(\.name), ["newest", "middle", "oldest"], "Archive must render newest-first")
+        XCTAssertEqual(
+            archive.map(\.name),
+            ["fiveMinAgo", "oneHourAgo", "twoHoursAgo"],
+            "Archive must sort by lastActiveAt descending, not reverse insertion order"
+        )
+    }
+
+    /// Sessions with a `nil` `lastActiveAt` sort last, after every
+    /// timestamped session — regardless of insertion position.
+    func testArchiveSortsNilLastActiveAtLast() {
+        let noTimestamp = session(name: "noTimestamp", lastActiveAt: nil)
+        let oneHourAgo = session(name: "oneHourAgo", lastActiveAt: Date(timeIntervalSinceNow: -3600))
+        let fiveMinAgo = session(name: "fiveMinAgo", lastActiveAt: Date(timeIntervalSinceNow: -300))
+
+        // noTimestamp is inserted FIRST, but must still render LAST.
+        let archive = RecentsListView.archiveSessions(
+            from: [noTimestamp, oneHourAgo, fiveMinAgo],
+            indicatorStates: [:],
+            sessionIdsWithLiveSurface: []
+        )
+
+        XCTAssertEqual(
+            archive.map(\.name),
+            ["fiveMinAgo", "oneHourAgo", "noTimestamp"],
+            "nil lastActiveAt must sort after every timestamped session"
+        )
+    }
+
+    /// When every session lacks a `lastActiveAt` (all nil), the sort must be
+    /// stable and preserve incoming (append/creation) order rather than
+    /// reordering arbitrarily.
+    func testArchivePreservesAppendOrderWhenAllLastActiveAtAreNil() {
+        let first = session(name: "first", lastActiveAt: nil)
+        let second = session(name: "second", lastActiveAt: nil)
+        let third = session(name: "third", lastActiveAt: nil)
+
+        let archive = RecentsListView.archiveSessions(
+            from: [first, second, third],
+            indicatorStates: [:],
+            sessionIdsWithLiveSurface: []
+        )
+
+        XCTAssertEqual(archive.map(\.name), ["first", "second", "third"], "all-nil list must preserve insertion order")
     }
 
     /// Active's ordering is unchanged by the three-way split — still
