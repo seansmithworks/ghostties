@@ -6,7 +6,7 @@ import SwiftUI
 ///   + New Session (full-width row → native flyout menu for project selection)
 ///   ─────────────────────────────────
 ///   ACTIVE    (sessions with a live indicator state)
-///   INACTIVE  (exited this launch, but still holds a live surface — ran, then stopped)
+///   INACTIVE  (started at some point this launch, currently not active — ran, then stopped)
 ///   ARCHIVE   (restored from disk, never started this launch)
 struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
@@ -199,37 +199,29 @@ struct RecentsListView: View {
         Self.activeSessions(from: store.sessions, indicatorStates: store.globalIndicatorStates)
     }
 
-    /// Sessions that exited (or completed) THIS launch but still hold a live
-    /// surface — `coordinator.hasLiveSurface(id:)` is true. This is the
-    /// "ran, then stopped" bucket: a session the user actually interacted
-    /// with this run, as opposed to one restored from disk that never
-    /// started. See `archiveSessions` for the complement.
+    /// Sessions that exited (or completed) THIS launch but were started at
+    /// some point this launch — `coordinator.sessionIdsStartedThisLaunch`
+    /// contains the id. This is the "ran, then stopped" bucket: a session
+    /// the user actually interacted with this run, as opposed to one
+    /// restored from disk that never started. See `archiveSessions` for the
+    /// complement.
     var inactiveSessions: [AgentSession] {
         Self.inactiveSessions(
             from: store.sessions,
             indicatorStates: store.globalIndicatorStates,
-            sessionIdsWithLiveSurface: sessionIdsWithLiveSurface
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
         )
     }
 
-    /// Sessions with no live indicator state AND no live surface this
+    /// Sessions with no live indicator state AND never started this
     /// launch — restored from `workspace.json`, never started this run.
     /// Exact complement of `activeSessions` + `inactiveSessions` combined.
     var archiveSessions: [AgentSession] {
         Self.archiveSessions(
             from: store.sessions,
             indicatorStates: store.globalIndicatorStates,
-            sessionIdsWithLiveSurface: sessionIdsWithLiveSurface
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
         )
-    }
-
-    /// Session ids that currently have a live surface in `coordinator`
-    /// (`sessionTrees` or `browserManagers`) — the same liveness check
-    /// `WorkspaceSidebarView.sessionsTabCycleOrder` already uses via
-    /// `coordinator.hasLiveSurface(id:)`. Computed once per `body` pass via
-    /// the `inactiveSessions`/`archiveSessions` instance properties above.
-    private var sessionIdsWithLiveSurface: Set<UUID> {
-        Set(store.sessions.map(\.id).filter { coordinator.hasLiveSurface(id: $0) })
     }
 
     // MARK: - Actions
@@ -327,24 +319,24 @@ struct RecentsListView: View {
     }
 
     /// Pure, testable variant of the `inactiveSessions` instance property:
-    /// not active (no live indicator state) AND still has a live surface
-    /// this launch — `sessionIdsWithLiveSurface` is passed in rather than
+    /// not active (no live indicator state) AND was started at some point
+    /// this launch — `sessionIdsStartedThisLaunch` is passed in rather than
     /// read from a coordinator so this stays a pure function callers can
     /// test directly. Ordering matches `activeSessions` (append order) —
     /// only `archiveSessions` reverses.
     static func inactiveSessions(
         from sessions: [AgentSession],
         indicatorStates: [UUID: SessionIndicatorState],
-        sessionIdsWithLiveSurface: Set<UUID>
+        sessionIdsStartedThisLaunch: Set<UUID>
     ) -> [AgentSession] {
         sorted(sessions: sessions.filter {
             !belongsInActive(indicatorState: indicatorStates[$0.id] ?? .inactive)
-                && sessionIdsWithLiveSurface.contains($0.id)
+                && sessionIdsStartedThisLaunch.contains($0.id)
         })
     }
 
     /// Pure, testable variant of the `archiveSessions` instance property:
-    /// not active AND no live surface this launch — restored from disk,
+    /// not active AND never started this launch — restored from disk,
     /// never started. Together with `activeSessions` and `inactiveSessions`
     /// this is an exact three-way partition — every session lands in
     /// exactly one bucket. Sorted newest-first by `lastActiveAt` — the one
@@ -354,11 +346,11 @@ struct RecentsListView: View {
     static func archiveSessions(
         from sessions: [AgentSession],
         indicatorStates: [UUID: SessionIndicatorState],
-        sessionIdsWithLiveSurface: Set<UUID>
+        sessionIdsStartedThisLaunch: Set<UUID>
     ) -> [AgentSession] {
         let archived = sorted(sessions: sessions.filter {
             !belongsInActive(indicatorState: indicatorStates[$0.id] ?? .inactive)
-                && !sessionIdsWithLiveSurface.contains($0.id)
+                && !sessionIdsStartedThisLaunch.contains($0.id)
         })
         // Sort newest-first by `lastActiveAt`, nil last. `Array.sort` is not
         // guaranteed stable, so ties (and nil-vs-nil) are broken on the
