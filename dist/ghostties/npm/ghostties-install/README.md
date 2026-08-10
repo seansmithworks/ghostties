@@ -7,10 +7,11 @@ pinned, checksum-verified build of `Ghostties.app` and places it on your Mac.
 checksum-verified `Ghostties.app` build and installs it — no separate `npm
 install` step needed.
 
-**Recommended install path: [Homebrew Cask](https://ghostties.org).** This npm shim
-exists for people who already live in `npx` and want a one-liner; it defers to the
-cask for everything else (auto-bumped versions, `brew upgrade`, uninstall hooks). If
-you have Homebrew, use the cask instead.
+**Recommended install path:** `brew install --cask seansmithworks/tap/ghostties`
+(see [`../../homebrew/README.md`](../../homebrew/README.md)). This npm shim exists
+for people who already live in `npx` and want a one-liner; it defers to the cask for
+everything else (auto-bumped versions, `brew upgrade`, uninstall hooks). If you have
+Homebrew, use the cask instead.
 
 ## Requirements
 
