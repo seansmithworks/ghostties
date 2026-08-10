@@ -9,9 +9,10 @@ install` step needed.
 
 **Recommended install path:** `brew install --cask seansmithworks/tap/ghostties`
 (see [`../../homebrew/README.md`](../../homebrew/README.md)). This npm shim exists
-for people who already live in `npx` and want a one-liner; it defers to the cask for
-everything else (auto-bumped versions, `brew upgrade`, uninstall hooks). If you have
-Homebrew, use the cask instead.
+for people who already live in `npx` and want a one-liner; the cask does more for
+you (checksum-verified download, `/Applications` placement, `uninstall`/`zap`
+cleanup) while Sparkle handles updates in-app either way. If you have Homebrew, use
+the cask instead.
 
 ## Requirements
 
