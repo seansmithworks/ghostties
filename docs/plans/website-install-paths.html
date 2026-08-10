@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ghostties.org — surfacing brew + npx install paths</title>
+    <link rel="stylesheet" href="http://localhost:4849/assets/plan.css" />
+  </head>
+  <body>
+    <h1>Surfacing <code>brew</code> + <code>npx</code> on ghostties.org</h1>
+    <p class="doc-meta">
+      Ghostties · web lane · 2026-08-09 · <strong>Plan for review</strong>
+    </p>
+
+    <blockquote class="callout" data-anchor-id="tldr">
+      <p>
+        <strong
+          >Both terminal installs shipped and are verified live. The site still
+          presents the DMG as the only path.</strong
+        >
+        This plan closes that gap across two pages, fixes an un-automated
+        release step found along the way, and corrects one trust claim that is
+        no longer accurate.
+      </p>
+      <p>
+        Scope is deliberately narrow: no redesign, no new visual world, no
+        touching the hero's ghost choreography.
+      </p>
+    </blockquote>
+
+    <blockquote class="callout" data-anchor-id="status">
+      <p>
+        <strong>Status 2026-08-09: paused, nothing built for real.</strong>
+        Design is settled through mockups; no repo file has been changed.
+        Working mockups lived in a session scratchpad and are
+        <em>ephemeral</em> — if this is picked up in a new session, they are
+        gone and this document is the record.
+      </p>
+    </blockquote>
+
+    <h2 data-anchor-id="decisions">Decisions made</h2>
+
+    <table data-anchor-id="decisions-table">
+      <thead>
+        <tr>
+          <th>Question</th>
+          <th>Call</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Hero structure</td>
+          <td>
+            <strong>Six lines.</strong> Three separate install buttons — brew,
+            npx, download — each on its own line.
+          </td>
+        </tr>
+        <tr>
+          <td><code>- install soon</code> joke line</td>
+          <td>
+            <strong>Removed.</strong> Written as a promise months ago; the
+            promise shipped.
+          </td>
+        </tr>
+        <tr>
+          <td>Version + requirements</td>
+          <td>
+            <strong>Merged into one line</strong> —
+            <code>+ ghostties % v0.1.0-beta.21 · macOS 13+</code>. Drops the
+            date and "Apple Silicon"; both survive on <code>/download</code>.
+          </td>
+        </tr>
+        <tr>
+          <td>Terminal width</td>
+          <td>
+            <strong>Stays 46ch.</strong> Short button labels rather than
+            widening the hero for the 54ch brew command.
+          </td>
+        </tr>
+        <tr>
+          <td>Timing</td>
+          <td>
+            <strong>Compressed</strong>, uniform 0.35s gaps. Ends ~9.25s vs
+            10.1s shipping today.
+          </td>
+        </tr>
+        <tr>
+          <td><code>+</code> prefixes</td>
+          <td>
+            <strong>Kept.</strong> With no red line left they stop being diff
+            grammar, but on screen they still read as one contiguous terminal
+            output block.
+          </td>
+        </tr>
+        <tr>
+          <td><code>/download</code> ordering</td>
+          <td><strong>Homebrew primary</strong>, npx second, DMG third.</td>
+        </tr>
+        <tr>
+          <td>Gatekeeper claim</td>
+          <td>
+            <strong>Soften.</strong> Keep "signed and notarized"; drop the
+            absolute no-warning promise.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 data-anchor-id="hero-final">Final hero structure</h2>
+
+    <pre><code>  cd ~/ghostties                              14ch  unchanged
+  https://github.com/SeanSmithWorks/ghostties 43ch  unchanged
++ ghostties % v0.1.0-beta.21 · macOS 13+      40ch  merged
++ [brew install ⧉]                            18ch  copies the FULL cask command
++ [npx ghostties-install ⧉]                   27ch  desktop · 25ch ≤480px, icon drops
++ [download now]                              16ch  → .dmg</code></pre>
+
+    <p>
+      Timing at the site's ~0.025s/char rate, uniform 0.35s gaps: line-3 @5.65s
+      · line-4 @7.0s · line-5 @7.825s · line-6 @8.85s, ending ~9.25s. Lines 1–2
+      and every ghost animation (<code>g0</code>–<code>g7</code>) are untouched.
+    </p>
+
+    <blockquote class="callout" data-anchor-id="domlesson">
+      <p>
+        <strong
+          >Build note that cost a round — the <code>.line</code> must stay a
+          block <code>&lt;div&gt;</code> with the button nested inside
+          it.</strong
+        >
+        Making the line itself a <code>&lt;button&gt;</code> breaks three things
+        at once: buttons are <code>inline-block</code> so brew and npx flow side
+        by side instead of stacking; <code>text-indent: -2ch</code> (the hanging
+        indent positioning the <code>+</code>) does not apply, so stray
+        <code>+</code> glyphs escape the <code>width: 0</code> clip and float on
+        the page mid-animation; and the green reveal background paints
+        per-button instead of across the line.
+      </p>
+      <p>
+        The shipped <code>line-6</code> already had the right pattern —
+        <code>&lt;span aria-hidden&gt;+ [&lt;/span&gt;</code>, then the
+        interactive element, then
+        <code>&lt;span aria-hidden&gt;]&lt;/span&gt;</code>. Copy it rather than
+        describing the behaviour and leaving the structure open.
+      </p>
+    </blockquote>
+
+    <h2 data-anchor-id="constraints">Three constraints that shaped this</h2>
+
+    <h3 data-anchor-id="c1">
+      1. The brew command cannot go in the hero terminal
+    </h3>
+    <p>
+      <code>brew install --cask seansmithworks/tap/ghostties</code> is 48
+      characters, 50 with the <code>+&nbsp;</code> diff prefix. The terminal is
+      <code>width: 46ch</code> on desktop, and below 480px it drops to 16px mono
+      inside <code>calc(100vw - 72px)</code> — roughly
+      <strong>25ch at 320px</strong>. It would clip mid-word on every phone.
+    </p>
+    <p>
+      This is why the hero carries the <em>short</em> path and
+      <code>/download</code> carries the <em>recommended</em> one in full.
+    </p>
+
+    <h3 data-anchor-id="c2">2. The typewriter cannot wrap</h3>
+    <p>
+      Every line animates <code>width: 0 → Nch</code> with
+      <code>steps(N)</code> under <code>white-space: nowrap</code>. A line that
+      reflows breaks the mechanism outright. So "two lines" means
+      <strong>two real <code>.line</code> divs</strong>, not one line that wraps
+      at a breakpoint.
+    </p>
+    <p>
+      On desktop they stack as two short options under the green block, which
+      reads as intentional rather than as overflow.
+    </p>
+
+    <h3 data-anchor-id="c3">
+      3. The copy glyph must sit outside the typed character count
+    </h3>
+    <p>Character budget at 320px is ~25ch. Measured:</p>
+    <table data-anchor-id="charcount">
+      <thead>
+        <tr>
+          <th>Candidate</th>
+          <th>Width</th>
+          <th>Fits 320px (~25ch)?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>+ npx ghostties-install</code></td>
+          <td>23ch</td>
+          <td>Yes, with margin</td>
+        </tr>
+        <tr>
+          <td><code>+ [npx ghostties-install]</code></td>
+          <td>25ch</td>
+          <td>Exactly at budget, zero margin</td>
+        </tr>
+        <tr>
+          <td><code>+ [npx ghostties-install ⧉]</code></td>
+          <td>27ch</td>
+          <td><strong>No — clips</strong></td>
+        </tr>
+        <tr>
+          <td><code>+ [download now]</code></td>
+          <td>16ch</td>
+          <td>Yes</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      So the copy button is rendered <em>after</em> the animated span, outside
+      the width animation. Note <code>.line</code> has
+      <code>overflow: hidden</code>, so the button needs a wrapper rather than
+      absolute positioning inside the line.
+    </p>
+
+    <h2 data-anchor-id="hero">The hero terminal</h2>
+
+    <p>
+      The last line becomes two lines. Brackets carry meaning:
+      <strong>bracketed = click, bare = copy.</strong> The bare-command form
+      already has precedent one line up — the GitHub URL on line 2 is a bare
+      link with no brackets.
+    </p>
+
+    <pre><code>  cd ~/ghostties
+  https://github.com/SeanSmithWorks/ghostties
+- ghostties % install soon
++ ghostties % v0.1.0-beta.21
++ 02Aug2026 · macOS 13+ · Apple Silicon
++ npx ghostties-install   ⧉        ← copy, 23ch typed
++ [download now]                   ← click → .dmg, 16ch</code></pre>
+
+    <blockquote class="callout" data-anchor-id="joke">
+      <p>
+        <strong>The joke finally pays off.</strong> Line 3 is
+        <code>- ghostties % install soon</code> — a red diff-<em>delete</em>
+        line, written as a promise. With a real install command on the green
+        side, the diff now literally reads <em>install soon → install now</em>.
+        That payoff was already set up on the page; it just needed the green
+        line to carry a command.
+      </p>
+    </blockquote>
+
+    <h3 data-anchor-id="timing">
+      Timing — this costs ~0.8s unless we compress
+    </h3>
+
+    <p>
+      I checked whether there was slack earlier in the sequence.
+      <strong>There is not</strong> — the 1.56s→4.2s gap I suspected was dead
+      air is the ghost pyramid assembling (<code>g1</code> at 1.8s through
+      <code>g7</code> ending 3.8s). That stays untouched.
+    </p>
+
+    <p>
+      The three gaps <em>inside</em> the green diff block are reclaimable
+      without touching the ghosts:
+    </p>
+
+    <table data-anchor-id="timing-table">
+      <thead>
+        <tr>
+          <th>Line</th>
+          <th>Today</th>
+          <th>Append as-is</th>
+          <th>Compressed <em>(recommended)</em></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>line-3 (26ch)</td>
+          <td>5.50 → 6.15</td>
+          <td>5.50 → 6.15</td>
+          <td>5.50 → 6.15</td>
+        </tr>
+        <tr>
+          <td>line-4 (28ch)</td>
+          <td>7.00 → 7.70</td>
+          <td>7.00 → 7.70</td>
+          <td>6.50 → 7.20</td>
+        </tr>
+        <tr>
+          <td>line-5 (39ch)</td>
+          <td>8.20 → 9.20</td>
+          <td>8.20 → 9.20</td>
+          <td>7.55 → 8.55</td>
+        </tr>
+        <tr>
+          <td>line-6 (23ch)</td>
+          <td>—</td>
+          <td>9.70 → 10.28</td>
+          <td>8.90 → 9.48</td>
+        </tr>
+        <tr>
+          <td>line-7 (16ch)</td>
+          <td>9.70 → <strong>10.10</strong></td>
+          <td>10.50 → <strong>10.90</strong></td>
+          <td>9.80 → <strong>10.20</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      Compressing trims the inter-line gaps from 0.85 / 0.50 / 0.50s to a
+      uniform 0.35s. It lands at
+      <strong>~10.2s — parity with today</strong> while adding a whole line.
+      <code>BACKLOG.md</code> already lists "CTA gated behind ~10.1s of
+      animation" as an open complaint; appending without compressing makes a
+      known problem measurably worse.
+    </p>
+
+    <blockquote class="callout" data-anchor-id="open-timing">
+      <p>
+        <strong>Open for you:</strong> compressed (~10.2s, recommended) or
+        append as-is (10.9s)? Fully rebalancing the hero's pacing is a separate
+        <code>BACKLOG</code> item ("the hero half") and is <em>not</em> in this
+        scope either way.
+      </p>
+    </blockquote>
+
+    <h2 data-anchor-id="downloadpage">The <code>/download</code> page</h2>
+
+    <p>
+      Reordered around <em>install method</em> rather than "current release".
+      The existing <code>.download-btn</code> and
+      <code>.download-meta</code> survive as the third option — no rebuild.
+    </p>
+
+    <pre><code>Download
+───────────────────────────────────────────
+Install
+
+  brew install --cask seansmithworks/tap/ghostties   [copy]
+  Recommended · upgrades with brew, in-app via Sparkle
+
+  npx ghostties-install                              [copy]
+  One-off installer · pinned version + SHA256
+
+  [ Download v0.1.0-beta.21 for macOS ]
+  147 MB · macOS 13+ · Apple Silicon
+  Developer ID signed and notarized by Apple.
+
+Beta release — auto-updates via Sparkle once installed.
+View all releases → · What's new →
+───────────────────────────────────────────</code></pre>
+
+    <p>
+      <strong>Reuse, don't invent:</strong> <code>DESIGN.md</code> §6 notes that
+      <code>pre</code> is styled in <code>style.css</code> but no page uses it
+      today. The command blocks are exactly that use. The copy button is the
+      only genuinely new component, and it stays in <code>download.html</code>'s
+      page block per §2 (the hero's copy affordance lives in a different context
+      and shares no rules).
+    </p>
+
+    <h2 data-anchor-id="bug">
+      Bug found in scope — the homepage DMG URL is never bumped
+    </h2>
+
+    <p>
+      <code>index.html:594</code> hardcodes
+      <code>.../releases/download/v0.1.0-beta.21/Ghostties.dmg</code>, but
+      <code>scripts/update-web-version.py</code> rewrites that URL in
+      <code>download.html</code> only. Its own comment asserts the opposite:
+    </p>
+
+    <pre><code># 1. DMG download URL — only download.html has one. (index.html links to /download.)</code></pre>
+
+    <p>
+      That comment is wrong, and the HTML at
+      <code>index.html:590</code> confirms it is a known manual step ("Hardcoded
+      DMG URL — bump the version tag with each release"). It is correct today
+      only because someone remembered.
+    </p>
+
+    <p>
+      <strong>Fix at the root:</strong> add <code>web/index.html</code> to that
+      rule and correct the comment. The alternative — pointing the hero at
+      <code>/download</code> — routes around the bug instead of fixing it, and
+      costs a click.
+    </p>
+
+    <blockquote class="callout" data-anchor-id="noversions">
+      <p>
+        <strong>Neither new command carries a version number.</strong>
+        <code>brew install --cask seansmithworks/tap/ghostties</code> and
+        <code>npx ghostties-install</code> both resolve their own versions, so
+        they need no new regexes and cannot be mangled by the bump job. The only
+        version-bearing string added anywhere is the one already handled.
+      </p>
+    </blockquote>
+
+    <h2 data-anchor-id="trust">The Gatekeeper claim</h2>
+
+    <p><code>download.html:124</code> currently reads:</p>
+    <pre><code>Developer ID signed and notarized by Apple — opens without a Gatekeeper warning.</code></pre>
+    <p>
+      Per <code>BACKLOG.md</code> (2026-08-08) the release workflow runs
+      <code>create-dmg</code> <em>before</em> <code>xcrun stapler staple</code>,
+      so the DMG ships unstapled. The cask installs from that same DMG, so
+      <strong
+        >adding brew spreads the claim to a new path rather than leaving it
+        contained.</strong
+      >
+      Becoming:
+    </p>
+    <pre><code>Developer ID signed and notarized by Apple.</code></pre>
+    <p>
+      One clause deleted, no new claims. It becomes true again automatically
+      once the stapler ordering is fixed — which stays filed for the app lane,
+      not bundled here.
+    </p>
+
+    <h2 data-anchor-id="files">Files touched</h2>
+
+    <table data-anchor-id="files-table">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>web/index.html</code></td>
+          <td>
+            line-6 → <code>npx ghostties-install</code> + copy button; new
+            line-7 <code>[download now]</code>; typing keyframes,
+            <code>steps()</code> counts, char-count comments; compressed delays;
+            copy handler JS
+          </td>
+        </tr>
+        <tr>
+          <td><code>web/download.html</code></td>
+          <td>
+            Restructure to Install-first with two command blocks; soften the
+            Gatekeeper line; copy handler
+          </td>
+        </tr>
+        <tr>
+          <td><code>scripts/update-web-version.py</code></td>
+          <td>
+            Add <code>web/index.html</code> to the DMG-URL rule; correct the
+            false comment
+          </td>
+        </tr>
+        <tr>
+          <td><code>web/DESIGN.md</code></td>
+          <td>
+            Record the command-block + copy-button component and the new
+            <code>pre</code> usage
+          </td>
+        </tr>
+        <tr>
+          <td><code>BACKLOG.md</code></td>
+          <td>
+            File the <code>create-dmg</code>/<code>stapler</code> reorder for
+            the app lane
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2 data-anchor-id="a11y">Accessibility</h2>
+    <ul>
+      <li>
+        Copy controls are real <code>&lt;button&gt;</code>s with an accessible
+        name ("Copy install command"), not styled spans.
+      </li>
+      <li>
+        An <code>aria-live="polite"</code> region announces "Copied" — the
+        visual state change alone is not enough.
+      </li>
+      <li>
+        The hero copy button must toggle
+        <strong><code>visibility</code>, not just <code>opacity</code></strong
+        >, or a keyboard user tabbing during the 10s animation lands on an
+        invisible control.
+      </li>
+      <li>
+        Commands stay selectable text. Copy-to-clipboard is an accelerator,
+        never the only way to get the string.
+      </li>
+      <li>
+        <strong>Inherited debt, flagged not fixed:</strong>
+        <code>DESIGN.md</code> §7 records that 17 homepage animations already
+        ignore <code>prefers-reduced-motion</code>. This adds two more. Minimum
+        bar here: the copy affordance appears instantly under
+        <code>reduce</code>.
+      </li>
+    </ul>
+
+    <h2 data-anchor-id="verify">Verification</h2>
+
+    <blockquote class="callout" data-anchor-id="tworounds">
+      <p>
+        <strong>Two review rounds minimum, non-negotiable on this repo.</strong>
+        The website lane has a documented three-for-three record of each round's
+        <em>fixes</em> introducing the next round's defects. One passing round
+        is not evidence.
+      </p>
+    </blockquote>
+
+    <ol>
+      <li>
+        <strong>Dispatch real clicks</strong> on both hero CTAs and all three
+        <code>/download</code> actions at 320 / 375 / 768. A rendered element is
+        not a reachable one — that is exactly what PR&nbsp;#95 shipped to fix.
+      </li>
+      <li>
+        <strong>No horizontal page scroll at 320px</strong>, and confirm line-6
+        does not clip.
+      </li>
+      <li>
+        <strong>Screenshot diff</strong> at 1280 and 375, before/after, with an
+        ~11s settle. Treat anything under <strong>0.14%</strong> as noise (<code
+          >DESIGN.md</code
+        >
+        §2).
+      </li>
+      <li>
+        <strong>Clipboard actually receives the string</strong> — read it back,
+        don't trust a "Copied" label.
+      </li>
+      <li>
+        <strong>Dry-run the version script</strong> against a fake tag and
+        confirm it rewrites <em>both</em> pages.
+      </li>
+      <li>
+        Run the impeccable detector over both changed pages once, at the end.
+      </li>
+    </ol>
+
+    <h2 data-anchor-id="risks">Risks</h2>
+    <ul>
+      <li>
+        <strong>Merging to <code>main</code> is a production deploy</strong>
+        (<code>rootDirectory = web</code>). There is no staging step.
+      </li>
+      <li>
+        <strong>481–719px is unaddressed site-wide</strong> (<code
+          >DESIGN.md</code
+        >
+        §5) — the new command blocks must not overflow in that band, which the
+        existing audit already flagged as a trouble zone.
+      </li>
+      <li>
+        <strong>The hero is the most fragile surface on the site.</strong>
+        Editing the typewriter means touching <code>steps()</code> counts,
+        keyframe widths, and char-count comments that must stay in sync with the
+        visible text.
+      </li>
+    </ul>
+
+    <h2 data-anchor-id="alsofound">
+      Product section cleanup — IN SCOPE (added 2026-08-09)
+    </h2>
+
+    <blockquote class="callout" data-anchor-id="scopenote">
+      <p>
+        <strong>Scope expansion, deliberate.</strong> These are pre-existing
+        defects shipping on ghostties.org today, not caused by the install-path
+        work. Sean's call to fix them in the same pass rather than file them.
+      </p>
+    </blockquote>
+
+    <ul>
+      <li>
+        <strong>Product captions attach to the wrong window.</strong>
+        <code>.product-window { margin: 0 auto 56px }</code> puts 56px between a
+        window and its own caption, and <strong>0px</strong> between that
+        caption and the next window. So "four sessions, one window" sits flush
+        against the <em>second</em> window and reads as its header. Fix: move
+        the gap — window <code>margin-bottom: 12px</code>, caption
+        <code>margin-bottom: 56px</code>. Check the
+        <code>max-width: 480px</code> block too, which sets its own
+        <code>.product-window { margin-bottom: 28px }</code> and
+        <code>.product-caption { margin-top: 8px }</code> and has the same
+        inversion.
+      </li>
+
+      <li>
+        <strong
+          >The two product videos are framed inconsistently — RESOLVED as "leave
+          it".</strong
+        >
+        A CSS crop was built to hide the mismatch, then reverted
+        (<code>dbf0c5306</code>). It was the wrong direction: it deleted the
+        good asset's best feature to disguise the bad asset's flaw.
+        <p>
+          <strong>Proven by inspecting the sources, not by reading CSS.</strong>
+          Both files are <strong>1520×950</strong>.
+          <code>product-flow.mp4</code> contains full window chrome — traffic
+          lights, <code>+</code> button, tab icon, globe.
+          <code>product-sessions.mp4</code>'s top ~40px is blank background,
+          then straight into <code>PINNED</code> / <code>Last login:</code>.
+          <strong>The chrome was never captured.</strong> No CSS can recover
+          pixels that do not exist.
+        </p>
+        <p>
+          <strong>Standing decision (2026-08-09):</strong> the app has changed
+          substantially since these clips were recorded, so
+          <em>every</em> product asset needs re-shooting regardless. Fixing one
+          clip now is wasted work. This PR fixes the <em>container</em> so the
+          new recordings drop into a correct frame.
+        </p>
+      </li>
+    </ul>
+
+    <h2 data-anchor-id="capturespec">Capture spec for the eventual re-shoot</h2>
+
+    <p>
+      Measured during this work. Recording to these values means the existing
+      CSS needs no changes.
+    </p>
+
+    <table data-anchor-id="capture-table">
+      <thead>
+        <tr>
+          <th>Constraint</th>
+          <th>Value</th>
+          <th>Why</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Dimensions</td>
+          <td><strong>1520×950</strong></td>
+          <td>
+            What both current clips use; <code>.product-card</code> sizing and
+            the 860px <code>max-width</code> are tuned around this aspect ratio
+          </td>
+        </tr>
+        <tr>
+          <td>Window chrome</td>
+          <td><strong>Include it</strong> — traffic lights, tab strip</td>
+          <td>
+            <code>product-flow.mp4</code> is the reference. Chrome reads as a
+            real Mac app; its absence is what makes the sessions clip look wrong
+          </td>
+        </tr>
+        <tr>
+          <td>Chrome height</td>
+          <td>~40px of 950 (4.2%)</td>
+          <td>
+            Pixel-sampled from the flow video. Keep consistent across clips so
+            they sit identically in the card
+          </td>
+        </tr>
+        <tr>
+          <td>Posters</td>
+          <td>Re-shoot <code>*-poster.jpg</code> too</td>
+          <td>
+            They must match frame 1 of their clip or the page flashes a
+            mismatched still before playback
+          </td>
+        </tr>
+        <tr>
+          <td>Content vs caption</td>
+          <td>Must match the caption text</td>
+          <td>
+            Captions are "four sessions, one window" and "gt list — every task,
+            one lane" — the recording has to actually show that
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <blockquote class="callout" data-anchor-id="captureblocked">
+      <p>
+        <strong>Capture is currently blocked</strong> on two independent things:
+        demo capture is parked mid-build, and this machine has no Screen
+        Recording permission. There is also a hard safety constraint — Sean's
+        real terminal and the demo instance share the OS process name
+        <code>ghostty</code>, so AX targeting flaps between them and solo
+        automated driving is unsafe. Co-drive only.
+      </p>
+    </blockquote>
+
+    <h2 data-anchor-id="copy">Content change</h2>
+
+    <p>The product heading is currently two stacked sentences:</p>
+    <pre><code>&lt;h2&gt;&lt;span&gt;Multiple agents.&lt;/span&gt;&lt;span&gt;One window.&lt;/span&gt;&lt;/h2&gt;</code></pre>
+    <p>
+      Becomes a single line:
+      <strong>"Multiple agent terminals, one window"</strong>. Note
+      <code>.product h2 span</code> exists purely to force the two-line break —
+      check whether that rule is still needed once the copy is one sentence.
+    </p>
+
+    <h2 data-anchor-id="notdoing">Explicitly not doing</h2>
+    <ul>
+      <li>
+        Rebalancing the hero's overall pacing, or the CTA-gating question ("the
+        hero half" — separate <code>BACKLOG</code> item, needs your design
+        calls).
+      </li>
+      <li>
+        The <code>create-dmg</code>/<code>stapler</code> workflow reorder — app
+        lane, untestable without cutting a release.
+      </li>
+      <li>
+        A <code>curl | sh</code> installer. Not built, and not proposed here.
+      </li>
+      <li>
+        Terracotta / ghost-palette decisions, the fixed-footer question, or any
+        other open web item.
+      </li>
+    </ul>
+  </body>
+</html>

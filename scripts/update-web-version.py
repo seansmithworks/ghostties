@@ -37,8 +37,6 @@ short_version = version.lstrip("v")  # "0.1.0-beta.14"
 
 now = datetime.now()
 date_long = now.strftime("%B %-d, %Y")          # "April 30, 2026"
-date_compact = now.strftime("%-d%b%Y")          # "30Apr2026"
-date_compact = re.sub(r"^(\d)([A-Z])", r"0\1\2", date_compact)  # zero-pad single digit day → "01Apr2026"
 
 dmg_size_str = None
 if len(sys.argv) == 3:
@@ -48,12 +46,20 @@ if len(sys.argv) == 3:
 
 print(f"Bumping site to {version} ({date_long})")
 
-# 1. DMG download URL — only download.html has one. (index.html links to /download.)
+# 1. DMG download URL — both download.html and index.html hardcode one.
+#    (index.html's hero "download now" line links straight to the DMG, not
+#    to /download, so it needs the same bump.)
 replace(
     "web/download.html",
     r"releases/download/v[\d][^/]+/Ghostties\.dmg",
     f"releases/download/{version}/Ghostties.dmg",
     "download.html DMG URL",
+)
+replace(
+    "web/index.html",
+    r"releases/download/v[\d][^/]+/Ghostties\.dmg",
+    f"releases/download/{version}/Ghostties.dmg",
+    "index.html DMG URL",
 )
 
 # 2. download.html — button label  ("Download v0.1.0-beta.X for macOS")
@@ -89,40 +95,25 @@ replace(
     "download.html last-updated footer",
 )
 
-# 5. index.html — terminal line-4 displayed text "+ ghostties % v0.1.0-beta.X"
+# 5. index.html — terminal line-3 version string.
+#    Matches every occurrence of "<+ or %> v<version>": the desktop span
+#    ("+ ghostties % v..."), the mobile-short span ("+ v..." — no "%",
+#    "ghostties" is dropped there too, to fit the mobile character budget),
+#    the CSS comment above the desktop keyframe, the CSS comment above the
+#    mobile-override keyframe, the illustrative example in the mobile
+#    budget-math comment, and the HTML markup comment. The lookbehind
+#    requires a literal "+ " or "% " immediately before "v" so it can't
+#    also match the unrelated "v<version>" inside the DMG URL (handled by
+#    rule 1 above), which is preceded by "/" instead. (The char-count
+#    numbers in those comments aren't touched here: like the rest of this
+#    script, a version bump is assumed not to change the string's length.
+#    If a beta number crosses a digit boundary — e.g. beta.9 → beta.10 —
+#    recheck the *ch counts by hand.)
 replace(
     "web/index.html",
-    r"\+ ghostties % v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
-    f"+ ghostties % {version}",
-    "index.html terminal line-4",
-)
-
-# 6. index.html — comments referencing the line (keep them in sync to aid grep)
-replace(
-    "web/index.html",
-    r'line-4: "?\+ ghostties % v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?"? = (\d+) chars',
-    lambda m: f'line-4: "+ ghostties % {version}" = {m.group(1)} chars',
-    "index.html line-4 char-count comment (CSS)",
-)
-replace(
-    "web/index.html",
-    r"line-4: (\d+) chars: \+ ghostties % v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
-    lambda m: f"line-4: {m.group(1)} chars: + ghostties % {version}",
-    "index.html line-4 char-count comment (HTML)",
-)
-
-# 7. index.html — terminal date line "+ <date> · macOS 13+ · Apple Silicon"
-replace(
-    "web/index.html",
-    r"\+ \d{1,2}[A-Z][a-z]+\d{4} &middot;",
-    f"+ {date_compact} &middot;",
-    "index.html terminal date",
-)
-replace(
-    "web/index.html",
-    r"line-5: (\d+) chars: \+ \d{1,2}[A-Z][a-z]+\d{4}",
-    lambda m: f"line-5: {m.group(1)} chars: + {date_compact}",
-    "index.html line-5 char-count comment",
+    r"(?<=[+%] )v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
+    version,
+    "index.html terminal line-3 (all occurrences)",
 )
 
 print("Done.")

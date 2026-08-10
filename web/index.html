@@ -153,6 +153,45 @@
       text-decoration: underline;
     }
 
+    /* Copy buttons nested in line-4/line-5. Must stay a plain block .line
+       with the button nested inside it — a .line that IS a button breaks
+       stacking (buttons are inline-block), the -2ch hanging indent (doesn't
+       apply to buttons), and the green reveal background (would paint per-
+       button instead of across the line). Hidden via visibility (not
+       opacity/display) so it's never tab-reachable before its line types in;
+       see reveal-btn below. */
+    .term-btn {
+      background: transparent;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      visibility: hidden;
+      user-select: text;
+    }
+
+    .term-btn:hover {
+      text-decoration: underline;
+    }
+
+    /* line-5's copy icon drops on mobile; see the max-width: 480px block. */
+    .btn-icon {
+      display: inline;
+    }
+
+    /* Default (>480px): show the full line-3 string, hide the mobile-short
+       one. Without this rule both spans render above 480px — the
+       max-width: 480px block below only sets the mobile state, there was
+       no default-state rule, so the version string doubled in the DOM and
+       accessibility tree at every width above mobile (invisible on screen
+       only because .line's overflow:hidden + typewriter animation clips
+       the second span's pixels — an accident, not a design). */
+    .line-3-full { display: inline; }
+    .line-3-short { display: none; }
+
     /* Caret blink states */
     .animate .line-1.caret-visible {
       border-right-color: var(--terminal-fg);
@@ -177,47 +216,59 @@
       animation: type-line2 1.1s steps(43) 4.2s forwards;
     }
 
-    /* line-3: "- ghostties % install soon" = 26 chars */
+    /* line-3: "+ ghostties % v0.1.0-beta.21 · macOS 13+" = 40 chars */
     .animate .line-3 {
       animation:
-        type-line3 0.65s steps(26) 5.5s forwards,
-        reveal-line3 0s 5.5s forwards;
+        type-line3 1.0s steps(40) 5.65s forwards,
+        reveal-line-green 0s 5.65s forwards;
     }
 
-    /* line-4: "+ ghostties % v0.1.0-beta.21" = 28 chars */
+    /* line-4: "+ [brew install ⧉]" = 18 chars */
     .animate .line-4 {
       animation:
-        type-line4 0.7s steps(28) 7.0s forwards,
+        type-line4 0.45s steps(18) 7.0s forwards,
         reveal-line-green 0s 7.0s forwards;
     }
 
-    /* line-5: "+ 27Apr2026 · macOS 13+ · Apple Silicon" = 39 chars */
+    .animate .line-4 .term-btn {
+      animation: reveal-btn 0s 7.0s forwards;
+    }
+
+    /* line-5: "+ [npx ghostties-install ⧉]" = 27 chars */
     .animate .line-5 {
       animation:
-        type-line5 1.0s steps(39) 8.2s forwards,
-        reveal-line-green 0s 8.2s forwards;
+        type-line5 0.675s steps(27) 7.825s forwards,
+        reveal-line-green 0s 7.825s forwards;
+    }
+
+    .animate .line-5 .term-btn {
+      animation: reveal-btn 0s 7.825s forwards;
     }
 
     /* line-6: "+ [download now]" = 16 chars */
     .animate .line-6 {
       animation:
-        type-line6 0.4s steps(16) 9.7s forwards,
-        reveal-line-green 0s 9.7s forwards;
+        type-line6 0.4s steps(16) 8.85s forwards,
+        reveal-line-green 0s 8.85s forwards;
     }
 
     @keyframes type-line1 { from { width: 0; } to { width: 14ch; } }
     @keyframes type-line2 { from { width: 0; } to { width: 43ch; } }
-    @keyframes type-line3 { from { width: 0; } to { width: 26ch; } }
-    @keyframes type-line4 { from { width: 0; } to { width: 28ch; } }
-    @keyframes type-line5 { from { width: 0; } to { width: 39ch; } }
+    @keyframes type-line3 { from { width: 0; } to { width: 40ch; } }
+    @keyframes type-line4 { from { width: 0; } to { width: 18ch; } }
+    @keyframes type-line5 { from { width: 0; } to { width: 27ch; } }
     @keyframes type-line6 { from { width: 0; } to { width: 16ch; } }
-
-    @keyframes reveal-line3 {
-      to { color: var(--diff-del-fg); background: var(--diff-del-bg); }
-    }
 
     @keyframes reveal-line-green {
       to { color: var(--diff-add-fg); background: var(--diff-add-bg); }
+    }
+
+    @keyframes reveal-btn {
+      to { visibility: visible; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .term-btn { visibility: visible; animation: none; }
     }
 
     @keyframes blink-caret-green {
@@ -298,19 +349,21 @@
       line-height: 1.25;
     }
 
-    .product h2 span {
-      display: block;
-    }
-
-    /* Window card: glow behind, tilt + video on top */
+    /* Window card: glow behind, tilt + video on top.
+       margin-bottom stays small here — the 56px gap belongs to
+       .product-caption below, so each caption reads as its own window's
+       label instead of the next window's header. */
     .product-window {
       position: relative;
-      margin: 0 auto 56px;
+      margin: 0 auto 12px;
       max-width: 860px;
     }
 
-    .product-window:last-child {
-      margin-bottom: 24px;
+    /* :last-child never matched here — the last child of .product is a
+       .product-caption, not a .product-window. :last-of-type is the
+       selector that actually reaches the flow window. */
+    .product-window:last-of-type {
+      margin-bottom: 12px;
     }
 
     .product-window--sessions .product-card {
@@ -348,11 +401,18 @@
       display: block;
     }
 
+    /* The 56px gap between a window and the next one lives here, not on
+       .product-window, so each caption reads as its own window's label
+       instead of the next window's header. */
     .product-caption {
       font-family: var(--font-mono);
       font-size: 0.75rem; /* 12px */
       color: var(--accent);
-      margin-top: 12px;
+      margin-bottom: 56px;
+    }
+
+    .product-caption:last-of-type {
+      margin-bottom: 0;
     }
 
     /* --- Footer (homepage variant: mono, smaller, pinned to the hero) ---
@@ -451,6 +511,66 @@
       .ghost-row { gap: 10px; }
       .ghosts { gap: 10px; margin-bottom: 28px; }
       .terminal { font-size: 1rem; max-width: calc(100vw - 72px); } /* 16px; .scene 20px + body 16px per side at this width */
+
+      /* line-3 drops "ghostties" and " · macOS 13+" (still on /download) —
+         at this width even the "+ ghostties % v0.1.0-beta.21" wording
+         measures ~395.6px against a 248px .terminal, ~148px (about 15
+         chars) past the budget and invisibly truncated by .terminal's
+         overflow:hidden. Dropping "ghostties" (redundant — line-1 already
+         establishes it) and the bare "%" (had nothing in front of it, read
+         as a rendering bug rather than an abbreviation) clears the budget.
+         Two spans, not visual-only hiding, so a screen reader never reads
+         the string twice. */
+      .line-3-full { display: none; }
+      .line-3-short { display: inline; }
+
+      /* line-5 drops the ⧉ icon to fit the same budget. */
+      .btn-icon { display: none; }
+
+      /* Retimed so mobile stays coherent: line-3's shorter string types
+         faster (16 chars vs 40), and line-5 without its icon is 25 chars
+         vs 27, so every line after line-3 shifts earlier. Every line-3–6
+         typing rate is a uniform 25ms/char; gaps between lines stay a
+         uniform 0.35s. Total run: ~8.575s (desktop: ~9.25s). */
+      /* line-3: "+ v0.1.0-beta.21" = 16 chars */
+      .animate .line-3 {
+        animation:
+          type-line3 0.4s steps(16) 5.65s forwards,
+          reveal-line-green 0s 5.65s forwards;
+      }
+
+      /* line-4: "+ [brew install ⧉]" = 18 chars, unchanged */
+      .animate .line-4 {
+        animation:
+          type-line4 0.45s steps(18) 6.4s forwards,
+          reveal-line-green 0s 6.4s forwards;
+      }
+
+      .animate .line-4 .term-btn {
+        animation: reveal-btn 0s 6.4s forwards;
+      }
+
+      /* line-5: "+ [npx ghostties-install]" = 25 chars (icon dropped) */
+      .animate .line-5 {
+        animation:
+          type-line5 0.625s steps(25) 7.2s forwards,
+          reveal-line-green 0s 7.2s forwards;
+      }
+
+      .animate .line-5 .term-btn {
+        animation: reveal-btn 0s 7.2s forwards;
+      }
+
+      /* line-6: "+ [download now]" = 16 chars, unchanged */
+      .animate .line-6 {
+        animation:
+          type-line6 0.4s steps(16) 8.175s forwards,
+          reveal-line-green 0s 8.175s forwards;
+      }
+
+      @keyframes type-line3 { from { width: 0; } to { width: 16ch; } }
+      @keyframes type-line5 { from { width: 0; } to { width: 25ch; } }
+
       footer { padding: 8px 16px; font-size: 0.625rem; } /* 10px; matches the document-page footer padding trim */
       /* Bottom padding raised from 72px to clear the fixed footer's own
          height (up to 96px once its icons + link row wrap at this width).
@@ -460,10 +580,11 @@
          footer, so this padding didn't need to reach that far. */
       .product { padding: 16px 20px 112px; }
       .product h2 { font-size: 1.375rem; margin-bottom: 28px; } /* 22px */
-      .product-window { margin-bottom: 28px; }
+      .product-window { margin-bottom: 8px; }
       .product-window--sessions .product-card,
       .product-window--flow .product-card { transform: none; }
-      .product-caption { font-size: 0.6875rem; margin-top: 8px; } /* 11px */
+      .product-caption { font-size: 0.6875rem; margin-bottom: 28px; } /* 11px */
+      .product-caption:last-of-type { margin-bottom: 0; }
       .bg-ghost { width: 22px; height: 22px; }
 
       /* Touch target: the icon stays 14px, the anchor's clickable box
@@ -576,16 +697,17 @@
       <div class="line line-1">cd ~/ghostties</div>
       <!-- line-2: 43 chars: https://github.com/SeanSmithWorks/ghostties -->
       <div class="line line-2"><a class="gh-link" href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener">https://github.com/SeanSmithWorks/ghostties</a></div>
-      <!-- line-3: 26 chars: - ghostties % install soon -->
-      <!-- Joke line, not a fact about the product — the only line hidden from
-           assistive tech. Every other line in this terminal states something
-           real (repo URL, version, requirements, download link) and must stay
-           in the accessibility tree. -->
-      <div class="line line-3" aria-hidden="true">- ghostties % install soon</div>
-      <!-- line-4: 28 chars: + ghostties % v0.1.0-beta.21 -->
-      <div class="line line-4">+ ghostties % v0.1.0-beta.21</div>
-      <!-- line-5: 39 chars: + 02Aug2026 · macOS 13+ · Apple Silicon -->
-      <div class="line line-5">+ 02Aug2026 &middot; macOS 13+ &middot; Apple Silicon</div>
+      <!-- line-3: 40 chars: + ghostties % v0.1.0-beta.21 · macOS 13+
+           (16 chars on mobile: "+ v0.1.0-beta.21" — "ghostties", the bare
+           "%", and " · macOS 13+" are dropped, see the max-width: 480px
+           block. Two spans, not visual-only hiding, so a screen reader
+           never reads the string twice.) -->
+      <div class="line line-3"><span class="line-3-full">+ ghostties % v0.1.0-beta.21 &middot; macOS 13+</span><span class="line-3-short">+ v0.1.0-beta.21</span></div>
+      <!-- line-4: 18 chars: + [brew install ⧉] (clickable — copies the command) -->
+      <div class="line line-4"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">brew install ⧉</button><span aria-hidden="true">]</span></div>
+      <!-- line-5: 27 chars: + [npx ghostties-install ⧉] (clickable — copies the command)
+           25 chars on mobile: the icon is dropped, see .btn-icon below. -->
+      <div class="line line-5"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">npx ghostties-install<span class="btn-icon" aria-hidden="true"> ⧉</span></button><span aria-hidden="true">]</span></div>
       <!-- line-6: 16 chars: + [download now] (clickable) -->
       <!-- Hardcoded DMG URL — bump the version tag with each release. Decoration
            ("+ [" / "]") sits outside the link so the accessible name is just
@@ -595,9 +717,11 @@
       </div>
     </div>
 
+    <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
+
     <section class="product">
       <p class="lead">Ghostties is a multi-agent workspace terminal for macOS &mdash; a fork of <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">Ghostty</a>, built by Sean Smith.</p>
-      <h2><span>Multiple agents.</span><span>One window.</span></h2>
+      <h2>Multiple agent terminals, one window</h2>
       <div class="product-window product-window--sessions">
         <div class="product-card">
           <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" autoplay muted loop playsinline aria-label="Ghostties sidebar showing four parallel Claude Code agent sessions running in one window"></video>
@@ -640,7 +764,15 @@
     const scene = document.querySelector('.scene');
     const ghLink = document.querySelector('.gh-link');
     const dlLink = document.querySelector('.line-6 a');
+    const termBtns = document.querySelectorAll('.term-btn');
+    const copyStatus = document.getElementById('copy-status');
     let animating = false;
+
+    // Mobile retimes line-3 (shorter string) and line-5 (icon dropped),
+    // which shifts every line after them — see the max-width: 480px block.
+    function lockDelayMs() {
+      return window.matchMedia('(max-width: 480px)').matches ? 8575 : 9250;
+    }
 
     function activateCarets() {
       const line1 = document.querySelector('.line-1');
@@ -651,17 +783,17 @@
       setTimeout(() => { line1.classList.add('caret-visible'); }, 1000);
       setTimeout(() => { line1.classList.remove('caret-visible'); }, 4200);
 
-      // Line 2: caret appears at 4.2s, disappears when line 3 starts at 5.5s
+      // Line 2: caret appears at 4.2s, disappears when line 3 starts at 5.65s
       setTimeout(() => { line2.classList.add('caret-visible'); }, 4200);
-      setTimeout(() => { line2.classList.remove('caret-visible'); }, 5500);
+      setTimeout(() => { line2.classList.remove('caret-visible'); }, 5650);
 
-      // Line 6: caret + inline locks when typing ends (9.7s delay + 0.4s duration = 10.1s)
+      // Line 6: caret + inline locks when typing ends
       setTimeout(() => {
         line6.classList.add('caret-blink');
         line6.style.width = '16ch';
         line6.style.color = 'rgba(100, 220, 120, 0.9)';
         line6.style.background = 'rgba(80, 210, 100, 0.13)';
-      }, 10100);
+      }, lockDelayMs());
     }
 
     activateCarets();
@@ -697,9 +829,19 @@
       }, 1400); // 0.55s scatter + ~0.85s pause before ghosts fly back in
     });
 
-    // Don't scatter when clicking links
+    // Don't scatter when clicking links or copy buttons
     ghLink.addEventListener('click', (e) => e.stopPropagation());
     dlLink.addEventListener('click', (e) => e.stopPropagation());
+    termBtns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = btn.dataset.copy;
+        navigator.clipboard.writeText(text).then(() => {
+          copyStatus.textContent = 'Copied';
+          setTimeout(() => { copyStatus.textContent = ''; }, 2000);
+        });
+      });
+    });
   </script>
 </body>
 </html>

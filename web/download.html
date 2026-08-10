@@ -34,6 +34,49 @@
   <style>
     /* Download page only. Shared base: /style.css */
 
+    .install-block {
+      margin: 24px 0 32px;
+    }
+
+    .install-block pre {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 0;
+    }
+
+    .install-block pre code {
+      background: transparent;
+      padding: 0;
+      overflow-wrap: anywhere;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .copy-btn {
+      flex: 0 0 auto;
+      background: transparent;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      color: var(--text-meta);
+      font-family: var(--font-mono);
+      font-size: var(--size-caption);
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color var(--transition);
+    }
+
+    .copy-btn:hover {
+      color: var(--text-meta-hover);
+    }
+
+    .install-meta {
+      font-size: var(--size-small);
+      color: var(--text-meta);
+      margin: 8px 0 20px;
+    }
+
     .download-block {
       display: flex;
       flex-direction: column;
@@ -113,7 +156,17 @@
     <h1>Download</h1>
     <p class="lead">Ghostties is a multi-agent workspace terminal for macOS &mdash; a fork of <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">Ghostty</a>, built by Sean Smith. Currently in beta.</p>
 
-    <h2>Current release</h2>
+    <h2>Install</h2>
+    <div class="install-block">
+      <pre><code>brew install --cask seansmithworks/tap/ghostties</code><button type="button" class="copy-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command">Copy</button></pre>
+      <p class="install-meta">Recommended &mdash; upgrades with brew, in-app via Sparkle.</p>
+
+      <pre><code>npx ghostties-install</code><button type="button" class="copy-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command">Copy</button></pre>
+      <p class="install-meta">One-off installer &mdash; pinned version + SHA256.</p>
+    </div>
+
+    <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
+
     <div class="download-block">
       <a class="download-btn" href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.21/Ghostties.dmg" download>
         Download v0.1.0-beta.21 for macOS
@@ -121,7 +174,7 @@
       <div class="download-meta">
         v0.1.0-beta.21 &middot; August 1, 2026 &middot; 147 MB<br>
         macOS 13 (Ventura) or later &middot; Apple Silicon<br>
-        Developer ID signed and notarized by Apple &mdash; opens without a Gatekeeper warning.
+        Developer ID signed and notarized by Apple.
       </div>
     </div>
 
@@ -148,5 +201,17 @@
       <a href="/licenses">Licenses</a>
     </span>
   </footer>
+
+  <script>
+    const copyStatus = document.getElementById('copy-status');
+    document.querySelectorAll('.copy-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+          copyStatus.textContent = 'Copied';
+          setTimeout(() => { copyStatus.textContent = ''; }, 2000);
+        });
+      });
+    });
+  </script>
 </body>
 </html>
