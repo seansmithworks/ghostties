@@ -21,11 +21,42 @@ enum SessionTitleSanitizer {
         "claude", "claude code", "zsh", "bash", "-zsh", "-bash", "sh", "-sh", "fish", "-fish"
     ]
 
+    /// Fixed status/spinner glyphs Claude Code (and similar CLI agents) prefix
+    /// onto a terminal title while working, e.g. `"✳ Claude Code"`. Distinct
+    /// from the Braille Patterns block (below), which covers the *animated*
+    /// spinner frames (`⠐`, `⠄`, `⠁`, …) rather than a fixed marker character.
+    private static let leadingStatusMarkerCharacters: Set<Character> = ["✳", "✻", "✽", "*", "·", "•"]
+
+    /// Braille Patterns block (U+2800–U+28FF) — Claude Code's terminal spinner
+    /// cycles through glyphs in this range as its status animation. Matched
+    /// as a range rather than an enumerated set since the spinner can use any
+    /// of the 256 codepoints in the block.
+    private static let brailleSpinnerRange: ClosedRange<UInt32> = 0x2800...0x28FF
+
+    /// Strips a single leading status/spinner marker — and any whitespace
+    /// immediately following it — from `segment`, if present. This exists
+    /// only so the bare-program-name and directory-name checks below can see
+    /// past a transient marker like `"✳ "` or `"⠐ "`; it must never be used
+    /// to change what's actually persisted as a session name; the full,
+    /// unstripped title is what gets returned when a title is accepted.
+    private static func strippingLeadingStatusMarker(from segment: Substring) -> Substring {
+        var result = segment
+        guard let first = result.first else { return result }
+        let isBrailleSpinnerFrame = first.unicodeScalars.count == 1
+            && brailleSpinnerRange.contains(first.unicodeScalars[first.unicodeScalars.startIndex].value)
+        guard isBrailleSpinnerFrame || leadingStatusMarkerCharacters.contains(first) else { return result }
+        result.removeFirst()
+        while let next = result.first, next.isWhitespace {
+            result.removeFirst()
+        }
+        return result
+    }
+
     /// Separators terminal titles commonly use to glue a program/repo name
     /// onto the "real" content, e.g. `"repo-name | Claude Code"` or
     /// `"repo-name — zsh"`. Deliberately excludes a bare, unspaced `-` —
     /// project/repo directory names are routinely hyphenated
-    /// (`2026-web-playground`), and splitting on every hyphen would shred
+    /// (`sample-web-project`), and splitting on every hyphen would shred
     /// that single informative segment into fragments that individually
     /// look like noise. Only a *spaced* hyphen (`" - "`) is treated as a
     /// separator, matching how humans actually punctuate a title.
@@ -44,7 +75,13 @@ enum SessionTitleSanitizer {
         )
         let dirLower = projectDirectoryName.lowercased()
         for rawSegment in replaced.split(separator: placeholder, omittingEmptySubsequences: true) {
-            let segment = rawSegment.trimmingCharacters(in: .whitespaces)
+            let trimmedSegment = rawSegment.trimmingCharacters(in: .whitespaces)
+            guard !trimmedSegment.isEmpty else { continue }
+            // Strip a leading status/spinner marker (e.g. "✳ " or "⠐ ") before
+            // judging whether this segment is informative — a marker prefix
+            // on an otherwise-bare program/directory name must not make it
+            // look informative.
+            let segment = String(strippingLeadingStatusMarker(from: Substring(trimmedSegment)))
             guard !segment.isEmpty else { continue }
             let segmentLower = segment.lowercased()
             if segmentLower == dirLower { continue }
@@ -52,6 +89,64 @@ enum SessionTitleSanitizer {
             return true
         }
         return false
+    }
+
+    /// True when `cleaned`, once split on `titleSeparatorPattern`, ends in a
+    /// bare "Claude Code" segment — e.g. `"Code | Claude Code"` or
+    /// `"sample-web-project — Claude Code"`. Claude Code's idle terminal
+    /// title has the shape `"<cwd-basename> | Claude Code"`, where the
+    /// segment before "Claude Code" is always a directory basename, never a
+    /// description — so a trailing "Claude Code" segment marks the whole
+    /// title as boilerplate regardless of what precedes it or what the
+    /// project directory happens to be. Deliberately unconditional (no
+    /// `projectDirectoryName` needed): the leading segment's identity
+    /// doesn't matter here.
+    ///
+    /// This does mean a leading segment that reads as informative on its own
+    /// (e.g. `"Fixing the parser | Claude Code"`) is still rejected. That's
+    /// intentional, not an oversight: Claude Code's *working* title uses a
+    /// marker prefix instead (`"<glyph> <task description>"`), never a
+    /// trailing "| Claude Code" — so this exact shape doesn't occur for a
+    /// genuine description, and the simple, unconditional rule is worth more
+    /// than guarding an edge case that can't happen.
+    private static func endsWithBareClaudeCodeSegment(_ cleaned: String) -> Bool {
+        let placeholder: Character = "\u{0}"
+        let replaced = cleaned.replacingOccurrences(
+            of: titleSeparatorPattern,
+            with: String(placeholder),
+            options: .regularExpression
+        )
+        guard let lastSegment = replaced.split(separator: placeholder, omittingEmptySubsequences: true).last else {
+            return false
+        }
+        return lastSegment.trimmingCharacters(in: .whitespaces).lowercased() == "claude code"
+    }
+
+    /// True when `cleaned` is an *abbreviated* filesystem path — the shape a
+    /// terminal title uses to fit a long path into limited width, e.g.
+    /// `"…/Code/sandbox/sample-web-project"` or
+    /// `".../Users/someone/projects/thing"`. The existing bare-path check below
+    /// only recognizes a path that starts with `/` or `~` outright; an
+    /// elided prefix defeats it.
+    ///
+    /// Distinguished from ordinary prose that happens to start with an
+    /// ellipsis (`"… and then it worked"`) by requiring a `/` to follow the
+    /// ellipsis once any whitespace between them is skipped — a real
+    /// abbreviated path always continues straight into the next path
+    /// segment; prose does not.
+    private static func hasAbbreviatedPathPrefix(_ cleaned: String) -> Bool {
+        var remainder = Substring(cleaned)
+        if remainder.hasPrefix("...") {
+            remainder = remainder.dropFirst(3)
+        } else if remainder.hasPrefix("…") {
+            remainder = remainder.dropFirst()
+        } else {
+            return false
+        }
+        while let next = remainder.first, next.isWhitespace {
+            remainder = remainder.dropFirst()
+        }
+        return remainder.hasPrefix("/")
     }
 
     /// The `titleFromTerminal` fallback `SurfaceView_AppKit` writes ~500ms after
@@ -137,6 +232,17 @@ enum SessionTitleSanitizer {
 
         let lowercased = cleaned.lowercased()
         if bareProgramNames.contains(lowercased) { return nil }
+        // Same check, but past a leading status/spinner marker — Claude Code
+        // prefixes its title with a marker like "✳ " or an animated Braille
+        // spinner frame ("⠐ ") that changes every couple of seconds, so
+        // "✳ Claude Code" must be caught here just like "claude code" is
+        // above. Only the check uses the stripped value; the title returned
+        // below (if accepted) is always the untouched `cleaned` string.
+        let markerStrippedLowercased = strippingLeadingStatusMarker(from: Substring(lowercased))
+        if bareProgramNames.contains(String(markerStrippedLowercased)) { return nil }
+        // Reject a title ending in a bare "Claude Code" segment regardless of
+        // what precedes it — see `endsWithBareClaudeCodeSegment` doc comment.
+        if endsWithBareClaudeCodeSegment(cleaned) { return nil }
         // Reject a title whose only content, once split on common title
         // separators (`|`, em/en dash, spaced `-`, `:`, `·`, `»`, `>`), is
         // the project directory name and/or a bare program name — e.g.
@@ -154,7 +260,7 @@ enum SessionTitleSanitizer {
         // "~/Code/my project" is still just a path, not a description of
         // work) — so gate on word count rather than requiring the whole
         // string to be space-free.
-        if cleaned.hasPrefix("/") || cleaned.hasPrefix("~") {
+        if cleaned.hasPrefix("/") || cleaned.hasPrefix("~") || hasAbbreviatedPathPrefix(cleaned) {
             let wordCount = cleaned.split(separator: " ").count
             if wordCount <= 3 { return nil }
         }
