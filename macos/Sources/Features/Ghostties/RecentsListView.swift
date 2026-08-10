@@ -158,7 +158,7 @@ struct RecentsListView: View {
                 Button("Relaunch") {
                     relaunchSession(session, project: project)
                 }
-                Button("Remove", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     coordinator.clearRuntime(id: session.id)
                     store.removeSession(id: session.id)
                 }

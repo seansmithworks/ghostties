@@ -222,7 +222,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
                 Button("Relaunch") {
                     relaunchSession(session)
                 }
-                Button("Remove", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     coordinator.clearRuntime(id: session.id)
                     store.removeSession(id: session.id)
                 }
