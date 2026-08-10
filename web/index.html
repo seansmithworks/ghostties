@@ -401,24 +401,6 @@
       display: block;
     }
 
-    /* product-flow.mp4 includes its window titlebar and traffic lights;
-       product-sessions.mp4 is already cropped above them. .product-card's
-       overflow: hidden lets a negative top offset crop the flow video to
-       match without a re-capture.
-
-       The video is 1520x950 intrinsic; the titlebar chrome measures exactly
-       40px in the source frame (pixel-sampled: content pane background
-       starts at row 40, chrome background above it). Expressed as a
-       percentage of the containing block's WIDTH — not a fixed px value —
-       because percentage margins always resolve against container width,
-       and since the video's aspect ratio is fixed, width and height scale
-       together, so 40/1520 = 2.6316% crops the same proportion of the
-       titlebar at every viewport instead of biting a fixed pixel count out
-       of a shrinking frame. */
-    .product-window--flow .product-card video {
-      margin-top: -2.6316%;
-    }
-
     /* The 56px gap between a window and the next one lives here, not on
        .product-window, so each caption reads as its own window's label
        instead of the next window's header. */
