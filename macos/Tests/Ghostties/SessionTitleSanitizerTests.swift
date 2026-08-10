@@ -274,4 +274,140 @@ final class SessionTitleSanitizerTests: XCTestCase {
             currentName: "Session 1"
         ))
     }
+
+    // MARK: - Status/spinner-glyph-prefixed titles (Claude Code's title
+    // shape while working: a leading marker or animated Braille spinner
+    // frame glued onto "Claude Code" or another bare program/directory name)
+
+    func testAsteriskMarkerPrefixedClaudeCodeRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "✳ Claude Code",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testBrailleSpinnerFramePrefixedClaudeCodeRejected() {
+        // Claude Code's terminal spinner is an animated Braille Patterns
+        // (U+2800–U+28FF) frame that changes every couple of seconds.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "⠐ Claude Code",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testAlternateAsteriskMarkerPrefixedClaudeCodeRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "✻ Claude Code",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testMiddleDotMarkerPrefixedShellNameRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "· zsh",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testMarkerPrefixedProjectDirectoryNameRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "✳ invented-project",
+            currentName: "Session 1",
+            projectDirectoryName: "invented-project"
+        ))
+    }
+
+    func testMarkerPrefixedInformativeTitleKept() {
+        // A marker prefix on a real, informative title must not cause a
+        // rejection — and the accepted value stays the FULL sanitized
+        // title, glyph included. Rewriting the stored name to a de-glyphed
+        // version is a separate product decision, not made here.
+        let result = SessionTitleSanitizer.sanitize(
+            title: "✳ Refactoring the auth module",
+            currentName: "Session 1"
+        )
+        XCTAssertEqual(result, "✳ Refactoring the auth module")
+    }
+
+    func testAsteriskNotAtStartOfTitleDoesNotTriggerRejection() {
+        // A leading-marker strip must never fire on an asterisk that isn't
+        // actually a leading status marker.
+        let result = SessionTitleSanitizer.sanitize(
+            title: "5 * 3 results",
+            currentName: "Session 1"
+        )
+        XCTAssertEqual(result, "5 * 3 results")
+    }
+
+    // MARK: - Leak 2: a title ending in a bare "Claude Code" segment is
+    // boilerplate regardless of what directory basename precedes it.
+
+    func testCwdBasenamePipeClaudeCodeRejectedEvenWhenNotProjectDirectory() {
+        // Observed live shape: cwd is a subdirectory of the project (e.g.
+        // "~/Code"), so its basename ("Code") doesn't match the project
+        // directory name ("2026-web-playground") that #107's check compares
+        // against — this must still be rejected.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "Code | Claude Code",
+            currentName: "Session 1",
+            projectDirectoryName: "2026-web-playground"
+        ))
+    }
+
+    func testArbitraryDirectoryPipeClaudeCodeRejectedWithNoProjectDirectory() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "anything-at-all | Claude Code",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testBareClaudeCodeAloneStillRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(title: "Claude Code", currentName: "Session 1"))
+    }
+
+    func testInformativePrefixBeforeClaudeCodeSuffixStillRejected() {
+        // Deliberate: Claude Code never actually emits "<description> |
+        // Claude Code" — its working title uses a marker prefix instead,
+        // with no trailing "| Claude Code". A trailing "Claude Code" segment
+        // is always boilerplate, so this is rejected even though the
+        // leading segment reads as informative on its own.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "Fixing the parser | Claude Code",
+            currentName: "Session 1"
+        ))
+    }
+
+    // MARK: - Leak 3: an ellipsis-abbreviated path defeats the bare-path
+    // shape check unless the leading "…"/"..." is accounted for.
+
+    func testEllipsisAbbreviatedPathRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "…/Code/_experiments/2026-web-playground",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testTripleDotAbbreviatedPathRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: ".../Users/someone/projects/thing",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testShortEllipsisAbbreviatedPathRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "…/src",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testEllipsisPrefixedProseKept() {
+        // A leading ellipsis followed by prose (not a path) must survive —
+        // the strip only applies when what follows actually reads as a path.
+        let result = SessionTitleSanitizer.sanitize(
+            title: "… and then it worked",
+            currentName: "Session 1"
+        )
+        XCTAssertEqual(result, "… and then it worked")
+    }
 }
