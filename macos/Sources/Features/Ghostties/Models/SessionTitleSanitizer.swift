@@ -56,7 +56,7 @@ enum SessionTitleSanitizer {
     /// onto the "real" content, e.g. `"repo-name | Claude Code"` or
     /// `"repo-name — zsh"`. Deliberately excludes a bare, unspaced `-` —
     /// project/repo directory names are routinely hyphenated
-    /// (`2026-web-playground`), and splitting on every hyphen would shred
+    /// (`sample-web-project`), and splitting on every hyphen would shred
     /// that single informative segment into fragments that individually
     /// look like noise. Only a *spaced* hyphen (`" - "`) is treated as a
     /// separator, matching how humans actually punctuate a title.
@@ -93,7 +93,7 @@ enum SessionTitleSanitizer {
 
     /// True when `cleaned`, once split on `titleSeparatorPattern`, ends in a
     /// bare "Claude Code" segment — e.g. `"Code | Claude Code"` or
-    /// `"2026-web-playground — Claude Code"`. Claude Code's idle terminal
+    /// `"sample-web-project — Claude Code"`. Claude Code's idle terminal
     /// title has the shape `"<cwd-basename> | Claude Code"`, where the
     /// segment before "Claude Code" is always a directory basename, never a
     /// description — so a trailing "Claude Code" segment marks the whole
@@ -124,8 +124,8 @@ enum SessionTitleSanitizer {
 
     /// True when `cleaned` is an *abbreviated* filesystem path — the shape a
     /// terminal title uses to fit a long path into limited width, e.g.
-    /// `"…/Code/_experiments/2026-web-playground"` or
-    /// `".../Users/sean/projects/thing"`. The existing bare-path check below
+    /// `"…/Code/sandbox/sample-web-project"` or
+    /// `".../Users/someone/projects/thing"`. The existing bare-path check below
     /// only recognizes a path that starts with `/` or `~` outright; an
     /// elided prefix defeats it.
     ///

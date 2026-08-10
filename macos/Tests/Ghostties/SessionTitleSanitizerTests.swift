@@ -21,7 +21,7 @@ final class SessionTitleSanitizerTests: XCTestCase {
 
     func testBarePathRejected() {
         XCTAssertNil(SessionTitleSanitizer.sanitize(
-            title: "/Users/sean/Code/ghostties",
+            title: "/Users/someone/Code/ghostties",
             currentName: "Session 1"
         ))
         XCTAssertNil(SessionTitleSanitizer.sanitize(
@@ -266,7 +266,7 @@ final class SessionTitleSanitizerTests: XCTestCase {
 
     func testBarePathWithSpacesInDirectoryNameRejected() {
         XCTAssertNil(SessionTitleSanitizer.sanitize(
-            title: "/Users/sean/My Code/thing",
+            title: "/Users/someone/My Code/thing",
             currentName: "Session 1"
         ))
         XCTAssertNil(SessionTitleSanitizer.sanitize(
@@ -345,12 +345,12 @@ final class SessionTitleSanitizerTests: XCTestCase {
     func testCwdBasenamePipeClaudeCodeRejectedEvenWhenNotProjectDirectory() {
         // Observed live shape: cwd is a subdirectory of the project (e.g.
         // "~/Code"), so its basename ("Code") doesn't match the project
-        // directory name ("2026-web-playground") that #107's check compares
+        // directory name ("sample-web-project") that #107's check compares
         // against — this must still be rejected.
         XCTAssertNil(SessionTitleSanitizer.sanitize(
             title: "Code | Claude Code",
             currentName: "Session 1",
-            projectDirectoryName: "2026-web-playground"
+            projectDirectoryName: "sample-web-project"
         ))
     }
 
@@ -382,7 +382,7 @@ final class SessionTitleSanitizerTests: XCTestCase {
 
     func testEllipsisAbbreviatedPathRejected() {
         XCTAssertNil(SessionTitleSanitizer.sanitize(
-            title: "…/Code/_experiments/2026-web-playground",
+            title: "…/Code/sandbox/sample-web-project",
             currentName: "Session 1"
         ))
     }
