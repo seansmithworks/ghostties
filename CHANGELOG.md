@@ -34,6 +34,9 @@ The Sessions tab gets a real Inactive zone, session keyboard shortcuts, and a ti
 - **Archive sorts by when a session was last active**, not by the order it happened to be added.
 - **Session names no longer echo just the repo name plus boilerplate** — a title like "my-project | Claude Code" duplicating the row's own subtitle.
 - **Session names no longer flicker through spinner characters, bare directory names, or truncated paths.** Claude Code's terminal title changes rapidly while it's working; Ghostties now filters those out and keeps only genuinely informative titles.
+- **Pressing Esc while renaming a session reverts it**, instead of committing whatever you'd typed so far.
+- **The sidebar re-clamps its width correctly when you shrink the window**, so it can no longer end up wider than the window itself.
+- **Next Project and Previous Project grey out in the menu when there's nothing to cycle to**, instead of sitting there as if they'd do something.
 
 ---
 
