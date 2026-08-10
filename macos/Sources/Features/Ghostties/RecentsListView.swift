@@ -39,13 +39,11 @@ struct RecentsListView: View {
                 let activeExpanded = Self.effectiveExpanded(
                     storedPreference: isActiveExpanded,
                     isArchiveSection: false,
-                    activeSessionsEmpty: active.isEmpty,
                     sectionContainsSelectedSession: selectedId.map { id in active.contains { $0.id == id } } ?? false
                 )
                 let archiveExpanded = Self.effectiveExpanded(
                     storedPreference: isArchiveExpanded,
                     isArchiveSection: true,
-                    activeSessionsEmpty: active.isEmpty,
                     sectionContainsSelectedSession: selectedId.map { id in archive.contains { $0.id == id } } ?? false
                 )
 
@@ -297,26 +295,24 @@ struct RecentsListView: View {
     /// `@AppStorage` preference, or a temporary condition (e.g. the selected
     /// session moving) would permanently clobber the user's stored choice.
     ///
-    /// Expands, regardless of `storedPreference`, when either:
-    ///   (a) `isArchiveSection` is true and `activeSessionsEmpty` is true —
-    ///       nothing above it to show, so Archive can't be left collapsed
-    ///       with the whole list hidden behind it.
-    ///   (b) `isArchiveSection` is true and `sectionContainsSelectedSession`
-    ///       is true — a session that drops into a collapsed Archive stays
-    ///       visible, without relocating the session itself (see
-    ///       `belongsInActive`). This override is Archive-only: Active has no
-    ///       equivalent vanishing problem, and a selected, running session
-    ///       lives in Active essentially all the time during normal use, so
-    ///       applying the override there would make the Active header a dead
-    ///       control.
-    /// Otherwise falls through to `storedPreference` unchanged.
+    /// Expands, regardless of `storedPreference`, when `isArchiveSection` is
+    /// true and `sectionContainsSelectedSession` is true — a session that
+    /// drops into a collapsed Archive stays visible, without relocating the
+    /// session itself (see `belongsInActive`). This override is
+    /// Archive-only: Active has no equivalent vanishing problem, and a
+    /// selected, running session lives in Active essentially all the time
+    /// during normal use, so applying the override there would make the
+    /// Active header a dead control.
+    ///
+    /// Otherwise falls through to `storedPreference` unchanged — including
+    /// when Active is empty. An empty Active section is not, by itself, a
+    /// reason to force Archive open; the user's collapsed/expanded choice
+    /// for Archive is honored either way.
     static func effectiveExpanded(
         storedPreference: Bool,
         isArchiveSection: Bool,
-        activeSessionsEmpty: Bool,
         sectionContainsSelectedSession: Bool
     ) -> Bool {
-        if isArchiveSection && activeSessionsEmpty { return true }
         if isArchiveSection && sectionContainsSelectedSession { return true }
         return storedPreference
     }
