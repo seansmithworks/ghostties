@@ -6,6 +6,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.1.0-beta.22] — 2026-08-09
+
+The Sessions tab gets a real Inactive zone, session keyboard shortcuts, and a titlebar fix that finally sticks.
+
+### Added
+
+- **Active, Inactive, and Archive zones in the Sessions tab.** A session you've stopped now lands in its own Inactive zone instead of Archive, so "still running," "stopped this launch," and "from a while ago" read as three different things instead of one crowded list.
+- **Keyboard navigation for sessions.** `Cmd+T` opens a new session, `Cmd+W` closes the current one (confirming first if it's still active, and closing the window if nothing's left running), and `Cmd+1` through `Cmd+9` jump straight to a session by its position in the sidebar.
+- **A built-in Codex template** alongside Shell and Claude Code in the New Session picker.
+- **Terminal install options.** Install without the DMG: `brew install --cask seansmithworks/tap/ghostties` or `npx ghostties-install`.
+
+### Changed
+
+- **One "+ New" button per tab.** Projects and Sessions each get a single labelled button for starting something new, replacing the old icon-only button and full-width row.
+- **The overlay sidebar floats like the others now.** In overlay/hover mode the terminal card had lost its inset, rounded corners, and shadow; it now matches the pinned and closed modes.
+- **Tasks removed from the Sidebar View menu.** Projects and Sessions remain.
+- **The session context menu's "Remove" is now "Delete."** It permanently deletes the session with no undo — the old label read like it moved the session to Archive instead.
+
+### Fixed
+
+- **The window titlebar now matches your actual terminal theme.** It was drawing from a fixed color instead of your theme's real background, so it could look mismatched against the terminal below it. It now always tracks the same background your terminal renders.
+- **`Cmd+Shift+[` and `Cmd+Shift+]` cycle sessions in the order you actually see them** when the Sessions tab is open, instead of the Projects tab's order.
+- **Stopped sessions land in Inactive instead of vanishing.** They were being swept straight into Archive as soon as they stopped.
+- **Stopping one session no longer disturbs other running sessions.** A stale internal cache could hold back status updates for sessions that were still running, whenever a different session had just stopped.
+- **Archive stays collapsed when there's nothing active**, instead of forcing itself back open every time you close it.
+- **Archive sorts by when a session was last active**, not by the order it happened to be added.
+- **Session names no longer echo just the repo name plus boilerplate** — a title like "my-project | Claude Code" duplicating the row's own subtitle.
+- **Session names no longer flicker through spinner characters, bare directory names, or truncated paths.** Claude Code's terminal title changes rapidly while it's working; Ghostties now filters those out and keeps only genuinely informative titles.
+
+---
+
 ## [0.1.0-beta.21] — 2026-08-01
 
 The Sessions tab gets its own character, names that keep themselves current, and a round of security hardening.
