@@ -4,6 +4,65 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-10 — beta.22 SHIPPED; distribution + one new bug
+
+`v0.1.0-beta.22` tagged at `3979c7025`, release CI green, appcast live (build 16655, verified in
+the deployed XML). Merged tonight: #110 (title-sanitizer leaks), #113 (`Remove`→`Delete`),
+#115 (changelog), #117 (npm pin). Sean passed all three runtime gates (#57, #58, #92) on a build
+proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fail / 1 skip** via
+`xcrun xcresulttool get test-results summary` at the merged tip.
+
+- [ ] **NEW BUG — a session started in the launch window is invisible to the sidebar.** Sean opened
+  beta.22, used the terminal the app opens with, ran `claude` in `~/Code/Career-ops`. The agent runs
+  fine; the sidebar reads **ACTIVE 0 / INACTIVE 0** (screenshot 2026-08-10). Not mis-sorted —
+  there is no row at all. Suspected mechanism: `AgentSession` records are only created by
+  `SessionCoordinator.createSession(session:template:project:)`, i.e. only via the sidebar's New
+  Session path; the default launch window is a plain terminal with no `AgentSession` behind it, so
+  anything started inside it is unknown to `WorkspaceStore`. **Almost certainly predates beta.22** —
+  Sean's own read, and nothing in this release touches session creation. **Same root gap as the
+  parked #56 item below** (2026-07-28 section): Ghostties only knows about agents it launched
+  itself. The launcher-UUID join would close both, which is the argument for doing that work as one
+  piece rather than patching each symptom. | macos | needs-triage
+- [ ] **`npx ghostties-install` is stuck on beta.21.** `ghostties-install@0.1.1` is merged and ready
+  (`cad579db7` — pin `v0.1.0-beta.22`, zip sha256 verified against GitHub's own asset digest) but
+  **never published**. Blocked by a deliberate global rule `"deny": ["Bash(npm publish*)"]` in
+  `~/.claude/settings.json` — a `deny` refuses outright and never prompts, so no session can
+  approve past it, and the `!` prefix no-ops from Sean's phone. Publish is one command from a
+  desktop: `cd dist/ghostties/npm/ghostties-install && npm publish`. Low urgency — an npx install
+  lands beta.21 and Sparkle offers beta.22 on first launch. | dist | needs-desktop
+- [ ] **PR #116 — decide or kill.** Bumps the cask copy at `dist/ghostties/homebrew/ghostties.rb`
+  inside this repo. **The repo copy has no automated maintenance at all**: the release workflow's
+  step is literally named "Bump cask (local checkout only, not committed)" — it bumps a throwaway
+  checkout, pushes only to the tap, never commits back. So this file goes stale after every release
+  and #116 only fixes tonight. **Strawman: merge #116 now, and add a line to the file marking it a
+  template whose `version` is a snapshot**, so the next reader isn't misled. Alternative is closing
+  #116 and accepting permanent drift. | dist | decide-or-kill
+- [ ] **Turn on the Homebrew cask auto-bump.** The `homebrew-cask` job already exists and is
+  complete (opens a PR on the tap, preserving the human gate) — it skipped this release only because
+  `vars.HOMEBREW_TAP_REPO` is unset. Needs a fine-grained PAT scoped to `SeanSmithWorks/homebrew-tap`
+  alone, Contents + Pull requests read/write, minted in the GitHub UI (`gh` cannot create one).
+  **Order is load-bearing: set `HOMEBREW_TAP_TOKEN` (secret) BEFORE `HOMEBREW_TAP_REPO` (variable).**
+  The job gates on the variable and errors hard when it exists without the token — reversing the
+  order turns the *next* release red at its final job, after the release is already public. Never
+  substitute `gh auth token`; it spans every repo including private ones. | dist | needs-sean
+- [ ] **npm publishing has no automation path at all.** Unlike brew, there is no CI job — publishing
+  from CI would need an npm automation token as a repo secret plus a publish step that doesn't
+  exist. Doing this is what stops npx drifting behind every release, and it leaves the `npm publish`
+  deny rule fully intact because publishing stops being a local action. | dist | not-started
+- [ ] **Resume-on-Relaunch — designed, not built.** Relaunch currently rebuilds from template
+  (`clearRuntime` + `createSession`), so the terminal returns and the conversation does not; the
+  fork has **zero** references to `resume`/`--continue`/any Claude session identity. Design settled
+  with Sean: **flat context menu with a `Relaunch` section title** (not a submenu — his call), three
+  items **Resume** / **Branch from here** / **Fresh**, shown only when a transcript exists.
+  `.claudeCode` templates only. Mechanism: launch with `claude --session-id <AgentSession.id>` so the
+  transcript is keyed to the UUID Ghostties already owns, then `--resume <id>`. **Claude is the only
+  agent CLI that lets the caller dictate the session ID at launch** — codex resumes by
+  subcommand, gemini by positional index, cursor-agent by chatId, so `.custom` templates would each
+  need their own resume config. **One unverified assumption blocks the build:** whether
+  `Section("Relaunch")` renders a visible header inside a SwiftUI `.contextMenu` on macOS. If it
+  renders as a bare divider the flat layout loses its labelling and the submenu wins by default.
+  Cheap to check at build time. Wireframes in the session scratchpad. | macos | ready-to-brief
+
 ## 2026-08-09 — App/UX wave: six PRs open, none merged
 
 Objective was to turn Sean's seven asks into reviewable PRs without merging. All seven closed.
