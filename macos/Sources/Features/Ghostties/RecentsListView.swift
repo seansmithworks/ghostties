@@ -6,7 +6,8 @@ import SwiftUI
 ///   + New Session (full-width row → native flyout menu for project selection)
 ///   ─────────────────────────────────
 ///   ACTIVE    (sessions with a live indicator state)
-///   ARCHIVE   (exited / never-run sessions)
+///   INACTIVE  (exited this launch, but still holds a live surface — ran, then stopped)
+///   ARCHIVE   (restored from disk, never started this launch)
 struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -15,16 +16,20 @@ struct RecentsListView: View {
     @State private var editingName: String = ""
     @FocusState private var renameFieldFocused: Bool
 
-    /// Section-collapse state, persisted across launches. Active defaults open
-    /// (the sessions the user is working with today); Archive defaults closed.
+    /// Section-collapse state, persisted across launches. Active and
+    /// Inactive default open (sessions the user is working with today, or
+    /// just stopped); Archive defaults closed.
     @AppStorage("ghostties.sessionsSection.active") private var isActiveExpanded = true
+    @AppStorage("ghostties.sessionsSection.inactive") private var isInactiveExpanded = true
     @AppStorage("ghostties.sessionsSection.archive") private var isArchiveExpanded = false
 
     var body: some View {
-        // Bound once per body pass — `activeSessions`/`archiveSessions` each
-        // filter + build a Dictionary internally, and were previously
-        // evaluated twice (once for an `isEmpty` check, once for `ForEach`).
+        // Bound once per body pass — `activeSessions`/`inactiveSessions`/
+        // `archiveSessions` each filter + build a Dictionary internally, and
+        // were previously evaluated twice (once for an `isEmpty` check, once
+        // for `ForEach`).
         let active = activeSessions
+        let inactive = inactiveSessions
         let archive = archiveSessions
         let selectedId = coordinator.activeSessionId
 
@@ -38,22 +43,27 @@ struct RecentsListView: View {
                 // clears. See `effectiveExpanded(...)`.
                 let activeExpanded = Self.effectiveExpanded(
                     storedPreference: isActiveExpanded,
-                    isArchiveSection: false,
+                    section: .active,
                     sectionContainsSelectedSession: selectedId.map { id in active.contains { $0.id == id } } ?? false
+                )
+                let inactiveExpanded = Self.effectiveExpanded(
+                    storedPreference: isInactiveExpanded,
+                    section: .inactive,
+                    sectionContainsSelectedSession: selectedId.map { id in inactive.contains { $0.id == id } } ?? false
                 )
                 let archiveExpanded = Self.effectiveExpanded(
                     storedPreference: isArchiveExpanded,
-                    isArchiveSection: true,
+                    section: .archive,
                     sectionContainsSelectedSession: selectedId.map { id in archive.contains { $0.id == id } } ?? false
                 )
 
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        // Both headers always render (when there's at least
-                        // one session anywhere) — membership adapts, but the
-                        // ACTIVE/ARCHIVE headers themselves never disappear.
-                        // Every header carries a count; a collapsed header
-                        // with no count is illegible.
+                        // All three headers always render (when there's at
+                        // least one session anywhere) — membership adapts,
+                        // but the ACTIVE/INACTIVE/ARCHIVE headers themselves
+                        // never disappear. Every header carries a count; a
+                        // collapsed header with no count is illegible.
                         SessionSectionHeader(
                             title: "Active",
                             count: active.count,
@@ -62,6 +72,18 @@ struct RecentsListView: View {
                         )
                         if activeExpanded {
                             ForEach(active) { session in
+                                sessionRow(for: session)
+                            }
+                        }
+
+                        SessionSectionHeader(
+                            title: "Inactive",
+                            count: inactive.count,
+                            isExpanded: $isInactiveExpanded,
+                            isEffectivelyExpanded: inactiveExpanded
+                        )
+                        if inactiveExpanded {
+                            ForEach(inactive) { session in
                                 sessionRow(for: session)
                             }
                         }
@@ -170,16 +192,44 @@ struct RecentsListView: View {
     /// whichever section actually contains the selection without relocating
     /// the row itself. A selection-based membership guard here would make
     /// rows jump between sections — and everything below them shift ~38pt —
-    /// the instant the user clicks an Archive row, reintroducing exactly the
-    /// "rows reshuffling under the cursor" problem this feature set removed.
+    /// the instant the user clicks an Inactive/Archive row, reintroducing
+    /// exactly the "rows reshuffling under the cursor" problem this feature
+    /// set removed.
     var activeSessions: [AgentSession] {
         Self.activeSessions(from: store.sessions, indicatorStates: store.globalIndicatorStates)
     }
 
-    /// Sessions that have exited, completed, or never had a live process this
-    /// launch. See `activeSessions` — membership is indicator-state-only.
+    /// Sessions that exited (or completed) THIS launch but still hold a live
+    /// surface — `coordinator.hasLiveSurface(id:)` is true. This is the
+    /// "ran, then stopped" bucket: a session the user actually interacted
+    /// with this run, as opposed to one restored from disk that never
+    /// started. See `archiveSessions` for the complement.
+    var inactiveSessions: [AgentSession] {
+        Self.inactiveSessions(
+            from: store.sessions,
+            indicatorStates: store.globalIndicatorStates,
+            sessionIdsWithLiveSurface: sessionIdsWithLiveSurface
+        )
+    }
+
+    /// Sessions with no live indicator state AND no live surface this
+    /// launch — restored from `workspace.json`, never started this run.
+    /// Exact complement of `activeSessions` + `inactiveSessions` combined.
     var archiveSessions: [AgentSession] {
-        Self.archiveSessions(from: store.sessions, indicatorStates: store.globalIndicatorStates)
+        Self.archiveSessions(
+            from: store.sessions,
+            indicatorStates: store.globalIndicatorStates,
+            sessionIdsWithLiveSurface: sessionIdsWithLiveSurface
+        )
+    }
+
+    /// Session ids that currently have a live surface in `coordinator`
+    /// (`sessionTrees` or `browserManagers`) — the same liveness check
+    /// `WorkspaceSidebarView.sessionsTabCycleOrder` already uses via
+    /// `coordinator.hasLiveSurface(id:)`. Computed once per `body` pass via
+    /// the `inactiveSessions`/`archiveSessions` instance properties above.
+    private var sessionIdsWithLiveSurface: Set<UUID> {
+        Set(store.sessions.map(\.id).filter { coordinator.hasLiveSurface(id: $0) })
     }
 
     // MARK: - Actions
@@ -276,44 +326,78 @@ struct RecentsListView: View {
         })
     }
 
-    /// Pure, testable variant of the `archiveSessions` instance property.
-    /// Exact complement of `activeSessions` — every session is in exactly one
-    /// of the two.
-    static func archiveSessions(
+    /// Pure, testable variant of the `inactiveSessions` instance property:
+    /// not active (no live indicator state) AND still has a live surface
+    /// this launch — `sessionIdsWithLiveSurface` is passed in rather than
+    /// read from a coordinator so this stays a pure function callers can
+    /// test directly. Ordering matches `activeSessions` (append order) —
+    /// only `archiveSessions` reverses.
+    static func inactiveSessions(
         from sessions: [AgentSession],
-        indicatorStates: [UUID: SessionIndicatorState]
+        indicatorStates: [UUID: SessionIndicatorState],
+        sessionIdsWithLiveSurface: Set<UUID>
     ) -> [AgentSession] {
         sorted(sessions: sessions.filter {
             !belongsInActive(indicatorState: indicatorStates[$0.id] ?? .inactive)
+                && sessionIdsWithLiveSurface.contains($0.id)
         })
     }
 
+    /// Pure, testable variant of the `archiveSessions` instance property:
+    /// not active AND no live surface this launch — restored from disk,
+    /// never started. Together with `activeSessions` and `inactiveSessions`
+    /// this is an exact three-way partition — every session lands in
+    /// exactly one bucket. Newest-first (reverse append/creation order) —
+    /// the one bucket that does NOT keep append order, per Sean's call that
+    /// Archive should read reverse-chronological.
+    static func archiveSessions(
+        from sessions: [AgentSession],
+        indicatorStates: [UUID: SessionIndicatorState],
+        sessionIdsWithLiveSurface: Set<UUID>
+    ) -> [AgentSession] {
+        let archived = sorted(sessions: sessions.filter {
+            !belongsInActive(indicatorState: indicatorStates[$0.id] ?? .inactive)
+                && !sessionIdsWithLiveSurface.contains($0.id)
+        })
+        return Array(archived.reversed())
+    }
+
     // MARK: - Auto-Expand Override (static so tests can call without a view instance)
+
+    /// One of the three Sessions-tab sections. Used only to decide which
+    /// sections get the selected-session force-expand override below — not
+    /// a membership concept (see `belongsInActive`, `inactiveSessions`,
+    /// `archiveSessions` for that).
+    enum Section {
+        case active, inactive, archive
+    }
 
     /// Whether a section renders expanded. This is a RENDER-TIME override
     /// only — callers must never write the result back into the persisted
     /// `@AppStorage` preference, or a temporary condition (e.g. the selected
     /// session moving) would permanently clobber the user's stored choice.
     ///
-    /// Expands, regardless of `storedPreference`, when `isArchiveSection` is
-    /// true and `sectionContainsSelectedSession` is true — a session that
-    /// drops into a collapsed Archive stays visible, without relocating the
-    /// session itself (see `belongsInActive`). This override is
-    /// Archive-only: Active has no equivalent vanishing problem, and a
-    /// selected, running session lives in Active essentially all the time
-    /// during normal use, so applying the override there would make the
-    /// Active header a dead control.
+    /// Expands, regardless of `storedPreference`, when `section` is
+    /// `.inactive` or `.archive` AND `sectionContainsSelectedSession` is
+    /// true — a session that drops into a collapsed Inactive or Archive
+    /// section stays visible, without relocating the session itself (see
+    /// `belongsInActive`). This override excludes `.active`: a selected,
+    /// running session lives in Active essentially all the time during
+    /// normal use, so applying the override there would make the Active
+    /// header a dead control.
     ///
     /// Otherwise falls through to `storedPreference` unchanged — including
-    /// when Active is empty. An empty Active section is not, by itself, a
-    /// reason to force Archive open; the user's collapsed/expanded choice
-    /// for Archive is honored either way.
+    /// when another section is empty. An empty section is not, by itself, a
+    /// reason to force a different section open; the user's
+    /// collapsed/expanded choice is honored either way. (This "expand
+    /// because another section is empty" rule was deliberately removed in
+    /// PR #106 — do not reintroduce it.)
     static func effectiveExpanded(
         storedPreference: Bool,
-        isArchiveSection: Bool,
+        section: Section,
         sectionContainsSelectedSession: Bool
     ) -> Bool {
-        if isArchiveSection && sectionContainsSelectedSession { return true }
+        if section != .active && sectionContainsSelectedSession { return true }
         return storedPreference
     }
 

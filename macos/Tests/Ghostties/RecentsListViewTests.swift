@@ -158,27 +158,29 @@ final class RecentsListViewTests: XCTestCase {
         }
     }
 
-    // MARK: - Active/Archive Sessions (pure helpers)
+    // MARK: - Active/Inactive/Archive Sessions (pure helpers)
 
     /// Sean hit this directly: at cold launch every session resolves
-    /// `.inactive` (no `globalIndicatorStates` entries yet), Active is empty,
-    /// nothing is selected, and Archive's stored preference is `false`
-    /// (its default). Archive must render COLLAPSED — an empty Active
-    /// section is not a reason to override the user's collapsed/expanded
-    /// choice for Archive. A bare sidebar in this state is the accepted
-    /// outcome; it is not this helper's job to prevent it.
+    /// `.inactive` (no `globalIndicatorStates` entries yet) and has no live
+    /// surface, Active is empty, nothing is selected, and Archive's stored
+    /// preference is `false` (its default). Archive must render COLLAPSED —
+    /// an empty Active section is not a reason to override the user's
+    /// collapsed/expanded choice for Archive. A bare sidebar in this state
+    /// is the accepted outcome; it is not this helper's job to prevent it.
     func testColdLaunchArchiveStaysCollapsedWhenActiveIsEmpty() {
         let sessions = (0..<14).map { session(name: "s\($0)") }
 
         let active = RecentsListView.activeSessions(from: sessions, indicatorStates: [:])
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:])
+        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: [])
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: [])
 
         XCTAssertTrue(active.isEmpty)
+        XCTAssertTrue(inactive.isEmpty)
         XCTAssertEqual(archive.count, 14)
 
         let archiveExpanded = RecentsListView.effectiveExpanded(
             storedPreference: false,
-            isArchiveSection: true,
+            section: .archive,
             sectionContainsSelectedSession: false
         )
         XCTAssertFalse(archiveExpanded, "Archive must honor the collapsed stored preference even when Active is empty")
@@ -194,17 +196,51 @@ final class RecentsListViewTests: XCTestCase {
         let indicatorStates: [UUID: SessionIndicatorState] = [other.id: .processing]
 
         let active = RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates)
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsWithLiveSurface: [])
 
         XCTAssertTrue(archive.contains { $0.id == selected.id }, "selected session must stay in Archive")
         XCTAssertFalse(active.contains { $0.id == selected.id }, "selected session must NOT be promoted into Active")
 
         let archiveExpanded = RecentsListView.effectiveExpanded(
             storedPreference: false,
-            isArchiveSection: true,
+            section: .archive,
             sectionContainsSelectedSession: archive.contains { $0.id == selected.id }
         )
         XCTAssertTrue(archiveExpanded, "Archive must expand because it contains the selected session")
+    }
+
+    /// Same as above, but for the new INACTIVE section: a selected session
+    /// that ran-then-stopped (has a live surface) stays in Inactive — no
+    /// promotion into Active, no relocation into Archive — but its section
+    /// force-expands so it's visible without moving. This is the exact case
+    /// Sean hit: stop a running session, expect it somewhere other than
+    /// Archive, and it must be reachable even if Inactive were collapsed.
+    func testSelectedInactiveSessionStaysInInactiveButSectionExpands() {
+        let selected = session(name: "selected")
+        let other = session(name: "other")
+        let sessions = [selected, other]
+        let indicatorStates: [UUID: SessionIndicatorState] = [other.id: .processing]
+
+        let inactive = RecentsListView.inactiveSessions(
+            from: sessions,
+            indicatorStates: indicatorStates,
+            sessionIdsWithLiveSurface: [selected.id]
+        )
+        let archive = RecentsListView.archiveSessions(
+            from: sessions,
+            indicatorStates: indicatorStates,
+            sessionIdsWithLiveSurface: [selected.id]
+        )
+
+        XCTAssertTrue(inactive.contains { $0.id == selected.id }, "stopped-but-surfaced session must land in Inactive")
+        XCTAssertFalse(archive.contains { $0.id == selected.id }, "must NOT be lumped into Archive")
+
+        let inactiveExpanded = RecentsListView.effectiveExpanded(
+            storedPreference: false,
+            section: .inactive,
+            sectionContainsSelectedSession: true
+        )
+        XCTAssertTrue(inactiveExpanded, "Inactive must expand because it contains the selected session")
     }
 
     /// The auto-expand override is render-time only — it must never depend on
@@ -214,19 +250,19 @@ final class RecentsListViewTests: XCTestCase {
     func testEffectiveExpandedOverrideIgnoresStoredPreferenceWhenTriggered() {
         XCTAssertTrue(RecentsListView.effectiveExpanded(
             storedPreference: false,
-            isArchiveSection: true,
+            section: .archive,
             sectionContainsSelectedSession: true
         ))
         // No override condition met — falls through to the stored preference.
         XCTAssertFalse(RecentsListView.effectiveExpanded(
             storedPreference: false,
-            isArchiveSection: true,
+            section: .archive,
             sectionContainsSelectedSession: false
         ))
     }
 
-    /// FIX (dead ACTIVE header): the selected-session override must be
-    /// Archive-only. A selected, running session lives in Active essentially
+    /// FIX (dead ACTIVE header): the selected-session override must exclude
+    /// `.active`. A selected, running session lives in Active essentially
     /// all the time during normal use, so applying the override there would
     /// make the ACTIVE header collapse control permanently dead — tapping it
     /// while a session is selected must actually collapse the section, honoring
@@ -234,9 +270,123 @@ final class RecentsListViewTests: XCTestCase {
     func testActiveSectionRespectsStoredPreferenceEvenWhenItContainsSelectedSession() {
         XCTAssertFalse(RecentsListView.effectiveExpanded(
             storedPreference: false,
-            isArchiveSection: false,
+            section: .active,
             sectionContainsSelectedSession: true
-        ), "Active must not force-expand for the selected session — only Archive gets that override")
+        ), "Active must not force-expand for the selected session — only Inactive/Archive get that override")
+    }
+
+    /// The three static buckets must be an EXACT partition: every session
+    /// lands in exactly one of Active/Inactive/Archive, never zero, never
+    /// two. Mixes all combinations of indicator state x live-surface
+    /// presence across a set of sessions.
+    func testActiveInactiveArchivePartitionIsExact() {
+        let liveNoSurface = session(name: "liveNoSurface") // active, no surface (impossible in prod but must still partition)
+        let liveWithSurface = session(name: "liveWithSurface") // active, has surface
+        let stoppedWithSurface = session(name: "stoppedWithSurface") // inactive, has surface -> Inactive
+        let neverStarted = session(name: "neverStarted") // inactive, no surface -> Archive
+        let sessions = [liveNoSurface, liveWithSurface, stoppedWithSurface, neverStarted]
+
+        let indicatorStates: [UUID: SessionIndicatorState] = [
+            liveNoSurface.id: .processing,
+            liveWithSurface.id: .idle,
+            // stoppedWithSurface, neverStarted absent -> resolve .inactive.
+        ]
+        let sessionIdsWithLiveSurface: Set<UUID> = [liveWithSurface.id, stoppedWithSurface.id]
+
+        let active = RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
+        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsWithLiveSurface: sessionIdsWithLiveSurface)
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsWithLiveSurface: sessionIdsWithLiveSurface)
+
+        for s in sessions {
+            let memberships = [active, inactive, archive].filter { bucket in bucket.contains { $0.id == s.id } }
+            XCTAssertEqual(memberships.count, 1, "\(s.name) must land in exactly one section, found in \(memberships.count)")
+        }
+        XCTAssertEqual(active.count + inactive.count + archive.count, sessions.count, "buckets must cover every session exactly once")
+
+        XCTAssertTrue(active.contains { $0.id == liveNoSurface.id })
+        XCTAssertTrue(active.contains { $0.id == liveWithSurface.id })
+        XCTAssertTrue(inactive.contains { $0.id == stoppedWithSurface.id })
+        XCTAssertTrue(archive.contains { $0.id == neverStarted.id })
+    }
+
+    /// The exact bug Sean hit: a session that RAN and was stopped (inactive
+    /// indicator, but still holds a live surface this launch) must land in
+    /// INACTIVE, not ARCHIVE.
+    func testStoppedButStillSurfacedSessionLandsInInactiveNotArchive() {
+        let stopped = session(name: "stopped")
+        let sessions = [stopped]
+        let sessionIdsWithLiveSurface: Set<UUID> = [stopped.id]
+
+        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: sessionIdsWithLiveSurface)
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: sessionIdsWithLiveSurface)
+
+        XCTAssertTrue(inactive.contains { $0.id == stopped.id }, "a stopped-but-surfaced session must land in Inactive")
+        XCTAssertTrue(archive.isEmpty, "must not also land in Archive")
+    }
+
+    /// A session with no live surface this launch (restored from disk,
+    /// never started) must land in ARCHIVE, not INACTIVE.
+    func testNeverStartedSessionLandsInArchiveNotInactive() {
+        let neverStarted = session(name: "neverStarted")
+        let sessions = [neverStarted]
+
+        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: [])
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: [])
+
+        XCTAssertTrue(archive.contains { $0.id == neverStarted.id }, "a never-started session must land in Archive")
+        XCTAssertTrue(inactive.isEmpty, "must not also land in Inactive")
+    }
+
+    // MARK: - Ordering (Archive newest-first; Active/Inactive unchanged)
+
+    /// Archive renders newest-first (reverse append/creation order) — Sean's
+    /// call. Active and Inactive keep the existing append-order behavior
+    /// (see `testLastActiveAtDoesNotAffectOrder` etc. above) unchanged.
+    func testArchiveOrdersNewestFirst() {
+        let oldest = session(name: "oldest")
+        let middle = session(name: "middle")
+        let newest = session(name: "newest")
+
+        // Passed in append/creation order: oldest, middle, newest.
+        let archive = RecentsListView.archiveSessions(
+            from: [oldest, middle, newest],
+            indicatorStates: [:],
+            sessionIdsWithLiveSurface: []
+        )
+
+        XCTAssertEqual(archive.map(\.name), ["newest", "middle", "oldest"], "Archive must render newest-first")
+    }
+
+    /// Active's ordering is unchanged by the three-way split — still
+    /// append/creation order, exactly like before.
+    func testActiveOrderingUnchangedByThreeWaySplit() {
+        let first = session(name: "first")
+        let second = session(name: "second")
+        let third = session(name: "third")
+        let indicatorStates: [UUID: SessionIndicatorState] = [
+            first.id: .processing, second.id: .idle, third.id: .waiting,
+        ]
+
+        let active = RecentsListView.activeSessions(from: [first, second, third], indicatorStates: indicatorStates)
+
+        XCTAssertEqual(active.map(\.name), ["first", "second", "third"], "Active must keep append order")
+    }
+
+    /// Inactive's ordering is append/creation order too, NOT reversed like
+    /// Archive.
+    func testInactiveOrderingIsAppendOrderNotReversed() {
+        let first = session(name: "first")
+        let second = session(name: "second")
+        let third = session(name: "third")
+        let sessionIdsWithLiveSurface: Set<UUID> = [first.id, second.id, third.id]
+
+        let inactive = RecentsListView.inactiveSessions(
+            from: [first, second, third],
+            indicatorStates: [:],
+            sessionIdsWithLiveSurface: sessionIdsWithLiveSurface
+        )
+
+        XCTAssertEqual(inactive.map(\.name), ["first", "second", "third"], "Inactive must keep append order, not reverse like Archive")
     }
 
     // MARK: - Sessions-tab Cmd+Shift+[/] cycle order (single shared source)
