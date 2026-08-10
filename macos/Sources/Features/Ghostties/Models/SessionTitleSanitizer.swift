@@ -18,8 +18,41 @@ enum SessionTitleSanitizer {
     /// Bare shell/program names that show up as terminal titles but carry no
     /// information about what the session is doing.
     private static let bareProgramNames: Set<String> = [
-        "claude", "zsh", "bash", "-zsh", "-bash", "sh", "-sh", "fish", "-fish"
+        "claude", "claude code", "zsh", "bash", "-zsh", "-bash", "sh", "-sh", "fish", "-fish"
     ]
+
+    /// Separators terminal titles commonly use to glue a program/repo name
+    /// onto the "real" content, e.g. `"repo-name | Claude Code"` or
+    /// `"repo-name — zsh"`. Deliberately excludes a bare, unspaced `-` —
+    /// project/repo directory names are routinely hyphenated
+    /// (`2026-web-playground`), and splitting on every hyphen would shred
+    /// that single informative segment into fragments that individually
+    /// look like noise. Only a *spaced* hyphen (`" - "`) is treated as a
+    /// separator, matching how humans actually punctuate a title.
+    private static let titleSeparatorPattern = #"(?: - )|[|—–:·»>]"#
+
+    /// Returns `true` if `cleaned`, once split on `titleSeparatorPattern`,
+    /// contains at least one segment that isn't just `projectDirectoryName`
+    /// or a bare program name — i.e. the title carries information beyond
+    /// "this is project X, running program Y".
+    private static func hasInformativeSegment(in cleaned: String, projectDirectoryName: String) -> Bool {
+        let placeholder: Character = "\u{0}"
+        let replaced = cleaned.replacingOccurrences(
+            of: titleSeparatorPattern,
+            with: String(placeholder),
+            options: .regularExpression
+        )
+        let dirLower = projectDirectoryName.lowercased()
+        for rawSegment in replaced.split(separator: placeholder, omittingEmptySubsequences: true) {
+            let segment = rawSegment.trimmingCharacters(in: .whitespaces)
+            guard !segment.isEmpty else { continue }
+            let segmentLower = segment.lowercased()
+            if segmentLower == dirLower { continue }
+            if bareProgramNames.contains(segmentLower) { continue }
+            return true
+        }
+        return false
+    }
 
     /// The `titleFromTerminal` fallback `SurfaceView_AppKit` writes ~500ms after
     /// surface creation if no real title has arrived yet. It carries no
@@ -104,7 +137,13 @@ enum SessionTitleSanitizer {
 
         let lowercased = cleaned.lowercased()
         if bareProgramNames.contains(lowercased) { return nil }
-        if let projectDirectoryName, lowercased == projectDirectoryName.lowercased() {
+        // Reject a title whose only content, once split on common title
+        // separators (`|`, em/en dash, spaced `-`, `:`, `·`, `»`, `>`), is
+        // the project directory name and/or a bare program name — e.g.
+        // Claude Code's terminal title "repo-name | Claude Code" carries no
+        // information beyond what the sidebar already shows via the project
+        // row and the fact that a Claude session is running there.
+        if let projectDirectoryName, !hasInformativeSegment(in: cleaned, projectDirectoryName: projectDirectoryName) {
             return nil
         }
 
