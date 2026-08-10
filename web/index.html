@@ -216,7 +216,7 @@
       animation: type-line2 1.1s steps(43) 4.2s forwards;
     }
 
-    /* line-3: "+ ghostties % v0.1.0-beta.21 · macOS 13+" = 40 chars */
+    /* line-3: "+ ghostties % v0.1.0-beta.22 · macOS 13+" = 40 chars */
     .animate .line-3 {
       animation:
         type-line3 1.0s steps(40) 5.65s forwards,
@@ -513,7 +513,7 @@
       .terminal { font-size: 1rem; max-width: calc(100vw - 72px); } /* 16px; .scene 20px + body 16px per side at this width */
 
       /* line-3 drops "ghostties" and " · macOS 13+" (still on /download) —
-         at this width even the "+ ghostties % v0.1.0-beta.21" wording
+         at this width even the "+ ghostties % v0.1.0-beta.22" wording
          measures ~395.6px against a 248px .terminal, ~148px (about 15
          chars) past the budget and invisibly truncated by .terminal's
          overflow:hidden. Dropping "ghostties" (redundant — line-1 already
@@ -532,7 +532,7 @@
          vs 27, so every line after line-3 shifts earlier. Every line-3–6
          typing rate is a uniform 25ms/char; gaps between lines stay a
          uniform 0.35s. Total run: ~8.575s (desktop: ~9.25s). */
-      /* line-3: "+ v0.1.0-beta.21" = 16 chars */
+      /* line-3: "+ v0.1.0-beta.22" = 16 chars */
       .animate .line-3 {
         animation:
           type-line3 0.4s steps(16) 5.65s forwards,
@@ -697,12 +697,12 @@
       <div class="line line-1">cd ~/ghostties</div>
       <!-- line-2: 43 chars: https://github.com/SeanSmithWorks/ghostties -->
       <div class="line line-2"><a class="gh-link" href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener">https://github.com/SeanSmithWorks/ghostties</a></div>
-      <!-- line-3: 40 chars: + ghostties % v0.1.0-beta.21 · macOS 13+
-           (16 chars on mobile: "+ v0.1.0-beta.21" — "ghostties", the bare
+      <!-- line-3: 40 chars: + ghostties % v0.1.0-beta.22 · macOS 13+
+           (16 chars on mobile: "+ v0.1.0-beta.22" — "ghostties", the bare
            "%", and " · macOS 13+" are dropped, see the max-width: 480px
            block. Two spans, not visual-only hiding, so a screen reader
            never reads the string twice.) -->
-      <div class="line line-3"><span class="line-3-full">+ ghostties % v0.1.0-beta.21 &middot; macOS 13+</span><span class="line-3-short">+ v0.1.0-beta.21</span></div>
+      <div class="line line-3"><span class="line-3-full">+ ghostties % v0.1.0-beta.22 &middot; macOS 13+</span><span class="line-3-short">+ v0.1.0-beta.22</span></div>
       <!-- line-4: 18 chars: + [brew install ⧉] (clickable — copies the command) -->
       <div class="line line-4"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">brew install ⧉</button><span aria-hidden="true">]</span></div>
       <!-- line-5: 27 chars: + [npx ghostties-install ⧉] (clickable — copies the command)
@@ -713,7 +713,7 @@
            ("+ [" / "]") sits outside the link so the accessible name is just
            "download now"; both spans render normally, so the visible text and
            the 16ch typing width are unchanged. -->
-      <div class="line line-6"><span aria-hidden="true">+ [</span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.21/Ghostties.dmg" download>download now</a><span aria-hidden="true">]</span></div>
+      <div class="line line-6"><span aria-hidden="true">+ [</span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.22/Ghostties.dmg" download>download now</a><span aria-hidden="true">]</span></div>
       </div>
     </div>
 
