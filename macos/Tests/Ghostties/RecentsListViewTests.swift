@@ -171,8 +171,8 @@ final class RecentsListViewTests: XCTestCase {
         let sessions = (0..<14).map { session(name: "s\($0)") }
 
         let active = RecentsListView.activeSessions(from: sessions, indicatorStates: [:])
-        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: [])
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: [])
+        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: [])
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: [])
 
         XCTAssertTrue(active.isEmpty)
         XCTAssertTrue(inactive.isEmpty)
@@ -196,7 +196,7 @@ final class RecentsListViewTests: XCTestCase {
         let indicatorStates: [UUID: SessionIndicatorState] = [other.id: .processing]
 
         let active = RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsWithLiveSurface: [])
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsStartedThisLaunch: [])
 
         XCTAssertTrue(archive.contains { $0.id == selected.id }, "selected session must stay in Archive")
         XCTAssertFalse(active.contains { $0.id == selected.id }, "selected session must NOT be promoted into Active")
@@ -210,11 +210,12 @@ final class RecentsListViewTests: XCTestCase {
     }
 
     /// Same as above, but for the new INACTIVE section: a selected session
-    /// that ran-then-stopped (has a live surface) stays in Inactive — no
-    /// promotion into Active, no relocation into Archive — but its section
-    /// force-expands so it's visible without moving. This is the exact case
-    /// Sean hit: stop a running session, expect it somewhere other than
-    /// Archive, and it must be reachable even if Inactive were collapsed.
+    /// that ran-then-stopped (started at some point this launch) stays in
+    /// Inactive — no promotion into Active, no relocation into Archive — but
+    /// its section force-expands so it's visible without moving. This is the
+    /// exact case Sean hit: stop a running session, expect it somewhere
+    /// other than Archive, and it must be reachable even if Inactive were
+    /// collapsed.
     func testSelectedInactiveSessionStaysInInactiveButSectionExpands() {
         let selected = session(name: "selected")
         let other = session(name: "other")
@@ -224,15 +225,15 @@ final class RecentsListViewTests: XCTestCase {
         let inactive = RecentsListView.inactiveSessions(
             from: sessions,
             indicatorStates: indicatorStates,
-            sessionIdsWithLiveSurface: [selected.id]
+            sessionIdsStartedThisLaunch: [selected.id]
         )
         let archive = RecentsListView.archiveSessions(
             from: sessions,
             indicatorStates: indicatorStates,
-            sessionIdsWithLiveSurface: [selected.id]
+            sessionIdsStartedThisLaunch: [selected.id]
         )
 
-        XCTAssertTrue(inactive.contains { $0.id == selected.id }, "stopped-but-surfaced session must land in Inactive")
+        XCTAssertTrue(inactive.contains { $0.id == selected.id }, "stopped-but-started-this-launch session must land in Inactive")
         XCTAssertFalse(archive.contains { $0.id == selected.id }, "must NOT be lumped into Archive")
 
         let inactiveExpanded = RecentsListView.effectiveExpanded(
@@ -281,9 +282,9 @@ final class RecentsListViewTests: XCTestCase {
     /// presence across a set of sessions.
     func testActiveInactiveArchivePartitionIsExact() {
         let liveNoSurface = session(name: "liveNoSurface") // active, no surface (impossible in prod but must still partition)
-        let liveWithSurface = session(name: "liveWithSurface") // active, has surface
-        let stoppedWithSurface = session(name: "stoppedWithSurface") // inactive, has surface -> Inactive
-        let neverStarted = session(name: "neverStarted") // inactive, no surface -> Archive
+        let liveWithSurface = session(name: "liveWithSurface") // active, started this launch
+        let stoppedWithSurface = session(name: "stoppedWithSurface") // inactive, started this launch -> Inactive
+        let neverStarted = session(name: "neverStarted") // inactive, never started -> Archive
         let sessions = [liveNoSurface, liveWithSurface, stoppedWithSurface, neverStarted]
 
         let indicatorStates: [UUID: SessionIndicatorState] = [
@@ -291,11 +292,11 @@ final class RecentsListViewTests: XCTestCase {
             liveWithSurface.id: .idle,
             // stoppedWithSurface, neverStarted absent -> resolve .inactive.
         ]
-        let sessionIdsWithLiveSurface: Set<UUID> = [liveWithSurface.id, stoppedWithSurface.id]
+        let sessionIdsStartedThisLaunch: Set<UUID> = [liveWithSurface.id, stoppedWithSurface.id]
 
         let active = RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
-        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsWithLiveSurface: sessionIdsWithLiveSurface)
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsWithLiveSurface: sessionIdsWithLiveSurface)
+        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
 
         for s in sessions {
             let memberships = [active, inactive, archive].filter { bucket in bucket.contains { $0.id == s.id } }
@@ -310,31 +311,83 @@ final class RecentsListViewTests: XCTestCase {
     }
 
     /// The exact bug Sean hit: a session that RAN and was stopped (inactive
-    /// indicator, but still holds a live surface this launch) must land in
-    /// INACTIVE, not ARCHIVE.
+    /// indicator, but was started at some point this launch) must land in
+    /// INACTIVE, not ARCHIVE. This is the pure-function analog of
+    /// `testStartedThenStoppedSessionLandsInInactiveNotArchive` below.
     func testStoppedButStillSurfacedSessionLandsInInactiveNotArchive() {
         let stopped = session(name: "stopped")
         let sessions = [stopped]
-        let sessionIdsWithLiveSurface: Set<UUID> = [stopped.id]
+        let sessionIdsStartedThisLaunch: Set<UUID> = [stopped.id]
 
-        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: sessionIdsWithLiveSurface)
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: sessionIdsWithLiveSurface)
+        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
 
-        XCTAssertTrue(inactive.contains { $0.id == stopped.id }, "a stopped-but-surfaced session must land in Inactive")
+        XCTAssertTrue(inactive.contains { $0.id == stopped.id }, "a stopped-but-started-this-launch session must land in Inactive")
         XCTAssertTrue(archive.isEmpty, "must not also land in Archive")
     }
 
-    /// A session with no live surface this launch (restored from disk,
+    /// A session that never started this launch (restored from disk,
     /// never started) must land in ARCHIVE, not INACTIVE.
     func testNeverStartedSessionLandsInArchiveNotInactive() {
         let neverStarted = session(name: "neverStarted")
         let sessions = [neverStarted]
 
-        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: [])
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsWithLiveSurface: [])
+        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: [])
+        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: [])
 
         XCTAssertTrue(archive.contains { $0.id == neverStarted.id }, "a never-started session must land in Archive")
         XCTAssertTrue(inactive.isEmpty, "must not also land in Inactive")
+    }
+
+    /// Integration-level regression test for PR #108's actual bug, exercised
+    /// through the real `SessionCoordinator` rather than a hand-built Set.
+    ///
+    /// A session is started this launch (`seedEmptySessionTreeForTesting`
+    /// establishes a tree, mirroring production's `createSession`, which
+    /// also inserts into `sessionIdsStartedThisLaunch`), then stopped
+    /// (`closeSession` removes the tree — mirroring every real way a
+    /// session stops: `closeSession`, natural process exit, and
+    /// `clearRuntime` all remove the tree). The session now has NO current
+    /// surface and indicator state resolves to `.inactive`.
+    ///
+    /// It must land in INACTIVE. This is the exact case that broke: under
+    /// the OLD `hasLiveSurface(id:)`-based discriminator, a stopped session
+    /// has `sessionTrees[id] == nil` and `browserManagers[id] == nil`, so
+    /// `hasLiveSurface` returns `false` — the session would fail the
+    /// Inactive membership test and fall through to Archive instead. The
+    /// assertion below on `coordinator.sessionIdsStartedThisLaunch` (which
+    /// stays `true` after the stop, unlike `hasLiveSurface`) is what
+    /// distinguishes the fixed behavior from the old, broken one.
+    @MainActor
+    func testStartedThenStoppedSessionLandsInInactiveNotArchive() {
+        let stopped = session(name: "stopped")
+        let sessions = [stopped]
+
+        let coordinator = SessionCoordinator()
+        coordinator.seedEmptySessionTreeForTesting(id: stopped.id)
+        XCTAssertTrue(coordinator.hasLiveSurface(id: stopped.id), "sanity: session has a live surface right after starting")
+
+        coordinator.closeSession(id: stopped.id)
+
+        // Old, broken discriminator: this is now false — proving that a
+        // hasLiveSurface-based bucketing would misclassify this session.
+        XCTAssertFalse(coordinator.hasLiveSurface(id: stopped.id), "stopping removes the tree, so the OLD discriminator would (wrongly) exclude this session from Inactive")
+        // New discriminator: stays true for the rest of the launch.
+        XCTAssertTrue(coordinator.sessionIdsStartedThisLaunch.contains(stopped.id), "started-this-launch tracking must survive the stop")
+
+        let inactive = RecentsListView.inactiveSessions(
+            from: sessions,
+            indicatorStates: [:],
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
+        )
+        let archive = RecentsListView.archiveSessions(
+            from: sessions,
+            indicatorStates: [:],
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
+        )
+
+        XCTAssertTrue(inactive.contains { $0.id == stopped.id }, "a started-then-stopped session must land in Inactive")
+        XCTAssertTrue(archive.isEmpty, "must not fall through to Archive")
     }
 
     // MARK: - Ordering (Archive newest-first by lastActiveAt; Active/Inactive unchanged)
@@ -359,7 +412,7 @@ final class RecentsListViewTests: XCTestCase {
         let archive = RecentsListView.archiveSessions(
             from: [twoHoursAgo, fiveMinAgo, oneHourAgo],
             indicatorStates: [:],
-            sessionIdsWithLiveSurface: []
+            sessionIdsStartedThisLaunch: []
         )
 
         XCTAssertEqual(
@@ -380,7 +433,7 @@ final class RecentsListViewTests: XCTestCase {
         let archive = RecentsListView.archiveSessions(
             from: [noTimestamp, oneHourAgo, fiveMinAgo],
             indicatorStates: [:],
-            sessionIdsWithLiveSurface: []
+            sessionIdsStartedThisLaunch: []
         )
 
         XCTAssertEqual(
@@ -401,7 +454,7 @@ final class RecentsListViewTests: XCTestCase {
         let archive = RecentsListView.archiveSessions(
             from: [first, second, third],
             indicatorStates: [:],
-            sessionIdsWithLiveSurface: []
+            sessionIdsStartedThisLaunch: []
         )
 
         XCTAssertEqual(archive.map(\.name), ["first", "second", "third"], "all-nil list must preserve insertion order")
@@ -428,12 +481,12 @@ final class RecentsListViewTests: XCTestCase {
         let first = session(name: "first")
         let second = session(name: "second")
         let third = session(name: "third")
-        let sessionIdsWithLiveSurface: Set<UUID> = [first.id, second.id, third.id]
+        let sessionIdsStartedThisLaunch: Set<UUID> = [first.id, second.id, third.id]
 
         let inactive = RecentsListView.inactiveSessions(
             from: [first, second, third],
             indicatorStates: [:],
-            sessionIdsWithLiveSurface: sessionIdsWithLiveSurface
+            sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch
         )
 
         XCTAssertEqual(inactive.map(\.name), ["first", "second", "third"], "Inactive must keep append order, not reverse like Archive")
