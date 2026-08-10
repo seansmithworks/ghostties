@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 cask "ghostties" do
-  version "0.1.0-beta.21"
-  sha256 "72a2cafd9b758efb94d7e4b3f8427e7979a44abee13567ff915a059a608f13ea"
+  version "0.1.0-beta.22"
+  sha256 "d98303637d6142af48e165627ca2afb312513610396ca56cda2e781efae780b0"
 
   # Ghostties has not cut a stable release yet — every tag so far, including
   # this one, is a GitHub prerelease. Tracking beta is a deliberate choice,
