@@ -182,6 +182,16 @@
       display: inline;
     }
 
+    /* Default (>480px): show the full line-3 string, hide the mobile-short
+       one. Without this rule both spans render above 480px — the
+       max-width: 480px block below only sets the mobile state, there was
+       no default-state rule, so the version string doubled in the DOM and
+       accessibility tree at every width above mobile (invisible on screen
+       only because .line's overflow:hidden + typewriter animation clips
+       the second span's pixels — an accident, not a design). */
+    .line-3-full { display: inline; }
+    .line-3-short { display: none; }
+
     /* Caret blink states */
     .animate .line-1.caret-visible {
       border-right-color: var(--terminal-fg);
@@ -394,9 +404,19 @@
     /* product-flow.mp4 includes its window titlebar and traffic lights;
        product-sessions.mp4 is already cropped above them. .product-card's
        overflow: hidden lets a negative top offset crop the flow video to
-       match without a re-capture. */
+       match without a re-capture.
+
+       The video is 1520x950 intrinsic; the titlebar chrome measures exactly
+       40px in the source frame (pixel-sampled: content pane background
+       starts at row 40, chrome background above it). Expressed as a
+       percentage of the containing block's WIDTH — not a fixed px value —
+       because percentage margins always resolve against container width,
+       and since the video's aspect ratio is fixed, width and height scale
+       together, so 40/1520 = 2.6316% crops the same proportion of the
+       titlebar at every viewport instead of biting a fixed pixel count out
+       of a shrinking frame. */
     .product-window--flow .product-card video {
-      margin-top: -34px;
+      margin-top: -2.6316%;
     }
 
     /* The 56px gap between a window and the next one lives here, not on
@@ -512,12 +532,13 @@
 
       /* line-3 drops "ghostties" and " · macOS 13+" (still on /download) —
          at this width even the "+ ghostties % v0.1.0-beta.21" wording
-         measures ~277px against a 248px .terminal, ~29px (3 chars) past the
-         budget and invisibly truncated by .terminal's overflow:hidden.
-         "ghostties" is redundant here (line-1 already establishes it) and
-         dropping it is enough to clear the budget with room for a 3-digit
-         beta number. Two spans, not visual-only hiding, so a screen reader
-         never reads the string twice. */
+         measures ~395.6px against a 248px .terminal, ~148px (about 15
+         chars) past the budget and invisibly truncated by .terminal's
+         overflow:hidden. Dropping "ghostties" (redundant — line-1 already
+         establishes it) and the bare "%" (had nothing in front of it, read
+         as a rendering bug rather than an abbreviation) clears the budget.
+         Two spans, not visual-only hiding, so a screen reader never reads
+         the string twice. */
       .line-3-full { display: none; }
       .line-3-short { display: inline; }
 
@@ -525,46 +546,47 @@
       .btn-icon { display: none; }
 
       /* Retimed so mobile stays coherent: line-3's shorter string types
-         faster (18 chars vs 40), and line-5 without its icon is 25 chars
-         vs 27, so every line after line-3 shifts earlier. Gaps stay a
-         uniform 0.35s. Total run: ~8.625s (desktop: ~9.25s). */
-      /* line-3: "+ % v0.1.0-beta.21" = 18 chars */
+         faster (16 chars vs 40), and line-5 without its icon is 25 chars
+         vs 27, so every line after line-3 shifts earlier. Every line-3–6
+         typing rate is a uniform 25ms/char; gaps between lines stay a
+         uniform 0.35s. Total run: ~8.575s (desktop: ~9.25s). */
+      /* line-3: "+ v0.1.0-beta.21" = 16 chars */
       .animate .line-3 {
         animation:
-          type-line3 0.45s steps(18) 5.65s forwards,
+          type-line3 0.4s steps(16) 5.65s forwards,
           reveal-line-green 0s 5.65s forwards;
       }
 
       /* line-4: "+ [brew install ⧉]" = 18 chars, unchanged */
       .animate .line-4 {
         animation:
-          type-line4 0.45s steps(18) 6.45s forwards,
-          reveal-line-green 0s 6.45s forwards;
+          type-line4 0.45s steps(18) 6.4s forwards,
+          reveal-line-green 0s 6.4s forwards;
       }
 
       .animate .line-4 .term-btn {
-        animation: reveal-btn 0s 6.45s forwards;
+        animation: reveal-btn 0s 6.4s forwards;
       }
 
       /* line-5: "+ [npx ghostties-install]" = 25 chars (icon dropped) */
       .animate .line-5 {
         animation:
-          type-line5 0.625s steps(25) 7.25s forwards,
-          reveal-line-green 0s 7.25s forwards;
+          type-line5 0.625s steps(25) 7.2s forwards,
+          reveal-line-green 0s 7.2s forwards;
       }
 
       .animate .line-5 .term-btn {
-        animation: reveal-btn 0s 7.25s forwards;
+        animation: reveal-btn 0s 7.2s forwards;
       }
 
       /* line-6: "+ [download now]" = 16 chars, unchanged */
       .animate .line-6 {
         animation:
-          type-line6 0.4s steps(16) 8.225s forwards,
-          reveal-line-green 0s 8.225s forwards;
+          type-line6 0.4s steps(16) 8.175s forwards,
+          reveal-line-green 0s 8.175s forwards;
       }
 
-      @keyframes type-line3 { from { width: 0; } to { width: 18ch; } }
+      @keyframes type-line3 { from { width: 0; } to { width: 16ch; } }
       @keyframes type-line5 { from { width: 0; } to { width: 25ch; } }
 
       footer { padding: 8px 16px; font-size: 0.625rem; } /* 10px; matches the document-page footer padding trim */
@@ -694,10 +716,11 @@
       <!-- line-2: 43 chars: https://github.com/SeanSmithWorks/ghostties -->
       <div class="line line-2"><a class="gh-link" href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener">https://github.com/SeanSmithWorks/ghostties</a></div>
       <!-- line-3: 40 chars: + ghostties % v0.1.0-beta.21 · macOS 13+
-           (18 chars on mobile: "ghostties" and " · macOS 13+" are dropped
-           — see the max-width: 480px block. Two spans, not visual-only
-           hiding, so a screen reader never reads the string twice.) -->
-      <div class="line line-3"><span class="line-3-full">+ ghostties % v0.1.0-beta.21 &middot; macOS 13+</span><span class="line-3-short">+ % v0.1.0-beta.21</span></div>
+           (16 chars on mobile: "+ v0.1.0-beta.21" — "ghostties", the bare
+           "%", and " · macOS 13+" are dropped, see the max-width: 480px
+           block. Two spans, not visual-only hiding, so a screen reader
+           never reads the string twice.) -->
+      <div class="line line-3"><span class="line-3-full">+ ghostties % v0.1.0-beta.21 &middot; macOS 13+</span><span class="line-3-short">+ v0.1.0-beta.21</span></div>
       <!-- line-4: 18 chars: + [brew install ⧉] (clickable — copies the command) -->
       <div class="line line-4"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">brew install ⧉</button><span aria-hidden="true">]</span></div>
       <!-- line-5: 27 chars: + [npx ghostties-install ⧉] (clickable — copies the command)
@@ -766,7 +789,7 @@
     // Mobile retimes line-3 (shorter string) and line-5 (icon dropped),
     // which shifts every line after them — see the max-width: 480px block.
     function lockDelayMs() {
-      return window.matchMedia('(max-width: 480px)').matches ? 8625 : 9250;
+      return window.matchMedia('(max-width: 480px)').matches ? 8575 : 9250;
     }
 
     function activateCarets() {

@@ -95,23 +95,24 @@ replace(
     "download.html last-updated footer",
 )
 
-# 5. index.html — terminal line-3 version string "% v0.1.0-beta.X"
-#    Matches every occurrence of the "% v<version>" fragment: the desktop
-#    span ("+ ghostties % v..."), the mobile-short span ("+ % v..." — no
-#    "ghostties", it's dropped there to fit the mobile character budget),
+# 5. index.html — terminal line-3 version string.
+#    Matches every occurrence of "<+ or %> v<version>": the desktop span
+#    ("+ ghostties % v..."), the mobile-short span ("+ v..." — no "%",
+#    "ghostties" is dropped there too, to fit the mobile character budget),
 #    the CSS comment above the desktop keyframe, the CSS comment above the
 #    mobile-override keyframe, the illustrative example in the mobile
-#    budget-math comment, and the HTML markup comment — same fixed
-#    "% v<version>" fragment in all of them, so one global replace covers
-#    all of them regardless of what precedes it. (The char-count numbers in
-#    those comments aren't touched here: like the rest of this script, a
-#    version bump is assumed not to change the string's length. If a beta
-#    number crosses a digit boundary — e.g. beta.9 → beta.10 — recheck the
-#    *ch counts by hand.)
+#    budget-math comment, and the HTML markup comment. The lookbehind
+#    requires a literal "+ " or "% " immediately before "v" so it can't
+#    also match the unrelated "v<version>" inside the DMG URL (handled by
+#    rule 1 above), which is preceded by "/" instead. (The char-count
+#    numbers in those comments aren't touched here: like the rest of this
+#    script, a version bump is assumed not to change the string's length.
+#    If a beta number crosses a digit boundary — e.g. beta.9 → beta.10 —
+#    recheck the *ch counts by hand.)
 replace(
     "web/index.html",
-    r"% v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
-    f"% {version}",
+    r"(?<=[+%] )v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
+    version,
     "index.html terminal line-3 (all occurrences)",
 )
 
