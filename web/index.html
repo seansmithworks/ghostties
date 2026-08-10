@@ -182,6 +182,20 @@
       display: inline;
     }
 
+    /* Forces the copy icon (U+29C9) to an exact 1ch advance. The glyph's
+       natural advance in the resolved mono stack measures ~1.29ch (see PR
+       description) -- not 1ch like every other character in these lines --
+       so it silently pushed the typewriter's hard-coded ch widths past the
+       actual rendered width and .line's overflow: hidden ate the trailing
+       "]". margin-left supplies the 1ch gap the source string's literal
+       space used to provide. */
+    .copy-icon {
+      display: inline-block;
+      width: 1ch;
+      margin-left: 1ch;
+      text-align: center;
+    }
+
     /* Default (>480px): show the full line-3 string, hide the mobile-short
        one. Without this rule both spans render above 480px — the
        max-width: 480px block below only sets the mobile state, there was
@@ -704,10 +718,10 @@
            never reads the string twice.) -->
       <div class="line line-3"><span class="line-3-full">+ ghostties % v0.1.0-beta.22 &middot; macOS 13+</span><span class="line-3-short">+ v0.1.0-beta.22</span></div>
       <!-- line-4: 18 chars: + [brew install ⧉] (clickable — copies the command) -->
-      <div class="line line-4"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">brew install ⧉</button><span aria-hidden="true">]</span></div>
+      <div class="line line-4"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">brew install<span class="copy-icon" aria-hidden="true">⧉</span></button><span aria-hidden="true">]</span></div>
       <!-- line-5: 27 chars: + [npx ghostties-install ⧉] (clickable — copies the command)
            25 chars on mobile: the icon is dropped, see .btn-icon below. -->
-      <div class="line line-5"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">npx ghostties-install<span class="btn-icon" aria-hidden="true"> ⧉</span></button><span aria-hidden="true">]</span></div>
+      <div class="line line-5"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">npx ghostties-install<span class="btn-icon copy-icon" aria-hidden="true">⧉</span></button><span aria-hidden="true">]</span></div>
       <!-- line-6: 16 chars: + [download now] (clickable) -->
       <!-- Hardcoded DMG URL — bump the version tag with each release. Decoration
            ("+ [" / "]") sits outside the link so the accessible name is just
@@ -724,10 +738,10 @@
       <h2>Multiple agent terminals, one window</h2>
       <div class="product-window product-window--sessions">
         <div class="product-card">
-          <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" autoplay muted loop playsinline aria-label="Ghostties sidebar showing four parallel Claude Code agent sessions running in one window"></video>
+          <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" autoplay muted loop playsinline aria-label="Ghostties sidebar showing multiple parallel Claude Code agent sessions running in one window"></video>
         </div>
       </div>
-      <div class="product-caption">four sessions, one window</div>
+      <div class="product-caption">every session, one window</div>
 
       <div class="product-window product-window--flow">
         <div class="product-card">
