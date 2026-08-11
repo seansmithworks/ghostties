@@ -2889,6 +2889,92 @@ New bug: a session started in the app's launch window is invisible to the sideba
 by the deny rule. PR #116 decide-or-kill. Homebrew auto-bump needs a PAT. npm publishing has no CI
 path at all. Resume-on-Relaunch designed but not built.
 
+## Aug 10, 2026 — Website: product-card band, hero bracket, session-count caption
+
+### Headline
+
+Two PRs merged and prod-verified in the deployed asset/HTML. The blank band above the first product
+card is gone, the hero copy-button `]` no longer clips, and the caption no longer undercounts the
+sessions in its own video.
+
+### Commits
+
+- **#114 `12dae56d3`** — `product-sessions.mp4` + poster trimmed 28 rows off the top → **1520×922**.
+  Both assets ended up *smaller* than what they replaced (44,530→43,647 and 49,868→47,169 bytes).
+- **#118 `f7f26ea63`** — `.copy-icon` forces the `⧉` glyph into a 2ch slot so the declared `ch`
+  widths hold; caption → `every session, one window`, `aria-label` → `multiple parallel…`.
+
+Prod verified with cache-busted requests: `ffprobe` on the downloaded asset reports 1520×922
+yuv420p; `four sessions` returns 0 matches on ghostties.org.
+
+### What actually took the time
+
+**The band was an asset problem, not a CSS one.** `product-sessions.mp4` never captured its
+titlebar — rows 0–48 of a 1520×950 frame were a single flat colour across all 90 frames. A CSS crop
+had been built and reverted earlier (`dbf0c5306`) because it deleted the *good* clip's chrome to
+disguise the bad clip's gap. Trimming the asset is also self-cleaning: the planned re-shoot drops in
+with no CSS rule left behind to over-trim it.
+
+**The hero bracket had a measurable cause.** At the terminal's 18px, `1ch = 11.140625px` but `⧉`
+(U+29C9) advances `14.328125px = 1.286ch` because it falls off the mono stack. The typewriter
+animates `width` to hard-coded `18ch`/`27ch` with `overflow: hidden`, so the real content overflowed
+and the bracket fell outside the clip. Line 6 (`+ [download now]`, no icon) was the control, already
+on the page. Fixed by making the declared arithmetic true rather than bumping the numbers, which
+would have made every `steps(N)` count and code comment a lie.
+
+### Corrections worth keeping
+
+- **`text-align` only distributes POSITIVE leftover space.** My first prescribed fix — `text-align:
+  right` on a 1ch box holding a 1.29ch glyph — was a **no-op**; both engines anchor overflowing
+  content flush-left regardless of the value. The agent proved it with an isolated cross-engine repro
+  and byte-identical before/after screenshots rather than reporting a pass. Size the box past the
+  content *first*, then align.
+- **`text-decoration` never paints on an atomic inline-level box**, even set directly on it —
+  `getComputedStyle` reports it active and no pixels render. The hover-underline fix in the same
+  commit was equally dead and was deleted rather than left in the stylesheet pretending to work.
+- **A builder pasted a stale `git diff --stat`** that hid a 52% poster size regression (49,868 →
+  75,735 bytes). Caught by re-running the command, not by reading the report. Same failure mode as
+  `feedback_subagent-summary-contradicts-own-artifact`.
+- **`git diff main..branch` produced a false alarm again**, showing three `dist/ghostties/npm/*`
+  files as part of #118 — they were the reversal of #117, which landed after the branch forked.
+  `main` moved twice during the session.
+- **A worktree-isolated session cannot run git in any other worktree** — not via `-C`, `cd`, a
+  subagent, or the `!` prefix. It cost a round: a fix was completed in a second worktree and
+  stranded, and Sean had to commit it from a real terminal.
+
+### Review rounds
+
+Both PRs went through adversarial review by agents that did not write the code.
+`feedback_ui-fixes-regress-each-other` is now **four-for-four** — and this time the rounds corrected
+*each other*: round 1 on #114 flagged a corner-clipping that round 2 disproved analytically, and
+round 2 also found round 1's clearance prediction wrong in direction. Round 1 on #118 caught a
+regression that the fix itself had introduced.
+
+Round 2 on #114 also closed a real gap by driving Playwright's WebKit, and caught that Python's
+stock `http.server` has no Range support — which would have failed Safari for the wrong reason.
+
+### New bug found, not fixed
+
+**Safari drops the hero's `npx` line bracket entirely, live on production.** WebKit's final animation
+progress computes as `0.9999999999999997`, so `steps(27)` floors to step 26 and the line settles at
+26ch inside an `overflow: hidden` box. Pre-existing, only above 481px, verified against live
+ghostties.org. Isolation evidence and the fix direction (extend the existing JS width-lock; do NOT
+bump `steps(N)`) → `reference_webkit-steps-animation-floors.md`.
+
+### Memory + state
+
+New: `reference_webkit-steps-animation-floors.md`. `MEMORY.md` compacted 20.3KB → 17.2KB.
+`ORCHESTRATOR.md` compacted 36.5KB → 16.8KB with 11.8KB moved to a new `ORCHESTRATOR-log.md`
+(archived, not deleted); the concurrent app thread's beta.22 entry was merged in, not clobbered.
+
+### Open (all in BACKLOG.md, 2026-08-10 web section)
+
+The Safari `]`. Whether the copy icon should be `right`-aligned rather than `center` (decide-or-kill,
+one character — it shipped as `center`). The un-underlined hover icon (accepted). Pinning `-refs 5`
+into the capture spec so both clips encode at the same h264 level. Product clips still needing a
+re-shoot. A stray `.claude/worktrees/hero-bracket` worktree needing removal from a non-isolated
+session.
+
 ---
 
 ## 2026-08-09 — Distribution lane: cask + npx install paths

@@ -4,6 +4,44 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-10 — Website: product-card band, hero bracket, caption (all SHIPPED)
+
+Merged and prod-verified in the deployed asset/HTML: **#114 `12dae56d3`** (product-sessions trimmed
+to 1520×922, band gone) and **#118 `f7f26ea63`** (hero `]` no longer clipped, caption corrected).
+Left open:
+
+- **Safari drops the `]` on hero line-5, live on production.** WebKit's final animation progress is
+  `0.9999999999999997`, so `steps(27)` floors to step 26 and the line settles at 26ch inside an
+  `overflow: hidden` box — the whole bracket sits outside. Pre-existing, predates both PRs, only
+  above 481px. Fix: extend the existing JS width-lock (`activateCarets` already pins
+  `line6.style.width = '16ch'`) to lines 1–5, branching on the mobile widths. **Do NOT bump
+  `steps(N)` or the `ch` value** — Chromium lands exactly and would break. Full isolation evidence,
+  including the route-rewrite table, in `reference_webkit-steps-animation-floors.md`. Measured via
+  Playwright WebKit, not Safari itself — confirm in real Safari before closing.
+- **Copy-icon sits centered rather than right-aligned.** `decide or kill` — strawman: change
+  `.copy-icon { text-align: center }` to `right`. Measured gap to the `]` is 13–15 ink-columns at
+  DPR 2 versus 8 on the pre-#118 baseline, so it overshot the original rhythm; every other glyph on
+  that line sits on a 1ch monospace grid. One-character change, no width impact. Shipped as
+  `center` on Sean's "ship it" — cosmetic only, not a defect.
+- **Hover underline no longer reaches the copy icon.** `display: inline-block` makes the span an
+  atomic inline box, and `text-decoration` is never painted on one — even when set directly on it
+  (`getComputedStyle` reports it active, no pixels render). Accepted, not fixed: a `border-bottom`
+  substitute would sit at the box edge rather than the text baseline. Same change also glued the
+  selection text to `brew install⧉`. Both cosmetic.
+- **Pin `-refs 5` (or `-level:v 4.0`) into the capture spec** at
+  `docs/plans/website-install-paths.html`. `-preset veryslow` raised the sessions clip's reference
+  frames to 16, forcing h264 level 5.0; `product-flow.mp4` is still level 4.0. Decode verified in
+  both Chromium and WebKit so it does not block, but the two clips should encode identically at the
+  re-shoot.
+- **Product clips still need re-shooting** (carried). `product-sessions.mp4` has no window titlebar
+  at all while `product-flow.mp4` shows traffic lights; trimming the band made that asymmetry more
+  legible, not less. Cropping flow to match would delete real UI, so the fix is re-capturing
+  sessions *with* its chrome, per the committed spec. Blocked on demo capture being parked and
+  Screen Recording permission.
+- **Stray worktree:** `.claude/worktrees/hero-bracket` still exists with local branch
+  `fix/hero-bracket-clip` (superseded; remote branch deleted). Needs `git worktree remove` from a
+  session that is not worktree-isolated.
+
 ## 2026-08-10 — beta.22 SHIPPED; distribution + one new bug
 
 `v0.1.0-beta.22` tagged at `3979c7025`, release CI green, appcast live (build 16655, verified in
