@@ -42,6 +42,16 @@ final class SessionCoordinator: ObservableObject {
     /// sessionTrees (terminal) OR browserManagers (browser), never both.
     private(set) var browserManagers: [UUID: BrowserTabManager] = [:]
 
+    /// Every session ID that has ever had a live surface (terminal tree or
+    /// browser manager) during this process's lifetime. Inserted into wherever
+    /// a `sessionTrees` or `browserManagers` entry is first established; never
+    /// removed — not on close, not on `clearRuntime`, not on surface teardown.
+    /// In-memory only, never persisted to `workspace.json`: it resets naturally
+    /// on relaunch, which is the desired semantics. Distinguishes a
+    /// stopped-this-launch session (INACTIVE) from one restored from disk that
+    /// never started this launch (ARCHIVE) — see `RecentsListView`.
+    private(set) var sessionIdsStartedThisLaunch: Set<UUID> = []
+
     /// Bridges CEF callbacks to the browser UI. Keyed by session ID.
     private var browserBridges: [UUID: BrowserSessionBridge] = [:]
 
@@ -247,6 +257,7 @@ final class SessionCoordinator: ObservableObject {
         snapshotActiveTree()
 
         sessionTrees[session.id] = newTree
+        sessionIdsStartedThisLaunch.insert(session.id)
         setStatus(.running, for: session.id)
         subscribeToOutput(surface: newView, sessionId: session.id)
         activeSessionId = session.id
@@ -335,6 +346,7 @@ final class SessionCoordinator: ObservableObject {
         snapshotActiveTree()
 
         browserManagers[session.id] = manager
+        sessionIdsStartedThisLaunch.insert(session.id)
         setStatus(.running, for: session.id)
         activeSessionId = session.id
         lastActiveSessionPerProject[session.projectId] = session.id
@@ -634,6 +646,51 @@ final class SessionCoordinator: ObservableObject {
         guard let controller = terminalController else { return }
         for surface in tree {
             controller.closeSurface(surface, withConfirmation: false)
+        }
+    }
+
+    /// "Close Session" — Cmd+W, browser-tab semantics. Confirms via
+    /// `NSAlert` (never SwiftUI `confirmationDialog` — see
+    /// `BaseTerminalController.closeSurface(_:withConfirmation:)`'s doc
+    /// comment for why a Cmd+W handler can't risk a dialog that Cmd+W itself
+    /// can dismiss) when the current session is "active" — the same
+    /// live/inactive split `RecentsListView` already uses for its
+    /// Active/Archive sections (`indicatorState != .inactive`). Closing then
+    /// runs through the existing `closeSession(id:)`, which already focuses
+    /// a replacement session if one is running. If that leaves this window
+    /// with no live session at all, closes the window — browser standard:
+    /// closing your last tab closes the window.
+    func closeCurrentSessionWithConfirmation() {
+        guard let id = activeSessionId else {
+            // Nothing to close, and nothing live left in this window — browser
+            // convention: ⌘W then closes the window. If live sessions DO exist but
+            // none is active, stay a no-op rather than closing out from under them.
+            if sessionTrees.isEmpty && browserManagers.isEmpty {
+                terminalController?.window?.close()
+            }
+            return
+        }
+
+        let indicatorState = WorkspaceStore.shared.globalIndicatorStates[id] ?? .inactive
+        let isActive = indicatorState != .inactive
+
+        func performClose() {
+            closeSession(id: id)
+            if sessionTrees.isEmpty && browserManagers.isEmpty {
+                terminalController?.window?.close()
+            }
+        }
+
+        guard isActive, let controller = terminalController else {
+            performClose()
+            return
+        }
+
+        controller.confirmClose(
+            messageText: "Close Session?",
+            informativeText: "This session is still active. Closing it will stop the running process."
+        ) {
+            performClose()
         }
     }
 
@@ -1367,6 +1424,7 @@ final class SessionCoordinator: ObservableObject {
     /// Never used in production.
     func seedEmptySessionTreeForTesting(id: UUID) {
         sessionTrees[id] = SplitTree()
+        sessionIdsStartedThisLaunch.insert(id)
     }
 
     /// Test-only: current count of live name-sync subscriptions, so tests

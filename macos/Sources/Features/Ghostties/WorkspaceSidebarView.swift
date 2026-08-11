@@ -136,6 +136,15 @@ struct WorkspaceSidebarView: View {
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             createNewSessionForSelectedProject()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceCloseSession)) { notification in
+            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
+            coordinator.closeCurrentSessionWithConfirmation()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceFocusSessionAtIndex)) { notification in
+            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
+            guard let index = notification.userInfo?["index"] as? Int else { return }
+            focusVisibleSession(atIndex: index)
+        }
         .sheet(isPresented: Binding(
             get: { !hasSeenOnboarding },
             set: { _ in }
@@ -151,9 +160,13 @@ struct WorkspaceSidebarView: View {
     private var titlebarToolbar: some View {
         HStack(spacing: 8) {
             Spacer()
-            // "+" only shown in Projects tab; Sessions view controls live in the content area.
+            // One labelled "new item" control per tab, right-aligned. Projects
+            // gets a plain action button; Sessions gets a menu-presenting
+            // button (project-picker flyout) — see `NewSessionToolbarButton`.
             if sidebarTab == .projects {
-                ToolbarIconButton(systemName: "plus", label: "Add project", action: presentFolderPicker)
+                ToolbarLabelButton(systemName: "plus", label: "New Project", action: presentFolderPicker)
+            } else {
+                NewSessionToolbarButton()
             }
         }
         .padding(.horizontal, 12)
@@ -268,21 +281,63 @@ struct WorkspaceSidebarView: View {
     /// writing them is redundant with `focusSession`, which already updates
     /// `lastActiveSessionPerProject`. Scoped to the Projects-tab branch only.
     private func selectAdjacentLiveSession(offset: Int) {
-        let liveSessions: [AgentSession]
-        if sidebarTab == .sessions {
-            liveSessions = Self.sessionsTabCycleOrder(
-                sessions: store.sessions,
-                indicatorStates: store.globalIndicatorStates,
-                coordinator: coordinator
-            )
-        } else {
-            liveSessions = store.sessionsInVisualOrder(coordinator: coordinator)
-        }
+        let liveSessions = currentTabLiveSessions()
         guard let target = coordinator.focusAdjacentLiveSession(offset: offset, in: liveSessions) else { return }
         if sidebarTab == .projects {
             expandedProjectIds.insert(target.projectId)
             selectedProjectId = target.projectId
         }
+    }
+
+    /// The visible session list for whichever sidebar tab is showing right
+    /// now — shared by Cmd+Shift+[/] cycling (`selectAdjacentLiveSession`)
+    /// and Cmd+1-9 positional focus (`focusVisibleSession(atIndex:)`) so
+    /// both shortcuts always agree with what's actually on screen. See
+    /// `selectAdjacentLiveSession`'s doc comment for why the two tabs pull
+    /// from different sources.
+    private func currentTabLiveSessions() -> [AgentSession] {
+        if sidebarTab == .sessions {
+            return Self.sessionsTabCycleOrder(
+                sessions: store.sessions,
+                indicatorStates: store.globalIndicatorStates,
+                coordinator: coordinator
+            )
+        } else {
+            return store.sessionsInVisualOrder(coordinator: coordinator)
+        }
+    }
+
+    /// Cmd+1..8 focuses the Nth visible session (1-indexed); Cmd+9 always
+    /// focuses the LAST visible session regardless of how many there are.
+    /// Out-of-range (e.g. Cmd+7 with 4 sessions visible) is a no-op — no
+    /// wrap, no clamp, matching browser-tab convention. `index` is the raw
+    /// digit pressed (1-9).
+    private func focusVisibleSession(atIndex index: Int) {
+        let liveSessions = currentTabLiveSessions()
+        guard let target = index == 9
+            ? Self.lastSession(in: liveSessions)
+            : Self.session(at: index, in: liveSessions)
+        else { return }
+
+        coordinator.focusSession(id: target.id)
+        if sidebarTab == .projects {
+            expandedProjectIds.insert(target.projectId)
+            selectedProjectId = target.projectId
+        }
+    }
+
+    /// Pure index lookup for Cmd+1..8 — static so tests can call it without
+    /// a view instance, same pattern as `sessionsTabCycleOrder`. `index` is
+    /// 1-indexed; anything outside `1...liveSessions.count` is a no-op.
+    static func session(at index: Int, in liveSessions: [AgentSession]) -> AgentSession? {
+        guard index >= 1, index <= liveSessions.count else { return nil }
+        return liveSessions[index - 1]
+    }
+
+    /// Pure "last visible session" lookup for Cmd+9 — always the last entry
+    /// regardless of `liveSessions.count`. Nil for an empty list.
+    static func lastSession(in liveSessions: [AgentSession]) -> AgentSession? {
+        liveSessions.last
     }
 
     /// The Sessions-tab cycle order: the ACTIVE zone in render order,
@@ -438,10 +493,12 @@ private struct EmptyStateAddButton: View {
     }
 }
 
-// MARK: - Toolbar Icon Button
+// MARK: - Toolbar Label Button
 
-/// A small icon button with hover highlight for the sidebar toolbar.
-private struct ToolbarIconButton: View {
+/// A labelled icon+text button with hover feedback for the sidebar toolbar's
+/// primary "new item" action. Styled to match `EmptyStateAddButton` above
+/// (icon 10pt medium, text 12pt medium, 4pt spacing) per DESIGN.md.
+private struct ToolbarLabelButton: View {
     let systemName: String
     let label: String
     let action: () -> Void
@@ -450,16 +507,15 @@ private struct ToolbarIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .medium))
-                .frame(width: 24, height: 24)
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(isHovered ? Color.primary.opacity(0.08) : .clear)
-                )
+            HStack(spacing: 4) {
+                Image(systemName: systemName)
+                    .font(.system(size: 10, weight: .medium))
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+            }
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(isHovered ? .primary : .secondary)
         .focusable()
         .onHover { isHovered = $0 }
         .accessibilityLabel(label)

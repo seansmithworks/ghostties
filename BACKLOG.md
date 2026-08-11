@@ -4,6 +4,108 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-10 — beta.22 SHIPPED; distribution + one new bug
+
+`v0.1.0-beta.22` tagged at `3979c7025`, release CI green, appcast live (build 16655, verified in
+the deployed XML). Merged tonight: #110 (title-sanitizer leaks), #113 (`Remove`→`Delete`),
+#115 (changelog), #117 (npm pin). Sean passed all three runtime gates (#57, #58, #92) on a build
+proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fail / 1 skip** via
+`xcrun xcresulttool get test-results summary` at the merged tip.
+
+- [ ] **NEW BUG — a session started in the launch window is invisible to the sidebar.** Sean opened
+  beta.22, used the terminal the app opens with, ran `claude` in `~/Code/Career-ops`. The agent runs
+  fine; the sidebar reads **ACTIVE 0 / INACTIVE 0** (screenshot 2026-08-10). Not mis-sorted —
+  there is no row at all. Suspected mechanism: `AgentSession` records are only created by
+  `SessionCoordinator.createSession(session:template:project:)`, i.e. only via the sidebar's New
+  Session path; the default launch window is a plain terminal with no `AgentSession` behind it, so
+  anything started inside it is unknown to `WorkspaceStore`. **Almost certainly predates beta.22** —
+  Sean's own read, and nothing in this release touches session creation. **Same root gap as the
+  parked #56 item below** (2026-07-28 section): Ghostties only knows about agents it launched
+  itself. The launcher-UUID join would close both, which is the argument for doing that work as one
+  piece rather than patching each symptom. | macos | needs-triage
+- [ ] **`npx ghostties-install` is stuck on beta.21.** `ghostties-install@0.1.1` is merged and ready
+  (`cad579db7` — pin `v0.1.0-beta.22`, zip sha256 verified against GitHub's own asset digest) but
+  **never published**. Blocked by a deliberate global rule `"deny": ["Bash(npm publish*)"]` in
+  `~/.claude/settings.json` — a `deny` refuses outright and never prompts, so no session can
+  approve past it, and the `!` prefix no-ops from Sean's phone. Publish is one command from a
+  desktop: `cd dist/ghostties/npm/ghostties-install && npm publish`. Low urgency — an npx install
+  lands beta.21 and Sparkle offers beta.22 on first launch. | dist | needs-desktop
+- [ ] **PR #116 — decide or kill.** Bumps the cask copy at `dist/ghostties/homebrew/ghostties.rb`
+  inside this repo. **The repo copy has no automated maintenance at all**: the release workflow's
+  step is literally named "Bump cask (local checkout only, not committed)" — it bumps a throwaway
+  checkout, pushes only to the tap, never commits back. So this file goes stale after every release
+  and #116 only fixes tonight. **Strawman: merge #116 now, and add a line to the file marking it a
+  template whose `version` is a snapshot**, so the next reader isn't misled. Alternative is closing
+  #116 and accepting permanent drift. | dist | decide-or-kill
+- [ ] **Turn on the Homebrew cask auto-bump.** The `homebrew-cask` job already exists and is
+  complete (opens a PR on the tap, preserving the human gate) — it skipped this release only because
+  `vars.HOMEBREW_TAP_REPO` is unset. Needs a fine-grained PAT scoped to `SeanSmithWorks/homebrew-tap`
+  alone, Contents + Pull requests read/write, minted in the GitHub UI (`gh` cannot create one).
+  **Order is load-bearing: set `HOMEBREW_TAP_TOKEN` (secret) BEFORE `HOMEBREW_TAP_REPO` (variable).**
+  The job gates on the variable and errors hard when it exists without the token — reversing the
+  order turns the *next* release red at its final job, after the release is already public. Never
+  substitute `gh auth token`; it spans every repo including private ones. | dist | needs-sean
+- [ ] **npm publishing has no automation path at all.** Unlike brew, there is no CI job — publishing
+  from CI would need an npm automation token as a repo secret plus a publish step that doesn't
+  exist. Doing this is what stops npx drifting behind every release, and it leaves the `npm publish`
+  deny rule fully intact because publishing stops being a local action. | dist | not-started
+- [ ] **Resume-on-Relaunch — designed, not built.** Relaunch currently rebuilds from template
+  (`clearRuntime` + `createSession`), so the terminal returns and the conversation does not; the
+  fork has **zero** references to `resume`/`--continue`/any Claude session identity. Design settled
+  with Sean: **flat context menu with a `Relaunch` section title** (not a submenu — his call), three
+  items **Resume** / **Branch from here** / **Fresh**, shown only when a transcript exists.
+  `.claudeCode` templates only. Mechanism: launch with `claude --session-id <AgentSession.id>` so the
+  transcript is keyed to the UUID Ghostties already owns, then `--resume <id>`. **Claude is the only
+  agent CLI that lets the caller dictate the session ID at launch** — codex resumes by
+  subcommand, gemini by positional index, cursor-agent by chatId, so `.custom` templates would each
+  need their own resume config. **One unverified assumption blocks the build:** whether
+  `Section("Relaunch")` renders a visible header inside a SwiftUI `.contextMenu` on macOS. If it
+  renders as a bare divider the flat layout loses its labelling and the submenu wins by default.
+  Cheap to check at build time. Wireframes in the session scratchpad. | macos | ready-to-brief
+
+## 2026-08-09 — App/UX wave: six PRs open, none merged
+
+Objective was to turn Sean's seven asks into reviewable PRs without merging. All seven closed.
+Distribution (#99) was the sibling thread's and is already on `main`.
+
+- [ ] **Merge the wave, in order.** `#102` **before** `#103` — both touch `WorkspaceSidebarView.swift`.
+  `#96` (titlebar), `#100` (hide Tasks), `#101` (Codex template) and `#104` (overlay card) are
+  independent of each other. | macos | carried
+- [ ] **#102 shipped WITHOUT its minimum-sidebar-width measurement.** Adding text labels to the
+  toolbar buttons widens them; the agent could not isolate its own Dev window to measure, and
+  correctly refused to force focus. **Nothing was pre-built for an overflow that was never
+  confirmed to exist.** 2-minute manual check is in the PR body — if the label truncates at
+  minimum width, an icon-only fallback is the fix. | macos | needs-runtime-check
+- [ ] **Screen Recording permission is NOT granted to this session's process.** `screencapture`
+  returns an all-black image and `osascript`/System Events is denied assistive access. Two
+  subagents and the orchestrator hit it independently — environmental, not agent error. **Every
+  visual acceptance criterion in this wave went unverified because of it**, and the parked
+  dark-mode hero capture is blocked on the same thing. Granting it once to the terminal
+  (System Settings → Privacy & Security → Screen Recording) unblocks the whole class. | ops | quick
+- [x] **~~#96's window-floor tradeoff~~ — dissolved, do not chase it.** Removing the
+  `TerminalController` override looked like it would let the gutter below the terminal card bleed
+  terminal colour instead of sidebar chrome. It does not: `WorkspaceViewContainer` paints its own
+  layer with `canvasBackgroundCGColor` in `.pinned`/`.closed` (lines 509, 1166, 1177), so
+  `window.backgroundColor` only ever shows in the titlebar strip. `.overlay` was the one exception
+  (`layer.backgroundColor = nil`, line 1188) and **#104 closes it** by making overlay paint its own.
+- **Sean's design call, 2026-08-09:** the canvas is **always** a shadowed card, including overlay.
+  Built as #104. Note a shadow needs the inset to be visible at all — a full-bleed view's shadow is
+  clipped — so inset, radius and shadow move together. This was never a persistence bug.
+
+### Method notes worth keeping
+
+- **`xcrun xcresulttool get test-results summary` is the fix for the recurring test-count
+  miscount.** Raw log lines overcount by a constant −49 in this repo; #103's agent reported "688
+  passed" against a real ~638. #104's agent used xcresulttool and hit the baseline exactly. Put it
+  in any brief that asks for totals.
+- **Verify PRs with `gh pr diff`, never `git diff main..branch`.** `main` moved repeatedly during
+  the wave, and a raw range diff made #100 look like it deleted the entire distribution lane. It
+  changed one file, +4/−10.
+- **A subagent typed into one of Sean's live sessions** — memory
+  `feedback_subagent-gui-automation-hit-live-session`. Every brief now carries: screen capture yes,
+  synthetic input never. Two later agents hit that wall and correctly stopped rather than route
+  around it.
+
 ## 2026-08-04 — Sessions-tab cycling + indicator lifecycle (PRs #90, #92 shipped)
 
 Both merged to `main` and verified present in the merged code, not just merge-succeeded.
@@ -427,3 +529,18 @@ Objective: get the GitHub repo presentable for incoming interest, with correct G
 
 - [ ] **Cask CI auto-bump not activated.** Needs a fine-grained PAT scoped to `SeanSmithWorks/homebrew-tap` stored as `HOMEBREW_TAP_TOKEN`, plus the `HOMEBREW_TAP_REPO` variable. **Set both together or neither** — the job intentionally fails loudly when the variable exists without the token, which would turn a release run red. Do not substitute `gh auth token` (spans every repo, including private ones, and rotates with the CLI session). Until then, bump manually: `bash scripts/update-cask-version.sh <tag>`, then copy into the tap's `Casks/ghostties.rb`. | build | needs-Sean
 - [ ] **npm version bumps are manual.** `dist/ghostties/npm/ghostties-install/package.json` pins the app version and its SHA256; publishing a new pin means `npm publish` by hand. Deliberate — Sparkle catches installed apps up on first launch, so a stale pin self-heals. | build | deferred
+
+Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #101, #102, #103, #104) plus four follow-ups driven by live testing (#106 Archive stays collapsed, #107 repo-name-echo titles, #108 Inactive zone, #109 real Archive sort by `lastActiveAt`, #111 Inactive boundary correction). Main at `86e2c0bc4`, suite 659/658/0/1.
+
+- [ ] **#110 fixture swap — IN FLIGHT, UNVERIFIED** — PR #110 (three title-sanitizer leaks: spinner glyphs, `<dir> | Claude Code`, ellipsis paths) is CLEAN and MERGEABLE but its fixtures contain real local strings (`2026-web-playground`, `…/Code/_experiments/…`). A subagent was mid-swap when the thread was recycled; its **uncommitted** edits to `SessionTitleSanitizer.swift` + `SessionTitleSanitizerTests.swift` are in the worktree at `.claude/worktrees/agent-af3ba3c118d267faf` on branch `fix/reject-status-glyph-titles`. Verify with `grep -rn "2026-web-playground\|_experiments\|/Users/sean" macos/` — must return nothing before merging. If the work is gone, it's a 3-string swap: `2026-web-playground`→`sample-web-project`, `…/Code/_experiments/2026-web-playground`→`…/Code/sandbox/sample-web-project`, `/Users/sean/`→`/Users/someone/`. Suite must stay exactly 673/672/0/1 — a pure string swap changes no counts. | app | carried
+- [ ] **Rename-with-Enter verdict** — `isNamePinned` is **0 of 31** sessions after a full evening of Sean testing. Consistent with only-Esc (correct #57 behavior), but not proven. Code reads correct on both tabs (`.onSubmit → commitRename → store.renameSession`), persistence verified (the flag is written on all 31 records). Needs one deliberate Rename → type → **Enter**, then read `~/Library/Application Support/Ghostties Dev/workspace.json`. Until settled, cannot rule out a broken Enter path. | app | needs-Sean
+- [ ] **beta.22 — three runtime checks, then tag** — tag point `047cd3a85` confirmed still an ancestor of main, so the wave did not contaminate it. Checks (each has an ordering trap that makes the lazy version pass trivially): **#57** rename → junk → Esc → right-click, "Sync name automatically" must be ABSENT, **Projects tab only** (the item only exists in `ProjectDisclosureRow`) and on a never-renamed session; **#58** close sidebar FIRST, shrink to ~700pt, THEN open; **#92** two sessions running, stop one, other must stay ACTIVE, on an already-running app. Tag needs Sean's explicit go — fires release CI and republishes the appcast, and origin rulesets block tag deletion. | release | needs-Sean
+- [ ] **CI guard for `window.backgroundColor`** — offered, never built. A test that fails if a `WorkspaceLayout` token is ever assigned to a window's `backgroundColor` anywhere in `macos/Sources`. #96 deleted both hardcoded overrides and left fork-fence comments, but comments don't enforce. Root cause of the 3× recurrence was `agent-craft.md` actively instructing the bug; both entries corrected 2026-08-09 and captured in `feedback_window-backgroundcolor-is-derived.md`. | app | quick
+- [ ] **Prune 8 stale worktrees** — all merged branches, only `vendor/cef*` build artifacts dirty, no work at risk: the four `agent-*` from the wave, plus `esc-cancel-rename` (#57), `hide-tasks-view` (#100), `menu-validation` (#59), `sidebar-reclamp` (#58). Do NOT touch `session-2` (locked, another session, PR #105) or `truthful-idle` (#56 open) or `cache-load-harness` (never merged). | build | quick
+- [ ] **Archive expansion is remembered, not reset per launch** — Sean asked for "closed by default"; the code default was already `false` and the symptom was a stale stored `1` from testing (fixed by `defaults write com.seansmithdesign.ghostties.dev ghostties.sessionsSection.archive -bool false`). Open question he hasn't answered: should Archive *always* start collapsed each launch regardless of how it was left? That's a real code change. | app | needs-Sean
+
+**Off-objective, parked (do NOT carry):**
+
+- [ ] **PR #105** (`docs/npm-published`) — owned by another session, worktree `session-2` is locked. Not this thread's to merge. | dist | other-session
+- [ ] **PR #56** (idle-fallback) — open since July, correctly excluded from beta.22. | app | deferred
+- [ ] **`test/session-cache-load-harness`** — branch on origin, no PR ever opened, genuinely unmerged. Confirm whether it's dead. | build | deferred

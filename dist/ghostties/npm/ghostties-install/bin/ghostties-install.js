@@ -23,9 +23,9 @@ const { execFileSync } = require("child_process");
 // Pinned release. Bump manually when a new release ships. See README.md.
 // ---------------------------------------------------------------------------
 const RELEASE = {
-  tag: "v0.1.0-beta.21",
+  tag: "v0.1.0-beta.22",
   assetName: "ghostties-macos-arm64.zip",
-  sha256: "779cb110cc2c3a4cfeb1581601b1f13ed00139dbf5cb039d775b54e625e512ac",
+  sha256: "0542bd3db77ca60048e3f9aba5096c9779037139a52eee2bd82c6c3e1eea98fc",
 };
 const DOWNLOAD_URL = `https://github.com/SeanSmithWorks/ghostties/releases/download/${RELEASE.tag}/${RELEASE.assetName}`;
 const APP_NAME = "Ghostties.app";

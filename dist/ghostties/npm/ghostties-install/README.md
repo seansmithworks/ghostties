@@ -76,12 +76,11 @@ self-heals immediately after install.
 
 **Bumping the pin is currently a manual step**, not automated in CI. The
 Homebrew cask's version bump is automated by a separate CI workflow in this repo;
-the npm package's is not — publishing a new pin means `npm publish` by hand.
-Because the app self-updates via Sparkle on first launch, a stale pin self-heals,
-so this is a deliberate trade rather than a gap to close urgently. If you're
-bumping this by hand: update `RELEASE.tag`, `RELEASE.assetName` (should stay the
-same name), and `RELEASE.sha256` in `bin/ghostties-install.js`, using the sha256
-GitHub reports for the release asset, then run `npm publish`.
+the npm package's is not, because publishing from CI would need an npm
+automation token that isn't configured. If you're bumping
+this by hand: update `RELEASE.tag`, `RELEASE.assetName` (should stay the same name),
+and `RELEASE.sha256` in `bin/ghostties-install.js`, using the sha256 GitHub reports
+for the release asset.
 
 ## Zero dependencies
 

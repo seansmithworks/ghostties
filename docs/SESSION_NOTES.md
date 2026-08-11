@@ -2828,6 +2828,67 @@ The hero half (CTA gated behind ~10.1s of animation; mobile terminal type scale)
 targets 13–16px at the 768px breakpoint (under WCAG 2.5.8's 24px floor); whether the homepage
 footer should go `static` below 480px; favicon randomisation; build-time version substitution.
 
+## 2026-08-09/10 — App lane: beta.22 shipped
+
+### Headline
+
+`v0.1.0-beta.22` tagged, released, and verified live end to end. Four PRs merged first, all three
+outstanding runtime gates passed, and the app PR queue is now empty. One new bug found by Sean and
+filed; the npx install path is the single surface left stale.
+
+### Commits
+
+- `ce64d4f0c` — fix(sidebar): reject status-glyph, dir-basename, abbreviated-path titles (#110)
+- `22787efe3` — fix(sidebar): rename session context-menu "Remove" to "Delete" (#113)
+- `3979c7025` — docs(changelog): add v0.1.0-beta.22 entry (#115) ← **tag point**
+- `772a2f052` — chore(appcast): update from v0.1.0-beta.22 (pushed by CI)
+- `cad579db7` — chore(npm): bump ghostties-install pin to v0.1.0-beta.22 (#117)
+- Tag `v0.1.0-beta.22` → `3979c7025`
+- `SeanSmithWorks/homebrew-tap` PR #1 merged — cask now serves beta.22
+
+### What Changed
+
+**#113** renamed the session context menu's "Remove" to "Delete". `removeSession(id:)` is
+`sessions.removeAll` + `persist()` with no undo, tombstone, or soft-delete — and it sat one item
+away from an Archive zone in the same sidebar, which read as though Remove routed there. It does
+not: Archive is derived (`archiveSessions` is the exact complement of Active + Inactive, meaning
+"restored from disk, never started this launch"), and the only way in is quitting and relaunching
+the app. Sean reasoned his way to a wrong model from a reasonable reading of the UI, which is what
+made the rename worth doing.
+
+**Release verification** was done against deployed artifacts, not deploy status: live appcast
+serves `0.1.0-beta.22` / build 16655, and the DMG URL inside it resolves. The cask's sha256 was
+confirmed against **GitHub's own asset digest**, not just the script that computed it.
+
+### Gotchas Logged
+
+- **`deny` permission rules never prompt.** `~/.claude/settings.json` carries a global
+  `"deny": ["Bash(npm publish*)"]`. It refuses instantly, indistinguishable from a declined prompt,
+  and there is no approval path to offer. Grep the settings before promising one.
+  → `reference_npm-publish-deny-rule.md`
+- **The `!` prefix silently no-ops from Sean's phone** — the command echoes into the thread as text
+  with no error. Confirmed twice by checking `registry.npmjs.org` rather than trusting the silence.
+- **CI's macOS job is `build-for-testing`, not `test`.** A green CI does not mean the suite ran;
+  only the `cli/` Swift Package tests execute. The local run at the merged tip was
+  **674 / 673 pass / 0 fail / 1 skip** (`xcrun xcresulttool get test-results summary`).
+- **A brief's "what shipped" list is a claim, not a spec.** The changelog brief omitted #57/#58/#59
+  — the exact fixes gate-tested that night. The agent found them in the commit range and flagged
+  rather than silently adding.
+
+### Resolved
+
+`isNamePinned` was never broken. The 0-of-31 count was because only **Esc** had ever been pressed,
+which is correct #57 behavior; Sean pressed Enter and the flag flipped, confirmed in
+`workspace.json`. Session naming stays **one-way** (terminal → sidebar) by his decision —
+→ `decision_session-naming-stays-one-way.md`.
+
+### Open (all in BACKLOG.md, 2026-08-10)
+
+New bug: a session started in the app's launch window is invisible to the sidebar (no
+`AgentSession` behind that terminal) — same root gap as parked #56. `npx` still on beta.21, blocked
+by the deny rule. PR #116 decide-or-kill. Homebrew auto-bump needs a PAT. npm publishing has no CI
+path at all. Resume-on-Relaunch designed but not built.
+
 ---
 
 ## 2026-08-09 — Distribution lane: cask + npx install paths

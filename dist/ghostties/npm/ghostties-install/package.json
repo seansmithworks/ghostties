@@ -1,6 +1,6 @@
 {
   "name": "ghostties-install",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Installer shim for Ghostties (macOS, Apple silicon). Downloads and verifies a pinned release build of Ghostties.app.",
   "license": "MIT",
   "os": [
