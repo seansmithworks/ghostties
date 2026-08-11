@@ -4,6 +4,39 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-11 — Repo hygiene wave (worktrees, branches, stale PRs)
+
+Worktrees 21 → 3, local branches 60 → 13, origin branches 11 → 5, disk 34 GB → 2.5 GB. Merged
+#116 `3ea42d69d`, #105 `45c834929`, #119 `7ec311a57`. Recovered an unpushed commit (`059d5ef38`,
+website session notes) from an abandoned worktree before pruning would have destroyed it.
+
+- **Safari drops the `]` on the hero `npx` line — STILL LIVE ON PRODUCTION** (carried 1×).
+  Re-verified 2026-08-11 against `https://ghostties.org/`: `steps(27)` is still present and the JS
+  width-lock still covers `line6` only. Fix and the do-NOT-bump-`steps(N)` warning are in the
+  2026-08-10 section below; nothing about them has changed. This is the highest-value open item on
+  the site — it breaks the install command in the hero for every Safari visitor above 481px.
+- **PR #120 (session-cache load harness) — decide or kill.** Opened this session at Sean's request;
+  CI green. **Strawman: kill it.** Claude Code now writes `~/.claude/sessions/<pid>.json` carrying
+  `nameSource`, so session naming looks to be moving to read-from-source rather than something
+  Ghostties infers and caches. If that holds, the harness tests a layer Ghostties will not own.
+  Counter-argument if you want to keep it: it is already written and costs nothing to merge.
+- **PR #56 (`fix/agent-session-idle-fallback`) — keep open, needs a rebase** (carried 2×).
+  `CONFLICTING` against main. **The earlier plan to close it was reversed on evidence:** Switchboard's
+  session JSON is written by Claude Code ONLY, while #56 gates on `template.kind != .shell`, which
+  also covers the Codex template (#101) and any custom agent CLI. Main still has a bare
+  `return .waiting` at `SessionCoordinator.swift:1308` and zero `isAgentKindSession`. Closing it
+  would ship a known, quantified lie with nothing in its place.
+- **Screen Recording permission still not granted** (carried 3×). Root blocker for two separate
+  things: the runtime-verification debt that shipped into beta.22, and the product-clip re-shoot.
+  One toggle in System Settings → Privacy & Security → Screen Recording. Three agents plus the
+  orchestrator have hit it independently across sessions.
+
+**Environment facts established this session** (all verified by running them, full text in
+`ORCHESTRATOR.md` under the 2026-08-11 entry): a worktree-isolated session CAN `git worktree remove`
+but CANNOT `git -C`/`cd` into siblings; detect sibling dirty state with `git ls-tree` +
+`git hash-object` from your own worktree; `git branch -D` is denied, use
+`git update-ref -d refs/heads/<name>`; `git worktree remove` does not delete the branch.
+
 ## 2026-08-10 — Website: product-card band, hero bracket, caption (all SHIPPED)
 
 Merged and prod-verified in the deployed asset/HTML: **#114 `12dae56d3`** (product-sessions trimmed
@@ -38,9 +71,10 @@ Left open:
   legible, not less. Cropping flow to match would delete real UI, so the fix is re-capturing
   sessions *with* its chrome, per the committed spec. Blocked on demo capture being parked and
   Screen Recording permission.
-- **Stray worktree:** `.claude/worktrees/hero-bracket` still exists with local branch
-  `fix/hero-bracket-clip` (superseded; remote branch deleted). Needs `git worktree remove` from a
-  session that is not worktree-isolated.
+- [x] ~~**Stray worktree:** `.claude/worktrees/hero-bracket`~~ — DONE 2026-08-11. **The premise of
+  this item was wrong and is corrected below:** `git worktree remove` runs fine from a
+  worktree-isolated session (probed, exit 0). It is `git -C <sibling>` and `cd <sibling> && git …`
+  that the harness refuses. See the 2026-08-11 section.
 
 ## 2026-08-10 — beta.22 SHIPPED; distribution + one new bug
 

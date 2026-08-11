@@ -3027,3 +3027,68 @@ CI cask auto-bump not activated, needs a fine-grained PAT; npm version bumps are
 Durable learnings in project memory, referenced not restated:
 `reference_ghostties-vs-upstream-ghostty-domains.md`, `reference_homebrew-cask-gotchas.md`,
 `project_distribution-brew-npm.md`.
+
+## 2026-08-11 — Repo hygiene wave
+
+### Headline
+
+Cleared multi-session sprawl: worktrees 21 → 3, local branches 60 → 13, origin branches 11 → 5,
+disk **34 GB → 2.5 GB**. Recovered an unpushed commit that branch pruning would have destroyed.
+Ran the work through `/adversarial-plan` first, which killed five of the plan's own claims before
+any of them cost anything.
+
+### Merged
+
+- `3ea42d69d` — chore(homebrew): bump cask to v0.1.0-beta.22 (#116)
+- `45c834929` — docs(dist): npm package is published; record parked follow-ups (#105)
+- `7ec311a57` — docs: record the website session (#119), the recovered commit
+
+### Opened, left for Sean
+
+- **#120** — session-cache load harness. CI green. Body carries an explicit obsolescence question.
+- **#56** — unchanged and still open, now `CONFLICTING`. See the reversal below.
+
+### The recovery
+
+`worktree-session-3` held `059d5ef38` — `BACKLOG.md` +38, `docs/SESSION_NOTES.md` +86 from a
+website session that ended without pushing. No remote branch, no PR. Pushed it before pruning
+anything, then merged as #119. Its most valuable contents: a **live production bug on
+ghostties.org** (WebKit floors `steps(27)` to 26, so the hero's `npx` line loses its `]` in Safari
+above 481px), re-verified still live this session against the deployed HTML.
+
+Worth noting *why* it was nearly lost: `git worktree remove` does not delete a branch, so removing
+worktrees was always safe. The danger was the **branch** prune scheduled later in the same plan.
+
+### Two decisions reversed on evidence
+
+- **#116 is not user-facing.** The plan called it urgent because "brew still serves beta.21." The
+  live tap `SeanSmithWorks/homebrew-tap` already served beta.22 with a byte-identical sha256,
+  bumped 2026-08-10. Merged as bookkeeping.
+- **#56 should NOT be closed.** The plan argued Switchboard's session JSON (now carrying a
+  first-class `status` field) obsoletes its inference heuristic. It does not: that file is written
+  by Claude Code **only**, while #56 gates on `template.kind != .shell`, which also covers the
+  Codex template (#101) and custom agent CLIs. Main still has a bare `return .waiting` at
+  `SessionCoordinator.swift:1308`. Closing it would have shipped a known lie with nothing in its
+  place.
+
+### Method
+
+The adversarial gate paid for itself. Beyond the two above it caught: `#105` reported "CI green,
+ready to merge" while it was `CONFLICTING/DIRTY` (CI status cannot see a conflict — a plan step was
+ordered behind a merge that would have hard-stopped); a "byte-for-byte identical" branch claim that
+returned 4+/3− when re-run; and `ORCHESTRATOR.md` reported at 36,476 chars and over cap when a
+sibling thread had pruned it to 16,752 mid-session, making a whole planned step make-work. That last
+one is the durable lesson, now `L15` in the adversarial-plan skill: **re-measure at the moment of
+the claim; a boot-time read is not current state.**
+
+The refuter was wrong once — it predicted worktree removal was impossible from an isolated session.
+A probe on a 131 MB worktree returned exit 0, which is what made the whole cleanup possible.
+
+### Open (BACKLOG.md, 2026-08-11)
+
+Safari `steps()` bug live on prod; #120 decide-or-kill; #56 needs a rebase; Screen Recording
+permission still ungranted (carried 3×), blocking both the runtime-verification debt and the
+product-clip re-shoot.
+
+Durable learnings in project memory, referenced not restated:
+`reference_worktree-isolation-git-boundaries.md`.
