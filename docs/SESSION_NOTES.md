@@ -3084,11 +3084,24 @@ the claim; a boot-time read is not current state.**
 The refuter was wrong once — it predicted worktree removal was impossible from an isolated session.
 A probe on a 131 MB worktree returned exit 0, which is what made the whole cleanup possible.
 
+### The distribution channel I got wrong, and then got right
+
+Merging #116 came with the finding that brew was never stale — the tap already served beta.22. That
+was correct but incomplete, and I closed the session saying distribution was fine. It is not.
+Re-checked at the second wrap: **`npx ghostties-install` still resolves to `0.1.0`, which pins
+beta.21.** The repo holds `0.1.1` pinning beta.22 (`cad579db7`), merged and never published, blocked
+by an unappealable `Bash(npm publish*)` deny at `~/.claude/settings.json:32`.
+
+So the stale channel was npm the whole time, and it is the one the homepage hero advertises by name.
+Already filed at `BACKLOG.md` (2026-08-10) — stamped with this re-verification rather than
+duplicated. **Checking one install channel is not checking distribution.**
+
 ### Open (BACKLOG.md, 2026-08-11)
 
-Safari `steps()` bug live on prod; #120 decide-or-kill; #56 needs a rebase; Screen Recording
-permission still ungranted (carried 3×), blocking both the runtime-verification debt and the
-product-clip re-shoot.
+`npx` stuck on beta.21, needs one `npm publish` from a desktop; Safari `steps()` bug live on prod;
+#120 decide-or-kill; #56 needs a rebase; Screen Recording permission still ungranted (carried 3×),
+blocking both the runtime-verification debt and the product-clip re-shoot.
 
 Durable learnings in project memory, referenced not restated:
-`reference_worktree-isolation-git-boundaries.md`.
+`reference_worktree-isolation-git-boundaries.md`. Lane correction (third recurrence, this one
+crossing into other *repos*) appended to `feedback-website-thread-scope.md`.

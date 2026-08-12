@@ -101,14 +101,17 @@ proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fai
   `~/.claude/settings.json` — a `deny` refuses outright and never prompts, so no session can
   approve past it, and the `!` prefix no-ops from Sean's phone. Publish is one command from a
   desktop: `cd dist/ghostties/npm/ghostties-install && npm publish`. Low urgency — an npx install
-  lands beta.21 and Sparkle offers beta.22 on first launch. | dist | needs-desktop
-- [ ] **PR #116 — decide or kill.** Bumps the cask copy at `dist/ghostties/homebrew/ghostties.rb`
-  inside this repo. **The repo copy has no automated maintenance at all**: the release workflow's
-  step is literally named "Bump cask (local checkout only, not committed)" — it bumps a throwaway
-  checkout, pushes only to the tap, never commits back. So this file goes stale after every release
-  and #116 only fixes tonight. **Strawman: merge #116 now, and add a line to the file marking it a
-  template whose `version` is a snapshot**, so the next reader isn't misled. Alternative is closing
-  #116 and accepting permanent drift. | dist | decide-or-kill
+  lands beta.21 and Sparkle offers beta.22 on first launch. **Re-verified 2026-08-12** (carried 1×):
+  registry `latest` is still `0.1.0`, repo `package.json` is `0.1.1` pinning `v0.1.0-beta.22`, and
+  the `Bash(npm publish*)` deny is still at `~/.claude/settings.json:32`. **This is the only stale
+  user-facing install channel** — brew was checked the same day and is correct. Worth noting the
+  homepage hero advertises `npx ghostties-install` by name. | dist | needs-desktop
+- [x] ~~**PR #116 — decide or kill.**~~ MERGED 2026-08-11 as `3ea42d69d`. **Confirmed before merging
+  that this was bookkeeping, not user-facing:** the live tap `SeanSmithWorks/homebrew-tap` already
+  served beta.22 with a byte-identical sha256 (bumped 2026-08-10, `3b4bddca6`), so `brew install`
+  was never stale. The strawman's second half — marking the repo file as a snapshot template — was
+  NOT done; the drift described above is still real and still unaddressed after every release.
+  Automating it is the item below. | dist | partially-closed
 - [ ] **Turn on the Homebrew cask auto-bump.** The `homebrew-cask` job already exists and is
   complete (opens a PR on the tap, preserving the human gate) — it skipped this release only because
   `vars.HOMEBREW_TAP_REPO` is unset. Needs a fine-grained PAT scoped to `SeanSmithWorks/homebrew-tap`
