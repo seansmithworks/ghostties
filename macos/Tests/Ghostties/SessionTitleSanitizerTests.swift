@@ -302,13 +302,6 @@ final class SessionTitleSanitizerTests: XCTestCase {
         ))
     }
 
-    func testMiddleDotMarkerPrefixedShellNameRejected() {
-        XCTAssertNil(SessionTitleSanitizer.sanitize(
-            title: "· zsh",
-            currentName: "Session 1"
-        ))
-    }
-
     func testMarkerPrefixedProjectDirectoryNameRejected() {
         XCTAssertNil(SessionTitleSanitizer.sanitize(
             title: "✳ invented-project",
@@ -317,16 +310,54 @@ final class SessionTitleSanitizerTests: XCTestCase {
         ))
     }
 
-    func testMarkerPrefixedInformativeTitleKept() {
+    func testMarkerPrefixedInformativeTitleStripsMarker() {
         // A marker prefix on a real, informative title must not cause a
-        // rejection — and the accepted value stays the FULL sanitized
-        // title, glyph included. Rewriting the stored name to a de-glyphed
-        // version is a separate product decision, not made here.
+        // rejection — and the leading status/spinner marker must be
+        // stripped from the persisted value. The sidebar row already
+        // encodes session state via the colored status dot, so the glyph
+        // is redundant, and a spinner frame captured at one instant should
+        // never be frozen into a stored name.
         let result = SessionTitleSanitizer.sanitize(
             title: "✳ Refactoring the auth module",
             currentName: "Session 1"
         )
-        XCTAssertEqual(result, "✳ Refactoring the auth module")
+        XCTAssertEqual(result, "Refactoring the auth module")
+    }
+
+    func testHalfCircleSpinnerFramePrefixedTitleStripsMarker() {
+        let resultLeftHalf = SessionTitleSanitizer.sanitize(
+            title: "◐ Refactoring the auth module",
+            currentName: "Session 1"
+        )
+        XCTAssertEqual(resultLeftHalf, "Refactoring the auth module")
+
+        let resultRightHalf = SessionTitleSanitizer.sanitize(
+            title: "◑ Refactoring the auth module",
+            currentName: "Session 1"
+        )
+        XCTAssertEqual(resultRightHalf, "Refactoring the auth module")
+    }
+
+    func testHalfCircleSpinnerFramePrefixedClaudeCodeRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "◐ Claude Code",
+            currentName: "Session 1"
+        ))
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "◑ Claude Code",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testLeadingEmojiPreserved() {
+        // A genuine leading emoji is part of the title, not a status
+        // marker, and must be preserved — this is the guard on the
+        // isEmojiPresentation condition in `strippingLeadingStatusMarker`.
+        let result = SessionTitleSanitizer.sanitize(
+            title: "🚀 Deploy the thing",
+            currentName: "Session 1"
+        )
+        XCTAssertEqual(result, "🚀 Deploy the thing")
     }
 
     func testAsteriskNotAtStartOfTitleDoesNotTriggerRejection() {

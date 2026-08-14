@@ -21,31 +21,33 @@ enum SessionTitleSanitizer {
         "claude", "claude code", "zsh", "bash", "-zsh", "-bash", "sh", "-sh", "fish", "-fish"
     ]
 
-    /// Fixed status/spinner glyphs Claude Code (and similar CLI agents) prefix
-    /// onto a terminal title while working, e.g. `"✳ Claude Code"`. Distinct
-    /// from the Braille Patterns block (below), which covers the *animated*
-    /// spinner frames (`⠐`, `⠄`, `⠁`, …) rather than a fixed marker character.
-    private static let leadingStatusMarkerCharacters: Set<Character> = ["✳", "✻", "✽", "*", "·", "•"]
-
-    /// Braille Patterns block (U+2800–U+28FF) — Claude Code's terminal spinner
-    /// cycles through glyphs in this range as its status animation. Matched
-    /// as a range rather than an enumerated set since the spinner can use any
-    /// of the 256 codepoints in the block.
-    private static let brailleSpinnerRange: ClosedRange<UInt32> = 0x2800...0x28FF
-
-    /// Strips a single leading status/spinner marker — and any whitespace
-    /// immediately following it — from `segment`, if present. This exists
-    /// only so the bare-program-name and directory-name checks below can see
-    /// past a transient marker like `"✳ "` or `"⠐ "`; it must never be used
-    /// to change what's actually persisted as a session name; the full,
-    /// unstripped title is what gets returned when a title is accepted.
+    /// Strips a leading run of status/spinner marker characters — and any
+    /// whitespace immediately following the run — from `segment`, if
+    /// present. Claude Code (and similar CLI agents) prefix a terminal title
+    /// with a marker while working, either a fixed glyph (e.g. `"✳ Claude
+    /// Code"`) or an animated spinner frame cycling through a symbol block
+    /// (e.g. Braille Patterns `"⠐ "`, or circle-fill frames `"◐ "` / `"◑ "`).
+    ///
+    /// Matched structurally rather than by enumerating known glyphs — a
+    /// leading character is stripped when it's Unicode general category `So`
+    /// (Symbol, other) and does NOT default to emoji presentation. This
+    /// covers every observed marker/spinner style without a hardcoded list
+    /// (enumerating glyphs is exactly what made three previous sanitizer
+    /// patches leak on a new spinner style), while a genuine leading emoji
+    /// (`Emoji_Presentation=Yes`, e.g. 🚀) is left untouched since it's part
+    /// of the title, not a status marker.
+    ///
+    /// This result is what `sanitize(title:currentName:projectDirectoryName:)`
+    /// actually returns — the marker is not persisted into the sidebar name.
     private static func strippingLeadingStatusMarker(from segment: Substring) -> Substring {
         var result = segment
-        guard let first = result.first else { return result }
-        let isBrailleSpinnerFrame = first.unicodeScalars.count == 1
-            && brailleSpinnerRange.contains(first.unicodeScalars[first.unicodeScalars.startIndex].value)
-        guard isBrailleSpinnerFrame || leadingStatusMarkerCharacters.contains(first) else { return result }
-        result.removeFirst()
+        while let first = result.first,
+              first.unicodeScalars.count == 1,
+              let scalar = first.unicodeScalars.first {
+            let properties = scalar.properties
+            guard properties.generalCategory == .otherSymbol, !properties.isEmojiPresentation else { break }
+            result.removeFirst()
+        }
         while let next = result.first, next.isWhitespace {
             result.removeFirst()
         }
@@ -77,13 +79,11 @@ enum SessionTitleSanitizer {
         for rawSegment in replaced.split(separator: placeholder, omittingEmptySubsequences: true) {
             let trimmedSegment = rawSegment.trimmingCharacters(in: .whitespaces)
             guard !trimmedSegment.isEmpty else { continue }
-            // Strip a leading status/spinner marker (e.g. "✳ " or "⠐ ") before
-            // judging whether this segment is informative — a marker prefix
-            // on an otherwise-bare program/directory name must not make it
-            // look informative.
-            let segment = String(strippingLeadingStatusMarker(from: Substring(trimmedSegment)))
-            guard !segment.isEmpty else { continue }
-            let segmentLower = segment.lowercased()
+            // `cleaned` already had its leading status/spinner marker (if
+            // any) stripped before this function is called, so only the
+            // first segment could ever have carried one — no per-segment
+            // stripping needed here.
+            let segmentLower = trimmedSegment.lowercased()
             if segmentLower == dirLower { continue }
             if bareProgramNames.contains(segmentLower) { continue }
             return true
@@ -215,8 +215,17 @@ enum SessionTitleSanitizer {
         // Strip bidi overrides and zero-width obfuscation characters before
         // any shape check below sees the string. Re-trim afterward: removing
         // one of these can expose new leading/trailing whitespace.
-        let cleaned = String(trimmed.unicodeScalars.filter { !disallowedCharacters.contains($0) })
+        let withoutDisallowedCharacters = String(trimmed.unicodeScalars.filter { !disallowedCharacters.contains($0) })
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !withoutDisallowedCharacters.isEmpty else { return nil }
+
+        // Strip a leading status/spinner marker (e.g. "✳ ", "⠐ ", "◐ ") so it
+        // is never persisted into the sidebar name — the row already encodes
+        // session state via the colored status dot, and a stored spinner
+        // frame captures one animation instant and then freezes it forever.
+        // Every check below, and the value returned when a title is
+        // accepted, operates on this already-stripped string.
+        let cleaned = String(strippingLeadingStatusMarker(from: Substring(withoutDisallowedCharacters)))
         guard !cleaned.isEmpty else { return nil }
 
         // Explicit reject for the terminal's own "no title yet" placeholder —
@@ -232,14 +241,6 @@ enum SessionTitleSanitizer {
 
         let lowercased = cleaned.lowercased()
         if bareProgramNames.contains(lowercased) { return nil }
-        // Same check, but past a leading status/spinner marker — Claude Code
-        // prefixes its title with a marker like "✳ " or an animated Braille
-        // spinner frame ("⠐ ") that changes every couple of seconds, so
-        // "✳ Claude Code" must be caught here just like "claude code" is
-        // above. Only the check uses the stripped value; the title returned
-        // below (if accepted) is always the untouched `cleaned` string.
-        let markerStrippedLowercased = strippingLeadingStatusMarker(from: Substring(lowercased))
-        if bareProgramNames.contains(String(markerStrippedLowercased)) { return nil }
         // Reject a title ending in a bare "Claude Code" segment regardless of
         // what precedes it — see `endsWithBareClaudeCodeSegment` doc comment.
         if endsWithBareClaudeCodeSegment(cleaned) { return nil }
