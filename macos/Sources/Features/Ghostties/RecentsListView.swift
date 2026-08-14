@@ -15,6 +15,10 @@ struct RecentsListView: View {
     @State private var editingSessionId: UUID?
     @State private var editingName: String = ""
     @FocusState private var renameFieldFocused: Bool
+    /// Bumped on every `store.objectWillChange` so SwiftUI has a dependency
+    /// that actually changes on name edits — see the `.onReceive` below and
+    /// the `_ = storeRevision` read in `body`.
+    @State private var storeRevision = 0
 
     /// Section-collapse state, persisted across launches. Active and
     /// Inactive default open (sessions the user is working with today, or
@@ -32,6 +36,12 @@ struct RecentsListView: View {
         let inactive = inactiveSessions
         let archive = archiveSessions
         let selectedId = coordinator.activeSessionId
+        // Reads storeRevision so the compiler can't strip it as an unused
+        // dependency — see the `.onReceive` below for why it's needed. Uses
+        // `let _ =` (not a bare `_ =`) because `body` is a @ViewBuilder
+        // closure, which parses a bare discard expression as an attempted
+        // View and fails to build.
+        let _ = storeRevision
 
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
@@ -109,6 +119,10 @@ struct RecentsListView: View {
             Spacer(minLength: 0)
         }
         .background(.clear)
+        // Session rows don't otherwise re-render when only `session.name`
+        // changes (e.g. terminal title sync) — see ActiveZoneView's
+        // identical pattern for `sessionDraftStore`.
+        .onReceive(store.objectWillChange) { _ in storeRevision &+= 1 }
     }
 
     // MARK: - New Session (project-picker templates)
