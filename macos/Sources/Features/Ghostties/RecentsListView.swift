@@ -1,4 +1,9 @@
 import SwiftUI
+import os
+
+/// TEMPORARY diagnostic logger — see `SIDEBARDIAG` tag. To be reverted.
+private let sidebarDiagLogger = Logger(subsystem: "com.seansmithdesign.ghostties", category: "sidebardiag")
+private var sidebarDiagBodyCounter = 0
 
 /// The Sessions tab content: a flat, time-sorted list of all sessions across projects.
 ///
@@ -15,10 +20,6 @@ struct RecentsListView: View {
     @State private var editingSessionId: UUID?
     @State private var editingName: String = ""
     @FocusState private var renameFieldFocused: Bool
-    /// Bumped on every `store.objectWillChange` so SwiftUI has a dependency
-    /// that actually changes on name edits — see the `.onReceive` below and
-    /// the `_ = storeRevision` read in `body`.
-    @State private var storeRevision = 0
 
     /// Section-collapse state, persisted across launches. Active and
     /// Inactive default open (sessions the user is working with today, or
@@ -36,12 +37,14 @@ struct RecentsListView: View {
         let inactive = inactiveSessions
         let archive = archiveSessions
         let selectedId = coordinator.activeSessionId
-        // Reads storeRevision so the compiler can't strip it as an unused
-        // dependency — see the `.onReceive` below for why it's needed. Uses
-        // `let _ =` (not a bare `_ =`) because `body` is a @ViewBuilder
-        // closure, which parses a bare discard expression as an attempted
-        // View and fails to build.
-        let _ = storeRevision
+
+        // TEMPORARY diagnostic — see SIDEBARDIAG in the boundaries note; to be reverted.
+        let _ = {
+            sidebarDiagBodyCounter &+= 1
+            sidebarDiagLogger.debug("SIDEBARDIAG body pass=\(sidebarDiagBodyCounter, privacy: .public) activeCount=\(active.count, privacy: .public)")
+            let activeSummary = active.map { "\(String($0.id.uuidString.prefix(8)))=\($0.name)" }.joined(separator: ", ")
+            sidebarDiagLogger.debug("SIDEBARDIAG active sessions: \(activeSummary, privacy: .public)")
+        }()
 
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
@@ -81,6 +84,18 @@ struct RecentsListView: View {
                             isEffectivelyExpanded: activeExpanded
                         )
                         if activeExpanded {
+                            // Keyed on the stable `\.id` (default Identifiable) —
+                            // NOT `\.self`. `\.self` was tried and reverted: it makes
+                            // row identity churn on every `lastActiveAt` write (see
+                            // `AgentSession.lastActiveAt`, rewritten every few seconds
+                            // for running sessions), which tears down and rebuilds the
+                            // row — resetting `RecentsRowView`'s hover state and
+                            // killing the inline-rename `TextField`/`FocusState`
+                            // mid-edit. Freshness on a stable identity is instead
+                            // guaranteed by `.equatable()` on `RecentsRowView` in
+                            // `sessionRow(for:)`, which forces a body re-render
+                            // whenever the row's own inputs change, without touching
+                            // identity.
                             ForEach(active) { session in
                                 sessionRow(for: session)
                             }
@@ -93,6 +108,8 @@ struct RecentsListView: View {
                             isEffectivelyExpanded: inactiveExpanded
                         )
                         if inactiveExpanded {
+                            // See the identity/`.equatable()` comment on the Active
+                            // ForEach above — same fix applies here.
                             ForEach(inactive) { session in
                                 sessionRow(for: session)
                             }
@@ -105,6 +122,8 @@ struct RecentsListView: View {
                             isEffectivelyExpanded: archiveExpanded
                         )
                         if archiveExpanded {
+                            // See the identity/`.equatable()` comment on the Active
+                            // ForEach above — same fix applies here.
                             ForEach(archive) { session in
                                 sessionRow(for: session)
                             }
@@ -119,10 +138,6 @@ struct RecentsListView: View {
             Spacer(minLength: 0)
         }
         .background(.clear)
-        // Session rows don't otherwise re-render when only `session.name`
-        // changes (e.g. terminal title sync) — see ActiveZoneView's
-        // identical pattern for `sessionDraftStore`.
-        .onReceive(store.objectWillChange) { _ in storeRevision &+= 1 }
     }
 
     // MARK: - New Session (project-picker templates)
@@ -159,6 +174,7 @@ struct RecentsListView: View {
             onCommitRename: { commitRename(session: session) },
             onCancelRename: { cancelRename() }
         )
+        .equatable()
         .contextMenu {
             Button("Rename") {
                 beginRename(session: session)

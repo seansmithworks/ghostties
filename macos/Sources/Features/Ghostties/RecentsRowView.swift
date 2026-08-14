@@ -1,11 +1,25 @@
 import SwiftUI
+import os
+
+/// TEMPORARY diagnostic logger — see `SIDEBARDIAG` tag. To be reverted.
+private let sidebarDiagRowLogger = Logger(subsystem: "com.seansmithdesign.ghostties", category: "sidebardiag")
 
 /// A single row in the Sessions recents list.
 ///
 /// Displays a status dot (colored by `SessionIndicatorState`), the session name,
 /// the owning project name in muted text, and a right-aligned relative timestamp.
 /// Tapping focuses the session in the terminal area.
-struct RecentsRowView: View {
+///
+/// `Equatable` (manual, not synthesized — several stored properties are
+/// closures/bindings and can't derive `==`) so the caller can apply
+/// `.equatable()` and gate `body` re-execution on this row's own inputs.
+/// This is the same pattern as `ProjectDisclosureRowContent` (PR #40): it lets
+/// `RecentsListView` key its `ForEach` on the stable `\.id` — required so
+/// hover state and an in-progress inline rename survive `WorkspaceStore`
+/// writes that don't touch this row (e.g. another session's
+/// `lastActiveAt`) — while still refreshing this row's own rendered content
+/// (name, indicator, timestamp) without a full teardown/rebuild.
+struct RecentsRowView: View, Equatable {
     let session: AgentSession
     let projectName: String
     let indicatorState: SessionIndicatorState
@@ -20,7 +34,22 @@ struct RecentsRowView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isHovered = false
 
+    /// Every field that affects rendered output. Deliberately excludes
+    /// `editingName`/`isRenameFocused`/the closures — those are live
+    /// bindings the `TextField` reads directly, not values `body` needs to
+    /// re-run for.
+    static func == (lhs: RecentsRowView, rhs: RecentsRowView) -> Bool {
+        lhs.session == rhs.session
+            && lhs.projectName == rhs.projectName
+            && lhs.indicatorState == rhs.indicatorState
+            && lhs.isActive == rhs.isActive
+            && lhs.isEditing == rhs.isEditing
+    }
+
     var body: some View {
+        // TEMPORARY diagnostic — see SIDEBARDIAG in the boundaries note; to be reverted.
+        let _ = sidebarDiagRowLogger.debug("SIDEBARDIAG row id=\(String(session.id.uuidString.prefix(8)), privacy: .public) name=\(session.name, privacy: .public)")
+
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
             // Per-session ghost character, tinted by status — same color mapping
             // as MenuBarDropdownView.
