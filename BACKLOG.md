@@ -619,3 +619,22 @@ Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #10
 - [ ] **PR #105** (`docs/npm-published`) — owned by another session, worktree `session-2` is locked. Not this thread's to merge. | dist | other-session
 - [ ] **PR #56** (idle-fallback) — open since July, correctly excluded from beta.22. | app | deferred
 - [ ] **`test/session-cache-load-harness`** — branch on origin, no PR ever opened, genuinely unmerged. Confirm whether it's dead. | build | deferred
+
+## 2026-08-14
+
+**Carried — sidebar row staleness (branch `fix/sidebar-name-stale-sessions-tab`, PR #121, `d3f85b08f`):**
+
+- [ ] **Verify the `.equatable()` fix at runtime** — built but UNVERIFIED. Relaunch `Ghostties Dev.app`, rename a session, confirm the SIDEBARDIAG log shows the row rendering the new name with an unchanged `id=` prefix. | app | carried
+- [ ] **Strip temporary SIDEBARDIAG os_log instrumentation** from `RecentsListView.swift` + `RecentsRowView.swift` before merge. Commit `d3f85b08f` is explicitly labelled not-shippable. | app | carried
+- [ ] **Run the full suite + reshape PR #121** — its description still describes the abandoned `.onReceive` attempt, which was disproven. | app | carried
+- [ ] **`ThrottleTrailingEdgeHypothesisTests.swift`** (untracked) — DECIDE OR KILL: keep the trailing-edge test as a regression test and delete the two diagnostic ones (one calls `XCTFail` unconditionally, so it fails every local run), or drop the file. Strawman: keep the trailing-edge test only. | app | carried
+
+**New, found while debugging the above:**
+
+- [ ] **`.workspaceSidebarTabChanged` is a dead notification** — declared `WorkspaceLayout.swift:338`, posted twice from `TerminalController.swift:1361,1368`, zero observers anywhere. The sidebar tab switch actually works by riding the `.workspaceSidebarViewModeChanged` post on the following line, usually setting the mode to the value it already held. | app | new
+- [ ] **`SessionTitleSanitizer` doesn't strip `◐`/`◑` (U+25D0/U+25D1)** — it covers `✳ ✻ ✽ * · •` and the Braille block, but the circle-quadrant spinner frames persist into session names and rewrite `workspace.json` every few seconds. | app | new
+- [ ] **Re-test two conclusions measured through the broken row** — the invisible-session bug (2026-08-10) and the blue-ghost indicator readings in `project_switchboard-phase0-verdict.md`. Both were observed via a row that could not update its `indicatorState`, so they may not hold. | app | new
+
+**Parked — off-objective (next thread's scope, not this one's):**
+
+- [ ] **Status representation vs. per-session ghost icons** — Sean: "The ghost icons were supposed to represent status. If we have a new status representation then the ghost icons are redundant." The row now carries two status channels (ghost color + Claude's own `✳` glyph baked into the name) plus a timestamp. Design decision, Sean's call. Captured in `tease-capture.md`. | design | parked
