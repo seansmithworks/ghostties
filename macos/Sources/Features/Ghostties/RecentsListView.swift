@@ -58,7 +58,23 @@ struct RecentsListView: View {
                 )
 
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    // Deliberately a plain VStack, NOT `LazyVStack`. A lazy
+                    // container realizes each row once and retains it — when
+                    // a session's fields (e.g. name) change but its `\.id`
+                    // identity doesn't, `ForEach`'s content closure is never
+                    // re-invoked for that row, so it renders the value it was
+                    // first constructed with forever (proven by
+                    // instrumentation: `sessionRow(for:)` fired only at
+                    // creation, never on rename). Switching this back to
+                    // `LazyVStack` reintroduces the frozen-name bug — rows
+                    // will stop picking up renames, activity changes, and
+                    // timestamp updates. If eager rendering of ~37 archive
+                    // rows (each carrying a `.contextMenu`) ever becomes a
+                    // measured perf problem, the fix is a lazy container that
+                    // still re-invokes its content closure on element change
+                    // (e.g. `LazyVStack` keyed with `.id` forced to include a
+                    // content hash), not a plain revert.
+                    VStack(spacing: 2) {
                         // All three headers always render (when there's at
                         // least one session anywhere) — membership adapts,
                         // but the ACTIVE/INACTIVE/ARCHIVE headers themselves
@@ -71,6 +87,18 @@ struct RecentsListView: View {
                             isEffectivelyExpanded: activeExpanded
                         )
                         if activeExpanded {
+                            // Keyed on the stable `\.id` (default Identifiable) —
+                            // NOT `\.self`. `\.self` was tried and reverted: it makes
+                            // row identity churn on every `lastActiveAt` write (see
+                            // `AgentSession.lastActiveAt`, rewritten every few seconds
+                            // for running sessions), which tears down and rebuilds the
+                            // row — resetting `RecentsRowView`'s hover state and
+                            // killing the inline-rename `TextField`/`FocusState`
+                            // mid-edit. Freshness on that stable identity comes from
+                            // this container being a non-lazy `VStack` (see the
+                            // comment above it) — `.equatable()` on `RecentsRowView`
+                            // in `sessionRow(for:)` is a body-re-execution perf gate
+                            // layered on top, not what makes rows fresh.
                             ForEach(active) { session in
                                 sessionRow(for: session)
                             }
@@ -83,6 +111,8 @@ struct RecentsListView: View {
                             isEffectivelyExpanded: inactiveExpanded
                         )
                         if inactiveExpanded {
+                            // See the identity comment on the Active ForEach
+                            // above — same reasoning applies here.
                             ForEach(inactive) { session in
                                 sessionRow(for: session)
                             }
@@ -95,6 +125,8 @@ struct RecentsListView: View {
                             isEffectivelyExpanded: archiveExpanded
                         )
                         if archiveExpanded {
+                            // See the identity comment on the Active ForEach
+                            // above — same reasoning applies here.
                             ForEach(archive) { session in
                                 sessionRow(for: session)
                             }
@@ -145,6 +177,7 @@ struct RecentsListView: View {
             onCommitRename: { commitRename(session: session) },
             onCancelRename: { cancelRename() }
         )
+        .equatable()
         .contextMenu {
             Button("Rename") {
                 beginRename(session: session)
