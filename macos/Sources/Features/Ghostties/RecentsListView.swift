@@ -1,9 +1,4 @@
 import SwiftUI
-import os
-
-/// TEMPORARY diagnostic logger — see `SIDEBARDIAG` tag. To be reverted.
-private let sidebarDiagLogger = Logger(subsystem: "com.seansmithdesign.ghostties", category: "sidebardiag")
-private var sidebarDiagBodyCounter = 0
 
 /// The Sessions tab content: a flat, time-sorted list of all sessions across projects.
 ///
@@ -38,14 +33,6 @@ struct RecentsListView: View {
         let archive = archiveSessions
         let selectedId = coordinator.activeSessionId
 
-        // TEMPORARY diagnostic — see SIDEBARDIAG in the boundaries note; to be reverted.
-        let _ = {
-            sidebarDiagBodyCounter &+= 1
-            sidebarDiagLogger.debug("SIDEBARDIAG body pass=\(sidebarDiagBodyCounter, privacy: .public) activeCount=\(active.count, privacy: .public)")
-            let activeSummary = active.map { "\(String($0.id.uuidString.prefix(8)))=\($0.name)" }.joined(separator: ", ")
-            sidebarDiagLogger.debug("SIDEBARDIAG active sessions: \(activeSummary, privacy: .public)")
-        }()
-
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
                 emptyState
@@ -71,6 +58,22 @@ struct RecentsListView: View {
                 )
 
                 ScrollView {
+                    // Deliberately a plain VStack, NOT `LazyVStack`. A lazy
+                    // container realizes each row once and retains it — when
+                    // a session's fields (e.g. name) change but its `\.id`
+                    // identity doesn't, `ForEach`'s content closure is never
+                    // re-invoked for that row, so it renders the value it was
+                    // first constructed with forever (proven by
+                    // instrumentation: `sessionRow(for:)` fired only at
+                    // creation, never on rename). Switching this back to
+                    // `LazyVStack` reintroduces the frozen-name bug — rows
+                    // will stop picking up renames, activity changes, and
+                    // timestamp updates. If eager rendering of ~37 archive
+                    // rows (each carrying a `.contextMenu`) ever becomes a
+                    // measured perf problem, the fix is a lazy container that
+                    // still re-invokes its content closure on element change
+                    // (e.g. `LazyVStack` keyed with `.id` forced to include a
+                    // content hash), not a plain revert.
                     VStack(spacing: 2) {
                         // All three headers always render (when there's at
                         // least one session anywhere) — membership adapts,
@@ -91,11 +94,11 @@ struct RecentsListView: View {
                             // for running sessions), which tears down and rebuilds the
                             // row — resetting `RecentsRowView`'s hover state and
                             // killing the inline-rename `TextField`/`FocusState`
-                            // mid-edit. Freshness on a stable identity is instead
-                            // guaranteed by `.equatable()` on `RecentsRowView` in
-                            // `sessionRow(for:)`, which forces a body re-render
-                            // whenever the row's own inputs change, without touching
-                            // identity.
+                            // mid-edit. Freshness on that stable identity comes from
+                            // this container being a non-lazy `VStack` (see the
+                            // comment above it) — `.equatable()` on `RecentsRowView`
+                            // in `sessionRow(for:)` is a body-re-execution perf gate
+                            // layered on top, not what makes rows fresh.
                             ForEach(active) { session in
                                 sessionRow(for: session)
                             }
@@ -108,8 +111,8 @@ struct RecentsListView: View {
                             isEffectivelyExpanded: inactiveExpanded
                         )
                         if inactiveExpanded {
-                            // See the identity/`.equatable()` comment on the Active
-                            // ForEach above — same fix applies here.
+                            // See the identity comment on the Active ForEach
+                            // above — same reasoning applies here.
                             ForEach(inactive) { session in
                                 sessionRow(for: session)
                             }
@@ -122,8 +125,8 @@ struct RecentsListView: View {
                             isEffectivelyExpanded: archiveExpanded
                         )
                         if archiveExpanded {
-                            // See the identity/`.equatable()` comment on the Active
-                            // ForEach above — same fix applies here.
+                            // See the identity comment on the Active ForEach
+                            // above — same reasoning applies here.
                             ForEach(archive) { session in
                                 sessionRow(for: session)
                             }
@@ -159,8 +162,6 @@ struct RecentsListView: View {
     // MARK: - Session Row
 
     private func sessionRow(for session: AgentSession) -> some View {
-        // TEMPORARY diagnostic — see SIDEBARDIAG in the boundaries note; to be reverted.
-        sidebarDiagLogger.debug("SIDEBARDIAG construct id=\(session.id.uuidString.prefix(8), privacy: .public) name=\(session.name, privacy: .public)")
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive

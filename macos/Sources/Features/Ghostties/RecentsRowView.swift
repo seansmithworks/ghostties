@@ -1,8 +1,4 @@
 import SwiftUI
-import os
-
-/// TEMPORARY diagnostic logger — see `SIDEBARDIAG` tag. To be reverted.
-private let sidebarDiagRowLogger = Logger(subsystem: "com.seansmithdesign.ghostties", category: "sidebardiag")
 
 /// A single row in the Sessions recents list.
 ///
@@ -12,13 +8,18 @@ private let sidebarDiagRowLogger = Logger(subsystem: "com.seansmithdesign.ghostt
 ///
 /// `Equatable` (manual, not synthesized — several stored properties are
 /// closures/bindings and can't derive `==`) so the caller can apply
-/// `.equatable()` and gate `body` re-execution on this row's own inputs.
-/// This is the same pattern as `ProjectDisclosureRowContent` (PR #40): it lets
-/// `RecentsListView` key its `ForEach` on the stable `\.id` — required so
-/// hover state and an in-progress inline rename survive `WorkspaceStore`
-/// writes that don't touch this row (e.g. another session's
-/// `lastActiveAt`) — while still refreshing this row's own rendered content
-/// (name, indicator, timestamp) without a full teardown/rebuild.
+/// `.equatable()` and skip re-executing `body` when none of this row's own
+/// inputs changed. This is the same pattern as `ProjectDisclosureRowContent`
+/// (PR #40) and is a body-re-execution **perf gate**, not what makes a row
+/// pick up new values — `RecentsListView` keys its `ForEach` on the stable
+/// `\.id` (required so hover state and an in-progress inline rename survive
+/// `WorkspaceStore` writes that don't touch this row, e.g. another session's
+/// `lastActiveAt`), and freshness on that stable identity comes from the
+/// caller using a non-lazy `VStack` rather than `LazyVStack` — a lazy
+/// container retains a realized row and never re-invokes the `ForEach`
+/// content closure when only the element changes, so `.equatable()` alone
+/// cannot fix a frozen row (there is no new value to compare against).
+/// See the `VStack` comment in `RecentsListView.body`.
 struct RecentsRowView: View, Equatable {
     let session: AgentSession
     let projectName: String
@@ -47,9 +48,6 @@ struct RecentsRowView: View, Equatable {
     }
 
     var body: some View {
-        // TEMPORARY diagnostic — see SIDEBARDIAG in the boundaries note; to be reverted.
-        let _ = sidebarDiagRowLogger.debug("SIDEBARDIAG row id=\(String(session.id.uuidString.prefix(8)), privacy: .public) name=\(session.name, privacy: .public)")
-
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
             // Per-session ghost character, tinted by status — same color mapping
             // as MenuBarDropdownView.
