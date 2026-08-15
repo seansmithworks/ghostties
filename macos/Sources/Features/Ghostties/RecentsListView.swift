@@ -159,6 +159,8 @@ struct RecentsListView: View {
     // MARK: - Session Row
 
     private func sessionRow(for session: AgentSession) -> some View {
+        // TEMPORARY diagnostic — see SIDEBARDIAG in the boundaries note; to be reverted.
+        sidebarDiagLogger.debug("SIDEBARDIAG construct id=\(session.id.uuidString.prefix(8), privacy: .public) name=\(session.name, privacy: .public)")
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
