@@ -3105,3 +3105,38 @@ blocking both the runtime-verification debt and the product-clip re-shoot.
 Durable learnings in project memory, referenced not restated:
 `reference_worktree-isolation-git-boundaries.md`. Lane correction (third recurrence, this one
 crossing into other *repos*) appended to `feedback-website-thread-scope.md`.
+
+## August 14, 2026 — Sidebar row staleness root-caused; three PRs shipped
+
+### Headline
+
+Sessions-tab sidebar rows rendered a session name frozen at first construction. **Root cause: `LazyVStack`**, which never re-invokes `ForEach`'s content closure when an element changes but its `\.id` identity doesn't. Fix was one word — `VStack`. Two prior fixes (`.onReceive` + `@State` bump, then `Equatable` + `.equatable()`) both failed because they targeted the comparison; SwiftUI never built a new row to compare against.
+
+### Merged to `main`
+
+- `988b11223` — #121 sidebar rows no longer freeze (`LazyVStack` → `VStack`)
+- `7e04b7fd3` — #122 strip Claude's status glyph (`✳ Child Session` → `Child Session`)
+- `f7248d5b9` — #123 dev build-info badge, bottom-left, click-to-copy
+
+Verified on `main` itself: build green, **685 total / 682 passed / 2 failed / 1 skipped** (both failures from the untracked `ThrottleTrailingEdgeHypothesisTests`, fail-by-design). Zero SIDEBARDIAG instrumentation left in `macos/Sources`.
+
+### What actually found it
+
+Three layers logged in the same body pass — and the middle one had never been instrumented:
+
+```
+active sessions: <id>=<name>   parent computed
+construct id=… name=…          what sessionRow(for:) RECEIVED   ← the missing layer
+row       id=… name=…          what the row RENDERED
+```
+
+Broken: `construct` fired 6 times (session creation only) against 31 parent body passes; each row id rendered exactly one name for its lifetime. Fixed: `construct` fires on every rename, all three layers agree.
+
+### Memory written
+
+- `reference_sidebar-rows-frozen-lazyvstack.md` — supersedes and deletes the earlier note that wrongly credited `.equatable()`
+- `reference_screencapture-responsible-app-is-the-terminal.md` — `screencapture` is gated by the TCC grant of the terminal hosting the session, not the app being photographed
+
+### Open
+
+Archive-expansion perf (eager render of ~37 rows), and **re-test every conclusion ever measured through a Sessions-tab row** — including the blue-ghost readings the Switchboard polarity plan rests on. Both in `BACKLOG.md`.
