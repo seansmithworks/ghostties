@@ -159,6 +159,15 @@ class WorkspaceViewContainer: NSView {
     /// The browser panel content (navigation bar + content area placeholder).
     private let browserPanelView = BrowserPanelView()
 
+    /// Diagnostic build/launch info badge — bottom-left corner of the window,
+    /// click-to-copy. `@AppStorage`-gated; sizes itself to its content so it
+    /// never intercepts clicks outside its own bounds. See `BuildInfoBadgeView.swift`.
+    private let buildInfoBadgeHostingView: NSHostingView<BuildInfoBadgeView> = {
+        let view = NSHostingView(rootView: BuildInfoBadgeView())
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
     /// Sidebar material backing for overlay mode. In pinned mode the shared
     /// `backgroundEffectView` already covers the sidebar area, so this is hidden.
     /// In overlay mode it provides the .sidebar material behind the hosting view
@@ -1313,7 +1322,7 @@ class WorkspaceViewContainer: NSView {
         // Canvas layer — the warm background visible behind the floating card.
         wantsLayer = true
 
-        // Z-order: background material → overlay background → sidebar → sidebar drag handle → terminal → browser drag handle → browser.
+        // Z-order: background material → overlay background → sidebar → sidebar drag handle → terminal → browser drag handle → browser → build-info badge (topmost).
         addSubview(backgroundEffectView)
         addSubview(sidebarOverlayBackground)
         addSubview(sidebarHostingView)
@@ -1321,6 +1330,7 @@ class WorkspaceViewContainer: NSView {
         addSubview(terminalShadowHost)
         addSubview(browserDragHandle)
         addSubview(browserShadowHost)
+        addSubview(buildInfoBadgeHostingView)
 
         sidebarHostingView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -1477,6 +1487,12 @@ class WorkspaceViewContainer: NSView {
             sidebarDragHandle.bottomAnchor.constraint(equalTo: sidebarHostingView.bottomAnchor),
             sidebarDragHandle.leadingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
             sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
+
+            // Build-info badge: bottom-left corner of the whole window, on top
+            // of sidebar and terminal alike. Unconstrained width/height — the
+            // hosting view sizes to its SwiftUI content (`.fixedSize()`).
+            buildInfoBadgeHostingView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            buildInfoBadgeHostingView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
         ])
 
         // Terminal floating card: top corners rounded when in card mode (pinned/closed).
