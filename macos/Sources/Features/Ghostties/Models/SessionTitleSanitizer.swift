@@ -21,6 +21,15 @@ enum SessionTitleSanitizer {
         "claude", "claude code", "zsh", "bash", "-zsh", "-bash", "sh", "-sh", "fish", "-fish"
     ]
 
+    /// Legacy marker characters that predate the structural rule below and
+    /// don't fall under it: `*`, `·`, `•` are Unicode general category `Po`
+    /// (punctuation), not `So` (symbol), so the structural check alone
+    /// wouldn't catch them. Kept as an explicit union rather than folded
+    /// into the structural rule because they're a real, live-observed shape
+    /// — `· Current Apps` was captured verbatim (byte `c2 b7`) from a
+    /// running Claude Code session — not a hypothesis about title format.
+    private static let legacyMarkerCharacters: Set<Character> = ["*", "·", "•"]
+
     /// Strips a leading run of status/spinner marker characters — and any
     /// whitespace immediately following the run — from `segment`, if
     /// present. Claude Code (and similar CLI agents) prefix a terminal title
@@ -28,22 +37,29 @@ enum SessionTitleSanitizer {
     /// Code"`) or an animated spinner frame cycling through a symbol block
     /// (e.g. Braille Patterns `"⠐ "`, or circle-fill frames `"◐ "` / `"◑ "`).
     ///
-    /// Matched structurally rather than by enumerating known glyphs — a
-    /// leading character is stripped when it's Unicode general category `So`
-    /// (Symbol, other) and does NOT default to emoji presentation. This
-    /// covers every observed marker/spinner style without a hardcoded list
-    /// (enumerating glyphs is exactly what made three previous sanitizer
-    /// patches leak on a new spinner style), while a genuine leading emoji
-    /// (`Emoji_Presentation=Yes`, e.g. 🚀) is left untouched since it's part
-    /// of the title, not a status marker.
+    /// Matched structurally where possible rather than by enumerating known
+    /// glyphs — a leading character is stripped when it's Unicode general
+    /// category `So` (Symbol, other) and does NOT default to emoji
+    /// presentation. This covers every observed marker/spinner style
+    /// without a hardcoded list (enumerating glyphs is exactly what made
+    /// three previous sanitizer patches leak on a new spinner style), while
+    /// a genuine leading emoji (`Emoji_Presentation=Yes`, e.g. 🚀) is left
+    /// untouched since it's part of the title, not a status marker.
+    ///
+    /// Unioned with `legacyMarkerCharacters` — see that set's doc comment
+    /// for why those three characters need an explicit carve-out instead of
+    /// falling under the structural rule.
     ///
     /// This result is what `sanitize(title:currentName:projectDirectoryName:)`
     /// actually returns — the marker is not persisted into the sidebar name.
     private static func strippingLeadingStatusMarker(from segment: Substring) -> Substring {
         var result = segment
-        while let first = result.first,
-              first.unicodeScalars.count == 1,
-              let scalar = first.unicodeScalars.first {
+        while let first = result.first {
+            if legacyMarkerCharacters.contains(first) {
+                result.removeFirst()
+                continue
+            }
+            guard first.unicodeScalars.count == 1, let scalar = first.unicodeScalars.first else { break }
             let properties = scalar.properties
             guard properties.generalCategory == .otherSymbol, !properties.isEmojiPresentation else { break }
             result.removeFirst()
@@ -79,11 +95,15 @@ enum SessionTitleSanitizer {
         for rawSegment in replaced.split(separator: placeholder, omittingEmptySubsequences: true) {
             let trimmedSegment = rawSegment.trimmingCharacters(in: .whitespaces)
             guard !trimmedSegment.isEmpty else { continue }
-            // `cleaned` already had its leading status/spinner marker (if
-            // any) stripped before this function is called, so only the
-            // first segment could ever have carried one — no per-segment
-            // stripping needed here.
-            let segmentLower = trimmedSegment.lowercased()
+            // Strip a leading status/spinner marker (e.g. "✳ " or "⠐ ")
+            // before judging whether this segment is informative. `cleaned`
+            // only has its OWN leading marker stripped (by the early strip
+            // in `sanitize`) — a marker can still appear at the start of a
+            // later segment, e.g. "repo | ✳ Claude Code", so every segment
+            // needs its own check here.
+            let segment = String(strippingLeadingStatusMarker(from: Substring(trimmedSegment)))
+            guard !segment.isEmpty else { continue }
+            let segmentLower = segment.lowercased()
             if segmentLower == dirLower { continue }
             if bareProgramNames.contains(segmentLower) { continue }
             return true

@@ -302,6 +302,27 @@ final class SessionTitleSanitizerTests: XCTestCase {
         ))
     }
 
+    func testMiddleDotMarkerPrefixedShellNameRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "· zsh",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testAsteriskMarkerPrefixedShellNameRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "* zsh",
+            currentName: "Session 1"
+        ))
+    }
+
+    func testBulletMarkerPrefixedShellNameRejected() {
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "• zsh",
+            currentName: "Session 1"
+        ))
+    }
+
     func testMarkerPrefixedProjectDirectoryNameRejected() {
         XCTAssertNil(SessionTitleSanitizer.sanitize(
             title: "✳ invented-project",
@@ -358,6 +379,33 @@ final class SessionTitleSanitizerTests: XCTestCase {
             currentName: "Session 1"
         )
         XCTAssertEqual(result, "🚀 Deploy the thing")
+    }
+
+    func testDirectorySeparatedMarkerPrefixedClaudeCodeRejected() {
+        // The production shape: `SessionCoordinator.performNameSync` always
+        // supplies `projectDirectoryName`, so a marker prefix glued onto
+        // "Claude Code" after a "<dir> | " separator must still be caught —
+        // the marker doesn't only ever appear at the very start of the raw
+        // title.
+        XCTAssertNil(SessionTitleSanitizer.sanitize(
+            title: "repo | ✳ Claude Code",
+            currentName: "Session 1",
+            projectDirectoryName: "repo"
+        ))
+    }
+
+    func testMigrationPathStripsMarkerFromAlreadyStoredName() {
+        // Existing stored names in workspace.json carry the glyph (from
+        // before this fix). The next terminal-title sync for that same
+        // session re-runs the raw title through `sanitize`, so the glyph
+        // must be stripped from the persisted name even though
+        // `currentName` also still carries it — this is how already-stored
+        // names self-heal without any migration step.
+        let result = SessionTitleSanitizer.sanitize(
+            title: "✳ Child Session",
+            currentName: "✳ Child Session"
+        )
+        XCTAssertEqual(result, "Child Session")
     }
 
     func testAsteriskNotAtStartOfTitleDoesNotTriggerRejection() {
