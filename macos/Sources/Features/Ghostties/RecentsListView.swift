@@ -71,7 +71,7 @@ struct RecentsListView: View {
                 )
 
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    VStack(spacing: 2) {
                         // All three headers always render (when there's at
                         // least one session anywhere) — membership adapts,
                         // but the ACTIVE/INACTIVE/ARCHIVE headers themselves
