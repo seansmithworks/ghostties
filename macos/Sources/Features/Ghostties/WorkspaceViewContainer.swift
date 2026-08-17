@@ -631,18 +631,31 @@ class WorkspaceViewContainer: NSView {
         // Explicit shadow paths eliminate per-frame offscreen rendering.
         // Without these, Core Animation rasterizes the entire layer to compute
         // the shadow shape every frame — expensive for a terminal that redraws at 60fps.
-        terminalShadowHost.layer?.shadowPath = CGPath(
-            roundedRect: terminalShadowHost.bounds,
-            cornerWidth: WorkspaceLayout.terminalCornerRadius,
-            cornerHeight: WorkspaceLayout.terminalCornerRadius,
-            transform: nil
-        )
-        browserShadowHost.layer?.shadowPath = CGPath(
-            roundedRect: browserShadowHost.bounds,
-            cornerWidth: WorkspaceLayout.terminalCornerRadius,
-            cornerHeight: WorkspaceLayout.terminalCornerRadius,
-            transform: nil
-        )
+        //
+        // `bounds.isEmpty` guard: mirrors the resize reclamp's `bounds.width > 0`
+        // guard above — during animated constraint changes (mode transitions,
+        // teardown, fullscreen intermediates) a shadow host's bounds can
+        // transiently be zero-size. Once an explicit shadowPath is set, Core
+        // Animation uses it exclusively; installing a zero-rect path renders no
+        // shadow at all, silently, until a later layout pass rebuilds it from
+        // settled bounds. Skipping leaves the previously-installed path in
+        // place, which is strictly better than a dead one.
+        if !terminalShadowHost.bounds.isEmpty {
+            terminalShadowHost.layer?.shadowPath = CGPath(
+                roundedRect: terminalShadowHost.bounds,
+                cornerWidth: WorkspaceLayout.terminalCornerRadius,
+                cornerHeight: WorkspaceLayout.terminalCornerRadius,
+                transform: nil
+            )
+        }
+        if !browserShadowHost.bounds.isEmpty {
+            browserShadowHost.layer?.shadowPath = CGPath(
+                roundedRect: browserShadowHost.bounds,
+                cornerWidth: WorkspaceLayout.terminalCornerRadius,
+                cornerHeight: WorkspaceLayout.terminalCornerRadius,
+                transform: nil
+            )
+        }
         sidebarOverlayBackground.layer?.shadowPath = CGPath(
             rect: sidebarOverlayBackground.bounds,
             transform: nil
