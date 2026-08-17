@@ -347,6 +347,45 @@ jobs:
             ./
           mv ./Ghostties*.dmg ./Ghostties.dmg
 
+      # create-dmg signs the DMG itself with a separate code signature/CDHash
+      # from the app inside it, so the app's notarization ticket (stapled
+      # above) does not cover the DMG. Without this second round trip, a
+      # direct DMG download needs an online Gatekeeper check just to mount —
+      # the same class of bug this PR set out to fix, just moved to a
+      # different artifact. The app packaged inside is already stapled at
+      # this point, so this covers the "double-click the DMG" install path
+      # on top of the "copy the app out" path handled above.
+      - name: Notarize DMG
+        env:
+          APPLE_NOTARIZATION_ISSUER: ${{ secrets.APPLE_NOTARIZATION_ISSUER }}
+          APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+          APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
+        run: |
+          # Credentials were already stored under this profile name by the
+          # "Notarize app" step above; reuse it.
+          set -o pipefail
+          xcrun notarytool submit "Ghostties.dmg" \
+            --keychain-profile "notarytool-profile" \
+            --wait | tee notarytool-submit-dmg.log
+          NOTARIZE_EXIT=${PIPESTATUS[0]}
+
+          # Always fetch the detailed log — Apple's per-file rejection reasons
+          # only appear via `notarytool log`, never in the submit output.
+          SUBMISSION_ID=$(grep -m1 "id:" notarytool-submit-dmg.log | head -1 | awk '{print $2}')
+          if [ -n "$SUBMISSION_ID" ]; then
+            echo "::group::DMG notarization detailed log (submission $SUBMISSION_ID)"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --keychain-profile "notarytool-profile" || true
+            echo "::endgroup::"
+          fi
+
+          if [ "$NOTARIZE_EXIT" != "0" ]; then
+            echo "::error::DMG notarization failed (exit $NOTARIZE_EXIT). See log above."
+            exit "$NOTARIZE_EXIT"
+          fi
+
+          xcrun stapler staple "Ghostties.dmg"
+
       - name: Zip app
         run: |
           cd macos/build/Release
