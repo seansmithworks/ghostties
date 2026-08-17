@@ -280,18 +280,20 @@ jobs:
           /usr/bin/codesign --verbose -f -s "$MACOS_CERTIFICATE_NAME" -o runtime \
             --entitlements "macos/Ghostties.entitlements" "$APP"
 
-      - name: Create DMG
-        env:
-          MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+      # Notarization must run — and staple succeed — on the app bundle BEFORE
+      # it gets packaged into the DMG or the release zip, otherwise whichever
+      # artifact is built first ships an unstapled app (see BACKLOG.md history:
+      # create-dmg used to run before stapling, so the DMG's copy of the app
+      # never received the notarization ticket while the zip's copy did).
+      - name: Zip app for notarization submission
         run: |
-          npm install --global create-dmg@8.1.0
-          create-dmg \
-            --identity="$MACOS_CERTIFICATE_NAME" \
-            ./macos/build/Release/Ghostties.app \
-            ./
-          mv ./Ghostties*.dmg ./Ghostties.dmg
+          cd macos/build/Release
+          # ditto (not zip) preserves the code signature exactly as notarytool
+          # expects for submission. This zip is a transient submission vehicle
+          # only — the release zip is built fresh from the stapled app below.
+          ditto -c -k --keepParent Ghostties.app ../../../notarization-submission.zip
 
-      - name: Notarize DMG
+      - name: Notarize app
         env:
           APPLE_NOTARIZATION_ISSUER: ${{ secrets.APPLE_NOTARIZATION_ISSUER }}
           APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
@@ -309,7 +311,7 @@ jobs:
           # Capture submission ID so we can fetch the detailed log if it fails.
           # --wait exits non-zero on Invalid, so we tee output and parse the ID.
           set -o pipefail
-          xcrun notarytool submit "Ghostties.dmg" \
+          xcrun notarytool submit "notarization-submission.zip" \
             --keychain-profile "notarytool-profile" \
             --wait | tee notarytool-submit.log
           NOTARIZE_EXIT=${PIPESTATUS[0]}
@@ -329,9 +331,60 @@ jobs:
             exit "$NOTARIZE_EXIT"
           fi
 
-          # Staple the ticket so Gatekeeper validates the app offline
-          xcrun stapler staple "Ghostties.dmg"
+          # Staple the ticket so Gatekeeper validates the app offline. This
+          # must happen before Create DMG and Zip app below, so both
+          # packaged artifacts ship the stapled app, not just one of them.
           xcrun stapler staple "macos/build/Release/Ghostties.app"
+
+      - name: Create DMG
+        env:
+          MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+        run: |
+          npm install --global create-dmg@8.1.0
+          create-dmg \
+            --identity="$MACOS_CERTIFICATE_NAME" \
+            ./macos/build/Release/Ghostties.app \
+            ./
+          mv ./Ghostties*.dmg ./Ghostties.dmg
+
+      # create-dmg signs the DMG itself with a separate code signature/CDHash
+      # from the app inside it, so the app's notarization ticket (stapled
+      # above) does not cover the DMG. Without this second round trip, a
+      # direct DMG download needs an online Gatekeeper check just to mount —
+      # the same class of bug this PR set out to fix, just moved to a
+      # different artifact. The app packaged inside is already stapled at
+      # this point, so this covers the "double-click the DMG" install path
+      # on top of the "copy the app out" path handled above.
+      - name: Notarize DMG
+        env:
+          APPLE_NOTARIZATION_ISSUER: ${{ secrets.APPLE_NOTARIZATION_ISSUER }}
+          APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+          APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
+        run: |
+          # Credentials were already stored under this profile name by the
+          # "Notarize app" step above; reuse it.
+          set -o pipefail
+          xcrun notarytool submit "Ghostties.dmg" \
+            --keychain-profile "notarytool-profile" \
+            --wait | tee notarytool-submit-dmg.log
+          NOTARIZE_EXIT=${PIPESTATUS[0]}
+
+          # Always fetch the detailed log — Apple's per-file rejection reasons
+          # only appear via `notarytool log`, never in the submit output.
+          SUBMISSION_ID=$(grep -m1 "id:" notarytool-submit-dmg.log | head -1 | awk '{print $2}')
+          if [ -n "$SUBMISSION_ID" ]; then
+            echo "::group::DMG notarization detailed log (submission $SUBMISSION_ID)"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --keychain-profile "notarytool-profile" || true
+            echo "::endgroup::"
+          fi
+
+          if [ "$NOTARIZE_EXIT" != "0" ]; then
+            echo "::error::DMG notarization failed (exit $NOTARIZE_EXIT). See log above."
+            exit "$NOTARIZE_EXIT"
+          fi
+
+          xcrun stapler staple "Ghostties.dmg"
 
       - name: Zip app
         run: |
