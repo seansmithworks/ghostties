@@ -15,7 +15,7 @@
     <div class="doc-meta">
       <span>Project: Ghostties</span>
       <span>2026-08-18</span>
-      <span class="badge badge--draft">Draft — 3 forks open</span>
+      <span class="badge badge--draft">Draft — 4 forks open</span>
     </div>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
@@ -32,120 +32,181 @@
 
     <ul data-anchor-id="verdict-list">
       <li><strong>Token drift fixed in <code>DESIGN.md</code> first</strong> —
-        docs-only edits, no code changes.</li>
-      <li><strong>One site, two clearly separated systems</strong> — app and
-        website don't share tokens; the page doesn't pretend they do.</li>
+        docs-only edits, no code changes. This round corrects two wrong claims
+        from the last pass; see below.</li>
+      <li><strong>App and site sections, one shared value flagged</strong> —
+        not merged into one token table, but not claimed to share nothing
+        either.</li>
       <li><strong>Lives at <code>docs/design-system/index.html</code>, opened
         locally, never deployed</strong> — <code>web/</code> auto-deploys to
-        production on merge, and this page documents internal detail that
-        isn't public-facing.</li>
+        production on merge.</li>
       <li><strong>Marketing assets are a checklist</strong> — every capture
-        step done by Sean at the desk (screen-capture permission can't be
-        scripted around).</li>
+        step done by Sean at the desk; web-bound assets get their own PR.</li>
     </ul>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
-    <h2 data-anchor-id="drift">Token drift — three fixes, one correction</h2>
+    <h2 data-anchor-id="drift">Token drift — corrected</h2>
 
     <table data-anchor-id="drift-table">
-      <thead>
-        <tr><th>Problem</th><th>Fix</th></tr>
-      </thead>
+      <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
       <tbody>
         <tr>
-          <td><code>textPrimary</code>/<code>textSecondary</code> (both
-            modes) are fixed hex in <code>DESIGN.md</code> §2. Code uses
-            <code>Color.primary</code>/<code>.tertiaryLabelColor</code> —
-            dynamic, no static RGBA. Zero hits for either string in
-            <code>macos/Sources</code>.</td>
-          <td>Relabel the row <strong>"System dynamic — approximate, not
-            canonical."</strong> Keep the hex for mockup reference; stop
-            calling it the implementation.</td>
+          <td><code>textPrimary</code> (<code>DESIGN.md:9,16</code>) is fixed
+            hex; code uses dynamic <code>Color.primary</code>, no static
+            RGBA, and stays that way.</td>
+          <td>Relabel <strong>"System dynamic — approximate, not
+            canonical."</strong></td>
         </tr>
         <tr>
-          <td><code>border</code>, <code>destructive</code>,
-            <code>success</code> — zero hits in
-            <code>WorkspaceLayout.swift</code> or elsewhere in the fork.
-            (Coordinator-verified: code matches for these strings are all
-            false positives — SwiftUI's <code>.border()</code>,
-            <code>role: .destructive</code>, <code>Result.success</code>.)</td>
-          <td>Delete the three rows. Zero call sites isn't a design system,
-            it's a wish list.</td>
+          <td><code>textSecondary</code> (<code>DESIGN.md:10,17</code>) is
+            currently the same kind of mismatch — <strong>but
+            <code>fix/sidebar-contrast-text</code> (pushed to origin,
+            commit <code>66ce51820</code>, not yet merged) adds
+            <code>textSecondaryLight</code>/<code>textSecondaryDark</code> as
+            real <code>WorkspaceLayout.swift</code> constants at exactly
+            <code>#6B6B6B</code>/<code>#9A9A9A</code></strong> — the same hex
+            already in <code>DESIGN.md</code>.</td>
+          <td>Once that branch merges, <code>textSecondary</code> becomes
+            canonical, not approximate — opposite treatment from
+            <code>textPrimary</code>. Site build has a real, in-flight
+            dependency here (see Phasing).</td>
         </tr>
         <tr>
-          <td>Status-dot palette (blue/gold/orange, plus system green) ships
-            in <code>WorkspaceLayout.swift</code> and isn't in
-            <code>DESIGN.md</code> at all.</td>
-          <td>Add the "Activity indicator states" table: green=working
-            (system), blue=your-turn <code>#5B8DEF</code>,
-            gold=needs-decision <code>#FFC400</code>,
+          <td><code>border</code> (<code>DESIGN.md:12,18</code>) — zero hits
+            anywhere in <code>macos/Sources</code>.</td>
+          <td>Delete. Only token in this row set that's genuinely unused.</td>
+        </tr>
+        <tr>
+          <td><strong>Correction:</strong> <code>destructive</code>/
+            <code>success</code> (<code>DESIGN.md:13-14,19</code>) are
+            <strong>live</strong>, ~15 call sites, as system dynamic colors —
+            <code>.systemRed</code>/<code>.systemGreen</code> in
+            <code>SessionDetailView.swift</code>,
+            <code>WorkspaceStore.swift</code>,
+            <code>ProjectDisclosureRow.swift</code>,
+            <code>RecentsRowView.swift</code>,
+            <code>MenuBar/MenuBarDropdownView.swift</code>,
+            <code>MenuBar/MenuBarIconRenderer.swift</code>,
+            <code>TaskRowView.swift</code>,
+            <code>NewTaskComposerView.swift</code>, plus
+            <code>WorkspaceLayout.swift:231</code>
+            (<code>ciFailColor</code>). I originally proposed deleting both
+            as unused — wrong; the audit said the token <em>names</em> are
+            absent from <code>WorkspaceLayout.swift</code>, not that the
+            role is unused.</td>
+          <td>Same treatment as <code>textPrimary</code>: relabel
+            system-dynamic/approximate, don't delete. (My prior draft also
+            self-contradicted — deleting <code>success</code> while adding
+            "green=working (system)" to the indicator table below. Same
+            color, one row.)</td>
+        </tr>
+        <tr>
+          <td>"Activity indicator states" table
+            (<code>DESIGN.md:149-155</code>) already exists — stale
+            Waiting/Running/Idle rows, not absent.</td>
+          <td><strong>Correction:</strong> this is a <strong>REPLACE</strong>
+            of those three rows, not an add. Replace with: green=working
+            (system, = <code>success</code> role above), blue=your-turn
+            <code>#5B8DEF</code>, gold=needs-decision <code>#FFC400</code>,
             orange=long-running <code>#F97316</code>.</td>
+        </tr>
+        <tr>
+          <td>Frontmatter (<code>DESIGN.md:1-53</code>, declared
+            machine-readable) duplicates all five keys above at
+            <code>:9-14</code> and their dark variants at <code>:15-19</code>.</td>
+          <td>Edit in lockstep with the prose rows — this is the exact
+            human/machine split the plan exists to close, not a second pass
+            later.</td>
         </tr>
       </tbody>
     </table>
 
+    <h3 data-anchor-id="terracotta-heading">The terracotta contradiction — seven lines, not one</h3>
+
     <p data-anchor-id="terracotta-correction">
-      <strong>Correction from the last pass:</strong> I originally proposed
-      folding terracotta into that same "stale, replace it" fix. Wrong —
-      terracotta is live, in two places, and the real drift is sharper than
-      staleness.
+      <strong>Correction:</strong> I previously proposed editing
+      <code>DESIGN.md:102</code> alone. The terracotta-is-waiting rule is
+      stated <strong>seven times</strong>: <code>68</code>, <code>97</code>,
+      <code>102</code>, <code>153</code>, <code>203</code>, <code>212</code>,
+      <code>245</code>. Editing one leaves the file more self-contradictory,
+      not less — and <code>245</code> sits inside §11 Agent Prompt Guide, the
+      section an implementing agent actually reads. Leaving it means the next
+      SwiftUI agent gets instructed to reproduce the bug.
     </p>
 
     <table data-anchor-id="terracotta-table">
       <tbody>
         <tr>
-          <td><strong>Code</strong></td>
-          <td><code>waitingTerracotta = #C97350</code>
-            (<code>WorkspaceLayout.swift:128</code>), documented in-code as
+          <td><strong>Code says</strong></td>
+          <td><code>waitingTerracotta</code> (<code>#C97350</code>,
+            <code>WorkspaceLayout.swift:128</code>) — brand-accent chrome:
             pin notices, callout cards, task-row highlights, browser-toggle
-            tint — <strong>and an explicit comment that it is NOT the
-            session-status waiting color.</strong> Second hit:
-            <code>AgentTemplate.swift:305</code>, launch-banner background
-            bar.</td>
+            tint. In-code comment: explicitly <strong>NOT</strong> the
+            session-status waiting color. <strong>~19 call sites</strong>
+            across <code>WorkspaceLayout.swift</code> (definition) +
+            8 view files (<code>WorkspaceSidebarView</code>,
+            <code>NeedsYouZoneView</code>, <code>TaskRowView</code>,
+            <code>InboxZoneView</code>, <code>OrphanTriageCardView</code>,
+            <code>SidebarCalloutCard</code>, <code>NewTaskComposerView</code>).
+            A second token, <strong><code>waitingTerracottaNS</code></strong>
+            (<code>WorkspaceLayout.swift:131</code>), is used separately in
+            <code>WorkspaceViewContainer.swift:835</code>. Both swatches
+            belong on the reference site.</td>
         </tr>
         <tr>
-          <td><strong><code>DESIGN.md:102</code></strong></td>
-          <td>"Terracotta is reserved exclusively for the
-            <code>waiting</code> activity indicator state." The opposite of
-            what the code says and does.</td>
+          <td><strong>DESIGN.md says (7×)</strong></td>
+          <td>"Reserved exclusively for the <code>waiting</code> activity
+            indicator state" — the opposite.</td>
         </tr>
         <tr>
-          <td><strong>History</strong>
-            (<code>feedback_terracotta-not-brand-color.md</code>)</td>
-          <td>2026-06-23: Sean pulled terracotta out of the
-            <em>status-dot</em> palette specifically — one accent serving
-            both brand and status semaphore was muddy, and terracotta reads
-            as a Claude color. It stayed for brand-accent chrome. Not
-            removed wholesale.</td>
+          <td><strong>Not a terracotta call site</strong></td>
+          <td><code>AgentTemplate.swift:305</code> is a doc comment claiming
+            <code>#C97350</code>; the color actually emitted at
+            <code>:316</code> is <code>48;2;210;150;120</code> =
+            <strong><code>#D29678</code></strong> — a different color
+            entirely, with an inaccurate comment. Own finding, not terracotta
+            evidence: a hardcoded off-brand banner color.</td>
         </tr>
         <tr>
           <td><strong>Fix</strong></td>
-          <td>Rewrite the <code>DESIGN.md:102</code> rule to describe what
-            ships: terracotta is brand-accent chrome, explicitly not a
-            status color. Flag <code>waitingTerracotta</code> in
-            <code>WorkspaceLayout.swift</code> as a misnamed token for
-            whoever renames it next — it hasn't meant "waiting" since June.</td>
+          <td>Rewrite all seven lines to describe what ships: terracotta is
+            brand-accent chrome, not a status color. Flag
+            <code>waitingTerracotta</code> as a misnomer — it hasn't meant
+            "waiting" since June. Separately, file
+            <code>AgentTemplate.swift:305</code>'s comment/color mismatch.</td>
         </tr>
       </tbody>
     </table>
 
+    <p data-anchor-id="web-restates">
+      <strong>Two files outside the app restate the pre-correction framing</strong>
+      and need the same pass: <code>web/style.css</code>'s <code>--accent</code>
+      comment ("Dropped as an app brand color but still shipping on the
+      web") and <code>web/DESIGN.md:127-128</code> ("explicitly dropped as a
+      brand colour for the app... see the root <code>DESIGN.md</code>").
+      Both cite a "dropped" framing the root file won't assert once Fork 2
+      below is answered — the honest state is <em>unresolved</em>, not
+      settled. (Not editing either file here — off-limits for this task —
+      just naming them as dependent edits.)
+    </p>
+
     <p data-anchor-id="drift-not-in-scope">
       Not in scope: the status-dot contrast failures themselves (1.3–2.7:1 in
-      light mode) — deliberately deferred by Sean, in flight on another
-      branch. The reference site documents them as-shipped with a callout
-      linking the audit.
+      light mode) — deliberately deferred by Sean. The reference site
+      documents them as-shipped with a callout linking the audit.
     </p>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
-    <h2 data-anchor-id="two-systems">Two systems, one page, no shared tokens</h2>
+    <h2 data-anchor-id="two-systems">Two systems, one shared value</h2>
 
     <p data-anchor-id="two-systems-body">
-      App and website have separate <code>DESIGN.md</code> files, separate
-      palettes (warm chrome/canvas vs. near-black <code>#1a1a2e</code>), and
-      separate type stacks. The page gets two top-level sections —
-      <strong>App</strong> and <strong>Site</strong> — each sourced from its
-      own <code>DESIGN.md</code>. No merged token table; nothing today claims
-      the two should match.
+      App and website have separate <code>DESIGN.md</code> files and don't
+      share a token table. <strong>Correction:</strong> they do share exactly
+      one literal value today — <code>#C97350</code>, as
+      <code>waitingTerracotta</code> in the app and
+      <code>--accent</code> in <code>web/style.css:57</code>. Not proposing a
+      merged table for one entry; flagging it because it's what makes Fork 2
+      below cross-system rather than app-only.
     </p>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
@@ -179,12 +240,13 @@
       <tbody>
         <tr><td><strong>Colors / tokens</strong> (both systems)</td>
           <td>Swatch grid with hex + the Swift constant or CSS custom
-            property name beside each</td>
+            property name beside each. Both terracotta swatches
+            (<code>waitingTerracotta</code> and the separate
+            <code>waitingTerracottaNS</code>) shown, not collapsed to one</td>
           <td><code>WorkspaceLayout.swift</code>; <code>web/style.css</code>
             <code>:root</code></td></tr>
         <tr><td><strong>Light / dark</strong></td>
-          <td>Toggle on the app section only (site is single-theme);
-            every swatch and mock re-renders under it</td>
+          <td>Toggle on the app section only (site is single-theme)</td>
           <td><code>DESIGN.md</code> chrome/canvas pairs</td></tr>
         <tr><td><strong>Type ramp</strong></td>
           <td>App: SF Pro Text 11pt / SF Mono, two-weight rule. Site:
@@ -192,25 +254,24 @@
           <td><code>DESIGN.md</code> §3; <code>web/DESIGN.md</code> §4</td></tr>
         <tr><td><strong>Menus</strong></td>
           <td>Static screenshot, sidebar context menu + template picker,
-            light + dark — not a rebuilt CSS menu</td>
+            light + dark</td>
           <td>Live app, captured by Sean</td></tr>
         <tr><td><strong>Lists</strong></td>
           <td>Session row anatomy, spacing/token labeled on the screenshot
             itself</td>
           <td>Live app; <code>WorkspaceLayout.swift</code></td></tr>
         <tr><td><strong>Ghost sequences</strong></td>
-          <td>All 24 characters as static pixel-grid SVG, one per cell, no
-            animation for v1 (Fork 2)</td>
-          <td><code>GhostCharacter.swift</code> path data, re-rendered
-            inline</td></tr>
+          <td>All 24 characters as static <code>&lt;rect&gt;</code> grids,
+            one per cell, no animation for v1 (Fork 4). <strong>Correction:</strong>
+            these are 12×12 boolean grids parsed from ASCII art
+            (<code>Models/GhostCharacter.swift</code>, <code>pixelGrid</code>),
+            not path geometry — <code>GhostShape</code>/<code>drawPath(in:)</code>
+            (the SwiftUI renderer) live separately in
+            <code>GhostCharacterView.swift</code>. A grid→SVG rect
+            transcription is simpler than hunting for <code>Path</code> math.</td>
+          <td><code>Models/GhostCharacter.swift</code> grid data</td></tr>
       </tbody>
     </table>
-
-    <p data-anchor-id="content-note">
-      Everything but the ghost wall and the two screenshots is a direct
-      transcription of a token file — no re-implementing SwiftUI components
-      in CSS. A second hand-maintained implementation is exactly what drifts.
-    </p>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
     <h2 data-anchor-id="marketing">Marketing asset set</h2>
@@ -220,11 +281,11 @@
       <tbody>
         <tr><td><strong>App icon</strong></td>
           <td>Full-bleed 1024×1024 PNG, square, no rounded corners, no
-            shadow (macOS applies its own squircle + bezel)</td>
+            shadow</td>
           <td>Cask/npx pages, README, appcast icon</td></tr>
         <tr><td><strong>Hero screenshot</strong></td>
           <td>Full window, 3–5 sessions, 2 projects, dark mode</td>
-          <td>Homepage hero — "multiple agents in parallel in one window"</td></tr>
+          <td>Homepage hero</td></tr>
         <tr><td><strong>Sidebar close-up</strong></td>
           <td>Cropped to sidebar, light and dark, status dots visible</td>
           <td>Reference site's Lists section; secondary marketing</td></tr>
@@ -243,18 +304,24 @@
     <p data-anchor-id="capture-intro">
       Every step is Sean, at the machine. Screen-capture permission is
       granted to the terminal, not the app, and can deny silently even when
-      visibly on — the fix needs a relaunch that would kill this session.
+      visibly on.
     </p>
 
     <ol data-anchor-id="capture-steps">
       <li>Set the scene by hand: sessions, projects, mode, per shot.</li>
-      <li><code>screencapture -D 2</code> from a real Terminal window — the
-        delay lets you click the target window first.</li>
-      <li>Save to <code>images/marketing/</code>, named to match the asset
-        table (e.g. <code>hero-dark.png</code>).</li>
+      <li><code>screencapture -D 2</code> from a real Terminal window.</li>
+      <li>Save reference-site captures to <code>images/marketing/</code>,
+        named to match the asset table.</li>
       <li>App icon: export 1024×1024 from the existing source in
         <code>images/</code> — no new capture.</li>
-      <li>Hand the PNGs off; the site/web build from there can be delegated.</li>
+      <li><strong>Correction:</strong> anything web-bound (hero, sidebar
+        close-up if reused on <code>ghostties.org</code>) saves to
+        <code>web/assets/</code>, <em>not</em> <code>images/marketing/</code>
+        — and ships as its <strong>own PR</strong>, separate from the
+        reference-site work, since merging to <code>main</code> deploys
+        production. Verify by reading the deployed asset after merge, not the
+        deploy status: <code>/assets/*</code> carries a 1-hour cache, so a
+        warm browser shows stale for up to an hour.</li>
     </ol>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
@@ -265,7 +332,11 @@
       <tbody>
         <tr><td><strong>1</strong></td>
           <td>Token drift fix in <code>DESIGN.md</code></td>
-          <td>Nothing</td></tr>
+          <td><strong>Correction:</strong> not "nothing" — the
+            <code>textSecondary</code> row depends on
+            <code>fix/sidebar-contrast-text</code> merging first (in-flight,
+            pushed, unmerged); doing this phase before that merges means
+            re-editing the same row twice.</td></tr>
         <tr><td><strong>2</strong></td>
           <td>Site skeleton: colors, type ramp, light/dark toggle</td>
           <td>Phase 1</td></tr>
@@ -273,62 +344,61 @@
           <td>Ghost character wall (static SVG)</td>
           <td>Phase 2</td></tr>
         <tr><td><strong>4</strong></td>
-          <td>Menus + Lists sections, plus the marketing asset set</td>
+          <td>Menus + Lists sections, plus the reference-site-only marketing
+            assets</td>
           <td>Sean's capture session</td></tr>
+        <tr><td><strong>5</strong></td>
+          <td>Web-bound assets (hero, any reused close-up), own PR</td>
+          <td>Same capture session; separate merge from Phase 4</td></tr>
       </tbody>
     </table>
 
-    <p data-anchor-id="phasing-note">
-      Phases 1–3 need nothing from Sean but review. Phase 4 is one ~20-minute
-      capture session that unblocks the site's last two sections and every
-      marketing asset at once.
-    </p>
-
     <!-- ────────────────────────────────────────────────────────────────── -->
-    <h2 data-anchor-id="decisions">Yours to decide — three forks</h2>
+    <h2 data-anchor-id="decisions">Yours to decide — four forks</h2>
 
     <ol data-anchor-id="decision-list">
       <li>
-        <strong>Is terracotta still the Ghostties brand color at all?</strong>
-        This is <strong>Sean's open call, not mine</strong> —
-        <code>feedback_terracotta-not-brand-color.md</code> records him
-        mulling it on 2026-06-23 and explicitly not resolving it. One prior
-        decision already narrows it: terracotta is <em>out</em> of the
-        status-dot semaphore, permanently. What's undecided is whether it
-        stays the general brand accent (pins, callouts, launch banner) or
-        gets replaced there too.
-        <br /><em>If a strawman is useful:</em> keep it as brand-accent
-        chrome for now — nothing else in the palette currently fills that
-        role, and swapping it is a bigger design pass than this plan should
-        trigger. But treat this as flagged, not decided.
+        <strong>The terracotta contradiction: rewrite the spec, or move the
+        code?</strong> <code>BACKLOG.md:600</code> already poses this as
+        Sean's call — I was silently answering it by proposing the seven-line
+        spec rewrite above. Making it explicit.
+        <br /><strong>Recommendation: rewrite the spec (as above).</strong>
+        The code side is ~19 shipped call sites implementing a deliberate
+        June 2026 decision (terracotta out of status semaphore,
+        <code>feedback_terracotta-not-brand-color.md</code>); reverting it
+        would undo shipped, intentional work with no user-facing complaint
+        driving it.
+      </li>
+      <li>
+        <strong>Is terracotta still the Ghostties brand color at all —
+        app and site?</strong> Sean's open call
+        (<code>feedback_terracotta-not-brand-color.md</code>, 2026-06-23,
+        explicitly unresolved). <strong>Wider than app chrome:</strong>
+        <code>#C97350</code> is also the site's only chromatic color, its
+        global <code>:focus-visible</code> ring (a11y-load-bearing, 4.92:1,
+        decided 2026-08-05 — <code>web/DESIGN.md:114-120</code>), the
+        homepage product-window glow (<code>web/index.html:394</code>), and
+        the product captions/404 link.
+        <br /><strong>Recommendation: keep it, for now.</strong> It's woven
+        into an accessibility-load-bearing decision on the live site;
+        replacing it means re-deriving a contrast pair and touching five
+        surfaces across two codebases at once. That's a real design pass,
+        not a token edit — worth doing deliberately, not as a side effect of
+        this plan.
       </li>
       <li>
         <strong>Does the reference site ever go public?</strong>
         <br /><strong>Strawman: no, stays local-only.</strong> It documents
-        internal detail — dynamic-color approximations, a known contrast
-        failure, Swift token names — that reads as unfinished to an outside
-        visitor.
-        <br /><em>Alternative:</em> a curated public subset on
-        <code>ghostties.org</code> later, if there's ever a concrete reason
-        (press kit, etc.).
+        internal detail that reads as unfinished to an outside visitor.
+        <br /><em>Alternative:</em> a curated public subset later, if there's
+        a concrete reason.
       </li>
       <li>
         <strong>Do the ghost sequences animate?</strong>
-        <br /><strong>Strawman: static pixel-grid renders only, v1.</strong>
-        Motion capture is more desk time, and 24 distinct characters are
-        already legible frozen.
-        <br /><em>Alternative:</em> screen-record idle/walk loops per
-        character — nicer, five more capture sessions for a page whose job
-        is "what are the 24 characters," not "how do they move."
+        <br /><strong>Strawman: static grids only, v1.</strong> More desk
+        time for motion capture; 24 characters are already legible frozen.
+        <br /><em>Alternative:</em> screen-recorded idle/walk loops later.
       </li>
     </ol>
-
-    <blockquote class="callout" data-anchor-id="closing">
-      <p>
-        <strong>Not a decision, just so it isn't re-litigated:</strong> the
-        reference site is never imported, linked, or wired into either
-        codebase. It's a document that happens to be HTML.
-      </p>
-    </blockquote>
   </body>
 </html>
