@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>One way to start a session</title>
+    <link rel="stylesheet" href="http://localhost:4849/assets/plan.css" />
+  </head>
+  <body>
+    <h1>One way to start a session</h1>
+    <p class="subtitle" data-anchor-id="subtitle">
+      Unifying seven creation entry points onto one composer
+    </p>
+
+    <div class="doc-meta">
+      <span>Project: Ghostties</span>
+      <span>2026-08-18</span>
+      <span class="badge badge--draft">Draft — 2 design forks open</span>
+    </div>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <h2 data-anchor-id="verdict">The verdict</h2>
+
+    <blockquote class="callout" data-anchor-id="verdict-callout">
+      <p>
+        <strong
+          >Every session in Ghostties is already created by one function.</strong
+        >
+        <code>SessionCoordinator.createQuickSession(for:template:…)</code>
+        (<code>SessionCoordinator.swift:306</code>) has six call sites and no
+        rivals. There is no second spawn path, no duplicated wiring, no
+        divergent side effects. <strong>This is a UI consolidation, not a
+        refactor</strong> — the model underneath is already unified and the five
+        front-ends are five different ways of picking two arguments.
+      </p>
+    </blockquote>
+
+    <p data-anchor-id="model-intro">
+      So the work is: build <strong>one composer</strong>, parameterize it by
+      entry point, and delete four bespoke pickers. What varies across entry
+      points is only three things — everything else is constant:
+    </p>
+
+    <ul data-anchor-id="model-list">
+      <li>
+        <strong>Presentation</strong> — anchored popover (came from a row) or
+        centered overlay (came from a keystroke or the toolbar).
+      </li>
+      <li>
+        <strong>Project state</strong> — locked (row knows it), pre-filled
+        (cascade guessed it), or open (user picks).
+      </li>
+      <li>
+        <strong>Focus target</strong> — which field owns first responder on
+        open.
+      </li>
+    </ul>
+
+    <p data-anchor-id="model-constant">
+      Constant everywhere: the template list, the search behavior, the
+      add-project chip, Return-to-commit, Esc-to-cancel, and the single call to
+      <code>createQuickSession</code>.
+    </p>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <h2 data-anchor-id="matrix">Presentation matrix — every row decided</h2>
+
+    <table data-anchor-id="matrix-table">
+      <thead>
+        <tr>
+          <th>Entry point</th>
+          <th>Presentation</th>
+          <th>Pre-filled</th>
+          <th>User still picks</th>
+          <th>Decision</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <strong>Sidebar <code>+ New Session</code></strong> in a project
+            group<br /><code>ProjectDisclosureRow.swift:459,465</code>
+          </td>
+          <td>Anchored popover, tail on the button — keep</td>
+          <td>Project (locked), project default template</td>
+          <td>Template</td>
+          <td>
+            Keep the popover, swap its body for
+            <code>SessionComposerView</code>. Project chip shows but is not
+            editable — the row already answered that question.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Per-project <code>+</code></strong> on a hovered/selected
+            row
+          </td>
+          <td colspan="3">
+            <em>Same code as the row above</em> —
+            <code>handleNewSession()</code> serves both affordances.
+          </td>
+          <td>
+            Collapse in the plan and in your head: this is one entry point, not
+            two.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Sessions-tab toolbar <code>+ New Session</code></strong
+            ><br /><code>RecentsListView.swift:481–526</code>
+          </td>
+          <td><strong>Centered overlay</strong> — not a menu</td>
+          <td>Cascade guess (frontmost cwd → MRU → most recent)</td>
+          <td>Project and template, by typing</td>
+          <td>
+            Delete the two-level <code>Menu</code> cascade outright. It is the
+            worst surface in the app and a search field is the whole fix.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Cmd+T</strong><br /><code>AppDelegate.swift:738–744</code> →
+            <code>WorkspaceSidebarView.swift:135,227</code>
+          </td>
+          <td><strong>Centered overlay</strong> over the Ghostties window</td>
+          <td>Selected project if any, else cascade; project default template</td>
+          <td>Nothing — Return starts it</td>
+          <td>
+            Your ask, and it also fixes a silent no-op (D1 below). One extra
+            keystroke buys a visible target.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Cmd+Shift+T</strong> (today a hidden alias)<br /><code
+              >AppDelegate.swift:749–756</code
+            >
+          </td>
+          <td>None — no UI at all</td>
+          <td>Everything</td>
+          <td>Nothing</td>
+          <td>
+            Promote it to <em>the</em> instant path. Today's zero-UI speed
+            survives as an explicit chord rather than being quietly taxed.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong><code>+ New Project</code></strong> in the sidebar
+            header<br /><code>WorkspaceSidebarView.swift:219–224</code> →
+            <code>WorkspaceStore.swift:915</code>
+          </td>
+          <td><code>NSOpenPanel</code>, then centered overlay</td>
+          <td>The just-added project (locked)</td>
+          <td>Template</td>
+          <td>
+            Chain them. Adding a project should end in a running session, not an
+            empty group you then have to click into.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Browser panel toggle</strong><br /><code
+              >WorkspaceViewContainer.swift:807–812</code
+            >
+          </td>
+          <td>None — side effect</td>
+          <td><code>projects.first</code> — a bug</td>
+          <td>Nothing</td>
+          <td>
+            Not a creation affordance, so no composer. Route its project
+            resolution through the composer's resolver so the browser opens in
+            the project you are looking at.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Task row click</strong><br /><code
+              >RowClickHandlers.swift:111,171,298</code
+            >
+            → <code>SessionCoordinator.swift:470</code>
+          </td>
+          <td>None — by design</td>
+          <td>Everything, from task frontmatter</td>
+          <td>Nothing</td>
+          <td>
+            Leave alone. This is a <em>resume</em> gesture, not a creation
+            gesture, and mixing the two would make one control do two things.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p data-anchor-id="matrix-correction">
+      <strong>Correction to the brief:</strong> there are seven distinct paths,
+      not five. Two of your five are the same code, and three you did not list
+      (Cmd+Shift+T, the browser side effect, task-row click) also create
+      sessions. Detail in the current-state map below.
+    </p>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <h2 data-anchor-id="composer">The composer</h2>
+
+    <p data-anchor-id="composer-precedent">
+      <strong>Do not invent this.</strong>
+      <code>NewTaskComposerStore</code> already implements the exact state
+      machine — single-instance-at-a-time, focus trigger, a three-step
+      smart-default project cascade (<code>NewTaskComposerStore.swift:168–195</code>:
+      frontmost terminal cwd → MRU → most-recently-touched), an inline
+      <code>+ Add project…</code> chip that runs the folder picker without
+      closing the composer (<code>:162</code>), inline error state, Esc cancel.
+      It commits a <code>.md</code> task instead of a session, so it cannot be
+      reused directly — but its shape is the answer and the new store should be
+      a deliberate mirror of it, file-adjacent and same naming.
+    </p>
+
+    <pre data-anchor-id="composer-mock"><code>┌────────────────────────────────────────┐
+│  ◆ Ghostties  ▾                        │  project chip — locked when the
+│  ┌──────────────────────────────────┐  │  entry point already knows it
+│  │ Start…                           │  │  one field: filters templates AND
+│  └──────────────────────────────────┘  │  projects; owns focus on open
+│  RECENT                                │
+│   ◆ Claude Code        ghostties       │
+│   ◆ Orchestrator       brukas          │
+│  TEMPLATES                             │
+│   ◆ Shell              Default shell   │
+│   ◆ Linear Sync        Sync issues…    │
+│  ──────────────────────────────────    │
+│   + New template…                      │
+└────────────────────────────────────────┘
+     ↵ start    ⌥↵ start + reveal    esc cancel</code></pre>
+
+    <p data-anchor-id="composer-search">
+      <strong>One search field is the load-bearing idea.</strong> It filters
+      templates always, and projects too whenever the project is not locked. So
+      the 28-project problem and the template problem get the same control:
+      Cmd+T, type <code>bru</code>, Return, you are in a Brukas session. No
+      submenu, no scanning, no ordering debate — because you never read the
+      list.
+    </p>
+
+    <p data-anchor-id="composer-noname">
+      <strong>No name field, deliberately.</strong> An unpinned session's
+      sidebar name <em>is</em> its live terminal title, so anything typed at
+      creation is overwritten within seconds unless it also pins. Naming stays
+      one-way (your call, 2026-08-10). <code>createQuickSession</code> keeps
+      auto-naming <code>"\(template.name) \(count + 1)"</code> at
+      <code>SessionCoordinator.swift:315</code>.
+    </p>
+
+    <h3 data-anchor-id="mechanism">Centered presentation: in-window overlay, not NSPanel</h3>
+
+    <p data-anchor-id="mechanism-body">
+      There is no centered-panel pattern in the app today — the four existing
+      mechanisms are <code>NSOpenPanel</code>, <code>.popover()</code>,
+      <code>.sheet()</code>, and a borderless <code>Menu</code>, and none of
+      them float centered. The recommendation is a
+      <code>TransparentHostingView&lt;SessionComposerOverlay&gt;</code> added as
+      a subview of <code>WorkspaceViewContainer</code> — that hosting subclass
+      already exists at <code>WorkspaceViewContainer.swift:1701</code>,
+      purpose-built to not paint a window background.
+    </p>
+
+    <p data-anchor-id="mechanism-why">
+      An <code>NSPanel</code> would be the textbook answer and it is the wrong
+      one here. A second window brings its own key/main handling, its own
+      responder chain for Esc, floats above other apps when Ghostties is not
+      front, and needs one instance per terminal window. The overlay inherits
+      the window it belongs to for free, and it reads as part of the app rather
+      than as a system dialog — which is what "tied to the entry point" actually
+      means for a keystroke: tied to <em>that</em> window.
+    </p>
+
+    <blockquote class="callout" data-anchor-id="mechanism-cost">
+      <p>
+        <strong>The cost, stated plainly.</strong> It means touching
+        <code>WorkspaceViewContainer</code> — 85&nbsp;KB of hand-managed AppKit,
+        home to both the shadowPath fragility and the projectFirst measurement
+        beachball. Three non-negotiables: use Auto Layout constraints the way
+        <code>buildInfoBadgeHostingView</code> does
+        (<code>:1507–1508</code>) and never touch <code>layout()</code> at
+        <code>:572</code>; pin the width explicitly
+        (<code>.frame(width: 360)</code>) so SwiftUI never negotiates size with
+        the container — the exact fix that killed the projectFirst loop; add and
+        remove the subview on demand so no hidden hosting view participates in
+        layout while closed.
+      </p>
+    </blockquote>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <h2 data-anchor-id="defects">Defects found while reading</h2>
+
+    <p data-anchor-id="defects-intro">
+      Numbered so a phase can cite one. Every line is first-hand from the code,
+      and four of them contradict the brief.
+    </p>
+
+    <table data-anchor-id="defect-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Defect</th>
+          <th>Evidence</th>
+          <th>Fix</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>D1</td>
+          <td>
+            <strong>Cmd+T silently does nothing with no project selected</strong> — and
+            it does <em>not</em> infer from the current repo or branch. It reads
+            the sidebar's <code>selectedProjectId</code> and the project's
+            <code>defaultTemplateId</code>.
+          </td>
+          <td>
+            <code>WorkspaceSidebarView.swift:228</code> —
+            <code>guard let project = selectedProject else { return }</code>
+          </td>
+          <td>Phase 3 — open the composer with the cascade instead of returning</td>
+        </tr>
+        <tr>
+          <td>D2</td>
+          <td>
+            <strong>Cmd+T is dead in task-first mode.</strong> The local event
+            monitor only reclaims the chord for project-first windows, and only
+            <code>WorkspaceSidebarView</code> observes the notification.
+          </td>
+          <td>
+            <code>AppDelegate.swift:999</code> —
+            <code>isProjectFirstWorkspaceWindow(window)</code>; single observer
+            at <code>WorkspaceSidebarView.swift:135</code>
+          </td>
+          <td>Phase 3 — the overlay lives in the container, so both modes get it</td>
+        </tr>
+        <tr>
+          <td>D3</td>
+          <td>
+            <strong>Option-key polarity is backwards.</strong> A plain click
+            creates instantly; holding Option is what reveals the picker. The
+            modifier should be the shortcut, not the escape hatch.
+          </td>
+          <td>
+            <code>ProjectDisclosureRow.swift:462</code> —
+            <code>!NSEvent.modifierFlags.contains(.option)</code>
+          </td>
+          <td>Phase 2 — invert: click opens composer, Option-click creates</td>
+        </tr>
+        <tr>
+          <td>D4</td>
+          <td>
+            <strong>Three rows named "New Template".</strong> Root cause found:
+            the name is hardcoded, the edit sheet can be dismissed without
+            renaming, and the record persists. "Default shell" is the subtitle
+            fallback. A session spawned from one is named "New Template 2".
+          </td>
+          <td>
+            <code>TemplatePickerView.swift:338</code> (hardcoded),
+            <code>:165</code> (fallback subtitle),
+            <code>SessionCoordinator.swift:315</code> (session name)
+          </td>
+          <td>Phase 1 — name-first, dedupe-on-write, empty state</td>
+        </tr>
+        <tr>
+          <td>D5</td>
+          <td>
+            <strong>Two competing template filters, different answers.</strong>
+            One respects project scoping; the other ignores it entirely — so a
+            project-scoped template appears in every project's popover.
+          </td>
+          <td>
+            <code>RecentsListView.swift:153</code>
+            (<code>isGlobal || projectId == project.id</code>) vs
+            <code>TemplatePickerView.swift:32–43</code> (filters only on
+            <code>isDefault</code> / <code>templateDescription</code>)
+          </td>
+          <td>Phase 1 — one resolver, both callers</td>
+        </tr>
+        <tr>
+          <td>D6</td>
+          <td>
+            <strong>Sort predicate is not a strict weak ordering.</strong> It
+            ignores its second argument, so everything past "default is early"
+            is unspecified order.
+          </td>
+          <td>
+            <code>RecentsListView.swift:156</code> —
+            <code>candidates.sorted { a, _ in a.id == defaultId }</code>
+          </td>
+          <td>Phase 1 — replace with a partition</td>
+        </tr>
+        <tr>
+          <td>D7</td>
+          <td>
+            <strong>The toolbar cascade really is insertion-ordered.</strong> It
+            iterates <code>store.projects</code> raw — not
+            <code>flatProjectsInVisualOrder</code>. Both complaints hold: length
+            <em>and</em> order.
+          </td>
+          <td>
+            <code>RecentsListView.swift:489</code> —
+            <code>ForEach(store.projects)</code>
+          </td>
+          <td>Phase 3 — the menu is deleted, so this evaporates</td>
+        </tr>
+        <tr>
+          <td>D8</td>
+          <td>
+            <strong>Every project add pins, and nothing ever un-pins.</strong>
+            Re-adding an existing path force-pins it, and a task-row click on an
+            unknown project auto-registers one. The 28-item list is partly
+            self-inflicted.
+          </td>
+          <td>
+            <code>WorkspaceStore.swift:638,649</code>
+            (<code>isPinned = true</code> on both branches);
+            <code>SessionCoordinator.swift:491</code> (auto-register)
+          </td>
+          <td>Phase 5 — held separate, it changes existing sidebars on upgrade</td>
+        </tr>
+        <tr>
+          <td>D9</td>
+          <td>
+            <strong>Projects resolve by name, not path</strong>, on the task
+            path. Two repos with the same folder name collide onto one project
+            record.
+          </td>
+          <td>
+            <code>SessionCoordinator.swift:485</code> —
+            <code>projects.first(where: { $0.name == name })</code>
+          </td>
+          <td>Out of scope — flagged, not fixed</td>
+        </tr>
+        <tr>
+          <td>D10</td>
+          <td>
+            <strong>The folder picker has no starting directory and no
+            title</strong> — only <code>message</code> and
+            <code>prompt</code> are set, so every add begins wherever macOS last
+            was.
+          </td>
+          <td><code>WorkspaceStore.swift:916–922</code></td>
+          <td>Phase 4 — persisted <code>directoryURL</code></td>
+        </tr>
+        <tr>
+          <td>D11</td>
+          <td>
+            <strong>Picker type sizes are off-system.</strong> The template
+            picker uses 12&nbsp;pt/10&nbsp;pt where
+            <code>DESIGN.md</code> specifies 11&nbsp;pt SF Pro Text for sidebar
+            UI.
+          </td>
+          <td>
+            <code>TemplatePickerView.swift:154,157</code> vs
+            <code>DESIGN.md</code> §3
+          </td>
+          <td>Phase 2 — fold into the composer build, not a separate task</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <h2 data-anchor-id="phases">Phasing</h2>
+
+    <p data-anchor-id="phases-intro">
+      Each phase is independently mergeable and each is written for an
+      implementer with no memory of this document. Smallest first — Phase 1
+      ships real user-visible value with zero new UI surface.
+    </p>
+
+    <h3 data-anchor-id="phase1">Phase 1 · One template resolver, name-first templates</h3>
+    <ul data-anchor-id="phase1-list">
+      <li>
+        <strong>New file</strong>
+        <code>macos/Sources/Features/Ghostties/SessionTemplateResolver.swift</code>
+        with one function:
+        <code
+          >static func templates(for project: Project, store: WorkspaceStore)
+          -> [AgentTemplate]</code
+        >. Filter <code>isGlobal || projectId == project.id</code>; partition
+        the project's <code>defaultTemplateId</code> to the front; keep
+        insertion order within each partition; presets
+        (<code>templateDescription != nil</code>) group before built-ins group
+        before user templates.
+      </li>
+      <li>
+        <strong>Repoint both callers.</strong> Delete
+        <code>RecentsListView.availableTemplates(for:store:)</code>
+        (<code>:152–160</code>, including the invalid sort at <code>:156</code>)
+        and the three computed filters in
+        <code>TemplatePickerView</code> (<code>:32–43</code>). Both call the
+        resolver. Fixes D5 and D6.
+      </li>
+      <li>
+        <strong>Name-first template creation.</strong> Replace
+        <code>addCustomTemplate()</code> at
+        <code>TemplatePickerView.swift:336–339</code>: the
+        <code>+ New template…</code> row becomes an inline text field in place,
+        Return commits via <code>store.addTemplate</code> with the typed name,
+        Esc discards and writes nothing. Never persist an unnamed record. Fixes
+        D4.
+      </li>
+      <li>
+        <strong>Dedupe on write</strong> in <code>WorkspaceStore.addTemplate</code>
+        — an exact name collision appends " 2", " 3". Backstop for the case
+        where a user types the same name twice.
+      </li>
+      <li>
+        <strong>Empty state</strong> in the YOUR TEMPLATES section: one
+        secondary line, no emoji, e.g. "Presets above cover most cases." Shown
+        only when the section is empty.
+      </li>
+      <li>
+        <strong>Ship gate:</strong> three identically-named templates cannot be
+        recreated by any click sequence; a project-scoped template appears in
+        exactly one project's list. Add a unit test on the resolver with a mixed
+        global/scoped fixture.
+      </li>
+    </ul>
+
+    <h3 data-anchor-id="phase2">Phase 2 · SessionComposer, popover only</h3>
+    <ul data-anchor-id="phase2-list">
+      <li>
+        <strong>New files</strong>
+        <code>SessionComposerStore.swift</code> and
+        <code>SessionComposerView.swift</code>, flat in
+        <code>macos/Sources/Features/Ghostties/</code>. Read
+        <code>NewTaskComposerStore.swift</code> first and mirror its shape —
+        <code>static let shared</code>, <code>@Published isOpen</code>,
+        <code>focusSearchFieldTrigger</code>, <code>selectedProjectId</code>,
+        <code>searchText</code>, <code>writeError</code>. Copy the cascade at
+        <code>:168–195</code> and the add-project chip at <code>:162</code>; do
+        not import the task store, it commits a <code>.md</code>.
+      </li>
+      <li>
+        <strong>Request type</strong>
+        <code>SessionComposerRequest { presentation: .anchored | .centered;
+        projectBinding: .locked(Project) | .prefilled(Project) | .open;
+        }</code>. Nothing else parameterizes it.
+      </li>
+      <li>
+        <strong>View anatomy</strong> per the mock above: project chip, search
+        field, RECENT section (last three
+        <code>(project, template)</code> pairs, persisted to
+        <code>@AppStorage</code>), TEMPLATES section from the Phase 1 resolver,
+        <code>+ New template…</code> footer. Plain <code>VStack</code>, never
+        <code>LazyVStack</code>. Width 220&nbsp;pt anchored / 360&nbsp;pt
+        centered. 11&nbsp;pt SF Pro Text per <code>DESIGN.md</code> §3, fixing D11.
+      </li>
+      <li>
+        <strong>Commit</strong> calls
+        <code>coordinator.createQuickSession(for:template:)</code> and nothing
+        else. Return commits the highlighted row; Esc closes without writing.
+      </li>
+      <li>
+        <strong>Wire one call site only.</strong>
+        <code>ProjectDisclosureRow.swift:452</code>'s
+        <code>.popover</code> renders <code>SessionComposerView</code> with
+        <code>.locked(project)</code>. Invert the Option polarity at
+        <code>:461</code> — plain click opens the composer, Option-click keeps
+        today's instant create. Fixes D3.
+      </li>
+      <li>
+        <strong>Leave <code>TemplatePickerView</code> in the tree</strong> — it
+        still owns the preset preview card, the edit sheet, and the
+        duplicate/delete context menu. Phase 2 replaces the list, not the file.
+      </li>
+      <li>
+        <strong>Ship gate:</strong> the sidebar's
+        <code>+ New Session</code> behaves exactly as before plus a search
+        field. No other surface changes. Screenshot before/after in the PR.
+      </li>
+    </ul>
+
+    <h3 data-anchor-id="phase3">Phase 3 · Centered overlay, Cmd+T, toolbar replacement</h3>
+    <ul data-anchor-id="phase3-list">
+      <li>
+        <strong>New file</strong> <code>SessionComposerOverlay.swift</code> — a
+        SwiftUI view wrapping <code>SessionComposerView</code> in a scrim, hosted
+        by <code>TransparentHostingView</code>
+        (<code>WorkspaceViewContainer.swift:1701</code>) and added as a subview
+        of the container. Constraints only: centerX/centerY to the container,
+        <code>.frame(width: 360)</code>, intrinsic height. Do not modify
+        <code>layout()</code> at <code>:572</code>. Add on open, remove on close.
+      </li>
+      <li>
+        <strong>Route Cmd+T.</strong> Move the
+        <code>.workspaceNewSession</code> handling out of
+        <code>WorkspaceSidebarView.swift:135</code> and into the container so
+        both sidebar modes receive it (fixes D2). Delete the
+        <code>selectedProject</code> guard at <code>:229</code> — open the
+        composer with the cascade instead (fixes D1).
+        <code>createNewSessionForSelectedProject()</code> at
+        <code>:227–242</code> goes away.
+      </li>
+      <li>
+        <strong>Promote Cmd+Shift+T</strong> to the instant path: unhide the
+        item at <code>AppDelegate.swift:749–756</code>, retitle it
+        "New Session (Instant)", and point it at a new
+        <code>TerminalController</code> action that posts a distinct
+        notification. The overlay is not involved.
+      </li>
+      <li>
+        <strong>Replace the cascade.</strong>
+        <code>NewSessionToolbarButton</code>'s
+        <code>Menu</code> body (<code>RecentsListView.swift:488–506</code>)
+        becomes a plain button that opens the overlay with
+        <code>.open</code>. The 28-project <code>ForEach</code> and its
+        submenus are deleted, taking D7 with them.
+      </li>
+      <li>
+        <strong>Ship gate:</strong> Cmd+T with nothing selected opens the
+        composer; typing three characters and pressing Return starts a session
+        in a project you never scrolled to; the two-level menu is gone. Record a
+        short screen capture for the PR — this is the phase Sean will judge.
+      </li>
+    </ul>
+
+    <h3 data-anchor-id="phase4">Phase 4 · Project-creation convergence</h3>
+    <ul data-anchor-id="phase4-list">
+      <li>
+        <strong>One picker signature.</strong>
+        <code>WorkspaceStore.addProjectViaFolderPicker(startingAt:)</code>
+        (<code>:915</code>) gains a <code>directoryURL</code> from a persisted
+        <code>@AppStorage</code> last-used path and a real
+        <code>panel.title</code>. Fixes D10.
+      </li>
+      <li>
+        <strong>All four callers use it:</strong>
+        <code>WorkspaceSidebarView.swift:220</code>,
+        <code>NewTaskComposerStore.swift:162</code>,
+        <code>OrphanTriageStore.swift:104</code>,
+        <code>OrphanTriageCardView.swift:137</code>. Miss one and it keeps its
+        own behavior — this is the reason the phase exists.
+      </li>
+      <li>
+        <strong>Chain header add → composer.</strong>
+        <code>presentFolderPicker()</code> at
+        <code>WorkspaceSidebarView.swift:219</code> opens the composer at
+        <code>.locked(newProject)</code> after the panel returns OK.
+      </li>
+      <li>
+        <strong>Fix the browser's project pick.</strong>
+        <code>WorkspaceViewContainer.swift:807</code> resolves
+        <code>WorkspaceStore.shared.projects.first</code> — replace with the
+        composer store's project resolver so the browser opens in the active
+        project. One line, no UI.
+      </li>
+      <li>
+        <strong>Ship gate:</strong> adding a project from the header ends with a
+        running terminal; the picker reopens where you last were; the browser
+        opens in the project on screen.
+      </li>
+    </ul>
+
+    <h3 data-anchor-id="phase5">Phase 5 · Stop pinning everything (optional)</h3>
+    <ul data-anchor-id="phase5-list">
+      <li>
+        <strong>Drop the force-pin</strong> on re-add at
+        <code>WorkspaceStore.swift:638</code> and on auto-register at
+        <code>SessionCoordinator.swift:491</code>. Explicit pinning stays user-driven.
+      </li>
+      <li>
+        <strong>Held separate</strong> because it visibly reorders existing
+        sidebars on upgrade — that is a taste call, not a bug fix, and it should
+        not ride along inside another phase's PR.
+      </li>
+      <li>
+        <strong>This is what actually shortens the list</strong> long-term. The
+        search field makes length not matter; this makes it not happen.
+      </li>
+    </ul>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <h2 data-anchor-id="risks">Risks and fragile ground</h2>
+
+    <table data-anchor-id="risk-table">
+      <thead>
+        <tr>
+          <th>Risk</th>
+          <th>Severity</th>
+          <th>Mitigation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <strong>Composer typing writes to <code>WorkspaceStore</code></strong> —
+            the <code>sessions</code> <code>didSet</code>
+            (<code>WorkspaceStore.swift:32–37</code>) wipes <code>sessionGroupsCache</code>
+            wholesale, for <em>every</em> project. Per-keystroke that is the SEA-214 tick with a
+            human driving it.
+          </td>
+          <td><strong>High</strong></td>
+          <td>
+            All composer state lives in <code>SessionComposerStore</code>.
+            Nothing reaches the store until commit. Hard review item on Phase 2.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong>A new path bypasses <code>createQuickSession</code></strong>
+            and writes only one of the two indicator caches
+            (<code>WorkspaceStore.globalIndicatorStates</code> +
+            <code>SessionCoordinator.cachedIndicatorStates</code>) — exactly how
+            #90/#92 shipped invisible and ghost sessions.
+          </td>
+          <td><strong>High</strong></td>
+          <td>
+            Every phase's acceptance criterion:
+            <code>grep -c createQuickSession</code> call sites goes down or stays
+            flat, never up. Paste the count in the PR.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <strong>Composer wired to the relaunch path.</strong>
+            <code>relaunchSession</code>
+            (<code>ProjectDisclosureRow.swift:472</code>,
+            <code>RecentsListView.swift:319</code>) reuses an existing
+            <code>AgentSession</code> record;
+            <code>createQuickSession</code> mints a fresh one. A search field
+            that restarts a dead session and one that creates a new session look
+            identical and behave differently.
+          </td>
+          <td>Medium</td>
+          <td>
+            The composer never touches relaunch. Resuming stays on the row it
+            belongs to.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <code>WorkspaceViewContainer</code> layout regression — shadowPath
+            and the projectFirst measurement loop both live in this file.
+          </td>
+          <td>Medium</td>
+          <td>
+            Constraints not <code>layout()</code>; explicit
+            <code>.frame(width:)</code>; add/remove the hosting view on demand.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            Two composers open at once — popover from a row plus overlay from
+            Cmd+T.
+          </td>
+          <td>Medium</td>
+          <td>
+            Singleton store like <code>NewTaskComposerStore.shared</code>.
+            Opening while open re-targets and re-focuses; it never stacks.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            Template list goes lazy later and rows freeze at first construction
+            (PR #121).
+          </td>
+          <td>Low</td>
+          <td>
+            Plain <code>VStack</code>, documented in a comment at the call site.
+          </td>
+        </tr>
+        <tr>
+          <td>Cmd+T muscle memory breaks.</td>
+          <td>Low — reversible</td>
+          <td>
+            Return commits with everything pre-filled, so the fast path costs one
+            keystroke. Cmd+Shift+T stays truly instant. Fork 2 below if you want
+            it the other way.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ────────────────────────────────────────────────────────────────── -->
+    <h2 data-anchor-id="decisions">Yours to decide — two forks, both with a strawman</h2>
+
+    <ol data-anchor-id="decision-list">
+      <li>
+        <strong>Does the centered composer dim the terminal behind it?</strong>
+        <br /><strong>Strawman: yes — a black scrim at 0.25 across the container.</strong>
+        Ghostties has two shadow levels and no modal vocabulary at all; on a busy
+        dark terminal a card with only the overlay shadow
+        (<code>0.20/12/0</code>) loses its edge and reads as terminal content.
+        The scrim is what makes it read as "on top of."
+        <br /><em>Alternative:</em> no scrim, shadow only. Quieter and more
+        tool-like, at the cost of edge definition. Reversible either way — it is
+        one modifier.
+      </li>
+      <li>
+        <strong>Cmd+T opens the composer, or stays instant?</strong>
+        <br /><strong>Strawman: Cmd+T opens the composer with everything
+        pre-filled and Return commits</strong>, and Cmd+Shift+T — already a
+        hidden alias — becomes the true zero-UI instant create. You gain a
+        visible target on the chord you actually press, and keep an instant path
+        for when you do not want one.
+        <br /><em>Alternative:</em> Cmd+T stays instant and the composer gets
+        Cmd+Option+T. Preserves muscle memory exactly, but a panel behind a
+        three-modifier chord is a panel nobody opens.
+      </li>
+    </ol>
+
+    <blockquote class="callout" data-anchor-id="closing">
+      <p>
+        <strong>Not a decision, just so it is not re-litigated:</strong> the
+        composer has no session-name field. An unpinned session's sidebar name
+        <em>is</em> its live terminal title, so anything typed at creation is
+        overwritten within seconds. Naming stays one-way.
+      </p>
+    </blockquote>
+  </body>
+</html>

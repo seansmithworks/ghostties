@@ -790,7 +790,11 @@
     function activateCarets() {
       const line1 = document.querySelector('.line-1');
       const line2 = document.querySelector('.line-2');
+      const line3 = document.querySelector('.line-3');
+      const line4 = document.querySelector('.line-4');
+      const line5 = document.querySelector('.line-5');
       const line6 = document.querySelector('.line-6');
+      const narrow = window.matchMedia('(max-width: 480px)').matches;
 
       // Line 1: caret appears at 1.0s, disappears when line 2 starts at 4.2s
       setTimeout(() => { line1.classList.add('caret-visible'); }, 1000);
@@ -800,10 +804,25 @@
       setTimeout(() => { line2.classList.add('caret-visible'); }, 4200);
       setTimeout(() => { line2.classList.remove('caret-visible'); }, 5650);
 
+      // WebKit's step-timing animation lands at progress 0.9999999999999997, not
+      // 1.0, so it floors one step short and every typed line settles one
+      // character narrow inside .line's overflow:hidden box (clips the last
+      // glyph — on line 5 that's the closing "]"). Chromium lands exactly on
+      // 1.0 and is unaffected. A held `forwards` animation outranks a plain
+      // inline style in the cascade, so a bare `.style.width =` assignment
+      // is silently ignored while the animation is still in effect — the
+      // lock must be `!important` to actually win. Lock each line's width
+      // once its own typing animation ends.
+      setTimeout(() => { line1.style.setProperty('width', '14ch', 'important'); }, 1560);
+      setTimeout(() => { line2.style.setProperty('width', '43ch', 'important'); }, 5300);
+      setTimeout(() => { line3.style.setProperty('width', narrow ? '16ch' : '40ch', 'important'); }, narrow ? 6050 : 6650);
+      setTimeout(() => { line4.style.setProperty('width', '18ch', 'important'); }, narrow ? 6850 : 7450);
+      setTimeout(() => { line5.style.setProperty('width', narrow ? '25ch' : '27ch', 'important'); }, narrow ? 7825 : 8500);
+
       // Line 6: caret + inline locks when typing ends
       setTimeout(() => {
         line6.classList.add('caret-blink');
-        line6.style.width = '16ch';
+        line6.style.setProperty('width', '16ch', 'important');
         line6.style.color = 'rgba(100, 220, 120, 0.9)';
         line6.style.background = 'rgba(80, 210, 100, 0.13)';
       }, lockDelayMs());
