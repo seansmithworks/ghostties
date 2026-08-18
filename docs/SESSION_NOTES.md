@@ -1,5 +1,38 @@
 # Session Notes — Ghostties
 
+## Aug 16–17, 2026 — beta.23 shipped, verified end-to-end
+
+### Headline
+
+Tagged `v0.1.0-beta.23` (`7987f6b19`), released green, and — for the first time — actually ran the
+pre-tag gate instead of skipping it. The standing "a fresh worktree can't build" blocker turned out
+to be solvable: `cp -Rc` the gitignored build inputs (`GhosttyKit.xcframework`, `zig-out`,
+`vendor/cef*`) from the main checkout. APFS copy-on-write, instant, no real disk. Suite came back
+**685 passed / 0 failed / 1 skipped** via `xcresulttool`.
+
+### Shipped
+
+- **#124** — DMG staple ordering. Needed two notarization round trips, not a reorder: `notarytool`
+  can't submit a raw `.app`, so the original used the DMG as submission vehicle. First attempt fixed
+  the app and silently dropped the DMG's own ticket; caught on diff review and sent back. Verified on
+  the **shipped** artifact: `stapler validate` + `spctl` → `accepted`, `Notarized Developer ID`.
+- **#56** — `.waiting` polarity, open six weeks. Rebased, merged; its five tests ran for the first
+  time, including the shell-session guard.
+- **#125** — shadow-path guard against zero-size bounds. Shipped knowingly unverified.
+- **#121/#122** carried in from the prior wave.
+
+### Also
+
+npm `0.1.1` published, closing the beta.21 staleness (E401 → `npm login`, same trail as before).
+Repo hygiene: worktrees 19 → 3, local branches 32 → 8, origin 8 → 5; all 16 dead worktrees came out
+without `--force`, which is git's own dirty check.
+
+### Diagnosed, not fixed
+
+Sidebar timestamps advance on focus — deliberate since April, not a #121 regression; #121 only made
+it visible. Deferred to beta.24. Canvas shadow vanishes mid-session; config is clean, suspect is the
+unguarded `shadowPath` rebuild. No repro yet.
+
 ## May 15–16, 2026 — SEA-214 Perf Fix + PR
 
 ### Headline

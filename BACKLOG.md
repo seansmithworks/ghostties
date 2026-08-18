@@ -4,6 +4,58 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-17 — beta.23 shipped, verified end-to-end
+
+Tag `v0.1.0-beta.23` → `7987f6b19`. Release green, published, all four assets. **First release whose
+pre-tag gate was actually run:** build inputs (`GhosttyKit.xcframework`, `zig-out`, `vendor/cef*`)
+were cloned into a worktree with `cp -Rc` (APFS copy-on-write, near-instant, no real disk), making
+the "a fresh worktree can't build" constraint routinely solvable. Suite: **685 passed / 0 failed /
+1 skipped** via `xcresulttool`. Shipped in: #121, #122, #56, #125, #124.
+
+Repo hygiene same session: worktrees 19 → 3, local branches 32 → 8, origin branches 8 → 5. All 16
+dead `session-*` worktrees came out under `git worktree remove` **without** `--force`, which is
+git's own dirty check and stronger evidence than the sampled audit that preceded it.
+
+- [ ] **`npx ghostties-install` is stale again — pins beta.22 while beta.23 is live.** `0.1.1` was
+  published 2026-08-17 (registry `latest: 0.1.1`) closing the long-running beta.21 gap, but the pin
+  in `bin/ghostties-install.js` (`tag: "v0.1.0-beta.22"`) now trails by one release. Same one-command
+  fix from a real terminal; `npm publish` is deny-blocked inside a session. Self-heals via Sparkle on
+  first launch, so low urgency by design. | dist | carried
+- [ ] **Homebrew cask not bumped to beta.23.** CI auto-bump still not active (needs the fine-grained
+  PAT — set `HOMEBREW_TAP_TOKEN` *before* `HOMEBREW_TAP_REPO` or the next release goes red at its
+  final job). Manual: `bash scripts/update-cask-version.sh v0.1.0-beta.23`, then copy into the tap's
+  `Casks/ghostties.rb`. | build | carried
+- [ ] **Canvas shadow fix shipped UNVERIFIED — needs a repro.** #125 guards the `shadowPath` rebuild
+  against zero-size bounds in both `terminalShadowHost` and `browserShadowHost`. The trigger was
+  never reproduced, so the fix may be a no-op. Sean is testing against beta.23; the release notes ask
+  for the trigger. If it still vanishes, the next move is a repro, **not** a second blind fix. Full
+  diagnosis: `project_canvas-shadow-disappears-during-use.md`. | app | new
+- [ ] **Timestamp-on-focus → beta.24.** Sidebar `lastActiveAt` advances on focus (keyboard cycling
+  and row clicks), by design since April 2026 — not a #121 regression. Strawman is written and not
+  built: add `lastOutputAt` written only by the output sink; Sessions rows and Archive sort read it,
+  project bucketing keeps `lastActiveAt`. Deferred by Sean 2026-08-17. Detail:
+  `reference_lastactiveat-written-on-focus.md`. | app | new
+- [ ] **PR #120 (session-cache load harness) — decide or kill** (carried 3×). Still open, never
+  merged, branch and worktree still alive. **Strawman unchanged: kill it.** Claude Code now writes
+  `~/.claude/sessions/<pid>.json`, so session naming looks to be moving to read-from-source rather
+  than something Ghostties infers and caches — the harness would test a layer Ghostties won't own.
+  Counter: it's written and costs nothing to merge. | build | carried 3×
+- [ ] **`ThrottleTrailingEdgeHypothesisTests.swift` — decide or kill** (carried 3×). Untracked, so it
+  was absent from the beta.23 worktree — which is why that run reported 0 failures where local runs
+  usually report 2. **Strawman unchanged: keep the trailing-edge test as a regression test, delete
+  the two diagnostic ones** (one calls `XCTFail` unconditionally). | app | carried 3×
+- [ ] **#56's discriminator is imperfect by design.** Now live: `template.kind != .shell` gates the
+  `.waiting` fallback. The recorded plan was always to rewire to a real foreground-TUI signal later.
+  Its five tests ran and passed for the first time in beta.23, including the shell-session guard. |
+  app | carried
+- [ ] **Tag protection does not constrain Sean.** Pushing `v0.1.0-beta.23` reported `Bypassed rule
+  violations for refs/tags/... creations being restricted`. The ruleset stops other people; his own
+  permissions pass through it. Tags still cannot be deleted after the fact. | ops | new
+
+**Closed this session:** DMG-ships-unstapled (#124, verified on the *shipped* artifact — `stapler
+validate` + `spctl` → `accepted`, source `Notarized Developer ID`); npm beta.21 staleness; PR #56
+merged after six weeks; repo hygiene wave.
+
 ## 2026-08-11 — Repo hygiene wave (worktrees, branches, stale PRs)
 
 Worktrees 21 → 3, local branches 60 → 13, origin branches 11 → 5, disk 34 GB → 2.5 GB. Merged
