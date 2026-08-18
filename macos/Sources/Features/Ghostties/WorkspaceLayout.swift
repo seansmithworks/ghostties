@@ -175,15 +175,35 @@ enum WorkspaceLayout {
     /// the long tail" — quietest tier above pure invisible.
     static let activityMutedForeground = Color(.tertiaryLabelColor)
 
+    /// Secondary/muted text foreground (light mode). DESIGN.md `textSecondary`.
+    /// A fixed value, not a system dynamic color — `NSColor.tertiaryLabelColor`
+    /// (25% opacity) fails WCAG 4.5:1 for low-emphasis UI text against every
+    /// backdrop it renders on. `#6b6b6b` (DESIGN.md's original documented
+    /// value) still falls short at 4.44:1 on chrome and 4.08:1 on the
+    /// `activeRowLight` tint — the two backdrops most of this text actually
+    /// sits on. `#636363` clears 4.5:1 on chrome, the active-row tint, and
+    /// canvas. See `docs/audits/sidebar-contrast-audit.md`.
+    static let textSecondaryLight = Color(red: 0x63 / 255.0, green: 0x63 / 255.0, blue: 0x63 / 255.0)
+
+    /// Secondary/muted text foreground (dark mode). See `textSecondaryLight`.
+    static let textSecondaryDark = Color(red: 0x9A / 255.0, green: 0x9A / 255.0, blue: 0x9A / 255.0)
+
     /// Foreground for the small section-header labels in the sidebar
     /// ("Pinned", "Active Now", "Recent", "All Projects"). Muted by design so
-    /// the project rows themselves stay the dominant visual.
-    static let sectionHeaderForeground = Color(.tertiaryLabelColor)
+    /// the project rows themselves stay the dominant visual. Uses the fixed
+    /// `textSecondary` token (not `tertiaryLabelColor`) because this text must
+    /// clear WCAG 4.5:1.
+    static func sectionHeaderForeground(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? textSecondaryDark : textSecondaryLight
+    }
 
     /// Foreground for the smaller in-row session group headers ("Active",
     /// "Recent", "Idle") inside an expanded project. One tier quieter than the
-    /// top-level section headers since they're nested.
-    static let sessionGroupHeaderForeground = Color(.tertiaryLabelColor)
+    /// top-level section headers since they're nested. Same `textSecondary`
+    /// token as `sectionHeaderForeground` — both must clear 4.5:1.
+    static func sessionGroupHeaderForeground(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? textSecondaryDark : textSecondaryLight
+    }
 
     // MARK: - Sidebar Icon Column
 

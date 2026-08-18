@@ -533,19 +533,22 @@ private struct ProjectDisclosureRowContent: View, Equatable {
 private struct SessionGroupHeader: View {
     let bucket: SessionBucket
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: iconName)
                 .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(Color(.tertiaryLabelColor))
                 .frame(width: 10, alignment: .center)
 
             Text(label.uppercased())
                 .font(.system(size: 9, weight: .semibold))
                 .tracking(0.5)
+                .foregroundStyle(WorkspaceLayout.sessionGroupHeaderForeground(for: colorScheme))
 
             Spacer(minLength: 0)
         }
-        .foregroundStyle(WorkspaceLayout.sessionGroupHeaderForeground)
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)

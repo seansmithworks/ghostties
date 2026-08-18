@@ -7,7 +7,7 @@ colors:
   chromeBackground: "#F0E9E6"
   canvasBackground: "#FAF7F3"
   textPrimary: "#1a1a1a"
-  textSecondary: "#6b6b6b"
+  textSecondary: "#636363"
   accent: "#C97350"
   border: "#e5e5e3"
   destructive: "#dc3545"
@@ -93,7 +93,7 @@ The sidebar itself is `.background(.clear)` in both modes — chrome reads throu
 | **Chrome background** | `#F0E9E6` | `#242424` | `chromeBackgroundLight/Dark` |
 | **Canvas background** | `#FAF7F3` | `#2D2D2D` | `canvasBackgroundLight/Dark` |
 | **Text Primary**      | `#1a1a1a` | `#f0efed` | `textPrimary`                |
-| **Text Secondary**    | `#6b6b6b` | `#9a9a9a` | `textSecondary`              |
+| **Text Secondary**    | `#636363` | `#9a9a9a` | `textSecondary`              |
 | **Accent (waiting)**  | `#C97350` | `#C97350` | `waitingTerracotta`          |
 | **Border**            | `#e5e5e3` | `#2a2a2a` | `border`                     |
 | **Destructive**       | `#dc3545` | `#dc3545` | `destructive`                |

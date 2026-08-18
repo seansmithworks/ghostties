@@ -14,6 +14,8 @@ struct NeedsYouZoneView: View {
     /// hold an independent @ObservedObject on the singleton.
     @ObservedObject private var router = RowClickRouter.shared
 
+    @Environment(\.colorScheme) private var colorScheme
+
     /// Reserved minimum height when the zone is empty. Keeps the divider
     /// below from walking up the sidebar when the list clears out.
     private let emptyHeight: CGFloat = 30
@@ -65,7 +67,7 @@ struct NeedsYouZoneView: View {
 
             Text("\(taskStore.needsYou.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                 .fixedSize()
         }
         .padding(.horizontal, TaskRowMetrics.horizontalPadding)

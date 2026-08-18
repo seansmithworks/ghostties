@@ -259,7 +259,7 @@ struct OrphanTriageCardView: View {
         Text(text)
             .font(.system(size: 9.5, weight: .semibold))
             .tracking(0.6)
-            .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+            .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
     }
 
     // MARK: - Background

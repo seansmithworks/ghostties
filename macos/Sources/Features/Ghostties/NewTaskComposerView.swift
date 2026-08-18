@@ -126,7 +126,7 @@ struct NewTaskComposerView: View {
             Text("in")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.5)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                 .textCase(.uppercase)
                 .frame(width: 20, alignment: .leading)
 
@@ -194,7 +194,7 @@ struct NewTaskComposerView: View {
             Text("via")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.5)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                 .textCase(.uppercase)
                 .frame(width: 20, alignment: .leading)
 
@@ -218,7 +218,7 @@ struct NewTaskComposerView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(
                             store.selectedTemplateName == nil
-                                ? Color(nsColor: .tertiaryLabelColor)
+                                ? (colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                                 : Color.primary.opacity(0.85)
                         )
                     Image(systemName: "chevron.down")

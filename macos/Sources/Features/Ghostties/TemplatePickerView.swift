@@ -20,6 +20,7 @@ struct TemplatePickerView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var editingTemplate: AgentTemplate?
     @State private var showDeleteConfirmation = false
@@ -155,16 +156,16 @@ struct TemplatePickerView: View {
                     if let description = template.templateDescription {
                         Text(description)
                             .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                             .lineLimit(1)
                     } else if !isPreset, let command = template.command {
                         Text(command)
                             .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     } else if !isPreset {
                         Text("Default shell")
                             .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     }
                 }
                 Spacer()
