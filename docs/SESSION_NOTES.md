@@ -3140,3 +3140,38 @@ Broken: `construct` fired 6 times (session creation only) against 31 parent body
 ### Open
 
 Archive-expansion perf (eager render of ~37 rows), and **re-test every conclusion ever measured through a Sessions-tab row** — including the blue-ghost readings the Switchboard polarity plan rests on. Both in `BACKLOG.md`.
+
+---
+
+## August 15–17, 2026 — `/orchestrator-route` on ghostties
+
+### Headline
+
+Routed `ORCHESTRATOR.md` from 18,888 → 13,174 chars without dropping a fact. Boot set 123,758 → 118,497. Wikilinks 28 → 30, none lost. No ghostties code changed — this was state-file maintenance.
+
+### Commits
+
+- `4048bda` (in `~/.claude`, pushed to `seansmithworks/claude-config`) — the routing pass
+
+### What moved
+
+- Four closed lane blocks (beta.22, repo hygiene, web #114/#118, sidebar #121–123) → `ORCHESTRATOR-log.md`
+- Traps that already had owner files cut to one-line pointers rather than restated — most of the 5,714 chars saved came from this, not from deletion
+- PR #56's argument had been stated twice in full; now once, in In-Flight
+
+### Memory written
+
+- `feedback_brief-claims-and-acceptance-criteria.md` — a brief's PR/commit list is a snapshot, not a spec; `git checkout main` belongs in acceptance criteria
+- `feedback_re-measure-at-claim-time.md` — 5 of 11 research claims died under review because they were read at boot and asserted later
+
+### Correction found by routing
+
+The Decision Log still credited `.equatable()` with the sidebar-staleness fix while the `reference_` file it linked to recorded that as disproven (`LazyVStack` was the cause). Compression surfaced it because deduplicating forces reading both sides. This is now Gate 4 in the skill: where router and target disagree, the target wins.
+
+### Skill corrections upstreamed
+
+Eight findings went to the orchestrator builder thread; seven shipped as `b8326eb fix(orchestrator-route): field corrections from ghostties run` — explicit invocation is itself a trigger, Gate 5 baseline is conditional on a dirty tree, Gate 6 tolerates the `MEMORY.md` indexing gap, Gate 4 added. Still open: route has no precondition check that a `reference_`/`feedback_` destination tier exists.
+
+### Open
+
+`ORCHESTRATOR.md`'s PICKUP block is dated 2026-08-14 and does not reflect beta.23-era work owned by other threads.
