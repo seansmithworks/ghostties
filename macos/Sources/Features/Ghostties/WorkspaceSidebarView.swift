@@ -436,15 +436,16 @@ private struct SidebarSectionHeader: View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
             Image(systemName: iconName)
                 .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color(.tertiaryLabelColor))
                 .frame(width: WorkspaceLayout.sidebarIconColumnWidth, alignment: .center)
 
             Text(label.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
+                .foregroundStyle(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
 
             Spacer(minLength: 0)
         }
-        .foregroundStyle(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
         .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
         .padding(.trailing, 12)
         .padding(.vertical, 4)

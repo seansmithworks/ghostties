@@ -177,10 +177,13 @@ enum WorkspaceLayout {
 
     /// Secondary/muted text foreground (light mode). DESIGN.md `textSecondary`.
     /// A fixed value, not a system dynamic color — `NSColor.tertiaryLabelColor`
-    /// (25% opacity) fails WCAG 4.5:1 for low-emphasis UI text against both
-    /// chrome and canvas backgrounds; this hex clears it. See
-    /// `docs/audits/sidebar-contrast-audit.md`.
-    static let textSecondaryLight = Color(red: 0x6B / 255.0, green: 0x6B / 255.0, blue: 0x6B / 255.0)
+    /// (25% opacity) fails WCAG 4.5:1 for low-emphasis UI text against every
+    /// backdrop it renders on. `#6b6b6b` (DESIGN.md's original documented
+    /// value) still falls short at 4.44:1 on chrome and 4.08:1 on the
+    /// `activeRowLight` tint — the two backdrops most of this text actually
+    /// sits on. `#636363` clears 4.5:1 on chrome, the active-row tint, and
+    /// canvas. See `docs/audits/sidebar-contrast-audit.md`.
+    static let textSecondaryLight = Color(red: 0x63 / 255.0, green: 0x63 / 255.0, blue: 0x63 / 255.0)
 
     /// Secondary/muted text foreground (dark mode). See `textSecondaryLight`.
     static let textSecondaryDark = Color(red: 0x9A / 255.0, green: 0x9A / 255.0, blue: 0x9A / 255.0)

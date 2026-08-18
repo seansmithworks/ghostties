@@ -4,6 +4,23 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-18 — PR #128 sidebar contrast follow-ups (deferred, not dropped)
+
+`textSecondary` shipped in #128 (`tertiaryLabelColor` → fixed `#636363`/`#9a9a9a` hex for
+low-emphasis sidebar text). Two items surfaced during round-two review, deliberately out of scope
+for that PR — neither blocks merge.
+
+- [ ] **`Color.secondary` is now the worst text in the sidebar.** Independently verified at
+  3.85:1 against chrome — below the 4.5:1 tier #128 just fixed for `tertiaryLabelColor`. Visible
+  side-by-side at `ArchiveZoneView.swift:98-106` (the "Done" lane label reads lighter than the
+  count beside it) and `NeedsYouZoneView.swift:89-91`. #128 didn't cause this, but fixing the
+  tertiary tier made the secondary tier the new visible outlier. | design | new
+- [ ] **Fixed hex text tokens drop Increase Contrast support.** `NSColor.tertiaryLabelColor`
+  ships system high-contrast appearance variants; a literal `Color(red:green:blue:)` (the fix
+  #128 applied) does not respond to `NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast`.
+  Affects exactly the low-vision users #128 targets. Possible follow-up: branch `textSecondary`
+  on that accessibility flag and return a still-higher-contrast value when set. | design | new
+
 ## 2026-08-18 — PR #126 lastOutputAt follow-ups (deferred, not dropped)
 
 `lastOutputAt` (splitting Sessions-row/Archive recency from focus-driven project bucketing) shipped

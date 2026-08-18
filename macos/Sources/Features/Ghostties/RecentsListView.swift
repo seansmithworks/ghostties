@@ -560,7 +560,7 @@ private struct SessionSectionHeader: View {
                 // directly below it — `PixelChevronView` already pins its own
                 // internal content to a 16pt frame, so the outer frame here
                 // must match that, not shrink it.
-                PixelChevronView(color: WorkspaceLayout.sectionHeaderForeground(for: colorScheme), isExpanded: isEffectivelyExpanded)
+                PixelChevronView(isExpanded: isEffectivelyExpanded)
                     .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
 
                 Text("\(title.uppercased()) \(count)")
