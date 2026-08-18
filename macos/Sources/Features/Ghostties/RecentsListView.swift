@@ -372,10 +372,12 @@ struct RecentsListView: View {
     /// not active AND never started this launch — restored from disk,
     /// never started. Together with `activeSessions` and `inactiveSessions`
     /// this is an exact three-way partition — every session lands in
-    /// exactly one bucket. Sorted newest-first by `lastActiveAt` — the one
-    /// bucket that does NOT keep append order, per Sean's call that Archive
-    /// should read reverse-chronological. Sessions with a `nil`
-    /// `lastActiveAt` sort last, after every timestamped session.
+    /// exactly one bucket. Sorted newest-first by `displayTimestamp` (last
+    /// real output, falling back to `lastActiveAt` for sessions that predate
+    /// `lastOutputAt`) — the one bucket that does NOT keep append order, per
+    /// Sean's call that Archive should read reverse-chronological. Sessions
+    /// with a `nil` `displayTimestamp` sort last, after every timestamped
+    /// session.
     static func archiveSessions(
         from sessions: [AgentSession],
         indicatorStates: [UUID: SessionIndicatorState],
@@ -385,13 +387,13 @@ struct RecentsListView: View {
             !belongsInActive(indicatorState: indicatorStates[$0.id] ?? .inactive)
                 && !sessionIdsStartedThisLaunch.contains($0.id)
         })
-        // Sort newest-first by `lastActiveAt`, nil last. `Array.sort` is not
-        // guaranteed stable, so ties (and nil-vs-nil) are broken on the
+        // Sort newest-first by `displayTimestamp`, nil last. `Array.sort` is
+        // not guaranteed stable, so ties (and nil-vs-nil) are broken on the
         // original index to preserve incoming relative order.
         return archived
             .enumerated()
             .sorted { lhs, rhs in
-                switch (lhs.element.lastActiveAt, rhs.element.lastActiveAt) {
+                switch (lhs.element.displayTimestamp, rhs.element.displayTimestamp) {
                 case let (l?, r?):
                     if l != r { return l > r }
                 case (nil, .some):

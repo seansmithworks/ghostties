@@ -1048,9 +1048,12 @@ final class SessionCoordinator: ObservableObject {
                 // active-vs-idle indicator-state check internally.
                 if let projectId = WorkspaceStore.shared.sessions
                     .first(where: { $0.id == sessionId })?.projectId {
+                    // isOutput: true — this is the real output sink, the only
+                    // call site allowed to advance `lastOutputAt`.
                     WorkspaceStore.shared.recordActivity(
                         sessionId: sessionId,
-                        projectId: projectId
+                        projectId: projectId,
+                        isOutput: true
                     )
                 }
             }

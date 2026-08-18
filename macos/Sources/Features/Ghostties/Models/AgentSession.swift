@@ -27,6 +27,16 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// Nil means this session predates the timestamp system or has never been touched.
     var lastActiveAt: Date?
 
+    /// The last moment this session actually produced terminal output — written
+    /// ONLY by `SessionCoordinator.subscribeToOutput`'s sink, never by focus,
+    /// selection, or keyboard cycling. Unlike `lastActiveAt` (which also
+    /// advances on a plain "touch"), this is what the Sessions-row timestamp
+    /// and the Archive sort mean by "last active": last did something, not
+    /// last looked at. Nil means this session predates the field or has never
+    /// produced output this launch — see `displayTimestamp` for the read-side
+    /// fallback.
+    var lastOutputAt: Date?
+
     /// True once the user has manually renamed this session via the sidebar
     /// context menu. A pinned name is locked — incoming agent title updates
     /// (see `SessionTitleSanitizer` / `SessionCoordinator`) stop overwriting it
@@ -46,6 +56,7 @@ struct AgentSession: Identifiable, Codable, Hashable {
         projectId: UUID,
         sortOrder: Int? = nil,
         lastActiveAt: Date? = nil,
+        lastOutputAt: Date? = nil,
         isNamePinned: Bool = false,
         ghostCharacter: GhostCharacter? = nil
     ) {
@@ -55,12 +66,13 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = projectId
         self.sortOrder = sortOrder
         self.lastActiveAt = lastActiveAt
+        self.lastOutputAt = lastOutputAt
         self.isNamePinned = isNamePinned
         self.ghostCharacter = ghostCharacter
     }
 
     // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
-    // isNamePinned/ghostCharacter) load without error.
+    // lastOutputAt/isNamePinned/ghostCharacter) load without error.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -69,8 +81,22 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.projectId = try container.decode(UUID.self, forKey: .projectId)
         self.sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
         self.lastActiveAt = try container.decodeIfPresent(Date.self, forKey: .lastActiveAt)
+        // Absent on every workspace.json written before this field existed —
+        // `displayTimestamp` below falls back to `lastActiveAt` per-session so
+        // existing sessions keep their own distinct recency instead of all
+        // collapsing to the same "just migrated" timestamp.
+        self.lastOutputAt = try container.decodeIfPresent(Date.self, forKey: .lastOutputAt)
         self.isNamePinned = try container.decodeIfPresent(Bool.self, forKey: .isNamePinned) ?? false
         self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
+    }
+
+    /// The timestamp Sessions rows and the Archive sort should display and
+    /// sort by: "last did something" (real output), falling back to
+    /// "last looked at" only for sessions that predate `lastOutputAt` or have
+    /// never produced output this launch. Project bucketing does NOT use
+    /// this — it reads `lastActiveAt` directly (see `WorkspaceStore.recordActivity`).
+    var displayTimestamp: Date? {
+        lastOutputAt ?? lastActiveAt
     }
 
     /// Stable ghost for this session — the assigned `ghostCharacter` if present,

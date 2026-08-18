@@ -12,6 +12,7 @@ final class RecentsListViewTests: XCTestCase {
     private func session(
         name: String,
         lastActiveAt: Date? = nil,
+        lastOutputAt: Date? = nil,
         sortOrder: Int? = nil
     ) -> AgentSession {
         AgentSession(
@@ -19,7 +20,8 @@ final class RecentsListViewTests: XCTestCase {
             templateId: UUID(),
             projectId: UUID(),
             sortOrder: sortOrder,
-            lastActiveAt: lastActiveAt
+            lastActiveAt: lastActiveAt,
+            lastOutputAt: lastOutputAt
         )
     }
 
@@ -440,6 +442,68 @@ final class RecentsListViewTests: XCTestCase {
             archive.map(\.name),
             ["fiveMinAgo", "oneHourAgo", "noTimestamp"],
             "nil lastActiveAt must sort after every timestamped session"
+        )
+    }
+
+    /// Archive must sort by `lastOutputAt` (real output), not `lastActiveAt`
+    /// (which also advances on a plain focus/browse), when both are present.
+    /// `staleOutputFreshFocus` has a stale `lastOutputAt` but a very recent
+    /// `lastActiveAt` from being clicked in the sidebar a moment ago —
+    /// `freshOutput` must still sort first, because browsing must not reorder
+    /// Archive. This is the field-overloading fix from
+    /// `reference_lastactiveat-written-on-focus.md`.
+    func testArchiveOrdersByLastOutputAtNotLastActiveAt() {
+        let staleOutputFreshFocus = session(
+            name: "staleOutputFreshFocus",
+            lastActiveAt: Date(timeIntervalSinceNow: -5),
+            lastOutputAt: Date(timeIntervalSinceNow: -7200)
+        )
+        let freshOutput = session(
+            name: "freshOutput",
+            lastActiveAt: Date(timeIntervalSinceNow: -3600),
+            lastOutputAt: Date(timeIntervalSinceNow: -300)
+        )
+
+        let archive = RecentsListView.archiveSessions(
+            from: [staleOutputFreshFocus, freshOutput],
+            indicatorStates: [:],
+            sessionIdsStartedThisLaunch: []
+        )
+
+        XCTAssertEqual(
+            archive.map(\.name),
+            ["freshOutput", "staleOutputFreshFocus"],
+            "a recent focus/click must not out-rank real output recency in Archive"
+        )
+    }
+
+    /// Migration case: a session persisted before `lastOutputAt` existed has
+    /// `lastOutputAt == nil` but a real `lastActiveAt`. It must fall back to
+    /// `lastActiveAt` for ordering purposes rather than sorting as if it had
+    /// no timestamp at all (which would dump every pre-migration session at
+    /// the bottom, collapsed together).
+    func testArchiveFallsBackToLastActiveAtWhenLastOutputAtAbsent() {
+        let migratedRecent = session(
+            name: "migratedRecent",
+            lastActiveAt: Date(timeIntervalSinceNow: -300),
+            lastOutputAt: nil
+        )
+        let migratedOlder = session(
+            name: "migratedOlder",
+            lastActiveAt: Date(timeIntervalSinceNow: -3600),
+            lastOutputAt: nil
+        )
+
+        let archive = RecentsListView.archiveSessions(
+            from: [migratedOlder, migratedRecent],
+            indicatorStates: [:],
+            sessionIdsStartedThisLaunch: []
+        )
+
+        XCTAssertEqual(
+            archive.map(\.name),
+            ["migratedRecent", "migratedOlder"],
+            "pre-migration sessions must fall back to lastActiveAt, preserving their relative recency"
         )
     }
 

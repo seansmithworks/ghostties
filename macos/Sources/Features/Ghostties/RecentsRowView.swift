@@ -89,8 +89,10 @@ struct RecentsRowView: View, Equatable {
 
             Spacer(minLength: 4)
 
-            // Relative timestamp
-            if let ts = session.lastActiveAt {
+            // Relative timestamp — reads `displayTimestamp` (last real output,
+            // falling back to `lastActiveAt`), not `lastActiveAt` directly, so
+            // browsing/focus never advances what this row shows.
+            if let ts = session.displayTimestamp {
                 Text(Self.relativeLabel(ts))
                     .font(.system(size: 10))
                     .foregroundStyle(Color(.tertiaryLabelColor))
@@ -149,7 +151,7 @@ struct RecentsRowView: View, Equatable {
 
     private var accessibilityLabel: String {
         var parts = [session.name, "in \(projectName)"]
-        if let ts = session.lastActiveAt {
+        if let ts = session.displayTimestamp {
             parts.append(Self.relativeLabel(ts))
         }
         if isActive { parts.append("active") }
