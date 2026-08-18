@@ -15,7 +15,7 @@
     <div class="doc-meta">
       <span>Project: Ghostties</span>
       <span>2026-08-18</span>
-      <span class="badge badge--draft">Draft — 2 forks open</span>
+      <span class="badge badge--draft">Draft — 3 forks open</span>
     </div>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
@@ -26,127 +26,126 @@
         <strong>Fix the token drift first, then build one page that documents
         both systems side by side, and ship it as a local file — not a route on
         ghostties.org.</strong> The reference site's only job is to be true to
-        what's in code today. Building it before the drift is fixed just
-        re-publishes the same lie <code>DESIGN.md</code> already tells.
+        what's in code today.
       </p>
     </blockquote>
 
     <ul data-anchor-id="verdict-list">
-      <li>
-        <strong>Token drift gets fixed in <code>DESIGN.md</code> itself</strong> —
-        three edits, no code changes, done before the reference site is written.
-      </li>
-      <li>
-        <strong>One site, two clearly separated systems</strong> — Mac app and
-        website each get their own section, because they don't share tokens and
-        pretending otherwise is how the next drift starts.
-      </li>
-      <li>
-        <strong>Lives at <code>docs/design-system/index.html</code>, opened
-        locally, never deployed.</strong> It's an internal reference, not
-        marketing — it documents private SwiftUI hex values and dynamic-color
-        approximations that have no business on the public site, and
-        <code>web/</code> auto-deploys to production on merge.
-      </li>
-      <li>
-        <strong>Marketing assets are a checklist, not a build</strong> — app
-        icon plus five screenshots, every capture step done by Sean at the desk
-        (screen-capture permission is gated per-terminal-session and can't be
-        scripted around).
-      </li>
+      <li><strong>Token drift fixed in <code>DESIGN.md</code> first</strong> —
+        docs-only edits, no code changes.</li>
+      <li><strong>One site, two clearly separated systems</strong> — app and
+        website don't share tokens; the page doesn't pretend they do.</li>
+      <li><strong>Lives at <code>docs/design-system/index.html</code>, opened
+        locally, never deployed</strong> — <code>web/</code> auto-deploys to
+        production on merge, and this page documents internal detail that
+        isn't public-facing.</li>
+      <li><strong>Marketing assets are a checklist</strong> — every capture
+        step done by Sean at the desk (screen-capture permission can't be
+        scripted around).</li>
     </ul>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
-    <h2 data-anchor-id="drift">Token drift — fix before documenting</h2>
-
-    <p data-anchor-id="drift-intro">
-      Three edits to <code>DESIGN.md</code>, all documentation-only — nothing in
-      <code>WorkspaceLayout.swift</code> changes. The audit
-      (<code>docs/audits/sidebar-contrast-audit.md</code>) already did the
-      comparison work; this just applies it.
-    </p>
+    <h2 data-anchor-id="drift">Token drift — three fixes, one correction</h2>
 
     <table data-anchor-id="drift-table">
       <thead>
-        <tr>
-          <th>Problem</th>
-          <th>Fix</th>
-        </tr>
+        <tr><th>Problem</th><th>Fix</th></tr>
       </thead>
       <tbody>
         <tr>
-          <td>
-            <code>textPrimary</code> / <code>textSecondary</code> are fixed hex
-            values in <code>DESIGN.md</code> §2, but the code uses
-            <code>Color.primary</code> / <code>.tertiaryLabelColor</code> —
-            system dynamic colors with no static RGBA. They're not the same
-            mechanism, and the fixed hex is what's currently wrong (the
-            contrast audit's whole finding).
-          </td>
-          <td>
-            Relabel the row <strong>"System dynamic — approximate, not
-            canonical."</strong> Keep the hex as a rendering reference (useful
-            for mockups) but stop calling it the implementation. The real
-            token is the API call, not a hex code.
-          </td>
+          <td><code>textPrimary</code>/<code>textSecondary</code> (both
+            modes) are fixed hex in <code>DESIGN.md</code> §2. Code uses
+            <code>Color.primary</code>/<code>.tertiaryLabelColor</code> —
+            dynamic, no static RGBA. Zero hits for either string in
+            <code>macos/Sources</code>.</td>
+          <td>Relabel the row <strong>"System dynamic — approximate, not
+            canonical."</strong> Keep the hex for mockup reference; stop
+            calling it the implementation.</td>
         </tr>
         <tr>
-          <td>
-            <code>DESIGN.md</code>'s "Activity indicator states" table lists
-            only <code>Waiting: waitingTerracotta</code>. The palette that
-            actually ships — blue/gold/orange status dots plus system green —
-            replaced terracotta in status dots back in June and was never
-            written back.
-          </td>
-          <td>
-            Replace the table with the four real states, values pulled
-            straight from <code>WorkspaceLayout.swift</code>: green=working
-            (system), blue=your-turn <code>#5B8DEF</code>, gold=needs-decision
-            <code>#FFC400</code>, orange=long-running <code>#F97316</code>.
-            Terracotta stays documented separately as "brand accent — chrome
-            elements, not status," matching where it still ships.
-          </td>
+          <td><code>border</code>, <code>destructive</code>,
+            <code>success</code> — zero hits in
+            <code>WorkspaceLayout.swift</code> or elsewhere in the fork.
+            (Coordinator-verified: code matches for these strings are all
+            false positives — SwiftUI's <code>.border()</code>,
+            <code>role: .destructive</code>, <code>Result.success</code>.)</td>
+          <td>Delete the three rows. Zero call sites isn't a design system,
+            it's a wish list.</td>
         </tr>
         <tr>
-          <td>
-            <code>border</code>, <code>destructive</code>, <code>success</code>
-            are documented in <code>DESIGN.md</code> §2 but don't exist
-            anywhere in <code>WorkspaceLayout.swift</code> or the fork's Swift
-            files.
-          </td>
-          <td>
-            Delete the three rows. Aspirational tokens with zero call sites
-            aren't a design system, they're a wish list — and the reference
-            site should never show a swatch nobody can find on screen.
-          </td>
+          <td>Status-dot palette (blue/gold/orange, plus system green) ships
+            in <code>WorkspaceLayout.swift</code> and isn't in
+            <code>DESIGN.md</code> at all.</td>
+          <td>Add the "Activity indicator states" table: green=working
+            (system), blue=your-turn <code>#5B8DEF</code>,
+            gold=needs-decision <code>#FFC400</code>,
+            orange=long-running <code>#F97316</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p data-anchor-id="terracotta-correction">
+      <strong>Correction from the last pass:</strong> I originally proposed
+      folding terracotta into that same "stale, replace it" fix. Wrong —
+      terracotta is live, in two places, and the real drift is sharper than
+      staleness.
+    </p>
+
+    <table data-anchor-id="terracotta-table">
+      <tbody>
+        <tr>
+          <td><strong>Code</strong></td>
+          <td><code>waitingTerracotta = #C97350</code>
+            (<code>WorkspaceLayout.swift:128</code>), documented in-code as
+            pin notices, callout cards, task-row highlights, browser-toggle
+            tint — <strong>and an explicit comment that it is NOT the
+            session-status waiting color.</strong> Second hit:
+            <code>AgentTemplate.swift:305</code>, launch-banner background
+            bar.</td>
+        </tr>
+        <tr>
+          <td><strong><code>DESIGN.md:102</code></strong></td>
+          <td>"Terracotta is reserved exclusively for the
+            <code>waiting</code> activity indicator state." The opposite of
+            what the code says and does.</td>
+        </tr>
+        <tr>
+          <td><strong>History</strong>
+            (<code>feedback_terracotta-not-brand-color.md</code>)</td>
+          <td>2026-06-23: Sean pulled terracotta out of the
+            <em>status-dot</em> palette specifically — one accent serving
+            both brand and status semaphore was muddy, and terracotta reads
+            as a Claude color. It stayed for brand-accent chrome. Not
+            removed wholesale.</td>
+        </tr>
+        <tr>
+          <td><strong>Fix</strong></td>
+          <td>Rewrite the <code>DESIGN.md:102</code> rule to describe what
+            ships: terracotta is brand-accent chrome, explicitly not a
+            status color. Flag <code>waitingTerracotta</code> in
+            <code>WorkspaceLayout.swift</code> as a misnamed token for
+            whoever renames it next — it hasn't meant "waiting" since June.</td>
         </tr>
       </tbody>
     </table>
 
     <p data-anchor-id="drift-not-in-scope">
-      Not in scope here: the contrast failures themselves (status dots at
-      1.3–2.7:1 in light mode). Sean has deliberately deferred that fix because
-      it touches his chosen palette — the reference site documents the dots
-      <em>as they ship today</em>, contrast failure and all, with a callout
-      linking the audit. Documenting a wrong value is drift; documenting a
-      known-imperfect value with a link to the fix-in-progress is honest.
+      Not in scope: the status-dot contrast failures themselves (1.3–2.7:1 in
+      light mode) — deliberately deferred by Sean, in flight on another
+      branch. The reference site documents them as-shipped with a callout
+      linking the audit.
     </p>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
-    <h2 data-anchor-id="two-systems">Two systems, not one</h2>
+    <h2 data-anchor-id="two-systems">Two systems, one page, no shared tokens</h2>
 
     <p data-anchor-id="two-systems-body">
-      The app and the website are separate products with separate
-      <code>DESIGN.md</code> files, separate palettes (warm chrome/canvas vs.
-      near-black <code>#1a1a2e</code>), and separate type stacks (SF Pro/SF Mono
-      vs. system sans/mono). A reference page that merges them into one token
-      list would either force a fake reconciliation or silently pick one and
-      call it canonical. Neither is true. The page gets two top-level sections —
-      <strong>App</strong> and <strong>Site</strong> — each sourced from its own
-      <code>DESIGN.md</code>, with no shared token table between them. If a
-      value is ever meant to match across both (it isn't today, beyond the
-      terracotta hex itself), that's a design decision to make explicitly, not
-      an artifact of building one page.
+      App and website have separate <code>DESIGN.md</code> files, separate
+      palettes (warm chrome/canvas vs. near-black <code>#1a1a2e</code>), and
+      separate type stacks. The page gets two top-level sections —
+      <strong>App</strong> and <strong>Site</strong> — each sourced from its
+      own <code>DESIGN.md</code>. No merged token table; nothing today claims
+      the two should match.
     </p>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
@@ -154,32 +153,19 @@
 
     <table data-anchor-id="location-table">
       <tbody>
-        <tr>
-          <td><strong>Path</strong></td>
-          <td><code>docs/design-system/index.html</code> (+ one CSS file
-            alongside it, not shared with <code>web/style.css</code>)</td>
-        </tr>
-        <tr>
-          <td><strong>Served how</strong></td>
-          <td><code>open docs/design-system/index.html</code>, or
-            <code>python3 -m http.server</code> from that folder — never
-            deployed, never linked from <code>ghostties.org</code> nav</td>
-        </tr>
-        <tr>
-          <td><strong>Why not <code>web/</code></strong></td>
-          <td>Merging to <code>main</code> is a production deploy of
-            <code>ghostties.org</code>. A page full of internal SwiftUI hex
-            approximations and "known contrast failure" callouts is not
-            something to accidentally ship to visitors on the next unrelated
-            web PR.</td>
-        </tr>
-        <tr>
-          <td><strong>Updated how</strong></td>
-          <td>By hand, same discipline as any doc — when
-            <code>WorkspaceLayout.swift</code> or <code>web/style.css</code>
-            changes a value that's on the page, update the page in the same
-            PR. No generator, no build step; it's one static file.</td>
-        </tr>
+        <tr><td><strong>Path</strong></td>
+          <td><code>docs/design-system/index.html</code> + one local CSS
+            file (not shared with <code>web/style.css</code>)</td></tr>
+        <tr><td><strong>Served how</strong></td>
+          <td><code>open</code> the file, or a local
+            <code>http.server</code> — never deployed, never linked from
+            <code>ghostties.org</code> nav</td></tr>
+        <tr><td><strong>Why not <code>web/</code></strong></td>
+          <td>Merging to <code>main</code> is a production deploy; this page
+            has internal hex approximations and a known-failure callout</td></tr>
+        <tr><td><strong>Updated how</strong></td>
+          <td>By hand, same PR as the token change it reflects — no
+            generator, one static file</td></tr>
       </tbody>
     </table>
 
@@ -188,111 +174,66 @@
 
     <table data-anchor-id="content-table">
       <thead>
-        <tr>
-          <th>Section</th>
-          <th>Shows</th>
-          <th>Source of truth</th>
-        </tr>
+        <tr><th>Section</th><th>Shows</th><th>Source of truth</th></tr>
       </thead>
       <tbody>
-        <tr>
-          <td><strong>Colors / tokens</strong> (both systems)</td>
-          <td>Swatch grid, hex, and the WorkspaceLayout constant or CSS custom
-            property name next to each — not just the color</td>
+        <tr><td><strong>Colors / tokens</strong> (both systems)</td>
+          <td>Swatch grid with hex + the Swift constant or CSS custom
+            property name beside each</td>
           <td><code>WorkspaceLayout.swift</code>; <code>web/style.css</code>
-            <code>:root</code></td>
-        </tr>
-        <tr>
-          <td><strong>Light / dark</strong></td>
-          <td>A toggle on the app section only (the site is single-theme).
-            Every swatch and every mock component re-renders under the toggle
-            — no separate light and dark pages to fall out of sync</td>
-          <td>Chrome/canvas light+dark pairs already in <code>DESIGN.md</code></td>
-        </tr>
-        <tr>
-          <td><strong>Type ramp</strong></td>
-          <td>App: SF Pro Text 11pt / SF Mono, the two-weight rule, stated as
-            a rule not a range. Site: the seven-step <code>--size-*</code>
-            scale rendered at actual size</td>
-          <td><code>DESIGN.md</code> §3; <code>web/DESIGN.md</code> §4</td>
-        </tr>
-        <tr>
-          <td><strong>Menus</strong></td>
-          <td>Static screenshot of the sidebar context menu and the template
-            picker popover, light + dark — not a rebuilt CSS menu. See the
-            capture checklist below</td>
-          <td>Live app, captured by Sean</td>
-        </tr>
-        <tr>
-          <td><strong>Lists</strong></td>
-          <td>Session row anatomy (title/subtitle/timestamp/dot) with the
-            spacing and token labeled on the screenshot itself — annotated
-            once, not re-described in prose</td>
-          <td>Live app, captured by Sean; tokens from <code>WorkspaceLayout.swift</code></td>
-        </tr>
-        <tr>
-          <td><strong>Ghost character sequences</strong></td>
-          <td>All 24 characters as static pixel-grid renders in a wall, one
-            per cell, no animation for v1 (see Fork 2 below)</td>
-          <td><code>GhostCharacter.swift</code> path data, re-rendered as
-            inline SVG on the page — this is the one place the page
-            regenerates art rather than just quoting a hex value</td>
-        </tr>
+            <code>:root</code></td></tr>
+        <tr><td><strong>Light / dark</strong></td>
+          <td>Toggle on the app section only (site is single-theme);
+            every swatch and mock re-renders under it</td>
+          <td><code>DESIGN.md</code> chrome/canvas pairs</td></tr>
+        <tr><td><strong>Type ramp</strong></td>
+          <td>App: SF Pro Text 11pt / SF Mono, two-weight rule. Site:
+            seven-step <code>--size-*</code> scale at real size</td>
+          <td><code>DESIGN.md</code> §3; <code>web/DESIGN.md</code> §4</td></tr>
+        <tr><td><strong>Menus</strong></td>
+          <td>Static screenshot, sidebar context menu + template picker,
+            light + dark — not a rebuilt CSS menu</td>
+          <td>Live app, captured by Sean</td></tr>
+        <tr><td><strong>Lists</strong></td>
+          <td>Session row anatomy, spacing/token labeled on the screenshot
+            itself</td>
+          <td>Live app; <code>WorkspaceLayout.swift</code></td></tr>
+        <tr><td><strong>Ghost sequences</strong></td>
+          <td>All 24 characters as static pixel-grid SVG, one per cell, no
+            animation for v1 (Fork 2)</td>
+          <td><code>GhostCharacter.swift</code> path data, re-rendered
+            inline</td></tr>
       </tbody>
     </table>
 
     <p data-anchor-id="content-note">
-      Everything except the ghost wall and the two screenshots is a direct
-      transcription of a token file — no new visual design work, no
-      re-implementing SwiftUI components in CSS. That's deliberate: a second,
-      hand-maintained implementation of the app's components is exactly the
-      kind of thing that drifts.
+      Everything but the ghost wall and the two screenshots is a direct
+      transcription of a token file — no re-implementing SwiftUI components
+      in CSS. A second hand-maintained implementation is exactly what drifts.
     </p>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
     <h2 data-anchor-id="marketing">Marketing asset set</h2>
 
     <table data-anchor-id="marketing-table">
-      <thead>
-        <tr>
-          <th>Asset</th>
-          <th>Spec</th>
-          <th>Used for</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Asset</th><th>Spec</th><th>Used for</th></tr></thead>
       <tbody>
-        <tr>
-          <td><strong>App icon</strong></td>
-          <td>Full-bleed 1024×1024 PNG, square, no rounded corners, no drop
-            shadow (macOS applies its own squircle + bezel — see
-            <code>reference-macos-fullbleed-icon-requirement.md</code>)</td>
-          <td>Cask/npx install pages, GitHub README, Sparkle appcast icon</td>
-        </tr>
-        <tr>
-          <td><strong>Hero screenshot</strong></td>
-          <td>Full window, 3–5 sessions running across 2 projects, dark mode
-            (matches the site's near-black palette so it doesn't clash on
-            <code>ghostties.org</code>)</td>
-          <td>Homepage hero, already the site's stated vision — "multiple
-            Claude agents in parallel in one organized window"</td>
-        </tr>
-        <tr>
-          <td><strong>Sidebar close-up</strong></td>
-          <td>Cropped to the sidebar column only, light <em>and</em> dark,
-            status dots visible</td>
-          <td>Reference site's Lists section; secondary marketing still</td>
-        </tr>
-        <tr>
-          <td><strong>Overlay mode</strong></td>
-          <td>Sidebar mid-slide-in over a terminal, one frame</td>
-          <td>Feature callout — differentiates from a static split-pane
-            terminal</td>
-        </tr>
-        <tr>
-          <td><strong>Template picker</strong></td>
-          <td>Popover open, 3+ templates visible, light mode</td>
-          <td>Reference site's Menus section</td>
-        </tr>
+        <tr><td><strong>App icon</strong></td>
+          <td>Full-bleed 1024×1024 PNG, square, no rounded corners, no
+            shadow (macOS applies its own squircle + bezel)</td>
+          <td>Cask/npx pages, README, appcast icon</td></tr>
+        <tr><td><strong>Hero screenshot</strong></td>
+          <td>Full window, 3–5 sessions, 2 projects, dark mode</td>
+          <td>Homepage hero — "multiple agents in parallel in one window"</td></tr>
+        <tr><td><strong>Sidebar close-up</strong></td>
+          <td>Cropped to sidebar, light and dark, status dots visible</td>
+          <td>Reference site's Lists section; secondary marketing</td></tr>
+        <tr><td><strong>Overlay mode</strong></td>
+          <td>Mid-slide-in over a terminal, one frame</td>
+          <td>Feature callout vs. static split-pane</td></tr>
+        <tr><td><strong>Template picker</strong></td>
+          <td>Popover open, 3+ templates, light mode</td>
+          <td>Reference site's Menus section</td></tr>
       </tbody>
     </table>
 
@@ -300,113 +241,93 @@
     <h2 data-anchor-id="capture">At-the-desk capture checklist</h2>
 
     <p data-anchor-id="capture-intro">
-      Every step below is Sean, at the machine, by hand. Screen-capture
-      permission is granted to the <em>terminal</em>, not the app being
-      photographed, and a visibly-on toggle can still deny silently — the fix
-      requires a relaunch that would kill this session. No agent can safely
-      drive this.
+      Every step is Sean, at the machine. Screen-capture permission is
+      granted to the terminal, not the app, and can deny silently even when
+      visibly on — the fix needs a relaunch that would kill this session.
     </p>
 
     <ol data-anchor-id="capture-steps">
-      <li>Set up the scene by hand — the sessions, projects, and mode
-        (light/dark, pinned/overlay) each shot calls for.</li>
-      <li>Run <code>screencapture -D 2</code> from a real Terminal window,
-        not inside the automated session — the interactive delay lets you
-        click into the target window first.</li>
-      <li>Save straight to <code>images/marketing/</code> with a name matching
-        the row in the table above (e.g. <code>hero-dark.png</code>,
-        <code>sidebar-light.png</code>).</li>
-      <li>For the app icon: export at 1024×1024 from the existing icon
-        source in <code>images/</code>; no new capture needed.</li>
-      <li>Hand the files to whichever agent is doing the reference-site build
-        or the web PR — that part <em>can</em> be delegated once the PNGs
-        exist.</li>
+      <li>Set the scene by hand: sessions, projects, mode, per shot.</li>
+      <li><code>screencapture -D 2</code> from a real Terminal window — the
+        delay lets you click the target window first.</li>
+      <li>Save to <code>images/marketing/</code>, named to match the asset
+        table (e.g. <code>hero-dark.png</code>).</li>
+      <li>App icon: export 1024×1024 from the existing source in
+        <code>images/</code> — no new capture.</li>
+      <li>Hand the PNGs off; the site/web build from there can be delegated.</li>
     </ol>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
     <h2 data-anchor-id="phasing">Phasing</h2>
 
     <table data-anchor-id="phasing-table">
-      <thead>
-        <tr>
-          <th>Phase</th>
-          <th>Ships</th>
-          <th>Depends on</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Phase</th><th>Ships</th><th>Depends on</th></tr></thead>
       <tbody>
-        <tr>
-          <td><strong>1</strong></td>
-          <td>Token drift fix in <code>DESIGN.md</code> (three edits above)</td>
-          <td>Nothing — do this regardless of whether the site ever gets built</td>
-        </tr>
-        <tr>
-          <td><strong>2</strong></td>
-          <td>Reference site skeleton: colors, type ramp, light/dark toggle —
-            pure data transcription, zero capture dependency</td>
-          <td>Phase 1</td>
-        </tr>
-        <tr>
-          <td><strong>3</strong></td>
-          <td>Ghost character wall (static SVG regeneration)</td>
-          <td>Phase 2 (same page)</td>
-        </tr>
-        <tr>
-          <td><strong>4</strong></td>
-          <td>Menus + Lists sections, plus the marketing asset set — both
-            gated on the same five screenshots</td>
-          <td>Sean's capture session (checklist above)</td>
-        </tr>
+        <tr><td><strong>1</strong></td>
+          <td>Token drift fix in <code>DESIGN.md</code></td>
+          <td>Nothing</td></tr>
+        <tr><td><strong>2</strong></td>
+          <td>Site skeleton: colors, type ramp, light/dark toggle</td>
+          <td>Phase 1</td></tr>
+        <tr><td><strong>3</strong></td>
+          <td>Ghost character wall (static SVG)</td>
+          <td>Phase 2</td></tr>
+        <tr><td><strong>4</strong></td>
+          <td>Menus + Lists sections, plus the marketing asset set</td>
+          <td>Sean's capture session</td></tr>
       </tbody>
     </table>
 
     <p data-anchor-id="phasing-note">
-      Phases 1–3 need nothing from Sean but review. Phase 4 is the only phase
-      blocked on desk time, and it's a single 20-minute capture session that
-      unblocks both the reference site's last two sections and every marketing
-      asset at once — do it once, use the files twice.
+      Phases 1–3 need nothing from Sean but review. Phase 4 is one ~20-minute
+      capture session that unblocks the site's last two sections and every
+      marketing asset at once.
     </p>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
-    <h2 data-anchor-id="decisions">Yours to decide — two forks, both with a strawman</h2>
+    <h2 data-anchor-id="decisions">Yours to decide — three forks</h2>
 
     <ol data-anchor-id="decision-list">
       <li>
-        <strong>Does the reference site ever go public?</strong>
-        <br /><strong>Strawman: no, stays local-only indefinitely.</strong> It
-        documents private implementation detail — dynamic-color
-        approximations, a known contrast failure, internal SwiftUI token
-        names — that reads as unfinished or overly technical to an outside
-        visitor. A public design-system page is a different, smaller document
-        (palette + type only, no code-level detail) and a separate decision
-        later if there's ever a reason to court that audience.
-        <br /><em>Alternative:</em> publish a curated public subset on
-        <code>ghostties.org</code> as a brand/press page. More work, and
-        nothing in the current site plan calls for it — defer until there's a
-        concrete reason (press kit request, etc.).
+        <strong>Is terracotta still the Ghostties brand color at all?</strong>
+        This is <strong>Sean's open call, not mine</strong> —
+        <code>feedback_terracotta-not-brand-color.md</code> records him
+        mulling it on 2026-06-23 and explicitly not resolving it. One prior
+        decision already narrows it: terracotta is <em>out</em> of the
+        status-dot semaphore, permanently. What's undecided is whether it
+        stays the general brand accent (pins, callouts, launch banner) or
+        gets replaced there too.
+        <br /><em>If a strawman is useful:</em> keep it as brand-accent
+        chrome for now — nothing else in the palette currently fills that
+        role, and swapping it is a bigger design pass than this plan should
+        trigger. But treat this as flagged, not decided.
       </li>
       <li>
-        <strong>Do the ghost sequences animate on the page?</strong>
+        <strong>Does the reference site ever go public?</strong>
+        <br /><strong>Strawman: no, stays local-only.</strong> It documents
+        internal detail — dynamic-color approximations, a known contrast
+        failure, Swift token names — that reads as unfinished to an outside
+        visitor.
+        <br /><em>Alternative:</em> a curated public subset on
+        <code>ghostties.org</code> later, if there's ever a concrete reason
+        (press kit, etc.).
+      </li>
+      <li>
+        <strong>Do the ghost sequences animate?</strong>
         <br /><strong>Strawman: static pixel-grid renders only, v1.</strong>
-        Motion capture is more desk time for Sean and the mascot's identity is
-        already fully legible frozen — 24 distinct pixel-art characters.
-        Animation adds production cost without adding information the page
-        needs to convey.
-        <br /><em>Alternative:</em> screen-record the idle/walk animation per
-        character and embed short loops. Nicer, but it's five more capture
-        sessions' worth of work for a reference page whose job is "what are
-        the 24 characters," not "how do they move." Revisit if the site ever
-        goes toward Fork 1's public-page alternative.
+        Motion capture is more desk time, and 24 distinct characters are
+        already legible frozen.
+        <br /><em>Alternative:</em> screen-record idle/walk loops per
+        character — nicer, five more capture sessions for a page whose job
+        is "what are the 24 characters," not "how do they move."
       </li>
     </ol>
 
     <blockquote class="callout" data-anchor-id="closing">
       <p>
         <strong>Not a decision, just so it isn't re-litigated:</strong> the
-        reference site is not a build target for the app or the site — it
-        never gets imported, linked, or wired into either codebase. It's a
-        document that happens to be HTML because tables and swatches read
-        better that way than in Markdown.
+        reference site is never imported, linked, or wired into either
+        codebase. It's a document that happens to be HTML.
       </p>
     </blockquote>
   </body>
