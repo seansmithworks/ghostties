@@ -4,6 +4,35 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-18 — orchestrator session (Safari ship, #126 review, two plans)
+
+**Carried — immediate next action:**
+
+- [ ] **#126 WIP is UNVERIFIED — finish the verification** (carried). Branch `fix/session-lastoutputat-timestamp` @ `3fb27cbbf`, worktree `.claude/worktrees/agent-a58533f0e068a85b7`. Both review rounds' fixes are applied but the agent was stopped mid-verification. Two things never ran: (a) confirm the pinned test in `SessionCoordinatorOutputActivityTests.swift` actually FAILS when the sink write is removed — it is now at `SessionCoordinator.swift:1115`, moved from `:1056`; (b) the unfiltered suite. Last known good 691/0/1 before these edits. | app | carried
+
+**Approved by Sean 2026-08-18, not started:**
+
+- [ ] **Contrast fix — TEXT ONLY.** Sean's call: wire `DESIGN.md`'s existing `textSecondary` (`#6B6B6B` light / `#8E8E8E` dark) into code, replacing `tertiaryLabelColor` (25% opacity, 20 files / 44 occurrences). **Do not blanket-replace** — only text that must clear 4.5:1; `PixelChevronView` and other decorative uses stay. Two review rounds required (UI). Evidence: `docs/audits/sidebar-contrast-audit.md`. | design | new
+- [ ] **Wire `HOMEBREW_TAP_TOKEN` PAT.** Sean's call over manual bumps. Set the **secret before the variable** (`HOMEBREW_TAP_TOKEN` then `HOMEBREW_TAP_REPO`) or the next release goes red at its final job. Needs Sean to generate a fine-grained PAT — cannot be done from a session. | build | carried
+- [ ] **Todo accordion — plan the pipeline AND build it.** Sean's call (rejected the tasks-first shortcut). Order: (0) lift the `launchBanner` guard at `SessionCoordinator.swift:225` so launcher scripts always get written — coverage is currently **zero**, `~/.ghostties/cache/launchers/` is empty; (1) port the `ppid` walk + `KERN_PROCARGS2` ancestor lookup from `~/Code/Agent-Status-loader-explore/Sources/AgentStatusCore` — it is NOT in this repo; (2) `SessionTodoStore` reusing `TaskFileWatcher` (genuinely free, it is general); (3) accordion UI copying `ProjectDisclosureRow`'s pattern. Row sketch and data facts: `reference_claude-todo-data-source.md`. Affordance must be **absent, not disabled**, when empty — only 5 of 336 todo files are non-empty. Sequencing: touches `RecentsRowView`/`RecentsListView`, so it lands after #126. | app | new
+
+**Owed — my miss:**
+
+- [ ] **Design-system site plan was never written.** The brief was split when the Opus pool 529'd repeatedly and only the measurement half shipped (the contrast audit). The plan for the reference site (light/dark, colors, type ramp, menus, lists, ghost sequences) and the marketing asset set (app icon, screenshots) does not exist. Note asset capture is blocked by the Screen Recording TCC problem, so plan it as an at-the-desk step. | design | new
+
+**Needs Sean:**
+
+- [ ] **Review `docs/plans/session-creation-unified.html`** (36KB, on `main`). Offer stands to open it on `:4849` for inline comments. Two design forks have strawmen rather than questions: scrim behind the centered composer (rec: yes, 0.25) and whether Cmd+T opens the panel or stays instant (rec: panel, `Cmd+Shift+T` becomes instant). | design | new
+
+**Latent defects found while mapping — not fixed, surgical rule:**
+
+- [ ] **Project matching is by NAME, not path** (`SessionCoordinator.swift:485`) — miss and it registers a brand-new project. Combined with force-pin on every add (`WorkspaceStore.swift:638,649`, nothing ever un-pins) this is why the project list reached 28. Task-row clicks are a creation path too, so it grows unattended. | app | new
+- [ ] **Invalid sort predicate** at `RecentsListView.swift:156` — `sorted { a, _ in a.id == defaultId }` ignores its second operand, so it is not a strict weak ordering. Swift's sort has undefined behavior with an invalid comparator. | app | new
+- [ ] **Project-scoped templates leak into every project** — `TemplatePickerView.swift:32-43` ignores scoping, `RecentsListView.swift:153` respects it. Two filters, two answers. | app | new
+- [ ] **Status dots fail 3:1 in LIGHT mode only** (gold 1.33, green 1.85, orange 2.34, blue 2.69; dark passes at 4.81–9.72). Deferred by Sean's text-only call — fixing means changing the palette he picked. Proposed values in the audit. | design | parked
+- [ ] **Token drift, both directions.** `DESIGN.md` defines `textPrimary`/`textSecondary` that exist **nowhere** in code; `WorkspaceLayout.swift`'s status-dot palette is absent from `DESIGN.md`, which still documents the dropped terracotta scheme. | design | new
+- [ ] **Six named-graph skills are unversioned** — `batch-ship`, `apply-wave`, `content-cascade`, `debug-trace`, `skill-forge`, `case-forge` exist only in `~/.claude/skills/`, not in `~/Code/agent-skills`. No git history, no backup. | ops | new
+
 ## 2026-08-17 — beta.23 shipped, verified end-to-end
 
 Tag `v0.1.0-beta.23` → `7987f6b19`. Release green, published, all four assets. **First release whose
