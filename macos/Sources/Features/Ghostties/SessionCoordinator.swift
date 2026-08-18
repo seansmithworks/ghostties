@@ -1077,9 +1077,9 @@ final class SessionCoordinator: ObservableObject {
     /// two session-creation call sites in `createSession`/
     /// `createBrowserSession`, which also pass `isOutput: true` but for a
     /// different reason — clearing a stale persisted value at (re)launch).
-    /// `WorkspaceStoreLastOutputAtTests` asserts one send here advances
-    /// `lastOutputAt` — deleting the `isOutput: true` argument below must
-    /// fail that test.
+    /// `SessionCoordinatorOutputActivityTests` asserts one send here
+    /// advances `lastOutputAt` — deleting the `isOutput: true` argument
+    /// below must fail that test.
     func subscribeToOutput<P: Publisher>(
         sessionId: UUID,
         outputPublisher: P,
@@ -1111,7 +1111,8 @@ final class SessionCoordinator: ObservableObject {
                     .first(where: { $0.id == sessionId })?.projectId {
                     store.recordActivity(
                         sessionId: sessionId,
-                        projectId: projectId
+                        projectId: projectId,
+                        isOutput: true
                     )
                 }
             }
