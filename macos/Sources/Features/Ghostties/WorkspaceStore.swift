@@ -512,12 +512,16 @@ final class WorkspaceStore: ObservableObject {
     /// Persists through the existing 100ms debounced `persist()`. Bursty output
     /// coalesces into a single disk write.
     ///
-    /// - Parameter isOutput: Pass `true` ONLY from the real output sink
-    ///   (`SessionCoordinator.subscribeToOutput`'s `lastOutputSubject` sink).
-    ///   When true, also advances `session.lastOutputAt` — the timestamp
-    ///   Sessions rows and the Archive sort read. Focus, selection, and
-    ///   session-creation call sites must leave this `false` so browsing
-    ///   never advances it. See `reference_lastactiveat-written-on-focus.md`.
+    /// - Parameter isOutput: When true, also advances `session.lastOutputAt`
+    ///   — the timestamp Sessions rows and the Archive sort read. Two kinds
+    ///   of call site pass `true`: the real output sink
+    ///   (`SessionCoordinator.subscribeToOutput`, the only place that fires
+    ///   on an actual output-activity signal) and the two session-creation
+    ///   sites (`createSession`/`createBrowserSession`), which pass `true` to
+    ///   clear a stale persisted `lastOutputAt` on a fresh or relaunched
+    ///   session rather than to report new output. Focus and selection call
+    ///   sites (`focusSession`) must leave this `false` so browsing never
+    ///   advances it. See `reference_lastactiveat-written-on-focus.md`.
     func recordActivity(
         sessionId: UUID,
         projectId: UUID,

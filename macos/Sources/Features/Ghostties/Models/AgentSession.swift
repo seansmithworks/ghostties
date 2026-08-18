@@ -27,14 +27,15 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// Nil means this session predates the timestamp system or has never been touched.
     var lastActiveAt: Date?
 
-    /// The last moment this session actually produced terminal output — written
-    /// ONLY by `SessionCoordinator.subscribeToOutput`'s sink, never by focus,
+    /// The last output-activity signal from this session — a terminal title
+    /// event (the same proxy `SessionIndicatorState` uses), captured by
+    /// `SessionCoordinator.subscribeToOutput`'s sink, never by focus,
     /// selection, or keyboard cycling. Unlike `lastActiveAt` (which also
     /// advances on a plain "touch"), this is what the Sessions-row timestamp
     /// and the Archive sort mean by "last active": last did something, not
-    /// last looked at. Nil means this session predates the field or has never
-    /// produced output this launch — see `displayTimestamp` for the read-side
-    /// fallback.
+    /// last looked at. Persisted to `workspace.json`. Nil means this session
+    /// predates the field ever being written — see `displayTimestamp` for the
+    /// read-side fallback.
     var lastOutputAt: Date?
 
     /// True once the user has manually renamed this session via the sidebar
@@ -91,10 +92,14 @@ struct AgentSession: Identifiable, Codable, Hashable {
     }
 
     /// The timestamp Sessions rows and the Archive sort should display and
-    /// sort by: "last did something" (real output), falling back to
-    /// "last looked at" only for sessions that predate `lastOutputAt` or have
-    /// never produced output this launch. Project bucketing does NOT use
-    /// this — it reads `lastActiveAt` directly (see `WorkspaceStore.recordActivity`).
+    /// sort by: "last did something" (real output-activity signal), falling
+    /// back to "last looked at" only for a session where `lastOutputAt` has
+    /// never been written at all — i.e. one persisted before the field
+    /// existed. (Creation and relaunch also stamp `lastOutputAt`, so a
+    /// browser session — which never fires a real output signal — still
+    /// gets a non-nil value from that stamp, not from this fallback.)
+    /// Project bucketing does NOT use this — it reads `lastActiveAt` directly
+    /// (see `WorkspaceStore.recordActivity`).
     var displayTimestamp: Date? {
         lastOutputAt ?? lastActiveAt
     }

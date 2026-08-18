@@ -282,9 +282,15 @@ final class SessionCoordinator: ObservableObject {
         }
         // Stamp creation as activity so the project surfaces in `.recent`
         // (or `.activeNow` once the surface produces output) right away.
+        // isOutput: true — a fresh session (including a relaunch reusing the
+        // same persisted `AgentSession`) must not keep a stale prior
+        // `lastOutputAt`. Without this, `displayTimestamp` would prefer that
+        // stale value over the brand-new `lastActiveAt` and the row would
+        // show yesterday's timestamp for a session that's live right now.
         WorkspaceStore.shared.recordActivity(
             sessionId: session.id,
-            projectId: session.projectId
+            projectId: session.projectId,
+            isOutput: true
         )
 
         showSession(newTree, focusView: newView)
@@ -360,9 +366,17 @@ final class SessionCoordinator: ObservableObject {
         lastActiveSessionPerProject[session.projectId] = session.id
         // Stamp creation as activity so the project surfaces in `.recent`
         // right away (browser sessions don't emit terminal output events).
+        // isOutput: true — browser sessions never fire `lastOutputSubject` at
+        // all, so without this `lastOutputAt` would stay nil for the
+        // session's entire life while focus kept moving `lastActiveAt`; the
+        // row's `displayTimestamp` would then read stale/nil forever instead
+        // of tracking real recency. Also covers browser relaunch reusing a
+        // stale persisted `lastOutputAt` — same reasoning as the terminal
+        // creation site above.
         WorkspaceStore.shared.recordActivity(
             sessionId: session.id,
-            projectId: session.projectId
+            projectId: session.projectId,
+            isOutput: true
         )
 
         showBrowserInContainer(manager)
@@ -1027,36 +1041,11 @@ final class SessionCoordinator: ObservableObject {
 
     /// Subscribe to a session's root surface output activity via Combine.
     private func subscribeToOutput(surface: Ghostty.SurfaceView, sessionId: UUID) {
-        outputSubscriptions[sessionId] = surface.lastOutputSubject
-            .sink { [weak self, weak surface] in
-                guard let self else { return }
-                self.lastOutputTimestamps[sessionId] = .now
-                // Output means we're no longer at the prompt.
-                self.isAtPrompt[sessionId] = false
-                // Start tracking processing duration if not already.
-                if self.processingStartTimes[sessionId] == nil {
-                    self.processingStartTimes[sessionId] = .now
-                }
-                // Capture the surface title as a proxy for the last output line.
-                // Used by isLikelyPromptingForInput to detect attention-needed state.
-                if let title = surface?.title, !title.isEmpty {
-                    self.lastSurfaceTitle[sessionId] = title
-                }
-                // Push activity into the workspace store so per-project /
-                // per-session `lastActiveAt` and the grace-period tracker stay
-                // current with real terminal output. The store handles the
-                // active-vs-idle indicator-state check internally.
-                if let projectId = WorkspaceStore.shared.sessions
-                    .first(where: { $0.id == sessionId })?.projectId {
-                    // isOutput: true — this is the real output sink, the only
-                    // call site allowed to advance `lastOutputAt`.
-                    WorkspaceStore.shared.recordActivity(
-                        sessionId: sessionId,
-                        projectId: projectId,
-                        isOutput: true
-                    )
-                }
-            }
+        subscribeToOutput(
+            sessionId: sessionId,
+            outputPublisher: surface.lastOutputSubject,
+            titleProvider: { [weak surface] in surface?.title }
+        )
 
         // Name sync is its own subscription, independent of `lastOutputSubject`
         // above — it does not piggyback on the output-activity signal path
@@ -1074,6 +1063,58 @@ final class SessionCoordinator: ObservableObject {
             titlePublisher: surface.$title,
             isManualTitle: { [weak surface] in surface?.isManuallyTitled ?? false }
         )
+    }
+
+    /// Testable core of `subscribeToOutput` — generic over the output
+    /// publisher and injectable `store`, mirroring `subscribeNameSync`'s
+    /// `interval:`/`store:` pattern below, so `@testable import` can drive it
+    /// with a `PassthroughSubject<Void, Never>` and an isolated
+    /// `WorkspaceStore(testingProjects:testingSessions:)`, with no live
+    /// `Ghostty.SurfaceView`/GhosttyKit dependency.
+    ///
+    /// This is the ONLY place `recordActivity` is called with
+    /// `isOutput: true` for real terminal-output-activity signals (see the
+    /// two session-creation call sites in `createSession`/
+    /// `createBrowserSession`, which also pass `isOutput: true` but for a
+    /// different reason — clearing a stale persisted value at (re)launch).
+    /// `WorkspaceStoreLastOutputAtTests` asserts one send here advances
+    /// `lastOutputAt` — deleting the `isOutput: true` argument below must
+    /// fail that test.
+    func subscribeToOutput<P: Publisher>(
+        sessionId: UUID,
+        outputPublisher: P,
+        titleProvider: @escaping () -> String? = { nil },
+        store: WorkspaceStore = .shared
+    ) where P.Output == Void, P.Failure == Never {
+        outputSubscriptions[sessionId] = outputPublisher
+            .sink { [weak self] in
+                guard let self else { return }
+                self.lastOutputTimestamps[sessionId] = .now
+                // Output means we're no longer at the prompt.
+                self.isAtPrompt[sessionId] = false
+                // Start tracking processing duration if not already.
+                if self.processingStartTimes[sessionId] == nil {
+                    self.processingStartTimes[sessionId] = .now
+                }
+                // Capture the surface title as a proxy for the last output line.
+                // Used by isLikelyPromptingForInput to detect attention-needed state.
+                if let title = titleProvider(), !title.isEmpty {
+                    self.lastSurfaceTitle[sessionId] = title
+                }
+                // Push activity into the workspace store so per-project /
+                // per-session `lastActiveAt` and `lastOutputAt` stay current
+                // with the last output-activity signal (terminal title event
+                // — the same proxy the indicator states use), and so the
+                // grace-period tracker stays current. The store handles the
+                // active-vs-idle indicator-state check internally.
+                if let projectId = store.sessions
+                    .first(where: { $0.id == sessionId })?.projectId {
+                    store.recordActivity(
+                        sessionId: sessionId,
+                        projectId: projectId
+                    )
+                }
+            }
     }
 
     /// Wires a session's title publisher into the Claude Code → sidebar name

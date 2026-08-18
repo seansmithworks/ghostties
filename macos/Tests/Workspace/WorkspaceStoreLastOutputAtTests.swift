@@ -7,11 +7,15 @@ import Testing
 /// timestamp Sessions rows and the Archive sort display. See
 /// `reference_lastactiveat-written-on-focus.md`.
 ///
-/// `WorkspaceStore.recordActivity`'s `isOutput` parameter is the single write
-/// gate: `SessionCoordinator.subscribeToOutput`'s output sink is the only
-/// caller that passes `isOutput: true`; every other call site (session
-/// creation, `focusSession`, keyboard cycling via `focusAdjacentLiveSession`)
-/// leaves it at the `false` default.
+/// `WorkspaceStore.recordActivity`'s `isOutput` parameter is the write gate.
+/// Two kinds of call site pass `isOutput: true`: the real output sink
+/// (`SessionCoordinator.subscribeToOutput`, on an actual output-activity
+/// signal — see `SessionCoordinatorOutputActivityTests`) and the two
+/// session-creation sites (`createSession`/`createBrowserSession`), which
+/// pass `true` to clear a stale persisted `lastOutputAt` on a fresh or
+/// relaunched session. `focusSession`/keyboard cycling
+/// (`focusAdjacentLiveSession`) leave it at the `false` default — browsing
+/// must never advance `lastOutputAt`.
 @MainActor
 struct WorkspaceStoreLastOutputAtTests {
     private let template = AgentTemplate.shell
@@ -88,6 +92,41 @@ struct WorkspaceStoreLastOutputAtTests {
 
         #expect(store.sessions[0].lastActiveAt == focusTime, "focus still advances lastActiveAt")
         #expect(store.sessions[0].lastOutputAt == recordedOutputAt, "focus must not touch lastOutputAt")
+    }
+
+    /// Direct coverage of the `outputNeedsUpdate` branch in `recordActivity`
+    /// (`WorkspaceStore.swift`) — the one genuinely new guard term this
+    /// feature added. Sequence: output at T (both fields land at T), focus at
+    /// T+6 (past the 5s granularity guard — `lastActiveAt` advances to T+6,
+    /// `lastOutputAt` must NOT), output again at T+8 (only 2s past the focus
+    /// write, but `lastOutputAt`'s OWN last-stored value is still T — 8s
+    /// prior — so it must advance to T+8 even though `sessionNeedsUpdate`
+    /// alone would say no). Without `outputNeedsUpdate` as a separate guard
+    /// term (rather than folding it into `if sessionNeedsUpdate`),
+    /// `lastOutputAt` would stick at T forever for any regularly-focused
+    /// session, with the rest of the suite still green.
+    @Test func outputNeedsUpdateAdvancesIndependentlyOfLastActiveAtGuard() {
+        let project = makeProject()
+        let session = AgentSession(name: "s", templateId: template.id, projectId: project.id)
+        let store = makeStore(session: session, project: project)
+
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        store.recordActivity(sessionId: session.id, projectId: project.id, isOutput: true, now: { t })
+        #expect(store.sessions[0].lastActiveAt == t)
+        #expect(store.sessions[0].lastOutputAt == t)
+
+        let tPlus6 = t.addingTimeInterval(6)
+        store.recordActivity(sessionId: session.id, projectId: project.id, now: { tPlus6 })
+        #expect(store.sessions[0].lastActiveAt == tPlus6, "focus past the 5s guard must advance lastActiveAt")
+        #expect(store.sessions[0].lastOutputAt == t, "focus must not touch lastOutputAt")
+
+        let tPlus8 = t.addingTimeInterval(8)
+        store.recordActivity(sessionId: session.id, projectId: project.id, isOutput: true, now: { tPlus8 })
+        #expect(
+            store.sessions[0].lastOutputAt == tPlus8,
+            "lastOutputAt's own 8s-since-T gap must clear its guard even though lastActiveAt only moved 2s since tPlus6"
+        )
+        #expect(store.sessions[0].lastActiveAt == tPlus6, "lastActiveAt must NOT advance again — only 2s since tPlus6, under the 5s guard")
     }
 
     /// `displayTimestamp` — the read-side used by Sessions rows and the

@@ -4,6 +4,33 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-18 — PR #126 lastOutputAt follow-ups (deferred, not dropped)
+
+`lastOutputAt` (splitting Sessions-row/Archive recency from focus-driven project bucketing) shipped
+in #126, two adversarial review rounds. Four items surfaced during review, deliberately out of scope
+for that PR — none block merge.
+
+- [ ] **Split panes freeze the row timestamp.** `subscribeToOutput` runs once per session on the ROOT
+  surface (`SessionCoordinator.swift:270`) and `outputSubscriptions` is `[UUID: AnyCancellable]` —
+  structurally one entry per session id, so a second pane's subscription cannot be held, and there is
+  no split-creation hook. Run a 20-minute build in pane 2 and the row shows "May 5" while being
+  actively typed in; Archive ranks it ancient. Pre-existing hole the indicator dot shares — exposed,
+  not created, by #126. Fix is subscribing every surface in the tree and resubscribing on split. |
+  app | new
+- [ ] **Pruner and Archive rank by different keys.** `pruneStaleSessionsAtLaunch`
+  (`WorkspaceStore.swift:236-271`) keeps each project's top-15 by `lastActiveAt`; Archive now sorts by
+  `displayTimestamp`. In a project with >15 sessions all outside the 30-day window, launch prune can
+  delete the session sitting highest in the visible Archive list. Deliberate for now — retention is a
+  "last touched" policy. Add one line to the pruner's doc comment saying so. | app | new
+- [ ] **Projects and Sessions tabs now disagree about the same session.** Projects buckets on
+  `lastActiveAt`, Sessions displays `lastOutputAt`, so after a click a session is `.recent` in one tab
+  and "3h ago" in the other. Deliberate, Sean's call. | app | new
+- [ ] **`sessionSignature` extra invalidation.** `ProjectDisclosureRow.swift:104-110` compares
+  `[AgentSession]` with synthesized `==`, now including `lastOutputAt`, so a `lastOutputAt`-only write
+  re-runs every expanded project row's body for a field the Projects tab never renders. Bounded to
+  once per 5s per session; flagged only because this row's render cost is the known-unfixed
+  `contextMenu` bottleneck. | app | new
+
 ## 2026-08-17 — beta.23 shipped, verified end-to-end
 
 Tag `v0.1.0-beta.23` → `7987f6b19`. Release green, published, all four assets. **First release whose
