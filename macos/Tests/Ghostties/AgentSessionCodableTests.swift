@@ -17,6 +17,7 @@ final class AgentSessionCodableTests: XCTestCase {
             projectId: UUID(),
             sortOrder: 2,
             lastActiveAt: Date(timeIntervalSince1970: 1_700_000_000),
+            lastOutputAt: Date(timeIntervalSince1970: 1_700_000_500),
             isNamePinned: true
         )
 
@@ -24,6 +25,7 @@ final class AgentSessionCodableTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
 
         XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.lastOutputAt, original.lastOutputAt, "lastOutputAt must actually reach disk, not just decode-equal a nil default")
     }
 
     /// A legacy `workspace.json` predates `isNamePinned` entirely — the
@@ -51,6 +53,7 @@ final class AgentSessionCodableTests: XCTestCase {
         XCTAssertEqual(decoded.projectId, projectId)
         XCTAssertNil(decoded.sortOrder)
         XCTAssertNil(decoded.lastActiveAt)
+        XCTAssertNil(decoded.lastOutputAt, "legacy sessions with no lastOutputAt key must decode to nil, not fail or default to now()")
         XCTAssertFalse(decoded.isNamePinned, "legacy sessions with no isNamePinned key must default to false")
     }
 }

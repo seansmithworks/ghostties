@@ -496,7 +496,9 @@ final class WorkspaceStore: ObservableObject {
     /// project timestamp needs to move, the function returns without touching
     /// any `@Published` property or calling `persist()`. The `activeSinceTimestamps`
     /// grace-tracker refresh below rides this same guard — harmless given its
-    /// much wider 120s window.
+    /// much wider 120s window. `lastOutputAt` (when `isOutput` is true) rides
+    /// the same 5s granularity guard, on its own comparison against its own
+    /// last-stored value.
     ///
     /// Silent no-op when the session or project id is stale (e.g. a Combine
     /// sink fires after the session was removed) — no crash, no write.
@@ -509,9 +511,21 @@ final class WorkspaceStore: ObservableObject {
     ///
     /// Persists through the existing 100ms debounced `persist()`. Bursty output
     /// coalesces into a single disk write.
+    ///
+    /// - Parameter isOutput: When true, also advances `session.lastOutputAt`
+    ///   — the timestamp Sessions rows and the Archive sort read. Two kinds
+    ///   of call site pass `true`: the real output sink
+    ///   (`SessionCoordinator.subscribeToOutput`, the only place that fires
+    ///   on an actual output-activity signal) and the two session-creation
+    ///   sites (`createSession`/`createBrowserSession`), which pass `true` to
+    ///   clear a stale persisted `lastOutputAt` on a fresh or relaunched
+    ///   session rather than to report new output. Focus and selection call
+    ///   sites (`focusSession`) must leave this `false` so browsing never
+    ///   advances it. See `reference_lastactiveat-written-on-focus.md`.
     func recordActivity(
         sessionId: UUID,
         projectId: UUID,
+        isOutput: Bool = false,
         now: () -> Date = Date.init
     ) {
         guard let sessionIdx = sessions.firstIndex(where: { $0.id == sessionId }),
@@ -528,13 +542,18 @@ final class WorkspaceStore: ObservableObject {
         // (never rolls lastActiveAt backward).
         let sessionNeedsUpdate = sessions[sessionIdx].lastActiveAt.map { timestamp.timeIntervalSince($0) >= 5 } ?? true
         let projectNeedsUpdate = projects[projectIdx].lastActiveAt.map { timestamp.timeIntervalSince($0) >= 5 } ?? true
-        guard sessionNeedsUpdate || projectNeedsUpdate else { return }
+        let outputNeedsUpdate = isOutput
+            && (sessions[sessionIdx].lastOutputAt.map { timestamp.timeIntervalSince($0) >= 5 } ?? true)
+        guard sessionNeedsUpdate || projectNeedsUpdate || outputNeedsUpdate else { return }
 
         if sessionNeedsUpdate {
             sessions[sessionIdx].lastActiveAt = timestamp
         }
         if projectNeedsUpdate {
             projects[projectIdx].lastActiveAt = timestamp
+        }
+        if outputNeedsUpdate {
+            sessions[sessionIdx].lastOutputAt = timestamp
         }
 
         // Only refresh the grace tracker if this session is currently in an

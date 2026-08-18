@@ -4,11 +4,48 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-18 — PR #126 lastOutputAt follow-ups (deferred, not dropped)
+
+`lastOutputAt` (splitting Sessions-row/Archive recency from focus-driven project bucketing) shipped
+in #126, two adversarial review rounds. Four items surfaced during review, deliberately out of scope
+for that PR — none block merge.
+
+- [ ] **Split panes freeze the row timestamp.** `subscribeToOutput` runs once per session on the ROOT
+  surface (`SessionCoordinator.swift:270`) and `outputSubscriptions` is `[UUID: AnyCancellable]` —
+  structurally one entry per session id, so a second pane's subscription cannot be held, and there is
+  no split-creation hook. Run a 20-minute build in pane 2 and the row shows "May 5" while being
+  actively typed in; Archive ranks it ancient. Pre-existing hole the indicator dot shares — exposed,
+  not created, by #126. Fix is subscribing every surface in the tree and resubscribing on split. |
+  app | new
+- [ ] **Pruner and Archive rank by different keys.** `pruneStaleSessionsAtLaunch`
+  (`WorkspaceStore.swift:236-271`) keeps each project's top-15 by `lastActiveAt`; Archive now sorts by
+  `displayTimestamp`. In a project with >15 sessions all outside the 30-day window, launch prune can
+  delete the session sitting highest in the visible Archive list. Deliberate for now — retention is a
+  "last touched" policy. Add one line to the pruner's doc comment saying so. | app | new
+- [ ] **Projects and Sessions tabs now disagree about the same session.** Projects buckets on
+  `lastActiveAt`, Sessions displays `lastOutputAt`, so after a click a session is `.recent` in one tab
+  and "3h ago" in the other. Deliberate, Sean's call. | app | new
+- [ ] **`sessionSignature` extra invalidation.** `ProjectDisclosureRow.swift:104-110` compares
+  `[AgentSession]` with synthesized `==`, now including `lastOutputAt`, so a `lastOutputAt`-only write
+  re-runs every expanded project row's body for a field the Projects tab never renders. Bounded to
+  once per 5s per session; flagged only because this row's render cost is the known-unfixed
+  `contextMenu` bottleneck. | app | new
+
 ## 2026-08-18 — orchestrator session (Safari ship, #126 review, two plans)
 
-**Carried — immediate next action:**
+**Closed:**
 
-- [ ] **#126 WIP is UNVERIFIED — finish the verification** (carried). Branch `fix/session-lastoutputat-timestamp` @ `3fb27cbbf`, worktree `.claude/worktrees/agent-a58533f0e068a85b7`. Both review rounds' fixes are applied but the agent was stopped mid-verification. Two things never ran: (a) confirm the pinned test in `SessionCoordinatorOutputActivityTests.swift` actually FAILS when the sink write is removed — it is now at `SessionCoordinator.swift:1115`, moved from `:1056`; (b) the unfiltered suite. Last known good 691/0/1 before these edits. | app | carried
+- [x] ~~**#126 WIP is UNVERIFIED**~~ — **verified and closed.** Round-2's refactor (injectable
+  `store:` parameter on `subscribeToOutput`) silently dropped `isOutput: true` from the sink's
+  `recordActivity` call, disabling the entire `lastOutputAt` feature on the real output path.
+  Restored in `1f15cea6a`. The pinned test has teeth, confirmed by observation not assumption:
+  `SessionCoordinatorOutputActivityTests.testOutputSignalAdvancesLastOutputAt` FAILED against the
+  unmodified `3fb27cbbf` and passes after the restore. Full unfiltered suite: **694 passed / 0
+  failed / 1 skipped** (baseline 691/0/1 at `ab0fe95f3` + three tests genuinely new since that
+  commit — the two `SessionCoordinatorOutputActivityTests` cases plus
+  `outputNeedsUpdateAdvancesIndependentlyOfLastActiveAtGuard`). All five `@Test` cases in
+  `WorkspaceStoreLastOutputAtTests` ran and passed, verified by enumerating the result bundle's
+  test list, not the summary line. | app | closed
 
 **Approved by Sean 2026-08-18, not started:**
 
