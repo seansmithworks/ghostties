@@ -49,6 +49,7 @@ struct InboxZoneView: View {
     @AppStorage("ghostties.defaultTaskTemplate") private var defaultTaskTemplate: String = ""
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     /// SEA-215: Read the pre-sorted array from the store instead of sorting
     /// inline. `TaskStore.recomputeLanes()` performs the O(n log n) sort once
@@ -236,7 +237,7 @@ struct InboxZoneView: View {
 
             Text("Click anywhere here to start a new task.")
                 .font(.system(size: 10.5))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                 .multilineTextAlignment(.center)
 
             // SG-03: first-run hint — shown only when every lane is empty.
@@ -275,11 +276,11 @@ struct InboxZoneView: View {
             Text("Inbox".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
 
             Text("· \(rows.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
 
             Spacer(minLength: 0)
         }

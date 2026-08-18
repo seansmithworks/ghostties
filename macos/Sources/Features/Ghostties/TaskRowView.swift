@@ -269,7 +269,7 @@ struct TaskRowView: View {
             TimelineView(.periodic(from: .now, by: 60)) { _ in
                 Text(statusPhrase)
                     .font(.system(size: 11))
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
             }
         }
@@ -306,7 +306,7 @@ struct TaskRowView: View {
 
                 Text(compactMetaLine)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -323,7 +323,7 @@ struct TaskRowView: View {
             TimelineView(.periodic(from: .now, by: 60)) { _ in
                 Text(trailingTime)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
                     .padding(.top, 2)
             }

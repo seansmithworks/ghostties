@@ -83,7 +83,7 @@ struct RecentsRowView: View, Equatable {
 
                 Text(projectName)
                     .font(.system(size: 10))
-                    .foregroundStyle(Color(.tertiaryLabelColor))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
             }
 
@@ -95,7 +95,7 @@ struct RecentsRowView: View, Equatable {
             if let ts = session.displayTimestamp {
                 Text(Self.relativeLabel(ts))
                     .font(.system(size: 10))
-                    .foregroundStyle(Color(.tertiaryLabelColor))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .monospacedDigit()
             }
         }

@@ -427,6 +427,8 @@ private struct PinMigrationNoticeBanner: View {
 private struct SidebarSectionHeader: View {
     let section: SidebarSection
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         // Matches the column structure of `ProjectDisclosureRow` header so
         // section icons vertically center-align with row ghost icons, and
@@ -442,7 +444,7 @@ private struct SidebarSectionHeader: View {
 
             Spacer(minLength: 0)
         }
-        .foregroundStyle(WorkspaceLayout.sectionHeaderForeground)
+        .foregroundStyle(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
         .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
         .padding(.trailing, 12)
         .padding(.vertical, 4)

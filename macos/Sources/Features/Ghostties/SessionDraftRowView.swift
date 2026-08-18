@@ -44,7 +44,7 @@ struct SessionDraftRowView: View {
 
                 Text(metaLine)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
@@ -55,7 +55,7 @@ struct SessionDraftRowView: View {
                 // Replaces the + Name affordance while we're editing.
                 Text("↵")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .padding(.top, 2)
             } else if isHovered {
                 promoteButton
@@ -64,7 +64,7 @@ struct SessionDraftRowView: View {
                 // shift when the hover button appears.
                 Text(trailingTime)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
                     .padding(.top, 2)
             }

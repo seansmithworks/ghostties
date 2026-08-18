@@ -241,7 +241,7 @@ struct TaskSidebarView: View {
         HStack(spacing: 0) {
             Text("tasks · \(taskStore.tasks.count)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
 
             Spacer(minLength: 0)
 

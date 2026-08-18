@@ -23,6 +23,8 @@ struct ActiveZoneView: View {
     /// body call (which previously fired on every user interaction across the sidebar).
     @State private var cachedMergedRows: [ActiveRow] = []
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         let rows = cachedMergedRows
         return VStack(alignment: .leading, spacing: 0) {
@@ -132,17 +134,17 @@ struct ActiveZoneView: View {
             Text("Active".uppercased())
                 .font(.system(size: 10.5, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
 
             Text("· \(rowCount) of ~\(taskStore.machineCap)")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
 
             Spacer(minLength: 0)
 
             Text("machine ok")
                 .font(.system(size: 10.5, design: .monospaced))
-                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
         }
         .padding(.horizontal, TaskRowMetrics.horizontalPadding)
         .padding(.vertical, 6)

@@ -170,7 +170,7 @@ struct SessionRow: View {
         switch indicatorState {
         case .waiting, .needsAttention, .processing, .longRunning: return .primary
         case .idle:     return Color(.secondaryLabelColor)
-        case .inactive: return Color(.tertiaryLabelColor)
+        case .inactive: return colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
         case .error:    return .primary
         }
     }

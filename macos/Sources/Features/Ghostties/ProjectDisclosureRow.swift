@@ -533,6 +533,8 @@ private struct ProjectDisclosureRowContent: View, Equatable {
 private struct SessionGroupHeader: View {
     let bucket: SessionBucket
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: iconName)
@@ -545,7 +547,7 @@ private struct SessionGroupHeader: View {
 
             Spacer(minLength: 0)
         }
-        .foregroundStyle(WorkspaceLayout.sessionGroupHeaderForeground)
+        .foregroundStyle(WorkspaceLayout.sessionGroupHeaderForeground(for: colorScheme))
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
