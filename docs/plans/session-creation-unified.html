@@ -214,10 +214,8 @@
     </p>
 
     <pre data-anchor-id="composer-mock"><code>┌────────────────────────────────────────┐
-│  ◆ Ghostties  ▾                        │  project chip — locked when the
-│  ┌──────────────────────────────────┐  │  entry point already knows it
-│  │ Start…                           │  │  one field: filters templates AND
-│  └──────────────────────────────────┘  │  projects; owns focus on open
+│  ⌕ Start…                  │ Ghostties ▾│  hairline divider then project name + ▾ —
+│                                          │  Treatment 2, divided trailing control
 │  RECENT                                │
 │   ◆ Claude Code        ghostties       │
 │   ◆ Orchestrator       brukas          │
@@ -227,15 +225,25 @@
 │  ──────────────────────────────────    │
 │   + New template…                      │
 └────────────────────────────────────────┘
-     ↵ start    ⌥↵ start + reveal    esc cancel</code></pre>
+     ↵ start    ⌥↵ start + reveal    esc cancel
+
+project ▾ open:                     ┌────────────────┐
+                                     │ Ghostties      │
+                                     │ Brukas         │
+                                     │ Switchboard    │
+                                     │ ────────────── │
+                                     │ + Add project… │  ← NewTaskComposerStore.swift:162,
+                                     └────────────────┘    folder picker, composer stays open</code></pre>
 
     <p data-anchor-id="composer-search">
-      <strong>One search field is the load-bearing idea.</strong> It filters
-      templates always, and projects too whenever the project is not locked. So
-      the 28-project problem and the template problem get the same control:
-      Cmd+T, type <code>bru</code>, Return, you are in a Brukas session. No
-      submenu, no scanning, no ordering debate — because you never read the
-      list.
+      <strong>Whether one field still filters both is now open, not settled</strong>
+      — see decision 3 below. Giving the project its own trailing control
+      (Treatment 2, locked) makes the original "one field filters templates
+      AND projects" idea either redundant-by-design or abandoned; Sean has
+      seen it both ways in the mockups and has not chosen. The strawman keeps
+      filtering both, so Cmd+T, type <code>bru</code>, Return still lands you
+      in a Brukas session — no submenu, no scanning — while the trailing
+      control becomes the discoverable, explicit path to the same place.
     </p>
 
     <p data-anchor-id="composer-noname">
@@ -250,14 +258,23 @@
     <h3 data-anchor-id="mechanism">Centered presentation: in-window overlay, not NSPanel</h3>
 
     <p data-anchor-id="mechanism-body">
-      There is no centered-panel pattern in the app today — the four existing
-      mechanisms are <code>NSOpenPanel</code>, <code>.popover()</code>,
-      <code>.sheet()</code>, and a borderless <code>Menu</code>, and none of
-      them float centered. The recommendation is a
+      <strong>Correction: there is already a centered-panel pattern.</strong>
+      Four floating overlays ship today — <code>UpdateOverlay</code>
+      (<code>TerminalView.swift:128</code>), <code>SurfaceSearchOverlay</code>
+      (<code>SurfaceView.swift:165</code>),
+      <code>buildInfoBadgeHostingView</code>
+      (<code>WorkspaceViewContainer.swift:165</code>, constrained at
+      <code>:1507–1508</code>), and the closest analog,
+      <code>CommandPaletteView</code> (<code>CommandPalette.swift:60</code>) —
+      a Spotlight panel with keyboard nav, focus handling, and focus
+      restoration already solved, presented as a SwiftUI overlay in a
+      <code>ZStack</code>+<code>GeometryReader</code> offset 5% from the top
+      (<code>TerminalCommandPalette.swift:22–43</code>). The recommendation is
+      unchanged — an in-window overlay, a
       <code>TransparentHostingView&lt;SessionComposerOverlay&gt;</code> added as
-      a subview of <code>WorkspaceViewContainer</code> — that hosting subclass
-      already exists at <code>WorkspaceViewContainer.swift:1701</code>,
-      purpose-built to not paint a window background.
+      a subview of <code>WorkspaceViewContainer</code>, hosted by that same
+      purpose-built subclass at <code>WorkspaceViewContainer.swift:1701</code>
+      — but it now follows a shipped pattern instead of inventing one.
     </p>
 
     <p data-anchor-id="mechanism-why">
@@ -272,19 +289,47 @@
 
     <blockquote class="callout" data-anchor-id="mechanism-cost">
       <p>
-        <strong>The cost, stated plainly.</strong> It means touching
-        <code>WorkspaceViewContainer</code> — 85&nbsp;KB of hand-managed AppKit,
-        home to both the shadowPath fragility and the projectFirst measurement
-        beachball. Three non-negotiables: use Auto Layout constraints the way
-        <code>buildInfoBadgeHostingView</code> does
-        (<code>:1507–1508</code>) and never touch <code>layout()</code> at
-        <code>:572</code>; pin the width explicitly
-        (<code>.frame(width: 360)</code>) so SwiftUI never negotiates size with
-        the container — the exact fix that killed the projectFirst loop; add and
-        remove the subview on demand so no hidden hosting view participates in
-        layout while closed.
+        <strong>The cost, stated more precisely.</strong> It means touching
+        <code>WorkspaceViewContainer</code> — home to both the shadowPath
+        fragility and the projectFirst measurement beachball — but not into
+        the unknown: <code>buildInfoBadgeHostingView</code>
+        (<code>:165</code>, constrained at <code>:1507–1508</code>) is the
+        fork's own shipped precedent for a constraint-only floating hosting
+        view, so this follows the pattern that already works here rather than
+        braving a minefield. Three non-negotiables still apply: use Auto
+        Layout constraints the way <code>buildInfoBadgeHostingView</code> does
+        and never touch <code>layout()</code> at <code>:572</code>; pin the
+        width explicitly (<code>.frame(width:)</code>) so SwiftUI never
+        negotiates size with the container — the exact fix that killed the
+        projectFirst loop; add and remove the subview on demand so no hidden
+        hosting view participates in layout while closed.
       </p>
     </blockquote>
+
+    <p data-anchor-id="mechanism-fork-decision">
+      <strong>Fork-vs-build is decided: fork a copy.</strong> Calling
+      <code>CommandPaletteView</code> as-is cannot deliver the locked design —
+      every part that must change (<code>CommandPaletteQuery</code> at
+      <code>:222</code>, <code>CommandTable</code> at <code>:287</code>,
+      <code>CommandRow</code> at <code>:337</code>) is <code>private</code>,
+      and the only exposed knobs are <code>isPresented</code>,
+      <code>backgroundColor</code>, <code>options</code>. So the real choice
+      is only copy-or-build, and copy wins: it starts from working
+      arrow/⌃P/⌃N nav with wraparound, selection clamping,
+      auto-select-first-on-type, match highlighting including initials
+      matching, scroll-to-selection, hover, empty state, material card, and
+      scheme derivation — all on a plain <code>VStack</code>, not
+      <code>LazyVStack</code>, which already satisfies the frozen-rows
+      constraint from PR&nbsp;#121. Editing <code>CommandPalette.swift</code>
+      in place is ruled out:
+      <code>git diff upstream/main HEAD -- "macos/Sources/Features/Command Palette/"</code>
+      is 2 lines, all in <code>TerminalCommandPalette.swift</code> —
+      <code>CommandPalette.swift</code> is byte-identical to upstream, and
+      editing it converts a zero-conflict file into a permanent rebase
+      liability. The copy lands at
+      <code>macos/Sources/Features/Ghostties/SessionComposerPalette.swift</code>,
+      renamed and parameterized.
+    </p>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
     <h2 data-anchor-id="defects">Defects found while reading</h2>
@@ -520,12 +565,13 @@
     <h3 data-anchor-id="phase2">Phase 2 · SessionComposer, popover only</h3>
     <ul data-anchor-id="phase2-list">
       <li>
-        <strong>New files</strong>
-        <code>SessionComposerStore.swift</code> and
-        <code>SessionComposerView.swift</code>, flat in
-        <code>macos/Sources/Features/Ghostties/</code>. Read
-        <code>NewTaskComposerStore.swift</code> first and mirror its shape —
-        <code>static let shared</code>, <code>@Published isOpen</code>,
+        <strong>New files</strong> <code>SessionComposerStore.swift</code>,
+        flat in <code>macos/Sources/Features/Ghostties/</code>, and
+        <code>SessionComposerPalette.swift</code> — a forked copy of
+        <code>CommandPalette.swift</code>, renamed and parameterized (the
+        fork-vs-build decision above). The <em>store</em> still mirrors
+        <code>NewTaskComposerStore.swift</code> — read it first and match its
+        shape: <code>static let shared</code>, <code>@Published isOpen</code>,
         <code>focusSearchFieldTrigger</code>, <code>selectedProjectId</code>,
         <code>searchText</code>, <code>writeError</code>. Copy the cascade at
         <code>:168–195</code> and the add-project chip at <code>:162</code>; do
@@ -538,13 +584,57 @@
         }</code>. Nothing else parameterizes it.
       </li>
       <li>
-        <strong>View anatomy</strong> per the mock above: project chip, search
-        field, RECENT section (last three
-        <code>(project, template)</code> pairs, persisted to
-        <code>@AppStorage</code>), TEMPLATES section from the Phase 1 resolver,
-        <code>+ New template…</code> footer. Plain <code>VStack</code>, never
-        <code>LazyVStack</code>. Width 220&nbsp;pt anchored / 360&nbsp;pt
-        centered. 11&nbsp;pt SF Pro Text per <code>DESIGN.md</code> §3, fixing D11.
+        <strong>View anatomy</strong> per the mock above: search field with a
+        trailing divided project control (hairline rule, project name,
+        <code>▾</code> — Treatment 2, no separate project-chip row), RECENT
+        section (last three <code>(project, template)</code> pairs, persisted
+        to <code>@AppStorage</code>), TEMPLATES section from the Phase 1
+        resolver, <code>+ New template…</code> footer, and
+        <code>+ Add project…</code> as the last row in the open project
+        dropdown, mirroring <code>NewTaskComposerStore.swift:162</code>.
+        <code>CommandPaletteView</code> has no section headers — <code>:303</code>
+        is a flat <code>ForEach</code> — so the RECENT/TEMPLATES grouping must
+        be added; <code>TemplatePickerView.swift:83,110</code> is the header
+        precedent. Plain <code>VStack</code>, never <code>LazyVStack</code>.
+      </li>
+      <li>
+        <strong>Remove or gate the focus-loss auto-dismiss.</strong>
+        <code>CommandPalette.swift:264–268</code> fires <code>.exit</code> on
+        text-field blur, closing the panel — the trailing project dropdown and
+        <code>+ Add project…</code>'s <code>NSOpenPanel</code> both take first
+        responder and would kill the composer mid-interaction under the
+        inherited behavior. Ship gate: open the project dropdown, pick a
+        project, composer still open; <code>+ Add project…</code> opens the
+        folder picker and the composer survives it.
+      </li>
+      <li>
+        <strong>Build prefix-first relevance ranking.</strong>
+        <code>filteredOptions</code> (<code>CommandPalette.swift:74–92</code>)
+        is boolean match then <code>colorMatchScore</code> only — nothing
+        guarantees "type three characters, press Return" lands on the right
+        row, and the color scoring means typing "blue" surfaces rows by dot
+        color. Not inherited; must be built. Ship gate: typing a project's or
+        template's distinctive prefix and pressing Return always starts that
+        session.
+      </li>
+      <li>
+        <strong>Four smaller inherited constraints to budget for.</strong>
+        <code>CommandOption.id = UUID()</code> is assigned at init
+        (<code>:5</code>) with no way to pass one, so options recomputed per
+        keystroke churn hover state and scroll-to-selection — make
+        <code>id</code> injectable. <code>extension String { matchedIndices }</code>
+        (<code>:466–494</code>) is module-scope; copying it into the fork is a
+        redeclaration compile error — call the existing one. Proportions are
+        system-palette scale — 20&nbsp;pt light field, 48&nbsp;pt row,
+        <code>maxWidth: 500</code> (<code>:165</code>) — and none of it is
+        parameterized; <code>DESIGN.md:116</code> specifies 11&nbsp;pt sidebar
+        UI and <code>:202</code> says resist upsizing, so the fork must
+        parameterize width and type scale, fixing D11.
+        <code>.onSubmit</code> (<code>:271</code>) carries no modifier
+        information, so ⌥↵ (start + reveal) needs
+        <code>Backport.onKeyPress</code>
+        (<code>Helpers/Backport.swift:53</code>; precedent at
+        <code>SurfaceView.swift:416</code>).
       </li>
       <li>
         <strong>Commit</strong> calls
@@ -554,7 +644,7 @@
       <li>
         <strong>Wire one call site only.</strong>
         <code>ProjectDisclosureRow.swift:452</code>'s
-        <code>.popover</code> renders <code>SessionComposerView</code> with
+        <code>.popover</code> renders <code>SessionComposerPalette</code> with
         <code>.locked(project)</code>. Invert the Option polarity at
         <code>:461</code> — plain click opens the composer, Option-click keeps
         today's instant create. Fixes D3.
@@ -575,10 +665,15 @@
     <ul data-anchor-id="phase3-list">
       <li>
         <strong>New file</strong> <code>SessionComposerOverlay.swift</code> — a
-        SwiftUI view wrapping <code>SessionComposerView</code> in a scrim, hosted
-        by <code>TransparentHostingView</code>
-        (<code>WorkspaceViewContainer.swift:1701</code>) and added as a subview
-        of the container. Constraints only: centerX/centerY to the container,
+        SwiftUI view wrapping <code>SessionComposerPalette</code> in a scrim.
+        <code>TransparentHostingView</code> is <code>private</code> at
+        <code>WorkspaceViewContainer.swift:1701</code>, so a separate file
+        cannot reach it as written — widen it to <code>internal</code> (one
+        word, fork-owned file) rather than hosting the composer from inside
+        <code>WorkspaceViewContainer</code> itself; that keeps the composer
+        view code out of the 85&nbsp;KB file. Hosted by the now-internal
+        <code>TransparentHostingView</code> and added as a subview of the
+        container. Constraints only: centerX/centerY to the container,
         <code>.frame(width: 360)</code>, intrinsic height. Do not modify
         <code>layout()</code> at <code>:572</code>. Add on open, remove on close.
       </li>
@@ -773,7 +868,7 @@
     </table>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
-    <h2 data-anchor-id="decisions">Yours to decide — two forks, both with a strawman</h2>
+    <h2 data-anchor-id="decisions">Yours to decide — three forks, each with a strawman</h2>
 
     <ol data-anchor-id="decision-list">
       <li>
@@ -797,6 +892,22 @@
         <br /><em>Alternative:</em> Cmd+T stays instant and the composer gets
         Cmd+Option+T. Preserves muscle memory exactly, but a panel behind a
         three-modifier chord is a panel nobody opens.
+      </li>
+      <li>
+        <strong>Does the search field still filter projects, or templates
+        only?</strong>
+        <br /><strong>Strawman: keep filtering both.</strong> Giving the
+        project its own dedicated trailing control (Treatment 2, locked) makes
+        the plan's original "one field filters both" idea either
+        redundant-by-design or abandoned — Sean has seen it both ways in the
+        mockups and has not chosen. Keeping both filtered means "type
+        <code>bru</code>, press Return" survives as the fast path, and the
+        trailing control becomes the discoverable, explicit path to the same
+        place.
+        <br /><em>Alternative:</em> field filters templates only; project
+        selection is exclusively via the trailing control. Cleaner mental
+        model, but kills the single-fastest path for the common case where you
+        already know the project.
       </li>
     </ol>
 
