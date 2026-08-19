@@ -4,6 +4,47 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-19 — ghostties.org redesign: direction locked, build round next (carried)
+
+Design canvas: <https://claude.ai/code/artifact/7abace9c-8541-4960-ad29-eec5ffb4b593>
+Sources committed at `docs/design/web-redesign/` (branch `worktree-session-2`, `a77f5a558`).
+
+**Locked:** Arcade direction. Type = pixel + grotesk (Silkscreen display, Archivo prose, DM Mono
+for commands/labels). Game is opt-in and secret — `I` inserts a coin, WASD/arrows, wrap at edges,
+no lose state. Retired: Ghostties OS (faked terminal content), Long Hallway, Manifest, Field.
+
+**Carried — the overnight build queue:**
+
+- [ ] **B4 — scroll-driven zoom** into a high-fidelity recreation of the app. Sean's call: most of
+  the terminal canvas is dead space, so zoom the parts that matter. Supersedes B1/B2/B3 on the
+  canvas. Needs the app rebuilt in HTML at a fidelity that survives magnification.
+- [ ] **Motion language — C1/C2/C3 all rejected.** Explore instead: canvasui.dev `grid`,
+  `asciify`, `decrypt-reveal`. Read the docs before building. Asciify + the B4 zoom may be one
+  idea rather than two (ASCII resolves into real UI as you zoom in).
+- [ ] **Snake v2** — push the page UI further down to give the playfield room; add collectible
+  tokens. Sean floated Claude/Codex/Cursor icons; **trademark risk on a public site**, so build
+  generic agent-tokens plus a logo version beside it for comparison.
+- [ ] **Ghost art, another pass.** The visor redraw is not settled. Direction to explore: robot /
+  agent ghosts.
+- [ ] **Variants carry live dials** — parameters exposed as tweak controls so Sean tunes rather
+  than describes.
+- [ ] **A cut list.** Sean: *"there is more here than we should implement, the question of taste
+  is always what not to include."* This is a deliverable, not a footnote.
+- [ ] **Real SFX** via ElevenLabs — coin, collect, stray, rescue, ambient hum. Only after the
+  shape is approved; current audio is synthesised placeholder.
+- [ ] **Cast-of-eight naming pass** — only if C3 survives the cut. Current names are a strawman.
+
+**Content gap found, worth fixing whatever wins:** the site has no "first 60 seconds" section —
+what happens after install, where it puts things, what it touches, how to leave. For a terminal
+fork that is the biggest unspoken objection and the cheapest to answer.
+
+**Parked (off-objective):**
+
+- [ ] `MEMORY.md` is 20,819 chars, over its 20,000 cap and read in full every boot. Route older
+  entries to `INDEX.md`. Flagged by the size gate 2026-08-19.
+- [ ] Confirm "dialkit" — read as *dials* (tuning controls). If it is an actual library Sean had
+  in mind, swap the approach.
+
 ## 2026-08-18 — Session composer: palette reuse + design direction (carried)
 
 Sean picked the composer direction from mockups this session. Design decisions locked; the plan
