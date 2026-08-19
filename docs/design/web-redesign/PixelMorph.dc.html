@@ -1,0 +1,193 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Martian+Mono:wght@400;500&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .pm { width: 1360px; height: 880px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "DM Mono", monospace; padding: 52px 56px 44px;
+      display: flex; flex-direction: column; }
+
+    .lbl { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+    h2 { font-family: "Silkscreen", monospace; font-size: 28px; line-height: 1.3;
+      color: #fff; margin: 13px 0 0; }
+    h2 em { font-style: normal; color: #ffd54f; }
+    .blurb { font-size: 13.5px; font-weight: 300; line-height: 1.7; margin: 15px 0 0;
+      max-width: 66ch; color: rgba(236,234,245,0.62); text-wrap: pretty; }
+
+    .stage { margin-top: 40px; display: grid; grid-template-columns: 420px 1fr; gap: 56px;
+      flex: 1; min-height: 0; }
+
+    /* live morph — the same ghost, redrawn at four resolutions on a loop */
+    .live { position: relative; align-self: start; }
+    .live .fr { position: absolute; inset: 0; opacity: 0; }
+    .live .fr svg { width: 100%; height: 100%; display: block; }
+    .live { width: 420px; height: 420px; }
+    .live .f0 { animation: cyc 8s steps(1, end) infinite; }
+    .live .f1 { animation: cyc 8s steps(1, end) infinite -2s; }
+    .live .f2 { animation: cyc 8s steps(1, end) infinite -4s; }
+    .live .f3 { animation: cyc 8s steps(1, end) infinite -6s; }
+    @keyframes cyc { 0%, 22% { opacity: 1; } 25%, 100% { opacity: 0; } }
+    .liveCap { margin-top: 420px; padding-top: 18px;
+      border-top: 1px solid rgba(236,234,245,0.12); }
+    .liveCap b { font-family: "Silkscreen", monospace; font-size: 12px; color: #fff;
+      display: block; margin-bottom: 7px; }
+    .liveCap span { font-size: 12.5px; font-weight: 300; line-height: 1.65;
+      color: rgba(236,234,245,0.52); }
+
+    /* the ladder, laid out precisely */
+    .ladder { display: flex; flex-direction: column; }
+    .rung { display: grid; grid-template-columns: 116px 1fr; gap: 26px; align-items: center;
+      padding: 17px 0; border-top: 1px solid rgba(236,234,245,0.12); }
+    .rung:last-of-type { border-bottom: 1px solid rgba(236,234,245,0.12); }
+    .rung .art { width: 116px; height: 116px; }
+    .rung .art svg { width: 100%; height: 100%; display: block; }
+    .rung .n { font-family: "Silkscreen", monospace; font-size: 15px; color: #ffd54f; }
+    .rung .m { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); margin-top: 8px; }
+    .rung .d { font-size: 12.5px; font-weight: 300; line-height: 1.65; margin-top: 9px;
+      color: rgba(236,234,245,0.58); max-width: 52ch; text-wrap: pretty; }
+
+    .foot { margin-top: auto; padding-top: 22px; display: flex; align-items: center; gap: 18px;
+      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.36); }
+    .foot i { width: 6px; height: 6px; background: #ffd54f; display: block; }
+  </style>
+</helmet>
+<div class="pm">
+  <div class="lbl">motion language &nbsp;/&nbsp; option 1</div>
+  <h2>The pixel grid <em>is</em> the transition.</h2>
+  <p class="blurb">Nothing fades or slides. Sections resolve &mdash; the ghost is rebuilt at a coarser or finer grid, one step per scroll beat, so the motion comes from the same 4px lattice the icons are drawn on. It is cheap, it is on-brand, and no other dev-tool site moves like this.</p>
+
+  <div class="stage">
+    <div>
+      <div class="live">
+        <sc-for list="{{ levels }}" as="L" hint-placeholder-count="4">
+          <div class="fr {{ L.cls }}">
+            <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+              <path d="{{ L.body }}" fill="#00BCD4"></path>
+              <path d="{{ L.shade }}" fill="rgba(0,0,0,0.26)"></path>
+              <path d="{{ L.visor }}" fill="rgba(5,5,12,0.72)"></path>
+              <path d="{{ L.pupil }}" fill="#f2fdff"></path>
+            </svg>
+          </div>
+        </sc-for>
+      </div>
+      <div class="liveCap">
+        <b>ONE SHAPE, FOUR GRIDS</b>
+        <span>Same silhouette, resampled. Running here on a loop; on the page each step is tied to a scroll beat, so you drive it.</span>
+      </div>
+    </div>
+
+    <div class="ladder">
+      <sc-for list="{{ rungs }}" as="r" hint-placeholder-count="4">
+        <div class="rung">
+          <span class="art">
+            <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+              <path d="{{ r.body }}" fill="{{ r.c }}"></path>
+              <path d="{{ r.shade }}" fill="rgba(0,0,0,0.26)"></path>
+              <path d="{{ r.visor }}" fill="rgba(5,5,12,0.72)"></path>
+              <path d="{{ r.pupil }}" fill="#fff"></path>
+            </svg>
+          </span>
+          <span>
+            <span class="n">{{ r.title }}</span>
+            <span class="m">{{ r.grid }}</span>
+            <span class="d">{{ r.use }}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div class="foot"><i></i>every frame snaps to the grid &mdash; no sub-pixel, no blur, no easing between resolutions</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // The ghost is generated, not hand-drawn, so it can be resampled to any
+    // grid and still be the same shape. Dome + body + toothed skirt, with a
+    // visor band carved through the middle.
+    function cells(N, kind) {
+      const out = [];
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const u = (x + 0.5) / N, v = (y + 0.5) / N;
+          let solid;
+          if (v < 0.5) {
+            solid = (u - 0.5) * (u - 0.5) + (v - 0.5) * (v - 0.5) <= 0.25;
+          } else if (v < 0.84) {
+            solid = true;
+          } else {
+            const local = (u * 4) % 1;
+            const peak = 1 - Math.abs(2 * local - 1);
+            solid = (v - 0.84) / 0.16 < peak;
+          }
+          if (!solid) continue;
+          const inVisor = v > 0.355 && v < 0.5 && u > 0.17 && u < 0.83;
+          const inPupil = v > 0.395 && v < 0.465 && u > 0.44 && u < 0.60;
+          const isShade = v > 0.74;
+          if (kind === 'body') out.push([x, y]);
+          else if (kind === 'visor' && inVisor && !inPupil) out.push([x, y]);
+          else if (kind === 'pupil' && inPupil) out.push([x, y]);
+          else if (kind === 'shade' && isShade) out.push([x, y]);
+        }
+      }
+      return out;
+    }
+    function path(list, N) {
+      const s = 48 / N;
+      return list.map(function (c) {
+        const x = (c[0] * s).toFixed(3), y = (c[1] * s).toFixed(3), w = s.toFixed(3);
+        return 'M' + x + ' ' + y + 'h' + w + 'v' + w + 'h-' + w + 'Z';
+      }).join('');
+    }
+    function build(N) {
+      return {
+        body:  path(cells(N, 'body'), N),
+        shade: path(cells(N, 'shade'), N),
+        visor: path(cells(N, 'visor'), N),
+        pupil: path(cells(N, 'pupil'), N)
+      };
+    }
+
+    const GRIDS = [48, 24, 12, 6];
+    const META = [
+      ['FINE',    '48 × 48 · 1px cell',  'The resting state. Full detail — this is the favicon, the app icon, the hero character.'],
+      ['MEDIUM',  '24 × 24 · 2px cell',  'One scroll beat in. Detail drops, silhouette holds. Section headers live here.'],
+      ['COARSE',  '12 × 12 · 4px cell',  'The app icon grid. Reads at a glance on a card or a social thumbnail.'],
+      ['BLOCK',   '6 × 6 · 8px cell',    'Nearly abstract. Used as a section marker, a bullet, a loading state — a ghost reduced to a glyph.']
+    ];
+    const HUES = ['#FF4136', '#FF9800', '#7C4DFF', '#FF80AB'];
+
+    return {
+      levels: GRIDS.map(function (N, i) {
+        const b = build(N);
+        b.cls = 'f' + i;
+        return b;
+      }),
+      rungs: GRIDS.map(function (N, i) {
+        const b = build(N);
+        b.c = HUES[i];
+        b.title = META[i][0];
+        b.grid = META[i][1];
+        b.use = META[i][2];
+        return b;
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

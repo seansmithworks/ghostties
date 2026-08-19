@@ -1,0 +1,215 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #06060c; }
+    a { color: rgba(255,255,255,0.7); text-decoration: none; } a:hover { color: #fff; }
+
+    .fd { width: 1360px; height: 900px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #06060c; color: #fff;
+      font-family: "Bricolage Grotesque", system-ui, sans-serif; }
+
+    /* --- the field: eight ghost hues, drifting, screened together --- */
+    .field { position: absolute; inset: -20%; filter: blur(72px) saturate(1.25); }
+    .field i { position: absolute; display: block; border-radius: 46% 54% 58% 42%;
+      mix-blend-mode: screen; opacity: 0.9; }
+    .b1 { width: 620px; height: 560px; left: 4%;  top: 6%;   background: #FF4136;
+      animation: w1 26s ease-in-out infinite; }
+    .b2 { width: 700px; height: 620px; left: 26%; top: 34%;  background: #7C4DFF;
+      animation: w2 31s ease-in-out infinite; }
+    .b3 { width: 560px; height: 640px; left: 52%; top: 2%;   background: #00BCD4;
+      animation: w3 24s ease-in-out infinite; }
+    .b4 { width: 520px; height: 480px; left: 68%; top: 46%;  background: #FF80AB;
+      animation: w1 34s ease-in-out infinite reverse; }
+    .b5 { width: 480px; height: 440px; left: 14%; top: 58%;  background: #FF9800;
+      animation: w2 29s ease-in-out infinite reverse; }
+    .b6 { width: 420px; height: 400px; left: 44%; top: 66%;  background: #FFEB3B;
+      animation: w3 37s ease-in-out infinite; opacity: 0.55; }
+    .b7 { width: 560px; height: 500px; left: 76%; top: 10%;  background: #81D4FA;
+      animation: w2 33s ease-in-out infinite; }
+    .b8 { width: 640px; height: 520px; left: -4%; top: 30%;  background: #7986CB;
+      animation: w3 28s ease-in-out infinite reverse; }
+    @keyframes w1 { 0%,100% { transform: translate(0,0) rotate(0deg) scale(1); }
+                    50% { transform: translate(120px,-70px) rotate(38deg) scale(1.18); } }
+    @keyframes w2 { 0%,100% { transform: translate(0,0) rotate(0deg) scale(1.1); }
+                    50% { transform: translate(-140px,80px) rotate(-32deg) scale(0.9); } }
+    @keyframes w3 { 0%,100% { transform: translate(0,0) rotate(10deg) scale(0.95); }
+                    50% { transform: translate(90px,110px) rotate(-24deg) scale(1.22); } }
+
+    .noise { position: absolute; inset: 0; pointer-events: none; opacity: 0.4;
+      mix-blend-mode: overlay; }
+    .noise svg { width: 100%; height: 100%; display: block; }
+    .dim { position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(90% 70% at 50% 42%, rgba(6,6,12,0.34), rgba(6,6,12,0.86) 100%),
+        linear-gradient(180deg, rgba(6,6,12,0.5) 0%, transparent 26%, rgba(6,6,12,0.72) 100%); }
+
+    /* --- glass --- */
+    .z { position: relative; z-index: 3; height: 100%; box-sizing: border-box;
+      padding: 40px 56px 44px; display: flex; flex-direction: column; }
+    .nav { display: flex; align-items: center; gap: 24px;
+      font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.6); }
+    .nav .mark { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800;
+      font-size: 17px; letter-spacing: -0.02em; color: #fff; }
+    .nav .r { margin-left: auto; display: flex; gap: 24px; }
+
+    .glass { border-radius: 18px; border: 1px solid rgba(255,255,255,0.20);
+      background: rgba(255,255,255,0.055); backdrop-filter: blur(26px) saturate(1.2);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), 0 30px 70px rgba(0,0,0,0.42); }
+
+    .main { margin-top: 46px; display: grid; grid-template-columns: 1.15fr 1fr; gap: 26px;
+      align-items: start; }
+    .hero { padding: 40px 40px 36px; }
+    h1 { font-size: 66px; line-height: 0.98; letter-spacing: -0.04em; font-weight: 800;
+      margin: 0; text-wrap: balance; }
+    h1 span { display: block; font-weight: 400;
+      background: linear-gradient(96deg, #FFEB3B, #FF80AB 38%, #00BCD4 72%, #81D4FA);
+      -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .lead { font-size: 16px; line-height: 1.6; color: rgba(255,255,255,0.76);
+      margin: 22px 0 0; max-width: 40ch; text-wrap: pretty; }
+    .buttons { display: flex; gap: 10px; align-items: center; margin-top: 30px; flex-wrap: wrap; }
+    .btn { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; padding: 11px 15px;
+      border-radius: 9px; border: 1px solid rgba(255,255,255,0.24);
+      background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.9);
+      display: flex; align-items: center; gap: 9px; }
+    .btn.p { background: #fff; color: #10101c; border-color: #fff; font-weight: 500; }
+    .btn em { font-style: normal; opacity: 0.45; }
+
+    /* product on glass */
+    .shot { padding: 12px; }
+    .shot .frame { border-radius: 10px; overflow: hidden; background: #12122a;
+      border: 1px solid rgba(255,255,255,0.12); }
+    .shot .tb { height: 26px; background: rgba(255,255,255,0.06); display: flex;
+      align-items: center; gap: 5px; padding: 0 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .shot .tb i { width: 8px; height: 8px; border-radius: 50%; }
+    .shot .body { display: grid; grid-template-columns: 92px 1fr; height: 226px; }
+    .shot .side { background: rgba(255,255,255,0.035); padding: 9px 8px;
+      border-right: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 7px; }
+    .shot .srow { display: flex; align-items: center; gap: 6px; font-size: 9.5px;
+      font-family: "IBM Plex Mono", monospace; color: rgba(255,255,255,0.6); }
+    .shot .srow b { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+    .shot .term { padding: 11px 12px; font-family: "IBM Plex Mono", monospace;
+      font-size: 10px; line-height: 1.9; color: rgba(255,255,255,0.5); }
+    .shot .term b { color: rgba(255,255,255,0.9); font-weight: 400; }
+    .shot .term .ok { color: rgba(120,230,140,0.9); }
+    .shot .cap { font-family: "IBM Plex Mono", monospace; font-size: 11px;
+      color: rgba(255,255,255,0.55); text-align: center; padding: 11px 0 4px; }
+
+    /* palette rail — the field's source, doing double duty as a legend */
+    .rail { margin-top: auto; display: flex; align-items: center; gap: 12px;
+      font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.12em;
+      text-transform: uppercase; color: rgba(255,255,255,0.44); }
+    .swatches { display: flex; gap: 7px; }
+    .swatches div { width: 26px; height: 26px; }
+    .swatches svg { width: 100%; height: 100%; display: block; }
+    .rail .r { margin-left: auto; letter-spacing: 0.06em; text-transform: none;
+      color: rgba(255,255,255,0.5); }
+  </style>
+</helmet>
+<div class="fd">
+  <div class="field">
+    <i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="b4"></i>
+    <i class="b5"></i><i class="b6"></i><i class="b7"></i><i class="b8"></i>
+  </div>
+  <div class="noise">
+    <svg xmlns="http://www.w3.org/2000/svg">
+      <filter id="gf"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"></feTurbulence></filter>
+      <rect width="100%" height="100%" filter="url(#gf)"></rect>
+    </svg>
+  </div>
+  <div class="dim"></div>
+
+  <div class="z">
+    <div class="nav">
+      <span class="mark">Ghostties</span>
+      <span class="r"><a href="#">capabilities</a><a href="#">install</a><a href="#">changelog</a><a href="#">github</a></span>
+    </div>
+
+    <div class="main">
+      <div class="glass hero">
+        <h1>Six agents.<span>One window.</span></h1>
+        <p class="lead">A multi-agent workspace terminal for macOS. Every Claude Code session in one sidebar, colour-coded by who is working and who is waiting on you.</p>
+        <div class="buttons">
+          <span class="btn p">brew install --cask ghostties</span>
+          <span class="btn">npx ghostties-install <em>&#9106;</em></span>
+          <span class="btn">.dmg <em>&darr;</em></span>
+        </div>
+      </div>
+
+      <div class="glass shot">
+        <div class="frame">
+          <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+          <div class="body">
+            <div class="side">
+              <div class="srow"><b style="background:#4ade80"></b>brukas</div>
+              <div class="srow"><b style="background:#60a5fa"></b>web</div>
+              <div class="srow"><b style="background:#fbbf24"></b>career</div>
+              <div class="srow"><b style="background:#4ade80"></b>ghostties</div>
+              <div class="srow"><b style="background:rgba(255,255,255,0.25)"></b>docs</div>
+            </div>
+            <div class="term">
+              <div><b>~ &gt; gt list</b></div>
+              <div><span class="ok">needs you</span> &nbsp;2</div>
+              <div>running &nbsp;&nbsp;&nbsp;3</div>
+              <div>done today 7</div>
+            </div>
+          </div>
+        </div>
+        <div class="cap">every session, one window</div>
+      </div>
+    </div>
+
+    <div class="rail">
+      <span>Eight ghosts</span>
+      <span class="swatches">
+        <sc-for list="{{ ghosts }}" as="g" hint-placeholder-count="8">
+          <div>
+            <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+              <path d="{{ g.d }}" fill="{{ g.c }}"></path>
+            </svg>
+          </div>
+        </sc-for>
+      </span>
+      <span class="r">the palette is the background &mdash; a GLSL flow field sampling all eight hues</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const RECTS = {
+      red:    '12,0,24,4 8,4,32,4 4,8,40,4 4,12,8,8 20,12,8,8 36,12,8,8 0,20,48,20 0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4 0,44,4,4 16,44,4,4 28,44,4,4 44,44,4,4',
+      purple: '12,0,24,4 4,4,40,4 0,8,48,4 0,12,8,4 16,12,16,4 40,12,8,4 0,16,4,4 16,16,16,4 44,16,4,4 0,20,48,20 0,40,8,4 16,40,16,4 40,40,8,4 0,44,4,4 20,44,8,4 44,44,4,4',
+      cyan:   '12,0,24,4 8,4,32,4 4,8,40,4 4,12,12,8 32,12,12,8 0,20,48,20 0,40,4,4 8,40,8,4 20,40,8,4 32,40,8,4 44,40,4,4 0,44,4,4 12,44,4,4 32,44,4,4 44,44,4,4',
+      pink:   '16,0,16,4 8,4,32,4 4,8,40,4 4,12,4,8 16,12,16,8 40,12,4,8 0,20,48,20 0,40,12,4 20,40,8,4 36,40,12,4 0,44,4,4 44,44,4,4',
+      orange: '8,0,32,4 4,4,40,4 0,8,48,4 0,12,8,8 16,12,16,8 40,12,8,8 0,20,48,20 0,40,12,4 16,40,16,4 36,40,12,4 0,44,4,4 20,44,8,4 44,44,4,4',
+      yellow: '8,0,32,4 4,4,40,4 0,8,48,4 0,12,4,8 16,12,16,8 44,12,4,8 0,20,48,4 0,24,12,4 36,24,12,4 0,28,48,12 0,40,8,4 16,40,16,4 40,40,8,4 0,44,4,4 20,44,8,4 44,44,4,4',
+      lblue:  '16,0,16,4 8,4,32,4 4,8,40,4 0,12,48,4 0,16,12,8 20,16,8,8 36,16,12,8 0,24,48,12 4,36,40,4 8,40,32,4 16,44,16,4',
+      indigo: '8,0,32,4 4,4,40,4 0,8,48,4 0,12,12,4 20,12,28,4 0,16,8,4 20,16,28,4 0,20,12,4 20,20,28,4 0,24,48,16 0,40,8,4 16,40,16,4 40,40,8,4 0,44,4,4 20,44,8,4 44,44,4,4'
+    };
+    function toPath(s) {
+      return s.split(' ').map(function (t) {
+        var a = t.split(',').map(Number);
+        return 'M' + a[0] + ' ' + a[1] + 'h' + a[2] + 'v' + a[3] + 'h-' + a[2] + 'Z';
+      }).join('');
+    }
+    const order = [
+      ['red', '#FF4136'], ['purple', '#7C4DFF'], ['cyan', '#00BCD4'], ['pink', '#FF80AB'],
+      ['orange', '#FF9800'], ['yellow', '#FFEB3B'], ['lblue', '#81D4FA'], ['indigo', '#7986CB']
+    ];
+    return { ghosts: order.map(function (p) { return { c: p[1], d: toPath(RECTS[p[0]]) }; }) };
+  }
+}
+</script>
+</body>
+</html>

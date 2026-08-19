@@ -1,0 +1,222 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Martian+Mono:wght@400;500&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .rp { width: 1360px; height: 880px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "DM Mono", monospace; padding: 46px 56px 40px;
+      display: flex; flex-direction: column; }
+
+    .lbl { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+    .top { display: flex; align-items: flex-end; gap: 40px; }
+    h2 { font-family: "Silkscreen", monospace; font-size: 26px; line-height: 1.3;
+      color: #fff; margin: 12px 0 0; }
+    h2 em { font-style: normal; color: #ffd54f; }
+    .blurb { font-size: 13px; font-weight: 300; line-height: 1.7; margin: 0 0 4px;
+      max-width: 46ch; color: rgba(236,234,245,0.6); text-wrap: pretty; }
+    .warn { margin-left: auto; border: 1px solid rgba(255,140,110,0.4);
+      background: rgba(255,140,110,0.07); padding: 11px 14px; max-width: 250px;
+      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.14em;
+      line-height: 2; text-transform: uppercase; color: rgba(255,170,145,0.9); }
+
+    /* --- the replica. app UI is SF Pro; terminal is SF Mono. --- */
+    .win { margin-top: 30px; flex: 1; min-height: 0; border-radius: 10px; overflow: hidden;
+      display: grid; grid-template-rows: 38px 1fr; background: #1a1a2e;
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 34px 84px rgba(0,0,0,0.7);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .tb { display: flex; align-items: center; gap: 8px; padding: 0 13px; background: #15152a;
+      border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .tl { width: 12px; height: 12px; border-radius: 50%; }
+    .tb .t { margin-left: 14px; font-size: 12px; color: rgba(255,255,255,0.45); }
+    .tb .t b { color: rgba(255,255,255,0.75); font-weight: 500; }
+
+    .body { display: grid; grid-template-columns: 244px 1fr; min-height: 0; }
+    .side { background: #16162a; border-right: 1px solid rgba(255,255,255,0.07);
+      padding: 12px 0; display: flex; flex-direction: column; }
+    .sh { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
+      color: rgba(255,255,255,0.34); padding: 10px 16px 7px; }
+    .row { display: flex; align-items: center; gap: 9px; padding: 8px 16px;
+      font-size: 13px; color: rgba(255,255,255,0.72); cursor: pointer;
+      border-left: 2px solid transparent; }
+    .row:hover { background: rgba(255,255,255,0.045); }
+    .row.on { background: rgba(255,255,255,0.075); color: #fff; border-left-color: #c97350; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .row .ts { margin-left: auto; font-size: 10.5px; color: rgba(255,255,255,0.3);
+      font-family: "DM Mono", monospace; }
+    .side .foot { margin-top: auto; padding: 12px 16px 2px; font-size: 11px;
+      color: rgba(255,255,255,0.3); border-top: 1px solid rgba(255,255,255,0.06); }
+
+    /* terminal pane — mono, like the real thing */
+    .pane { padding: 22px 26px; font-family: "SFMono-Regular", "SF Mono", "DM Mono", monospace;
+      font-size: 13px; line-height: 1.9; color: rgba(255,255,255,0.6); overflow: hidden; }
+    .pr { color: rgba(255,255,255,0.32); }
+    .pane b { color: #fff; font-weight: 400; }
+    .ok { color: rgba(120,225,140,0.92); }
+    .warnc { color: rgba(251,191,36,0.95); }
+    .caret { display: inline-block; width: 8px; height: 15px; background: #c97350;
+      vertical-align: -2px; animation: blink 1.05s steps(2, jump-none) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .hint { margin-top: 16px; font-family: "Martian Mono", monospace; font-size: 8.5px;
+      letter-spacing: 0.2em; text-transform: uppercase; color: rgba(236,234,245,0.34);
+      display: flex; align-items: center; gap: 10px; }
+    .hint i { width: 6px; height: 6px; background: #4ade80; display: block;
+      animation: sq 1.5s steps(2, jump-none) infinite; }
+    @keyframes sq { 50% { opacity: 0.2; } }
+  </style>
+</helmet>
+<div class="rp">
+  <div class="top">
+    <div>
+      <div class="lbl">02 &mdash; the sidebar &nbsp;/&nbsp; alternate treatment</div>
+      <h2>A replica you can <em>actually click.</em></h2>
+    </div>
+    <p class="blurb">Rebuilt in HTML rather than captured. Click any session and the pane follows, exactly as the app does.</p>
+    <div class="warn">drift risk &mdash; a replica has to be re-measured against the real app on every release, or it starts lying</div>
+  </div>
+
+  <div class="win">
+    <div class="tb">
+      <span class="tl" style="background:#ff5f57"></span>
+      <span class="tl" style="background:#febc2e"></span>
+      <span class="tl" style="background:#28c840"></span>
+      <span class="t"><b>{{ current.title }}</b> &mdash; 7 sessions &middot; {{ needCount }} need you</span>
+    </div>
+    <div class="body">
+      <div class="side">
+        <div class="sh">Sessions</div>
+        <sc-for list="{{ live }}" as="s" hint-placeholder-count="4">
+          <div class="row {{ s.cls }}" onClick="{{ s.pick }}">
+            <span class="dot" style="background: rgb(74 222 128)"></span>
+            <span>{{ s.name }}</span>
+            <span class="ts">{{ s.ts }}</span>
+          </div>
+        </sc-for>
+        <div class="sh">Archive</div>
+        <sc-for list="{{ archived }}" as="s" hint-placeholder-count="3">
+          <div class="row {{ s.cls }}" onClick="{{ s.pick }}">
+            <span class="dot" style="background: rgb(255 255 255 / 0.22)"></span>
+            <span>{{ s.name }}</span>
+            <span class="ts">{{ s.ts }}</span>
+          </div>
+        </sc-for>
+        <div class="foot">v0.1.0-beta.23 &middot; macOS 13+</div>
+      </div>
+
+      <div class="pane">
+        <div><span class="pr">{{ current.cwd }} &nbsp;&gt;</span> <b>{{ current.cmd }}</b></div>
+        <sc-for list="{{ current.out }}" as="l" hint-placeholder-count="5">
+          <div class="{{ l.cls }}">{{ l.text }}</div>
+        </sc-for>
+        <div><span class="pr">{{ current.cwd }} &nbsp;&gt;</span> <span class="caret"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint"><i></i>click a session in the sidebar &mdash; the pane is wired</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":880}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { picked: 'brukas' };
+  }
+  renderVals() {
+    const self = this;
+    const DATA = {
+      brukas: {
+        name: 'brukas', ts: 'now', live: true, title: 'brukas',
+        cwd: '~/Code/brukas', cmd: 'claude',
+        out: [
+          ['', 'Running the migration plan against the staging branch.'],
+          ['ok', '  ✓ 14 files rewritten'],
+          ['ok', '  ✓ types regenerated'],
+          ['warnc', '  ! supabase/migrations/0042 needs your call — destructive'],
+          ['', 'Waiting on you before I apply it.']
+        ]
+      },
+      web: {
+        name: 'web', ts: '1m', live: true, title: 'web',
+        cwd: '~/Code/ghostties/web', cmd: 'gt list',
+        out: [
+          ['', 'needs you   2   pick a hero direction · approve copy'],
+          ['', 'running     3   a11y sweep · poster crop · og image'],
+          ['ok', 'done today  7']
+        ]
+      },
+      career: {
+        name: 'career-ops', ts: '4m', live: true, title: 'career-ops',
+        cwd: '~/Code/career-ops', cmd: 'claude',
+        out: [
+          ['', 'Rewriting the case study intro against the voice anchor.'],
+          ['ok', '  ✓ draft 3 saved'],
+          ['', 'Still working — no input needed yet.']
+        ]
+      },
+      ghostties: {
+        name: 'ghostties', ts: '6m', live: true, title: 'ghostties',
+        cwd: '~/Code/ghostties', cmd: 'zig build run',
+        out: [
+          ['ok', '  ✓ GhosttyKit.xcframework up to date'],
+          ['', '  compiling Features/Ghostties …'],
+          ['', '  47 / 112 files']
+        ]
+      },
+      changelog: {
+        name: 'changelog', ts: '2d', live: false, title: 'changelog',
+        cwd: '~/Code/ghostties', cmd: 'git log --oneline -3',
+        out: [
+          ['', 'c6622e0 docs(plans): align composer mock box edges'],
+          ['', '724c11f fix(macos): wire textSecondary token'],
+          ['', '4ade82a fix(macos): split lastOutputAt from lastActiveAt']
+        ]
+      },
+      docs: {
+        name: 'docs', ts: '9d', live: false, title: 'docs',
+        cwd: '~/Code/ghostties/docs', cmd: 'ls solutions',
+        out: [['', 'build-xcode-workaround.md'], ['', 'release-pipeline.md']]
+      },
+      tap: {
+        name: 'homebrew-tap', ts: '21d', live: false, title: 'homebrew-tap',
+        cwd: '~/Code/homebrew-tap', cmd: 'brew audit --cask ghostties',
+        out: [['ok', '  ✓ no offenses detected']]
+      }
+    };
+    const keys = Object.keys(DATA);
+    const picked = DATA[this.state.picked] ? this.state.picked : 'brukas';
+    const mk = function (k) {
+      const d = DATA[k];
+      return {
+        name: d.name, ts: d.ts,
+        cls: k === picked ? 'on' : '',
+        pick: function () { self.setState({ picked: k }); }
+      };
+    };
+    const cur = DATA[picked];
+    return {
+      live: keys.filter(function (k) { return DATA[k].live; }).map(mk),
+      archived: keys.filter(function (k) { return !DATA[k].live; }).map(mk),
+      needCount: 2,
+      current: {
+        title: cur.title, cwd: cur.cwd, cmd: cur.cmd,
+        out: cur.out.map(function (l) { return { cls: l[0], text: l[1] }; })
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

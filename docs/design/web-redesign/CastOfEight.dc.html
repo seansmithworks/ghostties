@@ -1,0 +1,159 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Martian+Mono:wght@400;500&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .ce { width: 1360px; height: 880px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "DM Mono", monospace; padding: 48px 56px 40px;
+      display: flex; flex-direction: column; }
+
+    .lbl { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+    .head { display: flex; align-items: flex-end; gap: 44px; }
+    h2 { font-family: "Silkscreen", monospace; font-size: 28px; line-height: 1.3;
+      color: #fff; margin: 13px 0 0; }
+    h2 em { font-style: normal; color: #ffd54f; }
+    .blurb { font-size: 13px; font-weight: 300; line-height: 1.7; margin: 0 0 3px;
+      max-width: 52ch; color: rgba(236,234,245,0.6); text-wrap: pretty; }
+    .flag { margin-left: auto; border: 1px solid rgba(236,234,245,0.2); padding: 10px 13px;
+      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.16em;
+      line-height: 1.9; text-transform: uppercase; color: rgba(236,234,245,0.5); max-width: 210px; }
+
+    /* specimen sheet — hairline grid, no cards, no rounding, no shadows */
+    .sheet { margin-top: 34px; flex: 1; min-height: 0;
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px; background: rgba(236,234,245,0.13);
+      border: 1px solid rgba(236,234,245,0.13); }
+    .spec { background: #07070f; padding: 20px 18px 18px; display: flex; flex-direction: column; }
+    .art { width: 62px; height: 62px; }
+    .art svg { width: 100%; height: 100%; display: block;
+      filter: drop-shadow(0 3px 0 rgba(0,0,0,0.4)); }
+    .spec .nm { font-family: "Silkscreen", monospace; font-size: 16px; color: #fff;
+      margin-top: 16px; }
+    .spec .cap { font-family: "Martian Mono", monospace; font-size: 8px; letter-spacing: 0.18em;
+      text-transform: uppercase; margin-top: 9px; }
+    .spec .dsc { font-size: 12px; font-weight: 300; line-height: 1.6; margin-top: 11px;
+      color: rgba(236,234,245,0.55); text-wrap: pretty; }
+    .spec .hex { margin-top: auto; padding-top: 14px; display: flex; align-items: center; gap: 8px;
+      font-family: "Martian Mono", monospace; font-size: 8px; letter-spacing: 0.14em;
+      color: rgba(236,234,245,0.3); }
+    .spec .hex i { width: 9px; height: 9px; display: block; }
+
+    .foot { margin-top: 22px; display: flex; align-items: center; gap: 18px;
+      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.36); }
+    .foot i { width: 6px; height: 6px; background: #ffd54f; display: block; }
+    .foot .r { margin-left: auto; color: rgba(236,234,245,0.28); }
+  </style>
+</helmet>
+<div class="ce">
+  <div class="head">
+    <div>
+      <div class="lbl">motion language &nbsp;/&nbsp; option 3 &mdash; a cast, not a decoration</div>
+      <h2>Eight ghosts. <em>Eight jobs.</em></h2>
+    </div>
+    <p class="blurb">Each character owns one capability and appears only where that capability does &mdash; in the docs, on the social card, in the changelog entry that shipped it. The set stops being wallpaper and becomes the site&rsquo;s index.</p>
+    <div class="flag">names are a strawman &mdash; the structure is the proposal, not the vocabulary</div>
+  </div>
+
+  <div class="sheet">
+    <sc-for list="{{ cast }}" as="g" hint-placeholder-count="8">
+      <div class="spec">
+        <span class="art">
+          <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+            <path d="{{ g.body }}" fill="{{ g.c }}"></path>
+            <path d="{{ g.shade }}" fill="rgba(0,0,0,0.24)"></path>
+            <path d="{{ g.hi }}" fill="rgba(255,255,255,0.20)"></path>
+            <rect x="8" y="17" width="32" height="9" fill="rgba(5,5,12,0.72)"></rect>
+            <rect x="{{ g.ex }}" y="19" width="7" height="5" fill="{{ g.eye }}"></rect>
+          </svg>
+        </span>
+        <span class="nm">{{ g.name }}</span>
+        <span class="cap" style="color: rgb(255 213 79)">{{ g.owns }}</span>
+        <span class="dsc">{{ g.desc }}</span>
+        <span class="hex"><i style="background: rgb(120 120 140)"></i>{{ g.c }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div class="foot">
+    <i></i>one character per capability &mdash; if a feature has no ghost, it does not get a section
+    <span class="r">8 characters &middot; 8 social cards &middot; 8 changelog marks</span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const DOME = {
+      tall:  '12,0,24,4 8,4,32,4 4,8,40,4 4,12,40,4 0,16,48,24',
+      wide:  '8,0,32,4 4,4,40,4 0,8,48,4 0,12,48,4 0,16,48,24',
+      round: '16,0,16,4 8,4,32,4 4,8,40,4 0,12,48,4 0,16,48,24'
+    };
+    const SKIRT = {
+      four:  '0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4 0,44,4,4 16,44,4,4 28,44,4,4 44,44,4,4',
+      three: '0,40,12,4 18,40,12,4 36,40,12,4 0,44,4,4 22,44,4,4 44,44,4,4',
+      drip:  '0,40,48,4 4,44,8,4 20,44,8,4 36,44,8,4',
+      taper: '4,40,40,4 12,44,24,4'
+    };
+    const SHADE = {
+      four:  '0,36,48,4 0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4',
+      three: '0,36,48,4 0,40,12,4 18,40,12,4 36,40,12,4',
+      drip:  '0,36,48,4 0,40,48,4',
+      taper: '0,36,48,4 4,40,40,4'
+    };
+    const HI = {
+      tall:  '12,0,12,4 8,4,10,4 4,8,8,4',
+      wide:  '8,0,14,4 4,4,10,4 0,8,8,4',
+      round: '16,0,10,4 8,4,12,4 4,8,8,4'
+    };
+    function toPath(s) {
+      return s.split(' ').map(function (t) {
+        var a = t.split(',').map(Number);
+        return 'M' + a[0] + ' ' + a[1] + 'h' + a[2] + 'v' + a[3] + 'h-' + a[2] + 'Z';
+      }).join('');
+    }
+    // hue, dome, skirt, eye, pupil-x, name, owns, description
+    const SET = [
+      ['#FF4136', 'tall',  'four',  '#fff6f5', 21, 'PILOT',  'the sidebar',
+       'Holds the list of live sessions and decides who floats to the top.'],
+      ['#00BCD4', 'wide',  'three', '#f2fdff', 26, 'LANE',   'gt list',
+       'Every open task, every project, sorted into status lanes.'],
+      ['#FFEB3B', 'wide',  'four',  '#2a2400', 21, 'BEACON', 'your turn',
+       'The blue state. An agent has stopped and is waiting on a human.'],
+      ['#FF9800', 'wide',  'drip',  '#fff8ec', 16, 'EMBER',  'long-running',
+       'Still going, no input needed. Sinks down the list so it stops shouting.'],
+      ['#7C4DFF', 'tall',  'three', '#f6f2ff', 26, 'QUORUM', 'needs a decision',
+       'The gold state. Something is blocked on a judgement call only you can make.'],
+      ['#FF80AB', 'round', 'taper', '#fff4f8', 21, 'ECHO',   'task notes',
+       'Per-task markdown in .ghostties/tasks, edited in the row you are looking at.'],
+      ['#81D4FA', 'round', 'drip',  '#f3fbff', 16, 'DRIFT',  'projects & archive',
+       'Grouping by repo, and getting finished work out of your face.'],
+      ['#7986CB', 'tall',  'taper', '#f4f5ff', 26, 'ROOT',   'ghostty underneath',
+       'The upstream terminal, unmodified. Your config, your themes, your keybinds.']
+    ];
+    return {
+      cast: SET.map(function (g) {
+        return {
+          c: g[0], eye: g[3], ex: g[4], name: g[5], owns: g[6], desc: g[7],
+          body:  toPath(DOME[g[1]] + ' ' + SKIRT[g[2]]),
+          shade: toPath(SHADE[g[2]]),
+          hi:    toPath(HI[g[1]])
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

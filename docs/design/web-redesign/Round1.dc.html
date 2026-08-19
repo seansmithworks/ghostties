@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #101020; }
+    a { color: #d8d3ea; } a:hover { color: #fff; }
+    .cov { width: 1440px; height: 760px; box-sizing: border-box; background:
+      radial-gradient(120% 90% at 12% -10%, rgba(124,77,255,0.16), transparent 60%),
+      radial-gradient(90% 80% at 96% 110%, rgba(0,188,212,0.10), transparent 62%),
+      #101020;
+      color: #f2f0f7; font-family: "IBM Plex Sans", system-ui, sans-serif;
+      padding: 60px 68px; display: flex; flex-direction: column; gap: 34px;
+      position: relative; overflow: hidden; }
+    .grain { position: absolute; inset: 0; opacity: 0.5; pointer-events: none;
+      background-image: radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px);
+      background-size: 3px 3px; }
+    .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(242,240,247,0.42); }
+    h1 { font-size: 54px; line-height: 1.03; letter-spacing: -0.03em; font-weight: 600;
+      margin: 14px 0 0; }
+    h1 em { font-style: normal; color: rgba(242,240,247,0.32); }
+    .sub { font-size: 15.5px; line-height: 1.6; color: rgba(242,240,247,0.62);
+      max-width: 66ch; margin: 16px 0 0; text-wrap: pretty; }
+    .cols { display: grid; grid-template-columns: 292px 1fr; gap: 52px; align-items: start; flex: 1; }
+    .rail-h { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(242,240,247,0.34); margin-bottom: 14px; }
+    .spine { display: flex; flex-direction: column; border-top: 1px solid rgba(255,255,255,0.10); }
+    .spine div { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.07);
+      font-size: 13.5px; color: rgba(242,240,247,0.78); }
+    .spine span { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: rgba(242,240,247,0.3);
+      padding-top: 2px; min-width: 16px; }
+    .spine b { font-weight: 500; }
+    .spine i { font-style: normal; color: #f0a58a; font-family: "IBM Plex Mono", monospace;
+      font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-left: auto; padding-top: 3px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .card { border: 1px solid rgba(255,255,255,0.10); border-radius: 3px; padding: 17px 17px 19px;
+      background: rgba(255,255,255,0.022); display: flex; flex-direction: column; gap: 9px;
+      min-height: 172px; }
+    .k { display: flex; align-items: baseline; gap: 10px; }
+    .ltr { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.14em;
+      color: rgba(242,240,247,0.34); }
+    .badge { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
+      letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 7px; border-radius: 2px; }
+    .in  { background: rgba(0,188,212,0.13); color: #7fd8e6; }
+    .out { background: rgba(255,152,0,0.13); color: #f0b46a; }
+    .card h3 { margin: 0; font-size: 20px; letter-spacing: -0.015em; font-weight: 600; }
+    .card p { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(242,240,247,0.56); text-wrap: pretty; }
+    .card p em { font-style: italic; color: rgba(242,240,247,0.78); }
+    .axis { margin-top: auto; font-family: "IBM Plex Mono", monospace; font-size: 10px;
+      letter-spacing: 0.1em; text-transform: uppercase; color: rgba(242,240,247,0.3); }
+    .note { font-size: 12.5px; line-height: 1.55; margin-top: 20px; color: rgba(242,240,247,0.44); text-wrap: pretty; }
+  </style>
+</helmet>
+<div class="cov">
+  <div class="grain"></div>
+  <div>
+    <div class="eyebrow">ghostties.org &nbsp;/&nbsp; redesign &nbsp;/&nbsp; direction round</div>
+    <h1>Six directions, <em>one content spine.</em></h1>
+    <p class="sub">Every board below is the same page saying the same things &mdash; they differ only in stance. Three stay inside the multi&#8209;ghost&nbsp;+&nbsp;terminal concept the site has today. Three leave it. Pick a direction, or pick parts from several; the next round builds one for real, with live motion.</p>
+  </div>
+  <div class="cols">
+    <div>
+      <div class="rail-h">What every direction must carry</div>
+      <div class="spine">
+        <div><span>01</span><b>The offer, in one sentence</b></div>
+        <div><span>02</span><b>Proof &mdash; the product, moving</b></div>
+        <div><span>03</span><b>Capabilities</b><i>new</i></div>
+        <div><span>04</span><b>Install &mdash; brew / npx / dmg</b></div>
+        <div><span>05</span><b>Source &mdash; GitHub, changelog</b></div>
+        <div><span>06</span><b>Fine print</b></div>
+      </div>
+      <p class="note">Item 03 does not exist on the site today. Whatever wins has to make room for it &mdash; that is the one structural change every direction is solving for.</p>
+    </div>
+    <div>
+      <div class="rail-h">The six</div>
+      <div class="grid">
+        <div class="card"><div class="k"><span class="ltr">A</span><span class="badge in">in concept</span></div><h3>Arcade</h3><p>The Pac&#8209;Man DNA taken all the way. Maze grid, phosphor glow, ghosts that patrol the page and eat your tasks.</p><div class="axis">axis &mdash; personality</div></div>
+        <div class="card"><div class="k"><span class="ltr">B</span><span class="badge in">in concept</span></div><h3>Ghostties OS</h3><p>The site <em>is</em> the app. Real titlebar, real session sidebar, docs rendered as sessions. Proof by demonstration.</p><div class="axis">axis &mdash; credibility</div></div>
+        <div class="card"><div class="k"><span class="ltr">C</span><span class="badge in">in concept</span></div><h3>S&eacute;ance</h3><p>Ghosts and terminal, but quiet. Editorial display type, volumetric fog, one apparition, enormous negative space.</p><div class="axis">axis &mdash; restraint</div></div>
+        <div class="card"><div class="k"><span class="ltr">D</span><span class="badge out">outside</span></div><h3>The Long Hallway</h3><p>Scroll&#8209;driven 3D. A chaos of scattered windows resolves into one lit window; the ghosts fall in behind you.</p><div class="axis">axis &mdash; narrative</div></div>
+        <div class="card"><div class="k"><span class="ltr">E</span><span class="badge out">outside</span></div><h3>Manifest</h3><p>No mascots above the fold. A monospace spec sheet: giant type, hairlines, a real capability table. Anti&#8209;marketing.</p><div class="axis">axis &mdash; density</div></div>
+        <div class="card"><div class="k"><span class="ltr">F</span><span class="badge out">outside</span></div><h3>Field</h3><p>A living shader field in the eight ghost hues. The background does the work; the product floats on glass above it.</p><div class="axis">axis &mdash; atmosphere</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Martian+Mono:wght@400;500&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .cv { width: 1440px; height: 980px; box-sizing: border-box; background: #07070f;
+      color: #eceaf5; font-family: "DM Mono", monospace; padding: 56px 60px 48px;
+      display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .lattice { position: absolute; inset: 0; opacity: 0.5;
+      background-image: radial-gradient(rgba(255,255,255,0.07) 1.5px, transparent 1.5px);
+      background-size: 44px 44px; background-position: 22px 22px; }
+    .z { position: relative; z-index: 2; display: flex; flex-direction: column; height: 100%; }
+
+    .lbl { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.42); }
+    h1 { font-family: "Silkscreen", monospace; font-weight: 700; font-size: 46px;
+      line-height: 1.12; color: #fff; margin: 16px 0 0; }
+    h1 .y { color: #ffd54f; }
+    .sub { font-size: 14.5px; font-weight: 300; line-height: 1.7; margin: 18px 0 0;
+      max-width: 74ch; color: rgba(236,234,245,0.64); text-wrap: pretty; }
+    .sub b { color: #eceaf5; font-weight: 500; }
+
+    .cols { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px;
+      background: rgba(236,234,245,0.13); border: 1px solid rgba(236,234,245,0.13); flex: 1; }
+    .col { background: #07070f; padding: 22px 22px 24px; display: flex; flex-direction: column; }
+    .col > .lbl { margin-bottom: 16px; }
+    .item { padding: 13px 0; border-top: 1px solid rgba(236,234,245,0.11);
+      display: grid; grid-template-columns: 30px 1fr; gap: 11px; }
+    .item:first-of-type { border-top: 0; padding-top: 4px; }
+    .item .n { font-family: "Silkscreen", monospace; font-size: 12px; color: #ffd54f; padding-top: 2px; }
+    .item b { display: block; font-family: "Silkscreen", monospace; font-size: 13px;
+      color: #fff; font-weight: 400; }
+    .item span { display: block; font-size: 12px; font-weight: 300; line-height: 1.6;
+      color: rgba(236,234,245,0.55); margin-top: 6px; text-wrap: pretty; }
+    .item .st { display: inline-block; margin-top: 8px; font-family: "Martian Mono", monospace;
+      font-size: 7.5px; letter-spacing: 0.18em; text-transform: uppercase;
+      border: 1px solid rgba(236,234,245,0.22); padding: 3px 7px; color: rgba(236,234,245,0.5); }
+    .item .st.live { border-color: rgba(74,222,128,0.5); color: #7ee79b; }
+    .item .st.pick { border-color: #ffd54f; color: #ffd54f; }
+
+    .decided { margin-top: 26px; padding-top: 20px; border-top: 2px solid rgba(236,234,245,0.9);
+      display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 26px; }
+    .d b { display: block; font-family: "Martian Mono", monospace; font-size: 7.5px;
+      letter-spacing: 0.22em; text-transform: uppercase; color: rgba(236,234,245,0.38);
+      margin-bottom: 8px; }
+    .d span { font-size: 12.5px; font-weight: 300; line-height: 1.55;
+      color: rgba(236,234,245,0.72); }
+    .d span em { font-style: normal; color: #ffd54f; }
+  </style>
+</helmet>
+<div class="cv">
+  <div class="lattice"></div>
+  <div class="z">
+    <div class="lbl">ghostties.org &nbsp;/&nbsp; round two &nbsp;/&nbsp; arcade, developed</div>
+    <h1>You picked arcade. <span class="y">Here is what it becomes.</span></h1>
+    <p class="sub">D, E and F are retired &mdash; they live on the <b>Round one</b> page if you want them back. Everything here develops the direction you chose along the three axes still open: how the game works, how the app gets shown, and which type stance stops this reading as machine-made. <b>The boards move and some of them play</b>; click into one to use it.</p>
+
+    <div class="cols">
+      <div class="col">
+        <div class="lbl">01 &mdash; the hero</div>
+        <div class="item"><span class="n">A</span><span><b>PROPER SNAKE</b><span>Ambient by default: eight ghosts drift, nothing announces itself. A small <b>I &mdash; insert coin</b> is the only tell. Press it and the playfield lights, the scoreboard drops in, and WASD or the arrows drive a cursor head that herds them. One keeps wandering off; go back for it.</span><span class="st pick">playable &mdash; press I, then WASD</span><span class="st live">sound on</span></span></div>
+      </div>
+
+      <div class="col">
+        <div class="lbl">02 &mdash; showing the app</div>
+        <div class="item"><span class="n">B1</span><span><b>ANNOTATED CAPTURES</b><span>Real screenshots, framed and called out. Nothing invented, nothing to maintain.</span></span></div>
+        <div class="item"><span class="n">B2</span><span><b>GHOSTS AS WINDOWS</b><span>Silhouettes masked over live capture. Hover and the tint clears &mdash; the ghost dissolves into the app.</span></span></div>
+        <div class="item"><span class="n">B3</span><span><b>CLICKABLE REPLICA</b><span>Rebuilt in HTML. Most convincing, and the only one that can quietly start lying after a release.</span><span class="st pick">click the sidebar</span></span></div>
+      </div>
+
+      <div class="col">
+        <div class="lbl">03 &mdash; motion &amp; type</div>
+        <div class="item"><span class="n">C1</span><span><b>PIXEL MORPH</b><span>Sections resolve by resampling the ghost to a coarser grid. The lattice becomes the transition.</span></span></div>
+        <div class="item"><span class="n">C2</span><span><b>ANCHORED + FOCUS</b><span>The ghost holds still, copy pulls into focus, the capture swaps. No scroll-jacking.</span></span></div>
+        <div class="item"><span class="n">C3</span><span><b>CAST OF EIGHT</b><span>One ghost per capability. The set becomes the site&rsquo;s index instead of wallpaper.</span></span></div>
+        <div class="item"><span class="n">T</span><span><b>THREE TYPE STANCES</b><span>Specimen sheets, far right. This is the decision that settles the AI question.</span></span></div>
+      </div>
+    </div>
+
+    <div class="decided">
+      <div class="d"><b>settled</b><span>Arcade wins. Ghosts redrawn off the 1980 sprite &mdash; solid dome, <em>visor</em> instead of cut-out eyes, pupils that track you.</span></div>
+      <div class="d"><b>settled</b><span>The game is <em>opt-in and secret</em>. The page is a page until someone inserts a coin.</span></div>
+      <div class="d"><b>open</b><span>Which of the three app treatments &mdash; or a mix. B1 for docs, B2 for the pitch is a real answer.</span></div>
+      <div class="d"><b>open</b><span>Type stance. <em>03 is closest to the app</em> (sans + mono, like SF Pro + SF Mono); 01 is the furthest from anything generated.</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

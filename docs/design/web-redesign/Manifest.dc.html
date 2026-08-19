@@ -1,0 +1,170 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap">
+  <style>
+    body { margin: 0; background: #e8e4da; }
+    a { color: #14140f; text-decoration: none; border-bottom: 1px solid #14140f; }
+    a:hover { background: #14140f; color: #e8e4da; }
+
+    .mf { width: 1360px; height: 900px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #e8e4da; color: #14140f;
+      font-family: "JetBrains Mono", monospace;
+      display: flex; flex-direction: column; }
+
+    /* the grid is visible — it is the ornament */
+    .col-grid { position: absolute; inset: 0; pointer-events: none; display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .col-grid i { border-right: 1px solid rgba(20,20,15,0.07); }
+    .col-grid i:last-child { border-right: 0; }
+    .paper { position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+      background-image: radial-gradient(rgba(20,20,15,0.055) 1px, transparent 1px);
+      background-size: 3px 3px; }
+
+    .z { position: relative; z-index: 2; display: flex; flex-direction: column; height: 100%; }
+
+    /* header rule */
+    .top { display: grid; grid-template-columns: 2fr 3fr 1.2fr 1.2fr 2fr;
+      border-bottom: 2px solid #14140f; }
+    .top div { padding: 13px 16px; border-right: 1px solid rgba(20,20,15,0.22);
+      font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+    .top div:last-child { border-right: 0; text-align: right; }
+    .top b { font-weight: 800; letter-spacing: 0.02em; font-size: 12.5px; }
+    .top .muted { color: rgba(20,20,15,0.5); }
+    .live::before { content: ""; display: inline-block; width: 7px; height: 7px;
+      background: #d1442f; margin-right: 7px; vertical-align: 0px;
+      animation: pip 1.4s steps(2, jump-none) infinite; }
+    @keyframes pip { 50% { opacity: 0.15; } }
+
+    /* the statement */
+    .state { padding: 44px 16px 34px; border-bottom: 1px solid rgba(20,20,15,0.22); }
+    h1 { font-size: 132px; line-height: 0.84; letter-spacing: -0.06em; font-weight: 800;
+      margin: 0; text-transform: uppercase; }
+    h1 .hollow { color: transparent; -webkit-text-stroke: 2px #14140f; }
+    .say { display: flex; gap: 40px; align-items: flex-end; margin-top: 26px; }
+    .say p { font-size: 14px; line-height: 1.62; max-width: 54ch; margin: 0;
+      color: rgba(20,20,15,0.76); text-wrap: pretty; }
+    .say .n { font-size: 76px; font-weight: 800; letter-spacing: -0.05em; line-height: 0.8; }
+    .say .n small { display: block; font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em;
+      text-transform: uppercase; color: rgba(20,20,15,0.5); margin-top: 10px; }
+
+    /* capability table — the mascots live here, at 12px, doing a job */
+    .tbl { flex: 1; display: flex; flex-direction: column; }
+    .tr { display: grid; grid-template-columns: 26px 1.5fr 3fr 1fr;
+      border-bottom: 1px solid rgba(20,20,15,0.16); align-items: center; }
+    .tr > * { padding: 10px 16px; font-size: 12.5px; }
+    .tr.hd > * { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(20,20,15,0.5); padding-top: 12px; padding-bottom: 10px; }
+    .tr.hd { border-bottom: 1px solid #14140f; }
+    .tr b { font-weight: 700; }
+    .tr .d { color: rgba(20,20,15,0.66); }
+    .tr .s { text-align: right; font-size: 10.5px; letter-spacing: 0.12em;
+      text-transform: uppercase; color: rgba(20,20,15,0.5); }
+    .tr .s.ship { color: #14140f; font-weight: 700; }
+    .tr .gcell { padding-left: 16px; padding-right: 0; }
+    .tr .gcell svg { width: 13px; height: 13px; display: block; }
+    .tr:hover { background: rgba(20,20,15,0.05); }
+
+    /* install bar */
+    .bar { background: #14140f; color: #e8e4da; display: grid;
+      grid-template-columns: 2.2fr 1.4fr 0.9fr 1.5fr; }
+    .bar div { padding: 17px 16px; border-right: 1px solid rgba(232,228,218,0.2);
+      font-size: 12.5px; display: flex; align-items: center; gap: 10px; }
+    .bar div:last-child { border-right: 0; justify-content: flex-end;
+      font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(232,228,218,0.55); }
+    .bar .lbl { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(232,228,218,0.5); }
+    .bar .cur { display: inline-block; width: 8px; height: 14px; background: #e8e4da;
+      animation: blink 1.05s steps(2, jump-none) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+</helmet>
+<div class="mf">
+  <div class="col-grid"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+  <div class="z">
+    <div class="top">
+      <div><b>GHOSTTIES</b></div>
+      <div class="muted">Multi-agent workspace terminal &middot; macOS</div>
+      <div class="muted">v0.1.0-beta.23</div>
+      <div class="muted live">beta channel</div>
+      <div><a href="#">docs</a> &nbsp; <a href="#">changelog</a> &nbsp; <a href="#">github</a></div>
+    </div>
+
+    <div class="state">
+      <h1>One window.<br><span class="hollow">Every agent.</span></h1>
+      <div class="say">
+        <div class="n">6<small>sessions, one sidebar</small></div>
+        <p>A fork of Ghostty that stops treating parallel agent sessions as your problem. Every Claude Code run gets a row, a status you can read without reading, and one command &mdash; <b>gt list</b> &mdash; that shows every open task across every project you have.</p>
+      </div>
+    </div>
+
+    <div class="tbl">
+      <div class="tr hd"><span></span><span>Capability</span><span>What it actually does</span><span class="s">State</span></div>
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="5">
+        <div class="tr">
+          <span class="gcell">
+            <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+              <path d="{{ r.d }}" fill="{{ r.c }}"></path>
+            </svg>
+          </span>
+          <span><b>{{ r.name }}</b></span>
+          <span class="d">{{ r.desc }}</span>
+          <span class="s {{ r.cls }}">{{ r.state }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="bar">
+      <div><span class="lbl">brew</span> install --cask seansmithworks/tap/ghostties<span class="cur"></span></div>
+      <div><span class="lbl">npx</span> ghostties-install</div>
+      <div><span class="lbl">dmg</span> 41 MB</div>
+      <div>free &middot; open source &middot; macOS 13+</div>
+    </div>
+  </div>
+
+  <div class="paper"></div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const RECTS = {
+      red:    '12,0,24,4 8,4,32,4 4,8,40,4 4,12,8,8 20,12,8,8 36,12,8,8 0,20,48,20 0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4 0,44,4,4 16,44,4,4 28,44,4,4 44,44,4,4',
+      cyan:   '12,0,24,4 8,4,32,4 4,8,40,4 4,12,12,8 32,12,12,8 0,20,48,20 0,40,4,4 8,40,8,4 20,40,8,4 32,40,8,4 44,40,4,4 0,44,4,4 12,44,4,4 32,44,4,4 44,44,4,4',
+      purple: '12,0,24,4 4,4,40,4 0,8,48,4 0,12,8,4 16,12,16,4 40,12,8,4 0,16,4,4 16,16,16,4 44,16,4,4 0,20,48,20 0,40,8,4 16,40,16,4 40,40,8,4 0,44,4,4 20,44,8,4 44,44,4,4',
+      orange: '8,0,32,4 4,4,40,4 0,8,48,4 0,12,8,8 16,12,16,8 40,12,8,8 0,20,48,20 0,40,12,4 16,40,16,4 36,40,12,4 0,44,4,4 20,44,8,4 44,44,4,4',
+      pink:   '16,0,16,4 8,4,32,4 4,8,40,4 4,12,4,8 16,12,16,8 40,12,4,8 0,20,48,20 0,40,12,4 20,40,8,4 36,40,12,4 0,44,4,4 44,44,4,4',
+      indigo: '8,0,32,4 4,4,40,4 0,8,48,4 0,12,12,4 20,12,28,4 0,16,8,4 20,16,28,4 0,20,12,4 20,20,28,4 0,24,48,16 0,40,8,4 16,40,16,4 40,40,8,4 0,44,4,4 20,44,8,4 44,44,4,4'
+    };
+    function toPath(s) {
+      return s.split(' ').map(function (t) {
+        var a = t.split(',').map(Number);
+        return 'M' + a[0] + ' ' + a[1] + 'h' + a[2] + 'v' + a[3] + 'h-' + a[2] + 'Z';
+      }).join('');
+    }
+    const rows = [
+      ['red',    '#c0392b', 'Session sidebar', 'Every running agent gets a row, sorted so whoever needs you sits on top.', 'shipping', 'ship'],
+      ['cyan',   '#0e7f90', 'Status at a glance', 'Working / your turn / needs a decision / long-running, inferred from output.', 'shipping', 'ship'],
+      ['purple', '#5b3fbf', 'gt list', 'One command, every task across every project, sorted into status lanes.', 'shipping', 'ship'],
+      ['orange', '#b56a10', 'Task notes', 'Per-task markdown in .ghostties/tasks, edited in the row you are looking at.', 'beta', ''],
+      ['pink',   '#b3527a', 'Projects view', 'Group sessions by repo; archive the ones you are done with.', 'shipping', 'ship'],
+      ['indigo', '#4b5390', 'Ghostty underneath', 'The upstream terminal, unmodified. Your config, your themes, your muscle memory.', 'inherited', '']
+    ];
+    return {
+      rows: rows.map(function (r) {
+        return { c: r[1], d: toPath(RECTS[r[0]]), name: r[2], desc: r[3], state: r[4], cls: r[5] };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

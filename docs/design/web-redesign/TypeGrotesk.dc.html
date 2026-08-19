@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Archivo:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .ty { width: 660px; height: 980px; box-sizing: border-box; background: #07070f;
+      color: #eceaf5; font-family: "Archivo", system-ui, sans-serif; padding: 44px 40px 36px;
+      display: flex; flex-direction: column; overflow: hidden; }
+
+    .stamp { display: flex; align-items: baseline; gap: 10px;
+      padding-bottom: 13px; border-bottom: 2px solid rgba(236,234,245,0.9); }
+    .stamp .a { font-family: "Silkscreen", monospace; font-size: 15px; }
+    .stamp .b { font-family: "DM Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.42); margin-left: auto; }
+
+    .row { padding: 20px 0; border-bottom: 1px solid rgba(236,234,245,0.13); }
+    .tag { font-family: "DM Mono", monospace; font-size: 8px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.36); margin-bottom: 13px; }
+
+    /* the grotesk leads — tight, heavy, sentence case */
+    .display { font-family: "Archivo", sans-serif; font-weight: 800; font-size: 52px;
+      line-height: 0.96; letter-spacing: -0.042em; color: #fff; margin: 0; }
+    .display .y { color: #ffd54f; }
+    .spec { font-family: "DM Mono", monospace; font-size: 8px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(236,234,245,0.3); margin-top: 12px; }
+
+    .sect { font-family: "Archivo", sans-serif; font-weight: 600; font-size: 30px;
+      line-height: 1.14; letter-spacing: -0.028em; color: #fff; margin: 0; }
+    .body { font-family: "Archivo", sans-serif; font-size: 15px; font-weight: 400;
+      line-height: 1.62; margin: 0; color: rgba(236,234,245,0.7); text-wrap: pretty; }
+    .body b { font-weight: 600; color: #fff; }
+    .code { font-family: "DM Mono", monospace; font-size: 13px; color: #ffd54f; }
+
+    /* pixel type demoted to micro-labels and the score only */
+    .pxl { font-family: "Silkscreen", monospace; font-size: 15px; color: #ffd54f; }
+
+    .marks { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1px;
+      background: rgba(236,234,245,0.13); border: 1px solid rgba(236,234,245,0.13); }
+    .marks div { background: #07070f; padding: 9px 11px; display: flex; align-items: center; gap: 8px;
+      font-family: "DM Mono", monospace; font-size: 8.5px; letter-spacing: 0.14em;
+      text-transform: uppercase; color: rgba(236,234,245,0.6); }
+    .marks i { width: 9px; height: 9px; flex: none; }
+
+    .units { display: flex; margin-top: 13px; }
+    .u { display: flex; align-items: center; border: 1px solid rgba(236,234,245,0.2);
+      border-right-width: 0; }
+    .u:last-child { border-right-width: 1px; }
+    .u .k { font-family: "DM Mono", monospace; font-size: 8px; letter-spacing: 0.18em;
+      text-transform: uppercase; padding: 0 9px; align-self: stretch; display: flex;
+      align-items: center; background: rgba(236,234,245,0.72); color: rgba(7,7,15,0.86); }
+    .u .v { padding: 10px 12px; font-size: 11.5px; color: rgba(236,234,245,0.88);
+      font-family: "DM Mono", monospace; }
+    .u.p { border-color: #ffd54f; background: rgba(255,213,79,0.1); }
+    .u.p .k { background: #ffd54f; color: #201700; }
+
+    .scale { display: flex; flex-direction: column; gap: 7px; }
+    .scale div { display: flex; align-items: baseline; gap: 12px;
+      font-family: "DM Mono", monospace; font-size: 8px; letter-spacing: 0.14em;
+      color: rgba(236,234,245,0.3); }
+    .scale div span:last-child { color: rgba(236,234,245,0.6); letter-spacing: 0.06em; }
+
+    .verdict { margin-top: auto; padding-top: 18px; border-top: 2px solid rgba(236,234,245,0.9); }
+    .verdict b { font-family: "Silkscreen", monospace; font-size: 12px; color: #ffd54f;
+      display: block; margin-bottom: 9px; }
+    .verdict span { font-family: "DM Mono", monospace; font-size: 10px; line-height: 1.72;
+      color: rgba(236,234,245,0.56); text-wrap: pretty; }
+  </style>
+</helmet>
+<div class="ty">
+  <div class="stamp"><span class="a">STANCE 03</span><span class="b">grotesk lead &middot; pixel as accent</span></div>
+
+  <div class="row">
+    <div class="tag">display &mdash; archivo 800</div>
+    <h1 class="display">Six agents.<br><span class="y">One window.</span></h1>
+    <div class="spec">52px &middot; 0.96 &middot; &minus;0.042em &middot; sentence case, so long headlines stay possible</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">section &mdash; archivo 600</div>
+    <h2 class="sect">Read the room without reading</h2>
+    <div class="spec">30px &middot; 1.14 &middot; &minus;0.028em</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">body &mdash; archivo 400</div>
+    <p class="body">Ghostties keeps every Claude Code session in one macOS window &mdash; a sidebar that says who is working and who is waiting on you, and <span class="code">gt list</span> for every task across every project.</p>
+    <div class="spec">15px &middot; 1.62 &middot; the only stance where a docs page reads comfortably at length</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">pixel, demoted &mdash; score and micro-labels only</div>
+    <div style="display:flex;align-items:center;gap:22px">
+      <span class="pxl">HERDED 05/08</span>
+      <span class="pxl" style="color:rgba(236,234,245,0.7)">RESCUES 02</span>
+    </div>
+    <div class="spec">Silkscreen appears three or four times on the whole page, never in prose</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">labels &amp; status &mdash; dm mono</div>
+    <div class="marks">
+      <div><i style="background:#4ade80"></i>working</div>
+      <div><i style="background:#60a5fa"></i>your turn</div>
+      <div><i style="background:#fbbf24"></i>needs a decision</div>
+      <div><i style="background:#fb923c"></i>long-running</div>
+    </div>
+    <div class="units">
+      <span class="u p"><span class="k">brew</span><span class="v">install --cask ghostties</span></span>
+      <span class="u"><span class="k">npx</span><span class="v">ghostties-install</span></span>
+    </div>
+  </div>
+
+  <div class="row" style="border-bottom:0;padding-bottom:8px">
+    <div class="tag">the ramp</div>
+    <div class="scale">
+      <div><span>DISPLAY</span><span>Archivo 800 &middot; 52&ndash;76px</span></div>
+      <div><span>SECTION</span><span>Archivo 600 &middot; 24&ndash;30px</span></div>
+      <div><span>BODY</span><span>Archivo 400 &middot; 15&ndash;16px</span></div>
+      <div><span>MONO / LABEL</span><span>DM Mono 400 &middot; 8&ndash;13px</span></div>
+      <div><span>SCORE</span><span>Silkscreen 400 &middot; 15&ndash;17px</span></div>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <b>CLOSEST TO THE APP</b>
+    <span>The app is SF Pro for UI and SF Mono for the terminal &mdash; a sans plus a mono. This stance is that pairing, with the sans swapped for something with more character and the pixel face kept as a signature. Site and product finally match. Risk: it is also the most familiar shape, so the craft has to show up in the spacing, the hairlines and the block labels rather than the font choice.</span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":660,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

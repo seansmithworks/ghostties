@@ -1,0 +1,498 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Martian+Mono:wght@400;500;700&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; text-decoration: none; } a:hover { color: #fff; }
+
+    .sn { width: 1360px; height: 980px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "DM Mono", monospace; outline: none; }
+
+    /* playfield lattice — invisible until a coin goes in */
+    .lattice { position: absolute; left: 20px; top: 16px; width: 1320px; height: 792px;
+      background-image: radial-gradient(rgba(255,255,255,0.11) 1.5px, transparent 1.5px);
+      background-size: 44px 44px; background-position: 22px 22px;
+      opacity: 0; transition: opacity 0.7s cubic-bezier(0.25,1,0.5,1); }
+    .bounds { position: absolute; left: 20px; top: 16px; width: 1320px; height: 792px;
+      border: 1px solid rgba(255,213,79,0.16); opacity: 0;
+      transition: opacity 0.7s cubic-bezier(0.25,1,0.5,1); }
+    .sn.play .lattice, .sn.play .bounds { opacity: 1; }
+    .edge { position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(94% 78% at 50% 38%, transparent 52%, rgba(7,7,15,0.9) 100%); }
+
+    /* --- HUD --- */
+    .hud { position: absolute; left: 56px; right: 56px; top: 44px; z-index: 8;
+      display: flex; align-items: flex-start; gap: 24px; }
+    .brand { font-family: "Silkscreen", monospace; font-size: 15px; letter-spacing: 0.04em; }
+    .brand span { display: block; font-family: "Martian Mono", monospace; font-weight: 400;
+      font-size: 9px; letter-spacing: 0.22em; color: rgba(236,234,245,0.42); margin-top: 7px; }
+    .nav { display: flex; gap: 22px; margin-left: 34px; padding-top: 3px;
+      font-family: "Martian Mono", monospace; font-size: 9.5px; letter-spacing: 0.16em;
+      text-transform: uppercase; }
+    .nav a { color: rgba(236,234,245,0.5); }
+
+    /* scoreboard — hard-edged blocks butted together. no pills, no rounding. */
+    .score { margin-left: auto; display: flex; opacity: 0; transform: translateY(-6px);
+      transition: opacity 0.5s cubic-bezier(0.25,1,0.5,1), transform 0.5s cubic-bezier(0.25,1,0.5,1); }
+    .sn.play .score { opacity: 1; transform: none; }
+    .cell { border: 1px solid rgba(236,234,245,0.18); border-right-width: 0;
+      padding: 8px 14px 9px; min-width: 86px; }
+    .cell:last-child { border-right-width: 1px; }
+    .k { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+    .v { font-family: "Silkscreen", monospace; font-size: 17px; margin-top: 6px; color: #ffd54f; }
+    .v.dim { color: rgba(236,234,245,0.74); }
+    .cell.alert { border-color: rgba(255,120,96,0.65); background: rgba(255,120,96,0.10); }
+    .cell.alert .v { color: #ff8a70; }
+
+    /* --- copy: the page is a page first --- */
+    .copy { position: absolute; left: 56px; top: 214px; z-index: 6; max-width: 620px;
+      pointer-events: none; }
+    h1 { font-family: "Silkscreen", monospace; font-weight: 700; margin: 0;
+      font-size: 64px; line-height: 1.08; letter-spacing: 0.005em; color: #fff;
+      text-shadow: 0 0 22px rgba(7,7,15,0.95), 0 0 46px rgba(7,7,15,0.85), 0 2px 0 rgba(0,0,0,0.6); }
+    h1 .y { color: #ffd54f; }
+    .lead { font-size: 15.5px; font-weight: 300; line-height: 1.72; margin: 26px 0 0;
+      max-width: 44ch; color: rgba(236,234,245,0.7); text-wrap: pretty;
+      text-shadow: 0 0 18px rgba(7,7,15,0.95), 0 0 34px rgba(7,7,15,0.9); }
+    .lead b { color: #eceaf5; font-weight: 500; }
+
+    .install { position: absolute; left: 56px; top: 468px; z-index: 7; display: flex; }
+    .u { display: flex; align-items: center; border: 1px solid rgba(236,234,245,0.18);
+      border-right-width: 0; background: rgba(7,7,15,0.82); }
+    .u:last-child { border-right-width: 1px; }
+    .tag { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; padding: 0 11px; align-self: stretch; display: flex;
+      align-items: center; color: rgba(7,7,15,0.86); background: rgba(236,234,245,0.72); }
+    .val { padding: 13px 15px; font-size: 13px; color: rgba(236,234,245,0.9); }
+    .u.p { border-color: #ffd54f; background: rgba(255,213,79,0.10); }
+    .u.p .tag { background: #ffd54f; color: #201700; }
+    .u.p .val { color: #ffe08a; }
+
+    /* --- the coin slot: the only tell, and it stays small --- */
+    .slot { position: absolute; left: 56px; top: 556px; z-index: 7;
+      display: flex; align-items: center; gap: 10px;
+      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.30);
+      transition: color 0.3s, opacity 0.5s; }
+    .slot .key { width: 20px; height: 20px; border: 1px solid rgba(236,234,245,0.26);
+      display: flex; align-items: center; justify-content: center;
+      font-family: "Silkscreen", monospace; font-size: 10px; color: rgba(236,234,245,0.6);
+      animation: coinbeat 3.4s ease-in-out infinite; }
+    @keyframes coinbeat {
+      0%, 88%, 100% { border-color: rgba(236,234,245,0.26); color: rgba(236,234,245,0.6); }
+      92% { border-color: #ffd54f; color: #ffd54f; }
+    }
+    .sn.play .slot { opacity: 0; pointer-events: none; }
+
+    /* keycaps only exist once you're playing */
+    .keys { position: absolute; left: 56px; top: 552px; z-index: 7; display: flex;
+      align-items: center; gap: 12px; opacity: 0; transition: opacity 0.5s 0.25s;
+      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+    .sn.play .keys { opacity: 1; }
+    .keys .kk { display: flex; gap: 4px; }
+    .key2 { width: 22px; height: 22px; border: 1px solid rgba(236,234,245,0.28);
+      display: flex; align-items: center; justify-content: center;
+      font-family: "Silkscreen", monospace; font-size: 10px; color: rgba(236,234,245,0.7);
+      background: rgba(236,234,245,0.05); transition: none; }
+    .key2.hot { border-color: #ffd54f; color: #ffd54f; background: rgba(255,213,79,0.14); }
+
+    /* --- ghosts --- */
+    .field { position: absolute; inset: 0; z-index: 4; }
+    .gh { position: absolute; left: 0; top: 0; width: 44px; height: 44px; will-change: transform; }
+    .gh svg { width: 100%; height: 100%; display: block;
+      filter: drop-shadow(0 4px 0 rgba(0,0,0,0.4)); }
+    .gh.lost { animation: lostpulse 1.05s steps(2, jump-none) infinite; }
+    @keyframes lostpulse { 50% { opacity: 0.42; } }
+    .gh .ring { opacity: 0; }
+    .gh.lost .ring { opacity: 1; }
+    .head { position: absolute; left: 0; top: 0; width: 44px; height: 44px; z-index: 5;
+      opacity: 0; transition: opacity 0.4s; will-change: transform; }
+    .sn.play .head { opacity: 1; }
+    .head i { position: absolute; left: 7px; top: 7px; width: 30px; height: 30px;
+      background: #ffd54f; box-shadow: 0 0 22px rgba(255,213,79,0.75);
+      animation: cur 0.9s steps(2, jump-none) infinite; }
+    @keyframes cur { 50% { opacity: 0.55; } }
+
+    /* coin flash */
+    .flash { position: absolute; inset: 0; z-index: 20; pointer-events: none;
+      background: #ffd54f; opacity: 0; }
+    .flash.go { animation: fl 0.42s cubic-bezier(0.5,0,0.75,0) forwards; }
+    @keyframes fl { 0% { opacity: 0.5; } 100% { opacity: 0; } }
+
+    /* --- the app, actually shown --- */
+    .peek { position: absolute; left: 0; right: 0; bottom: 0; height: 190px; z-index: 9;
+      background: linear-gradient(180deg, rgba(7,7,15,0) 0%, rgba(7,7,15,0.9) 26%, #07070f 62%);
+      display: flex; align-items: flex-end; justify-content: center; }
+    .peekwin { width: 900px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.14); border-bottom: 0;
+      box-shadow: 0 -18px 60px rgba(0,0,0,0.72); background: #12122a; }
+    .peekwin .tb { height: 24px; background: rgba(255,255,255,0.06); display: flex;
+      align-items: center; gap: 6px; padding: 0 11px;
+      border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .peekwin .tb i { width: 8px; height: 8px; border-radius: 50%; }
+    .peekwin .tb b { margin-left: 12px; font-family: "Martian Mono", monospace; font-size: 8.5px;
+      letter-spacing: 0.18em; text-transform: uppercase; font-weight: 400;
+      color: rgba(255,255,255,0.44); }
+    .peekwin img { display: block; width: 100%; }
+    .peeklabel { position: absolute; left: 56px; bottom: 58px; z-index: 10;
+      font-family: "Martian Mono", monospace; font-size: 9px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.42); line-height: 2.1; }
+  </style>
+</helmet>
+<div class="sn" tabindex="0">
+  <div class="lattice"></div>
+  <div class="bounds"></div>
+
+  <div class="hud">
+    <div class="brand">GHOSTTIES<span>multi-agent terminal &middot; macos</span></div>
+    <div class="nav">
+      <a href="#">what it does</a><a href="#">install</a><a href="#">changelog</a><a href="#">github</a>
+    </div>
+    <div class="score">
+      <div class="cell"><div class="k">herded</div><div class="v" id="s-herd">0/8</div></div>
+      <div class="cell"><div class="k">rescues</div><div class="v dim" id="s-res">0</div></div>
+      <div class="cell" id="s-cell-lost"><div class="k">stray</div><div class="v dim" id="s-lost">0</div></div>
+    </div>
+  </div>
+
+  <div class="copy">
+    <h1>SIX AGENTS.<br><span class="y">ONE WINDOW.</span></h1>
+    <p class="lead">A macOS terminal that keeps every Claude Code session in one window &mdash; a sidebar that says who&rsquo;s working and who&rsquo;s waiting on you, and <b>gt list</b> for every task across every project.</p>
+  </div>
+
+  <div class="install">
+    <span class="u p"><span class="tag">brew</span><span class="val">install --cask seansmithworks/tap/ghostties</span></span>
+    <span class="u"><span class="tag">npx</span><span class="val">ghostties-install</span></span>
+    <span class="u"><span class="tag">dmg</span><span class="val">41 MB</span></span>
+  </div>
+
+  <div class="slot"><span class="key">I</span><span>insert coin</span></div>
+  <div class="keys">
+    <span class="kk"><span class="key2">W</span><span class="key2">A</span><span class="key2">S</span><span class="key2">D</span></span>
+    <span>herd them &mdash; one keeps wandering off</span>
+  </div>
+
+  <div class="field">
+    <div class="head" id="head"><i></i></div>
+    <sc-for list="{{ ghosts }}" as="g" hint-placeholder-count="8">
+      <div class="gh">
+        <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+          <path d="{{ g.body }}" fill="{{ g.c }}"></path>
+          <path d="{{ g.shade }}" fill="rgba(0,0,0,0.24)"></path>
+          <path d="{{ g.hi }}" fill="rgba(255,255,255,0.20)"></path>
+          <rect x="8" y="17" width="32" height="9" fill="rgba(5,5,12,0.72)"></rect>
+          <rect class="pupil" x="21" y="19" width="7" height="5" fill="{{ g.eye }}"></rect>
+          <rect class="ring" x="1" y="1" width="46" height="46" fill="none"
+                stroke="#ff8a70" stroke-width="2" stroke-dasharray="4 4"></rect>
+        </svg>
+      </div>
+    </sc-for>
+  </div>
+
+  <div class="edge"></div>
+  <div class="flash" id="flash"></div>
+
+  <div class="peek">
+    <div class="peekwin">
+      <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><b>the actual app &mdash; not a drawing of it</b></div>
+      <img src="./app-sessions.jpg" alt="Ghostties sidebar with parallel agent sessions">
+    </div>
+  </div>
+  <div class="peeklabel">scroll &darr;<br>every session, one window</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // --- refined ghost set -------------------------------------------------
+    // Same 4px grid as the app icons, redrawn off the 1980 sprite: solid dome
+    // (no Pac-Man eye cut-outs), a visor slit that reads as a small screen, a
+    // grounding shade and a top-left highlight. Personality comes from the
+    // dome and the skirt rhythm now.
+    const DOME = {
+      tall:  '12,0,24,4 8,4,32,4 4,8,40,4 4,12,40,4 0,16,48,24',
+      wide:  '8,0,32,4 4,4,40,4 0,8,48,4 0,12,48,4 0,16,48,24',
+      round: '16,0,16,4 8,4,32,4 4,8,40,4 0,12,48,4 0,16,48,24'
+    };
+    const SKIRT = {
+      four:  '0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4 0,44,4,4 16,44,4,4 28,44,4,4 44,44,4,4',
+      three: '0,40,12,4 18,40,12,4 36,40,12,4 0,44,4,4 22,44,4,4 44,44,4,4',
+      drip:  '0,40,48,4 4,44,8,4 20,44,8,4 36,44,8,4',
+      taper: '4,40,40,4 12,44,24,4'
+    };
+    const SHADE = {
+      four:  '0,36,48,4 0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4',
+      three: '0,36,48,4 0,40,12,4 18,40,12,4 36,40,12,4',
+      drip:  '0,36,48,4 0,40,48,4',
+      taper: '0,36,48,4 4,40,40,4'
+    };
+    const HI = {
+      tall:  '12,0,12,4 8,4,10,4 4,8,8,4',
+      wide:  '8,0,14,4 4,4,10,4 0,8,8,4',
+      round: '16,0,10,4 8,4,12,4 4,8,8,4'
+    };
+    function toPath(s) {
+      return s.split(' ').map(function (t) {
+        var a = t.split(',').map(Number);
+        return 'M' + a[0] + ' ' + a[1] + 'h' + a[2] + 'v' + a[3] + 'h-' + a[2] + 'Z';
+      }).join('');
+    }
+    const SET = [
+      ['#FF4136', 'tall',  'four',  '#fff6f5'],
+      ['#00BCD4', 'wide',  'three', '#f2fdff'],
+      ['#FF9800', 'wide',  'drip',  '#fff8ec'],
+      ['#7C4DFF', 'tall',  'three', '#f6f2ff'],
+      ['#FF80AB', 'round', 'taper', '#fff4f8'],
+      ['#FFEB3B', 'wide',  'four',  '#2a2400'],
+      ['#81D4FA', 'round', 'drip',  '#f3fbff'],
+      ['#7986CB', 'tall',  'taper', '#f4f5ff']
+    ];
+    return {
+      ghosts: SET.map(function (g) {
+        return {
+          c: g[0], eye: g[3],
+          body:  toPath(DOME[g[1]] + ' ' + SKIRT[g[2]]),
+          shade: toPath(SHADE[g[2]]),
+          hi:    toPath(HI[g[1]])
+        };
+      })
+    };
+  }
+
+  componentDidMount() { this._tries = 0; this._boot(); }
+
+  componentWillUnmount() {
+    if (this._raf) cancelAnimationFrame(this._raf);
+    if (this._onKey) window.removeEventListener('keydown', this._onKey);
+    if (this._ac) this._ac.close();
+  }
+
+  // --- placeholder arcade SFX, synthesised. stands in for the ElevenLabs set.
+  _sfx(name) {
+    if (!this._ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      this._ac = new AC();
+    }
+    const ac = this._ac;
+    if (ac.state === 'suspended') ac.resume();
+    const now = ac.currentTime;
+    const play = function (freq, t0, dur, type, peak) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || 'square';
+      o.frequency.setValueAtTime(freq, now + t0);
+      g.gain.setValueAtTime(0.0001, now + t0);
+      g.gain.exponentialRampToValueAtTime(peak || 0.14, now + t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + t0 + dur);
+      o.connect(g); g.connect(ac.destination);
+      o.start(now + t0); o.stop(now + t0 + dur + 0.02);
+    };
+    if (name === 'coin') {           // slot clunk, then the two-note chime
+      play(180, 0, 0.05, 'square', 0.10);
+      play(988, 0.06, 0.07);
+      play(1319, 0.13, 0.34);
+    } else if (name === 'collect') { // one rising blip per ghost
+      play(660, 0, 0.045, 'square', 0.10);
+      play(990, 0.045, 0.07, 'square', 0.10);
+    } else if (name === 'stray') {   // something slipped away
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(520, now);
+      o.frequency.exponentialRampToValueAtTime(150, now + 0.3);
+      g.gain.setValueAtTime(0.09, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+      o.connect(g); g.connect(ac.destination);
+      o.start(now); o.stop(now + 0.34);
+    } else if (name === 'rescue') {
+      play(784, 0, 0.06); play(1046, 0.06, 0.06); play(1568, 0.12, 0.2);
+    }
+  }
+
+  _boot() {
+    const root = document.querySelector('.sn');
+    const nodes = root ? root.querySelectorAll('.gh') : [];
+    const headEl = root ? root.querySelector('#head') : null;
+    if (!root || !headEl || nodes.length < 8) {
+      if (this._tries++ < 90) this._raf = requestAnimationFrame(this._boot.bind(this));
+      return;
+    }
+
+    const CELL = 44, COLS = 30, ROWS = 18, OX = 20, OY = 16;
+    const STEP = 7;
+    const px = function (c) { return OX + c * CELL; };
+
+    // idle posts (free-floating) and the grid cells they snap to on coin-in
+    const IDLE = [[1010,150],[1188,318],[880,300],[1122,512],[962,470],[1244,168],[792,462],[1082,660]];
+    const HOME = [[23,3],[27,7],[20,8],[26,12],[22,13],[28,2],[18,11],[25,15]];
+
+    const gs = [];
+    for (let i = 0; i < nodes.length; i++) {
+      gs.push({
+        el: nodes[i], pupil: nodes[i].querySelector('.pupil'),
+        x: IDLE[i][0], y: IDLE[i][1], ix: IDLE[i][0], iy: IDLE[i][1],
+        cx: HOME[i][0], cy: HOME[i][1],
+        phase: i * 0.79, rank: -1, lost: false
+      });
+    }
+
+    let mode = 'idle';
+    let hx = 6, hy = 14, dir = [1,0], next = [1,0];
+    let hpx = px(hx), hpy = OY + hy * CELL;
+    const trail = [[hx, hy]];
+    let f = 0, t = 0, herded = 0, rescues = 0, strays = 0;
+    let auto = true, lastDrop = 0;
+
+    const herdEl = root.querySelector('#s-herd');
+    const resEl  = root.querySelector('#s-res');
+    const lostEl = root.querySelector('#s-lost');
+    const lostCell = root.querySelector('#s-cell-lost');
+    const flashEl = root.querySelector('#flash');
+    const keyEls = {};
+    root.querySelectorAll('.key2').forEach(function (k) {
+      keyEls[k.textContent.trim().toLowerCase()] = k;
+    });
+
+    const MAP = {
+      w: [0,-1], arrowup: [0,-1], a: [-1,0], arrowleft: [-1,0],
+      s: [0,1],  arrowdown: [0,1], d: [1,0],  arrowright: [1,0]
+    };
+    const self = this;
+    this._onKey = function (e) {
+      const k = e.key.toLowerCase();
+      if (mode === 'idle') {
+        if (k !== 'i') return;
+        e.preventDefault();
+        mode = 'play';
+        root.classList.add('play');
+        flashEl.classList.remove('go');
+        void flashEl.offsetWidth;
+        flashEl.classList.add('go');
+        self._sfx('coin');
+        return;
+      }
+      const d = MAP[k];
+      if (!d) return;
+      e.preventDefault();
+      auto = false;
+      if (d[0] !== -dir[0] || d[1] !== -dir[1]) next = d;
+    };
+    window.addEventListener('keydown', this._onKey);
+    root.addEventListener('keydown', this._onKey);
+
+    function ranked() {
+      return gs.filter(function (g) { return g.rank >= 0; })
+               .sort(function (a, b) { return a.rank - b.rank; });
+    }
+
+    function think() {
+      const targets = gs.filter(function (g) { return g.rank < 0; });
+      if (!targets.length) return;
+      let best = targets[0], bd = 1e9;
+      for (const g of targets) {
+        const d = Math.abs(g.cx - hx) + Math.abs(g.cy - hy);
+        if (d < bd) { bd = d; best = g; }
+      }
+      const dx = best.cx - hx, dy = best.cy - hy;
+      const want = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx),0] : [0,Math.sign(dy)];
+      if (!want[0] && !want[1]) return;
+      if (want[0] === -dir[0] && want[1] === -dir[1]) return;
+      next = want;
+    }
+
+    function move() {
+      dir = next;
+      hx = (hx + dir[0] + COLS) % COLS;
+      hy = (hy + dir[1] + ROWS) % ROWS;
+      trail.unshift([hx, hy]);
+      if (trail.length > 80) trail.pop();
+
+      for (const g of gs) {
+        if (g.rank >= 0) continue;
+        if (g.cx === hx && g.cy === hy) {
+          g.rank = herded; herded++;
+          if (g.lost) {
+            g.lost = false; rescues++; strays--;
+            g.el.classList.remove('lost'); self._sfx('rescue');
+          } else {
+            self._sfx('collect');
+          }
+        }
+      }
+
+      const line = ranked();
+      for (const g of line) {
+        const s = trail[Math.min(trail.length - 1, g.rank + 1)];
+        g.cx = s[0]; g.cy = s[1];
+      }
+
+      if (line.length >= 3 && t - lastDrop > 9) {
+        const tail = line[line.length - 1];
+        tail.rank = -1; tail.lost = true; tail.el.classList.add('lost');
+        herded--; strays++; lastDrop = t;
+        ranked().forEach(function (g, i) { g.rank = i; });
+        self._sfx('stray');
+      }
+    }
+
+    function frame() {
+      t += 1 / 60;
+
+      if (mode === 'play') {
+        if (auto && f % STEP === 0) think();
+        if (f % STEP === 0) move();
+        f++;
+
+        const tx = px(hx), ty = OY + hy * CELL;
+        if (Math.abs(tx - hpx) > CELL * 1.6) hpx = tx; else hpx += (tx - hpx) * 0.4;
+        if (Math.abs(ty - hpy) > CELL * 1.6) hpy = ty; else hpy += (ty - hpy) * 0.4;
+        headEl.style.transform = 'translate3d(' + hpx.toFixed(1) + 'px,' + hpy.toFixed(1) + 'px,0)';
+      }
+
+      for (const g of gs) {
+        let gx, gy;
+        if (mode === 'idle') {
+          gx = g.ix + Math.sin(t * 0.52 + g.phase) * 16;
+          gy = g.iy + Math.cos(t * 0.63 + g.phase) * 13;
+          g.x = gx; g.y = gy;
+        } else {
+          gx = px(g.cx); gy = OY + g.cy * CELL;
+          if (Math.abs(gx - g.x) > CELL * 1.6) g.x = gx; else g.x += (gx - g.x) * 0.4;
+          if (Math.abs(gy - g.y) > CELL * 1.6) g.y = gy; else g.y += (gy - g.y) * 0.4;
+        }
+        g.el.style.transform = 'translate3d(' + g.x.toFixed(1) + 'px,' + g.y.toFixed(1) + 'px,0)';
+
+        // pupils: idle, they watch a slow wandering point; playing, they watch you
+        const lx = mode === 'play' ? hpx : 300 + Math.sin(t * 0.3) * 260;
+        const ly = mode === 'play' ? hpy : 400 + Math.cos(t * 0.24) * 150;
+        const ang = Math.atan2(ly - g.y, lx - g.x);
+        g.pupil.setAttribute('x', 21 + Math.round(Math.cos(ang) * 5 / 2) * 2);
+        g.pupil.setAttribute('y', 19 + Math.round(Math.sin(ang) * 3 / 2) * 2);
+      }
+
+      if (mode === 'play') {
+        const hot = { '1,0': 'd', '-1,0': 'a', '0,1': 's', '0,-1': 'w' }[dir.join(',')];
+        for (const k in keyEls) keyEls[k].classList.toggle('hot', k === hot);
+        herdEl.textContent = herded + '/8';
+        resEl.textContent = rescues;
+        lostEl.textContent = strays;
+        lostCell.classList.toggle('alert', strays > 0);
+      }
+
+      self._raf = requestAnimationFrame(frame);
+    }
+    this._raf = requestAnimationFrame(frame);
+  }
+}
+</script>
+</body>
+</html>

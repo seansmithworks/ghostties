@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Newsreader:opsz,wght@6..72,300;6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #0c0c13; }
+    a { color: rgba(236,231,221,0.62); text-decoration: none;
+        border-bottom: 1px solid rgba(236,231,221,0.18); padding-bottom: 1px; }
+    a:hover { color: #ece7dd; border-bottom-color: rgba(236,231,221,0.5); }
+
+    .se { width: 1360px; height: 900px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #0c0c13; color: #ece7dd;
+      font-family: "Newsreader", Georgia, serif;
+      padding: 44px 64px 48px; display: flex; flex-direction: column; }
+
+    /* volumetric fog — three slow, oversized clouds */
+    .fog { position: absolute; inset: -25%; pointer-events: none; }
+    .fog i { position: absolute; border-radius: 50%; filter: blur(90px); display: block; }
+    .f1 { width: 780px; height: 620px; left: 4%;  top: 22%;
+      background: rgba(124,77,255,0.16); animation: drift1 34s ease-in-out infinite; }
+    .f2 { width: 720px; height: 540px; right: 2%; top: 6%;
+      background: rgba(0,188,212,0.13); animation: drift2 41s ease-in-out infinite; }
+    .f3 { width: 900px; height: 500px; left: 28%; bottom: 2%;
+      background: rgba(255,152,0,0.07); animation: drift1 47s ease-in-out infinite reverse; }
+    @keyframes drift1 { 0%,100% { transform: translate(0,0) scale(1); }
+                        50% { transform: translate(70px,-46px) scale(1.14); } }
+    @keyframes drift2 { 0%,100% { transform: translate(0,0) scale(1.06); }
+                        50% { transform: translate(-84px,52px) scale(0.94); } }
+    .grain { position: absolute; inset: 0; pointer-events: none; opacity: 0.34;
+      background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 3px 3px; }
+
+    /* the one apparition */
+    .apparition { position: absolute; right: -110px; top: 96px; width: 720px; height: 720px;
+      opacity: 0.16; filter: blur(1.5px); animation: hover 17s ease-in-out infinite; }
+    .apparition svg { width: 100%; height: 100%; display: block; }
+    @keyframes hover { 0%,100% { transform: translateY(0); opacity: 0.16; }
+                       50% { transform: translateY(-30px); opacity: 0.09; } }
+
+    .inner { position: relative; z-index: 2; display: flex; flex-direction: column; height: 100%; }
+
+    .rule { display: flex; align-items: baseline; gap: 18px;
+      font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,231,221,0.4);
+      padding-bottom: 16px; border-bottom: 1px solid rgba(236,231,221,0.12); }
+    .rule .r { margin-left: auto; display: flex; gap: 26px; letter-spacing: 0.14em; }
+
+    h1 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400;
+      font-size: 92px; line-height: 0.99; letter-spacing: -0.02em; margin: 72px 0 0;
+      max-width: 16ch; text-wrap: balance; }
+    h1 em { font-style: italic; color: rgba(236,231,221,0.55); }
+
+    .lead { font-size: 19px; line-height: 1.62; font-weight: 300; max-width: 48ch;
+      color: rgba(236,231,221,0.66); margin: 30px 0 0; text-wrap: pretty; }
+
+    .foot { margin-top: auto; display: flex; align-items: flex-end; gap: 44px;
+      padding-top: 26px; border-top: 1px solid rgba(236,231,221,0.12); }
+    .install { font-family: "IBM Plex Mono", monospace; font-size: 13.5px;
+      color: rgba(236,231,221,0.86); display: flex; flex-direction: column; gap: 9px; }
+    .install .lbl { font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: rgba(236,231,221,0.36); }
+    .install .cmd { display: flex; align-items: center; gap: 12px; }
+    .install .cmd span { color: rgba(236,231,221,0.34); }
+    .alt { font-family: "IBM Plex Mono", monospace; font-size: 12px;
+      color: rgba(236,231,221,0.42); display: flex; flex-direction: column; gap: 9px; }
+    .alt .lbl { font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: rgba(236,231,221,0.3); }
+    .meta { margin-left: auto; text-align: right; font-family: "IBM Plex Mono", monospace;
+      font-size: 11px; letter-spacing: 0.1em; color: rgba(236,231,221,0.34); line-height: 2; }
+  </style>
+</helmet>
+<div class="se">
+  <div class="fog"><i class="f1"></i><i class="f2"></i><i class="f3"></i></div>
+
+  <div class="apparition">
+    <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+      <path d="{{ ghost }}" fill="#cbd5f5"></path>
+    </svg>
+  </div>
+
+  <div class="inner">
+    <div class="rule">
+      <span>Ghostties</span>
+      <span class="r"><a href="#">Capabilities</a><a href="#">Install</a><a href="#">Changelog</a><a href="#">GitHub</a></span>
+    </div>
+
+    <h1>You are running six agents. <em>You can only watch one.</em></h1>
+    <p class="lead">Ghostties gathers every Claude Code session into a single macOS window &mdash; a sidebar that tells you which one is working, which one is waiting on you, and <em>gt&nbsp;list</em> for every task you have open across every project.</p>
+
+    <div class="foot">
+      <div class="install">
+        <span class="lbl">Install</span>
+        <span class="cmd">brew install --cask seansmithworks/tap/ghostties <span>&#9106;</span></span>
+      </div>
+      <div class="alt">
+        <span class="lbl">or</span>
+        <span>npx ghostties-install &nbsp;&middot;&nbsp; <a href="#">download .dmg</a></span>
+      </div>
+      <div class="meta">
+        v0.1.0-beta.23<br>
+        macOS 13+ &middot; free &middot; open source
+      </div>
+    </div>
+  </div>
+
+  <div class="grain"></div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const rects = '16,0,16,4 8,4,32,4 4,8,40,4 0,12,48,4 0,16,12,8 20,16,8,8 36,16,12,8 0,24,48,12 4,36,40,4 8,40,32,4 16,44,16,4';
+    const d = rects.split(' ').map(function (t) {
+      var a = t.split(',').map(Number);
+      return 'M' + a[0] + ' ' + a[1] + 'h' + a[2] + 'v' + a[3] + 'h-' + a[2] + 'Z';
+    }).join('');
+    return { ghost: d };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Martian+Mono:wght@400;500&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .ap { width: 1360px; height: 880px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "DM Mono", monospace; padding: 52px 56px; display: flex; gap: 44px; }
+
+    .lbl { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+
+    /* left rail: the claims, each tied to a region of the real capture */
+    .rail { width: 372px; flex: none; display: flex; flex-direction: column; }
+    .sec { font-family: "Silkscreen", monospace; font-size: 22px; line-height: 1.3;
+      color: #fff; margin: 14px 0 0; }
+    .sec em { font-style: normal; color: #ffd54f; }
+    .blurb { font-size: 13.5px; font-weight: 300; line-height: 1.7; margin: 16px 0 0;
+      color: rgba(236,234,245,0.62); text-wrap: pretty; }
+
+    .notes { margin-top: 34px; display: flex; flex-direction: column; }
+    .note { display: grid; grid-template-columns: 26px 1fr; gap: 13px; padding: 15px 0;
+      border-top: 1px solid rgba(236,234,245,0.12); position: relative; }
+    .note:last-child { border-bottom: 1px solid rgba(236,234,245,0.12); }
+    .num { font-family: "Silkscreen", monospace; font-size: 11px; color: #ffd54f; padding-top: 2px; }
+    .note b { display: block; font-size: 13px; font-weight: 500; color: #eceaf5; }
+    .note span { display: block; font-size: 12px; font-weight: 300; line-height: 1.6;
+      color: rgba(236,234,245,0.52); margin-top: 5px; text-wrap: pretty; }
+
+    /* the status key — squares, not dots. blocks, not pills. */
+    .key { margin-top: 26px; display: grid; grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 1px; background: rgba(236,234,245,0.12); border: 1px solid rgba(236,234,245,0.12); }
+    .key div { background: #07070f; padding: 10px 12px; display: flex; align-items: center; gap: 9px;
+      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(236,234,245,0.6); }
+    .key i { width: 9px; height: 9px; flex: none; }
+
+    /* right: the actual capture, framed and called out */
+    .stage { flex: 1; position: relative; display: flex; flex-direction: column; gap: 22px; }
+    .win { border: 1px solid rgba(255,255,255,0.15); background: #12122a; overflow: hidden;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.66); position: relative; }
+    .win .tb { height: 26px; background: rgba(255,255,255,0.06); display: flex; align-items: center;
+      gap: 6px; padding: 0 11px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .win .tb i { width: 8px; height: 8px; border-radius: 50%; }
+    .win .tb b { margin-left: 12px; font-family: "Martian Mono", monospace; font-size: 8.5px;
+      letter-spacing: 0.18em; text-transform: uppercase; font-weight: 400; color: rgba(255,255,255,0.44); }
+    .win img { display: block; width: 100%; }
+
+    /* callout markers sit on the frame, not guessed pixel coordinates inside it */
+    .pin { position: absolute; width: 22px; height: 22px; border: 1px solid #ffd54f;
+      background: rgba(7,7,15,0.9); color: #ffd54f; display: flex; align-items: center;
+      justify-content: center; font-family: "Silkscreen", monospace; font-size: 10px; z-index: 3; }
+    .pin::before { content: ""; position: absolute; right: 100%; top: 50%; width: 26px;
+      height: 1px; background: rgba(255,213,79,0.5); }
+    .brk { position: absolute; border: 1px solid rgba(255,213,79,0.5); border-right: 0;
+      width: 12px; z-index: 2; }
+    .cap { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.38); }
+  </style>
+</helmet>
+<div class="ap">
+  <div class="rail">
+    <div class="lbl">02 &mdash; the sidebar</div>
+    <h2 class="sec">Read the room <em>without reading.</em></h2>
+    <p class="blurb">Six sessions, one window. The sidebar sorts itself so whoever is blocked on you sits at the top, and the colour tells you the state before you have parsed a single word of output.</p>
+
+    <div class="notes">
+      <div class="note"><span class="num">1</span><span><b>Sessions, ordered by urgency</b><span>Needs-you floats up. Long-running sinks. You never hunt for the one that stopped.</span></span></div>
+      <div class="note"><span class="num">2</span><span><b>Projects and archive</b><span>Group by repo, archive what you are done with, keep the live list short.</span></span></div>
+      <div class="note"><span class="num">3</span><span><b>The pane is real Ghostty</b><span>Your config, your themes, your keybinds. Nothing about the terminal itself changed.</span></span></div>
+    </div>
+
+    <div class="key">
+      <div><i style="background:#4ade80"></i>working</div>
+      <div><i style="background:#60a5fa"></i>your turn</div>
+      <div><i style="background:#fbbf24"></i>needs a decision</div>
+      <div><i style="background:#fb923c"></i>long-running</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="win">
+      <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><b>ghostties &mdash; 6 sessions</b></div>
+      <img src="./app-sessions.jpg" alt="Ghostties sidebar showing parallel Claude Code sessions in one window">
+      <div class="brk" style="left:-13px;top:60px;height:150px"></div>
+      <div class="pin" style="left:-61px;top:124px">1</div>
+      <div class="brk" style="left:-13px;top:224px;height:110px"></div>
+      <div class="pin" style="left:-61px;top:268px">2</div>
+      <div class="pin" style="left:-61px;top:392px">3</div>
+    </div>
+    <div class="cap">figure 1 &mdash; unretouched capture, v0.1.0-beta.23</div>
+
+    <div class="win">
+      <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><b>gt list</b></div>
+      <img src="./app-tasks.jpg" alt="gt list output showing tasks across projects grouped into status lanes">
+    </div>
+    <div class="cap">figure 2 &mdash; every task, every project, one command</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":880}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

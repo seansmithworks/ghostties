@@ -1,0 +1,214 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #050509; }
+    a { color: #9ad6e0; text-decoration: none; } a:hover { color: #fff; }
+
+    .hall { width: 1360px; height: 900px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #050509; color: #eef0f7;
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      display: flex; flex-direction: column; }
+
+    /* --- the corridor: real CSS 3D, standing in for the three.js scene --- */
+    .scene { position: relative; height: 592px; perspective: 900px;
+      perspective-origin: 50% 46%; overflow: hidden;
+      background:
+        radial-gradient(58% 52% at 50% 44%, rgba(0,188,212,0.16), transparent 68%),
+        linear-gradient(#07070f 0%, #0a0a16 55%, #05050b 100%); }
+    .rig { position: absolute; inset: 0; transform-style: preserve-3d;
+      animation: dolly 22s ease-in-out infinite; }
+    @keyframes dolly { 0%,100% { transform: translateZ(0px); } 50% { transform: translateZ(150px); } }
+
+    /* floor grid receding to the vanishing point */
+    .floor { position: absolute; left: -60%; right: -60%; top: 52%; height: 900px;
+      transform: rotateX(78deg); transform-origin: top center;
+      background-image:
+        linear-gradient(rgba(0,188,212,0.24) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,77,255,0.18) 1px, transparent 1px);
+      background-size: 88px 88px;
+      mask-image: linear-gradient(#000 0%, rgba(0,0,0,0.25) 42%, transparent 72%);
+      animation: run 4.4s linear infinite; }
+    @keyframes run { to { background-position: 0 88px, 0 0; } }
+
+    /* the scattered windows — chaos in front, order at the end */
+    .w { position: absolute; border-radius: 6px; box-sizing: border-box;
+      border: 1px solid rgba(255,255,255,0.16); background: rgba(14,14,28,0.82);
+      backdrop-filter: blur(2px);
+      box-shadow: 0 22px 60px rgba(0,0,0,0.66); overflow: hidden; }
+    .w .tb { height: 15px; background: rgba(255,255,255,0.06);
+      border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center;
+      gap: 4px; padding: 0 6px; }
+    .w .tb i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.22); }
+    .w .ln { height: 4px; margin: 6px 8px 0; border-radius: 2px; background: rgba(255,255,255,0.13); }
+    .w .ln.a { width: 62%; background: rgba(100,220,120,0.4); }
+    .w .ln.b { width: 40%; }
+    .w .ln.c { width: 78%; }
+    .w.dim { opacity: 0.46; }
+    .w.flick { animation: flick 6s steps(1, end) infinite; }
+    @keyframes flick { 0%,88%,100% { opacity: 0.46; } 90% { opacity: 0.16; } 93% { opacity: 0.5; } }
+
+    /* the hero window at the end of the hall — lit, singular */
+    .w.hero { border-color: rgba(0,229,255,0.5); background: rgba(16,18,40,0.96);
+      box-shadow: 0 0 90px rgba(0,188,212,0.42), 0 34px 90px rgba(0,0,0,0.8); }
+    .w.hero .tb { background: rgba(0,188,212,0.14); }
+    .w.hero .tb i:nth-child(1) { background: #ff5f57; }
+    .w.hero .tb i:nth-child(2) { background: #febc2e; }
+    .w.hero .tb i:nth-child(3) { background: #28c840; }
+
+    /* the procession */
+    .proc { position: absolute; left: 0; right: 0; bottom: 118px; height: 60px;
+      transform-style: preserve-3d; }
+    .g { position: absolute; bottom: 0; animation: step 0.5s steps(2, jump-none) infinite; }
+    .g svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 6px 16px rgba(0,0,0,0.7)); }
+    @keyframes step { 50% { transform: translateY(-7px); } }
+    /* the line, read as depth: near ghosts large and low, far ghosts small and high */
+    .g1 { width: 92px; height: 92px; left: 13%;   bottom: -8px; }
+    .g2 { width: 74px; height: 74px; left: 26%;   bottom: 13px; opacity: 0.92; animation-delay: 0.12s; }
+    .g3 { width: 60px; height: 60px; left: 37%;   bottom: 27px; opacity: 0.82; animation-delay: 0.24s; }
+    .g4 { width: 48px; height: 48px; left: 46.5%; bottom: 38px; opacity: 0.72; animation-delay: 0.36s; }
+    .g5 { width: 38px; height: 38px; left: 55%;   bottom: 46px; opacity: 0.60; animation-delay: 0.48s; }
+    .g6 { width: 30px; height: 30px; left: 62%;   bottom: 53px; opacity: 0.46; animation-delay: 0.60s; }
+
+    .haze { position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(70% 60% at 50% 46%, transparent 34%, rgba(5,5,9,0.92) 100%); }
+    .beam { position: absolute; left: 50%; top: 30%; width: 300px; height: 340px;
+      transform: translateX(-50%); pointer-events: none;
+      background: radial-gradient(50% 60% at 50% 30%, rgba(0,229,255,0.20), transparent 72%);
+      filter: blur(18px); animation: pulseBeam 7s ease-in-out infinite; }
+    @keyframes pulseBeam { 50% { opacity: 0.6; } }
+
+    /* --- copy laid over the scene --- */
+    .over { position: absolute; left: 62px; top: 58px; z-index: 5; }
+    .kicker { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(238,240,247,0.42); }
+    h1 { font-size: 62px; line-height: 1.0; letter-spacing: -0.035em; font-weight: 700;
+      margin: 16px 0 0; max-width: 13ch; }
+    h1 em { font-style: normal; color: #6fe3f2; }
+    .lead { font-size: 15.5px; line-height: 1.62; color: rgba(238,240,247,0.62);
+      max-width: 40ch; margin: 18px 0 0; text-wrap: pretty; }
+    .nav { position: absolute; right: 62px; top: 58px; z-index: 5; display: flex; gap: 26px;
+      font-family: "JetBrains Mono", monospace; font-size: 12px; letter-spacing: 0.06em;
+      color: rgba(238,240,247,0.46); }
+
+    /* --- storyboard strip: what scroll actually does --- */
+    .strip { flex: 1; border-top: 1px solid rgba(255,255,255,0.09);
+      background: #08080f; padding: 22px 62px 24px; display: flex; flex-direction: column; gap: 12px; }
+    .strip-h { display: flex; align-items: baseline; gap: 14px;
+      font-family: "JetBrains Mono", monospace; font-size: 10.5px; letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(238,240,247,0.36); }
+    .strip-h b { color: rgba(238,240,247,0.7); font-weight: 500; }
+    .strip-h .cta { margin-left: auto; letter-spacing: 0.04em; text-transform: none;
+      display: flex; gap: 10px; }
+    .strip-h .cta span { border: 1px solid rgba(255,255,255,0.16); border-radius: 4px;
+      padding: 5px 10px; color: rgba(238,240,247,0.72); font-size: 11px; }
+    .strip-h .cta span.p { background: #6fe3f2; border-color: #6fe3f2; color: #06121a; font-weight: 500; }
+    .frames { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; flex: 1; }
+    .fr { border: 1px solid rgba(255,255,255,0.10); border-radius: 5px; padding: 11px 12px;
+      background: rgba(255,255,255,0.022); display: flex; flex-direction: column; gap: 5px; }
+    .fr .n { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.14em;
+      color: #6fe3f2; }
+    .fr b { font-size: 14.5px; font-weight: 500; letter-spacing: -0.01em; }
+    .fr span { font-size: 11.5px; line-height: 1.5; color: rgba(238,240,247,0.5); text-wrap: pretty; }
+  </style>
+</helmet>
+<div class="hall">
+  <div class="scene">
+    <div class="rig">
+      <div class="floor"></div>
+
+      <!-- chaos: near, angled, dim -->
+      <div class="w dim flick" style="width:250px;height:150px;left:2%;top:26%;transform:translateZ(230px) rotateY(26deg) rotateX(-4deg)"><div class="tb"><i></i><i></i><i></i></div><div class="ln c"></div><div class="ln b"></div><div class="ln"></div></div>
+      <div class="w dim" style="width:220px;height:132px;right:1%;top:18%;transform:translateZ(190px) rotateY(-30deg)"><div class="tb"><i></i><i></i><i></i></div><div class="ln a"></div><div class="ln"></div><div class="ln b"></div></div>
+      <div class="w dim flick" style="width:196px;height:118px;left:11%;top:56%;transform:translateZ(140px) rotateY(17deg) rotateZ(-3deg)"><div class="tb"><i></i><i></i><i></i></div><div class="ln b"></div><div class="ln c"></div></div>
+      <div class="w dim" style="width:180px;height:110px;right:11%;top:58%;transform:translateZ(110px) rotateY(-19deg) rotateZ(2deg)"><div class="tb"><i></i><i></i><i></i></div><div class="ln c"></div><div class="ln a"></div></div>
+      <div class="w dim" style="width:150px;height:92px;left:23%;top:14%;transform:translateZ(50px) rotateY(11deg)"><div class="tb"><i></i><i></i><i></i></div><div class="ln"></div><div class="ln b"></div></div>
+      <div class="w dim" style="width:142px;height:88px;right:22%;top:12%;transform:translateZ(30px) rotateY(-13deg)"><div class="tb"><i></i><i></i><i></i></div><div class="ln b"></div><div class="ln c"></div></div>
+      <div class="w dim" style="width:118px;height:74px;left:33%;top:66%;transform:translateZ(-40px) rotateY(8deg)"><div class="tb"><i></i><i></i><i></i></div><div class="ln c"></div></div>
+      <div class="w dim" style="width:112px;height:70px;right:32%;top:68%;transform:translateZ(-60px) rotateY(-8deg)"><div class="tb"><i></i><i></i><i></i></div><div class="ln a"></div></div>
+
+      <!-- order: the one lit window at the vanishing point -->
+      <div class="w hero" style="width:286px;height:184px;left:50%;top:34%;transform:translate(-50%,-16%) translateZ(-330px)">
+        <div class="tb"><i></i><i></i><i></i></div>
+        <div class="ln a"></div><div class="ln c"></div><div class="ln b"></div><div class="ln c"></div><div class="ln a"></div><div class="ln b"></div>
+      </div>
+      <div class="beam"></div>
+
+      <div class="proc">
+        <sc-for list="{{ ghosts }}" as="g" hint-placeholder-count="6">
+          <div class="g {{ g.cls }}">
+            <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+              <path d="{{ g.d }}" fill="{{ g.c }}"></path>
+            </svg>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="haze"></div>
+
+    <div class="over">
+      <div class="kicker">Ghostties &nbsp;&middot;&nbsp; macOS</div>
+      <h1>Walk out of the <em>window sprawl.</em></h1>
+      <p class="lead">Scroll and the mess resolves: every stray terminal folds into one window, and the agents fall in behind you.</p>
+    </div>
+    <div class="nav"><a href="#">capabilities</a><a href="#">install</a><a href="#">changelog</a><a href="#">github</a></div>
+  </div>
+
+  <div class="strip">
+    <div class="strip-h">
+      <b>Scroll score</b>
+      <span>WebGL &middot; three.js &middot; 2.5D sprites on a real depth pass</span>
+      <span class="cta">
+        <span class="p">brew install &mdash;cask ghostties</span>
+        <span>npx ghostties-install</span>
+        <span>.dmg</span>
+      </span>
+    </div>
+    <div class="frames">
+      <div class="fr"><span class="n">00 &nbsp;/&nbsp; 0%</span><b>Sprawl</b><span>Forty windows adrift in the dark, each with an agent trapped inside. Nothing is readable.</span></div>
+      <div class="fr"><span class="n">01 &nbsp;/&nbsp; 30%</span><b>The pull</b><span>The camera moves. Windows begin to swing toward one axis; the floor grid appears underfoot.</span></div>
+      <div class="fr"><span class="n">02 &nbsp;/&nbsp; 65%</span><b>The line</b><span>Ghosts step out of their windows and form a procession &mdash; this is the sidebar, being born.</span></div>
+      <div class="fr"><span class="n">03 &nbsp;/&nbsp; 100%</span><b>One window</b><span>The hallway ends at the real product shot. Capabilities and install land here, on solid ground.</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const RECTS = {
+      red:    '12,0,24,4 8,4,32,4 4,8,40,4 4,12,8,8 20,12,8,8 36,12,8,8 0,20,48,20 0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4 0,44,4,4 16,44,4,4 28,44,4,4 44,44,4,4',
+      purple: '12,0,24,4 4,4,40,4 0,8,48,4 0,12,8,4 16,12,16,4 40,12,8,4 0,16,4,4 16,16,16,4 44,16,4,4 0,20,48,20 0,40,8,4 16,40,16,4 40,40,8,4 0,44,4,4 20,44,8,4 44,44,4,4',
+      cyan:   '12,0,24,4 8,4,32,4 4,8,40,4 4,12,12,8 32,12,12,8 0,20,48,20 0,40,4,4 8,40,8,4 20,40,8,4 32,40,8,4 44,40,4,4 0,44,4,4 12,44,4,4 32,44,4,4 44,44,4,4',
+      pink:   '16,0,16,4 8,4,32,4 4,8,40,4 4,12,4,8 16,12,16,8 40,12,4,8 0,20,48,20 0,40,12,4 20,40,8,4 36,40,12,4 0,44,4,4 44,44,4,4',
+      orange: '8,0,32,4 4,4,40,4 0,8,48,4 0,12,8,8 16,12,16,8 40,12,8,8 0,20,48,20 0,40,12,4 16,40,16,4 36,40,12,4 0,44,4,4 20,44,8,4 44,44,4,4',
+      indigo: '8,0,32,4 4,4,40,4 0,8,48,4 0,12,12,4 20,12,28,4 0,16,8,4 20,16,28,4 0,20,12,4 20,20,28,4 0,24,48,16 0,40,8,4 16,40,16,4 40,40,8,4 0,44,4,4 20,44,8,4 44,44,4,4'
+    };
+    function toPath(s) {
+      return s.split(' ').map(function (t) {
+        var a = t.split(',').map(Number);
+        return 'M' + a[0] + ' ' + a[1] + 'h' + a[2] + 'v' + a[3] + 'h-' + a[2] + 'Z';
+      }).join('');
+    }
+    // Depth is carried by the .g1-.g6 classes in the stylesheet, nearest first.
+    const line = [
+      ['red', '#FF4136'], ['cyan', '#00BCD4'], ['orange', '#FF9800'],
+      ['purple', '#7C4DFF'], ['pink', '#FF80AB'], ['indigo', '#7986CB']
+    ];
+    return {
+      ghosts: line.map(function (p, i) {
+        return { c: p[1], d: toPath(RECTS[p[0]]), cls: 'g' + (i + 1) };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

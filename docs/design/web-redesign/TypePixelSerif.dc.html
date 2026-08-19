@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Bodoni+Moda:opsz,ital,wght@6..96,0,400;6..96,0,500;6..96,1,400&family=Martian+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .ty { width: 660px; height: 980px; box-sizing: border-box; background: #07070f;
+      color: #eceaf5; font-family: "Bodoni Moda", Georgia, serif; padding: 44px 40px 36px;
+      display: flex; flex-direction: column; overflow: hidden; }
+
+    .stamp { display: flex; align-items: baseline; gap: 10px;
+      padding-bottom: 13px; border-bottom: 2px solid rgba(236,234,245,0.9); }
+    .stamp .a { font-family: "Silkscreen", monospace; font-size: 15px; }
+    .stamp .b { font-family: "Martian Mono", monospace; font-size: 8px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.42); margin-left: auto; }
+
+    .row { padding: 20px 0; border-bottom: 1px solid rgba(236,234,245,0.13); }
+    .tag { font-family: "Martian Mono", monospace; font-size: 7.5px; letter-spacing: 0.24em;
+      text-transform: uppercase; color: rgba(236,234,245,0.36); margin-bottom: 13px; }
+
+    .display { font-family: "Silkscreen", monospace; font-weight: 700; font-size: 38px;
+      line-height: 1.1; color: #fff; margin: 0; }
+    .display .y { color: #ffd54f; }
+    .spec { font-family: "Martian Mono", monospace; font-size: 7.5px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(236,234,245,0.3); margin-top: 12px; }
+
+    /* the didone does the prose and the section heads — this is the whole bet */
+    .sect { font-family: "Bodoni Moda", serif; font-weight: 400; font-size: 40px;
+      line-height: 1.1; letter-spacing: -0.015em; color: #fff; margin: 0; }
+    .sect em { font-style: italic; color: rgba(236,234,245,0.56); }
+    .body { font-family: "Bodoni Moda", serif; font-size: 16px; font-weight: 400;
+      line-height: 1.68; margin: 0; color: rgba(236,234,245,0.74); text-wrap: pretty; }
+    .body b { font-weight: 500; color: #fff; }
+    .drop { float: left; font-family: "Silkscreen", monospace; font-size: 34px; line-height: 0.86;
+      color: #ffd54f; margin: 4px 12px 0 0; }
+
+    .marks { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1px;
+      background: rgba(236,234,245,0.13); border: 1px solid rgba(236,234,245,0.13); }
+    .marks div { background: #07070f; padding: 9px 11px; display: flex; align-items: center; gap: 8px;
+      font-family: "Martian Mono", monospace; font-size: 8px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(236,234,245,0.6); }
+    .marks i { width: 9px; height: 9px; flex: none; }
+
+    .units { display: flex; margin-top: 13px; }
+    .u { display: flex; align-items: center; border: 1px solid rgba(236,234,245,0.2);
+      border-right-width: 0; }
+    .u:last-child { border-right-width: 1px; }
+    .u .k { font-family: "Martian Mono", monospace; font-size: 7.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; padding: 0 9px; align-self: stretch; display: flex;
+      align-items: center; background: rgba(236,234,245,0.72); color: rgba(7,7,15,0.86); }
+    .u .v { padding: 10px 12px; font-size: 11.5px; color: rgba(236,234,245,0.88);
+      font-family: "Martian Mono", monospace; }
+    .u.p { border-color: #ffd54f; background: rgba(255,213,79,0.1); }
+    .u.p .k { background: #ffd54f; color: #201700; }
+
+    .scale { display: flex; flex-direction: column; gap: 7px; }
+    .scale div { display: flex; align-items: baseline; gap: 12px;
+      font-family: "Martian Mono", monospace; font-size: 7.5px; letter-spacing: 0.16em;
+      color: rgba(236,234,245,0.3); }
+    .scale div span:last-child { color: rgba(236,234,245,0.6); letter-spacing: 0.1em; }
+
+    .verdict { margin-top: auto; padding-top: 18px; border-top: 2px solid rgba(236,234,245,0.9); }
+    .verdict b { font-family: "Silkscreen", monospace; font-size: 12px; color: #ffd54f;
+      display: block; margin-bottom: 9px; }
+    .verdict span { font-family: "Martian Mono", monospace; font-size: 9.5px; line-height: 1.75;
+      color: rgba(236,234,245,0.56); text-wrap: pretty; }
+  </style>
+</helmet>
+<div class="ty">
+  <div class="stamp"><span class="a">STANCE 02</span><span class="b">pixel + high-contrast serif</span></div>
+
+  <div class="row">
+    <div class="tag">display &mdash; silkscreen 700</div>
+    <h1 class="display">SIX AGENTS.<br><span class="y">ONE WINDOW.</span></h1>
+    <div class="spec">38px &middot; reserved for the loudest two moments on the page</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">section &mdash; bodoni moda 400</div>
+    <h2 class="sect">Read the room <em>without reading.</em></h2>
+    <div class="spec">40px &middot; 1.1 &middot; &minus;0.015em &middot; optical size axis set for display</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">body &mdash; bodoni moda 400</div>
+    <p class="body"><span class="drop">G</span>hostties keeps every Claude Code session in one macOS window &mdash; a sidebar that says who is working and who is waiting on you, and <b>gt list</b> for every task across every project.</p>
+    <div class="spec" style="clear:both">16px &middot; 1.68 &middot; hairline serifs need the extra size and leading on dark</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">labels &amp; status &mdash; martian mono 400</div>
+    <div class="marks">
+      <div><i style="background:#4ade80"></i>working</div>
+      <div><i style="background:#60a5fa"></i>your turn</div>
+      <div><i style="background:#fbbf24"></i>needs a decision</div>
+      <div><i style="background:#fb923c"></i>long-running</div>
+    </div>
+    <div class="units">
+      <span class="u p"><span class="k">brew</span><span class="v">install --cask ghostties</span></span>
+      <span class="u"><span class="k">npx</span><span class="v">ghostties-install</span></span>
+    </div>
+  </div>
+
+  <div class="row" style="border-bottom:0">
+    <div class="tag">the ramp</div>
+    <div class="scale">
+      <div><span>DISPLAY</span><span>Silkscreen 700 &middot; 38&ndash;60px</span></div>
+      <div><span>SECTION</span><span>Bodoni Moda 400 &middot; 34&ndash;56px</span></div>
+      <div><span>BODY</span><span>Bodoni Moda 400 &middot; 16&ndash;18px</span></div>
+      <div><span>LABEL</span><span>Martian Mono 400 &middot; 7.5&ndash;9px</span></div>
+      <div><span>CODE</span><span>Martian Mono 400 &middot; 11.5px</span></div>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <b>WHY IT BREAKS AWAY</b>
+    <span>The widest tonal range of the three &mdash; arcade shouting next to an editorial whisper. A didone on a dev-tool site is genuinely rare. Risk: hairline serifs get fragile on dark screens and in small sizes, so the body has to run large and the leading generous. Also the least developer-native: some visitors will read &ldquo;magazine&rdquo; before they read &ldquo;terminal&rdquo;.</span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":660,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #08080f; }
+    a { color: rgba(255,255,255,0.72); text-decoration: none; } a:hover { color: #fff; }
+
+    .os { width: 1360px; height: 900px; box-sizing: border-box; position: relative;
+      overflow: hidden; padding: 46px;
+      background: radial-gradient(120% 100% at 50% 0%, #23233c 0%, #0b0b16 62%, #08080f 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+    /* the window IS the page */
+    .win { height: 100%; box-sizing: border-box; border-radius: 12px; overflow: hidden;
+      display: grid; grid-template-rows: 40px 1fr; background: #1a1a2e;
+      border: 1px solid rgba(255,255,255,0.09);
+      box-shadow: 0 40px 90px rgba(0,0,0,0.72), 0 8px 26px rgba(0,0,0,0.5); }
+
+    .bar { display: flex; align-items: center; gap: 8px; padding: 0 14px;
+      background: #15152a; border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .tl { width: 12px; height: 12px; border-radius: 50%; }
+    .tl.r { background: #ff5f57; } .tl.y { background: #febc2e; } .tl.g { background: #28c840; }
+    .bar .t { margin-left: 14px; font-size: 12.5px; color: rgba(255,255,255,0.42);
+      font-family: "JetBrains Mono", monospace; }
+    .bar .t b { color: rgba(255,255,255,0.72); font-weight: 500; }
+
+    .body { display: grid; grid-template-columns: 236px 1fr; min-height: 0; }
+
+    /* sidebar = the site nav, rendered as the app's session list */
+    .side { background: #16162a; border-right: 1px solid rgba(255,255,255,0.07);
+      padding: 14px 0; display: flex; flex-direction: column; }
+    .sh { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: rgba(255,255,255,0.34); padding: 10px 16px 7px; }
+    .row { display: flex; align-items: center; gap: 9px; padding: 7px 16px;
+      font-size: 13px; color: rgba(255,255,255,0.72); }
+    .row.on { background: rgba(255,255,255,0.07); color: #fff;
+      box-shadow: inset 2px 0 0 #c97350; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .dot.work { background: #4ade80; animation: breathe 2.1s ease-in-out infinite; }
+    .dot.turn { background: #60a5fa; animation: breathe 2.1s ease-in-out infinite 0.5s; }
+    .dot.dec  { background: #fbbf24; }
+    .dot.idle { background: rgba(255,255,255,0.22); }
+    @keyframes breathe { 50% { opacity: 0.35; } }
+    .row .ts { margin-left: auto; font-size: 10.5px; color: rgba(255,255,255,0.3);
+      font-family: "JetBrains Mono", monospace; }
+    .side .foot { margin-top: auto; padding: 12px 16px 2px; font-size: 11px;
+      color: rgba(255,255,255,0.32); border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex; flex-direction: column; gap: 6px; }
+
+    /* content pane = terminal */
+    .pane { padding: 34px 42px; overflow: hidden; font-family: "JetBrains Mono", monospace;
+      color: rgba(255,255,255,0.65); font-size: 13.5px; line-height: 1.85;
+      display: flex; flex-direction: column; }
+    .pr { color: rgba(255,255,255,0.3); }
+    .cmd { color: #fff; }
+    .out { color: rgba(255,255,255,0.55); }
+    h1 { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 40px;
+      line-height: 1.12; letter-spacing: -0.028em; font-weight: 600; color: #fff;
+      margin: 16px 0 0; max-width: 20ch; }
+    .lead { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 16px;
+      line-height: 1.6; color: rgba(255,255,255,0.62); max-width: 56ch; margin: 14px 0 0;
+      text-wrap: pretty; }
+    .caret { display: inline-block; width: 8px; height: 15px; background: #c97350;
+      vertical-align: -2px; animation: blink 1.05s steps(2, jump-none) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .lanes { margin-top: 26px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 6px; overflow: hidden; }
+    .lane { background: #1a1a2e; padding: 12px 14px 16px; }
+    .lane .lh { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+      display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+    .lane .lh span { color: rgba(255,255,255,0.4); }
+    .lane .lh em { font-style: normal; margin-left: auto; color: rgba(255,255,255,0.28); }
+    .task { font-size: 12px; color: rgba(255,255,255,0.6); padding: 3px 0; line-height: 1.5;
+      display: flex; gap: 8px; }
+    .task i { font-style: normal; color: rgba(255,255,255,0.26); }
+
+    .cta { margin-top: 26px; display: flex; gap: 10px; align-items: center; }
+    .copy { border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.045);
+      border-radius: 6px; padding: 9px 13px; font-size: 12.5px; color: rgba(255,255,255,0.82);
+      display: flex; gap: 10px; align-items: center; }
+    .copy em { font-style: normal; color: rgba(255,255,255,0.34); }
+    .primary { background: #fff; color: #14142a; border-color: #fff; font-weight: 600; }
+    .hint { font-size: 11.5px; color: rgba(255,255,255,0.3); margin-left: 4px; }
+  </style>
+</helmet>
+<div class="os">
+  <div class="win">
+    <div class="bar">
+      <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+      <span class="t"><b>ghostties.org</b> &mdash; 6 sessions &middot; 2 need you</span>
+    </div>
+    <div class="body">
+      <div class="side">
+        <div class="sh">Sessions</div>
+        <div class="row on"><span class="dot work"></span>overview<span class="ts">now</span></div>
+        <div class="row"><span class="dot turn"></span>what it does<span class="ts">1m</span></div>
+        <div class="row"><span class="dot dec"></span>install<span class="ts">3m</span></div>
+        <div class="row"><span class="dot work"></span>gt list<span class="ts">4m</span></div>
+        <div class="sh">Archive</div>
+        <div class="row"><span class="dot idle"></span>changelog<span class="ts">2d</span></div>
+        <div class="row"><span class="dot idle"></span>support<span class="ts">9d</span></div>
+        <div class="row"><span class="dot idle"></span>privacy<span class="ts">21d</span></div>
+        <div class="foot">
+          <span>v0.1.0-beta.23 &middot; macOS 13+</span>
+          <span><a href="#">github</a> &nbsp;<a href="#">changelog</a></span>
+        </div>
+      </div>
+
+      <div class="pane">
+        <div><span class="pr">~/ghostties &nbsp;&gt;</span> <span class="cmd">gt overview</span></div>
+        <h1>Every agent you're running, in one window.</h1>
+        <p class="lead">Ghostties is a multi-agent workspace terminal for macOS &mdash; a fork of Ghostty. This page is a screenshot of nothing: it&rsquo;s the same layout the app gives you.</p>
+
+        <div style="margin-top: 22px"><span class="pr">~/ghostties &nbsp;&gt;</span> <span class="cmd">gt list</span></div>
+        <div class="lanes">
+          <div class="lane">
+            <div class="lh"><span class="dot turn"></span><span>needs you</span><em>2</em></div>
+            <div class="task"><i>brukas</i> approve migration plan</div>
+            <div class="task"><i>web</i> pick a hero direction</div>
+          </div>
+          <div class="lane">
+            <div class="lh"><span class="dot work"></span><span>running</span><em>3</em></div>
+            <div class="task"><i>ghostties</i> sidebar perf pass</div>
+            <div class="task"><i>career</i> rewrite case study</div>
+            <div class="task"><i>web</i> a11y sweep</div>
+          </div>
+          <div class="lane">
+            <div class="lh"><span class="dot idle"></span><span>done today</span><em>7</em></div>
+            <div class="task"><i>ghostties</i> ship beta.23</div>
+            <div class="task"><i>web</i> fix Safari bracket</div>
+            <div class="task"><i>brukas</i> queue update</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 24px"><span class="pr">~/ghostties &nbsp;&gt;</span> <span class="cmd">install</span><span class="caret"></span></div>
+        <div class="cta">
+          <div class="copy primary">brew install --cask seansmithworks/tap/ghostties</div>
+          <div class="copy">npx ghostties-install <em>&#9106;</em></div>
+          <div class="copy">.dmg <em>&darr;</em></div>
+          <span class="hint">free &middot; open source &middot; no account</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

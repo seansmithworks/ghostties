@@ -1,0 +1,192 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Martian+Mono:wght@400;500&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .sf { width: 1360px; height: 880px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "DM Mono", monospace; padding: 52px 56px 44px;
+      display: flex; flex-direction: column; }
+
+    .lbl { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+    h2 { font-family: "Silkscreen", monospace; font-size: 28px; line-height: 1.3;
+      color: #fff; margin: 13px 0 0; }
+    h2 em { font-style: normal; color: #ffd54f; }
+    .blurb { font-size: 13.5px; font-weight: 300; line-height: 1.7; margin: 15px 0 0;
+      max-width: 68ch; color: rgba(236,234,245,0.62); text-wrap: pretty; }
+
+    .stage { margin-top: 38px; display: grid; grid-template-columns: 1fr 380px 40px;
+      gap: 48px; flex: 1; min-height: 0; align-items: center; }
+
+    /* --- copy column: three blocks, one in focus --- */
+    .blocks { display: flex; flex-direction: column; gap: 30px; }
+    .blk { transition: none; }
+    .blk .n { font-family: "Silkscreen", monospace; font-size: 11px; color: #ffd54f; }
+    .blk h3 { font-family: "Silkscreen", monospace; font-size: 25px; line-height: 1.28;
+      margin: 11px 0 0; color: #fff; }
+    .blk p { font-size: 13.5px; font-weight: 300; line-height: 1.7; margin: 11px 0 0;
+      max-width: 50ch; color: rgba(236,234,245,0.6); text-wrap: pretty; }
+    /* the mechanic: out-of-focus blocks defocus and recede — no scrollbar hijack,
+       this is driven by section position, so the scrollbar keeps working */
+    .b0 { animation: focus 13.5s ease-in-out infinite; }
+    .b1 { animation: focus 13.5s ease-in-out infinite -4.5s; }
+    .b2 { animation: focus 13.5s ease-in-out infinite -9s; }
+    @keyframes focus {
+      0%   { opacity: 0.2; filter: blur(3px); transform: translateY(10px) scale(0.985); }
+      6%   { opacity: 1;   filter: blur(0);   transform: none; }
+      27%  { opacity: 1;   filter: blur(0);   transform: none; }
+      33%, 100% { opacity: 0.2; filter: blur(3px); transform: translateY(-10px) scale(0.985); }
+    }
+
+    /* --- fixed column: the ghost never moves, only its state changes --- */
+    .fixedcol { position: relative; height: 560px; }
+    .anchor { position: absolute; left: 0; right: 0; top: 0; height: 300px; }
+    .anchor .fr { position: absolute; inset: 0; opacity: 0; }
+    .anchor .fr svg { width: 100%; height: 100%; display: block; }
+    .a0 { animation: swap 13.5s steps(1, end) infinite; }
+    .a1 { animation: swap 13.5s steps(1, end) infinite -4.5s; }
+    .a2 { animation: swap 13.5s steps(1, end) infinite -9s; }
+    @keyframes swap { 0%, 32% { opacity: 1; } 34%, 100% { opacity: 0; } }
+
+    /* real capture underneath, swapping with the ghost above it */
+    .shot { position: absolute; left: 0; right: 0; top: 324px;
+      border: 1px solid rgba(255,255,255,0.14); background: #12122a; overflow: hidden;
+      box-shadow: 0 22px 60px rgba(0,0,0,0.66); }
+    .shot .tb { height: 22px; background: rgba(255,255,255,0.06); display: flex;
+      align-items: center; gap: 5px; padding: 0 9px;
+      border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .shot .tb i { width: 7px; height: 7px; border-radius: 50%; }
+    .shot .win { position: relative; height: 200px; }
+    .shot .win div { position: absolute; inset: 0; background-size: cover; opacity: 0; }
+    .shot .w0 { background-image: url(./app-sessions.jpg); background-position: 0 0;
+      animation: swap 13.5s steps(1, end) infinite; }
+    .shot .w1 { background-image: url(./app-tasks.jpg); background-position: 50% 0;
+      animation: swap 13.5s steps(1, end) infinite -4.5s; }
+    .shot .w2 { background-image: url(./app-sessions.jpg); background-position: 100% 100%;
+      animation: swap 13.5s steps(1, end) infinite -9s; }
+
+    /* --- progress rail --- */
+    .rail { height: 420px; width: 3px; background: rgba(236,234,245,0.12); position: relative;
+      justify-self: center; align-self: center; }
+    .rail i { position: absolute; left: -2px; width: 7px; height: 7px; background: rgba(236,234,245,0.3); }
+    .rail .p1 { top: 0; } .rail .p2 { top: 50%; } .rail .p3 { bottom: 0; }
+    .rail .run { position: absolute; left: 0; width: 3px; background: #ffd54f;
+      animation: fill 13.5s linear infinite; }
+    @keyframes fill { 0% { top: 0; height: 0; } 100% { top: 0; height: 100%; } }
+
+    .foot { margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(236,234,245,0.12);
+      display: flex; align-items: center; gap: 18px;
+      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.36); }
+    .foot i { width: 6px; height: 6px; background: #4ade80; display: block; }
+    .foot .r { margin-left: auto; color: rgba(236,234,245,0.28); }
+  </style>
+</helmet>
+<div class="sf">
+  <div class="lbl">motion language &nbsp;/&nbsp; option 2</div>
+  <h2>The ghost holds still. <em>Everything else resolves.</em></h2>
+  <p class="blurb">One anchored character on the right, pinned for the whole section. Copy on the left pulls into focus a block at a time while the ghost changes state and the capture under it swaps to match. The scrollbar keeps working the whole way &mdash; position drives it, nothing is hijacked.</p>
+
+  <div class="stage">
+    <div class="blocks">
+      <div class="blk b0">
+        <div class="n">01</div>
+        <h3>EVERY SESSION,<br>ONE WINDOW</h3>
+        <p>Six agents running at once, in a single sidebar that sorts itself so whoever is blocked on you sits at the top.</p>
+      </div>
+      <div class="blk b1">
+        <div class="n">02</div>
+        <h3>EVERY TASK,<br>ONE LANE</h3>
+        <p><b>gt list</b> pulls every open task across every project into status lanes. One command, one answer to &ldquo;what is actually going on&rdquo;.</p>
+      </div>
+      <div class="blk b2">
+        <div class="n">03</div>
+        <h3>STILL GHOSTTY,<br>UNDERNEATH</h3>
+        <p>Your config, your themes, your keybinds. The terminal did not change &mdash; only what surrounds it did.</p>
+      </div>
+    </div>
+
+    <div class="fixedcol">
+      <div class="anchor">
+        <sc-for list="{{ states }}" as="s" hint-placeholder-count="3">
+          <div class="fr {{ s.cls }}">
+            <svg viewBox="0 0 48 48" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+              <path d="{{ s.body }}" fill="{{ s.c }}"></path>
+              <path d="{{ s.shade }}" fill="rgba(0,0,0,0.26)"></path>
+              <rect x="8" y="17" width="32" height="9" fill="rgba(5,5,12,0.72)"></rect>
+              <rect x="{{ s.ex }}" y="19" width="7" height="5" fill="#fff"></rect>
+            </svg>
+          </div>
+        </sc-for>
+      </div>
+      <div class="shot">
+        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+        <div class="win"><div class="w0"></div><div class="w1"></div><div class="w2"></div></div>
+      </div>
+    </div>
+
+    <div class="rail">
+      <div class="run"></div>
+      <i class="p1"></i><i class="p2"></i><i class="p3"></i>
+    </div>
+  </div>
+
+  <div class="foot">
+    <i></i>no scroll-jacking &mdash; sticky positioning plus an intersection observer
+    <span class="r">reduced-motion: states swap instantly, nothing blurs</span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const DOME = {
+      tall:  '12,0,24,4 8,4,32,4 4,8,40,4 4,12,40,4 0,16,48,24',
+      wide:  '8,0,32,4 4,4,40,4 0,8,48,4 0,12,48,4 0,16,48,24',
+      round: '16,0,16,4 8,4,32,4 4,8,40,4 0,12,48,4 0,16,48,24'
+    };
+    const SKIRT = {
+      four:  '0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4 0,44,4,4 16,44,4,4 28,44,4,4 44,44,4,4',
+      three: '0,40,12,4 18,40,12,4 36,40,12,4 0,44,4,4 22,44,4,4 44,44,4,4',
+      taper: '4,40,40,4 12,44,24,4'
+    };
+    const SHADE = {
+      four:  '0,36,48,4 0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4',
+      three: '0,36,48,4 0,40,12,4 18,40,12,4 36,40,12,4',
+      taper: '0,36,48,4 4,40,40,4'
+    };
+    function toPath(s) {
+      return s.split(' ').map(function (t) {
+        var a = t.split(',').map(Number);
+        return 'M' + a[0] + ' ' + a[1] + 'h' + a[2] + 'v' + a[3] + 'h-' + a[2] + 'Z';
+      }).join('');
+    }
+    const S = [
+      ['#00BCD4', 'wide',  'three', 26],
+      ['#FF9800', 'tall',  'four',  21],
+      ['#7C4DFF', 'round', 'taper', 16]
+    ];
+    return {
+      states: S.map(function (s, i) {
+        return {
+          c: s[0], ex: s[3], cls: 'a' + i,
+          body: toPath(DOME[s[1]] + ' ' + SKIRT[s[2]]),
+          shade: toPath(SHADE[s[2]])
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

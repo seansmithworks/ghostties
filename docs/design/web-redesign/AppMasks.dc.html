@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Martian+Mono:wght@400;500&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .mk { width: 1360px; height: 880px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "DM Mono", monospace; padding: 52px 56px;
+      display: flex; flex-direction: column; }
+
+    .lbl { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+    h2 { font-family: "Silkscreen", monospace; font-size: 30px; line-height: 1.25;
+      color: #fff; margin: 14px 0 0; max-width: 22ch; }
+    h2 em { font-style: normal; color: #ffd54f; }
+    .blurb { font-size: 14px; font-weight: 300; line-height: 1.7; margin: 16px 0 0;
+      max-width: 62ch; color: rgba(236,234,245,0.62); text-wrap: pretty; }
+
+    /* --- the masks ------------------------------------------------------- */
+    .row { margin-top: 46px; display: grid; grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 34px; }
+    .cut { position: relative; }
+    /* each window is the real capture, clipped to a ghost silhouette.
+       masks are inline SVG data URIs — no network, no extra files. */
+    .glass { height: 300px; background-image: url(./app-sessions.jpg);
+      background-size: 190% auto; mask-repeat: no-repeat; mask-size: 100% 100%;
+      -webkit-mask-repeat: no-repeat; -webkit-mask-size: 100% 100%;
+      position: relative; }
+    .g1 .glass { background-position: 4% 26%;
+      mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><g fill="black"><rect x="12" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="40" height="4"/><rect y="16" width="48" height="24"/><rect y="40" width="8" height="4"/><rect x="12" y="40" width="8" height="4"/><rect x="28" y="40" width="8" height="4"/><rect x="40" y="40" width="8" height="4"/><rect y="44" width="4" height="4"/><rect x="16" y="44" width="4" height="4"/><rect x="28" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/></g></svg>');
+      -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><g fill="black"><rect x="12" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="40" height="4"/><rect y="16" width="48" height="24"/><rect y="40" width="8" height="4"/><rect x="12" y="40" width="8" height="4"/><rect x="28" y="40" width="8" height="4"/><rect x="40" y="40" width="8" height="4"/><rect y="44" width="4" height="4"/><rect x="16" y="44" width="4" height="4"/><rect x="28" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/></g></svg>'); }
+    .g2 .glass { background-position: 52% 34%; background-image: url(./app-tasks.jpg);
+      mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><g fill="black"><rect x="8" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect y="8" width="48" height="4"/><rect y="12" width="48" height="4"/><rect y="16" width="48" height="24"/><rect y="40" width="12" height="4"/><rect x="18" y="40" width="12" height="4"/><rect x="36" y="40" width="12" height="4"/><rect y="44" width="4" height="4"/><rect x="22" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/></g></svg>');
+      -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><g fill="black"><rect x="8" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect y="8" width="48" height="4"/><rect y="12" width="48" height="4"/><rect y="16" width="48" height="24"/><rect y="40" width="12" height="4"/><rect x="18" y="40" width="12" height="4"/><rect x="36" y="40" width="12" height="4"/><rect y="44" width="4" height="4"/><rect x="22" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/></g></svg>'); }
+    .g3 .glass { background-position: 96% 62%;
+      mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><g fill="black"><rect x="16" width="16" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect y="12" width="48" height="4"/><rect y="16" width="48" height="24"/><rect y="40" width="48" height="4"/><rect x="4" y="44" width="8" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="36" y="44" width="8" height="4"/></g></svg>');
+      -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><g fill="black"><rect x="16" width="16" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect y="12" width="48" height="4"/><rect y="16" width="48" height="24"/><rect y="40" width="48" height="4"/><rect x="4" y="44" width="8" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="36" y="44" width="8" height="4"/></g></svg>'); }
+
+    /* a hue wash so each mask still reads as its own character */
+    .tint { position: absolute; inset: 0; mix-blend-mode: color; opacity: 0.42;
+      pointer-events: none; }
+    .g1 .tint { background: #00BCD4; }
+    .g2 .tint { background: #FF9800; }
+    .g3 .tint { background: #7C4DFF; }
+    /* the visor, drawn over the capture so the character survives the crop */
+    .visor { position: absolute; left: 16.6%; top: 35.4%; width: 66.6%; height: 18.7%;
+      background: rgba(5,5,12,0.5); pointer-events: none; }
+    .visor::after { content: ""; position: absolute; top: 22%; left: 40%;
+      width: 15%; height: 56%; background: rgba(255,255,255,0.9); }
+    .cut:hover .tint { opacity: 0.12; }
+    .cut:hover .visor { opacity: 0.15; }
+    .tint, .visor { transition: opacity 0.4s cubic-bezier(0.25,1,0.5,1); }
+
+    .cap { margin-top: 18px; }
+    .cap b { display: block; font-family: "Silkscreen", monospace; font-size: 13px;
+      color: #fff; margin-bottom: 8px; }
+    .cap span { display: block; font-size: 12.5px; font-weight: 300; line-height: 1.6;
+      color: rgba(236,234,245,0.52); text-wrap: pretty; }
+
+    .foot { margin-top: auto; padding-top: 22px; border-top: 1px solid rgba(236,234,245,0.12);
+      display: flex; align-items: center; gap: 16px; }
+    .foot .hint { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(236,234,245,0.36); }
+    .foot .r { margin-left: auto; display: flex; gap: 10px; }
+    .foot .r span { border: 1px solid rgba(236,234,245,0.2); padding: 8px 12px; font-size: 12px;
+      color: rgba(236,234,245,0.8); }
+    .foot .r span.p { background: #ffd54f; border-color: #ffd54f; color: #201700; }
+  </style>
+</helmet>
+<div class="mk">
+  <div class="lbl">02 &mdash; the sidebar &nbsp;/&nbsp; alternate treatment</div>
+  <h2>The mascots are <em>windows.</em></h2>
+  <p class="blurb">Each ghost is a mask cut out of real, unretouched app footage &mdash; so the character and the product occupy the same pixels. Hover and the tint drops away: the ghost dissolves and you are just looking at the app.</p>
+
+  <div class="row">
+    <div class="cut g1">
+      <div class="glass"><div class="tint"></div><div class="visor"></div></div>
+      <div class="cap"><b>SESSIONS</b><span>Every running agent in one sidebar, sorted so whoever is blocked on you sits at the top.</span></div>
+    </div>
+    <div class="cut g2">
+      <div class="glass"><div class="tint"></div><div class="visor"></div></div>
+      <div class="cap"><b>GT LIST</b><span>One command. Every open task across every project, sorted into status lanes.</span></div>
+    </div>
+    <div class="cut g3">
+      <div class="glass"><div class="tint"></div><div class="visor"></div></div>
+      <div class="cap"><b>STILL GHOSTTY</b><span>The upstream terminal underneath, unmodified. Your config, your themes, your keybinds.</span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span class="hint">hover a ghost &mdash; the tint clears and the capture is all that is left</span>
+    <span class="r">
+      <span class="p">brew install --cask ghostties</span>
+      <span>npx ghostties-install</span>
+    </span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1360,"height":880}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

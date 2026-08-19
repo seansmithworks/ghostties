@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Martian+Mono:wght@400;500;700&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; } a:hover { color: #fff; }
+
+    .ty { width: 660px; height: 980px; box-sizing: border-box; background: #07070f;
+      color: #eceaf5; font-family: "DM Mono", monospace; padding: 44px 40px 36px;
+      display: flex; flex-direction: column; overflow: hidden; }
+
+    .stamp { display: flex; align-items: baseline; gap: 10px;
+      padding-bottom: 13px; border-bottom: 2px solid rgba(236,234,245,0.9); }
+    .stamp .a { font-family: "Silkscreen", monospace; font-size: 15px; }
+    .stamp .b { font-family: "Martian Mono", monospace; font-size: 8px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.42); margin-left: auto; }
+
+    .row { padding: 20px 0; border-bottom: 1px solid rgba(236,234,245,0.13); }
+    .tag { font-family: "Martian Mono", monospace; font-size: 7.5px; letter-spacing: 0.24em;
+      text-transform: uppercase; color: rgba(236,234,245,0.36); margin-bottom: 13px; }
+
+    .display { font-family: "Silkscreen", monospace; font-weight: 700; font-size: 40px;
+      line-height: 1.1; letter-spacing: 0.005em; color: #fff; margin: 0; }
+    .display .y { color: #ffd54f; }
+    .spec { font-family: "Martian Mono", monospace; font-size: 7.5px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(236,234,245,0.3); margin-top: 12px; }
+
+    .sect { font-family: "Silkscreen", monospace; font-size: 21px; color: #fff; margin: 0; }
+    .body { font-size: 13.5px; font-weight: 300; line-height: 1.75; margin: 0;
+      color: rgba(236,234,245,0.66); text-wrap: pretty; }
+    .body b { font-weight: 500; color: #eceaf5; }
+
+    /* block labels + square status marks — the anti-pill house style */
+    .marks { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1px;
+      background: rgba(236,234,245,0.13); border: 1px solid rgba(236,234,245,0.13); }
+    .marks div { background: #07070f; padding: 9px 11px; display: flex; align-items: center; gap: 8px;
+      font-family: "Martian Mono", monospace; font-size: 8px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: rgba(236,234,245,0.6); }
+    .marks i { width: 9px; height: 9px; flex: none; }
+
+    .units { display: flex; margin-top: 13px; }
+    .u { display: flex; align-items: center; border: 1px solid rgba(236,234,245,0.2);
+      border-right-width: 0; }
+    .u:last-child { border-right-width: 1px; }
+    .u .k { font-family: "Martian Mono", monospace; font-size: 7.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; padding: 0 9px; align-self: stretch; display: flex;
+      align-items: center; background: rgba(236,234,245,0.72); color: rgba(7,7,15,0.86); }
+    .u .v { padding: 10px 12px; font-size: 11.5px; color: rgba(236,234,245,0.88); }
+    .u.p { border-color: #ffd54f; background: rgba(255,213,79,0.1); }
+    .u.p .k { background: #ffd54f; color: #201700; }
+
+    .scale { display: flex; flex-direction: column; gap: 7px; }
+    .scale div { display: flex; align-items: baseline; gap: 12px;
+      font-family: "Martian Mono", monospace; font-size: 7.5px; letter-spacing: 0.16em;
+      color: rgba(236,234,245,0.3); }
+    .scale div span:last-child { color: rgba(236,234,245,0.6); letter-spacing: 0.1em; }
+
+    .verdict { margin-top: auto; padding-top: 18px; border-top: 2px solid rgba(236,234,245,0.9); }
+    .verdict b { font-family: "Silkscreen", monospace; font-size: 12px; color: #ffd54f;
+      display: block; margin-bottom: 9px; }
+    .verdict span { font-size: 12px; font-weight: 300; line-height: 1.62;
+      color: rgba(236,234,245,0.56); text-wrap: pretty; }
+  </style>
+</helmet>
+<div class="ty">
+  <div class="stamp"><span class="a">STANCE 01</span><span class="b">pixel + technical mono &middot; no sans</span></div>
+
+  <div class="row">
+    <div class="tag">display &mdash; silkscreen 700</div>
+    <h1 class="display">SIX AGENTS.<br><span class="y">ONE WINDOW.</span></h1>
+    <div class="spec">40px &middot; 1.1 &middot; +0.005em &middot; uppercase only, by nature of the face</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">section &mdash; silkscreen 400</div>
+    <h2 class="sect">READ THE ROOM<br>WITHOUT READING</h2>
+    <div class="spec">21px &middot; 1.3</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">body &mdash; dm mono 300</div>
+    <p class="body">Ghostties keeps every Claude Code session in one macOS window &mdash; a sidebar that says who is working and who is waiting on you, and <b>gt list</b> for every task across every project.</p>
+    <div class="spec">13.5px &middot; 1.75 &middot; 300 weight carries long prose without turning into code</div>
+  </div>
+
+  <div class="row">
+    <div class="tag">labels &amp; status &mdash; martian mono 400</div>
+    <div class="marks">
+      <div><i style="background:#4ade80"></i>working</div>
+      <div><i style="background:#60a5fa"></i>your turn</div>
+      <div><i style="background:#fbbf24"></i>needs a decision</div>
+      <div><i style="background:#fb923c"></i>long-running</div>
+    </div>
+    <div class="units">
+      <span class="u p"><span class="k">brew</span><span class="v">install --cask ghostties</span></span>
+      <span class="u"><span class="k">npx</span><span class="v">ghostties-install</span></span>
+    </div>
+    <div class="spec" style="margin-top:13px">8px &middot; +0.22em &middot; uppercase &middot; squares, never circles or pills</div>
+  </div>
+
+  <div class="row" style="border-bottom:0">
+    <div class="tag">the ramp</div>
+    <div class="scale">
+      <div><span>DISPLAY</span><span>Silkscreen 700 &middot; 40&ndash;64px</span></div>
+      <div><span>SECTION</span><span>Silkscreen 400 &middot; 21&ndash;28px</span></div>
+      <div><span>BODY</span><span>DM Mono 300 &middot; 13.5&ndash;15.5px</span></div>
+      <div><span>LABEL</span><span>Martian Mono 400 &middot; 7.5&ndash;9px</span></div>
+      <div><span>SCORE</span><span>Silkscreen 400 &middot; 17px</span></div>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <b>WHY IT BREAKS AWAY</b>
+    <span>No sans-serif anywhere, which is the single loudest tell. Martian Mono is wide and mechanical &mdash; nothing generated by default reaches for it. Risk: Silkscreen is uppercase-only, so headlines have to be written short, and long documentation pages will fight the mono body. Furthest from the app&rsquo;s own SF Pro UI.</span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":660,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

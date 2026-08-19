@@ -1,0 +1,315 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Round 2 — Arcade, developed" },
+    { "id": "page-2", "name": "Round 1 — first pass" }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "page": "page-1",
+      "x": 0,
+      "y": -1180,
+      "w": 1440,
+      "h": 980,
+      "title": "Round 2 — start here"
+    },
+
+    {
+      "file": "Snake.dc.html",
+      "page": "page-1",
+      "x": 0,
+      "y": 0,
+      "w": 1360,
+      "h": 980,
+      "title": "A · Proper snake (playable)"
+    },
+    {
+      "file": "AppAnnotated.dc.html",
+      "page": "page-1",
+      "x": 1520,
+      "y": 0,
+      "w": 1360,
+      "h": 880,
+      "title": "B1 · Annotated captures"
+    },
+    {
+      "file": "AppMasks.dc.html",
+      "page": "page-1",
+      "x": 3040,
+      "y": 0,
+      "w": 1360,
+      "h": 880,
+      "title": "B2 · Ghosts as windows"
+    },
+    {
+      "file": "AppReplica.dc.html",
+      "page": "page-1",
+      "x": 4560,
+      "y": 0,
+      "w": 1360,
+      "h": 880,
+      "title": "B3 · Clickable replica"
+    },
+
+    {
+      "file": "PixelMorph.dc.html",
+      "page": "page-1",
+      "x": 0,
+      "y": 1180,
+      "w": 1360,
+      "h": 880,
+      "title": "C1 · Pixel morph"
+    },
+    {
+      "file": "ScrollFocus.dc.html",
+      "page": "page-1",
+      "x": 1520,
+      "y": 1180,
+      "w": 1360,
+      "h": 880,
+      "title": "C2 · Anchored ghost, focus pull"
+    },
+    {
+      "file": "CastOfEight.dc.html",
+      "page": "page-1",
+      "x": 3040,
+      "y": 1180,
+      "w": 1360,
+      "h": 880,
+      "title": "C3 · Cast of eight"
+    },
+    {
+      "file": "Anatomy.dc.html",
+      "page": "page-1",
+      "x": 4560,
+      "y": 1180,
+      "w": 1360,
+      "h": 980,
+      "title": "Content map — the full page"
+    },
+
+    {
+      "file": "TypePixelMono.dc.html",
+      "page": "page-1",
+      "x": 0,
+      "y": 2320,
+      "w": 660,
+      "h": 980,
+      "title": "T1 · Pixel + technical mono"
+    },
+    {
+      "file": "TypePixelSerif.dc.html",
+      "page": "page-1",
+      "x": 820,
+      "y": 2320,
+      "w": 660,
+      "h": 980,
+      "title": "T2 · Pixel + didone"
+    },
+    {
+      "file": "TypeGrotesk.dc.html",
+      "page": "page-1",
+      "x": 1640,
+      "y": 2320,
+      "w": 660,
+      "h": 980,
+      "title": "T3 · Grotesk lead, pixel accent"
+    },
+
+    {
+      "file": "Round1.dc.html",
+      "page": "page-2",
+      "x": 1520,
+      "y": -900,
+      "w": 1440,
+      "h": 760,
+      "title": "The round"
+    },
+    {
+      "file": "Arcade.dc.html",
+      "page": "page-2",
+      "x": 0,
+      "y": 0,
+      "w": 1360,
+      "h": 900,
+      "title": "A · Arcade"
+    },
+    {
+      "file": "GhosttiesOS.dc.html",
+      "page": "page-2",
+      "x": 1520,
+      "y": 0,
+      "w": 1360,
+      "h": 900,
+      "title": "B · Ghostties OS (retired)"
+    },
+    {
+      "file": "Seance.dc.html",
+      "page": "page-2",
+      "x": 3040,
+      "y": 0,
+      "w": 1360,
+      "h": 900,
+      "title": "C · Séance"
+    },
+    {
+      "file": "LongHallway.dc.html",
+      "page": "page-2",
+      "x": 0,
+      "y": 1300,
+      "w": 1360,
+      "h": 900,
+      "title": "D · The Long Hallway (retired)"
+    },
+    {
+      "file": "Manifest.dc.html",
+      "page": "page-2",
+      "x": 1520,
+      "y": 1300,
+      "w": 1360,
+      "h": 900,
+      "title": "E · Manifest (retired)"
+    },
+    {
+      "file": "Field.dc.html",
+      "page": "page-2",
+      "x": 3040,
+      "y": 1300,
+      "w": 1360,
+      "h": 900,
+      "title": "F · Field (retired)"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "r2-snake",
+      "page": "page-1",
+      "x": 0,
+      "y": 1030,
+      "w": 620,
+      "text": "A · PROPER SNAKE — playable, with sound\n\nClick into the board first, then press I. You get a coin-slot clunk and the two-note chime, the playfield lights up, the scoreboard drops in. WASD or arrows from there. It wraps at the edges, so there is no lose state — a marketing page should never tell a visitor they failed.\n\nOne ghost drops off the tail every nine seconds and starts pulsing. Go back for it and you get a rescue chime and a point. That is the whole loop, and it maps onto the product without being cute about it: something wandered off, go collect it.\n\nAmbient until the coin goes in — eight ghosts drifting, pupils tracking a slow point, no HUD, no keycaps. The only tell is the small blinking I in the corner.\n\nThe sound here is synthesised placeholder — square waves, about twenty lines. Good enough to judge the timing and the feel. Real ElevenLabs SFX is a separate pass once you like the shape: coin insert, collect, stray, rescue, and probably a low ambient hum."
+    },
+    {
+      "id": "r2-ghosts",
+      "page": "page-1",
+      "x": 700,
+      "y": 1030,
+      "w": 620,
+      "text": "THE GHOSTS, REDRAWN\n\nYou asked to polish them and to back off Pac-Man. Same 4px grid as the app icons, but:\n\n· Solid dome — the old set got its eyes by cutting holes in the silhouette, which is exactly the 1980 sprite. These are closed shapes.\n· A visor slit instead of eyes, which reads as a small screen. Terminal, not arcade cabinet.\n· A grounding shade on the bottom two rows and a highlight on the top-left arc, so they have form instead of being flat fills.\n· Pupils track the cursor on a snapped 4px grid — they watch you before you ever press a key.\n\nPersonality now comes from three dome shapes and four skirt rhythms rather than from copying named characters. Twelve combinations, eight in use."
+    },
+    {
+      "id": "r2-app",
+      "page": "page-1",
+      "x": 1520,
+      "y": 930,
+      "w": 700,
+      "text": "B1 · ANNOTATED CAPTURES\n\nReal unretouched screenshots from the repo, framed and called out. Callouts point at regions of the frame, not at guessed pixel coordinates inside the image — that is deliberate, it survives a re-capture.\n\nCheapest to build, impossible to make misleading, and it never drifts. The weakness is that it is also the most ordinary."
+    },
+    {
+      "id": "r2-masks",
+      "page": "page-1",
+      "x": 3040,
+      "y": 930,
+      "w": 700,
+      "text": "B2 · GHOSTS AS WINDOWS\n\nYour masks idea. The silhouettes are CSS masks over the real captures, so character and product occupy the same pixels. Hover one and the hue wash and visor fade out — the ghost dissolves and you are just looking at the app.\n\nThis is the one that solves two problems at once: the app is visible, and the mascot finally has a job. It is also the most distinctive thing on this page.\n\nWatch for: the crop has to be chosen per capture or you get meaningless pixels inside a nice shape."
+    },
+    {
+      "id": "r2-replica",
+      "page": "page-1",
+      "x": 4560,
+      "y": 930,
+      "w": 700,
+      "text": "B3 · CLICKABLE REPLICA\n\nClick any session in the sidebar — the pane follows. Rebuilt in HTML rather than captured, using the app's own font logic: sans for UI chrome, mono for the terminal pane.\n\nThis is the honest version of what Ghostties OS was trying to do. That board invented terminal content and presented it as the app; this one is explicitly a replica and says so on the board.\n\nThe cost is real: every release, someone has to re-measure this against the actual app or it quietly starts lying again. That is the whole tradeoff."
+    },
+    {
+      "id": "r2-motion",
+      "page": "page-1",
+      "x": 0,
+      "y": 2110,
+      "w": 700,
+      "text": "C1 · PIXEL MORPH\n\nThe ghost is generated from a formula rather than hand-drawn, so it can be resampled to any grid and still be the same shape. Four resolutions: 48, 24, 12, 6.\n\nOn the page each step is tied to a scroll beat, so nothing fades or slides — sections resolve. The transition comes out of the same lattice the icons are drawn on, which is about as on-brand as motion gets.\n\nLoops here so you can see it; on the real page you drive it."
+    },
+    {
+      "id": "r2-focus",
+      "page": "page-1",
+      "x": 1520,
+      "y": 2110,
+      "w": 700,
+      "text": "C2 · ANCHORED GHOST, FOCUS PULL\n\nYou said you hate scroll-jacking. This does not do it: sticky positioning plus an intersection observer, so the scrollbar keeps behaving normally the whole way down.\n\nThe ghost holds one position for the section. Copy blocks on the left blur and recede out of focus, one pulls sharp, and the capture under the ghost swaps to match. Three beats, three features.\n\nUnder reduced-motion the states swap instantly and nothing blurs."
+    },
+    {
+      "id": "r2-cast",
+      "page": "page-1",
+      "x": 3040,
+      "y": 2110,
+      "w": 700,
+      "text": "C3 · CAST OF EIGHT\n\nEach ghost owns exactly one capability and appears only where that capability does — in the docs, on the social card, in the changelog entry that shipped it.\n\nThe structural bit is the rule, not the names: if a feature has no ghost, it does not get a section. That keeps the page from sprawling as you ship.\n\nNames are a strawman. PILOT, LANE, BEACON, EMBER, QUORUM, ECHO, DRIFT, ROOT. Say the word and I will run a proper naming pass — the old set was blinky/inky/pinky/clyde, which is the thing you are trying to get away from."
+    },
+    {
+      "id": "r2-type",
+      "page": "page-1",
+      "x": 0,
+      "y": 3370,
+      "w": 900,
+      "text": "TYPE — the decision that settles the AI question\n\nThree specimen sheets, same content in all three so they are actually comparable. None of them use Inter, Roboto or a system sans, which is the loudest tell.\n\nWorth knowing before you pick: the app itself is SF Pro for UI chrome and SF Mono for the terminal — a sans plus a mono. T3 is that pairing with more character, so site and product would finally match. T1 is the furthest from anything a machine reaches for by default but also the furthest from the app. T2 has the widest range and the most risk.\n\nThe house rules are the same across all three, and they matter more than the fonts: square status marks, never circles or pills. Block labels butted together with shared hairlines, no rounded corners, no drop shadows on chrome. Uppercase micro-labels at 0.2em tracking. That vocabulary is what will read as designed."
+    },
+    {
+      "id": "r2-anatomy",
+      "page": "page-1",
+      "x": 4560,
+      "y": 2230,
+      "w": 700,
+      "text": "CONTENT MAP\n\nTen sections. 02, 03 and 04 are the pitch — if someone reads only those they should already want it.\n\nThe gap worth flagging: section 08, first 60 seconds. Nothing on the site today says what happens after install, where it puts things, what it touches, or how to leave. For a terminal fork that is the single biggest unspoken objection, and it is cheap to answer.\n\nSections 05, 06 and 07 need captures that do not exist yet."
+    },
+
+    {
+      "id": "note-a-arcade",
+      "page": "page-2",
+      "x": 0,
+      "y": 950,
+      "w": 620,
+      "text": "A · ARCADE — the winner. Developed on the Round 2 page.\n\nThis was the first pass: full Pac-Man DNA, maze grid, phosphor bloom, ghosts eating pellets. Kept here for comparison — round two backs off the maze, redraws the ghosts, and turns the game into an opt-in secret rather than the first thing you see."
+    },
+    {
+      "id": "note-b-os",
+      "page": "page-2",
+      "x": 1520,
+      "y": 950,
+      "w": 620,
+      "text": "B · GHOSTTIES OS — retired.\n\nYou were right: the terminal pane is invented content presented as the app, which makes the whole board a lie however good it looks. The idea survives on the Round 2 page as B3, rebuilt honestly and labelled as a replica."
+    },
+    {
+      "id": "note-c-seance",
+      "page": "page-2",
+      "x": 3040,
+      "y": 950,
+      "w": 620,
+      "text": "C · SÉANCE — broken up for parts.\n\nThe quiet editorial dark did not survive, but four ideas out of it did: ghosts as masks, pixel-block morph, anchored ghosts with a focus pull, and one ghost per feature. All four are built on the Round 2 page."
+    },
+    {
+      "id": "note-d-hallway",
+      "page": "page-2",
+      "x": 0,
+      "y": 2250,
+      "w": 620,
+      "text": "D · THE LONG HALLWAY — retired 2026-08-19."
+    },
+    {
+      "id": "note-e-manifest",
+      "page": "page-2",
+      "x": 1520,
+      "y": 2250,
+      "w": 620,
+      "text": "E · MANIFEST — retired 2026-08-19."
+    },
+    {
+      "id": "note-f-field",
+      "page": "page-2",
+      "x": 3040,
+      "y": 2250,
+      "w": 620,
+      "text": "F · FIELD — retired 2026-08-19."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}
