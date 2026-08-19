@@ -4,54 +4,55 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
-## 2026-08-19 — ghostties.org redesign: direction locked, build round next (carried)
+## 2026-08-19 — ghostties.org redesign: ROUND 3 BUILT, awaiting Sean's review (carried)
 
-Design canvas: <https://claude.ai/code/artifact/7abace9c-8541-4960-ad29-eec5ffb4b593>
-Sources committed at `docs/design/web-redesign/` (branch `worktree-session-2`, `a77f5a558`).
+Branch `feat/web-redesign-round3` @ `89d7e3963`, pushed. Diverged from `worktree-session-2` —
+**consolidate the two before any further web work.**
 
-**Locked:** Arcade direction. Type = pixel + grotesk (Silkscreen display, Archivo prose, DM Mono
-for commands/labels). Game is opt-in and secret — `I` inserts a coin, WASD/arrows, wrap at edges,
-no lose state. Retired: Ghostties OS (faked terminal content), Long Hallway, Manifest, Field.
+**Done 2026-08-19 (round 3, commits `6aed18963` + `89d7e3963`):**
 
-**Done 2026-08-19 (commit `ce27bb8f0`):**
+- [x] **Snake v2** — hero copy moved below the playfield (grid now 30x10 at OY=148), collectible
+  tokens on a 14-node pool, five dials (`speed`, `strayEvery`, `tokens`, `tokenStyle`, `sound`).
+  Generic-vs-vendor token art is the `tokenStyle` dial on one board, with the trademark warning
+  wired to the legend band. The app-window peek was cut for room.
+- [x] **Ghost art pass** (`Ghosts.dc.html`) — robot direction. Visor is now a dial against
+  dual-lens, single-lens, scanline and readout; antenna added; size ladder at 96/48/28/16/12.
+- [x] **Type respec** (`TypeSpec.dc.html`) — the locked pairing as a system, three ramps, house
+  rules, live tracking dial.
+- [x] **Cut list** (`CutList.dc.html`) — 7 ship / 4 park / 8 cut, each with its reason.
+- [x] `Main.dc.html` decision strip refreshed — it still listed type and app treatment as open.
 
-- [x] Read the canvasui.dev docs for `grid`, `asciify`, `decrypt-reveal`. Verdict:
-  **decrypt-reveal is the pick**, **grid is the cut** (a handsome 3D ripple that says nothing
-  about the product), asciify is the same mechanic with the polarity flipped and belongs on the
-  hero if anywhere — two lenses on one page is one too many.
-- [x] **B4 scroll-zoom board** (`AppZoom.dc.html`). Four camera stops — whole window, sidebar,
-  one status dot, `gt list` — then pulls back out. DOM and real text, not a bitmap, so it holds
-  at 4x. Dials: `stop` (auto or pinned), `dwell`.
-- [x] **Decrypt-reveal board** (`Decrypt.dc.html`). Real capture rendered as ASCII cipher,
-  decrypted inside a cursor lens. Canvas-2d rebuild — the real component needs WebGL2 plus the
-  experimental html-in-canvas API and an npm install, none of which survive in a published
-  artifact. Cipher layer renders once; only the lens redraws per frame. Eight dials.
+**Open — Sean's calls, all live on the canvas:**
 
-**Carried — the rest of the build queue:**
+- [ ] **React to the cut list.** Strawman. The two likely objections: B3 clickable replica cut,
+  and T1/T2 cut as boards rather than just as options. | design | carried
+- [ ] **Pick a ghost face.** Five on the board; strawman argument is `readout`. Also open on the
+  board: do they keep tracking pupils at all, since that is the strongest Pac-Man tell. | design | carried
+- [ ] **Confirm Snake v2 reads as a hero** with the copy below the field, and whether tokens add
+  to the loop or clutter it. | design | carried
 
-- [ ] **Snake v2** — push the page UI further down to give the playfield room; add collectible
-  tokens. Sean floated Claude/Codex/Cursor icons; **trademark risk on a public site**, so build
-  generic agent-tokens plus a logo version beside it for comparison.
-- [ ] **Ghost art, another pass.** The visor redraw is not settled. Direction to explore: robot /
-  agent ghosts.
-- [ ] **Variants carry live dials** — parameters exposed as tweak controls so Sean tunes rather
-  than describes.
-- [ ] **A cut list.** Sean: *"there is more here than we should implement, the question of taste
-  is always what not to include."* This is a deliverable, not a footnote.
+**Found this round, not fixed:**
+
+- [ ] **8 Round 2 boards still load Martian Mono** where the locked type spec says Archivo: Main,
+  Anatomy, AppAnnotated, AppMasks, AppReplica, CastOfEight, PixelMorph, ScrollFocus. Recorded in
+  the conformance box on `TypeSpec.dc.html`. Fix each board when next opened — several are cut
+  candidates, so a sweep would be wasted. | design | new
+
+**Carried unchanged:**
+
 - [ ] **Real SFX** via ElevenLabs — coin, collect, stray, rescue, ambient hum. Only after the
-  shape is approved; current audio is synthesised placeholder.
-- [ ] **Cast-of-eight naming pass** — only if C3 survives the cut. Current names are a strawman.
-
-**Content gap found, worth fixing whatever wins:** the site has no "first 60 seconds" section —
-what happens after install, where it puts things, what it touches, how to leave. For a terminal
-fork that is the biggest unspoken objection and the cheapest to answer.
+  shape is approved; current audio is synthesised placeholder. | design | carried
+- [ ] **First 60 seconds section** — on the cut list's SHIP column and the only item there that
+  does not exist yet. What happens after install, where it puts things, what it touches, how to
+  leave. | web | carried
 
 **Parked (off-objective):**
 
-- [ ] `MEMORY.md` is 20,819 chars, over its 20,000 cap and read in full every boot. Route older
-  entries to `INDEX.md`. Flagged by the size gate 2026-08-19.
+- [ ] `MEMORY.md` is over its 20,000 cap and read in full every boot. Route older entries to
+  `INDEX.md`. Flagged by the size gate 2026-08-19.
 - [ ] Confirm "dialkit" — read as *dials* (tuning controls). If it is an actual library Sean had
   in mind, swap the approach.
+- [x] Cast-of-eight naming pass — **closed**, dies with C3 on the cut list.
 
 ## 2026-08-18 — Session composer: palette reuse + design direction (carried)
 
