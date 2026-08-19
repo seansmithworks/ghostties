@@ -7,7 +7,7 @@ Parked items that survive context resets. Prune at `/wrap`.
 ## 2026-08-18 — Session composer: palette reuse + design direction (carried)
 
 Sean picked the composer direction from mockups this session. Design decisions locked; the plan
-still needs rewriting to match.
+has been rewritten to match. Remaining items below are still open.
 
 - [x] **Rewrite `docs/plans/session-creation-unified.html` — 9 corrections.** Its "Centered
   presentation" section is built on a false premise: "there is no centered-panel pattern in the app
