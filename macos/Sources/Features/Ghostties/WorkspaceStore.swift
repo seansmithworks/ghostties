@@ -849,6 +849,19 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: - Template Actions
 
+    /// Returns `candidate` if free, else `candidate` with " 2", " 3", … appended
+    /// until it is. `excluding` is the id of the template being renamed, so
+    /// renaming a template to the name it already has is not a collision.
+    private func uniqueName(_ candidate: String, excluding id: UUID?) -> String {
+        let existingNames = Set(templates.filter { $0.id != id }.map(\.name))
+        guard existingNames.contains(candidate) else { return candidate }
+        var suffix = 2
+        while existingNames.contains("\(candidate) \(suffix)") {
+            suffix += 1
+        }
+        return "\(candidate) \(suffix)"
+    }
+
     @discardableResult
     func addTemplate(_ template: AgentTemplate) -> AgentTemplate {
         var sanitized = WorkspacePersistence.sanitizeTemplate(template)
@@ -856,14 +869,7 @@ final class WorkspaceStore: ObservableObject {
         // Dedupe an exact name collision against an existing template — a
         // backstop for a user typing the same name twice, appending " 2",
         // " 3", etc. until the name is free.
-        let existingNames = Set(templates.map(\.name))
-        if existingNames.contains(sanitized.name) {
-            var suffix = 2
-            while existingNames.contains("\(sanitized.name) \(suffix)") {
-                suffix += 1
-            }
-            sanitized.name = "\(sanitized.name) \(suffix)"
-        }
+        sanitized.name = uniqueName(sanitized.name, excluding: nil)
 
         templates.append(sanitized)
         persist()
@@ -883,7 +889,7 @@ final class WorkspaceStore: ObservableObject {
     ) {
         guard let index = templates.firstIndex(where: { $0.id == id }) else { return }
         guard !templates[index].isDefault else { return }
-        if let name { templates[index].name = name }
+        if let name { templates[index].name = uniqueName(name, excluding: id) }
         if let kind { templates[index].kind = kind }
         if let command { templates[index].command = command }
         if let environmentVariables { templates[index].environmentVariables = environmentVariables }
@@ -913,10 +919,7 @@ final class WorkspaceStore: ObservableObject {
             icon: original.icon,
             accessLabel: original.accessLabel
         )
-        let sanitized = WorkspacePersistence.sanitizeTemplate(copy)
-        templates.append(sanitized)
-        persist()
-        return sanitized
+        return addTemplate(copy)
     }
 
     func removeTemplate(id: UUID) {

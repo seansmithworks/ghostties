@@ -1,12 +1,17 @@
 import Foundation
 
 /// The single source of truth for "which templates are available to a
-/// project, in what order" — replaces two divergent implementations that
-/// used to live in `RecentsListView.availableTemplates(for:store:)` and the
-/// three computed properties on `TemplatePickerView` (`presetTemplates`,
-/// `builtinTemplates`, `customTemplates`). Both callers now route through
-/// this type so the scoping predicate and the ordering rule exist in exactly
-/// one place.
+/// project, in what order" for the session-creation surfaces (the New
+/// Session menu and the template picker) — replaces two divergent
+/// implementations that used to live in
+/// `RecentsListView.availableTemplates(for:store:)` and the three computed
+/// properties on `TemplatePickerView` (`presetTemplates`, `builtinTemplates`,
+/// `customTemplates`). Both those callers now route through this type.
+///
+/// `WorkspaceStore.templates(for projectId:)` is a third, knowingly-separate
+/// copy of the scoping predicate consumed by `NewTaskComposerView` — it does
+/// not route through here. Do not assume this is the only scoping/ordering
+/// implementation left in the codebase before adding a new caller.
 @MainActor
 enum SessionTemplateResolver {
 

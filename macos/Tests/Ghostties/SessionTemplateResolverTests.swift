@@ -117,6 +117,14 @@ final class SessionTemplateResolverTests: XCTestCase {
         XCTAssertEqual(list.first?.id, fixture.globalUser2.id)
     }
 
+    /// D6 regression guard: this is the test that genuinely fails against the
+    /// old implementation. The fixture appends `GlobalPreset` after the user
+    /// templates (see `makeFixture()`), so a non-grouping implementation
+    /// surfaces a preset after a builtin — this assertion catches that.
+    /// `testOrderingIsDeterministicAcrossRepeatedCalls` below does not: at
+    /// this fixture size the old predicate is deterministic in practice
+    /// (Swift's insertion sort below the introsort threshold), so it passes
+    /// against both implementations.
     func testGroupOrderIsPresetThenBuiltinThenUser() {
         let fixture = makeFixture()
 
@@ -153,11 +161,15 @@ final class SessionTemplateResolverTests: XCTestCase {
         XCTAssertEqual(userNames, ["ScopedToA", "GlobalUserFirst", "GlobalUserSecond"])
     }
 
-    /// D6 regression guard: with more than two candidates, repeated calls
-    /// must return the identical order every time. The predicate this
-    /// replaces (`candidates.sorted { a, _ in a.id == defaultId }`) is not a
-    /// strict weak ordering, so `sorted` was free to permute everything past
-    /// "the default sorts early" differently across calls.
+    /// Call-stability guard, NOT the D6 regression guard (that is
+    /// `testGroupOrderIsPresetThenBuiltinThenUser` above). With more than two
+    /// candidates, repeated calls must return the identical order every time.
+    /// The predicate this replaces (`candidates.sorted { a, _ in a.id ==
+    /// defaultId }`) is not a strict weak ordering, so `sorted` was free to
+    /// permute everything past "the default sorts early" differently across
+    /// calls — but at this fixture size Swift's insertion sort (used below
+    /// the introsort threshold) happens to be deterministic anyway, so this
+    /// test passes against both the old and new implementations.
     func testOrderingIsDeterministicAcrossRepeatedCalls() {
         let fixture = makeFixture()
         fixture.store.updateProject(id: fixture.projectA.id, defaultTemplateId: fixture.globalUser2.id)

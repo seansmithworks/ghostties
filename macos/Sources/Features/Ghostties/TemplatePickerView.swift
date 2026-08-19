@@ -114,7 +114,7 @@ struct TemplatePickerView: View {
             if userTemplates.isEmpty {
                 Text("Presets above cover most cases.")
                     .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 4)
             } else {
@@ -311,21 +311,13 @@ struct TemplatePickerView: View {
                     .focused($newCustomTemplateNameFocused)
                     .onSubmit { commitNewCustomTemplate() }
                     .onExitCommand { cancelNewCustomTemplate() }
-                    .onChange(of: newCustomTemplateNameFocused) { focused in
-                        // Deferred: Esc can drop focus (firing this) before
-                        // SwiftUI's onExitCommand runs cancelNewCustomTemplate().
-                        // Dispatching async lets the cancel clear
-                        // isAddingCustomTemplate first, so the guard in
-                        // commitNewCustomTemplate() rejects this call instead
-                        // of persisting a stale/unwanted template.
-                        if !focused, isAddingCustomTemplate {
-                            DispatchQueue.main.async { commitNewCustomTemplate() }
-                        }
-                    }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .onAppear { newCustomTemplateNameFocused = true }
+            .onAppear {
+                // Focus after the popover lays out so the TextField is actually in the hierarchy.
+                DispatchQueue.main.async { newCustomTemplateNameFocused = true }
+            }
         } else {
             addCustomButton
         }
