@@ -72,6 +72,20 @@ final class SessionComposerStore: ObservableObject {
 
     @Published private(set) var isOpen: Bool = false
 
+    /// The window that most recently opened the composer (Phase 3 review
+    /// round 3, Blocker 3). This store is one process-wide singleton, but
+    /// only one workspace window's overlay should be "the" composer at a
+    /// time — without this, two windows could each install their own
+    /// overlay against the same shared state (`selectedProjectId`/
+    /// `searchText`/`currentProjectBinding`), each visibly showing
+    /// whichever window opened last, with Escape in either tearing down
+    /// both. `WorkspaceViewContainer.presentComposerOverlay` writes this on
+    /// every open (dismissing any other window's overlay first); its
+    /// `$isOpen` sink and `dismissComposerOverlayIfPresented` check it
+    /// before acting. `weak` so this never keeps a window alive and simply
+    /// reads `nil` once one is gone.
+    weak var owningWindow: NSWindow?
+
     /// When true, the search field should receive first responder on the
     /// next render cycle. Cleared by the view after the focus request is
     /// consumed. Mirrors `NewTaskComposerStore.focusTitleFieldTrigger`.
