@@ -23,38 +23,57 @@ enum SessionComposerRanking {
         }
     }
 
-    /// Returns the best tier `title` matches `query` at, or `nil` if it
-    /// doesn't match at all. Reuses `String.matchedIndices(for:)`
-    /// (`CommandPalette.swift`, module-scope) for the substring/initials
-    /// fallback so highlighting stays consistent with the inherited row
-    /// rendering.
-    static func matchTier(title: String, query: String) -> MatchTier? {
+    /// Returns the best tier `title` (or, failing that, `subtitle`) matches
+    /// `query` at, or `nil` if neither matches. Upstream `CommandPaletteView`
+    /// matches title OR subtitle (`CommandPalette.swift:78-79`) — without
+    /// this a template's command/description isn't searchable. Reuses
+    /// `String.matchedIndices(for:)` (`CommandPalette.swift`, module-scope)
+    /// for the substring/initials fallback so highlighting stays consistent
+    /// with the inherited row rendering.
+    static func matchTier(title: String, subtitle: String? = nil, query: String) -> MatchTier? {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
 
-        if title.range(of: query, options: [.caseInsensitive, .anchored]) != nil {
+        let titleTier = rawMatchTier(for: title, query: query)
+        let subtitleTier = subtitle.flatMap { rawMatchTier(for: $0, query: query) }
+
+        switch (titleTier, subtitleTier) {
+        case let (t?, s?): return min(t, s)
+        case let (t?, nil): return t
+        case let (nil, s?): return s
+        case (nil, nil): return nil
+        }
+    }
+
+    private static func rawMatchTier(for text: String, query: String) -> MatchTier? {
+        if text.range(of: query, options: [.caseInsensitive, .anchored]) != nil {
             return .exactPrefix
         }
-        if title.range(of: query, options: .caseInsensitive) != nil {
+        if text.range(of: query, options: .caseInsensitive) != nil {
             return .substring
         }
         // At this point there's no substring match, so a non-nil result
         // from matchedIndices(for:) can only have come from its initials
         // fallback.
-        if title.matchedIndices(for: query) != nil {
+        if text.matchedIndices(for: query) != nil {
             return .initials
         }
         return nil
     }
 
-    /// Filters `items` to those matching `query` (by `title`) and sorts by
-    /// match tier, preserving each item's original relative order within
-    /// its tier (a stable partition, not a full sort). When `query` is
-    /// blank, returns `items` unfiltered and unreordered.
-    static func sorted<T>(_ items: [T], query: String, title: (T) -> String) -> [T] {
+    /// Filters `items` to those matching `query` (by `title` or `subtitle`)
+    /// and sorts by match tier, preserving each item's original relative
+    /// order within its tier (a stable partition, not a full sort). When
+    /// `query` is blank, returns `items` unfiltered and unreordered.
+    static func sorted<T>(
+        _ items: [T],
+        query: String,
+        title: (T) -> String,
+        subtitle: (T) -> String? = { _ in nil }
+    ) -> [T] {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return items }
 
         let ranked: [(offset: Int, tier: MatchTier, item: T)] = items.enumerated().compactMap { offset, item in
-            guard let tier = matchTier(title: title(item), query: query) else { return nil }
+            guard let tier = matchTier(title: title(item), subtitle: subtitle(item), query: query) else { return nil }
             return (offset, tier, item)
         }
 

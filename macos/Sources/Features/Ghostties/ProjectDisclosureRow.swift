@@ -452,7 +452,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         .popover(isPresented: $showingTemplatePicker) {
             SessionComposerPalette(
                 isPresented: $showingTemplatePicker,
-                request: SessionComposerRequest(presentation: .anchored, projectBinding: .locked(project))
+                request: SessionComposerRequest(presentation: .anchored, projectBinding: .prefilled(project))
             )
         }
     }

@@ -63,6 +63,26 @@ final class SessionComposerRankingTests: XCTestCase {
         XCTAssertEqual(SessionComposerRanking.sorted(items, query: "", title: { $0 }), items)
     }
 
+    /// The regression `testSortedRanksExactPrefixFirstRegardlessOfInputOrder`
+    /// was named for but didn't exercise: the loser there is dropped as a
+    /// non-match, so the comparator's `lhs.tier != rhs.tier` branch never
+    /// runs. Here both items match, a substring match precedes a prefix
+    /// match in input order, and the tier must still win.
+    func testSortedRanksExactPrefixBeforeSubstringWhenSubstringComesFirstInInputOrder() {
+        let items = ["Reclaude", "Claude Code"]
+        let result = SessionComposerRanking.sorted(items, query: "cl", title: { $0 })
+        XCTAssertEqual(result, ["Claude Code", "Reclaude"])
+    }
+
+    /// Same tier-reordering gate, one level down: a substring match must
+    /// outrank an initials match even when the initials match comes first
+    /// in input order.
+    func testSortedRanksSubstringBeforeInitialsWhenInitialsComesFirstInInputOrder() {
+        let items = ["Claude Code", "accumulate"]
+        let result = SessionComposerRanking.sorted(items, query: "cc", title: { $0 })
+        XCTAssertEqual(result, ["accumulate", "Claude Code"])
+    }
+
     // MARK: - SessionComposerProjectOrdering — the three-tier gate
 
     func testOrderPutsCascadePickFirst() {
