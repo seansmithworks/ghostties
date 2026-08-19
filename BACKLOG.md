@@ -13,14 +13,22 @@ Sources committed at `docs/design/web-redesign/` (branch `worktree-session-2`, `
 for commands/labels). Game is opt-in and secret — `I` inserts a coin, WASD/arrows, wrap at edges,
 no lose state. Retired: Ghostties OS (faked terminal content), Long Hallway, Manifest, Field.
 
-**Carried — the overnight build queue:**
+**Done 2026-08-19 (commit `ce27bb8f0`):**
 
-- [ ] **B4 — scroll-driven zoom** into a high-fidelity recreation of the app. Sean's call: most of
-  the terminal canvas is dead space, so zoom the parts that matter. Supersedes B1/B2/B3 on the
-  canvas. Needs the app rebuilt in HTML at a fidelity that survives magnification.
-- [ ] **Motion language — C1/C2/C3 all rejected.** Explore instead: canvasui.dev `grid`,
-  `asciify`, `decrypt-reveal`. Read the docs before building. Asciify + the B4 zoom may be one
-  idea rather than two (ASCII resolves into real UI as you zoom in).
+- [x] Read the canvasui.dev docs for `grid`, `asciify`, `decrypt-reveal`. Verdict:
+  **decrypt-reveal is the pick**, **grid is the cut** (a handsome 3D ripple that says nothing
+  about the product), asciify is the same mechanic with the polarity flipped and belongs on the
+  hero if anywhere — two lenses on one page is one too many.
+- [x] **B4 scroll-zoom board** (`AppZoom.dc.html`). Four camera stops — whole window, sidebar,
+  one status dot, `gt list` — then pulls back out. DOM and real text, not a bitmap, so it holds
+  at 4x. Dials: `stop` (auto or pinned), `dwell`.
+- [x] **Decrypt-reveal board** (`Decrypt.dc.html`). Real capture rendered as ASCII cipher,
+  decrypted inside a cursor lens. Canvas-2d rebuild — the real component needs WebGL2 plus the
+  experimental html-in-canvas API and an npm install, none of which survive in a published
+  artifact. Cipher layer renders once; only the lens redraws per frame. Eight dials.
+
+**Carried — the rest of the build queue:**
+
 - [ ] **Snake v2** — push the page UI further down to give the playfield room; add collectible
   tokens. Sean floated Claude/Codex/Cursor icons; **trademark risk on a public site**, so build
   generic agent-tokens plus a logo version beside it for comparison.
