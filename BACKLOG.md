@@ -9,7 +9,7 @@ Parked items that survive context resets. Prune at `/wrap`.
 Sean picked the composer direction from mockups this session. Design decisions locked; the plan
 still needs rewriting to match.
 
-- [ ] **Rewrite `docs/plans/session-creation-unified.html` — 9 corrections.** Its "Centered
+- [x] **Rewrite `docs/plans/session-creation-unified.html` — 9 corrections.** Its "Centered
   presentation" section is built on a false premise: "there is no centered-panel pattern in the app
   today" is wrong. `CommandPaletteView` (`CommandPalette.swift:60`) is a shipped Spotlight overlay
   (`TerminalCommandPalette.swift:22-43`), plus `UpdateOverlay`, `SurfaceSearchOverlay`, and
@@ -17,17 +17,19 @@ still needs rewriting to match.
   `reference_command-palette-reuse.md`. Also: `TransparentHostingView` is `private class` at
   `WorkspaceViewContainer.swift:1701`, so the plan's separate-file `SessionComposerOverlay.swift`
   can't reach it as written; and the "85 KB of fragile AppKit" framing is overstated —
-  `buildInfoBadgeHostingView` (`:165`, `:1507-1508`) is a shipped constraint-only precedent. |
-  app | carried
+  `buildInfoBadgeHostingView` (`:165`, `:1507-1508`) is a shipped constraint-only precedent. DONE
+  `c298e7e31` — all nine corrections landed, plus the `TransparentHostingView` privacy fix and the
+  relocked composer mock. | app | done
 
-- [ ] **DECIDE OR KILL: fork a copy of the palette, or build new.** Strawman is **fork a copy** into
+- [x] **DECIDE OR KILL: fork a copy of the palette, or build new.** Strawman is **fork a copy** into
   `macos/Sources/Features/Ghostties/SessionComposerPalette.swift`, renamed and parameterized.
   Reasoning: calling it as-is cannot deliver the chosen design (the trailing project control needs
   `CommandPaletteQuery`, which is `private`), so the real choice is only copy-or-build — and copying
   starts from working keyboard nav, selection clamping, and initials-match highlighting.
   `CommandPalette.swift` is byte-identical to `upstream/main`, so editing it in place creates a
   permanent rebase liability. Sean asked "is forking actually better" and had not answered as of
-  session end. | app | new
+  session end. DECIDED: fork a copy into `SessionComposerPalette.swift`, recorded in the plan as
+  settled. `c298e7e31`. | app | done
 
 **Design decisions locked 2026-08-18 (do not re-litigate):**
 
@@ -38,16 +40,25 @@ still needs rewriting to match.
 - **`+ Add project…` is not new complexity** — `NewTaskComposerStore.swift:162` already runs the
   folder picker without closing the composer. Mirror it; last item in the open dropdown.
 - **No session-name field, ever** — an unpinned session's name is its live terminal title.
+- **Project dropdown ordering — three tiers:** cascade pick pre-selected → recently-used (most
+  recent first) → everything else alphabetically. Sean chose this over strict alphabetical knowing
+  the trade that the list changes shape between openings — that's expected, not a bug; don't
+  re-open on the "but it reorders" argument.
+- **The search field filters both** templates and projects. "Type `bru`, Return" stays the fast
+  path; the trailing project control is the explicit path to the same place.
+- **Cmd+T is preference-driven, composer by default.** An `@AppStorage` flag chooses
+  composer-vs-instant; `Cmd+Shift+T` stays unconditionally instant and ignores the flag.
 
-- [ ] **Open: does the field still filter projects, or templates only?** Giving the project a
+- [x] **Open: does the field still filter projects, or templates only?** Giving the project a
   dedicated control makes the plan's "one field filters both" either redundant-by-design or
   abandoned. Shown both ways in the mockups; Sean had not chosen. Strawman: keep filtering both, so
-  "type `bru`, Return" survives. | app | new
+  "type `bru`, Return" survives. DECIDED: filters both. `ed750aa45`. | app | done
 
 - [ ] **Composer needs prefix-first relevance ranking.** `filteredOptions`
   (`CommandPalette.swift:74-92`) is boolean match then `colorMatchScore` only. The plan promises
   "type three characters, press Return"; nothing guarantees the right row is first. Not inherited —
-  must be built. | app | new
+  must be built. Now specified in the plan (not just noted as a gap); Phase 2 carries it with a
+  ship gate. Still no code — stays open. | app | new
 
 - [ ] **Audit's `#6D6A68` alternative is wrong — correct
   `docs/audits/sidebar-contrast-audit.md`.** It proposes `#6D6A68` as an exact 4.50:1 fix. Recomputed
@@ -59,6 +70,14 @@ still needs rewriting to match.
   v1, composer v2, forked-palette, design-system page directions) exist as claude.ai Artifacts and
   in the session scratchpad, which is ephemeral. If they matter beyond this thread, commit the HTML
   under `docs/mockups/`. | design | new
+
+- [ ] **The Cmd+T preference has no settings UI to live in.**
+  `macos/Sources/Features/Settings/SettingsView.swift` is a placeholder — its entire body is a
+  "Coming Soon. 🚧" card telling the user that settings live in a Ghostty config file, plus
+  `defaults write` instructions for `ghostties.autoUpdateChannel`. So the composer preference ships
+  as an `@AppStorage` flag set via `defaults write`, documented by one added line in that same
+  instruction block. A real Settings UI is out of scope for the composer work; when one is built,
+  this flag is a natural first row. | app | new
 
 ## 2026-08-18 — PR #128 sidebar contrast follow-ups (deferred, not dropped)
 
