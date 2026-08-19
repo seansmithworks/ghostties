@@ -7,7 +7,7 @@
 <body>
 <x-dc>
 <helmet>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Martian+Mono:wght@400;500;700&family=DM+Mono:wght@300;400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Archivo:wght@400;500;600&family=DM+Mono:wght@300;400;500&display=swap">
   <style>
     body { margin: 0; background: #07070f; }
     a { color: #ffd54f; text-decoration: none; } a:hover { color: #fff; }
@@ -16,27 +16,34 @@
       overflow: hidden; background: #07070f; color: #eceaf5;
       font-family: "DM Mono", monospace; outline: none; }
 
+    /* ---------------------------------------------------------------------
+       v2 layout. The playfield now owns the top of the board and the hero
+       copy sits under it, so the first thing read is the field, not a
+       headline lying across it. Everything is absolutely positioned, so the
+       legend band can appear and disappear without moving anything.
+       ------------------------------------------------------------------ */
+
     /* playfield lattice — invisible until a coin goes in */
-    .lattice { position: absolute; left: 20px; top: 16px; width: 1320px; height: 792px;
+    .lattice { position: absolute; left: 20px; top: 148px; width: 1320px; height: 440px;
       background-image: radial-gradient(rgba(255,255,255,0.11) 1.5px, transparent 1.5px);
       background-size: 44px 44px; background-position: 22px 22px;
       opacity: 0; transition: opacity 0.7s cubic-bezier(0.25,1,0.5,1); }
-    .bounds { position: absolute; left: 20px; top: 16px; width: 1320px; height: 792px;
+    .bounds { position: absolute; left: 20px; top: 148px; width: 1320px; height: 440px;
       border: 1px solid rgba(255,213,79,0.16); opacity: 0;
       transition: opacity 0.7s cubic-bezier(0.25,1,0.5,1); }
     .sn.play .lattice, .sn.play .bounds { opacity: 1; }
     .edge { position: absolute; inset: 0; pointer-events: none;
-      background: radial-gradient(94% 78% at 50% 38%, transparent 52%, rgba(7,7,15,0.9) 100%); }
+      background: radial-gradient(96% 62% at 50% 30%, transparent 54%, rgba(7,7,15,0.88) 100%); }
 
     /* --- HUD --- */
-    .hud { position: absolute; left: 56px; right: 56px; top: 44px; z-index: 8;
+    .hud { position: absolute; left: 56px; right: 56px; top: 40px; z-index: 8;
       display: flex; align-items: flex-start; gap: 24px; }
     .brand { font-family: "Silkscreen", monospace; font-size: 15px; letter-spacing: 0.04em; }
-    .brand span { display: block; font-family: "Martian Mono", monospace; font-weight: 400;
+    .brand span { display: block; font-family: "Archivo", sans-serif; font-weight: 500;
       font-size: 9px; letter-spacing: 0.22em; color: rgba(236,234,245,0.42); margin-top: 7px; }
     .nav { display: flex; gap: 22px; margin-left: 34px; padding-top: 3px;
-      font-family: "Martian Mono", monospace; font-size: 9.5px; letter-spacing: 0.16em;
-      text-transform: uppercase; }
+      font-family: "Archivo", sans-serif; font-weight: 500; font-size: 9.5px;
+      letter-spacing: 0.16em; text-transform: uppercase; }
     .nav a { color: rgba(236,234,245,0.5); }
 
     /* scoreboard — hard-edged blocks butted together. no pills, no rounding. */
@@ -44,44 +51,60 @@
       transition: opacity 0.5s cubic-bezier(0.25,1,0.5,1), transform 0.5s cubic-bezier(0.25,1,0.5,1); }
     .sn.play .score { opacity: 1; transform: none; }
     .cell { border: 1px solid rgba(236,234,245,0.18); border-right-width: 0;
-      padding: 8px 14px 9px; min-width: 86px; }
+      padding: 8px 13px 9px; min-width: 78px; }
     .cell:last-child { border-right-width: 1px; }
-    .k { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
-      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+    .k { font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
+      letter-spacing: 0.2em; text-transform: uppercase; color: rgba(236,234,245,0.4); }
     .v { font-family: "Silkscreen", monospace; font-size: 17px; margin-top: 6px; color: #ffd54f; }
     .v.dim { color: rgba(236,234,245,0.74); }
     .cell.alert { border-color: rgba(255,120,96,0.65); background: rgba(255,120,96,0.10); }
     .cell.alert .v { color: #ff8a70; }
 
-    /* --- copy: the page is a page first --- */
-    .copy { position: absolute; left: 56px; top: 214px; z-index: 6; max-width: 620px;
+    /* --- legend band: says what the tokens are, and warns when they carry names --- */
+    .band { position: absolute; left: 56px; right: 56px; top: 104px; height: 28px; z-index: 8;
+      box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 12px;
+      border: 1px solid rgba(236,234,245,0.16); background: rgba(236,234,245,0.03);
+      font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
+      letter-spacing: 0.2em; text-transform: uppercase; color: rgba(236,234,245,0.42);
+      opacity: 0; transition: opacity 0.5s 0.2s; }
+    .sn.play .band { opacity: 1; }
+    .band b { font-weight: 600; color: rgba(236,234,245,0.72); }
+    .band .warn { display: none; }
+    .sn.named .band { border-color: rgba(255,138,112,0.55); background: rgba(255,120,96,0.09);
+      color: rgba(255,178,160,0.92); }
+    .sn.named .band .plain { display: none; }
+    .sn.named .band .warn { display: inline; }
+    .sn.named .band b { color: #ff8a70; }
+
+    /* --- copy: under the field now, not over it --- */
+    .copy { position: absolute; left: 56px; top: 628px; z-index: 6; max-width: 680px;
       pointer-events: none; }
     h1 { font-family: "Silkscreen", monospace; font-weight: 700; margin: 0;
-      font-size: 64px; line-height: 1.08; letter-spacing: 0.005em; color: #fff;
-      text-shadow: 0 0 22px rgba(7,7,15,0.95), 0 0 46px rgba(7,7,15,0.85), 0 2px 0 rgba(0,0,0,0.6); }
+      font-size: 56px; line-height: 1.08; letter-spacing: 0.005em; color: #fff;
+      text-shadow: 0 0 22px rgba(7,7,15,0.95), 0 2px 0 rgba(0,0,0,0.6); }
     h1 .y { color: #ffd54f; }
-    .lead { font-size: 15.5px; font-weight: 300; line-height: 1.72; margin: 26px 0 0;
-      max-width: 44ch; color: rgba(236,234,245,0.7); text-wrap: pretty;
-      text-shadow: 0 0 18px rgba(7,7,15,0.95), 0 0 34px rgba(7,7,15,0.9); }
-    .lead b { color: #eceaf5; font-weight: 500; }
+    .lead { font-family: "Archivo", sans-serif; font-size: 16px; font-weight: 400;
+      line-height: 1.66; margin: 22px 0 0; max-width: 64ch;
+      color: rgba(236,234,245,0.7); text-wrap: pretty; }
+    .lead b { color: #eceaf5; font-weight: 600; }
 
-    .install { position: absolute; left: 56px; top: 468px; z-index: 7; display: flex; }
+    .install { position: absolute; left: 56px; top: 852px; z-index: 7; display: flex; }
     .u { display: flex; align-items: center; border: 1px solid rgba(236,234,245,0.18);
       border-right-width: 0; background: rgba(7,7,15,0.82); }
     .u:last-child { border-right-width: 1px; }
-    .tag { font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.2em;
-      text-transform: uppercase; padding: 0 11px; align-self: stretch; display: flex;
-      align-items: center; color: rgba(7,7,15,0.86); background: rgba(236,234,245,0.72); }
+    .tag { font-family: "Archivo", sans-serif; font-weight: 600; font-size: 8.5px;
+      letter-spacing: 0.2em; text-transform: uppercase; padding: 0 11px; align-self: stretch;
+      display: flex; align-items: center; color: rgba(7,7,15,0.86); background: rgba(236,234,245,0.72); }
     .val { padding: 13px 15px; font-size: 13px; color: rgba(236,234,245,0.9); }
     .u.p { border-color: #ffd54f; background: rgba(255,213,79,0.10); }
     .u.p .tag { background: #ffd54f; color: #201700; }
     .u.p .val { color: #ffe08a; }
 
     /* --- the coin slot: the only tell, and it stays small --- */
-    .slot { position: absolute; left: 56px; top: 556px; z-index: 7;
+    .slot { position: absolute; left: 56px; top: 916px; z-index: 7;
       display: flex; align-items: center; gap: 10px;
-      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
-      text-transform: uppercase; color: rgba(236,234,245,0.30);
+      font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
+      letter-spacing: 0.22em; text-transform: uppercase; color: rgba(236,234,245,0.30);
       transition: color 0.3s, opacity 0.5s; }
     .slot .key { width: 20px; height: 20px; border: 1px solid rgba(236,234,245,0.26);
       display: flex; align-items: center; justify-content: center;
@@ -93,11 +116,11 @@
     }
     .sn.play .slot { opacity: 0; pointer-events: none; }
 
-    /* keycaps only exist once you're playing */
-    .keys { position: absolute; left: 56px; top: 552px; z-index: 7; display: flex;
+    /* keycaps only exist once you are playing */
+    .keys { position: absolute; left: 56px; top: 912px; z-index: 7; display: flex;
       align-items: center; gap: 12px; opacity: 0; transition: opacity 0.5s 0.25s;
-      font-family: "Martian Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
-      text-transform: uppercase; color: rgba(236,234,245,0.4); }
+      font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
+      letter-spacing: 0.22em; text-transform: uppercase; color: rgba(236,234,245,0.4); }
     .sn.play .keys { opacity: 1; }
     .keys .kk { display: flex; gap: 4px; }
     .key2 { width: 22px; height: 22px; border: 1px solid rgba(236,234,245,0.28);
@@ -129,24 +152,30 @@
     .flash.go { animation: fl 0.42s cubic-bezier(0.5,0,0.75,0) forwards; }
     @keyframes fl { 0% { opacity: 0.5; } 100% { opacity: 0; } }
 
-    /* --- the app, actually shown --- */
-    .peek { position: absolute; left: 0; right: 0; bottom: 0; height: 190px; z-index: 9;
-      background: linear-gradient(180deg, rgba(7,7,15,0) 0%, rgba(7,7,15,0.9) 26%, #07070f 62%);
-      display: flex; align-items: flex-end; justify-content: center; }
-    .peekwin { width: 900px; overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.14); border-bottom: 0;
-      box-shadow: 0 -18px 60px rgba(0,0,0,0.72); background: #12122a; }
-    .peekwin .tb { height: 24px; background: rgba(255,255,255,0.06); display: flex;
-      align-items: center; gap: 6px; padding: 0 11px;
-      border-bottom: 1px solid rgba(255,255,255,0.08); }
-    .peekwin .tb i { width: 8px; height: 8px; border-radius: 50%; }
-    .peekwin .tb b { margin-left: 12px; font-family: "Martian Mono", monospace; font-size: 8.5px;
-      letter-spacing: 0.18em; text-transform: uppercase; font-weight: 400;
-      color: rgba(255,255,255,0.44); }
-    .peekwin img { display: block; width: 100%; }
-    .peeklabel { position: absolute; left: 56px; bottom: 58px; z-index: 10;
-      font-family: "Martian Mono", monospace; font-size: 9px; letter-spacing: 0.2em;
-      text-transform: uppercase; color: rgba(236,234,245,0.42); line-height: 2.1; }
+    /* --- collectible tokens ---------------------------------------------
+       Two art modes on ONE board, switched by the tokenStyle dial:
+         generic  — abstract agent glyphs on the same 4px grid as the icons
+         labelled — the same plate carrying a vendor NAME as plain text
+       The labelled mode is deliberately a name in a box and never a drawing
+       of a real mark. Redrawing competitor logos on a public marketing site
+       is a trademark risk, so the placeholder is the deliverable.
+       ------------------------------------------------------------------ */
+    .tokens { position: absolute; inset: 0; z-index: 3; }
+    .tk { position: absolute; left: 0; top: 0; width: 44px; height: 44px;
+      opacity: 0; transition: opacity 0.35s; will-change: transform; }
+    .sn.play .tk.on { opacity: 1; }
+    .tk .art { position: absolute; inset: 0; animation: tokbob 2.6s ease-in-out infinite; }
+    @keyframes tokbob { 50% { transform: translateY(-4px); } }
+    .tk svg { width: 100%; height: 100%; display: block; }
+    .tk .lab { position: absolute; left: -21px; top: 9px; width: 86px; height: 26px;
+      box-sizing: border-box; display: none; align-items: center; justify-content: center;
+      border: 1px solid currentColor; background: rgba(7,7,15,0.92);
+      font-family: "Silkscreen", monospace; font-size: 9px; letter-spacing: 0.02em; }
+    .sn.named .tk .gen { display: none; }
+    .sn.named .tk .lab { display: flex; }
+    .tk.pop .art { animation: tokpop 0.32s steps(3, jump-none) forwards; }
+    @keyframes tokpop { 0% { transform: scale(1); opacity: 1; }
+                      100% { transform: scale(1.7); opacity: 0; } }
   </style>
 </helmet>
 <div class="sn" tabindex="0">
@@ -160,9 +189,15 @@
     </div>
     <div class="score">
       <div class="cell"><div class="k">herded</div><div class="v" id="s-herd">0/8</div></div>
+      <div class="cell"><div class="k">tokens</div><div class="v dim" id="s-tok">0</div></div>
       <div class="cell"><div class="k">rescues</div><div class="v dim" id="s-res">0</div></div>
       <div class="cell" id="s-cell-lost"><div class="k">stray</div><div class="v dim" id="s-lost">0</div></div>
     </div>
+  </div>
+
+  <div class="band">
+    <span class="plain"><b>tokens</b> &nbsp;generic agent glyphs &mdash; no vendor marks anywhere on the board</span>
+    <span class="warn"><b>placeholder names only</b> &nbsp;drawn vendor marks are a trademark risk on a public site &mdash; ship the plate, never the logo</span>
   </div>
 
   <div class="copy">
@@ -179,7 +214,21 @@
   <div class="slot"><span class="key">I</span><span>insert coin</span></div>
   <div class="keys">
     <span class="kk"><span class="key2">W</span><span class="key2">A</span><span class="key2">S</span><span class="key2">D</span></span>
-    <span>herd them &mdash; one keeps wandering off</span>
+    <span>herd them &mdash; collect the tokens, one keeps wandering off</span>
+  </div>
+
+  <div class="tokens">
+    <sc-for list="{{ tokens }}" as="tk" hint-placeholder-count="14">
+      <div class="tk">
+        <div class="art" style="color:{{ tk.c }}">
+          <svg class="gen" viewBox="0 0 44 44" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+            <path d="{{ tk.plate }}" fill="{{ tk.c }}" opacity="0.9"></path>
+            <path d="{{ tk.glyph }}" fill="{{ tk.c }}"></path>
+          </svg>
+          <div class="lab">{{ tk.name }}</div>
+        </div>
+      </div>
+    </sc-for>
   </div>
 
   <div class="field">
@@ -201,17 +250,16 @@
 
   <div class="edge"></div>
   <div class="flash" id="flash"></div>
-
-  <div class="peek">
-    <div class="peekwin">
-      <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><b>the actual app &mdash; not a drawing of it</b></div>
-      <img src="./app-sessions.jpg" alt="Ghostties sidebar with parallel agent sessions">
-    </div>
-  </div>
-  <div class="peeklabel">scroll &darr;<br>every session, one window</div>
 </div>
 </x-dc>
-<script data-dc-script data-props='{"$preview":{"width":1360,"height":980}}'>
+<script data-dc-script data-props='{
+  "speed":      {"editor":"range","default":8.5,"min":3,"max":16,"step":0.5,"unit":"/s","section":"Game"},
+  "strayEvery": {"editor":"range","default":9,"min":3,"max":20,"step":1,"unit":"s","section":"Game"},
+  "tokens":     {"editor":"int","default":8,"min":0,"max":14,"step":1,"section":"Tokens"},
+  "tokenStyle": {"editor":"enum","default":"generic","options":["generic","labelled"],"section":"Tokens"},
+  "sound":      {"editor":"boolean","default":true,"section":"Audio"},
+  "$preview":   {"width":1360,"height":980}
+}'>
 class Component extends DCLogic {
   renderVals() {
     // --- refined ghost set -------------------------------------------------
@@ -257,6 +305,33 @@ class Component extends DCLogic {
       ['#81D4FA', 'round', 'drip',  '#f3fbff'],
       ['#7986CB', 'tall',  'taper', '#f4f5ff']
     ];
+
+    // --- collectible tokens ------------------------------------------------
+    // A hairline plate on the same 4px lattice, carrying either an abstract
+    // glyph or a name. Four glyphs, cycled: a caret, a bracket pair, a dot
+    // matrix and a stack of rules. None of them resemble a real product mark.
+    const PLATE = '10,10,24,2 10,32,24,2 10,10,2,24 32,10,2,24';
+    const GLYPH = [
+      '16,20,4,4 20,24,4,4 24,20,4,4 20,16,4,4',            // caret / diamond
+      '14,14,4,4 14,18,4,4 14,22,4,4 14,26,4,4 26,14,4,4 26,18,4,4 26,22,4,4 26,26,4,4',
+      '16,16,4,4 24,16,4,4 20,20,4,4 16,24,4,4 24,24,4,4',  // dot matrix
+      '14,16,16,4 14,22,10,4 14,28,14,4'                     // stacked rules
+    ];
+    const TCOL = ['#ffd54f', '#00BCD4', '#7C4DFF', '#4ade80'];
+    // Names are TEXT placeholders, deliberately not marks. See the band.
+    const TNAME = ['CLAUDE','CODEX','CURSOR','COPILOT','GEMINI','AIDER','DEVIN','CLINE',
+                   'ZED','WINDSURF','GOOSE','OPENHANDS','SWE','AMP'];
+
+    const tokens = [];
+    for (let i = 0; i < 14; i++) {
+      tokens.push({
+        c: TCOL[i % TCOL.length],
+        plate: toPath(PLATE),
+        glyph: toPath(GLYPH[i % GLYPH.length]),
+        name: TNAME[i % TNAME.length]
+      });
+    }
+
     return {
       ghosts: SET.map(function (g) {
         return {
@@ -265,7 +340,8 @@ class Component extends DCLogic {
           shade: toPath(SHADE[g[2]]),
           hi:    toPath(HI[g[1]])
         };
-      })
+      }),
+      tokens: tokens
     };
   }
 
@@ -277,8 +353,12 @@ class Component extends DCLogic {
     if (this._ac) this._ac.close();
   }
 
+  // props are read live inside the loop so the dials above the board are real
+  _p(k, d) { const v = this.props[k]; return v === undefined || v === null ? d : v; }
+
   // --- placeholder arcade SFX, synthesised. stands in for the ElevenLabs set.
   _sfx(name) {
+    if (!this._p('sound', true)) return;
     if (!this._ac) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
@@ -304,6 +384,9 @@ class Component extends DCLogic {
     } else if (name === 'collect') { // one rising blip per ghost
       play(660, 0, 0.045, 'square', 0.10);
       play(990, 0.045, 0.07, 'square', 0.10);
+    } else if (name === 'token') {   // brighter and shorter than a ghost
+      play(1318, 0, 0.035, 'square', 0.09);
+      play(1760, 0.035, 0.06, 'square', 0.08);
     } else if (name === 'stray') {   // something slipped away
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = 'sawtooth';
@@ -321,19 +404,22 @@ class Component extends DCLogic {
   _boot() {
     const root = document.querySelector('.sn');
     const nodes = root ? root.querySelectorAll('.gh') : [];
+    const tkNodes = root ? root.querySelectorAll('.tk') : [];
     const headEl = root ? root.querySelector('#head') : null;
-    if (!root || !headEl || nodes.length < 8) {
+    if (!root || !headEl || nodes.length < 8 || tkNodes.length < 14) {
       if (this._tries++ < 90) this._raf = requestAnimationFrame(this._boot.bind(this));
       return;
     }
 
-    const CELL = 44, COLS = 30, ROWS = 18, OX = 20, OY = 16;
-    const STEP = 7;
+    // v2 grid: the field is shorter and wider now that the copy sits below it
+    const CELL = 44, COLS = 30, ROWS = 10, OX = 20, OY = 148;
     const px = function (c) { return OX + c * CELL; };
+    const py = function (r) { return OY + r * CELL; };
 
-    // idle posts (free-floating) and the grid cells they snap to on coin-in
-    const IDLE = [[1010,150],[1188,318],[880,300],[1122,512],[962,470],[1244,168],[792,462],[1082,660]];
-    const HOME = [[23,3],[27,7],[20,8],[26,12],[22,13],[28,2],[18,11],[25,15]];
+    // idle posts (free-floating) and the grid cells they snap to on coin-in.
+    // Spread the full width now — nothing is sitting on top of them.
+    const IDLE = [[150,206],[336,330],[520,214],[706,382],[884,240],[1052,352],[1188,200],[420,436]];
+    const HOME = [[3,1],[7,4],[11,2],[15,5],[19,2],[23,4],[26,1],[9,8]];
 
     const gs = [];
     for (let i = 0; i < nodes.length; i++) {
@@ -346,13 +432,14 @@ class Component extends DCLogic {
     }
 
     let mode = 'idle';
-    let hx = 6, hy = 14, dir = [1,0], next = [1,0];
-    let hpx = px(hx), hpy = OY + hy * CELL;
+    let hx = 1, hy = 8, dir = [1,0], next = [1,0];
+    let hpx = px(hx), hpy = py(hy);
     const trail = [[hx, hy]];
-    let f = 0, t = 0, herded = 0, rescues = 0, strays = 0;
+    let f = 0, t = 0, herded = 0, rescues = 0, strays = 0, picked = 0;
     let auto = true, lastDrop = 0;
 
     const herdEl = root.querySelector('#s-herd');
+    const tokEl  = root.querySelector('#s-tok');
     const resEl  = root.querySelector('#s-res');
     const lostEl = root.querySelector('#s-lost');
     const lostCell = root.querySelector('#s-cell-lost');
@@ -361,6 +448,30 @@ class Component extends DCLogic {
     root.querySelectorAll('.key2').forEach(function (k) {
       keyEls[k.textContent.trim().toLowerCase()] = k;
     });
+
+    // --- tokens: fixed pool of 14 nodes, only `count` of them ever live ----
+    const tks = [];
+    for (let i = 0; i < tkNodes.length; i++) {
+      tks.push({ el: tkNodes[i], cx: 0, cy: 0, live: false, respawn: 0 });
+    }
+    function occupied(cx, cy) {
+      if (cx === hx && cy === hy) return true;
+      for (const g of gs) if (g.cx === cx && g.cy === cy) return true;
+      for (const k of tks) if (k.live && k.cx === cx && k.cy === cy) return true;
+      for (const s of trail) if (s[0] === cx && s[1] === cy) return true;
+      return false;
+    }
+    function placeToken(k) {
+      for (let a = 0; a < 200; a++) {
+        const cx = Math.floor(Math.random() * COLS), cy = Math.floor(Math.random() * ROWS);
+        if (occupied(cx, cy)) continue;
+        k.cx = cx; k.cy = cy; k.live = true;
+        k.el.style.transform = 'translate3d(' + px(cx) + 'px,' + py(cy) + 'px,0)';
+        k.el.classList.remove('pop');
+        k.el.classList.add('on');
+        return;
+      }
+    }
 
     const MAP = {
       w: [0,-1], arrowup: [0,-1], a: [-1,0], arrowleft: [-1,0],
@@ -394,15 +505,19 @@ class Component extends DCLogic {
                .sort(function (a, b) { return a.rank - b.rank; });
     }
 
+    // the autopilot chases whichever loose ghost or live token is nearest, so
+    // the ambient demo shows the token loop without anyone touching a key
     function think() {
-      const targets = gs.filter(function (g) { return g.rank < 0; });
+      const targets = [];
+      for (const g of gs) if (g.rank < 0) targets.push([g.cx, g.cy]);
+      for (const k of tks) if (k.live) targets.push([k.cx, k.cy]);
       if (!targets.length) return;
       let best = targets[0], bd = 1e9;
-      for (const g of targets) {
-        const d = Math.abs(g.cx - hx) + Math.abs(g.cy - hy);
-        if (d < bd) { bd = d; best = g; }
+      for (const p of targets) {
+        const d = Math.abs(p[0] - hx) + Math.abs(p[1] - hy);
+        if (d < bd) { bd = d; best = p; }
       }
-      const dx = best.cx - hx, dy = best.cy - hy;
+      const dx = best[0] - hx, dy = best[1] - hy;
       const want = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx),0] : [0,Math.sign(dy)];
       if (!want[0] && !want[1]) return;
       if (want[0] === -dir[0] && want[1] === -dir[1]) return;
@@ -429,13 +544,25 @@ class Component extends DCLogic {
         }
       }
 
+      // tokens are collected, not herded — they pop and come back elsewhere
+      for (const k of tks) {
+        if (!k.live) continue;
+        if (k.cx === hx && k.cy === hy) {
+          k.live = false; picked++;
+          k.el.classList.add('pop');
+          k.respawn = t + 1.4;
+          self._sfx('token');
+        }
+      }
+
       const line = ranked();
       for (const g of line) {
         const s = trail[Math.min(trail.length - 1, g.rank + 1)];
         g.cx = s[0]; g.cy = s[1];
       }
 
-      if (line.length >= 3 && t - lastDrop > 9) {
+      const every = self._p('strayEvery', 9);
+      if (line.length >= 3 && t - lastDrop > every) {
         const tail = line[line.length - 1];
         tail.rank = -1; tail.lost = true; tail.el.classList.add('lost');
         herded--; strays++; lastDrop = t;
@@ -447,12 +574,29 @@ class Component extends DCLogic {
     function frame() {
       t += 1 / 60;
 
+      // live dials --------------------------------------------------------
+      const step = Math.max(1, Math.round(60 / self._p('speed', 8.5)));
+      const want = Math.round(self._p('tokens', 8));
+      root.classList.toggle('named', self._p('tokenStyle', 'generic') === 'labelled');
+
       if (mode === 'play') {
-        if (auto && f % STEP === 0) think();
-        if (f % STEP === 0) move();
+        // reconcile the live token pool against the count dial
+        let liveCount = 0;
+        for (const k of tks) if (k.live) liveCount++;
+        for (let i = 0; i < tks.length; i++) {
+          const k = tks[i];
+          if (i < want) {
+            if (!k.live && t >= k.respawn) placeToken(k);
+          } else if (k.live) {
+            k.live = false; k.el.classList.remove('on', 'pop');
+          }
+        }
+
+        if (auto && f % step === 0) think();
+        if (f % step === 0) move();
         f++;
 
-        const tx = px(hx), ty = OY + hy * CELL;
+        const tx = px(hx), ty = py(hy);
         if (Math.abs(tx - hpx) > CELL * 1.6) hpx = tx; else hpx += (tx - hpx) * 0.4;
         if (Math.abs(ty - hpy) > CELL * 1.6) hpy = ty; else hpy += (ty - hpy) * 0.4;
         headEl.style.transform = 'translate3d(' + hpx.toFixed(1) + 'px,' + hpy.toFixed(1) + 'px,0)';
@@ -465,7 +609,7 @@ class Component extends DCLogic {
           gy = g.iy + Math.cos(t * 0.63 + g.phase) * 13;
           g.x = gx; g.y = gy;
         } else {
-          gx = px(g.cx); gy = OY + g.cy * CELL;
+          gx = px(g.cx); gy = py(g.cy);
           if (Math.abs(gx - g.x) > CELL * 1.6) g.x = gx; else g.x += (gx - g.x) * 0.4;
           if (Math.abs(gy - g.y) > CELL * 1.6) g.y = gy; else g.y += (gy - g.y) * 0.4;
         }
@@ -482,7 +626,8 @@ class Component extends DCLogic {
       if (mode === 'play') {
         const hot = { '1,0': 'd', '-1,0': 'a', '0,1': 's', '0,-1': 'w' }[dir.join(',')];
         for (const k in keyEls) keyEls[k].classList.toggle('hot', k === hot);
-        herdEl.textContent = herded + '/8';
+        herdEl.textContent = herded + '/' + gs.length;
+        tokEl.textContent = picked;
         resEl.textContent = rescues;
         lostEl.textContent = strays;
         lostCell.classList.toggle('alert', strays > 0);

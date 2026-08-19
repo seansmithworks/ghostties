@@ -1,0 +1,261 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Archivo:wght@400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+
+    .ts { width: 1360px; height: 1080px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "Archivo", sans-serif; padding: 44px 56px; }
+
+    /* micro-label: the house rule. uppercase, hairline, 0.2em by default. */
+    .ml { font-family: "Archivo", sans-serif; font-weight: 600; font-size: 8.5px;
+      text-transform: uppercase; color: rgba(236,234,245,0.38); }
+
+    .top { display: flex; align-items: baseline; gap: 18px;
+      border-bottom: 1px solid rgba(236,234,245,0.16); padding-bottom: 16px; }
+    .top h2 { font-family: "Silkscreen", monospace; font-size: 20px; font-weight: 700;
+      margin: 0; color: #fff; letter-spacing: 0.02em; }
+    .top .sub { font-size: 12.5px; color: rgba(236,234,245,0.55); margin-left: auto;
+      max-width: 60ch; text-align: right; line-height: 1.5; }
+
+    /* ---- the three families, one row of butted blocks ---- */
+    .fams { display: flex; margin: 26px 0 0; }
+    .fam { flex: 1; border: 1px solid rgba(236,234,245,0.18); border-right-width: 0;
+      padding: 16px 18px 18px; }
+    .fam:last-child { border-right-width: 1px; }
+    .fam .role { margin-bottom: 12px; }
+    .fam .spec { font-size: 44px; line-height: 1; color: #fff; }
+    .fam .name { margin-top: 14px; font-size: 12px; font-weight: 600;
+      color: rgba(236,234,245,0.9); }
+    .fam .use { margin-top: 5px; font-size: 11.5px; line-height: 1.5;
+      color: rgba(236,234,245,0.5); }
+    .fam.f1 .spec { font-family: "Silkscreen", monospace; font-size: 34px; }
+    .fam.f2 .spec { font-family: "Archivo", sans-serif; font-weight: 600; }
+    .fam.f3 .spec { font-family: "DM Mono", monospace; font-weight: 400; font-size: 34px; }
+    .fam.f1 { border-color: rgba(255,213,79,0.5); background: rgba(255,213,79,0.05); }
+
+    /* ---- the ramp ---- */
+    .cols { display: flex; gap: 34px; margin-top: 30px; }
+    .col { flex: 1; }
+    .ramp { margin-top: 12px; border-top: 1px solid rgba(236,234,245,0.14); }
+    .row { display: flex; align-items: baseline; gap: 16px; padding: 9px 0;
+      border-bottom: 1px solid rgba(236,234,245,0.09); }
+    .row .tk { font-family: "DM Mono", monospace; font-size: 9.5px;
+      color: rgba(236,234,245,0.34); width: 84px; flex: none; }
+    .row .sz { font-family: "DM Mono", monospace; font-size: 9.5px;
+      color: rgba(236,234,245,0.5); width: 92px; flex: none; text-align: right; }
+    .row .sm { flex: 1; color: #fff; overflow: hidden; white-space: nowrap;
+      text-overflow: ellipsis; }
+
+    .d1 .sm, .d2 .sm, .d3 .sm, .d4 .sm { font-family: "Silkscreen", monospace; font-weight: 700; }
+    .p1 .sm, .p2 .sm, .p3 .sm { font-family: "Archivo", sans-serif; }
+    .p4 .sm { font-family: "Archivo", sans-serif; font-weight: 600; text-transform: uppercase; }
+    .m1 .sm, .m2 .sm, .m3 .sm { font-family: "DM Mono", monospace; }
+
+    /* ---- prose measure specimen ---- */
+    .prose { margin-top: 26px; border: 1px solid rgba(236,234,245,0.18); padding: 18px 20px 20px; }
+    .prose p { margin: 12px 0 0; font-family: "Archivo", sans-serif; color: rgba(236,234,245,0.74);
+      text-wrap: pretty; }
+    .prose b { color: #eceaf5; font-weight: 600; }
+    .prose code { font-family: "DM Mono", monospace; color: #ffd54f;
+      background: rgba(255,213,79,0.09); padding: 1px 5px; }
+
+    /* ---- house rules + conformance ---- */
+    .foot { position: absolute; left: 56px; right: 56px; bottom: 44px; display: flex; gap: 0; }
+    .box { flex: 1; border: 1px solid rgba(236,234,245,0.18); border-right-width: 0;
+      padding: 15px 18px 17px; }
+    .box:last-child { border-right-width: 1px; }
+    .box ul { margin: 11px 0 0; padding: 0; list-style: none; }
+    .box li { font-size: 11.5px; line-height: 1.62; color: rgba(236,234,245,0.62);
+      padding-left: 14px; position: relative; }
+    .box li::before { content: ""; position: absolute; left: 0; top: 7px;
+      width: 5px; height: 5px; background: rgba(255,213,79,0.7); }
+    .box li b { color: #eceaf5; font-weight: 600; }
+    .box.no li::before { background: rgba(255,120,96,0.8); }
+    .box.warn { border-color: rgba(255,138,112,0.55); background: rgba(255,120,96,0.07); }
+    .box.warn .ml { color: #ff8a70; }
+    .box.warn li::before { background: #ff8a70; }
+  </style>
+</helmet>
+<div class="ts">
+  <div class="top">
+    <h2>TYPE &mdash; THE SPEC</h2>
+    <span class="ml" style="letter-spacing:0.2em">settled, not an option set</span>
+    <span class="sub">T1, T2 and T3 were three competing pairings. This is the one that won, written down
+      as a system: three families, one ramp each, and the rules that make it read as designed rather
+      than defaulted.</span>
+  </div>
+
+  <div class="fams">
+    <div class="fam f1">
+      <div class="ml" style="letter-spacing:0.2em">display</div>
+      <div class="spec">Aa 0123</div>
+      <div class="name">Silkscreen 400 / 700</div>
+      <div class="use">Headlines, scoreboard numerals, keycaps. Never below 10px and never
+        set as a paragraph &mdash; it has no lowercase rhythm to carry one.</div>
+    </div>
+    <div class="fam f2">
+      <div class="ml" style="letter-spacing:0.2em">prose</div>
+      <div class="spec">Aa 0123</div>
+      <div class="name">Archivo 400 / 500 / 600</div>
+      <div class="use">Leads, body, section headings, nav, micro-labels. A grotesk with real
+        width &mdash; the reason the page does not read as a system-sans default.</div>
+    </div>
+    <div class="fam f3">
+      <div class="ml" style="letter-spacing:0.2em">commands</div>
+      <div class="spec">Aa 0123</div>
+      <div class="name">DM Mono 300 / 400 / 500</div>
+      <div class="use">Install commands, file paths, <span style="font-family:'DM Mono',monospace">gt list</span>
+        output, block tags. Anything a person would type or a terminal would print.</div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <div class="ml" style="letter-spacing:0.2em">display ramp &mdash; silkscreen</div>
+      <div class="ramp">
+        <div class="row d1"><span class="tk">display/xl</span><span class="sm" id="s1">SIX AGENTS</span><span class="sz" id="z1">56 / 1.08</span></div>
+        <div class="row d2"><span class="tk">display/l</span><span class="sm" id="s2">ONE WINDOW</span><span class="sz" id="z2">40 / 1.1</span></div>
+        <div class="row d3"><span class="tk">display/m</span><span class="sm" id="s3">INSERT COIN</span><span class="sz" id="z3">28 / 1.15</span></div>
+        <div class="row d4"><span class="tk">display/s</span><span class="sm" id="s4">GHOSTTIES</span><span class="sz" id="z4">20 / 1.2</span></div>
+      </div>
+
+      <div class="ml" style="letter-spacing:0.2em; margin-top:24px">command ramp &mdash; dm mono</div>
+      <div class="ramp">
+        <div class="row m1"><span class="tk">mono/cmd</span><span class="sm" id="s8">brew install --cask ghostties</span><span class="sz" id="z8">13 / 1.5</span></div>
+        <div class="row m2"><span class="tk">mono/val</span><span class="sm" id="s9">~/.ghostties/tasks/</span><span class="sz" id="z9">11.5 / 1.5</span></div>
+        <div class="row m3"><span class="tk">mono/tag</span><span class="sm" id="s10">BREW &nbsp;NPX &nbsp;DMG</span><span class="sz" id="z10">8.5 / 1</span></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="ml" style="letter-spacing:0.2em">prose ramp &mdash; archivo</div>
+      <div class="ramp">
+        <div class="row p1"><span class="tk">prose/lead</span><span class="sm" id="s5">Every session in one window.</span><span class="sz" id="z5">22 / 1.5 &middot; 400</span></div>
+        <div class="row p2"><span class="tk">prose/body</span><span class="sm" id="s6">A sidebar that says who is waiting.</span><span class="sz" id="z6">16 / 1.66 &middot; 400</span></div>
+        <div class="row p3"><span class="tk">prose/small</span><span class="sm" id="s7">Requires macOS 14 or later.</span><span class="sz" id="z7">13 / 1.55 &middot; 400</span></div>
+        <div class="row p4"><span class="tk">prose/micro</span><span class="sm" id="s11">what it does</span><span class="sz" id="z11">8.5 &middot; 600</span></div>
+      </div>
+
+      <div class="prose" id="pbox">
+        <div class="ml" style="letter-spacing:0.2em">measure &mdash; drag the dial to set the line length</div>
+        <p id="ptext">Ghostties keeps every Claude Code session in one macOS window. The sidebar
+          tells you which agents are working and which are waiting on you, and <code>gt list</code>
+          collects every task across every project into one view. <b>It is a fork of Ghostty</b>,
+          so the terminal underneath is the one you already use.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="box">
+      <div class="ml" style="letter-spacing:0.2em">house rules &mdash; do</div>
+      <ul>
+        <li>Square status marks. <b>Never circles or pills.</b></li>
+        <li>Block labels butted together, sharing one hairline.</li>
+        <li>Uppercase micro-labels at <b>0.2em</b> tracking, 600 weight.</li>
+        <li>Numerals in Silkscreen wherever they are a score or a count.</li>
+      </ul>
+    </div>
+    <div class="box no">
+      <div class="ml" style="letter-spacing:0.2em">house rules &mdash; do not</div>
+      <ul>
+        <li>No Inter, Roboto or system sans. <b>The loudest AI tell.</b></li>
+        <li>No rounded corners or drop shadows on chrome.</li>
+        <li>No gradient-glass cards, no left-border accent panels.</li>
+        <li>No Silkscreen paragraphs and none below 10px.</li>
+      </ul>
+    </div>
+    <div class="box warn">
+      <div class="ml" style="letter-spacing:0.2em">conformance &mdash; not yet true</div>
+      <ul>
+        <li><b>8 Round&nbsp;2 boards still load Martian Mono</b> where this spec says Archivo:
+          Main, Anatomy, AppAnnotated, AppMasks, AppReplica, CastOfEight, PixelMorph, ScrollFocus.</li>
+        <li>On spec today: <b>Snake, AppZoom, Decrypt, TypeGrotesk</b>.</li>
+        <li>Fix when each board is next opened, not as one sweep &mdash; several are cut candidates.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{
+  "displayScale": {"editor":"range","default":1,"min":0.75,"max":1.35,"step":0.05,"unit":"x","section":"Ramps"},
+  "proseScale":   {"editor":"range","default":1,"min":0.85,"max":1.25,"step":0.05,"unit":"x","section":"Ramps"},
+  "measure":      {"editor":"int","default":52,"min":34,"max":80,"step":2,"unit":"ch","section":"Prose"},
+  "tracking":     {"editor":"range","default":0.2,"min":0.05,"max":0.4,"step":0.01,"unit":"em","section":"Labels"},
+  "$preview":     {"width":1360,"height":1080}
+}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+
+  componentDidMount() { this._tries = 0; this._boot(); }
+  componentWillUnmount() { if (this._timer) clearInterval(this._timer); }
+
+  _p(k, d) { const v = this.props[k]; return v === undefined || v === null ? d : v; }
+
+  _boot() {
+    const root = document.querySelector('.ts');
+    if (!root || !root.querySelector('#s1')) {
+      if (this._tries++ < 90) requestAnimationFrame(this._boot.bind(this));
+      return;
+    }
+    const self = this;
+
+    // base ramp, in the same order the rows appear. size, line-height.
+    const DISPLAY = [['s1',56,1.08],['s2',40,1.1],['s3',28,1.15],['s4',20,1.2]];
+    const PROSE   = [['s5',22,1.5],['s6',16,1.66],['s7',13,1.55],['s11',8.5,1.4]];
+    const MONO    = [['s8',13,1.5],['s9',11.5,1.5],['s10',8.5,1]];
+
+    function apply() {
+      const ds = self._p('displayScale', 1);
+      const ps = self._p('proseScale', 1);
+      const tr = self._p('tracking', 0.2);
+      const me = self._p('measure', 52);
+
+      function set(list, mult, showWeight) {
+        for (const r of list) {
+          const el = root.querySelector('#' + r[0]);
+          const lab = root.querySelector('#z' + r[0].slice(1));
+          if (!el) continue;
+          const px = Math.round(r[1] * mult * 10) / 10;
+          el.style.fontSize = px + 'px';
+          el.style.lineHeight = r[2];
+          if (lab) {
+            // capture the weight suffix once, then rebuild the label cleanly
+            if (lab.dataset.tail === undefined) {
+              const parts = lab.textContent.split(String.fromCharCode(183));
+              lab.dataset.tail = parts.length > 1 ? parts[1].trim() : '';
+            }
+            const tail = lab.dataset.tail;
+            lab.textContent = px + ' / ' + r[2] + (tail ? ' ' + String.fromCharCode(183) + ' ' + tail : '');
+          }
+        }
+      }
+      set(DISPLAY, ds);
+      set(PROSE, ps);
+      set(MONO, 1);
+
+      // micro-labels take the tracking dial live, so the 0.2em rule is testable
+      root.querySelectorAll('.ml').forEach(function (n) { n.style.letterSpacing = tr + 'em'; });
+      const micro = root.querySelector('#s11');
+      if (micro) micro.style.letterSpacing = tr + 'em';
+
+      const ptext = root.querySelector('#ptext');
+      if (ptext) { ptext.style.maxWidth = me + 'ch'; ptext.style.fontSize = (16 * ps) + 'px'; }
+    }
+
+    apply();
+    this._timer = setInterval(apply, 220);
+  }
+}
+</script>
+</body>
+</html>

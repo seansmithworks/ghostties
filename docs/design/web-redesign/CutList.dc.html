@@ -1,0 +1,231 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Archivo:wght@400;500;600&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+
+    .cl { width: 1360px; height: 1080px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "Archivo", sans-serif; padding: 44px 56px 40px; }
+
+    .ml { font-family: "Archivo", sans-serif; font-weight: 600; font-size: 8.5px;
+      letter-spacing: 0.2em; text-transform: uppercase; color: rgba(236,234,245,0.38); }
+
+    .top { display: flex; align-items: baseline; gap: 18px;
+      border-bottom: 1px solid rgba(236,234,245,0.16); padding-bottom: 16px; }
+    .top h2 { font-family: "Silkscreen", monospace; font-size: 20px; font-weight: 700;
+      margin: 0; color: #fff; letter-spacing: 0.02em; }
+    .quote { margin-left: auto; max-width: 62ch; text-align: right; font-size: 12.5px;
+      line-height: 1.55; color: rgba(236,234,245,0.55); }
+    .quote i { color: rgba(236,234,245,0.85); font-style: italic; }
+
+    /* tally — butted blocks, no pills */
+    .tally { display: flex; margin-top: 22px; }
+    .tcell { border: 1px solid rgba(236,234,245,0.18); border-right-width: 0;
+      padding: 11px 16px 13px; min-width: 128px; }
+    .tcell:last-child { border-right-width: 1px; }
+    .tcell .v { font-family: "Silkscreen", monospace; font-size: 26px; margin-top: 7px; }
+    .tcell.ship { border-color: rgba(74,222,128,0.5); background: rgba(74,222,128,0.07); }
+    .tcell.ship .v { color: #4ade80; }
+    .tcell.park { border-color: rgba(255,213,79,0.45); background: rgba(255,213,79,0.06); }
+    .tcell.park .v { color: #ffd54f; }
+    .tcell.cut  { border-color: rgba(255,120,96,0.5); background: rgba(255,120,96,0.07); }
+    .tcell.cut .v { color: #ff8a70; }
+    .tcell.tot .v { color: rgba(236,234,245,0.8); }
+
+    .cols { display: flex; gap: 0; margin-top: 26px; align-items: stretch; }
+    .lane { flex: 1; border: 1px solid rgba(236,234,245,0.18); border-right-width: 0;
+      padding: 0 0 12px; box-sizing: border-box; min-width: 0; }
+    .lane:last-child { border-right-width: 1px; }
+    .lane.hide { display: none; }
+    .lane .head { padding: 13px 18px 12px; border-bottom: 1px solid rgba(236,234,245,0.16);
+      display: flex; align-items: baseline; gap: 10px; }
+    .lane .head .n { font-family: "Silkscreen", monospace; font-size: 13px; }
+    .lane .head .d { font-size: 11px; color: rgba(236,234,245,0.45); line-height: 1.45; }
+
+    .lane.l-ship .head { background: rgba(74,222,128,0.08); }
+    .lane.l-ship .head .n { color: #4ade80; }
+    .lane.l-park .head { background: rgba(255,213,79,0.07); }
+    .lane.l-park .head .n { color: #ffd54f; }
+    .lane.l-cut  .head { background: rgba(255,120,96,0.08); }
+    .lane.l-cut  .head .n { color: #ff8a70; }
+
+    .item { padding: 11px 18px 12px; border-bottom: 1px solid rgba(236,234,245,0.08); }
+    .item:last-child { border-bottom: 0; }
+    .item .t { font-size: 12.5px; font-weight: 600; color: #eceaf5; display: flex;
+      align-items: baseline; gap: 8px; }
+    .item .t .mark { width: 7px; height: 7px; flex: none; }
+    .l-ship .item .t .mark { background: #4ade80; }
+    .l-park .item .t .mark { background: #ffd54f; }
+    .l-cut  .item .t .mark { background: #ff8a70; }
+    .item .t .ref { margin-left: auto; font-family: "DM Mono", monospace; font-size: 9px;
+      color: rgba(236,234,245,0.3); flex: none; }
+    .item .w { margin-top: 5px; padding-left: 15px; font-size: 11.5px; line-height: 1.58;
+      color: rgba(236,234,245,0.56); }
+    .item .w b { color: rgba(236,234,245,0.85); font-weight: 600; }
+    .cl.terse .item .w { display: none; }
+
+    .rule { position: absolute; left: 56px; right: 56px; bottom: 40px;
+      border: 1px solid rgba(255,213,79,0.45); background: rgba(255,213,79,0.05);
+      padding: 14px 18px 16px; }
+    .rule p { margin: 9px 0 0; font-size: 12.5px; line-height: 1.6;
+      color: rgba(236,234,245,0.72); max-width: 118ch; }
+    .rule b { color: #ffd54f; font-weight: 600; }
+  </style>
+</helmet>
+<div class="cl" id="cl">
+  <div class="top">
+    <h2>THE CUT LIST</h2>
+    <span class="ml">a strawman, argue with it</span>
+    <div class="quote">&ldquo;<i>There is more here than we should implement. The question of taste is
+      always what not to include.</i>&rdquo; &mdash; so this is the answer, taken as far as it goes
+      without you. Every line is a decision you can reverse in one word.</div>
+  </div>
+
+  <div class="tally">
+    <div class="tcell tot"><div class="ml">on the canvas</div><div class="v">19</div></div>
+    <div class="tcell ship"><div class="ml">ship</div><div class="v">7</div></div>
+    <div class="tcell park"><div class="ml">park</div><div class="v">4</div></div>
+    <div class="tcell cut"><div class="ml">cut</div><div class="v">8</div></div>
+  </div>
+
+  <div class="cols">
+    <div class="lane l-ship" id="lane-ship">
+      <div class="head"><span class="n">SHIP</span><span class="d">the page is these seven things and nothing else</span></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>Snake hero, opt-in<span class="ref">A</span></div>
+        <div class="w">The identity. A page until someone presses <b>I</b>. Nothing else on the canvas
+          would make a person send the link to a friend.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>B4 scroll-zoom<span class="ref">B4</span></div>
+        <div class="w">The app section. DOM and real text so it holds at 4x, and the seven-pixel status
+          dot finally gets shown at seven hundred.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>B1 annotated captures<span class="ref">B1</span></div>
+        <div class="w">For the two or three features that do not earn a camera move. Cheapest to build,
+          <b>impossible to make misleading</b>, never drifts.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>The type spec<span class="ref">T</span></div>
+        <div class="w">Silkscreen, Archivo, DM Mono plus the house vocabulary. This is what makes it read
+          as designed rather than generated.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>One ghost face<span class="ref">G</span></div>
+        <div class="w">Pick one from the robot pass and use it everywhere. A cast is a content
+          obligation; one mark is an identity.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>First 60 seconds<span class="ref">08</span></div>
+        <div class="w">What happens after install, where it puts things, what it touches, how to leave.
+          <b>The biggest unspoken objection and the cheapest to answer.</b> Does not exist yet.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>brew + npx install block<span class="ref">&mdash;</span></div>
+        <div class="w">Already live and already leading. Nothing on this canvas should push it below
+          the fold.</div></div>
+    </div>
+
+    <div class="lane l-park" id="lane-park">
+      <div class="head"><span class="n">PARK</span><span class="d">good, but not in the first version</span></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>B2 ghosts as windows<span class="ref">B2</span></div>
+        <div class="w">The most distinctive thing on the canvas and the hardest to finish &mdash; every
+          capture needs a hand-chosen crop or you get meaningless pixels in a nice shape. Park until
+          the 05&ndash;07 captures exist.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>Decrypt-reveal<span class="ref">D1</span></div>
+        <div class="w">It earns its place and it is still a second lens on a page that already has B4.
+          Park it as one section break, not a hero.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>Real ElevenLabs SFX<span class="ref">&mdash;</span></div>
+        <div class="w">The synthesised square waves are good enough to judge timing. Spend the
+          budget once the shape is approved, not before.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>Asciify on the hero<span class="ref">&mdash;</span></div>
+        <div class="w">Decrypt with the polarity flipped. If it ever ships it <b>replaces</b> decrypt
+          rather than joining it &mdash; two lenses on one page is one too many.</div></div>
+    </div>
+
+    <div class="lane l-cut" id="lane-cut">
+      <div class="head"><span class="n">CUT</span><span class="d">say no now so it stops costing attention</span></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>B3 clickable replica<span class="ref">B3</span></div>
+        <div class="w">Carries a <b>permanent re-measure cost every release</b> or it quietly starts
+          lying. B4 gets most of the value with none of that.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>C1 pixel morph<span class="ref">C1</span></div>
+        <div class="w">Already rejected. Keep it cut &mdash; it is the kind of thing that gets revived
+          because the demo loops nicely.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>C2 anchored focus pull<span class="ref">C2</span></div>
+        <div class="w">Already rejected. Solves scroll-jacking, but there is no scroll narrative left
+          once B4 owns the app section.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>C3 cast of eight<span class="ref">C3</span></div>
+        <div class="w">Already rejected. One ghost per feature is a rule that makes the page sprawl as
+          you ship, not shrink.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>Cast-of-eight naming pass<span class="ref">&mdash;</span></div>
+        <div class="w">Dies with C3. No names needed for a mascot that appears once.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>canvasui grid<span class="ref">&mdash;</span></div>
+        <div class="w">A handsome 3D ripple that <b>says nothing about the product</b>.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>Vendor-logo tokens<span class="ref">A</span></div>
+        <div class="w">Trademark risk on a public marketing site. The labelled dial exists to show you
+          what it would cost, not to ship. <b>Generic glyphs only.</b></div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>T1 / T2 specimen boards<span class="ref">T1 T2</span></div>
+        <div class="w">The decision is made. They are history now, not options &mdash; leaving them
+          live invites re-litigating a locked call.</div></div>
+    </div>
+  </div>
+
+  <div class="rule">
+    <div class="ml">the rule underneath all of it</div>
+    <p>Everything in <b>SHIP</b> answers a question a visitor actually has: what is it, what does it look
+      like, what happens if I install it, how do I get it. Everything in <b>CUT</b> is something we thought
+      was clever. That is the whole test &mdash; not whether it is good, but whether anyone arrived
+      wanting it.</p>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{
+  "lane":     {"editor":"enum","default":"all","options":["all","ship","park","cut"],"section":"View"},
+  "reasons":  {"editor":"boolean","default":true,"section":"View"},
+  "$preview": {"width":1360,"height":1080}
+}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+
+  componentDidMount() { this._tries = 0; this._boot(); }
+  componentWillUnmount() { if (this._timer) clearInterval(this._timer); }
+
+  _p(k, d) { const v = this.props[k]; return v === undefined || v === null ? d : v; }
+
+  _boot() {
+    const root = document.querySelector('#cl');
+    if (!root || !root.querySelector('#lane-ship')) {
+      if (this._tries++ < 90) requestAnimationFrame(this._boot.bind(this));
+      return;
+    }
+    const self = this;
+    const LANES = ['ship', 'park', 'cut'];
+    function apply() {
+      const pick = self._p('lane', 'all');
+      for (const l of LANES) {
+        root.querySelector('#lane-' + l).classList.toggle('hide', pick !== 'all' && pick !== l);
+      }
+      root.classList.toggle('terse', !self._p('reasons', true));
+    }
+    apply();
+    this._timer = setInterval(apply, 220);
+  }
+}
+</script>
+</body>
+</html>

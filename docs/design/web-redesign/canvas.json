@@ -11,6 +11,33 @@
   ],
   "artboards": [
     {
+      "file": "CutList.dc.html",
+      "page": "page-1",
+      "x": 0,
+      "y": -2800,
+      "w": 1360,
+      "h": 1080,
+      "title": "Round 3 · The cut list"
+    },
+    {
+      "file": "Ghosts.dc.html",
+      "page": "page-1",
+      "x": 1520,
+      "y": -2800,
+      "w": 1360,
+      "h": 980,
+      "title": "Round 3 · Ghost art, robot pass"
+    },
+    {
+      "file": "TypeSpec.dc.html",
+      "page": "page-1",
+      "x": 3040,
+      "y": -2800,
+      "w": 1360,
+      "h": 1080,
+      "title": "Round 3 · Type, the spec"
+    },
+    {
       "file": "Main.dc.html",
       "page": "page-1",
       "x": 0,
@@ -223,7 +250,7 @@
       "x": 0,
       "y": 1030,
       "w": 620,
-      "text": "A · PROPER SNAKE — playable, with sound\n\nClick into the board first, then press I. You get a coin-slot clunk and the two-note chime, the playfield lights up, the scoreboard drops in. WASD or arrows from there. It wraps at the edges, so there is no lose state — a marketing page should never tell a visitor they failed.\n\nOne ghost drops off the tail every nine seconds and starts pulsing. Go back for it and you get a rescue chime and a point. That is the whole loop, and it maps onto the product without being cute about it: something wandered off, go collect it.\n\nAmbient until the coin goes in — eight ghosts drifting, pupils tracking a slow point, no HUD, no keycaps. The only tell is the small blinking I in the corner.\n\nThe sound here is synthesised placeholder — square waves, about twenty lines. Good enough to judge the timing and the feel. Real ElevenLabs SFX is a separate pass once you like the shape: coin insert, collect, stray, rescue, and probably a low ambient hum."
+      "text": "A - PROPER SNAKE, v2\n\nThe hero copy moved BELOW the playfield. The field owns the top of the board now, which is the whole point of an opt-in game: the first thing read is the thing that moves, not a headline lying across it.\n\nClick into the board, then press I. Coin clunk, two-note chime, the playfield lights, the scoreboard drops in. WASD or arrows. It wraps at the edges - a marketing page should never tell a visitor they failed.\n\nNEW - collectible tokens. Plates scattered on the lattice; run over one and it pops and comes back elsewhere. The stray-ghost loop is still underneath it: one ghost drops off the tail, starts pulsing, go back for it.\n\nTOKEN ART IS A DIAL, NOT A SECOND BOARD. Generic draws four abstract agent glyphs on the same 4px lattice as the app icons. Labelled swaps them for a plate carrying a vendor NAME as plain text - and turns the band above the field orange to say why. Those are placeholders on purpose: drawing real marks on a public marketing site is a trademark risk, so the plate is the deliverable and the logo never is.\n\nDials: speed, strayEvery, tokens, tokenStyle, sound.\n\nCUT from this board: the app-window peek along the bottom. The copy needed the room, and B1/B4 own that job properly. Flagged on the cut list.\n\nSound is still synthesised square waves - good enough to judge timing. Real SFX is parked until the shape is approved."
     },
     {
       "id": "r2-ghosts",
@@ -344,6 +371,30 @@
       "y": 2250,
       "w": 620,
       "text": "F · FIELD — retired 2026-08-19."
+    },
+    {
+      "id": "n-cutlist",
+      "page": "page-1",
+      "x": 0,
+      "y": -1690,
+      "w": 660,
+      "text": "THE CUT LIST - the deliverable you asked for\n\nNineteen ideas on this canvas. Seven ship, four park, eight get cut. Every line carries its reason, because a cut without a reason gets re-proposed in three weeks.\n\nThe two that will sting: B3 clickable replica is cut - it is the most convincing app treatment and it carries a permanent re-measure cost every release, which is exactly how a marketing page starts lying. And T1/T2 are cut as boards, not just as options - leaving a decided choice on the wall invites re-litigating it.\n\nThe one addition: FIRST 60 SECONDS ships. It is the only item on the list that does not exist yet, and it answers the question a terminal fork actually gets asked.\n\nDials: lane (focus one column) and reasons (off for a fast scan).\n\nThis is a strawman. Say the word on any line and it moves."
+    },
+    {
+      "id": "n-ghosts3",
+      "page": "page-1",
+      "x": 1520,
+      "y": -1690,
+      "w": 660,
+      "text": "GHOST ART - the robot pass\n\nThe visor was never settled, so it is a dial now, against four other machine faces: dual-lens, single-lens, scanline and readout.\n\nREADOUT is the one to look at. Four status blocks where the eyes go - it puts the product's own status dot on the mascot's face. It is also the least cute thing here, which may be the point or may be too cold. Your call.\n\nThe antenna is the other move: it is the one feature no arcade ghost has, so it does more to break the Pac-Man read than any amount of redrawing the dome.\n\nThe size ladder along the bottom is the real test - 96, 48, 28, 16, 12. A face that only works at 260px is an illustration, not a mark. Watch scanline and readout collapse below 20px; watch dual-lens survive all the way down.\n\nDials: face, dome, antenna, skirt, hue, shading. The matrix holds everything but its two axes fixed, so you are always comparing one variable."
+    },
+    {
+      "id": "n-typespec",
+      "page": "page-1",
+      "x": 3040,
+      "y": -1690,
+      "w": 660,
+      "text": "TYPE - the spec, not another option\n\nT1, T2 and T3 were three competing pairings. This board is the winner written down as a system: three families, one ramp each, and the rules that make it read as designed rather than defaulted.\n\nThe conformance box in the bottom right is the uncomfortable part. EIGHT Round 2 boards still load Martian Mono where this spec says Archivo - Main, Anatomy, AppAnnotated, AppMasks, AppReplica, CastOfEight, PixelMorph and ScrollFocus. Only Snake, AppZoom, Decrypt and TypeGrotesk are on spec today. Worth fixing as each board is next opened rather than as one sweep, because several of them are on the cut list anyway.\n\nDials: displayScale, proseScale, measure, tracking. The tracking dial drives every micro-label on the board at once, so the 0.2em house rule is testable rather than asserted."
     }
   ],
   "launch": {

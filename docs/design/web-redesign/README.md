@@ -28,21 +28,50 @@ Publishing must target the existing artifact URL above so the link stays stable.
   2026-08-19. B (Ghostties OS) retired — its terminal pane was invented content
   presented as the real app.
 - **Type: pixel + grotesk.** Silkscreen for display, Archivo for sections and
-  prose, DM Mono kept for commands and block labels. The app itself is SF Pro
-  (UI) + SF Mono (terminal), so a sans + mono pairing keeps site and product
-  aligned.
+  prose, DM Mono for commands and block labels. The app itself is SF Pro (UI) +
+  SF Mono (terminal), so a sans + mono pairing keeps site and product aligned.
+  Written up as a system on `TypeSpec.dc.html` — that board is now the source of
+  truth for the ramp, not T1/T2/T3.
 - **The game is opt-in and secret.** The page is a page until someone presses
   `I` to insert a coin. Full-screen playfield, WASD and arrows, wrap at the
   edges so there is no lose state.
+- **App treatment: B4 scroll-zoom**, with B1 annotated captures for anything
+  that does not earn a camera move. B3 clickable replica is cut — it has to be
+  re-measured against the app every release or it starts lying.
+- **Vendor logos are never drawn.** Collectible tokens ship as generic agent
+  glyphs. The `tokenStyle: labelled` dial on `Snake.dc.html` shows named
+  placeholder plates *with the trademark warning on the board*; it exists to
+  price the idea, not to ship it.
 - **House vocabulary:** square status marks, never circles or pills. Block
   labels butted together sharing hairlines. No rounded corners or drop shadows
   on chrome. Uppercase micro-labels at 0.2em tracking.
 
+## Round 3 — the build round (2026-08-19)
+
+Top row of page 1, above everything else:
+
+| Board | What it is |
+| --- | --- |
+| `CutList.dc.html` | Seven ship, four park, eight cut, each with its reason. A strawman. |
+| `Ghosts.dc.html` | The robot pass — five machine faces, an antenna, and a size ladder down to 12px. |
+| `TypeSpec.dc.html` | The locked pairing written up as a ramp, plus a conformance box. |
+
+`Snake.dc.html` was rebuilt as v2 in the same round: hero copy pushed below the
+playfield, collectible tokens added, five dials exposed, and the app-window peek
+cut for room.
+
+## Known drift
+
+**Eight Round 2 boards still load Martian Mono** where the type spec says
+Archivo: `Main`, `Anatomy`, `AppAnnotated`, `AppMasks`, `AppReplica`,
+`CastOfEight`, `PixelMorph`, `ScrollFocus`. On spec today: `Snake`, `AppZoom`,
+`Decrypt`, `TypeGrotesk`, and the three Round 3 boards. Fix each board when it
+is next opened — several are cut candidates and not worth a sweep.
+
 ## Open
 
-- App UI treatment — B4 (scroll-driven zoom into a high-fidelity recreation) is
-  the direction; B1/B2/B3 on the canvas are the superseded options.
-- Motion language — C1/C2/C3 all rejected. Exploring Grid, Asciify and
-  Decrypt-Reveal (canvasui.dev) instead.
-- Ghost art — the visor redraw is not settled; robot/agent ghosts to explore.
-- Collectible tokens for the game; competitor logos are a trademark risk.
+- **Which ghost face.** Five on `Ghosts.dc.html`; also unresolved is whether
+  they keep tracking pupils at all, since that is the strongest Pac-Man tell.
+- **The cut list itself** is a proposal, not a ruling.
+- Real ElevenLabs SFX for the game — parked until the shape is approved.
+- Section 08, *first 60 seconds*, does not exist yet and is on the ship list.

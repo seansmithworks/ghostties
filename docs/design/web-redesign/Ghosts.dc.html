@@ -1,0 +1,332 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Archivo:wght@400;500;600&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+
+    .gb { width: 1360px; height: 980px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "Archivo", sans-serif; padding: 44px 56px; }
+
+    .ml { font-family: "Archivo", sans-serif; font-weight: 600; font-size: 8.5px;
+      letter-spacing: 0.2em; text-transform: uppercase; color: rgba(236,234,245,0.38); }
+
+    .top { display: flex; align-items: baseline; gap: 18px;
+      border-bottom: 1px solid rgba(236,234,245,0.16); padding-bottom: 16px; }
+    .top h2 { font-family: "Silkscreen", monospace; font-size: 20px; font-weight: 700;
+      margin: 0; color: #fff; letter-spacing: 0.02em; }
+    .top .sub { font-size: 12.5px; color: rgba(236,234,245,0.55); margin-left: auto;
+      max-width: 66ch; text-align: right; line-height: 1.5; }
+
+    .stage { display: flex; gap: 34px; margin-top: 26px; }
+
+    /* ---- hero specimen ---- */
+    .hero { width: 380px; flex: none; border: 1px solid rgba(255,213,79,0.4);
+      background: rgba(255,213,79,0.04); padding: 18px 20px 20px; box-sizing: border-box; }
+    .hero .plate { height: 322px; display: flex; align-items: center; justify-content: center;
+      background-image: radial-gradient(rgba(255,255,255,0.10) 1.5px, transparent 1.5px);
+      background-size: 22px 22px; background-position: 11px 11px;
+      border: 1px solid rgba(236,234,245,0.12); margin-top: 12px; }
+    .hero .plate svg { width: 262px; height: 100%; display: block; }
+    .hero .caption { margin-top: 14px; font-size: 11.5px; line-height: 1.6;
+      color: rgba(236,234,245,0.6); }
+    .hero .caption b { color: #eceaf5; font-weight: 600; }
+
+    /* ---- face matrix ---- */
+    .matrix { flex: 1; }
+    .mgrid { display: grid; grid-template-columns: 74px repeat(5, 1fr); margin-top: 12px;
+      border-top: 1px solid rgba(236,234,245,0.14);
+      border-left: 1px solid rgba(236,234,245,0.14); }
+    .mgrid > div { border-right: 1px solid rgba(236,234,245,0.14);
+      border-bottom: 1px solid rgba(236,234,245,0.14); }
+    .hcell { padding: 9px 8px; display: flex; align-items: center; justify-content: center; }
+    .rcell { padding: 0 8px; display: flex; align-items: center; }
+    .cellg { height: 108px; display: flex; align-items: center; justify-content: center; }
+    .cellg svg { width: 66px; height: 88px; display: block; }
+    .cellg.pick { background: rgba(255,213,79,0.09); box-shadow: inset 0 0 0 1px rgba(255,213,79,0.5); }
+
+    /* ---- size ladder ---- */
+    .ladder { margin-top: 26px; display: flex; align-items: flex-end; gap: 0; }
+    .rung { border: 1px solid rgba(236,234,245,0.16); border-right-width: 0;
+      padding: 14px 20px 12px; display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-end; min-width: 118px; }
+    .rung:last-child { border-right-width: 1px; }
+    .rung svg { display: block; }
+    .rung .n { margin-top: 12px; font-family: "DM Mono", monospace; font-size: 9.5px;
+      color: rgba(236,234,245,0.44); }
+    .ladnote { margin-left: 26px; font-size: 11.5px; line-height: 1.62; max-width: 52ch;
+      color: rgba(236,234,245,0.6); align-self: center; }
+    .ladnote b { color: #eceaf5; font-weight: 600; }
+
+    /* ---- decision strip ---- */
+    .foot { position: absolute; left: 56px; right: 56px; bottom: 44px; display: flex; }
+    .box { flex: 1; border: 1px solid rgba(236,234,245,0.18); border-right-width: 0;
+      padding: 15px 18px 17px; }
+    .box:last-child { border-right-width: 1px; }
+    .box ul { margin: 10px 0 0; padding: 0; list-style: none; }
+    .box li { font-size: 11.5px; line-height: 1.62; color: rgba(236,234,245,0.62);
+      padding-left: 14px; position: relative; }
+    .box li::before { content: ""; position: absolute; left: 0; top: 7px;
+      width: 5px; height: 5px; background: rgba(255,213,79,0.7); }
+    .box li b { color: #eceaf5; font-weight: 600; }
+    .box.open { border-color: rgba(255,213,79,0.5); background: rgba(255,213,79,0.05); }
+    .box.open .ml { color: #ffd54f; }
+  </style>
+</helmet>
+<div class="gb">
+  <div class="top">
+    <h2>THE GHOSTS &mdash; ROBOT PASS</h2>
+    <span class="ml">the visor is still open</span>
+    <span class="sub">Round 2 gave them a solid dome and a visor slit. The slit is the part that was
+      never settled, so here it is as a dial against four other machine faces. Everything stays on the
+      same 4px lattice the app icons use.</span>
+  </div>
+
+  <div class="stage">
+    <div class="hero">
+      <div class="ml">specimen &mdash; every dial applies here</div>
+      <div class="plate"><svg id="heroSvg" viewBox="0 -16 48 64" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="caption" id="heroCap"><b>visor</b> &mdash; one slit, reads as a small screen.</div>
+    </div>
+
+    <div class="matrix">
+      <div class="ml">five faces &times; three domes &mdash; the selected pair is highlighted</div>
+      <div class="mgrid" id="mgrid"></div>
+    </div>
+  </div>
+
+  <div class="ladder" id="ladder">
+    <div class="ladnote" id="ladnote"><b>The size ladder is the real test.</b> A face that only works at
+      260px is not a face, it is an illustration. The sidebar renders these at 12 and 16px, the favicon
+      at 32, the social card at 200.</div>
+  </div>
+
+  <div class="foot">
+    <div class="box">
+      <div class="ml">what carried over from round 2</div>
+      <ul>
+        <li><b>Solid dome.</b> The old set cut eye holes out of the silhouette, which is literally the 1980 sprite.</li>
+        <li>A grounding shade on the bottom rows and a top-left highlight, so they have form.</li>
+        <li>Personality from <b>dome shape and skirt rhythm</b>, not from copying named characters.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <div class="ml">what the robot pass adds</div>
+      <ul>
+        <li>An <b>antenna</b> as the agent tell &mdash; the one part no arcade ghost has.</li>
+        <li><b>Readout</b> face: four status blocks instead of eyes. The most on-product of the five.</li>
+        <li>Panel seams read as machine at 48px and vanish cleanly below 20px.</li>
+      </ul>
+    </div>
+    <div class="box open">
+      <div class="ml">still yours to call</div>
+      <ul>
+        <li><b>Do they have eyes at all?</b> Pupils that track the cursor are charming and they are also the Pac-Man tell.</li>
+        <li>Antenna on every ghost, or only on the one that strayed?</li>
+        <li>Readout is the strongest idea and the least cute. That may be the point, or may be too cold.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{
+  "face":     {"editor":"enum","default":"visor","options":["visor","dual-lens","single-lens","scanline","readout"],"section":"Head"},
+  "dome":     {"editor":"enum","default":"tall","options":["tall","wide","round"],"section":"Head"},
+  "antenna":  {"editor":"enum","default":"pin","options":["none","pin","stub","dish"],"section":"Head"},
+  "skirt":    {"editor":"enum","default":"four","options":["four","three","drip","taper"],"section":"Body"},
+  "hue":      {"editor":"color","default":"#00BCD4","options":["#00BCD4","#FF4136","#FF9800","#7C4DFF","#FF80AB","#FFEB3B","#81D4FA","#7986CB"],"section":"Body"},
+  "shading":  {"editor":"boolean","default":true,"section":"Body"},
+  "$preview": {"width":1360,"height":980}
+}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+
+  componentDidMount() { this._tries = 0; this._boot(); }
+  componentWillUnmount() { if (this._timer) clearInterval(this._timer); }
+
+  _p(k, d) { const v = this.props[k]; return v === undefined || v === null ? d : v; }
+
+  // --- shape tables, all on the same 4px lattice as the app icons ----------
+  _shapes() {
+    return {
+      DOME: {
+        tall:  '12,0,24,4 8,4,32,4 4,8,40,4 4,12,40,4 0,16,48,24',
+        wide:  '8,0,32,4 4,4,40,4 0,8,48,4 0,12,48,4 0,16,48,24',
+        round: '16,0,16,4 8,4,32,4 4,8,40,4 0,12,48,4 0,16,48,24'
+      },
+      SKIRT: {
+        four:  '0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4 0,44,4,4 16,44,4,4 28,44,4,4 44,44,4,4',
+        three: '0,40,12,4 18,40,12,4 36,40,12,4 0,44,4,4 22,44,4,4 44,44,4,4',
+        drip:  '0,40,48,4 4,44,8,4 20,44,8,4 36,44,8,4',
+        taper: '4,40,40,4 12,44,24,4'
+      },
+      SHADE: {
+        four:  '0,36,48,4 0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4',
+        three: '0,36,48,4 0,40,12,4 18,40,12,4 36,40,12,4',
+        drip:  '0,36,48,4 0,40,48,4',
+        taper: '0,36,48,4 4,40,40,4'
+      },
+      HI: {
+        tall:  '12,0,12,4 8,4,10,4 4,8,8,4',
+        wide:  '8,0,14,4 4,4,10,4 0,8,8,4',
+        round: '16,0,10,4 8,4,12,4 4,8,8,4'
+      },
+      // antennae live above the dome, which is why the viewBox starts at -16
+      ANT: {
+        none: '',
+        pin:  '22,-10,4,10 18,-14,12,4',
+        stub: '20,-6,8,6',
+        dish: '22,-8,4,8 12,-16,24,4 12,-12,4,4 32,-12,4,4'
+      }
+    };
+  }
+
+  // dark facepieces + the lit elements that sit on them
+  _face(kind) {
+    if (kind === 'dual-lens') {
+      return { dark: '11,17,11,10 26,17,11,10', lit: '14,20,5,4 29,20,5,4' };
+    }
+    if (kind === 'single-lens') {
+      return { dark: '15,15,18,13', lit: '21,19,6,5' };
+    }
+    if (kind === 'scanline') {
+      return { dark: '5,16,38,12', lit: '5,19,38,2 5,24,38,2' };
+    }
+    if (kind === 'readout') {
+      return { dark: '7,16,34,12', lit: '10,19,5,6 18,19,5,6 26,19,5,6 34,19,3,6' };
+    }
+    return { dark: '8,17,32,9', lit: '21,19,7,5' };  // visor
+  }
+
+  _path(s) {
+    if (!s) return '';
+    return s.split(' ').filter(Boolean).map(function (t) {
+      const a = t.split(',').map(Number);
+      return 'M' + a[0] + ' ' + a[1] + 'h' + a[2] + 'v' + a[3] + 'h-' + a[2] + 'Z';
+    }).join('');
+  }
+
+  _markup(o) {
+    const S = this._shapes();
+    const f = this._face(o.face);
+    const P = this._path.bind(this);
+    const parts = [];
+    if (o.antenna && o.antenna !== 'none') {
+      parts.push('<path d="' + P(S.ANT[o.antenna]) + '" fill="' + o.hue + '"></path>');
+    }
+    parts.push('<path d="' + P(S.DOME[o.dome] + ' ' + S.SKIRT[o.skirt]) + '" fill="' + o.hue + '"></path>');
+    if (o.shading) {
+      parts.push('<path d="' + P(S.SHADE[o.skirt]) + '" fill="rgba(0,0,0,0.24)"></path>');
+      parts.push('<path d="' + P(S.HI[o.dome]) + '" fill="rgba(255,255,255,0.20)"></path>');
+    }
+    parts.push('<path d="' + P(f.dark) + '" fill="rgba(5,5,12,0.78)"></path>');
+    parts.push('<path d="' + P(f.lit) + '" fill="rgba(255,255,255,0.92)"></path>');
+    return parts.join('');
+  }
+
+  _boot() {
+    const root = document.querySelector('.gb');
+    const grid = root ? root.querySelector('#mgrid') : null;
+    const hero = root ? root.querySelector('#heroSvg') : null;
+    const ladder = root ? root.querySelector('#ladder') : null;
+    if (!root || !grid || !hero || !ladder) {
+      if (this._tries++ < 90) requestAnimationFrame(this._boot.bind(this));
+      return;
+    }
+    const self = this;
+    const FACES = ['visor', 'dual-lens', 'single-lens', 'scanline', 'readout'];
+    const DOMES = ['tall', 'wide', 'round'];
+    const WHY = {
+      'visor':       '<b>visor</b> &mdash; one slit, reads as a small screen. Round 2 shipped this one.',
+      'dual-lens':   '<b>dual-lens</b> &mdash; two square eyes. Closest to the arcade set, and the warmest.',
+      'single-lens': '<b>single-lens</b> &mdash; one aperture. Cyclops, unmistakably a machine.',
+      'scanline':    '<b>scanline</b> &mdash; a CRT band. Terminal-first, but it is a texture not a face.',
+      'readout':     '<b>readout</b> &mdash; four status blocks instead of eyes. The status dot, on the mascot.'
+    };
+
+    // matrix scaffolding is built once; only the highlight moves afterwards
+    grid.appendChild(Object.assign(document.createElement('div'), { className: 'hcell' }));
+    for (const f of FACES) {
+      const h = document.createElement('div');
+      h.className = 'hcell';
+      h.innerHTML = '<span class="ml">' + f + '</span>';
+      grid.appendChild(h);
+    }
+    const cells = {};
+    for (const d of DOMES) {
+      const r = document.createElement('div');
+      r.className = 'rcell';
+      r.innerHTML = '<span class="ml">' + d + '</span>';
+      grid.appendChild(r);
+      for (const f of FACES) {
+        const c = document.createElement('div');
+        c.className = 'cellg';
+        c.innerHTML = '<svg viewBox="0 -16 48 64" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"></svg>';
+        grid.appendChild(c);
+        cells[f + '|' + d] = c;
+      }
+    }
+
+    // size ladder — the same specimen at the sizes it actually ships at
+    const RUNGS = [
+      [96, 'social card'], [48, 'hero row'], [28, 'favicon'], [16, 'sidebar'], [12, 'inline']
+    ];
+    const rungSvgs = [];
+    const note = ladder.querySelector('#ladnote');
+    for (const r of RUNGS) {
+      const el = document.createElement('div');
+      el.className = 'rung';
+      el.innerHTML = '<svg viewBox="0 -16 48 64" shape-rendering="crispEdges" width="' +
+        Math.round(r[0] * 48 / 64) + '" height="' + r[0] +
+        '" xmlns="http://www.w3.org/2000/svg"></svg><div class="n">' + r[0] + 'px &middot; ' + r[1] + '</div>';
+      ladder.insertBefore(el, note);
+      rungSvgs.push(el.querySelector('svg'));
+    }
+
+    let last = '';
+    function apply() {
+      const o = {
+        face:    self._p('face', 'visor'),
+        dome:    self._p('dome', 'tall'),
+        skirt:   self._p('skirt', 'four'),
+        antenna: self._p('antenna', 'pin'),
+        hue:     self._p('hue', '#00BCD4'),
+        shading: self._p('shading', true)
+      };
+      const sig = [o.face, o.dome, o.skirt, o.antenna, o.hue, o.shading].join('|');
+      if (sig === last) return;
+      last = sig;
+
+      const m = self._markup(o);
+      hero.innerHTML = m;
+      for (const s of rungSvgs) s.innerHTML = m;
+      root.querySelector('#heroCap').innerHTML = WHY[o.face] || '';
+
+      // the matrix holds the selected skirt, antenna and hue so the only
+      // variables across it are the two on the axes
+      for (const f of FACES) {
+        for (const d of DOMES) {
+          const c = cells[f + '|' + d];
+          c.querySelector('svg').innerHTML = self._markup({
+            face: f, dome: d, skirt: o.skirt, antenna: o.antenna,
+            hue: o.hue, shading: o.shading
+          });
+          c.classList.toggle('pick', f === o.face && d === o.dome);
+        }
+      }
+    }
+
+    apply();
+    this._timer = setInterval(apply, 200);
+  }
+}
+</script>
+</body>
+</html>
