@@ -1339,6 +1339,15 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         NotificationCenter.default.post(name: .workspaceNewSession, object: window)
     }
 
+    /// "New Session (Instant)" — Cmd+Shift+T (Phase 3 of
+    /// session-creation-unified). Distinct from `newWorkspaceSession(_:)`
+    /// above: `WorkspaceViewContainer` always creates a session immediately
+    /// for this notification, regardless of the
+    /// `ghostties.newSessionOpensComposer` preference.
+    @IBAction func newWorkspaceSessionInstant(_ sender: Any?) {
+        NotificationCenter.default.post(name: .workspaceNewSessionInstant, object: window)
+    }
+
     /// Toggle the sidebar view mode between project-first (legacy) and
     /// task-first (Concept F). v0 feature toggle. Broadcasts a notification
     /// so every open WorkspaceViewContainer swaps its hosted sidebar.

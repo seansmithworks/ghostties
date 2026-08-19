@@ -31,6 +31,11 @@ enum WorkspaceLayout {
     /// First-pass value — tunable.
     static let sidebarMaxWidth: CGFloat = 480
 
+    /// Width of the centered session composer overlay's card (Phase 3 of
+    /// session-creation-unified). Wider than `sidebarWidth` since it floats
+    /// free of the sidebar column instead of popping out of it.
+    static let composerOverlayWidth: CGFloat = 360
+
     /// Height reserved at top for window traffic light controls.
     static let titlebarSpacerHeight: CGFloat = 28
 
@@ -323,9 +328,20 @@ extension Notification.Name {
     /// running sessions before the store deletes the project's records.
     static let workspaceProjectWillBeRemoved = Notification.Name("com.seansmithdesign.ghostties.workspace.projectWillBeRemoved")
 
-    /// Posted by TerminalController when the user presses Cmd+T.
-    /// The notification object is the originating NSWindow.
+    /// Posted by TerminalController when the user presses Cmd+T. The
+    /// notification object is the originating NSWindow. Observed by
+    /// `WorkspaceViewContainer` (Phase 3 of session-creation-unified — moved
+    /// from `WorkspaceSidebarView` so both sidebar view modes receive it,
+    /// D2), which opens the composer overlay or creates instantly depending
+    /// on the `ghostties.newSessionOpensComposer` preference.
     static let workspaceNewSession = Notification.Name("com.seansmithdesign.ghostties.workspace.newSession")
+
+    /// Posted by TerminalController when the user presses Cmd+Shift+T
+    /// ("New Session (Instant)", Phase 3). The notification object is the
+    /// originating NSWindow. Unlike `workspaceNewSession` above, this
+    /// ALWAYS creates a session immediately with no UI — it ignores the
+    /// `ghostties.newSessionOpensComposer` preference entirely.
+    static let workspaceNewSessionInstant = Notification.Name("com.seansmithdesign.ghostties.workspace.newSessionInstant")
 
     /// Posted by AppDelegate's Cmd+W local-event monitor, project-first
     /// workspace mode only (see `AppDelegate.isProjectFirstWorkspaceWindow(_:)`).

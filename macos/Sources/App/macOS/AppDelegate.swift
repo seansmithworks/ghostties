@@ -743,17 +743,18 @@ class AppDelegate: NSObject,
         newSessionItem.keyEquivalentModifierMask = [.command]
         newSessionItem.setImageIfDesired(systemSymbolName: "plus.rectangle")
 
-        // Hidden duplicate: Cmd+Shift+T also creates a new session — kept as
-        // an alias so muscle memory from earlier betas (where Cmd+Shift+T was
-        // the only binding) still works, same pattern as `sidebarItemCmdS` above.
+        // "New Session (Instant)" — Cmd+Shift+T (Phase 3 of
+        // session-creation-unified). Always creates immediately with no UI,
+        // ignoring the `ghostties.newSessionOpensComposer` preference
+        // entirely — unlike Cmd+T above, which is preference-driven.
+        // Promoted from a hidden Cmd+T alias to a visible, distinctly-named
+        // item now that Cmd+T can open the composer instead.
         let newSessionItemCmdShiftT = NSMenuItem(
-            title: "New Session",
-            action: #selector(TerminalController.newWorkspaceSession(_:)),
+            title: "New Session (Instant)",
+            action: #selector(TerminalController.newWorkspaceSessionInstant(_:)),
             keyEquivalent: "t"
         )
         newSessionItemCmdShiftT.keyEquivalentModifierMask = [.command, .shift]
-        newSessionItemCmdShiftT.isHidden = true
-        newSessionItemCmdShiftT.allowsKeyEquivalentWhenHidden = true
 
         // "Sidebar View" submenu — radio group for the sidebar views.
         // Tasks is intentionally hidden here (not deleted) — see

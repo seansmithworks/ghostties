@@ -241,24 +241,6 @@ struct RecentsListView: View {
         )
     }
 
-    // MARK: - Actions
-
-    /// Static so `NewSessionToolbarButton` shares this exactly — see
-    /// `SessionTemplateResolver.templates(for:store:)`.
-    static func startNewSession(in project: Project, template: AgentTemplate?, store: WorkspaceStore, coordinator: SessionCoordinator) {
-        let resolved: AgentTemplate = template ?? {
-            if let defaultId = project.defaultTemplateId,
-               let t = store.templates.first(where: { $0.id == defaultId }) {
-                return t
-            }
-            return store.templates.first(where: { $0.kind == .shell })
-                ?? AgentTemplate.shell
-        }()
-        Task {
-            await coordinator.createQuickSession(for: project, template: resolved)
-        }
-    }
-
     // MARK: - Rename
 
     private func beginRename(session: AgentSession) {
@@ -460,10 +442,11 @@ struct RecentsListView: View {
 
 /// Labelled toolbar button for the Sessions tab, presented in
 /// `WorkspaceSidebarView.titlebarToolbar` right-aligned on the traffic-light
-/// row. Opens the same project-picker flyout menu the former `newSessionRow`
-/// showed inline in the list — see `SessionTemplateResolver.templates(for:store:)`
-/// and `RecentsListView.startNewSession(in:template:store:coordinator:)`, which
-/// this calls directly so the menu logic is never duplicated.
+/// row. Opens the centered session composer overlay (Phase 3 of
+/// session-creation-unified) instead of the old two-level project → template
+/// cascade menu (D7) — see `WorkspaceViewContainer.presentComposerOverlay(projectBinding:)`,
+/// reached via `coordinator.containerView` since this view has no direct
+/// reference to the AppKit container.
 struct NewSessionToolbarButton: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -471,25 +454,8 @@ struct NewSessionToolbarButton: View {
     @State private var isHovered = false
 
     var body: some View {
-        Menu {
-            ForEach(store.projects) { project in
-                let templates = SessionTemplateResolver.templates(for: project, store: store)
-                if templates.count <= 1 {
-                    // Single template — tap creates directly, no submenu needed.
-                    Button(project.name) {
-                        RecentsListView.startNewSession(in: project, template: templates.first, store: store, coordinator: coordinator)
-                    }
-                } else {
-                    // Multiple templates — submenu: project name → template list.
-                    Menu(project.name) {
-                        ForEach(templates) { template in
-                            Button(template.name) {
-                                RecentsListView.startNewSession(in: project, template: template, store: store, coordinator: coordinator)
-                            }
-                        }
-                    }
-                }
-            }
+        Button {
+            (coordinator.containerView as? WorkspaceViewContainer)?.presentComposerOverlay(projectBinding: .open)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "plus")
@@ -498,13 +464,7 @@ struct NewSessionToolbarButton: View {
                     .font(.system(size: 12, weight: .medium))
             }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        // `Menu` can otherwise claim more horizontal space than its label
-        // content needs; this keeps it hugging the icon+text so the
-        // trailing-aligned `Spacer()` in `WorkspaceSidebarView.titlebarToolbar`
-        // has room to push it flush against the sidebar's trailing edge.
-        .fixedSize()
+        .buttonStyle(.plain)
         .foregroundStyle(isHovered ? .primary : .secondary)
         .onHover { isHovered = $0 }
         .disabled(store.projects.isEmpty)

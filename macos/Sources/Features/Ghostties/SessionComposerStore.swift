@@ -271,6 +271,15 @@ final class SessionComposerStore: ObservableObject {
 
     // MARK: - Smart-default cascade
 
+    /// Resolves the same three-step smart-default cascade used by `open(projectBinding: .open, ...)`,
+    /// without opening the composer UI. Phase 3's instant-create paths
+    /// (Cmd+Shift+T, and Cmd+T when `ghostties.newSessionOpensComposer` is
+    /// off) need the cascade pick but must never touch `isOpen` or any of
+    /// the other UI-facing state `open()` resets.
+    func resolveCascadeProject(workspaceStore: WorkspaceStore) -> UUID? {
+        resolveDefaultProject(workspaceStore: workspaceStore)
+    }
+
     /// Same three-step cascade as `NewTaskComposerStore.resolveDefaultProject`
     /// (cwd of the frontmost terminal -> MRU -> most-recently-touched).
     /// Duplicated rather than shared: `NewTaskComposerStore` is a boundary

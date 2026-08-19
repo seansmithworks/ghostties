@@ -132,10 +132,6 @@ struct WorkspaceSidebarView: View {
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             selectAdjacentLiveSession(offset: -1)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceNewSession)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            createNewSessionForSelectedProject()
-        }
         .onReceive(NotificationCenter.default.publisher(for: .workspaceCloseSession)) { notification in
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             coordinator.closeCurrentSessionWithConfirmation()
@@ -211,32 +207,10 @@ struct WorkspaceSidebarView: View {
 
     // MARK: - Actions
 
-    private var selectedProject: Project? {
-        guard let id = selectedProjectId else { return nil }
-        return store.projects.first { $0.id == id }
-    }
-
     private func presentFolderPicker() {
         if let id = store.addProjectViaFolderPicker() {
             selectedProjectId = id
             expandedProjectIds.insert(id)
-        }
-    }
-
-    /// Create a new session in the currently selected project.
-    private func createNewSessionForSelectedProject() {
-        guard let project = selectedProject else { return }
-        let template: AgentTemplate
-        if let defaultId = project.defaultTemplateId,
-           let defaultTemplate = store.templates.first(where: { $0.id == defaultId }) {
-            template = defaultTemplate
-        } else {
-            template = AgentTemplate.shell
-        }
-        // Auto-expand the target project so the new session is visible.
-        expandedProjectIds.insert(project.id)
-        Task {
-            await coordinator.createQuickSession(for: project, template: template)
         }
     }
 

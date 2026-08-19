@@ -47,11 +47,18 @@ struct SessionComposerPalette: View {
     @FocusState private var newTemplateNameFocused: Bool
 
     // MARK: - DESIGN.md scale (D11) — see `TemplatePickerView` for precedent.
-    // `paletteWidth` pulls from `WorkspaceLayout.sidebarWidth` (DESIGN.md §2
+    // `paletteWidth` pulls from `WorkspaceLayout` tokens (DESIGN.md §2
     // forbids hardcoded pt values where an equivalent token exists); the
-    // other constants have no `WorkspaceLayout` equivalent.
+    // other constants have no `WorkspaceLayout` equivalent. Width varies by
+    // presentation (Phase 3): `.anchored` matches the sidebar it pops out
+    // of; `.centered` is wider since it floats free of the sidebar column.
+    private var paletteWidth: CGFloat {
+        switch request.presentation {
+        case .anchored: return WorkspaceLayout.sidebarWidth
+        case .centered: return WorkspaceLayout.composerOverlayWidth
+        }
+    }
 
-    private static let paletteWidth: CGFloat = WorkspaceLayout.sidebarWidth
     private static let fieldHeight: CGFloat = 30
     private static let fieldFontSize: CGFloat = 11
     private static let rowFontSize: CGFloat = 12
@@ -239,7 +246,7 @@ struct SessionComposerPalette: View {
 
             newTemplateRow
         }
-        .frame(width: Self.paletteWidth)
+        .frame(width: paletteWidth)
         .background(
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)

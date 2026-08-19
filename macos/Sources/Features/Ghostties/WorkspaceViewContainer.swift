@@ -168,6 +168,37 @@ class WorkspaceViewContainer: NSView {
         return view
     }()
 
+    /// Hosting view for the centered session composer overlay (Phase 3 of
+    /// session-creation-unified). Added as a subview only while
+    /// `SessionComposerStore.shared.isOpen` is true — see
+    /// `presentComposerOverlay(projectBinding:)` and the `isOpen` subscription
+    /// in `setup()`. Pinned to the container's full bounds so
+    /// `SessionComposerOverlay`'s scrim can dim the whole terminal; not
+    /// touched by `layout()`.
+    private lazy var composerOverlayHostingView: TransparentHostingView<AnyView> = {
+        let view = TransparentHostingView<AnyView>(rootView: AnyView(EmptyView()))
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    /// UserDefaults key for the Cmd+T preference — composer (default) vs.
+    /// instant create. Mirrors `Ghostty.Config.autoUpdateChannel`'s
+    /// resolution pattern (`ghostties.autoUpdateChannel`): a plain
+    /// `UserDefaults.standard` read, since this container is an AppKit
+    /// `NSView` and can't use the `@AppStorage` property wrapper directly.
+    /// Documented in `SettingsView.swift` beside the update-channel line.
+    private static let newSessionOpensComposerDefaultsKey = "ghostties.newSessionOpensComposer"
+
+    /// Whether Cmd+T opens the composer overlay (true, the default) or
+    /// creates a session instantly with no UI (false). Unset defaults to
+    /// composer per the locked decision in session-creation-unified.
+    private var newSessionOpensComposerPreference: Bool {
+        guard UserDefaults.standard.object(forKey: Self.newSessionOpensComposerDefaultsKey) != nil else {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: Self.newSessionOpensComposerDefaultsKey)
+    }
+
     /// Sidebar material backing for overlay mode. In pinned mode the shared
     /// `backgroundEffectView` already covers the sidebar area, so this is hidden.
     /// In overlay mode it provides the .sidebar material behind the hosting view
@@ -447,6 +478,8 @@ class WorkspaceViewContainer: NSView {
         NotificationCenter.default.removeObserver(self, name: NSWindow.willEnterFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didEnterFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didExitFullScreenNotification, object: fullScreenObservedWindow)
+        NotificationCenter.default.removeObserver(self, name: .workspaceNewSession, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceNewSessionInstant, object: nil)
 
         guard let window = window else { return }
         // Give the coordinator a reference to this view so it can discover
@@ -503,6 +536,27 @@ class WorkspaceViewContainer: NSView {
             object: window
         )
         fullScreenObservedWindow = window
+
+        // Cmd+T (Phase 3 of session-creation-unified). Moved here from
+        // `WorkspaceSidebarView` (D2 fix) so the container — present
+        // regardless of which sidebar view mode is currently mounted —
+        // always receives it, rather than only whichever SwiftUI sidebar
+        // view happens to observe it.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWorkspaceNewSession(_:)),
+            name: .workspaceNewSession,
+            object: window
+        )
+
+        // Cmd+Shift+T ("New Session (Instant)", Phase 3) — always creates
+        // immediately, ignoring the Cmd+T preference entirely.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWorkspaceNewSessionInstant(_:)),
+            name: .workspaceNewSessionInstant,
+            object: window
+        )
 
         // If the window is already key when we move into it, freeze immediately.
         if window.isKeyWindow {
@@ -1329,6 +1383,86 @@ class WorkspaceViewContainer: NSView {
         needsLayout = true
     }
 
+    // MARK: - Session Composer Overlay (Phase 3)
+
+    /// Cmd+T. Opens the composer overlay by default; creates a session
+    /// instantly (no UI) when `ghostties.newSessionOpensComposer` is off —
+    /// both paths use the same smart-default cascade (D1: no more "nothing
+    /// selected" guard).
+    @objc private func handleWorkspaceNewSession(_ notification: Notification) {
+        if newSessionOpensComposerPreference {
+            presentComposerOverlay(projectBinding: .open)
+        } else {
+            instantCreateSession()
+        }
+    }
+
+    /// Cmd+Shift+T. Always creates instantly — the Cmd+T preference is
+    /// never consulted here.
+    @objc private func handleWorkspaceNewSessionInstant(_ notification: Notification) {
+        instantCreateSession()
+    }
+
+    /// Opens the centered session composer overlay. Called from Cmd+T
+    /// (composer preference on, the default) and the sidebar toolbar's
+    /// "+ New Session" button (`NewSessionToolbarButton`, which reaches this
+    /// via `coordinator.containerView`).
+    func presentComposerOverlay(projectBinding: SessionComposerRequest.ProjectBinding) {
+        let request = SessionComposerRequest(presentation: .centered, projectBinding: projectBinding)
+        composerOverlayHostingView.rootView = AnyView(
+            SessionComposerOverlay(request: request)
+                .environmentObject(WorkspaceStore.shared)
+                .environmentObject(coordinator)
+        )
+        installComposerOverlayIfNeeded()
+    }
+
+    /// Adds the composer overlay hosting view as a subview, pinned to the
+    /// container's full bounds — not `layout()` — so its scrim can dim the
+    /// whole terminal. No-op if already installed (re-presenting just swaps
+    /// `rootView` above).
+    private func installComposerOverlayIfNeeded() {
+        guard composerOverlayHostingView.superview == nil else { return }
+        addSubview(composerOverlayHostingView)
+        NSLayoutConstraint.activate([
+            composerOverlayHostingView.topAnchor.constraint(equalTo: topAnchor),
+            composerOverlayHostingView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            composerOverlayHostingView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            composerOverlayHostingView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
+
+    /// Removes the composer overlay hosting view. No-op if not installed.
+    private func dismissComposerOverlayIfPresented() {
+        guard composerOverlayHostingView.superview != nil else { return }
+        composerOverlayHostingView.removeFromSuperview()
+    }
+
+    /// Instant session creation — Cmd+Shift+T (always) and Cmd+T when the
+    /// `ghostties.newSessionOpensComposer` preference is off. Resolves the
+    /// same smart-default cascade the composer uses, then creates directly
+    /// with the project's default template (falling back to `.shell`), with
+    /// no UI. Mirrors the deleted
+    /// `WorkspaceSidebarView.createNewSessionForSelectedProject()`, but uses
+    /// the cascade pick instead of the sidebar's `selectedProjectId`.
+    private func instantCreateSession() {
+        let store = WorkspaceStore.shared
+        guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
+              let project = store.projects.first(where: { $0.id == projectId }) else { return }
+
+        let template: AgentTemplate
+        if let defaultId = project.defaultTemplateId,
+           let defaultTemplate = store.templates.first(where: { $0.id == defaultId }) {
+            template = defaultTemplate
+        } else {
+            template = AgentTemplate.shell
+        }
+
+        Task {
+            await coordinator.createQuickSession(for: project, template: template)
+        }
+    }
+
     // MARK: - Layout
 
     private func setup() {
@@ -1555,6 +1689,18 @@ class WorkspaceViewContainer: NSView {
             browserToggleButton.alphaValue = 0
         }
 
+        // Dismiss the composer overlay's hosting view whenever the composer
+        // store closes (Esc, scrim click, or a successful commit) — every
+        // close path funnels through `SessionComposerStore.isOpen`, so this
+        // is the single place the subview teardown needs to live (Phase 3).
+        SessionComposerStore.shared.$isOpen
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isOpen in
+                guard !isOpen else { return }
+                self?.dismissComposerOverlayIfPresented()
+            }
+            .store(in: &cancellables)
+
         // Bind title label to the active session name.
         coordinator.$activeSessionId
             .combineLatest(WorkspaceStore.shared.$sessions)
@@ -1698,7 +1844,12 @@ extension WorkspaceViewContainer: NSTextFieldDelegate {
 /// Used for the sidebar so it's transparent in pinned mode — the window
 /// background shows through. The overlay NSVisualEffectView provides
 /// material only in hover mode.
-private class TransparentHostingView<Content: View>: NSHostingView<Content> {
+///
+/// Internal (not `private`) since Phase 3 of session-creation-unified hosts
+/// the session composer overlay through it too — kept in this file rather
+/// than moved, so the composer overlay's own view code stays out of this
+/// 85 KB file.
+class TransparentHostingView<Content: View>: NSHostingView<Content> {
     override var isOpaque: Bool { false }
 }
 

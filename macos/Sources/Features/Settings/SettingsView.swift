@@ -27,10 +27,13 @@ struct SettingsView: View {
                 Text("(\"tip\" is the beta feed.)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Text("defaults write com.seansmithdesign.ghostties ghostties.newSessionOpensComposer -bool false  (Cmd+T creates instantly instead of opening the composer)")
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
             }
         }
         .padding()
-        .frame(minWidth: 500, maxWidth: 500, minHeight: 156, maxHeight: 156)
+        .frame(minWidth: 500, maxWidth: 500, minHeight: 172, maxHeight: 172)
     }
 }
 
