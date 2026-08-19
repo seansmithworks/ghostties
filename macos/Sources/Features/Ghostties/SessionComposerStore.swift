@@ -92,14 +92,6 @@ final class SessionComposerStore: ObservableObject {
 
     @Published private(set) var writeError: String?
 
-    // MARK: - Re-entry guard
-
-    /// Guards `commit()` against a held Return landing twice before the
-    /// popover tears down asynchronously — mirrors
-    /// `TemplatePickerView.commitNewCustomTemplate`'s
-    /// `guard isAddingCustomTemplate else { return }` re-entry guard.
-    private var isCommitting = false
-
     // MARK: - Recent (project, template) pairs
 
     private static let recentSelectionsKey = "ghostties.sessionComposerRecentSelections"
@@ -217,16 +209,16 @@ final class SessionComposerStore: ObservableObject {
     /// (`writeError` is set in that case and the caller must NOT dismiss —
     /// dismissing before this returns is exactly the bug where the popover
     /// vanished with no session and no visible message).
+    ///
+    /// Double-Return protection lives in `SessionComposerPalette.commit(template:)`'s
+    /// synchronous `selectedIndex = nil` (see that function), not here —
+    /// this function has no suspension point for a second call to land in.
     @discardableResult
     func precommit(
         template: AgentTemplate,
         coordinator: SessionCoordinator,
         workspaceStore: WorkspaceStore
     ) -> Bool {
-        guard !isCommitting else { return false }
-        isCommitting = true
-        defer { isCommitting = false }
-
         // `.locked` enforces at the write path — resolved from the bound
         // project, never from `selectedProjectId` — so the enum case isn't
         // decorative once Phase 3 starts relying on it. `.prefilled`/`.open`
