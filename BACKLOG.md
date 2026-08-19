@@ -4,6 +4,62 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-18 — Session composer: palette reuse + design direction (carried)
+
+Sean picked the composer direction from mockups this session. Design decisions locked; the plan
+still needs rewriting to match.
+
+- [ ] **Rewrite `docs/plans/session-creation-unified.html` — 9 corrections.** Its "Centered
+  presentation" section is built on a false premise: "there is no centered-panel pattern in the app
+  today" is wrong. `CommandPaletteView` (`CommandPalette.swift:60`) is a shipped Spotlight overlay
+  (`TerminalCommandPalette.swift:22-43`), plus `UpdateOverlay`, `SurfaceSearchOverlay`, and
+  `buildInfoBadgeHostingView`. Full correction list + every gotcha:
+  `reference_command-palette-reuse.md`. Also: `TransparentHostingView` is `private class` at
+  `WorkspaceViewContainer.swift:1701`, so the plan's separate-file `SessionComposerOverlay.swift`
+  can't reach it as written; and the "85 KB of fragile AppKit" framing is overstated —
+  `buildInfoBadgeHostingView` (`:165`, `:1507-1508`) is a shipped constraint-only precedent. |
+  app | carried
+
+- [ ] **DECIDE OR KILL: fork a copy of the palette, or build new.** Strawman is **fork a copy** into
+  `macos/Sources/Features/Ghostties/SessionComposerPalette.swift`, renamed and parameterized.
+  Reasoning: calling it as-is cannot deliver the chosen design (the trailing project control needs
+  `CommandPaletteQuery`, which is `private`), so the real choice is only copy-or-build — and copying
+  starts from working keyboard nav, selection clamping, and initials-match highlighting.
+  `CommandPalette.swift` is byte-identical to `upstream/main`, so editing it in place creates a
+  permanent rebase liability. Sean asked "is forking actually better" and had not answered as of
+  session end. | app | new
+
+**Design decisions locked 2026-08-18 (do not re-litigate):**
+
+- **Spotlight direction**, refined: project/repo selector moves to the right side of the search
+  field; the separate project-chip row is dropped.
+- **Treatment 2 — divided trailing control** (hairline vertical rule inside the field, `▾`). Sean's
+  call: "option 2 works."
+- **`+ Add project…` is not new complexity** — `NewTaskComposerStore.swift:162` already runs the
+  folder picker without closing the composer. Mirror it; last item in the open dropdown.
+- **No session-name field, ever** — an unpinned session's name is its live terminal title.
+
+- [ ] **Open: does the field still filter projects, or templates only?** Giving the project a
+  dedicated control makes the plan's "one field filters both" either redundant-by-design or
+  abandoned. Shown both ways in the mockups; Sean had not chosen. Strawman: keep filtering both, so
+  "type `bru`, Return" survives. | app | new
+
+- [ ] **Composer needs prefix-first relevance ranking.** `filteredOptions`
+  (`CommandPalette.swift:74-92`) is boolean match then `colorMatchScore` only. The plan promises
+  "type three characters, press Return"; nothing guarantees the right row is first. Not inherited —
+  must be built. | app | new
+
+- [ ] **Audit's `#6D6A68` alternative is wrong — correct
+  `docs/audits/sidebar-contrast-audit.md`.** It proposes `#6D6A68` as an exact 4.50:1 fix. Recomputed
+  independently: **4.475 on chrome, still failing**, and 4.108 on the active-row tint. It was
+  computed against a different backdrop. #128 shipped `#636363` instead (5.007 / 4.598). The audit
+  still tells the next reader to use a value that fails. | design | new
+
+- [ ] **Mockups live only as Artifacts, not in the repo.** Four pages built this session (composer
+  v1, composer v2, forked-palette, design-system page directions) exist as claude.ai Artifacts and
+  in the session scratchpad, which is ephemeral. If they matter beyond this thread, commit the HTML
+  under `docs/mockups/`. | design | new
+
 ## 2026-08-18 — PR #128 sidebar contrast follow-ups (deferred, not dropped)
 
 `textSecondary` shipped in #128 (`tertiaryLabelColor` → fixed `#636363`/`#9a9a9a` hex for
