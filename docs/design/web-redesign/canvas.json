@@ -1,7 +1,13 @@
 {
   "pages": [
-    { "id": "page-1", "name": "Round 2 — Arcade, developed" },
-    { "id": "page-2", "name": "Round 1 — first pass" }
+    {
+      "id": "page-1",
+      "name": "Round 2 — Arcade, developed"
+    },
+    {
+      "id": "page-2",
+      "name": "Round 1 — first pass"
+    }
   ],
   "artboards": [
     {
@@ -13,7 +19,24 @@
       "h": 980,
       "title": "Round 2 — start here"
     },
-
+    {
+      "file": "AppZoom.dc.html",
+      "page": "page-1",
+      "x": 1600,
+      "y": -1180,
+      "w": 1360,
+      "h": 980,
+      "title": "B4 · Scroll-zoom (new)"
+    },
+    {
+      "file": "Decrypt.dc.html",
+      "page": "page-1",
+      "x": 3120,
+      "y": -1180,
+      "w": 1360,
+      "h": 880,
+      "title": "D1 · Decrypt reveal (new)"
+    },
     {
       "file": "Snake.dc.html",
       "page": "page-1",
@@ -50,7 +73,6 @@
       "h": 880,
       "title": "B3 · Clickable replica"
     },
-
     {
       "file": "PixelMorph.dc.html",
       "page": "page-1",
@@ -87,7 +109,6 @@
       "h": 980,
       "title": "Content map — the full page"
     },
-
     {
       "file": "TypePixelMono.dc.html",
       "page": "page-1",
@@ -115,7 +136,6 @@
       "h": 980,
       "title": "T3 · Grotesk lead, pixel accent"
     },
-
     {
       "file": "Round1.dc.html",
       "page": "page-2",
@@ -181,6 +201,22 @@
     }
   ],
   "annotations": [
+    {
+      "id": "n-appzoom",
+      "page": "page-1",
+      "x": 1600,
+      "y": -140,
+      "w": 660,
+      "text": "B4 - SCROLL-ZOOM, built from your note\n\nFour camera stops: the whole window, the sidebar, one status dot, then gt list. It pulls back out at the end so the detail has somewhere to land.\n\nThe recreation is DOM and real text rather than a bitmap, so it stays sharp at 4x - that is the whole reason to rebuild rather than crop a screenshot. Same drift risk as the replica: re-measure it against the app each release.\n\nDials above the board: stop (auto, or pin any one) and dwell. Pin a stop and drag dwell to feel the pacing.\n\nStop 02 is the argument for the whole idea. The status dot is seven pixels in the real app and it is the entire product; the only way to make that land is to show it at seven hundred."
+    },
+    {
+      "id": "n-decrypt",
+      "page": "page-1",
+      "x": 3120,
+      "y": -240,
+      "w": 660,
+      "text": "D1 - DECRYPT REVEAL, the pick of the three canvasui ideas\n\nThe real capture, rendered as an ASCII cipher. Your cursor decrypts a circle of it and the actual UI comes through; move away and it re-encrypts.\n\nWhy this one and not the other two: it solves the problem you named. Most of a terminal screenshot is dead space - as cipher that space becomes texture, and the cursor becomes a spotlight you control. It is also the only one of the three that is about terminals rather than merely rendered on one.\n\nDials: radius, softness, cell, charset (ascii / blocks / binary / hex), tint, passthrough, scramble, drift.\n\nNot the canvasui component - that needs WebGL2 plus the experimental html-in-canvas API and an npm install, none of which survive in a published artifact. This is a canvas-2d rebuild against the real jpg: the cipher layer renders once, only the lens redraws per frame.\n\nAsciify is the same mechanic with the polarity flipped - real page, ASCII lens. Worth trying on the hero rather than here; two lenses on one page is one too many.\n\nGrid is the cut. It is a nice 3D ripple that says nothing about the product."
+    },
     {
       "id": "r2-snake",
       "page": "page-1",
@@ -261,7 +297,6 @@
       "w": 700,
       "text": "CONTENT MAP\n\nTen sections. 02, 03 and 04 are the pitch — if someone reads only those they should already want it.\n\nThe gap worth flagging: section 08, first 60 seconds. Nothing on the site today says what happens after install, where it puts things, what it touches, or how to leave. For a terminal fork that is the single biggest unspoken objection, and it is cheap to answer.\n\nSections 05, 06 and 07 need captures that do not exist yet."
     },
-
     {
       "id": "note-a-arcade",
       "page": "page-2",
@@ -311,5 +346,8 @@
       "text": "F · FIELD — retired 2026-08-19."
     }
   ],
-  "launch": { "view": "canvas", "page": "page-1" }
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
 }

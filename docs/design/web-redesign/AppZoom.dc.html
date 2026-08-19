@@ -1,0 +1,232 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Archivo:wght@400;500;600;800&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin: 0; background: #07070f; }
+    a { color: #ffd54f; text-decoration: none; } a:hover { color: #fff; }
+
+    .zm { width: 1360px; height: 980px; box-sizing: border-box; position: relative;
+      overflow: hidden; background: #07070f; color: #eceaf5;
+      font-family: "Archivo", system-ui, sans-serif; padding: 40px 48px 32px;
+      display: flex; flex-direction: column; }
+
+    .lbl { font-family: "DM Mono", monospace; font-size: 8.5px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(236,234,245,0.42); }
+    .head { display: flex; align-items: flex-end; gap: 36px; }
+    h2 { font-family: "Silkscreen", monospace; font-size: 24px; line-height: 1.3;
+      color: #fff; margin: 12px 0 0; }
+    h2 em { font-style: normal; color: #ffd54f; }
+    .blurb { font-size: 13.5px; line-height: 1.62; margin: 0 0 2px; max-width: 50ch;
+      color: rgba(236,234,245,0.66); text-wrap: pretty; }
+    .badge { margin-left: auto; display: flex; }
+    .badge span { border: 1px solid rgba(236,234,245,0.2); border-right-width: 0;
+      padding: 8px 11px; font-family: "DM Mono", monospace; font-size: 8px;
+      letter-spacing: 0.16em; text-transform: uppercase; color: rgba(236,234,245,0.55); }
+    .badge span:last-child { border-right-width: 1px; }
+    .badge span.on { background: #ffd54f; border-color: #ffd54f; color: #201700; }
+
+    /* --- viewport --- */
+    .vp { margin-top: 24px; flex: 1; min-height: 0; position: relative; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.13); background: #0d0d1c; }
+    .app { position: absolute; left: 50%; top: 50%; width: 1180px; height: 700px;
+      margin: -350px 0 0 -590px;
+      transition: transform 900ms cubic-bezier(0.25, 1, 0.5, 1);
+      transform-origin: 50% 50%; will-change: transform; }
+
+    /* the recreation — DOM and real text, so it stays sharp at 4x */
+    .win { width: 100%; height: 100%; border-radius: 10px; overflow: hidden; display: grid;
+      grid-template-rows: 38px 1fr; background: #1a1a2e;
+      border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 30px 80px rgba(0,0,0,0.7);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .tb { display: flex; align-items: center; gap: 8px; padding: 0 13px; background: #15152a;
+      border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .tl { width: 12px; height: 12px; border-radius: 50%; }
+    .tb .t { margin-left: 14px; font-size: 12px; color: rgba(255,255,255,0.45); }
+    .tb .t b { color: rgba(255,255,255,0.78); font-weight: 500; }
+
+    .body { display: grid; grid-template-columns: 244px 1fr; min-height: 0; }
+    .side { background: #16162a; border-right: 1px solid rgba(255,255,255,0.07);
+      padding: 12px 0; display: flex; flex-direction: column; }
+    .sh { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
+      color: rgba(255,255,255,0.34); padding: 10px 16px 7px; }
+    .row { display: flex; align-items: center; gap: 9px; padding: 8px 16px;
+      font-size: 13px; color: rgba(255,255,255,0.72); border-left: 2px solid transparent; }
+    .row.on { background: rgba(255,255,255,0.075); color: #fff; border-left-color: #c97350; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .row .ts { margin-left: auto; font-size: 10.5px; color: rgba(255,255,255,0.3);
+      font-family: "DM Mono", monospace; }
+    .side .ft { margin-top: auto; padding: 12px 16px 2px; font-size: 11px;
+      color: rgba(255,255,255,0.3); border-top: 1px solid rgba(255,255,255,0.06); }
+
+    .pane { padding: 20px 24px; font-family: "DM Mono", monospace; font-size: 12.5px;
+      line-height: 1.95; color: rgba(255,255,255,0.6); overflow: hidden; }
+    .pr { color: rgba(255,255,255,0.3); }
+    .pane b { color: #fff; font-weight: 400; }
+    .ok { color: rgba(120,225,140,0.92); }
+    .wr { color: rgba(251,191,36,0.95); }
+    .lanes { margin-top: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.08); }
+    .lane { background: #1a1a2e; padding: 9px 11px 12px; }
+    .lane .lh { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase;
+      display: flex; align-items: center; gap: 6px; margin-bottom: 7px;
+      color: rgba(255,255,255,0.42); }
+    .lane .lh em { font-style: normal; margin-left: auto; color: rgba(255,255,255,0.28); }
+    .lane p { margin: 0; font-size: 11px; line-height: 1.65; color: rgba(255,255,255,0.6); }
+    .lane p i { font-style: normal; color: rgba(255,255,255,0.26); }
+
+    /* --- zoom stops ---
+       transform is `scale(k) translate(t)`, so t is in PRE-scale app pixels and
+       must be the negation of the target point's offset from the app's centre
+       (the app is 1180x700, centre 590,350). Getting the sign wrong here sends
+       the camera to the mirror image of the thing you wanted. */
+    .z0 .app { transform: scale(1); }
+    .z1 .app { transform: scale(2.35) translate(468px, 200px); }   /* sidebar, session list */
+    .z2 .app { transform: scale(4.0)  translate(480px, 257px); }   /* one row: dot, name, timestamp */
+    .z3 .app { transform: scale(1.85) translate(-122px, 110px); }  /* gt list lanes */
+
+    /* --- callouts --- */
+    .call { position: absolute; left: 26px; bottom: 24px; z-index: 6; max-width: 430px;
+      background: rgba(7,7,15,0.9); border: 1px solid rgba(255,255,255,0.16);
+      padding: 15px 17px 16px; }
+    .call .n { font-family: "Silkscreen", monospace; font-size: 11px; color: #ffd54f; }
+    .call h3 { font-family: "Silkscreen", monospace; font-size: 15px; margin: 9px 0 0; color: #fff; }
+    .call p { font-size: 12.5px; line-height: 1.62; margin: 9px 0 0;
+      color: rgba(236,234,245,0.62); text-wrap: pretty; }
+    .call > div { display: none; }
+    .z0 .call .c0, .z1 .call .c1, .z2 .call .c2, .z3 .call .c3 { display: block; }
+
+    /* --- stop rail --- */
+    .rail { position: absolute; right: 26px; top: 26px; z-index: 6; display: flex;
+      flex-direction: column; gap: 0; }
+    .rail span { border: 1px solid rgba(236,234,245,0.2); border-bottom-width: 0;
+      padding: 8px 12px; font-family: "DM Mono", monospace; font-size: 8px;
+      letter-spacing: 0.16em; text-transform: uppercase; color: rgba(236,234,245,0.5);
+      background: rgba(7,7,15,0.8); }
+    .rail span:last-child { border-bottom-width: 1px; }
+    .z0 .rail .s0, .z1 .rail .s1, .z2 .rail .s2, .z3 .rail .s3 {
+      background: #ffd54f; border-color: #ffd54f; color: #201700; }
+
+    .foot { margin-top: 16px; display: flex; align-items: center; gap: 18px;
+      font-family: "DM Mono", monospace; font-size: 8.5px; letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(236,234,245,0.38); }
+    .foot i { width: 6px; height: 6px; background: #ffd54f; display: block; }
+    .foot .r { margin-left: auto; color: rgba(236,234,245,0.28); }
+  </style>
+</helmet>
+<div class="zm z0" id="zm">
+  <div class="head">
+    <div>
+      <div class="lbl">showing the app &nbsp;/&nbsp; b4 &mdash; scroll-driven zoom</div>
+      <h2>Zoom to what <em>matters.</em></h2>
+    </div>
+    <p class="blurb">Most of a terminal screenshot is empty. Instead of showing the whole window and hoping, scroll pushes the camera into the three places that carry the pitch &mdash; and pulls back out when it is done.</p>
+    <div class="badge"><span class="on">replica</span><span>re-measure each release</span></div>
+  </div>
+
+  <div class="vp">
+    <div class="app">
+      <div class="win">
+        <div class="tb">
+          <span class="tl" style="background:#ff5f57"></span>
+          <span class="tl" style="background:#febc2e"></span>
+          <span class="tl" style="background:#28c840"></span>
+          <span class="t"><b>ghostties</b> &mdash; 7 sessions &middot; 2 need you</span>
+        </div>
+        <div class="body">
+          <div class="side">
+            <div class="sh">Sessions</div>
+            <div class="row on"><span class="dot" style="background:#60a5fa"></span><span>brukas</span><span class="ts">now</span></div>
+            <div class="row"><span class="dot" style="background:#fbbf24"></span><span>web</span><span class="ts">1m</span></div>
+            <div class="row"><span class="dot" style="background:#4ade80"></span><span>career-ops</span><span class="ts">4m</span></div>
+            <div class="row"><span class="dot" style="background:#4ade80"></span><span>ghostties</span><span class="ts">6m</span></div>
+            <div class="row"><span class="dot" style="background:#fb923c"></span><span>indexer</span><span class="ts">41m</span></div>
+            <div class="sh">Archive</div>
+            <div class="row"><span class="dot" style="background:rgba(255,255,255,0.22)"></span><span>changelog</span><span class="ts">2d</span></div>
+            <div class="row"><span class="dot" style="background:rgba(255,255,255,0.22)"></span><span>homebrew-tap</span><span class="ts">21d</span></div>
+            <div class="ft">v0.1.0-beta.23 &middot; macOS 13+</div>
+          </div>
+          <div class="pane">
+            <div><span class="pr">~/Code/brukas &nbsp;&gt;</span> <b>claude</b></div>
+            <div>Running the migration plan against staging.</div>
+            <div class="ok">&nbsp;&nbsp;&#10003; 14 files rewritten</div>
+            <div class="wr">&nbsp;&nbsp;! migrations/0042 is destructive &mdash; your call</div>
+            <div><span class="pr">~/Code/brukas &nbsp;&gt;</span> <b>gt list</b></div>
+            <div class="lanes">
+              <div class="lane"><div class="lh"><span class="dot" style="background:#fbbf24"></span>needs you<em>2</em></div><p><i>brukas</i> approve migration<br><i>web</i> pick a direction</p></div>
+              <div class="lane"><div class="lh"><span class="dot" style="background:#4ade80"></span>running<em>3</em></div><p><i>career</i> case study<br><i>ghostties</i> perf pass</p></div>
+              <div class="lane"><div class="lh"><span class="dot" style="background:rgba(255,255,255,0.24)"></span>done<em>7</em></div><p><i>web</i> Safari bracket<br><i>ghostties</i> beta.23</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rail">
+      <span class="s0">00 &nbsp;the window</span>
+      <span class="s1">01 &nbsp;the sidebar</span>
+      <span class="s2">02 &nbsp;one status dot</span>
+      <span class="s3">03 &nbsp;gt list</span>
+    </div>
+
+    <div class="call">
+      <div class="c0"><div class="n">00 / 0%</div><h3>ONE WINDOW</h3><p>Seven sessions, one macOS window. Establish the whole before magnifying any part &mdash; otherwise the zoom has nothing to zoom out of.</p></div>
+      <div class="c1"><div class="n">01 / 33%</div><h3>THE SIDEBAR</h3><p>Every running agent gets a row. The list orders itself so whoever is blocked on you sits at the top, and archived work drops out of the way.</p></div>
+      <div class="c2"><div class="n">02 / 66%</div><h3>ONE STATUS DOT</h3><p>Blue is waiting on you. Gold needs a decision. Green is working, orange has been going a while. This is the whole product in seven pixels &mdash; so show it at seven hundred.</p></div>
+      <div class="c3"><div class="n">03 / 100%</div><h3>GT LIST</h3><p>One command, every open task across every project, in status lanes. Pull back out here: the detail has done its job.</p></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <i></i>scroll drives the camera &mdash; sticky section, no scrollbar hijack
+    <span class="r">DOM and real text, not a bitmap &mdash; stays sharp at 4.6&times;</span>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{
+  "stop":  {"editor":"enum","default":"auto","options":["auto","00 window","01 sidebar","02 status dot","03 gt list"],"section":"Camera"},
+  "dwell": {"editor":"range","default":2.8,"min":1,"max":6,"step":0.2,"unit":"s","section":"Camera"},
+  "$preview": {"width":1360,"height":980}
+}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+
+  componentDidMount() { this._tries = 0; this._boot(); }
+  componentWillUnmount() { if (this._timer) clearInterval(this._timer); }
+
+  _boot() {
+    const root = document.querySelector('#zm');
+    if (!root) {
+      if (this._tries++ < 90) requestAnimationFrame(this._boot.bind(this));
+      return;
+    }
+    const self = this;
+    let i = 0;
+    function apply() {
+      const pick = self.props.stop || 'auto';
+      let n;
+      if (pick === 'auto') { n = i; } else { n = parseInt(pick.slice(0, 2), 10) || 0; }
+      root.className = 'zm z' + n;
+    }
+    function tick() { i = (i + 1) % 4; apply(); }
+    apply();
+    // dwell is a dial, so rebuild the timer when it moves
+    let last = null;
+    this._timer = setInterval(function () {
+      const d = self.props.dwell || 2.8;
+      if (d !== last) { last = d; self._acc = 0; }
+      self._acc = (self._acc || 0) + 0.25;
+      if (self._acc >= d) { self._acc = 0; if ((self.props.stop || 'auto') === 'auto') tick(); }
+      apply();
+    }, 250);
+  }
+}
+</script>
+</body>
+</html>
