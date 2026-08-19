@@ -11,32 +11,32 @@ NOT started. The run stopped deliberately after Phase 2, not at the 07:00 wall �
 two fix cycles, and Phase 3 could not have been built, twice-reviewed, and fixed in the time
 remaining.
 
-- [x] **Phase 1 — template resolver.** New `macos/Sources/Features/Ghostties/SessionTemplateResolver.swift`
+- [x] 2026-08-19 — **Phase 1 — template resolver.** New `macos/Sources/Features/Ghostties/SessionTemplateResolver.swift`
   with `static func templates(for:store:) -> [AgentTemplate]`. Repoint both callers; delete
   `RecentsListView.availableTemplates(for:store:)` (`:152–160`, including the invalid sort at
   `:156`) and the three computed filters in `TemplatePickerView` (`:32–43`). Name-first template
   creation replacing `addCustomTemplate()` (`TemplatePickerView.swift:336–339`). Dedupe on write in
   `WorkspaceStore.addTemplate`. Empty state in YOUR TEMPLATES. Fixes D4/D5/D6. DONE — branch
   `feat/session-template-resolver`, **PR #129** against `main`. Three review rounds; suite
-  710/2/1. | app | done
+  710/2/1. | app | session | done |
 
-- [x] **Phase 2 — SessionComposer.** Fork `macos/Sources/Features/Command Palette/CommandPalette.swift`
+- [x] 2026-08-19 — **Phase 2 — SessionComposer.** Fork `macos/Sources/Features/Command Palette/CommandPalette.swift`
   into `Features/Ghostties/SessionComposerPalette.swift`, renamed and parameterized. Plus
   `SessionComposerStore` mirroring `NewTaskComposerStore`. Wire to `ProjectDisclosureRow.swift:452`'s
   popover only. DONE — branch `feat/session-composer`, **PR #130** against
-  `feat/session-template-resolver` (stacked). Four review rounds; suite 726/2/1. | app | done
+  `feat/session-template-resolver` (stacked). Four review rounds; suite 726/2/1. | app | session | done |
 
-- [ ] **Phase 3 — centered overlay + Cmd+T.** `SessionComposerOverlay`, widen `TransparentHostingView`
+- [ ] 2026-08-19 — **Phase 3 — centered overlay + Cmd+T.** `SessionComposerOverlay`, widen `TransparentHostingView`
   (`WorkspaceViewContainer.swift:1701`) from `private` to `internal`, `@AppStorage` Cmd+T preference,
   delete the 28-project toolbar cascade. Fixes D1/D2/D7. See plan Phase 3 anchor for full detail.
-  UNSTARTED — no open decisions, plan section intact and current, ready to dispatch. | app | open
+  UNSTARTED — no open decisions, plan section intact and current, ready to dispatch. | app | session | open |
 
-- [ ] **Phase 4 — project-creation convergence.** See plan Phase 4 anchor for full detail. UNSTARTED
-  — plan section intact and current. | app | open
+- [ ] 2026-08-19 — **Phase 4 — project-creation convergence.** See plan Phase 4 anchor for full detail. UNSTARTED
+  — plan section intact and current. | app | session | open |
 
-- [ ] **Phase 5 — stop pinning everything (optional).** Only if everything above is green and time
-  remains. See plan Phase 5 anchor for full detail. UNSTARTED — plan section intact and current. |
-  app | open
+- [ ] 2026-08-19 — **Phase 5 — stop pinning everything (optional).** Only if everything above is green and time
+  remains. See plan Phase 5 anchor for full detail. UNSTARTED — plan section intact and current.
+  | app | session | open |
 
 **Run rules (hard limits):**
 
@@ -82,35 +82,35 @@ remaining.
 
 ## 2026-08-19 — Phase 2 spillover (deferred, not dropped)
 
-- [ ] **Three popover-nesting risks are unverified and need five minutes of clicking.** The composer's
+- [ ] 2026-08-19 — **Three popover-nesting risks are unverified and need five minutes of clicking.** The composer's
   project dropdown is a `.popover` nested inside the composer's own `.popover`; `+ Add project…`
   opens a modal `NSOpenPanel` inside that; and the template edit sheet and delete-confirmation alert
   are attached to popover content. On macOS a child taking key can dismiss the parent. None is
   decidable from source. If any dismisses the composer, it becomes a Phase 3 problem — the centered
-  overlay presents from the window and sidesteps the class entirely. | app | new
-- [ ] **Preset preview card was deliberately not ported to the composer.** A preview-on-tap card fights
+  overlay presents from the window and sidesteps the class entirely. | app | session | open |
+- [ ] 2026-08-19 — **Preset preview card was deliberately not ported to the composer.** A preview-on-tap card fights
   the composer's type-and-Return model. Consequence: `ghostties.skipPresetPreview` is now an
   orphaned `@AppStorage` key with no UI, and presets launch immediately for everyone regardless of
-  its stored value. Decide whether to restore the preview, expose the key, or delete the key. | app | new
-- [ ] **The smart-default cascade is duplicated.** `SessionComposerStore` carries its own ~25-line copy
+  its stored value. Decide whether to restore the preview, expose the key, or delete the key. | app | session | open |
+- [ ] 2026-08-19 — **The smart-default cascade is duplicated.** `SessionComposerStore` carries its own ~25-line copy
   of `NewTaskComposerStore.swift:168-195` because that logic is `private` to a file Phase 2 was not
   allowed to touch. Verified as a faithful copy, not a drift, but the two composers now keep
-  divergent memories of "last project used". Extract to something shared. | app | new
-- [ ] **No test coverage on the session composer's commit path.** All 16 new Phase 2 tests exercise the
+  divergent memories of "last project used". Extract to something shared. | app | session | open |
+- [ ] 2026-08-19 — **No test coverage on the session composer's commit path.** All 16 new Phase 2 tests exercise the
   pure ranking and ordering functions. Nothing covers `precommit`, dismissal, or selection reset —
   which is exactly where all four review-caught blockers lived. It is SwiftUI view state, so it
-  wants either a view-model extraction or a UI test. | quality | new
-- [ ] **Double-Return protection is a single unguarded line.** It is the synchronous
+  wants either a view-model extraction or a UI test. | quality | session | open |
+- [ ] 2026-08-19 — **Double-Return protection is a single unguarded line.** It is the synchronous
   `selectedIndex = nil` in `SessionComposerPalette.commit(template:)`. A vestigial `isCommitting`
   flag that appeared to be the guard has been removed and a comment now points at the real one, but
-  the protection remains implicit and untested. | app | new
+  the protection remains implicit and untested. | app | session | open |
 
 ## 2026-08-18 — Session composer: palette reuse + design direction (carried)
 
 Sean picked the composer direction from mockups this session. Design decisions locked; the plan
 has been rewritten to match. Remaining items below are still open.
 
-- [x] **Rewrite `docs/plans/session-creation-unified.html` — 9 corrections.** Its "Centered
+- [x] 2026-08-18 — **Rewrite `docs/plans/session-creation-unified.html` — 9 corrections.** Its "Centered
   presentation" section is built on a false premise: "there is no centered-panel pattern in the app
   today" is wrong. `CommandPaletteView` (`CommandPalette.swift:60`) is a shipped Spotlight overlay
   (`TerminalCommandPalette.swift:22-43`), plus `UpdateOverlay`, `SurfaceSearchOverlay`, and
@@ -120,9 +120,9 @@ has been rewritten to match. Remaining items below are still open.
   can't reach it as written; and the "85 KB of fragile AppKit" framing is overstated —
   `buildInfoBadgeHostingView` (`:165`, `:1507-1508`) is a shipped constraint-only precedent. DONE
   `c298e7e31` — all nine corrections landed, plus the `TransparentHostingView` privacy fix and the
-  relocked composer mock. | app | done
+  relocked composer mock. | app | session | done |
 
-- [x] **DECIDE OR KILL: fork a copy of the palette, or build new.** Strawman is **fork a copy** into
+- [x] 2026-08-18 — **DECIDE OR KILL: fork a copy of the palette, or build new.** Strawman is **fork a copy** into
   `macos/Sources/Features/Ghostties/SessionComposerPalette.swift`, renamed and parameterized.
   Reasoning: calling it as-is cannot deliver the chosen design (the trailing project control needs
   `CommandPaletteQuery`, which is `private`), so the real choice is only copy-or-build — and copying
@@ -130,7 +130,7 @@ has been rewritten to match. Remaining items below are still open.
   `CommandPalette.swift` is byte-identical to `upstream/main`, so editing it in place creates a
   permanent rebase liability. Sean asked "is forking actually better" and had not answered as of
   session end. DECIDED: fork a copy into `SessionComposerPalette.swift`, recorded in the plan as
-  settled. `c298e7e31`. | app | done
+  settled. `c298e7e31`. | app | session | done |
 
 **Design decisions locked 2026-08-18 (do not re-litigate):**
 
@@ -150,35 +150,35 @@ has been rewritten to match. Remaining items below are still open.
 - **Cmd+T is preference-driven, composer by default.** An `@AppStorage` flag chooses
   composer-vs-instant; `Cmd+Shift+T` stays unconditionally instant and ignores the flag.
 
-- [x] **Open: does the field still filter projects, or templates only?** Giving the project a
+- [x] 2026-08-18 — **Open: does the field still filter projects, or templates only?** Giving the project a
   dedicated control makes the plan's "one field filters both" either redundant-by-design or
   abandoned. Shown both ways in the mockups; Sean had not chosen. Strawman: keep filtering both, so
-  "type `bru`, Return" survives. DECIDED: filters both. `ed750aa45`. | app | done
+  "type `bru`, Return" survives. DECIDED: filters both. `ed750aa45`. | app | session | done |
 
-- [x] **Composer needs prefix-first relevance ranking.** `filteredOptions`
+- [x] 2026-08-18 — **Composer needs prefix-first relevance ranking.** `filteredOptions`
   (`CommandPalette.swift:74-92`) is boolean match then `colorMatchScore` only. The plan promises
   "type three characters, press Return"; nothing guarantees the right row is first. BUILT — shipped
   in Phase 2 (PR #130) as `SessionComposerRanking`: exact-prefix > substring > initials tiers,
-  `colorMatchScore` dropped, 16 unit tests. | app | done
+  `colorMatchScore` dropped, 16 unit tests. | app | session | done |
 
-- [ ] **Audit's `#6D6A68` alternative is wrong — correct
+- [ ] 2026-08-18 — **Audit's `#6D6A68` alternative is wrong — correct
   `docs/audits/sidebar-contrast-audit.md`.** It proposes `#6D6A68` as an exact 4.50:1 fix. Recomputed
   independently: **4.475 on chrome, still failing**, and 4.108 on the active-row tint. It was
   computed against a different backdrop. #128 shipped `#636363` instead (5.007 / 4.598). The audit
-  still tells the next reader to use a value that fails. | design | new
+  still tells the next reader to use a value that fails. | design | session | open |
 
-- [ ] **Mockups live only as Artifacts, not in the repo.** Four pages built this session (composer
+- [ ] 2026-08-18 — **Mockups live only as Artifacts, not in the repo.** Four pages built this session (composer
   v1, composer v2, forked-palette, design-system page directions) exist as claude.ai Artifacts and
   in the session scratchpad, which is ephemeral. If they matter beyond this thread, commit the HTML
-  under `docs/mockups/`. | design | new
+  under `docs/mockups/`. | design | session | open |
 
-- [ ] **The Cmd+T preference has no settings UI to live in.**
+- [ ] 2026-08-18 — **The Cmd+T preference has no settings UI to live in.**
   `macos/Sources/Features/Settings/SettingsView.swift` is a placeholder — its entire body is a
   "Coming Soon. 🚧" card telling the user that settings live in a Ghostty config file, plus
   `defaults write` instructions for `ghostties.autoUpdateChannel`. So the composer preference ships
   as an `@AppStorage` flag set via `defaults write`, documented by one added line in that same
   instruction block. A real Settings UI is out of scope for the composer work; when one is built,
-  this flag is a natural first row. | app | new
+  this flag is a natural first row. | app | session | open |
 
 ## 2026-08-18 — PR #128 sidebar contrast follow-ups (deferred, not dropped)
 
@@ -186,16 +186,16 @@ has been rewritten to match. Remaining items below are still open.
 low-emphasis sidebar text). Two items surfaced during round-two review, deliberately out of scope
 for that PR — neither blocks merge.
 
-- [ ] **`Color.secondary` is now the worst text in the sidebar.** Independently verified at
+- [ ] 2026-08-18 — **`Color.secondary` is now the worst text in the sidebar.** Independently verified at
   3.85:1 against chrome — below the 4.5:1 tier #128 just fixed for `tertiaryLabelColor`. Visible
   side-by-side at `ArchiveZoneView.swift:98-106` (the "Done" lane label reads lighter than the
   count beside it) and `NeedsYouZoneView.swift:89-91`. #128 didn't cause this, but fixing the
-  tertiary tier made the secondary tier the new visible outlier. | design | new
-- [ ] **Fixed hex text tokens drop Increase Contrast support.** `NSColor.tertiaryLabelColor`
+  tertiary tier made the secondary tier the new visible outlier. | design | session | open |
+- [ ] 2026-08-18 — **Fixed hex text tokens drop Increase Contrast support.** `NSColor.tertiaryLabelColor`
   ships system high-contrast appearance variants; a literal `Color(red:green:blue:)` (the fix
   #128 applied) does not respond to `NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast`.
   Affects exactly the low-vision users #128 targets. Possible follow-up: branch `textSecondary`
-  on that accessibility flag and return a still-higher-contrast value when set. | design | new
+  on that accessibility flag and return a still-higher-contrast value when set. | design | session | open |
 
 ## 2026-08-18 — PR #126 lastOutputAt follow-ups (deferred, not dropped)
 
@@ -203,32 +203,32 @@ for that PR — neither blocks merge.
 in #126, two adversarial review rounds. Four items surfaced during review, deliberately out of scope
 for that PR — none block merge.
 
-- [ ] **Split panes freeze the row timestamp.** `subscribeToOutput` runs once per session on the ROOT
+- [ ] 2026-08-18 — **Split panes freeze the row timestamp.** `subscribeToOutput` runs once per session on the ROOT
   surface (`SessionCoordinator.swift:270`) and `outputSubscriptions` is `[UUID: AnyCancellable]` —
   structurally one entry per session id, so a second pane's subscription cannot be held, and there is
   no split-creation hook. Run a 20-minute build in pane 2 and the row shows "May 5" while being
   actively typed in; Archive ranks it ancient. Pre-existing hole the indicator dot shares — exposed,
-  not created, by #126. Fix is subscribing every surface in the tree and resubscribing on split. |
-  app | new
-- [ ] **Pruner and Archive rank by different keys.** `pruneStaleSessionsAtLaunch`
+  not created, by #126. Fix is subscribing every surface in the tree and resubscribing on split.
+  | app | session | open |
+- [ ] 2026-08-18 — **Pruner and Archive rank by different keys.** `pruneStaleSessionsAtLaunch`
   (`WorkspaceStore.swift:236-271`) keeps each project's top-15 by `lastActiveAt`; Archive now sorts by
   `displayTimestamp`. In a project with >15 sessions all outside the 30-day window, launch prune can
   delete the session sitting highest in the visible Archive list. Deliberate for now — retention is a
-  "last touched" policy. Add one line to the pruner's doc comment saying so. | app | new
-- [ ] **Projects and Sessions tabs now disagree about the same session.** Projects buckets on
+  "last touched" policy. Add one line to the pruner's doc comment saying so. | app | session | open |
+- [ ] 2026-08-18 — **Projects and Sessions tabs now disagree about the same session.** Projects buckets on
   `lastActiveAt`, Sessions displays `lastOutputAt`, so after a click a session is `.recent` in one tab
-  and "3h ago" in the other. Deliberate, Sean's call. | app | new
-- [ ] **`sessionSignature` extra invalidation.** `ProjectDisclosureRow.swift:104-110` compares
+  and "3h ago" in the other. Deliberate, Sean's call. | app | session | open |
+- [ ] 2026-08-18 — **`sessionSignature` extra invalidation.** `ProjectDisclosureRow.swift:104-110` compares
   `[AgentSession]` with synthesized `==`, now including `lastOutputAt`, so a `lastOutputAt`-only write
   re-runs every expanded project row's body for a field the Projects tab never renders. Bounded to
   once per 5s per session; flagged only because this row's render cost is the known-unfixed
-  `contextMenu` bottleneck. | app | new
+  `contextMenu` bottleneck. | app | session | open |
 
 ## 2026-08-18 — orchestrator session (Safari ship, #126 review, two plans)
 
 **Closed:**
 
-- [x] ~~**#126 WIP is UNVERIFIED**~~ — **verified and closed.** Round-2's refactor (injectable
+- [x] 2026-08-18 — ~~**#126 WIP is UNVERIFIED**~~ — **verified and closed.** Round-2's refactor (injectable
   `store:` parameter on `subscribeToOutput`) silently dropped `isOutput: true` from the sink's
   `recordActivity` call, disabling the entire `lastOutputAt` feature on the real output path.
   Restored in `1f15cea6a`. The pinned test has teeth, confirmed by observation not assumption:
@@ -238,30 +238,30 @@ for that PR — none block merge.
   commit — the two `SessionCoordinatorOutputActivityTests` cases plus
   `outputNeedsUpdateAdvancesIndependentlyOfLastActiveAtGuard`). All five `@Test` cases in
   `WorkspaceStoreLastOutputAtTests` ran and passed, verified by enumerating the result bundle's
-  test list, not the summary line. | app | closed
+  test list, not the summary line. | app | session | done |
 
 **Approved by Sean 2026-08-18, not started:**
 
-- [ ] **Contrast fix — TEXT ONLY.** Sean's call: wire `DESIGN.md`'s existing `textSecondary` (`#6B6B6B` light / `#8E8E8E` dark) into code, replacing `tertiaryLabelColor` (25% opacity, 20 files / 44 occurrences). **Do not blanket-replace** — only text that must clear 4.5:1; `PixelChevronView` and other decorative uses stay. Two review rounds required (UI). Evidence: `docs/audits/sidebar-contrast-audit.md`. | design | new
-- [ ] **Wire `HOMEBREW_TAP_TOKEN` PAT.** Sean's call over manual bumps. Set the **secret before the variable** (`HOMEBREW_TAP_TOKEN` then `HOMEBREW_TAP_REPO`) or the next release goes red at its final job. Needs Sean to generate a fine-grained PAT — cannot be done from a session. | build | carried
-- [ ] **Todo accordion — plan the pipeline AND build it.** Sean's call (rejected the tasks-first shortcut). Order: (0) lift the `launchBanner` guard at `SessionCoordinator.swift:225` so launcher scripts always get written — coverage is currently **zero**, `~/.ghostties/cache/launchers/` is empty; (1) port the `ppid` walk + `KERN_PROCARGS2` ancestor lookup from `~/Code/Agent-Status-loader-explore/Sources/AgentStatusCore` — it is NOT in this repo; (2) `SessionTodoStore` reusing `TaskFileWatcher` (genuinely free, it is general); (3) accordion UI copying `ProjectDisclosureRow`'s pattern. Row sketch and data facts: `reference_claude-todo-data-source.md`. Affordance must be **absent, not disabled**, when empty — only 5 of 336 todo files are non-empty. Sequencing: touches `RecentsRowView`/`RecentsListView`, so it lands after #126. | app | new
+- [ ] 2026-08-18 — **Contrast fix — TEXT ONLY.** Sean's call: wire `DESIGN.md`'s existing `textSecondary` (`#6B6B6B` light / `#8E8E8E` dark) into code, replacing `tertiaryLabelColor` (25% opacity, 20 files / 44 occurrences). **Do not blanket-replace** — only text that must clear 4.5:1; `PixelChevronView` and other decorative uses stay. Two review rounds required (UI). Evidence: `docs/audits/sidebar-contrast-audit.md`. | design | session | open |
+- [ ] 2026-08-18 — **Wire `HOMEBREW_TAP_TOKEN` PAT.** Sean's call over manual bumps. Set the **secret before the variable** (`HOMEBREW_TAP_TOKEN` then `HOMEBREW_TAP_REPO`) or the next release goes red at its final job. Needs Sean to generate a fine-grained PAT — cannot be done from a session. | build | session | open |
+- [ ] 2026-08-18 — **Todo accordion — plan the pipeline AND build it.** Sean's call (rejected the tasks-first shortcut). Order: (0) lift the `launchBanner` guard at `SessionCoordinator.swift:225` so launcher scripts always get written — coverage is currently **zero**, `~/.ghostties/cache/launchers/` is empty; (1) port the `ppid` walk + `KERN_PROCARGS2` ancestor lookup from `~/Code/Agent-Status-loader-explore/Sources/AgentStatusCore` — it is NOT in this repo; (2) `SessionTodoStore` reusing `TaskFileWatcher` (genuinely free, it is general); (3) accordion UI copying `ProjectDisclosureRow`'s pattern. Row sketch and data facts: `reference_claude-todo-data-source.md`. Affordance must be **absent, not disabled**, when empty — only 5 of 336 todo files are non-empty. Sequencing: touches `RecentsRowView`/`RecentsListView`, so it lands after #126. | app | session | open |
 
 **Owed — my miss:**
 
-- [ ] **Design-system site plan was never written.** The brief was split when the Opus pool 529'd repeatedly and only the measurement half shipped (the contrast audit). The plan for the reference site (light/dark, colors, type ramp, menus, lists, ghost sequences) and the marketing asset set (app icon, screenshots) does not exist. Note asset capture is blocked by the Screen Recording TCC problem, so plan it as an at-the-desk step. | design | new
+- [ ] 2026-08-18 — **Design-system site plan was never written.** The brief was split when the Opus pool 529'd repeatedly and only the measurement half shipped (the contrast audit). The plan for the reference site (light/dark, colors, type ramp, menus, lists, ghost sequences) and the marketing asset set (app icon, screenshots) does not exist. Note asset capture is blocked by the Screen Recording TCC problem, so plan it as an at-the-desk step. | design | session | open |
 
 **Needs Sean:**
 
-- [ ] **Review `docs/plans/session-creation-unified.html`** (36KB, on `main`). Offer stands to open it on `:4849` for inline comments. Two design forks have strawmen rather than questions: scrim behind the centered composer (rec: yes, 0.25) and whether Cmd+T opens the panel or stays instant (rec: panel, `Cmd+Shift+T` becomes instant). | design | new
+- [ ] 2026-08-18 — **Review `docs/plans/session-creation-unified.html`** (36KB, on `main`). Offer stands to open it on `:4849` for inline comments. Two design forks have strawmen rather than questions: scrim behind the centered composer (rec: yes, 0.25) and whether Cmd+T opens the panel or stays instant (rec: panel, `Cmd+Shift+T` becomes instant). | design | session | open |
 
 **Latent defects found while mapping — not fixed, surgical rule:**
 
-- [ ] **Project matching is by NAME, not path** (`SessionCoordinator.swift:485`) — miss and it registers a brand-new project. Combined with force-pin on every add (`WorkspaceStore.swift:638,649`, nothing ever un-pins) this is why the project list reached 28. Task-row clicks are a creation path too, so it grows unattended. | app | new
-- [ ] **Invalid sort predicate** at `RecentsListView.swift:156` — `sorted { a, _ in a.id == defaultId }` ignores its second operand, so it is not a strict weak ordering. Swift's sort has undefined behavior with an invalid comparator. | app | new
-- [ ] **Project-scoped templates leak into every project** — `TemplatePickerView.swift:32-43` ignores scoping, `RecentsListView.swift:153` respects it. Two filters, two answers. | app | new
-- [ ] **Status dots fail 3:1 in LIGHT mode only** (gold 1.33, green 1.85, orange 2.34, blue 2.69; dark passes at 4.81–9.72). Deferred by Sean's text-only call — fixing means changing the palette he picked. Proposed values in the audit. | design | parked
-- [ ] **Token drift, both directions.** `DESIGN.md` defines `textPrimary`/`textSecondary` that exist **nowhere** in code; `WorkspaceLayout.swift`'s status-dot palette is absent from `DESIGN.md`, which still documents the dropped terracotta scheme. | design | new
-- [ ] **Six named-graph skills are unversioned** — `batch-ship`, `apply-wave`, `content-cascade`, `debug-trace`, `skill-forge`, `case-forge` exist only in `~/.claude/skills/`, not in `~/Code/agent-skills`. No git history, no backup. | ops | new
+- [ ] 2026-08-18 — **Project matching is by NAME, not path** (`SessionCoordinator.swift:485`) — miss and it registers a brand-new project. Combined with force-pin on every add (`WorkspaceStore.swift:638,649`, nothing ever un-pins) this is why the project list reached 28. Task-row clicks are a creation path too, so it grows unattended. | app | session | open |
+- [ ] 2026-08-18 — **Invalid sort predicate** at `RecentsListView.swift:156` — `sorted { a, _ in a.id == defaultId }` ignores its second operand, so it is not a strict weak ordering. Swift's sort has undefined behavior with an invalid comparator. | app | session | open |
+- [ ] 2026-08-18 — **Project-scoped templates leak into every project** — `TemplatePickerView.swift:32-43` ignores scoping, `RecentsListView.swift:153` respects it. Two filters, two answers. | app | session | open |
+- [ ] 2026-08-18 — **Status dots fail 3:1 in LIGHT mode only** (gold 1.33, green 1.85, orange 2.34, blue 2.69; dark passes at 4.81–9.72). Deferred by Sean's text-only call — fixing means changing the palette he picked. Proposed values in the audit. | design | session | parked |
+- [ ] 2026-08-18 — **Token drift, both directions.** `DESIGN.md` defines `textPrimary`/`textSecondary` that exist **nowhere** in code; `WorkspaceLayout.swift`'s status-dot palette is absent from `DESIGN.md`, which still documents the dropped terracotta scheme. | design | session | open |
+- [ ] 2026-08-18 — **Six named-graph skills are unversioned** — `batch-ship`, `apply-wave`, `content-cascade`, `debug-trace`, `skill-forge`, `case-forge` exist only in `~/.claude/skills/`, not in `~/Code/agent-skills`. No git history, no backup. | ops | session | open |
 
 ## 2026-08-17 — beta.23 shipped, verified end-to-end
 
@@ -275,41 +275,41 @@ Repo hygiene same session: worktrees 19 → 3, local branches 32 → 8, origin b
 dead `session-*` worktrees came out under `git worktree remove` **without** `--force`, which is
 git's own dirty check and stronger evidence than the sampled audit that preceded it.
 
-- [ ] **`npx ghostties-install` is stale again — pins beta.22 while beta.23 is live.** `0.1.1` was
+- [ ] 2026-08-17 — **`npx ghostties-install` is stale again — pins beta.22 while beta.23 is live.** `0.1.1` was
   published 2026-08-17 (registry `latest: 0.1.1`) closing the long-running beta.21 gap, but the pin
   in `bin/ghostties-install.js` (`tag: "v0.1.0-beta.22"`) now trails by one release. Same one-command
   fix from a real terminal; `npm publish` is deny-blocked inside a session. Self-heals via Sparkle on
-  first launch, so low urgency by design. | dist | carried
-- [ ] **Homebrew cask not bumped to beta.23.** CI auto-bump still not active (needs the fine-grained
+  first launch, so low urgency by design. | dist | session | open |
+- [ ] 2026-08-17 — **Homebrew cask not bumped to beta.23.** CI auto-bump still not active (needs the fine-grained
   PAT — set `HOMEBREW_TAP_TOKEN` *before* `HOMEBREW_TAP_REPO` or the next release goes red at its
   final job). Manual: `bash scripts/update-cask-version.sh v0.1.0-beta.23`, then copy into the tap's
-  `Casks/ghostties.rb`. | build | carried
-- [ ] **Canvas shadow fix shipped UNVERIFIED — needs a repro.** #125 guards the `shadowPath` rebuild
+  `Casks/ghostties.rb`. | build | session | open |
+- [ ] 2026-08-17 — **Canvas shadow fix shipped UNVERIFIED — needs a repro.** #125 guards the `shadowPath` rebuild
   against zero-size bounds in both `terminalShadowHost` and `browserShadowHost`. The trigger was
   never reproduced, so the fix may be a no-op. Sean is testing against beta.23; the release notes ask
   for the trigger. If it still vanishes, the next move is a repro, **not** a second blind fix. Full
-  diagnosis: `project_canvas-shadow-disappears-during-use.md`. | app | new
-- [ ] **Timestamp-on-focus → beta.24.** Sidebar `lastActiveAt` advances on focus (keyboard cycling
+  diagnosis: `project_canvas-shadow-disappears-during-use.md`. | app | session | open |
+- [ ] 2026-08-17 — **Timestamp-on-focus → beta.24.** Sidebar `lastActiveAt` advances on focus (keyboard cycling
   and row clicks), by design since April 2026 — not a #121 regression. Strawman is written and not
   built: add `lastOutputAt` written only by the output sink; Sessions rows and Archive sort read it,
   project bucketing keeps `lastActiveAt`. Deferred by Sean 2026-08-17. Detail:
-  `reference_lastactiveat-written-on-focus.md`. | app | new
-- [ ] **PR #120 (session-cache load harness) — decide or kill** (carried 3×). Still open, never
+  `reference_lastactiveat-written-on-focus.md`. | app | session | open |
+- [ ] 2026-08-17 — **PR #120 (session-cache load harness) — decide or kill** (carried 3×). Still open, never
   merged, branch and worktree still alive. **Strawman unchanged: kill it.** Claude Code now writes
   `~/.claude/sessions/<pid>.json`, so session naming looks to be moving to read-from-source rather
   than something Ghostties infers and caches — the harness would test a layer Ghostties won't own.
-  Counter: it's written and costs nothing to merge. | build | carried 3×
-- [ ] **`ThrottleTrailingEdgeHypothesisTests.swift` — decide or kill** (carried 3×). Untracked, so it
+  Counter: it's written and costs nothing to merge. | build | carried 3× | app | session | open |
+- [ ] 2026-08-17 — **`ThrottleTrailingEdgeHypothesisTests.swift` — decide or kill** (carried 3×). Untracked, so it
   was absent from the beta.23 worktree — which is why that run reported 0 failures where local runs
   usually report 2. **Strawman unchanged: keep the trailing-edge test as a regression test, delete
-  the two diagnostic ones** (one calls `XCTFail` unconditionally). | app | carried 3×
-- [ ] **#56's discriminator is imperfect by design.** Now live: `template.kind != .shell` gates the
+  the two diagnostic ones** (one calls `XCTFail` unconditionally). | app | carried 3× | app | session | open |
+- [ ] 2026-08-17 — **#56's discriminator is imperfect by design.** Now live: `template.kind != .shell` gates the
   `.waiting` fallback. The recorded plan was always to rewire to a real foreground-TUI signal later.
-  Its five tests ran and passed for the first time in beta.23, including the shell-session guard. |
-  app | carried
-- [ ] **Tag protection does not constrain Sean.** Pushing `v0.1.0-beta.23` reported `Bypassed rule
+  Its five tests ran and passed for the first time in beta.23, including the shell-session guard.
+  | app | session | open |
+- [ ] 2026-08-17 — **Tag protection does not constrain Sean.** Pushing `v0.1.0-beta.23` reported `Bypassed rule
   violations for refs/tags/... creations being restricted`. The ruleset stops other people; his own
-  permissions pass through it. Tags still cannot be deleted after the fact. | ops | new
+  permissions pass through it. Tags still cannot be deleted after the fact. | ops | session | open |
 
 **Closed this session:** DMG-ships-unstapled (#124, verified on the *shipped* artifact — `stapler
 validate` + `spctl` → `accepted`, source `Notarized Developer ID`); npm beta.21 staleness; PR #56
@@ -382,10 +382,10 @@ Left open:
   legible, not less. Cropping flow to match would delete real UI, so the fix is re-capturing
   sessions *with* its chrome, per the committed spec. Blocked on demo capture being parked and
   Screen Recording permission.
-- [x] ~~**Stray worktree:** `.claude/worktrees/hero-bracket`~~ — DONE 2026-08-11. **The premise of
+- [x] 2026-08-10 — ~~**Stray worktree:** `.claude/worktrees/hero-bracket`~~ — DONE 2026-08-11. **The premise of
   this item was wrong and is corrected below:** `git worktree remove` runs fine from a
   worktree-isolated session (probed, exit 0). It is `git -C <sibling>` and `cd <sibling> && git …`
-  that the harness refuses. See the 2026-08-11 section.
+  that the harness refuses. See the 2026-08-11 section. | app | session | done |
 
 ## 2026-08-10 — beta.22 SHIPPED; distribution + one new bug
 
@@ -395,7 +395,7 @@ the deployed XML). Merged tonight: #110 (title-sanitizer leaks), #113 (`Remove`�
 proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fail / 1 skip** via
 `xcrun xcresulttool get test-results summary` at the merged tip.
 
-- [ ] **NEW BUG — a session started in the launch window is invisible to the sidebar.** Sean opened
+- [ ] 2026-08-10 — **NEW BUG — a session started in the launch window is invisible to the sidebar.** Sean opened
   beta.22, used the terminal the app opens with, ran `claude` in `~/Code/Career-ops`. The agent runs
   fine; the sidebar reads **ACTIVE 0 / INACTIVE 0** (screenshot 2026-08-10). Not mis-sorted —
   there is no row at all. Suspected mechanism: `AgentSession` records are only created by
@@ -405,8 +405,8 @@ proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fai
   Sean's own read, and nothing in this release touches session creation. **Same root gap as the
   parked #56 item below** (2026-07-28 section): Ghostties only knows about agents it launched
   itself. The launcher-UUID join would close both, which is the argument for doing that work as one
-  piece rather than patching each symptom. | macos | needs-triage
-- [ ] **`npx ghostties-install` is stuck on beta.21.** `ghostties-install@0.1.1` is merged and ready
+  piece rather than patching each symptom. | macos | session | open |
+- [ ] 2026-08-10 — **`npx ghostties-install` is stuck on beta.21.** `ghostties-install@0.1.1` is merged and ready
   (`cad579db7` — pin `v0.1.0-beta.22`, zip sha256 verified against GitHub's own asset digest) but
   **never published**. Blocked by a deliberate global rule `"deny": ["Bash(npm publish*)"]` in
   `~/.claude/settings.json` — a `deny` refuses outright and never prompts, so no session can
@@ -416,26 +416,26 @@ proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fai
   registry `latest` is still `0.1.0`, repo `package.json` is `0.1.1` pinning `v0.1.0-beta.22`, and
   the `Bash(npm publish*)` deny is still at `~/.claude/settings.json:32`. **This is the only stale
   user-facing install channel** — brew was checked the same day and is correct. Worth noting the
-  homepage hero advertises `npx ghostties-install` by name. | dist | needs-desktop
-- [x] ~~**PR #116 — decide or kill.**~~ MERGED 2026-08-11 as `3ea42d69d`. **Confirmed before merging
+  homepage hero advertises `npx ghostties-install` by name. | dist | session | open |
+- [x] 2026-08-10 — ~~**PR #116 — decide or kill.**~~ MERGED 2026-08-11 as `3ea42d69d`. **Confirmed before merging
   that this was bookkeeping, not user-facing:** the live tap `SeanSmithWorks/homebrew-tap` already
   served beta.22 with a byte-identical sha256 (bumped 2026-08-10, `3b4bddca6`), so `brew install`
   was never stale. The strawman's second half — marking the repo file as a snapshot template — was
   NOT done; the drift described above is still real and still unaddressed after every release.
-  Automating it is the item below. | dist | partially-closed
-- [ ] **Turn on the Homebrew cask auto-bump.** The `homebrew-cask` job already exists and is
+  Automating it is the item below. | dist | session | done |
+- [ ] 2026-08-10 — **Turn on the Homebrew cask auto-bump.** The `homebrew-cask` job already exists and is
   complete (opens a PR on the tap, preserving the human gate) — it skipped this release only because
   `vars.HOMEBREW_TAP_REPO` is unset. Needs a fine-grained PAT scoped to `SeanSmithWorks/homebrew-tap`
   alone, Contents + Pull requests read/write, minted in the GitHub UI (`gh` cannot create one).
   **Order is load-bearing: set `HOMEBREW_TAP_TOKEN` (secret) BEFORE `HOMEBREW_TAP_REPO` (variable).**
   The job gates on the variable and errors hard when it exists without the token — reversing the
   order turns the *next* release red at its final job, after the release is already public. Never
-  substitute `gh auth token`; it spans every repo including private ones. | dist | needs-sean
-- [ ] **npm publishing has no automation path at all.** Unlike brew, there is no CI job — publishing
+  substitute `gh auth token`; it spans every repo including private ones. | dist | session | open |
+- [ ] 2026-08-10 — **npm publishing has no automation path at all.** Unlike brew, there is no CI job — publishing
   from CI would need an npm automation token as a repo secret plus a publish step that doesn't
   exist. Doing this is what stops npx drifting behind every release, and it leaves the `npm publish`
-  deny rule fully intact because publishing stops being a local action. | dist | not-started
-- [ ] **Resume-on-Relaunch — designed, not built.** Relaunch currently rebuilds from template
+  deny rule fully intact because publishing stops being a local action. | dist | session | open |
+- [ ] 2026-08-10 — **Resume-on-Relaunch — designed, not built.** Relaunch currently rebuilds from template
   (`clearRuntime` + `createSession`), so the terminal returns and the conversation does not; the
   fork has **zero** references to `resume`/`--continue`/any Claude session identity. Design settled
   with Sean: **flat context menu with a `Relaunch` section title** (not a submenu — his call), three
@@ -447,28 +447,28 @@ proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fai
   need their own resume config. **One unverified assumption blocks the build:** whether
   `Section("Relaunch")` renders a visible header inside a SwiftUI `.contextMenu` on macOS. If it
   renders as a bare divider the flat layout loses its labelling and the submenu wins by default.
-  Cheap to check at build time. Wireframes in the session scratchpad. | macos | ready-to-brief
+  Cheap to check at build time. Wireframes in the session scratchpad. | macos | session | open |
 
 ## 2026-08-09 — App/UX wave: six PRs open, none merged
 
 Objective was to turn Sean's seven asks into reviewable PRs without merging. All seven closed.
 Distribution (#99) was the sibling thread's and is already on `main`.
 
-- [ ] **Merge the wave, in order.** `#102` **before** `#103` — both touch `WorkspaceSidebarView.swift`.
+- [ ] 2026-08-09 — **Merge the wave, in order.** `#102` **before** `#103` — both touch `WorkspaceSidebarView.swift`.
   `#96` (titlebar), `#100` (hide Tasks), `#101` (Codex template) and `#104` (overlay card) are
-  independent of each other. | macos | carried
-- [ ] **#102 shipped WITHOUT its minimum-sidebar-width measurement.** Adding text labels to the
+  independent of each other. | macos | session | open |
+- [ ] 2026-08-09 — **#102 shipped WITHOUT its minimum-sidebar-width measurement.** Adding text labels to the
   toolbar buttons widens them; the agent could not isolate its own Dev window to measure, and
   correctly refused to force focus. **Nothing was pre-built for an overflow that was never
   confirmed to exist.** 2-minute manual check is in the PR body — if the label truncates at
-  minimum width, an icon-only fallback is the fix. | macos | needs-runtime-check
-- [ ] **Screen Recording permission is NOT granted to this session's process.** `screencapture`
+  minimum width, an icon-only fallback is the fix. | macos | session | open |
+- [ ] 2026-08-09 — **Screen Recording permission is NOT granted to this session's process.** `screencapture`
   returns an all-black image and `osascript`/System Events is denied assistive access. Two
   subagents and the orchestrator hit it independently — environmental, not agent error. **Every
   visual acceptance criterion in this wave went unverified because of it**, and the parked
   dark-mode hero capture is blocked on the same thing. Granting it once to the terminal
-  (System Settings → Privacy & Security → Screen Recording) unblocks the whole class. | ops | quick
-- [x] **~~#96's window-floor tradeoff~~ — dissolved, do not chase it.** Removing the
+  (System Settings → Privacy & Security → Screen Recording) unblocks the whole class. | ops | quick | open |
+- [x] 2026-08-09 — **~~#96's window-floor tradeoff~~ — dissolved, do not chase it.** Removing the
   `TerminalController` override looked like it would let the gutter below the terminal card bleed
   terminal colour instead of sidebar chrome. It does not: `WorkspaceViewContainer` paints its own
   layer with `canvasBackgroundCGColor` in `.pinned`/`.closed` (lines 509, 1166, 1177), so
@@ -476,7 +476,7 @@ Distribution (#99) was the sibling thread's and is already on `main`.
   (`layer.backgroundColor = nil`, line 1188) and **#104 closes it** by making overlay paint its own.
 - **Sean's design call, 2026-08-09:** the canvas is **always** a shadowed card, including overlay.
   Built as #104. Note a shadow needs the inset to be visible at all — a full-bleed view's shadow is
-  clipped — so inset, radius and shadow move together. This was never a persistence bug.
+  clipped — so inset, radius and shadow move together. This was never a persistence bug. | app | session | done |
 
 ### Method notes worth keeping
 
@@ -496,33 +496,33 @@ Distribution (#99) was the sibling thread's and is already on `main`.
 
 Both merged to `main` and verified present in the merged code, not just merge-succeeded.
 
-- [ ] **#92 was never eyes-on'd.** #90 Sean tested by hand (Sessions-tab cycling, verified against
+- [ ] 2026-08-04 — **#92 was never eyes-on'd.** #90 Sean tested by hand (Sessions-tab cycling, verified against
   a build whose PID launch time postdated the binary). #92 passed code review + 629-test suite
   only. **Decisive check before beta.22:** with the app running, start two sessions, stop one —
   it must leave ACTIVE for ARCHIVE *without* relaunching the app. A cold launch shows correct
   zones even on unfixed code (no cache yet → `.exited` → `.inactive`), so launching and looking
-  proves nothing. | macos | needs-runtime-check
-- [ ] **Sessions tab: two zones or three?** Open design question, deliberately deferred until
+  proves nothing. | macos | session | open |
+- [ ] 2026-08-04 — **Sessions tab: two zones or three?** Open design question, deliberately deferred until
   ACTIVE is honest. Sean's instinct was a third "Idle/Inactive" zone for stopped-but-warm
   sessions; the counter is that ARCHIVE accumulates across launches (30-day retention, top-15
   per project) so a just-stopped session lands in a 20–80 row pile. **Strawman if revived:** port
   the Projects tab's existing three-bucket model — `computeSessionGroups` (`WorkspaceStore.swift`)
   already does active / recent (`lastActiveAt` within 24h) / idle, and `SessionBucket` exists. Re-look
-  now that #92 makes ACTIVE truthful; if `ACTIVE 1 / ARCHIVE 23` reads fine, kill this. | craft | session
-- [ ] **`focusAdjacentLiveSession` returns a target it never focused** (`SessionCoordinator.swift`).
+  now that #92 makes ACTIVE truthful; if `ACTIVE 1 / ARCHIVE 23` reads fine, kill this. | craft | session | open |
+- [ ] 2026-08-04 — **`focusAdjacentLiveSession` returns a target it never focused** (`SessionCoordinator.swift`).
   Returns `target` unconditionally even when `focusSession` bailed on a missing tree — the silent
   lie that made the #90 cycling regression invisible at the call site. Durable fix, but touches
-  three call sites (`WorkspaceSidebarView`, `TaskSidebarView` ×2). Own PR. | macos | session
-- [ ] **ARCHIVE order is load order, not recency.** `RecentsListView.sorted(sessions:)` is an
+  three call sites (`WorkspaceSidebarView`, `TaskSidebarView` ×2). Own PR. | macos | session | open |
+- [ ] 2026-08-04 — **ARCHIVE order is load order, not recency.** `RecentsListView.sorted(sessions:)` is an
   identity function. Not a bug today, but it's why a just-stopped session is hard to find, and it
-  gates the zone decision above. **Decide or kill.** | craft | quick
-- [ ] **`clearRuntime` clears only the store cache, not `cachedIndicatorStates`** — same asymmetry
+  gates the zone decision above. **Decide or kill.** | craft | quick | open |
+- [ ] 2026-08-04 — **`clearRuntime` clears only the store cache, not `cachedIndicatorStates`** — same asymmetry
   #92 fixed in `setStatus`. Unreachable (a removed session's UUID never returns), one line for
-  symmetry. | macos | quick
-- [ ] **Two contradictory test-isolation conventions** once #56 lands. #56 adds a `#if DEBUG`
+  symmetry. | macos | quick | open |
+- [ ] 2026-08-04 — **Two contradictory test-isolation conventions** once #56 lands. #56 adds a `#if DEBUG`
   injected-store seam so tests avoid `WorkspaceStore.shared`; #92's tests use `.shared` directly
   (correctly declined — threading a store through `setStatus` would undermine the "single mutation
-  point" property the PR exists to make auditable). Pick one convention. | quality | quick
+  point" property the PR exists to make auditable). Pick one convention. | quality | quick | open |
 
 ## 2026-08-03 — ⚠️ UI fix wave merged to main WITHOUT its runtime gates
 
@@ -530,9 +530,9 @@ Both merged to `main` and verified present in the merged code, not just merge-su
 
 CI proves they *compile and pass unit tests*. It cannot prove either fix actually fires — both are behavioural fixes in SwiftUI event handling, which the test suite does not exercise.
 
-- [ ] **#57 (`d03d67a5c`) — Esc reverts inline rename. UNVERIFIED, and it is the risky one.** The entire fix reduces to one untested boolean: if `.onExitCommand` never fires on that field, the merge shipped the original bug unchanged while looking fixed. **Decisive check:** rename a session inline, press Esc, then right-click the row — **"Sync name automatically" must be ABSENT** from the context menu. If it is present, the fix is inert. | macos | needs-runtime-check
-- [ ] **#58 (`e3dd959fe`) — sidebar re-clamp on window shrink. UNVERIFIED.** **Decisive check, and the order matters:** close the sidebar FIRST, shrink the window to ~700pt, THEN open the sidebar — it must come in already narrowed. Testing in any other order passes trivially and proves nothing. | macos | needs-runtime-check
-- [x] **#59 (`cdb74ad4c`) — grey out Next/Previous Project menu items when empty.** No runtime gate; this one was always safe to land on CI alone.
+- [ ] 2026-08-03 — **#57 (`d03d67a5c`) — Esc reverts inline rename. UNVERIFIED, and it is the risky one.** The entire fix reduces to one untested boolean: if `.onExitCommand` never fires on that field, the merge shipped the original bug unchanged while looking fixed. **Decisive check:** rename a session inline, press Esc, then right-click the row — **"Sync name automatically" must be ABSENT** from the context menu. If it is present, the fix is inert. | macos | session | open |
+- [ ] 2026-08-03 — **#58 (`e3dd959fe`) — sidebar re-clamp on window shrink. UNVERIFIED.** **Decisive check, and the order matters:** close the sidebar FIRST, shrink the window to ~700pt, THEN open the sidebar — it must come in already narrowed. Testing in any other order passes trivially and proves nothing. | macos | session | open |
+- [x] 2026-08-03 — **#59 (`cdb74ad4c`) — grey out Next/Previous Project menu items when empty.** No runtime gate; this one was always safe to land on CI alone. | app | session | done |
 
 **Run both checks before cutting beta.22.** If either fails, the fix is inert and needs reopening — the merge did not close the underlying bug.
 
@@ -548,9 +548,9 @@ Investigation only, no code written. Findings in `reference_terminal-images-work
 
 Objective (locked): repo documentation + correct Ghostty-vs-Ghostties calibration. All five refresh waves are merged to `main`; this wave adds the design layer that was missing.
 
-- [x] ~~**PR #80** — `docs/INFORMATION-ARCHITECTURE.md` + `docs/case-study-documentation-refresh.md`.~~ **Merged 2026-08-02 as `1c2ff4e82`.** Records the IA the refresh produced (audience model, the disambiguation-not-topic-tree principle, decay model per file, five questions before adding a doc) and the narrative of how it was arrived at. Entry points in `CONTRIBUTING.md` for humans and `AGENTS.md` for agents.
-- [x] ~~**Should the case-study visuals live in the repo?**~~ **DECIDED 2026-08-03: no, killed.** GitHub markdown cannot render the CSS/SVG figures, so putting them in the repo means exporting PNGs, and images cannot be diffed — they would go stale silently and break the decay-model rule the IA doc itself sets. Repo docs stay textual; the visual version stays an Artifact. Do not re-open as a question.
-- [ ] **Visual case study lives only as an Artifact.** `https://claude.ai/code/artifact/8bda1349-3010-4780-bee8-88ffe72e5c0c` — six figures (inherited-scale receipt, the auto-close trap, the routing fork, six entry points, the 3.8:1 deletion bar, CONTRIBUTING before/after) plus the inlined demo GIF. Private to Sean's account; it is not backed up in the repo and would need rebuilding from `docs/case-study-documentation-refresh.md` if lost. | docs | reference
+- [x] 2026-08-02 — ~~**PR #80** — `docs/INFORMATION-ARCHITECTURE.md` + `docs/case-study-documentation-refresh.md`.~~ **Merged 2026-08-02 as `1c2ff4e82`.** Records the IA the refresh produced (audience model, the disambiguation-not-topic-tree principle, decay model per file, five questions before adding a doc) and the narrative of how it was arrived at. Entry points in `CONTRIBUTING.md` for humans and `AGENTS.md` for agents. | app | session | done |
+- [x] 2026-08-02 — ~~**Should the case-study visuals live in the repo?**~~ **DECIDED 2026-08-03: no, killed.** GitHub markdown cannot render the CSS/SVG figures, so putting them in the repo means exporting PNGs, and images cannot be diffed — they would go stale silently and break the decay-model rule the IA doc itself sets. Repo docs stay textual; the visual version stays an Artifact. Do not re-open as a question. | app | session | done |
+- [ ] 2026-08-02 — **Visual case study lives only as an Artifact.** `https://claude.ai/code/artifact/8bda1349-3010-4780-bee8-88ffe72e5c0c` — six figures (inherited-scale receipt, the auto-close trap, the routing fork, six entry points, the 3.8:1 deletion bar, CONTRIBUTING before/after) plus the inlined demo GIF. Private to Sean's account; it is not backed up in the repo and would need rebuilding from `docs/case-study-documentation-refresh.md` if lost. | docs | session | open |
 
 ## 2026-08-03 — Wave 0 repo settings ✅ COMPLETE
 
@@ -558,14 +558,14 @@ Every Wave 0 item is applied and verified live. Issues, Discussions, private vul
 
 Two follow-ups, neither blocking:
 
-- [ ] **The social-preview card has no preserved source.** It was rendered from a standalone HTML file in a session scratchpad, which is gone. Rebuilding is required to change the version string, the tagline, or the layout. **Now more pointed:** the site's `og:image` (PR #88, `web/assets/social-card.png`) also came from the Paper artboard — the Paper file is now the de-facto source for both the GitHub social preview and the site's share card. Decide whether that's acceptable or whether a rebuildable source belongs in the repo (e.g. `.github/assets/social-preview.html` + a render note). | docs | decide-or-kill
-- [x] ~~**Paper promo artboard carries the pre-rename URL.**~~ **Fixed.** Sean updated the artboard; the card shipped in PR #88 reads `github.com/SeanSmithWorks/ghostties` (verified in the rendered PNG).
+- [ ] 2026-08-03 — **The social-preview card has no preserved source.** It was rendered from a standalone HTML file in a session scratchpad, which is gone. Rebuilding is required to change the version string, the tagline, or the layout. **Now more pointed:** the site's `og:image` (PR #88, `web/assets/social-card.png`) also came from the Paper artboard — the Paper file is now the de-facto source for both the GitHub social preview and the site's share card. Decide whether that's acceptable or whether a rebuildable source belongs in the repo (e.g. `.github/assets/social-preview.html` + a render note). | docs | session | open |
+- [x] 2026-08-03 — ~~**Paper promo artboard carries the pre-rename URL.**~~ **Fixed.** Sean updated the artboard; the card shipped in PR #88 reads `github.com/SeanSmithWorks/ghostties` (verified in the rendered PNG). | app | session | done |
 
 **Deliberately NOT enabled:** Dependabot *security updates* (the auto-PR feature, `/automated-security-fixes`). `.github/dependabot.yml` is still the inherited upstream config pointing at upstream paths, so auto-PRs would file against the wrong targets until that retarget lands.
 
 **Off-objective, parked deliberately:**
 
-- [ ] **Idea-log prune** — 10 of 31 captures in `tease-capture.md` are older than 30 days and unacted-on, which is that file's own documented prune threshold (1 from May, 9 from June). Surfaced at `/wrap` 2026-08-02, nothing deleted. Spans projects, so it is not this thread's objective. | ops | needs-Sean
+- [ ] 2026-08-03 — **Idea-log prune** — 10 of 31 captures in `tease-capture.md` are older than 30 days and unacted-on, which is that file's own documented prune threshold (1 from May, 9 from June). Surfaced at `/wrap` 2026-08-02, nothing deleted. Spans projects, so it is not this thread's objective. | ops | session | open |
 
 ## 2026-08-03 — stale live indicator in Sessions tab ACTIVE zone ✅ FIXED 2026-08-04
 
@@ -748,7 +748,7 @@ Full design/technical audit of the live site. Scores: **Design 15/40 Nielsen, Te
 
 ## 2026-08-01 — ghostties.org docs section (parked)
 
-- [ ] **ghostties.org — high-level docs section (P3).** Add a docs overview page to the marketing site with high-level concepts, linking to the GitHub repo for depth. Blocked on the repo-documentation work happening in a separate thread — needs the real doc URLs to land first so the links aren't dead. | web | needs-docs
+- [ ] 2026-08-01 — **ghostties.org — high-level docs section (P3).** Add a docs overview page to the marketing site with high-level concepts, linking to the GitHub repo for depth. Blocked on the repo-documentation work happening in a separate thread — needs the real doc URLs to land first so the links aren't dead. | web | session | open |
 
 ## 2026-07-31 — In-app browser has no keyboard support (new, from Sean's testing)
 
@@ -871,15 +871,15 @@ Sean hit this testing a real build: **can't paste into the URL bar, and none of 
 
 ## 2026-07-18
 
-- [ ] **Re-enable app-hosted macOS test execution on CI** — `test-ghostties.yml`'s `macos-app` job now runs `build-for-testing` (compile-only), not `test`. Reason: launching `Ghostties Dev.app` as the XCTest host reliably hangs ~6 min on headless GitHub runners ("test runner hung before establishing connection" → exit 65), even though the three-layer XCTest short-circuit makes local Cmd+U launch fast. The pure-Swift logic suites still run in the `swift-package` (cli/) job; app-hosted `GhosttyTests` execution is local-Cmd+U-only. Real fix: move the host-independent test classes (TaskModelTests, TaskFileWatcherTests, TaskStoreWriteTests, router/dedup/zone logic, etc.) into a non-app-hosted logic bundle so they run without launching the GUI. See memory `project-ci-host-app-hang.md`. | build | session
+- [ ] 2026-07-18 — **Re-enable app-hosted macOS test execution on CI** — `test-ghostties.yml`'s `macos-app` job now runs `build-for-testing` (compile-only), not `test`. Reason: launching `Ghostties Dev.app` as the XCTest host reliably hangs ~6 min on headless GitHub runners ("test runner hung before establishing connection" → exit 65), even though the three-layer XCTest short-circuit makes local Cmd+U launch fast. The pure-Swift logic suites still run in the `swift-package` (cli/) job; app-hosted `GhosttyTests` execution is local-Cmd+U-only. Real fix: move the host-independent test classes (TaskModelTests, TaskFileWatcherTests, TaskStoreWriteTests, router/dedup/zone logic, etc.) into a non-app-hosted logic bundle so they run without launching the GUI. See memory `project-ci-host-app-hang.md`. | build | session | open |
 
 ## 2026-07-17
 
-- [ ] **Esc doesn't cancel inline session rename** (#43 polish) — right-click → Rename → type → `Esc` keeps the typed value instead of reverting; only `Enter` commits and re-typing reverts. Wire up Escape-to-cancel. Minor, out of scope of beta.20 verify. | craft | quick
-- [ ] **Phase 1 file-watch not live-verified** — blocked by TCC: the ad-hoc `Ghostties Demo` build lacks Files & Folders permission ("Data Access Blocked"), so it can't read `examples/demo-workspace/*/.ghostties/tasks/`. Needs Sean to grant it in System Settings → Privacy → Files & Folders, OR accept the Phase 1 close on code verification. | build | needs-Sean
-- [ ] **`.gitignore` build-output dirs** — `.build-demo/` and `.build-verify/` are untracked build artifacts sitting in the repo root; add to `.gitignore`. (`.build-demo/` gitignore already noted in ORCHESTRATOR demo-capture entry.) | build | quick
-- [ ] **Stale updater test on main** — `GhosttyTests/UpdateViewModelTests.testNotFoundText()` expects `"No Updates Available"` but the shipped `.notFound` copy (changed in fork PR #34, in beta.19) is `"You're on the latest"` / `"No stable releases yet"`. Pre-existing, unrelated to beta.20; our red CI never caught it. One-line fix: update the test's expected string to match current copy. | quality | quick
-- [ ] **Perf track (contextMenu render cost, #1/#2)** — confirmed this session the per-row `.contextMenu`/`.popover`/`.draggable` modifiers are still present in `ProjectDisclosureRow.swift` (not code-fixed). Full state + the one remaining interaction-under-load check live in ORCHESTRATOR In-Flight Work. Separate objective from beta.20 verify. | perf | session
+- [ ] 2026-07-17 — **Esc doesn't cancel inline session rename** (#43 polish) — right-click → Rename → type → `Esc` keeps the typed value instead of reverting; only `Enter` commits and re-typing reverts. Wire up Escape-to-cancel. Minor, out of scope of beta.20 verify. | craft | quick | open |
+- [ ] 2026-07-17 — **Phase 1 file-watch not live-verified** — blocked by TCC: the ad-hoc `Ghostties Demo` build lacks Files & Folders permission ("Data Access Blocked"), so it can't read `examples/demo-workspace/*/.ghostties/tasks/`. Needs Sean to grant it in System Settings → Privacy → Files & Folders, OR accept the Phase 1 close on code verification. | build | session | open |
+- [ ] 2026-07-17 — **`.gitignore` build-output dirs** — `.build-demo/` and `.build-verify/` are untracked build artifacts sitting in the repo root; add to `.gitignore`. (`.build-demo/` gitignore already noted in ORCHESTRATOR demo-capture entry.) | build | quick | open |
+- [ ] 2026-07-17 — **Stale updater test on main** — `GhosttyTests/UpdateViewModelTests.testNotFoundText()` expects `"No Updates Available"` but the shipped `.notFound` copy (changed in fork PR #34, in beta.19) is `"You're on the latest"` / `"No stable releases yet"`. Pre-existing, unrelated to beta.20; our red CI never caught it. One-line fix: update the test's expected string to match current copy. | quality | quick | open |
+- [ ] 2026-07-17 — **Perf track (contextMenu render cost, #1/#2)** — confirmed this session the per-row `.contextMenu`/`.popover`/`.draggable` modifiers are still present in `ProjectDisclosureRow.swift` (not code-fixed). Full state + the one remaining interaction-under-load check live in ORCHESTRATOR In-Flight Work. Separate objective from beta.20 verify. | perf | session | open |
 
 ## 2026-08-01 — repo documentation refresh
 
@@ -887,75 +887,75 @@ Objective: get the GitHub repo presentable for incoming interest, with correct G
 
 **All five waves are now in PRs awaiting review.** Merge order matters: #74 before #76, because the copy of `CONTRIBUTING.md` on `main` still links to the `AI_POLICY.md` that #76 deletes.
 
-- [x] **Wave 1 — governance purge** — PR #71. 19 files, 4,524 deletions: CODEOWNERS, VOUCHED.td, 5 vouch workflows, 2 discussion templates, 8 dead upstream pipelines.
-- [x] **Wave 2 — licensing & attribution** — PR #73. LICENSE stacked copyright + `THIRD-PARTY-NOTICES.md`, and the notice now ships inside the `.app` (verified by build: lands in `Contents/Resources/`, byte-identical). Corrections to the original plan: nerd-fonts is MIT (`font-patcher.py`), not OFL; swift-argument-parser (Apache-2.0) was missing entirely; Sparkle's LICENSE bundles four more licenses.
-- [x] **Wave 3 — README rewrite** — PR #75. 68 lines, uncropped hero (Sean's call), 332K inline demo GIF (GitHub won't render `<video>` from a repo-relative path), plain Ghostty credit + non-affiliation, fixed the License copyright mismatch.
-- [x] **Wave 4 — intake & support docs** — PR #74. CONTRIBUTING rewrite, SECURITY, CODE_OF_CONDUCT (Covenant 2.1), TESTING (written against real runs: 110 cli tests, 673 app tests, both green), YAML issue forms. 6 area labels created directly on the repo.
-- [x] **Wave 5 — inherited-doc cleanup** — PR #76. Deleted `PACKAGING.md` + `AI_POLICY.md`, rewrote `AGENTS.md`, fixed the `HACKING.md` header (it cloned upstream's URL).
-- [ ] **Wave 0 — repo settings (Sean's hands, GATED on Wave 1 merging to main)** — enable Issues + Discussions (Q&A and Ideas only, delete other categories), private vulnerability reporting, Dependabot alerts. Set description, 10 topics (currently empty), and a 1280x640 social preview. **Do not enable Issues before the merge** — `issues`-triggered workflows run from the default branch, so the inherited auto-close vouching workflow is still armed on `main`. | docs | needs-Sean
-- [ ] **`blank_issues_enabled: false`** — the Wave 4 plan called for this; left `true` so people who don't fit either form still have a route in. Flip it if the untemplated issues turn out to be noise. | docs | quick
-- [ ] **`.github/dependabot.yml` retarget** — listed in the Wave 5 plan, not done; it was out of the doc-prune scope and belongs with a CI pass. | build | quick
-- [ ] **Dark-mode hero capture — deferred** — hero is light-only, and a light screenshot on GitHub's dark theme reads as broken. `<picture>` theme-swapping needs a dark capture. Not worth a session on its own; do it next time Ghostties is open with Screen Recording granted. | design | deferred
-- [ ] **Stale comment in `ghostties-release.yml`** — line 6 reads `# Key differences from upstream release-tag.yml:`, but that file was deleted in Wave 1. Comment only, no functional reference. Left untouched because the security work-stream owns that file. | build | quick
+- [x] 2026-08-01 — **Wave 1 — governance purge** — PR #71. 19 files, 4,524 deletions: CODEOWNERS, VOUCHED.td, 5 vouch workflows, 2 discussion templates, 8 dead upstream pipelines. | app | session | done |
+- [x] 2026-08-01 — **Wave 2 — licensing & attribution** — PR #73. LICENSE stacked copyright + `THIRD-PARTY-NOTICES.md`, and the notice now ships inside the `.app` (verified by build: lands in `Contents/Resources/`, byte-identical). Corrections to the original plan: nerd-fonts is MIT (`font-patcher.py`), not OFL; swift-argument-parser (Apache-2.0) was missing entirely; Sparkle's LICENSE bundles four more licenses. | app | session | done |
+- [x] 2026-08-01 — **Wave 3 — README rewrite** — PR #75. 68 lines, uncropped hero (Sean's call), 332K inline demo GIF (GitHub won't render `<video>` from a repo-relative path), plain Ghostty credit + non-affiliation, fixed the License copyright mismatch. | app | session | done |
+- [x] 2026-08-01 — **Wave 4 — intake & support docs** — PR #74. CONTRIBUTING rewrite, SECURITY, CODE_OF_CONDUCT (Covenant 2.1), TESTING (written against real runs: 110 cli tests, 673 app tests, both green), YAML issue forms. 6 area labels created directly on the repo. | app | session | done |
+- [x] 2026-08-01 — **Wave 5 — inherited-doc cleanup** — PR #76. Deleted `PACKAGING.md` + `AI_POLICY.md`, rewrote `AGENTS.md`, fixed the `HACKING.md` header (it cloned upstream's URL). | app | session | done |
+- [ ] 2026-08-01 — **Wave 0 — repo settings (Sean's hands, GATED on Wave 1 merging to main)** — enable Issues + Discussions (Q&A and Ideas only, delete other categories), private vulnerability reporting, Dependabot alerts. Set description, 10 topics (currently empty), and a 1280x640 social preview. **Do not enable Issues before the merge** — `issues`-triggered workflows run from the default branch, so the inherited auto-close vouching workflow is still armed on `main`. | docs | session | open |
+- [ ] 2026-08-01 — **`blank_issues_enabled: false`** — the Wave 4 plan called for this; left `true` so people who don't fit either form still have a route in. Flip it if the untemplated issues turn out to be noise. | docs | quick | open |
+- [ ] 2026-08-01 — **`.github/dependabot.yml` retarget** — listed in the Wave 5 plan, not done; it was out of the doc-prune scope and belongs with a CI pass. | build | quick | open |
+- [ ] 2026-08-01 — **Dark-mode hero capture — deferred** — hero is light-only, and a light screenshot on GitHub's dark theme reads as broken. `<picture>` theme-swapping needs a dark capture. Not worth a session on its own; do it next time Ghostties is open with Screen Recording granted. | design | session | parked |
+- [ ] 2026-08-01 — **Stale comment in `ghostties-release.yml`** — line 6 reads `# Key differences from upstream release-tag.yml:`, but that file was deleted in Wave 1. Comment only, no functional reference. Left untouched because the security work-stream owns that file. | build | quick | open |
 
 **Off-objective, parked here deliberately (do NOT carry into the docs thread):**
 
-- [ ] **Public-repo hygiene** — `docs/SESSION_NOTES.md` (158KB of internal notes), `docs/handoffs/`, `docs/brainstorms/`, `docs/PR_DRAFTS.md`, `drafts/`, `todos/`, `BACKLOG.md` are all publicly readable. Wave D already untracked one file for the same reason. Untracking stops the bleeding but does not clear already-public history — see the private memory for prior art and the real fix. Deliberately NOT folded into a documentation branch. | security | needs-Sean
+- [ ] 2026-08-01 — **Public-repo hygiene** — `docs/SESSION_NOTES.md` (158KB of internal notes), `docs/handoffs/`, `docs/brainstorms/`, `docs/PR_DRAFTS.md`, `drafts/`, `todos/`, `BACKLOG.md` are all publicly readable. Wave D already untracked one file for the same reason. Untracking stops the bleeding but does not clear already-public history — see the private memory for prior art and the real fix. Deliberately NOT folded into a documentation branch. | security | session | open |
 
 ## Deferred / low priority
 
-- [ ] **Ghost physics playground — full port** — the fuller interactive playground (drift physics, drag-throw, trading-card hover) from the sibling `2026-web-playground` repo was explicitly parked in favor of the lighter ambient-drift-only version that shipped in PR #48. Repo isn't cloned on this machine. Revisit only if Sean asks for the fuller version specifically. | web | deferred
-- [ ] **Approve or edit the 4 social drafts** at `drafts/ghostties-social-question-series.md` — question-hook posts paired with the site's two hero visuals. Drafted and shown to Sean, not yet reacted to. Note: social/content review happens in a separate dedicated thread, not the app orchestrator thread. | content | needs-Sean
+- [ ] **Ghost physics playground — full port** — the fuller interactive playground (drift physics, drag-throw, trading-card hover) from the sibling `2026-web-playground` repo was explicitly parked in favor of the lighter ambient-drift-only version that shipped in PR #48. Repo isn't cloned on this machine. Revisit only if Sean asks for the fuller version specifically. | web | session | parked |
+- [ ] **Approve or edit the 4 social drafts** at `drafts/ghostties-social-question-series.md` — question-hook posts paired with the site's two hero visuals. Drafted and shown to Sean, not yet reacted to. Note: social/content review happens in a separate dedicated thread, not the app orchestrator thread. | content | session | open |
 
 ## 2026-08-08
 
-- [ ] **DMG-installed app is unstapled** (`.github/workflows/ghostties-release.yml`) — `create-dmg` runs (~line 288) before `xcrun stapler staple` (~line 334), so `Ghostties.dmg`'s app never gets the staple; `ghostties-macos-arm64.zip`, zipped after stapling (~line 337), does. Verified by installing both: the zip's app reports `Notarization Ticket=stapled`; the DMG's app fails `stapler validate` and carries `com.apple.quarantine`. Both still pass `spctl` while online. Consequence: a Homebrew cask install (copies out of the DMG) needs an online Gatekeeper check on first launch — offline or on a restrictive network it shows the "cannot check it for malicious software" dialog, on the exact path the README calls recommended. Likely fix: staple before `create-dmg`, not after. Not fixed here — touches the release pipeline, can't be verified without cutting a release, and beta.22 belongs to a sibling thread. | build | needs-release-cut
+- [ ] 2026-08-08 — **DMG-installed app is unstapled** (`.github/workflows/ghostties-release.yml`) — `create-dmg` runs (~line 288) before `xcrun stapler staple` (~line 334), so `Ghostties.dmg`'s app never gets the staple; `ghostties-macos-arm64.zip`, zipped after stapling (~line 337), does. Verified by installing both: the zip's app reports `Notarization Ticket=stapled`; the DMG's app fails `stapler validate` and carries `com.apple.quarantine`. Both still pass `spctl` while online. Consequence: a Homebrew cask install (copies out of the DMG) needs an online Gatekeeper check on first launch — offline or on a restrictive network it shows the "cannot check it for malicious software" dialog, on the exact path the README calls recommended. Likely fix: staple before `create-dmg`, not after. Not fixed here — touches the release pipeline, can't be verified without cutting a release, and beta.22 belongs to a sibling thread. | build | session | open |
 
 ## 2026-08-09
 
-- [ ] **Cask CI auto-bump not activated.** Needs a fine-grained PAT scoped to `SeanSmithWorks/homebrew-tap` stored as `HOMEBREW_TAP_TOKEN`, plus the `HOMEBREW_TAP_REPO` variable. **Set both together or neither** — the job intentionally fails loudly when the variable exists without the token, which would turn a release run red. Do not substitute `gh auth token` (spans every repo, including private ones, and rotates with the CLI session). Until then, bump manually: `bash scripts/update-cask-version.sh <tag>`, then copy into the tap's `Casks/ghostties.rb`. | build | needs-Sean
-- [ ] **npm version bumps are manual.** `dist/ghostties/npm/ghostties-install/package.json` pins the app version and its SHA256; publishing a new pin means `npm publish` by hand. Deliberate — Sparkle catches installed apps up on first launch, so a stale pin self-heals. | build | deferred
+- [ ] 2026-08-09 — **Cask CI auto-bump not activated.** Needs a fine-grained PAT scoped to `SeanSmithWorks/homebrew-tap` stored as `HOMEBREW_TAP_TOKEN`, plus the `HOMEBREW_TAP_REPO` variable. **Set both together or neither** — the job intentionally fails loudly when the variable exists without the token, which would turn a release run red. Do not substitute `gh auth token` (spans every repo, including private ones, and rotates with the CLI session). Until then, bump manually: `bash scripts/update-cask-version.sh <tag>`, then copy into the tap's `Casks/ghostties.rb`. | build | session | open |
+- [ ] 2026-08-09 — **npm version bumps are manual.** `dist/ghostties/npm/ghostties-install/package.json` pins the app version and its SHA256; publishing a new pin means `npm publish` by hand. Deliberate — Sparkle catches installed apps up on first launch, so a stale pin self-heals. | build | session | parked |
 
 Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #101, #102, #103, #104) plus four follow-ups driven by live testing (#106 Archive stays collapsed, #107 repo-name-echo titles, #108 Inactive zone, #109 real Archive sort by `lastActiveAt`, #111 Inactive boundary correction). Main at `86e2c0bc4`, suite 659/658/0/1.
 
-- [ ] **#110 fixture swap — IN FLIGHT, UNVERIFIED** — PR #110 (three title-sanitizer leaks: spinner glyphs, `<dir> | Claude Code`, ellipsis paths) is CLEAN and MERGEABLE but its fixtures contain real local strings (`2026-web-playground`, `…/Code/_experiments/…`). A subagent was mid-swap when the thread was recycled; its **uncommitted** edits to `SessionTitleSanitizer.swift` + `SessionTitleSanitizerTests.swift` are in the worktree at `.claude/worktrees/agent-af3ba3c118d267faf` on branch `fix/reject-status-glyph-titles`. Verify with `grep -rn "2026-web-playground\|_experiments\|/Users/sean" macos/` — must return nothing before merging. If the work is gone, it's a 3-string swap: `2026-web-playground`→`sample-web-project`, `…/Code/_experiments/2026-web-playground`→`…/Code/sandbox/sample-web-project`, `/Users/sean/`→`/Users/someone/`. Suite must stay exactly 673/672/0/1 — a pure string swap changes no counts. | app | carried
-- [ ] **Rename-with-Enter verdict** — `isNamePinned` is **0 of 31** sessions after a full evening of Sean testing. Consistent with only-Esc (correct #57 behavior), but not proven. Code reads correct on both tabs (`.onSubmit → commitRename → store.renameSession`), persistence verified (the flag is written on all 31 records). Needs one deliberate Rename → type → **Enter**, then read `~/Library/Application Support/Ghostties Dev/workspace.json`. Until settled, cannot rule out a broken Enter path. | app | needs-Sean
-- [ ] **beta.22 — three runtime checks, then tag** — tag point `047cd3a85` confirmed still an ancestor of main, so the wave did not contaminate it. Checks (each has an ordering trap that makes the lazy version pass trivially): **#57** rename → junk → Esc → right-click, "Sync name automatically" must be ABSENT, **Projects tab only** (the item only exists in `ProjectDisclosureRow`) and on a never-renamed session; **#58** close sidebar FIRST, shrink to ~700pt, THEN open; **#92** two sessions running, stop one, other must stay ACTIVE, on an already-running app. Tag needs Sean's explicit go — fires release CI and republishes the appcast, and origin rulesets block tag deletion. | release | needs-Sean
-- [ ] **CI guard for `window.backgroundColor`** — offered, never built. A test that fails if a `WorkspaceLayout` token is ever assigned to a window's `backgroundColor` anywhere in `macos/Sources`. #96 deleted both hardcoded overrides and left fork-fence comments, but comments don't enforce. Root cause of the 3× recurrence was `agent-craft.md` actively instructing the bug; both entries corrected 2026-08-09 and captured in `feedback_window-backgroundcolor-is-derived.md`. | app | quick
-- [ ] **Prune 8 stale worktrees** — all merged branches, only `vendor/cef*` build artifacts dirty, no work at risk: the four `agent-*` from the wave, plus `esc-cancel-rename` (#57), `hide-tasks-view` (#100), `menu-validation` (#59), `sidebar-reclamp` (#58). Do NOT touch `session-2` (locked, another session, PR #105) or `truthful-idle` (#56 open) or `cache-load-harness` (never merged). | build | quick
-- [ ] **Archive expansion is remembered, not reset per launch** — Sean asked for "closed by default"; the code default was already `false` and the symptom was a stale stored `1` from testing (fixed by `defaults write com.seansmithdesign.ghostties.dev ghostties.sessionsSection.archive -bool false`). Open question he hasn't answered: should Archive *always* start collapsed each launch regardless of how it was left? That's a real code change. | app | needs-Sean
+- [ ] 2026-08-09 — **#110 fixture swap — IN FLIGHT, UNVERIFIED** — PR #110 (three title-sanitizer leaks: spinner glyphs, `<dir> | Claude Code`, ellipsis paths) is CLEAN and MERGEABLE but its fixtures contain real local strings (`2026-web-playground`, `…/Code/_experiments/…`). A subagent was mid-swap when the thread was recycled; its **uncommitted** edits to `SessionTitleSanitizer.swift` + `SessionTitleSanitizerTests.swift` are in the worktree at `.claude/worktrees/agent-af3ba3c118d267faf` on branch `fix/reject-status-glyph-titles`. Verify with `grep -rn "2026-web-playground\|_experiments\|/Users/sean" macos/` — must return nothing before merging. If the work is gone, it's a 3-string swap: `2026-web-playground`→`sample-web-project`, `…/Code/_experiments/2026-web-playground`→`…/Code/sandbox/sample-web-project`, `/Users/sean/`→`/Users/someone/`. Suite must stay exactly 673/672/0/1 — a pure string swap changes no counts. | app | session | open |
+- [ ] 2026-08-09 — **Rename-with-Enter verdict** — `isNamePinned` is **0 of 31** sessions after a full evening of Sean testing. Consistent with only-Esc (correct #57 behavior), but not proven. Code reads correct on both tabs (`.onSubmit → commitRename → store.renameSession`), persistence verified (the flag is written on all 31 records). Needs one deliberate Rename → type → **Enter**, then read `~/Library/Application Support/Ghostties Dev/workspace.json`. Until settled, cannot rule out a broken Enter path. | app | session | open |
+- [ ] 2026-08-09 — **beta.22 — three runtime checks, then tag** — tag point `047cd3a85` confirmed still an ancestor of main, so the wave did not contaminate it. Checks (each has an ordering trap that makes the lazy version pass trivially): **#57** rename → junk → Esc → right-click, "Sync name automatically" must be ABSENT, **Projects tab only** (the item only exists in `ProjectDisclosureRow`) and on a never-renamed session; **#58** close sidebar FIRST, shrink to ~700pt, THEN open; **#92** two sessions running, stop one, other must stay ACTIVE, on an already-running app. Tag needs Sean's explicit go — fires release CI and republishes the appcast, and origin rulesets block tag deletion. | release | session | open |
+- [ ] 2026-08-09 — **CI guard for `window.backgroundColor`** — offered, never built. A test that fails if a `WorkspaceLayout` token is ever assigned to a window's `backgroundColor` anywhere in `macos/Sources`. #96 deleted both hardcoded overrides and left fork-fence comments, but comments don't enforce. Root cause of the 3× recurrence was `agent-craft.md` actively instructing the bug; both entries corrected 2026-08-09 and captured in `feedback_window-backgroundcolor-is-derived.md`. | app | quick | open |
+- [ ] 2026-08-09 — **Prune 8 stale worktrees** — all merged branches, only `vendor/cef*` build artifacts dirty, no work at risk: the four `agent-*` from the wave, plus `esc-cancel-rename` (#57), `hide-tasks-view` (#100), `menu-validation` (#59), `sidebar-reclamp` (#58). Do NOT touch `session-2` (locked, another session, PR #105) or `truthful-idle` (#56 open) or `cache-load-harness` (never merged). | build | quick | open |
+- [ ] 2026-08-09 — **Archive expansion is remembered, not reset per launch** — Sean asked for "closed by default"; the code default was already `false` and the symptom was a stale stored `1` from testing (fixed by `defaults write com.seansmithdesign.ghostties.dev ghostties.sessionsSection.archive -bool false`). Open question he hasn't answered: should Archive *always* start collapsed each launch regardless of how it was left? That's a real code change. | app | session | open |
 
 **Off-objective, parked (do NOT carry):**
 
-- [ ] **PR #105** (`docs/npm-published`) — owned by another session, worktree `session-2` is locked. Not this thread's to merge. | dist | other-session
-- [ ] **PR #56** (idle-fallback) — open since July, correctly excluded from beta.22. | app | deferred
-- [ ] **`test/session-cache-load-harness`** — branch on origin, no PR ever opened, genuinely unmerged. Confirm whether it's dead. | build | deferred
+- [ ] 2026-08-09 — **PR #105** (`docs/npm-published`) — owned by another session, worktree `session-2` is locked. Not this thread's to merge. | dist | session | open |
+- [ ] 2026-08-09 — **PR #56** (idle-fallback) — open since July, correctly excluded from beta.22. | app | session | parked |
+- [ ] 2026-08-09 — **`test/session-cache-load-harness`** — branch on origin, no PR ever opened, genuinely unmerged. Confirm whether it's dead. | build | session | parked |
 
 ## 2026-08-14
 
 **CLOSED 2026-08-14 — sidebar row staleness. Root cause was `LazyVStack`, not `.equatable()`.** All three merged to `main`: #121 `988b11223`, #122 `7e04b7fd3`, #123 `f7248d5b9`. Build green, 682/685 (2 failures = the untracked Throttle file below). Full write-up: `reference_sidebar-rows-frozen-lazyvstack.md`.
 
-- [x] ~~Verify the `.equatable()` fix at runtime~~ — verified and **FAILED**. `.equatable()` was never the fix; kept only as a perf gate.
-- [x] ~~Strip temporary SIDEBARDIAG instrumentation~~ — zero hits in `macos/Sources` on `main`.
-- [x] ~~Run the full suite + reshape PR #121~~ — done; PR body now describes the real root cause.
-- [x] ~~`SessionTitleSanitizer` doesn't strip `◐`/`◑`~~ — fixed in #122 via a structural rule (category `So`, non-emoji-presentation) unioned with the legacy `* · •` set, rather than enumerating glyphs.
+- [x] 2026-08-14 — ~~Verify the `.equatable()` fix at runtime~~ — verified and **FAILED**. `.equatable()` was never the fix; kept only as a perf gate. | app | session | done |
+- [x] 2026-08-14 — ~~Strip temporary SIDEBARDIAG instrumentation~~ — zero hits in `macos/Sources` on `main`. | app | session | done |
+- [x] 2026-08-14 — ~~Run the full suite + reshape PR #121~~ — done; PR body now describes the real root cause. | app | session | done |
+- [x] 2026-08-14 — ~~`SessionTitleSanitizer` doesn't strip `◐`/`◑`~~ — fixed in #122 via a structural rule (category `So`, non-emoji-presentation) unioned with the legacy `* · •` set, rather than enumerating glyphs. | app | session | done |
 
 **Still open:**
 
-- [ ] **`ThrottleTrailingEdgeHypothesisTests.swift`** (untracked) — DECIDE OR KILL: keep the trailing-edge test as a regression test and delete the two diagnostic ones (one calls `XCTFail` unconditionally, so it fails every local run), or drop the file. Strawman: keep the trailing-edge test only. It is the sole reason local runs report 2 failures. | app | carried 2×
-- [ ] **`.workspaceSidebarTabChanged` is a dead notification** — declared `WorkspaceLayout.swift:338`, posted twice from `TerminalController.swift:1361,1368`, zero observers anywhere. The sidebar tab switch actually works by riding the `.workspaceSidebarViewModeChanged` post on the following line, usually setting the mode to the value it already held. | app | carried 1×
-- [ ] **Re-test every conclusion measured through a Sessions-tab row** — RAISED IN PRIORITY. Now proven: rows were frozen at first construction, so *any* value read off a row (name, indicator dot, timestamp) was the value at creation, not the live one. Affects the invisible-session bug (2026-08-10) and the blue-ghost indicator readings in `project_switchboard-phase0-verdict.md` — including the "7 idle / 4 busy / 0 waitingFor" measurement the polarity-inversion plan rests on. | app | carried 1×
-- [ ] **Archive-expansion perf, unmeasured** — #121 swapped `LazyVStack` for `VStack`, so expanding Archive now builds ~37 rows eagerly, each carrying a `.contextMenu` — a documented, still-unfixed bottleneck (`project_perf-contextmenu-render-cost.md`). If it bites, the fix is a lazy container that still re-invokes content on element change; a plain revert to `LazyVStack` reinstates the frozen-name bug. Warning is already in the code comment. | app | new
-- [ ] **Screen Recording grant for `/Applications/Ghostties.app` isn't taking effect** — toggle shows ON, `screencapture` still fails (not the CC sandbox; fails identically with it disabled). Likely a code-requirement mismatch from a pre-beta.22 local build. Fix: `tccutil reset ScreenCapture com.seansmithdesign.ghostties` then relaunch — but the relaunch kills any Claude Code session running inside it, so it is a break-time job. Blocks all screenshot capture from CC sessions. See `reference_screencapture-responsible-app-is-the-terminal.md`. | env | new
-- [ ] **Build-badge type size** — the badge ships at 9pt, deliberately below the sidebar's 11pt floor, on the subagent's reasoning that a diagnostic HUD shouldn't read as product UI. Sean's call to keep or raise. | design | new
+- [ ] 2026-08-14 — **`ThrottleTrailingEdgeHypothesisTests.swift`** (untracked) — DECIDE OR KILL: keep the trailing-edge test as a regression test and delete the two diagnostic ones (one calls `XCTFail` unconditionally, so it fails every local run), or drop the file. Strawman: keep the trailing-edge test only. It is the sole reason local runs report 2 failures. | app | carried 2× | app | session | open |
+- [ ] 2026-08-14 — **`.workspaceSidebarTabChanged` is a dead notification** — declared `WorkspaceLayout.swift:338`, posted twice from `TerminalController.swift:1361,1368`, zero observers anywhere. The sidebar tab switch actually works by riding the `.workspaceSidebarViewModeChanged` post on the following line, usually setting the mode to the value it already held. | app | carried 1× | app | session | open |
+- [ ] 2026-08-14 — **Re-test every conclusion measured through a Sessions-tab row** — RAISED IN PRIORITY. Now proven: rows were frozen at first construction, so *any* value read off a row (name, indicator dot, timestamp) was the value at creation, not the live one. Affects the invisible-session bug (2026-08-10) and the blue-ghost indicator readings in `project_switchboard-phase0-verdict.md` — including the "7 idle / 4 busy / 0 waitingFor" measurement the polarity-inversion plan rests on. | app | carried 1× | app | session | open |
+- [ ] 2026-08-14 — **Archive-expansion perf, unmeasured** — #121 swapped `LazyVStack` for `VStack`, so expanding Archive now builds ~37 rows eagerly, each carrying a `.contextMenu` — a documented, still-unfixed bottleneck (`project_perf-contextmenu-render-cost.md`). If it bites, the fix is a lazy container that still re-invokes content on element change; a plain revert to `LazyVStack` reinstates the frozen-name bug. Warning is already in the code comment. | app | session | open |
+- [ ] 2026-08-14 — **Screen Recording grant for `/Applications/Ghostties.app` isn't taking effect** — toggle shows ON, `screencapture` still fails (not the CC sandbox; fails identically with it disabled). Likely a code-requirement mismatch from a pre-beta.22 local build. Fix: `tccutil reset ScreenCapture com.seansmithdesign.ghostties` then relaunch — but the relaunch kills any Claude Code session running inside it, so it is a break-time job. Blocks all screenshot capture from CC sessions. See `reference_screencapture-responsible-app-is-the-terminal.md`. | env | session | open |
+- [ ] 2026-08-14 — **Build-badge type size** — the badge ships at 9pt, deliberately below the sidebar's 11pt floor, on the subagent's reasoning that a diagnostic HUD shouldn't read as product UI. Sean's call to keep or raise. | design | session | open |
 
 **Parked — design, Sean's call:**
 
-- [ ] **Status representation vs. per-session ghost icons** — half of this resolved itself: #122 removed the `✳` glyph from names, so the row no longer carries two competing status channels. The remaining question is whether the ghost icon is the right status channel at all. Design decision. Captured in `tease-capture.md`. | design | parked
+- [ ] 2026-08-14 — **Status representation vs. per-session ghost icons** — half of this resolved itself: #122 removed the `✳` glyph from names, so the row no longer carries two competing status channels. The remaining question is whether the ghost icon is the right status channel at all. Design decision. Captured in `tease-capture.md`. | design | session | parked |
 
 ## 2026-08-19 — Phase 1 review spillover (deferred, not dropped)
 
-- [ ] **Third copy of the template-scoping predicate.** `WorkspaceStore.templates(for projectId:)` duplicates `isGlobal || projectId == id`, consumed by `NewTaskComposerView.swift:240`. Phase 1 unified the other two into `SessionTemplateResolver`. Deliberately out of scope then; converge or delete it. | app | new
-- [ ] **`duplicateTemplate` drops `mcpConfigPath`.** The memberwise copy in `WorkspaceStore.duplicateTemplate` omits `mcpConfigPath`, directly beneath its own `NOTE: Update this if AgentTemplate gains new stored properties.` Duplicating a folder-format preset silently loses its MCP config. Pre-existing on `main`, not introduced by Phase 1. | app | new
-- [ ] **Name-collision rename has no user feedback.** Typing an existing template name now silently yields "X 2", and correcting it back in the edit sheet silently keeps "X 2". Correct per the locked spec, but it dead-ends with no message. Wants one line under the name field: "A template named X already exists." | app | new
-- [ ] **Untracked `ThrottleTrailingEdgeHypothesisTests.swift` pollutes every local test run.** It sits untracked in the shared worktree, Xcode's synchronized groups compile it anyway, and 2 of its 4 tests fail by design — so a local unfiltered run reads 696/2/1 instead of the committed tree's 694/0/1. Decide whether it lands, moves, or goes. | build | new
+- [ ] 2026-08-19 — **Third copy of the template-scoping predicate.** `WorkspaceStore.templates(for projectId:)` duplicates `isGlobal || projectId == id`, consumed by `NewTaskComposerView.swift:240`. Phase 1 unified the other two into `SessionTemplateResolver`. Deliberately out of scope then; converge or delete it. | app | session | open |
+- [ ] 2026-08-19 — **`duplicateTemplate` drops `mcpConfigPath`.** The memberwise copy in `WorkspaceStore.duplicateTemplate` omits `mcpConfigPath`, directly beneath its own `NOTE: Update this if AgentTemplate gains new stored properties.` Duplicating a folder-format preset silently loses its MCP config. Pre-existing on `main`, not introduced by Phase 1. | app | session | open |
+- [ ] 2026-08-19 — **Name-collision rename has no user feedback.** Typing an existing template name now silently yields "X 2", and correcting it back in the edit sheet silently keeps "X 2". Correct per the locked spec, but it dead-ends with no message. Wants one line under the name field: "A template named X already exists." | app | session | open |
+- [ ] 2026-08-19 — **Untracked `ThrottleTrailingEdgeHypothesisTests.swift` pollutes every local test run.** It sits untracked in the shared worktree, Xcode's synchronized groups compile it anyway, and 2 of its 4 tests fail by design — so a local unfiltered run reads 696/2/1 instead of the committed tree's 694/0/1. Decide whether it lands, moves, or goes. | build | session | open |
