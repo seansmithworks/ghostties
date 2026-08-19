@@ -450,16 +450,22 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         .padding(.vertical, 4)
         .onHover { isNewSessionHovered = $0 }
         .popover(isPresented: $showingTemplatePicker) {
-            TemplatePickerView(project: project)
+            SessionComposerPalette(
+                isPresented: $showingTemplatePicker,
+                request: SessionComposerRequest(presentation: .anchored, projectBinding: .prefilled(project))
+            )
         }
     }
 
     // MARK: - Actions
 
+    /// D3: the modifier is the shortcut, not the escape hatch. A plain click
+    /// opens the session composer; Option-click keeps the old instant-create
+    /// behavior when the project has a default template.
     private func handleNewSession() {
         selectedProjectId = project.id
-        if let defaultId = project.defaultTemplateId,
-           !NSEvent.modifierFlags.contains(.option),
+        if NSEvent.modifierFlags.contains(.option),
+           let defaultId = project.defaultTemplateId,
            let template = store.templates.first(where: { $0.id == defaultId }) {
             Task {
                 await coordinator.createQuickSession(for: project, template: template)
