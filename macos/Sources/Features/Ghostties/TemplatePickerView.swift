@@ -27,22 +27,13 @@ struct TemplatePickerView: View {
     @State private var templateToDelete: AgentTemplate?
     @State private var previewingTemplate: AgentTemplate?
 
+    /// Whether the inline "name the new template" field is showing in place
+    /// of `addCustomButton` — see `addCustomRow`.
+    @State private var isAddingCustomTemplate = false
+    @State private var newCustomTemplateName = ""
+    @FocusState private var newCustomTemplateNameFocused: Bool
+
     @AppStorage("ghostties.skipPresetPreview") private var skipPresetPreview = false
-
-    /// Preset templates loaded from `~/.ghostties/presets/` (have a `templateDescription`).
-    private var presetTemplates: [AgentTemplate] {
-        store.templates.filter { $0.templateDescription != nil && $0.isDefault }
-    }
-
-    /// Built-in templates (Shell, Claude Code, etc.) — no preset description.
-    private var builtinTemplates: [AgentTemplate] {
-        store.templates.filter { $0.templateDescription == nil && $0.isDefault }
-    }
-
-    /// User-created custom templates.
-    private var customTemplates: [AgentTemplate] {
-        store.templates.filter { !$0.isDefault }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -77,7 +68,15 @@ struct TemplatePickerView: View {
     // MARK: - Template List
 
     private var templateList: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        // Resolved once per body evaluation, then split by group — the
+        // single source of ordering truth for this project's templates.
+        // See `SessionTemplateResolver`.
+        let resolved = SessionTemplateResolver.templates(for: project, store: store)
+        let presetTemplates = resolved.filter { SessionTemplateResolver.group(for: $0) == .preset }
+        let builtinTemplates = resolved.filter { SessionTemplateResolver.group(for: $0) == .builtin }
+        let userTemplates = resolved.filter { SessionTemplateResolver.group(for: $0) == .user }
+
+        return VStack(alignment: .leading, spacing: 2) {
             // Presets section
             if !presetTemplates.isEmpty {
                 sectionHeader("PRESETS")
@@ -101,15 +100,25 @@ struct TemplatePickerView: View {
                 }
             }
 
-            // Custom templates section
-            if !customTemplates.isEmpty {
+            // Your Templates section — header always shows once there's at
+            // least one other section above it, even with zero user
+            // templates, so the empty state below has somewhere to live.
+            if !presetTemplates.isEmpty || !builtinTemplates.isEmpty {
                 Divider()
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
+            }
 
-                sectionHeader("YOUR TEMPLATES")
+            sectionHeader("YOUR TEMPLATES")
 
-                ForEach(customTemplates) { template in
+            if userTemplates.isEmpty {
+                Text("Presets above cover most cases.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 4)
+            } else {
+                ForEach(userTemplates) { template in
                     templateRow(template)
                 }
             }
@@ -118,7 +127,7 @@ struct TemplatePickerView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
 
-            addCustomButton
+            addCustomRow
 
             Spacer()
                 .frame(height: 8)
@@ -285,8 +294,37 @@ struct TemplatePickerView: View {
 
     // MARK: - Add Custom Template
 
+    /// Shows `addCustomButton` normally; swaps in an inline name field, in
+    /// the same row position, once the user starts adding a template — see
+    /// `beginAddCustomTemplate()`. Nothing is persisted until the name is
+    /// committed (Return) with non-empty trimmed text; Esc discards.
+    @ViewBuilder
+    private var addCustomRow: some View {
+        if isAddingCustomTemplate {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11))
+                    .frame(width: 16)
+                TextField("Template name", text: $newCustomTemplateName)
+                    .font(.system(size: 12, weight: .medium))
+                    .textFieldStyle(.plain)
+                    .focused($newCustomTemplateNameFocused)
+                    .onSubmit { commitNewCustomTemplate() }
+                    .onExitCommand { cancelNewCustomTemplate() }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .onAppear {
+                // Focus after the popover lays out so the TextField is actually in the hierarchy.
+                DispatchQueue.main.async { newCustomTemplateNameFocused = true }
+            }
+        } else {
+            addCustomButton
+        }
+    }
+
     private var addCustomButton: some View {
-        Button(action: addCustomTemplate) {
+        Button(action: beginAddCustomTemplate) {
             HStack(spacing: 8) {
                 Image(systemName: "plus")
                     .font(.system(size: 11))
@@ -335,9 +373,32 @@ struct TemplatePickerView: View {
         dismiss()
     }
 
-    private func addCustomTemplate() {
-        let newTemplate = store.addTemplate(AgentTemplate(name: "New Template", kind: .custom))
+    private func beginAddCustomTemplate() {
+        newCustomTemplateName = ""
+        isAddingCustomTemplate = true
+    }
+
+    /// Commits the inline name field: trims, discards silently if empty
+    /// (never persists an unnamed template), otherwise creates the template
+    /// and opens the existing edit sheet on it — preserving the follow-on
+    /// behavior `addCustomTemplate()` used to provide immediately.
+    ///
+    /// Guarded on `isAddingCustomTemplate` as belt-and-braces against a
+    /// double-commit — calling this twice in a row is a no-op instead of
+    /// creating a second template.
+    private func commitNewCustomTemplate() {
+        guard isAddingCustomTemplate else { return }
+        isAddingCustomTemplate = false
+        let trimmed = newCustomTemplateName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newCustomTemplateName = ""
+        guard !trimmed.isEmpty else { return }
+        let newTemplate = store.addTemplate(AgentTemplate(name: trimmed, kind: .custom))
         editingTemplate = newTemplate
+    }
+
+    private func cancelNewCustomTemplate() {
+        isAddingCustomTemplate = false
+        newCustomTemplateName = ""
     }
 
     private func openPresetInEditor(_ template: AgentTemplate) {

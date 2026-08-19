@@ -952,3 +952,10 @@ Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #10
 **Parked — design, Sean's call:**
 
 - [ ] **Status representation vs. per-session ghost icons** — half of this resolved itself: #122 removed the `✳` glyph from names, so the row no longer carries two competing status channels. The remaining question is whether the ghost icon is the right status channel at all. Design decision. Captured in `tease-capture.md`. | design | parked
+
+## 2026-08-19 — Phase 1 review spillover (deferred, not dropped)
+
+- [ ] **Third copy of the template-scoping predicate.** `WorkspaceStore.templates(for projectId:)` duplicates `isGlobal || projectId == id`, consumed by `NewTaskComposerView.swift:240`. Phase 1 unified the other two into `SessionTemplateResolver`. Deliberately out of scope then; converge or delete it. | app | new
+- [ ] **`duplicateTemplate` drops `mcpConfigPath`.** The memberwise copy in `WorkspaceStore.duplicateTemplate` omits `mcpConfigPath`, directly beneath its own `NOTE: Update this if AgentTemplate gains new stored properties.` Duplicating a folder-format preset silently loses its MCP config. Pre-existing on `main`, not introduced by Phase 1. | app | new
+- [ ] **Name-collision rename has no user feedback.** Typing an existing template name now silently yields "X 2", and correcting it back in the edit sheet silently keeps "X 2". Correct per the locked spec, but it dead-ends with no message. Wants one line under the name field: "A template named X already exists." | app | new
+- [ ] **Untracked `ThrottleTrailingEdgeHypothesisTests.swift` pollutes every local test run.** It sits untracked in the shared worktree, Xcode's synchronized groups compile it anyway, and 2 of its 4 tests fail by design — so a local unfiltered run reads 696/2/1 instead of the committed tree's 694/0/1. Decide whether it lands, moves, or goes. | build | new
