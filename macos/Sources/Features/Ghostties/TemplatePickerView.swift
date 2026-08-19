@@ -383,9 +383,9 @@ struct TemplatePickerView: View {
     /// and opens the existing edit sheet on it — preserving the follow-on
     /// behavior `addCustomTemplate()` used to provide immediately.
     ///
-    /// Guarded on `isAddingCustomTemplate` so a commit racing a prior
-    /// cancel/commit (see the deferred dispatch in `addCustomRow`) is a
-    /// no-op instead of creating a second template.
+    /// Guarded on `isAddingCustomTemplate` as belt-and-braces against a
+    /// double-commit — calling this twice in a row is a no-op instead of
+    /// creating a second template.
     private func commitNewCustomTemplate() {
         guard isAddingCustomTemplate else { return }
         isAddingCustomTemplate = false

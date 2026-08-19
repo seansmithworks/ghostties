@@ -123,7 +123,7 @@ final class SessionTemplateResolverTests: XCTestCase {
     /// surfaces a preset after a builtin — this assertion catches that.
     /// `testOrderingIsDeterministicAcrossRepeatedCalls` below does not: at
     /// this fixture size the old predicate is deterministic in practice
-    /// (Swift's insertion sort below the introsort threshold), so it passes
+    /// (Swift's sort insertion-sorts short runs), so it passes
     /// against both implementations.
     func testGroupOrderIsPresetThenBuiltinThenUser() {
         let fixture = makeFixture()
@@ -167,8 +167,8 @@ final class SessionTemplateResolverTests: XCTestCase {
     /// The predicate this replaces (`candidates.sorted { a, _ in a.id ==
     /// defaultId }`) is not a strict weak ordering, so `sorted` was free to
     /// permute everything past "the default sorts early" differently across
-    /// calls — but at this fixture size Swift's insertion sort (used below
-    /// the introsort threshold) happens to be deterministic anyway, so this
+    /// calls — but at this fixture size Swift's sort insertion-sorts short
+    /// runs, which happens to be deterministic anyway, so this
     /// test passes against both the old and new implementations.
     func testOrderingIsDeterministicAcrossRepeatedCalls() {
         let fixture = makeFixture()
