@@ -851,7 +851,20 @@ final class WorkspaceStore: ObservableObject {
 
     @discardableResult
     func addTemplate(_ template: AgentTemplate) -> AgentTemplate {
-        let sanitized = WorkspacePersistence.sanitizeTemplate(template)
+        var sanitized = WorkspacePersistence.sanitizeTemplate(template)
+
+        // Dedupe an exact name collision against an existing template — a
+        // backstop for a user typing the same name twice, appending " 2",
+        // " 3", etc. until the name is free.
+        let existingNames = Set(templates.map(\.name))
+        if existingNames.contains(sanitized.name) {
+            var suffix = 2
+            while existingNames.contains("\(sanitized.name) \(suffix)") {
+                suffix += 1
+            }
+            sanitized.name = "\(sanitized.name) \(suffix)"
+        }
+
         templates.append(sanitized)
         persist()
         return sanitized

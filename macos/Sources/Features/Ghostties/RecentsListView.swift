@@ -143,22 +143,6 @@ struct RecentsListView: View {
         .background(.clear)
     }
 
-    // MARK: - New Session (project-picker templates)
-
-    /// Returns templates available for a given project: global templates plus
-    /// any templates scoped to that project, with the project's default first.
-    /// Static so `NewSessionToolbarButton` (titlebar toolbar) can share the
-    /// exact same resolution logic without instantiating this view.
-    static func availableTemplates(for project: Project, store: WorkspaceStore) -> [AgentTemplate] {
-        let candidates = store.templates.filter { $0.isGlobal || $0.projectId == project.id }
-        // Lift the default template to the top of the list.
-        if let defaultId = project.defaultTemplateId {
-            let sorted = candidates.sorted { a, _ in a.id == defaultId }
-            return sorted
-        }
-        return candidates
-    }
-
     // MARK: - Session Row
 
     private func sessionRow(for session: AgentSession) -> some View {
@@ -260,7 +244,7 @@ struct RecentsListView: View {
     // MARK: - Actions
 
     /// Static so `NewSessionToolbarButton` shares this exactly — see
-    /// `availableTemplates(for:store:)` above.
+    /// `SessionTemplateResolver.templates(for:store:)`.
     static func startNewSession(in project: Project, template: AgentTemplate?, store: WorkspaceStore, coordinator: SessionCoordinator) {
         let resolved: AgentTemplate = template ?? {
             if let defaultId = project.defaultTemplateId,
@@ -477,7 +461,7 @@ struct RecentsListView: View {
 /// Labelled toolbar button for the Sessions tab, presented in
 /// `WorkspaceSidebarView.titlebarToolbar` right-aligned on the traffic-light
 /// row. Opens the same project-picker flyout menu the former `newSessionRow`
-/// showed inline in the list — see `RecentsListView.availableTemplates(for:store:)`
+/// showed inline in the list — see `SessionTemplateResolver.templates(for:store:)`
 /// and `RecentsListView.startNewSession(in:template:store:coordinator:)`, which
 /// this calls directly so the menu logic is never duplicated.
 struct NewSessionToolbarButton: View {
@@ -489,7 +473,7 @@ struct NewSessionToolbarButton: View {
     var body: some View {
         Menu {
             ForEach(store.projects) { project in
-                let templates = RecentsListView.availableTemplates(for: project, store: store)
+                let templates = SessionTemplateResolver.templates(for: project, store: store)
                 if templates.count <= 1 {
                     // Single template — tap creates directly, no submenu needed.
                     Button(project.name) {
