@@ -2076,9 +2076,12 @@ class WorkspaceViewContainer: NSView {
         // guard (`didSet`-style "optimization" to skip redundant publishes),
         // a cancel that lands while `isOpen` is already `false` would
         // silently stop reaching this sink — the subview would stay
-        // installed until the next `windowDidResignKey` (the only other
-        // dismiss path) rather than closing when the user actually asked.
-        // Do not add that guard.
+        // installed until the next `applicationDidResignActive()` (app
+        // deactivation) or the next cross-window takeover in
+        // `presentComposerOverlay` (the other two dismiss paths, as of
+        // Blocker 3 below — `windowDidResignKey` no longer dismisses the
+        // composer at all) rather than closing when the user actually
+        // asked. Do not add that guard.
         //
         // Blocker 1 (Phase 3 review round 3): `.receive(on: DispatchQueue.main)`
         // is ALWAYS an async hop for Combine's `DispatchQueue` scheduler —
@@ -2100,6 +2103,20 @@ class WorkspaceViewContainer: NSView {
         // if a stale `false` is processed after `presentComposerOverlay`
         // already reopened the store, this now no-ops instead of tearing
         // the fresh overlay back down.
+        //
+        // FRAGILITY (Phase 3 review round 4) — `.receive(on: DispatchQueue.main)`
+        // below is NOT decorative; the live re-read above depends on it.
+        // `@Published` emits in `willSet`, i.e. BEFORE the stored property
+        // is actually updated — the closure below only sees the post-write
+        // value because the scheduler's async hop guarantees this closure
+        // runs strictly after the assignment that triggered it has already
+        // landed. Remove `.receive(on:)` as a "simplification" and this
+        // sink would run synchronously from within `willSet`, so
+        // `!SessionComposerStore.shared.isOpen` would read the PRE-`willSet`
+        // value (`true`, the value being replaced, not the `false` being
+        // set) — the guard above would then always fail, and every dismiss
+        // (scrim click, Escape, everything routed through `cancel()`) would
+        // die silently. Keep the hop.
         SessionComposerStore.shared.$isOpen
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in

@@ -72,18 +72,28 @@ final class SessionComposerStore: ObservableObject {
 
     @Published private(set) var isOpen: Bool = false
 
-    /// The window that most recently opened the composer (Phase 3 review
-    /// round 3, Blocker 3). This store is one process-wide singleton, but
-    /// only one workspace window's overlay should be "the" composer at a
-    /// time — without this, two windows could each install their own
-    /// overlay against the same shared state (`selectedProjectId`/
+    /// The window that most recently opened the CENTERED composer overlay
+    /// (Phase 3 review round 3, Blocker 3). This store is one process-wide
+    /// singleton, but only one workspace window's overlay should be "the"
+    /// composer at a time — without this, two windows could each install
+    /// their own overlay against the same shared state (`selectedProjectId`/
     /// `searchText`/`currentProjectBinding`), each visibly showing
     /// whichever window opened last, with Escape in either tearing down
     /// both. `WorkspaceViewContainer.presentComposerOverlay` writes this on
-    /// every open (dismissing any other window's overlay first); its
-    /// `$isOpen` sink and `dismissComposerOverlayIfPresented` check it
-    /// before acting. `weak` so this never keeps a window alive and simply
-    /// reads `nil` once one is gone.
+    /// every CENTERED-overlay open (dismissing any other window's overlay
+    /// first); its `$isOpen` sink and `dismissComposerOverlayIfPresented`
+    /// check it before acting.
+    ///
+    /// Deliberately NOT written by the ANCHORED popover's `open()` call
+    /// (`SessionComposerPalette.swift`'s `.onAppear`) — a row popover in
+    /// window B while window A's centered overlay is up still leaves two
+    /// composers live against the shared store. That's pre-existing
+    /// behavior (the round-2 `NSApp.isActive` gate produced the same
+    /// outcome) and explicitly out of scope here — not chased by this
+    /// property, which only arbitrates between CENTERED overlays.
+    ///
+    /// `weak` so this never keeps a window alive and simply reads `nil`
+    /// once one is gone.
     weak var owningWindow: NSWindow?
 
     /// When true, the search field should receive first responder on the
