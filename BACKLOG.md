@@ -6,32 +6,37 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 ## 2026-08-19 — Overnight autonomous run: session-composer Phases 1–5
 
-The plan at `docs/plans/session-creation-unified.html` is corrected and its decisions locked as of
-`c19c7c0cd`. No implementation exists yet — there are no `SessionComposer*` files in
-`macos/Sources/Features/Ghostties/`.
+**Actual outcome:** Phases 1 and 2 were built, reviewed, and opened as stacked PRs. Phases 3–5 were
+NOT started. The run stopped deliberately after Phase 2, not at the 07:00 wall — every phase needed
+two fix cycles, and Phase 3 could not have been built, twice-reviewed, and fixed in the time
+remaining.
 
-- [ ] **Phase 1 — template resolver.** New `macos/Sources/Features/Ghostties/SessionTemplateResolver.swift`
+- [x] **Phase 1 — template resolver.** New `macos/Sources/Features/Ghostties/SessionTemplateResolver.swift`
   with `static func templates(for:store:) -> [AgentTemplate]`. Repoint both callers; delete
   `RecentsListView.availableTemplates(for:store:)` (`:152–160`, including the invalid sort at
   `:156`) and the three computed filters in `TemplatePickerView` (`:32–43`). Name-first template
   creation replacing `addCustomTemplate()` (`TemplatePickerView.swift:336–339`). Dedupe on write in
-  `WorkspaceStore.addTemplate`. Empty state in YOUR TEMPLATES. Fixes D4/D5/D6. No open decisions —
-  ready to build. See plan Phase 1 anchor for full detail. | app | open
+  `WorkspaceStore.addTemplate`. Empty state in YOUR TEMPLATES. Fixes D4/D5/D6. DONE — branch
+  `feat/session-template-resolver`, **PR #129** against `main`. Three review rounds; suite
+  710/2/1. | app | done
 
-- [ ] **Phase 2 — SessionComposer.** Fork `macos/Sources/Features/Command Palette/CommandPalette.swift`
+- [x] **Phase 2 — SessionComposer.** Fork `macos/Sources/Features/Command Palette/CommandPalette.swift`
   into `Features/Ghostties/SessionComposerPalette.swift`, renamed and parameterized. Plus
   `SessionComposerStore` mirroring `NewTaskComposerStore`. Wire to `ProjectDisclosureRow.swift:452`'s
-  popover only. See plan Phase 2 anchor for full detail. | app | open
+  popover only. DONE — branch `feat/session-composer`, **PR #130** against
+  `feat/session-template-resolver` (stacked). Four review rounds; suite 726/2/1. | app | done
 
 - [ ] **Phase 3 — centered overlay + Cmd+T.** `SessionComposerOverlay`, widen `TransparentHostingView`
   (`WorkspaceViewContainer.swift:1701`) from `private` to `internal`, `@AppStorage` Cmd+T preference,
-  delete the 28-project toolbar cascade. Fixes D1/D2/D7. See plan Phase 3 anchor for full detail. |
-  app | open
+  delete the 28-project toolbar cascade. Fixes D1/D2/D7. See plan Phase 3 anchor for full detail.
+  UNSTARTED — no open decisions, plan section intact and current, ready to dispatch. | app | open
 
-- [ ] **Phase 4 — project-creation convergence.** See plan Phase 4 anchor for full detail. | app | open
+- [ ] **Phase 4 — project-creation convergence.** See plan Phase 4 anchor for full detail. UNSTARTED
+  — plan section intact and current. | app | open
 
 - [ ] **Phase 5 — stop pinning everything (optional).** Only if everything above is green and time
-  remains. See plan Phase 5 anchor for full detail. | app | open
+  remains. See plan Phase 5 anchor for full detail. UNSTARTED — plan section intact and current. |
+  app | open
 
 **Run rules (hard limits):**
 
@@ -58,6 +63,9 @@ The plan at `docs/plans/session-creation-unified.html` is corrected and its deci
   capture is fine, driving is never).
 - **Stage by explicit path**, never `git add -A` — sibling sessions share this worktree.
 - **PUBLIC repo** — never commit real session data or local `~/.claude` state.
+- **Nothing was observed running all night.** `screencapture` stayed TCC-denied ("could not create
+  image from display") for the full run, so both PRs carry zero visual evidence and say so in their
+  bodies.
 
 **Known blockers on verification:**
 
@@ -71,6 +79,31 @@ The plan at `docs/plans/session-creation-unified.html` is corrected and its deci
 - `SettingsView.swift` is a placeholder with no UI; the Cmd+T preference ships as an `@AppStorage`
   flag set via `defaults write`, documented by one added line in that file's existing instruction
   block.
+
+## 2026-08-19 — Phase 2 spillover (deferred, not dropped)
+
+- [ ] **Three popover-nesting risks are unverified and need five minutes of clicking.** The composer's
+  project dropdown is a `.popover` nested inside the composer's own `.popover`; `+ Add project…`
+  opens a modal `NSOpenPanel` inside that; and the template edit sheet and delete-confirmation alert
+  are attached to popover content. On macOS a child taking key can dismiss the parent. None is
+  decidable from source. If any dismisses the composer, it becomes a Phase 3 problem — the centered
+  overlay presents from the window and sidesteps the class entirely. | app | new
+- [ ] **Preset preview card was deliberately not ported to the composer.** A preview-on-tap card fights
+  the composer's type-and-Return model. Consequence: `ghostties.skipPresetPreview` is now an
+  orphaned `@AppStorage` key with no UI, and presets launch immediately for everyone regardless of
+  its stored value. Decide whether to restore the preview, expose the key, or delete the key. | app | new
+- [ ] **The smart-default cascade is duplicated.** `SessionComposerStore` carries its own ~25-line copy
+  of `NewTaskComposerStore.swift:168-195` because that logic is `private` to a file Phase 2 was not
+  allowed to touch. Verified as a faithful copy, not a drift, but the two composers now keep
+  divergent memories of "last project used". Extract to something shared. | app | new
+- [ ] **No test coverage on the session composer's commit path.** All 16 new Phase 2 tests exercise the
+  pure ranking and ordering functions. Nothing covers `precommit`, dismissal, or selection reset —
+  which is exactly where all four review-caught blockers lived. It is SwiftUI view state, so it
+  wants either a view-model extraction or a UI test. | quality | new
+- [ ] **Double-Return protection is a single unguarded line.** It is the synchronous
+  `selectedIndex = nil` in `SessionComposerPalette.commit(template:)`. A vestigial `isCommitting`
+  flag that appeared to be the guard has been removed and a comment now points at the real one, but
+  the protection remains implicit and untested. | app | new
 
 ## 2026-08-18 — Session composer: palette reuse + design direction (carried)
 
@@ -122,11 +155,11 @@ has been rewritten to match. Remaining items below are still open.
   abandoned. Shown both ways in the mockups; Sean had not chosen. Strawman: keep filtering both, so
   "type `bru`, Return" survives. DECIDED: filters both. `ed750aa45`. | app | done
 
-- [ ] **Composer needs prefix-first relevance ranking.** `filteredOptions`
+- [x] **Composer needs prefix-first relevance ranking.** `filteredOptions`
   (`CommandPalette.swift:74-92`) is boolean match then `colorMatchScore` only. The plan promises
-  "type three characters, press Return"; nothing guarantees the right row is first. Not inherited —
-  must be built. Now specified in the plan (not just noted as a gap); Phase 2 carries it with a
-  ship gate. Still no code — stays open. | app | new
+  "type three characters, press Return"; nothing guarantees the right row is first. BUILT — shipped
+  in Phase 2 (PR #130) as `SessionComposerRanking`: exact-prefix > substring > initials tiers,
+  `colorMatchScore` dropped, 16 unit tests. | app | done
 
 - [ ] **Audit's `#6D6A68` alternative is wrong — correct
   `docs/audits/sidebar-contrast-audit.md`.** It proposes `#6D6A68` as an exact 4.50:1 fix. Recomputed
