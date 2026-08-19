@@ -160,7 +160,11 @@ struct SessionComposerPalette: View {
     /// unfiltered. Selecting a row here sets the composer's selected
     /// project; it does not start a session.
     private var filteredProjectOptions: [ComposerOption] {
-        guard !query.isEmpty else { return [] }
+        // N3: `.locked` fixes the project at the write path (`commit()`
+        // resolves from the bound project, never `selectedProjectId`), so
+        // letting a project row re-scope the list here would show project B
+        // while `commit()` still creates in locked project A.
+        guard !isProjectLocked, !query.isEmpty else { return [] }
         let options = store.projects.map(makeOption)
         return SessionComposerRanking.sorted(options, query: query, title: { $0.title })
     }
@@ -272,23 +276,14 @@ struct SessionComposerPalette: View {
             // latches `SessionComposerStore.isOpen` true forever (B3).
             composerStore.cancel()
         }
-        .onChange(of: query) { _ in
-            // Clamp into range rather than nil-ing out — the old logic only
-            // reset when the index was exactly 0, so a stale index from a
-            // shrunk list (e.g. RECENT reordering after a commit) survived
-            // a query change untouched.
-            let count = flattenedOptions.count
-            guard count > 0 else {
-                selectedIndex = nil
-                return
-            }
-            if let current = selectedIndex {
-                if current >= UInt(count) {
-                    selectedIndex = UInt(count - 1)
-                }
-            } else {
-                selectedIndex = 0
-            }
+        .onChange(of: query) { _ in clampSelectedIndex() }
+        .onChange(of: composerStore.selectedProjectId) { _ in
+            // N5: changing the project via the dropdown or a project row
+            // changes `flattenedOptions.count` with `query` unchanged, so
+            // the query-only clamp above never ran — `selectedOption` fell
+            // back to `options.last` and the highlight silently jumped to
+            // the bottom of the list.
+            clampSelectedIndex()
         }
         .sheet(item: $newTemplateToEdit) { template in
             TemplateEditForm(template: template)
@@ -463,17 +458,51 @@ struct SessionComposerPalette: View {
 
     // MARK: - Actions
 
+    /// Clamp `selectedIndex` into range rather than nil-ing out — the old
+    /// logic only reset when the index was exactly 0, so a stale index from
+    /// a shrunk list (e.g. RECENT reordering after a commit) survived a
+    /// query or project change untouched. Shared by the `query` and
+    /// `selectedProjectId` triggers (N5) — either can change
+    /// `flattenedOptions.count`.
+    private func clampSelectedIndex() {
+        let count = flattenedOptions.count
+        guard count > 0 else {
+            selectedIndex = nil
+            return
+        }
+        if let current = selectedIndex {
+            if current >= UInt(count) {
+                selectedIndex = UInt(count - 1)
+            }
+        } else {
+            selectedIndex = 0
+        }
+    }
+
     private func commit(template: AgentTemplate) {
         // S1: reset the stale index up front. `recordRecent` (inside the
-        // store's commit) reorders RECENT, which would otherwise leave
+        // store's precommit) reorders RECENT, which would otherwise leave
         // `selectedIndex` pointing at the wrong row if the composer stays
-        // open on a failed commit (S6).
+        // open on a failed commit (S6). Synchronous and load-bearing (N1):
+        // it is what makes a double Return a no-op if both `.onSubmit` and
+        // `.onKeyPress` ever fire on macOS 14+.
         selectedIndex = nil
-        Task {
-            let success = await composerStore.commit(template: template, coordinator: coordinator, workspaceStore: store)
-            if success {
-                isPresented = false
-            }
+
+        // N1: `precommit` is synchronous — it validates, records the
+        // recent pair, and dispatches the actual session spawn from a
+        // detached `Task` it does not wait on. Dismissing here, on that
+        // synchronous result, is what keeps the popover from lingering
+        // over the newly-created session while `createQuickSession`
+        // resolves the binary path (a 3s-timeout shell-out).
+        let success = composerStore.precommit(template: template, coordinator: coordinator, workspaceStore: store)
+        if success {
+            isPresented = false
+        } else {
+            // N4: precommit failed — the composer stays open with
+            // `writeError` showing. `selectedIndex` was just nil'd above,
+            // so Return is dead until the user types or arrows; re-seed
+            // row 0 so Return works again immediately.
+            selectedIndex = 0
         }
     }
 
@@ -559,10 +588,12 @@ struct ComposerOption: Identifiable, Hashable {
 /// `Backport.onKeyPress` is a documented no-op below macOS 14
 /// (`Helpers/Backport.swift:53-68`) and the app's deployment target is
 /// 13.0, so `.onSubmit` alone is what makes Return work pre-14. If both
-/// fire on 14+, `SessionComposerStore.commit()`'s re-entry guard (`S9`)
-/// makes the second call a no-op rather than a double-commit — this repo
-/// cannot verify from source alone whether both actually fire, only that a
-/// double-fire would be harmless if they do.
+/// fire on 14+, `SessionComposerPalette.commit(template:)` nil-ing
+/// `selectedIndex` SYNCHRONOUSLY before calling
+/// `SessionComposerStore.precommit()` (N1) makes the second call's
+/// `selectedOption` nil and its `.submit` handler a no-op rather than a
+/// double-commit — this repo cannot verify from source alone whether both
+/// actually fire, only that a double-fire would be harmless if they do.
 struct ComposerQueryField: View {
     @Binding var query: String
     var fontSize: CGFloat
@@ -854,14 +885,11 @@ private struct ProjectDropdownView: View {
 
     @EnvironmentObject private var store: WorkspaceStore
 
-    /// Decoupled from the composer's search field (nit): this used to read
-    /// `SessionComposerStore.shared.searchText` directly, so typing
-    /// "claude" to find a template and then opening the dropdown showed
-    /// every project filtered out even though this view has no visible
-    /// search field of its own. Starts empty, unaffected by the composer's
-    /// query.
-    @State private var query: String = ""
-
+    // N6: this view has no search field of its own — the main composer
+    // field does the filtering (locked decision) — so a local `query`
+    // and a `filteredProjects` indirection over it were dead: always
+    // equal to `orderedProjects`. Removed rather than kept as unused
+    // scaffolding.
     private var orderedProjects: [Project] {
         let recentIds = SessionComposerStore.shared.recentProjectIds
         return SessionComposerProjectOrdering.order(
@@ -871,14 +899,10 @@ private struct ProjectDropdownView: View {
         )
     }
 
-    private var filteredProjects: [Project] {
-        SessionComposerRanking.sorted(orderedProjects, query: query, title: { $0.name })
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(filteredProjects) { project in
+                ForEach(orderedProjects) { project in
                     Button {
                         onSelect(project)
                     } label: {
@@ -914,7 +938,7 @@ private struct ProjectDropdownView: View {
             }
             .padding(6)
         }
-        .frame(width: 220)
+        .frame(width: WorkspaceLayout.sidebarWidth)
         .frame(maxHeight: 240)
     }
 }

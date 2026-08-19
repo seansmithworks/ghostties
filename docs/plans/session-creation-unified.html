@@ -224,7 +224,7 @@
 │  ──────────────────────────────────    │
 │   + New template…                      │
 └────────────────────────────────────────┘
-     ↵ start    ⌥↵ start + reveal    esc cancel
+     ↵ start    esc cancel
 
 project ▾ open:                      ┌────────────────┐
                                      │ Ghostties      │
@@ -651,11 +651,11 @@ project ▾ open:                      ┌────────────�
         parameterized; <code>DESIGN.md:116</code> specifies 11&nbsp;pt sidebar
         UI and <code>:202</code> says resist upsizing, so the fork must
         parameterize width and type scale, fixing D11.
-        <code>.onSubmit</code> (<code>:271</code>) carries no modifier
-        information, so ⌥↵ (start + reveal) needs
         <code>Backport.onKeyPress</code>
         (<code>Helpers/Backport.swift:53</code>; precedent at
-        <code>SurfaceView.swift:416</code>).
+        <code>SurfaceView.swift:416</code>) is the macOS 14+ Return path;
+        <code>.onSubmit</code> (<code>:271</code>) is what makes Return work
+        on the 13.0 deployment target.
       </li>
       <li>
         <strong>Commit</strong> calls

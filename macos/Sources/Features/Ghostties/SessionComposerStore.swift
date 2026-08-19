@@ -198,10 +198,19 @@ final class SessionComposerStore: ObservableObject {
 
     // MARK: - Commit
 
-    /// Validate, create the session, record the recent pair, and close.
-    /// This is the ONLY write path — it calls
-    /// `coordinator.createQuickSession(for:template:)` and nothing else
-    /// (ship gate 5).
+    /// Validate and record the recent pair, SYNCHRONOUSLY, then dispatch
+    /// session creation without waiting on it. This is the ONLY write path
+    /// — it calls `coordinator.createQuickSession(for:template:)` and
+    /// nothing else (ship gate 5).
+    ///
+    /// Split from a single `async` `commit()` (N1): the prior shape awaited
+    /// `createQuickSession`, which shells out to resolve the binary path
+    /// with a 3-second timeout — so the view stayed presented for up to 3s
+    /// after the query had already blanked and the new session was already
+    /// showing behind the still-open composer. The pre-check below is the
+    /// only part that can still fail with something to show on screen
+    /// (`writeError`), so it is what the view dismisses on; the spawn is
+    /// fired from a detached `Task` the view does not await.
     ///
     /// Returns `true` once the project has been validated and the session
     /// creation call has been dispatched, `false` if the pre-check failed
@@ -209,11 +218,11 @@ final class SessionComposerStore: ObservableObject {
     /// dismissing before this returns is exactly the bug where the popover
     /// vanished with no session and no visible message).
     @discardableResult
-    func commit(
+    func precommit(
         template: AgentTemplate,
         coordinator: SessionCoordinator,
         workspaceStore: WorkspaceStore
-    ) async -> Bool {
+    ) -> Bool {
         guard !isCommitting else { return false }
         isCommitting = true
         defer { isCommitting = false }
@@ -242,7 +251,16 @@ final class SessionComposerStore: ObservableObject {
         isOpen = false
         searchText = ""
 
-        _ = await coordinator.createQuickSession(for: project, template: template)
+        // N2: fire-and-forget from here on. The composer is already
+        // dismissed by the time this runs, so a genuine spawn failure
+        // (`ghostty.app` nil, CEF-init failure for browser templates) has
+        // no composer left to surface it into. This is exactly the
+        // existing Option-click instant-create path's behaviour today —
+        // the composer is at parity, not newly regressed.
+        Task.detached { [coordinator] in
+            _ = await coordinator.createQuickSession(for: project, template: template)
+        }
+
         return true
     }
 
