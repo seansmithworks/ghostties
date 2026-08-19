@@ -178,6 +178,10 @@ class WorkspaceViewContainer: NSView {
     private lazy var composerOverlayHostingView: TransparentHostingView<AnyView> = {
         let view = TransparentHostingView<AnyView>(rootView: AnyView(EmptyView()))
         view.translatesAutoresizingMaskIntoConstraints = false
+        // F9 (Phase 3 review): matches `sidebarHostingView` — this view is
+        // pinned by four edge constraints, so its own intrinsic-size
+        // reporting is unused work.
+        view.sizingOptions = []
         return view
     }()
 
@@ -192,11 +196,21 @@ class WorkspaceViewContainer: NSView {
     /// Whether Cmd+T opens the composer overlay (true, the default) or
     /// creates a session instantly with no UI (false). Unset defaults to
     /// composer per the locked decision in session-creation-unified.
-    private var newSessionOpensComposerPreference: Bool {
-        guard UserDefaults.standard.object(forKey: Self.newSessionOpensComposerDefaultsKey) != nil else {
+    ///
+    /// Extracted to a testable static function (F11, Phase 3 review) taking
+    /// an explicit `UserDefaults` — this exact absent/true/false resolution
+    /// is precisely the class of bug the review pass was chartered to catch,
+    /// so it's covered directly rather than only through the instance
+    /// property below.
+    static func newSessionOpensComposer(in defaults: UserDefaults) -> Bool {
+        guard defaults.object(forKey: newSessionOpensComposerDefaultsKey) != nil else {
             return true
         }
-        return UserDefaults.standard.bool(forKey: Self.newSessionOpensComposerDefaultsKey)
+        return defaults.bool(forKey: newSessionOpensComposerDefaultsKey)
+    }
+
+    private var newSessionOpensComposerPreference: Bool {
+        Self.newSessionOpensComposer(in: .standard)
     }
 
     /// Sidebar material backing for overlay mode. In pinned mode the shared
@@ -1354,6 +1368,14 @@ class WorkspaceViewContainer: NSView {
         if sidebarMode == .overlay {
             transitionTo(.closed)
         }
+        // F5 (Phase 3 review): the Phase 2 popover auto-closes on blur (native
+        // `NSPopover` behavior); the centered overlay is a plain subview and
+        // survives app deactivation on its own. Two workspace windows can
+        // otherwise each hold an installed overlay sharing the one
+        // `SessionComposerStore` singleton's `searchText`/`selectedProjectId`,
+        // and a cancel in either dismisses both (every container's `$isOpen`
+        // sink honors the same `false`).
+        dismissComposerOverlayIfPresented()
         // Sidebar smart-sections freeze-on-focus (plan unit 4):
         // window blur is treated as the primary release trigger. The next time
         // the window becomes key we'll re-freeze with the (potentially changed)
@@ -1408,21 +1430,77 @@ class WorkspaceViewContainer: NSView {
     /// "+ New Session" button (`NewSessionToolbarButton`, which reaches this
     /// via `coordinator.containerView`).
     func presentComposerOverlay(projectBinding: SessionComposerRequest.ProjectBinding) {
+        // F5 (Phase 3 review): single-presentation invariant — the centered
+        // overlay always wins over any open per-row anchored popover, since
+        // both share the one `SessionComposerStore` singleton's state and a
+        // second opener silently defeats the popover's `.locked` write-path
+        // enforcement otherwise. `ProjectDisclosureRow` observes this and
+        // closes its own popover.
+        NotificationCenter.default.post(name: .workspaceComposerOverlayWillPresent, object: window)
+
         let request = SessionComposerRequest(presentation: .centered, projectBinding: projectBinding)
         composerOverlayHostingView.rootView = AnyView(
-            SessionComposerOverlay(request: request)
+            SessionComposerOverlay(request: request, horizontalOffset: terminalCardHorizontalOffset)
                 .environmentObject(WorkspaceStore.shared)
                 .environmentObject(coordinator)
         )
+
+        // F4 (Phase 3 review): OBSERVED, not assumed — a scratch probe
+        // (NSHostingView, remove+re-add vs. rootView-reassign-only) showed
+        // `onAppear` reliably re-fires on a genuine remove+re-add of the
+        // hosting view, but does NOT re-fire when `rootView` is merely
+        // reassigned while the subview stays installed. That second case is
+        // exactly "Cmd+T while the overlay is already open"
+        // (`installComposerOverlayIfNeeded()` below is a no-op then), so
+        // `SessionComposerPalette.onAppear`'s call to `SessionComposerStore
+        // .open(...)` is not a reliable signal for it. Call `open()`
+        // explicitly here instead — it's idempotent, and when the store was
+        // already open this also sets `focusSearchFieldTrigger`, so Cmd+T
+        // while open refocuses the search field rather than doing nothing.
+        SessionComposerStore.shared.open(projectBinding: projectBinding, workspaceStore: WorkspaceStore.shared)
+
         installComposerOverlayIfNeeded()
     }
 
+    /// Offsets the composer card so it centers on the terminal card rather
+    /// than the whole window (Sean's design decision 2, Phase 3 review) —
+    /// only meaningful in `.pinned` mode, where the sidebar actually pushes
+    /// the terminal card rightward. In `.closed`/`.overlay` the terminal
+    /// card is full-width, so no offset is needed. The scrim itself stays
+    /// full-bleed regardless — the sidebar isn't usable while the composer
+    /// is up, so dimming it is honest.
+    private var terminalCardHorizontalOffset: CGFloat {
+        sidebarMode == .pinned ? currentSidebarWidth : 0
+    }
+
+    /// Guards the fade-out `removeFromSuperview()` in
+    /// `dismissComposerOverlayIfPresented()` against a fast re-open
+    /// (Escape immediately followed by Cmd+T) — bumped on every
+    /// install/dismiss call so a dismiss's deferred completion handler can
+    /// detect it was superseded and skip yanking the freshly re-presented
+    /// overlay back out mid-animation.
+    private var composerOverlayTransitionGeneration = 0
+
     /// Adds the composer overlay hosting view as a subview, pinned to the
     /// container's full bounds — not `layout()` — so its scrim can dim the
-    /// whole terminal. No-op if already installed (re-presenting just swaps
-    /// `rootView` above).
+    /// whole terminal. Fades in (F8, Phase 3 review) to match every other
+    /// appear-over-content transition in this container (`transitionTo(_:)`'s
+    /// 0.2s convention). If the view is still attached (e.g. mid a dismiss
+    /// fade-out that this call is interrupting), just animates it back to
+    /// fully visible instead of re-adding it.
     private func installComposerOverlayIfNeeded() {
-        guard composerOverlayHostingView.superview == nil else { return }
+        composerOverlayTransitionGeneration += 1
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+
+        guard composerOverlayHostingView.superview == nil else {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = reduceMotion ? 0 : 0.2
+                composerOverlayHostingView.animator().alphaValue = 1
+            }
+            return
+        }
+
+        composerOverlayHostingView.alphaValue = 0
         addSubview(composerOverlayHostingView)
         NSLayoutConstraint.activate([
             composerOverlayHostingView.topAnchor.constraint(equalTo: topAnchor),
@@ -1430,12 +1508,43 @@ class WorkspaceViewContainer: NSView {
             composerOverlayHostingView.trailingAnchor.constraint(equalTo: trailingAnchor),
             composerOverlayHostingView.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
+        // F10 (Phase 3 review): announce the new modal content to VoiceOver.
+        NSAccessibility.post(element: composerOverlayHostingView, notification: .layoutChanged)
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = reduceMotion ? 0 : 0.2
+            composerOverlayHostingView.animator().alphaValue = 1
+        }
     }
 
     /// Removes the composer overlay hosting view. No-op if not installed.
+    /// Fades out (F8) to match `installComposerOverlayIfNeeded()`'s fade-in,
+    /// and restores first responder to the focused terminal surface
+    /// immediately (F3, Phase 3 review) — `removeFromSuperview()` alone
+    /// hands first responder back to the WINDOW, not the terminal, the same
+    /// failure mode already solved for the command palette
+    /// (`TerminalCommandPaletteView.onChange(of: isPresented)`) and inline
+    /// tab-title editing (`TerminalWindow.tabTitleEditor(_:didFinishEditing:)`).
+    /// Without this, Escape (or any other dismiss) leaves the terminal
+    /// keyboard-dead until the user clicks it.
     private func dismissComposerOverlayIfPresented() {
         guard composerOverlayHostingView.superview != nil else { return }
-        composerOverlayHostingView.removeFromSuperview()
+
+        if let controller = window?.windowController as? BaseTerminalController,
+           let focusedSurface = controller.focusedSurface {
+            window?.makeFirstResponder(focusedSurface)
+        }
+
+        composerOverlayTransitionGeneration += 1
+        let myGeneration = composerOverlayTransitionGeneration
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = reduceMotion ? 0 : 0.2
+            composerOverlayHostingView.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, self.composerOverlayTransitionGeneration == myGeneration else { return }
+            self.composerOverlayHostingView.removeFromSuperview()
+        })
     }
 
     /// Instant session creation — Cmd+Shift+T (always) and Cmd+T when the
@@ -1457,6 +1566,15 @@ class WorkspaceViewContainer: NSView {
         } else {
             template = AgentTemplate.shell
         }
+
+        // F1 (Phase 3 review): without this, a session created via the
+        // cascade pick into a collapsed project spawns with no visible
+        // sidebar row — see `WorkspaceLayout.workspaceDidCreateSessionInProject`.
+        NotificationCenter.default.post(
+            name: .workspaceDidCreateSessionInProject,
+            object: window,
+            userInfo: ["projectId": project.id]
+        )
 
         Task {
             await coordinator.createQuickSession(for: project, template: template)
@@ -1693,6 +1811,18 @@ class WorkspaceViewContainer: NSView {
         // store closes (Esc, scrim click, or a successful commit) — every
         // close path funnels through `SessionComposerStore.isOpen`, so this
         // is the single place the subview teardown needs to live (Phase 3).
+        //
+        // F9 (Phase 3 review) — LOAD-BEARING DEPENDENCY: this sink only
+        // fires reliably because `@Published` re-emits `willSet` on every
+        // assignment, even one that doesn't change the value. `cancel()`
+        // sets `isOpen = false` unconditionally, including when it's
+        // already `false` — if `isOpen`'s setter ever grows an equality
+        // guard (`didSet`-style "optimization" to skip redundant publishes),
+        // a cancel that lands while `isOpen` is already `false` would
+        // silently stop reaching this sink — the subview would stay
+        // installed until the next `windowDidResignKey` (the only other
+        // dismiss path) rather than closing when the user actually asked.
+        // Do not add that guard.
         SessionComposerStore.shared.$isOpen
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isOpen in

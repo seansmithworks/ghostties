@@ -125,6 +125,18 @@ Ghostties uses exactly two font families and a strict size/weight discipline.
 - No Dynamic Type in sidebar UI — density is intentional at 11pt
 - SF Mono for all monospaced content; never SF Pro in the terminal card
 
+### Centered modal (session composer)
+
+A third surface class, distinct from sidebar UI — introduced in Phase 3 of session-creation-unified (`SessionComposerPalette`, `.centered` presentation only). It floats free of the sidebar column at 360pt wide, so it does not inherit the 11pt sidebar density; the anchored popover presentation (the same view, `.anchored`) keeps the sidebar scale unchanged.
+
+| Element                  | Font        | Size | Weight     |
+| ------------------------ | ----------- | ---- | ---------- |
+| Query field               | SF Pro Text | 15pt | `.regular` |
+| Row title                 | SF Pro Text | 13pt | `.medium`  |
+| Row subtitle               | SF Pro Text | 11pt | —          |
+
+Query field height: 38pt. Row vertical padding: 8pt (the 4pt spacing scale's own value — not the sidebar popover's legacy 5pt).
+
 ## 4. Component Stylings
 
 ### Terminal card (pinned mode)
@@ -140,6 +152,15 @@ Ghostties uses exactly two font families and a strict size/weight discipline.
 ```swift
 // Higher opacity shadow to lift from content
 .shadow(color: .black.opacity(0.20), radius: 12)
+```
+
+### Centered modal (session composer card)
+
+Peer surface to the terminal card, not a one-off: same 12pt `.continuous` corner radius (`WorkspaceLayout.terminalCornerRadius`), and reuses the Overlay sidebar's shadow spec above rather than inventing a third shadow level. Paired with a full-bleed black-0.25 scrim (`SessionComposerOverlay`) so the card reads as "on top of" the terminal — the scrim excludes the titlebar band so traffic lights and window dragging aren't affected. `.anchored` (the sidebar popover presentation of the same view) is unchanged — unstyled 10pt radius, relies on the native `NSPopover` chrome/shadow instead.
+
+```swift
+.clipShape(RoundedRectangle(cornerRadius: WorkspaceLayout.terminalCornerRadius, style: .continuous))
+.shadow(color: .black.opacity(WorkspaceLayout.composerModalShadowOpacity), radius: WorkspaceLayout.composerModalShadowRadius)
 ```
 
 ### Row / hover states
@@ -173,24 +194,25 @@ Never use arbitrary values (13pt, 22pt, 7pt, etc.).
 
 ## 6. Depth & Elevation
 
-Two shadow levels only — terminal card and overlay sidebar. No shadows elsewhere.
+Two shadow levels — terminal card and overlay. The centered composer card reuses the Overlay level rather than adding a third.
 
-| Level         | Opacity | Radius | Y   | Usage                           |
-| ------------- | ------- | ------ | --- | ------------------------------- |
-| Card (pinned) | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar |
-| Overlay       | `0.20`  | `12`   | `0` | Sidebar in overlay mode         |
+| Level         | Opacity | Radius | Y   | Usage                                              |
+| ------------- | ------- | ------ | --- | --------------------------------------------------- |
+| Card (pinned) | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar                    |
+| Overlay       | `0.20`  | `12`   | `0` | Sidebar in overlay mode; centered composer card    |
 
 **Critical:** `shadowPath` must be set explicitly in `layout()`. Without it, CoreAnimation rasterizes from the alpha channel every frame (GPU performance hit).
 
 ## 7. Shapes
 
-One radius. One style. No exceptions.
+One radius. One style. No exceptions — for surfaces documented here.
 
-| Surface       | Radius | Style         |
-| ------------- | ------ | ------------- |
-| Terminal card | 12pt   | `.continuous` |
+| Surface                          | Radius | Style         |
+| --------------------------------- | ------ | ------------- |
+| Terminal card                     | 12pt   | `.continuous` |
+| Centered composer card (`.centered`) | 12pt   | `.continuous` |
 
-Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's squircle aesthetic.
+Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's squircle aesthetic. (The composer's `.anchored` sidebar-popover presentation keeps its own unstyled 10pt radius from Phase 2 — a legacy exception, not a new one; do not extend it further.)
 
 ## 8. Do's and Don'ts
 

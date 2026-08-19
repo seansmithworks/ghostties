@@ -6,8 +6,9 @@ import SwiftUI
 /// toolbar cascade, D7). Wraps `SessionComposerPalette` in a scrim so the
 /// card reads as "on top of" the terminal rather than terminal content
 /// itself: Ghostties has only two shadow levels and no modal vocabulary, so
-/// the overlay shadow alone (0.20/12/0) isn't enough on a busy dark
-/// terminal.
+/// the overlay shadow alone (0.20/12/0, applied to the card itself by
+/// `SessionComposerPalette` for the `.centered` presentation) isn't enough
+/// on a busy dark terminal by itself.
 ///
 /// Scrim: black at 0.25 opacity, dismissed by clicking anywhere on it. This
 /// is a locked design decision (docs/plans/session-creation-unified.html,
@@ -25,6 +26,13 @@ import SwiftUI
 struct SessionComposerOverlay: View {
     let request: SessionComposerRequest
 
+    /// Shifts the card's center rightward off the window's center so it
+    /// centers on the terminal card instead (Sean's design decision 2,
+    /// Phase 3 review) — `WorkspaceViewContainer.terminalCardHorizontalOffset`,
+    /// the live sidebar width when pinned, 0 otherwise. Applied as leading
+    /// padding on the card only; the scrim stays full-bleed underneath it.
+    var horizontalOffset: CGFloat = 0
+
     @ObservedObject private var composerStore = SessionComposerStore.shared
 
     private var isPresented: Binding<Bool> {
@@ -38,11 +46,28 @@ struct SessionComposerOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.25)
-                .contentShape(Rectangle())
-                .onTapGesture { composerStore.cancel() }
+            // F7 (Phase 3 review): the scrim excludes the titlebar band
+            // (traffic lights + drag region) rather than covering the full
+            // window height. Two problems, one fix: painting a 25%-dimmed
+            // rectangle under the titlebar left the traffic lights — which
+            // live in the theme frame above this content view — rendering
+            // at full brightness inside a dimmed band, and the scrim's own
+            // `.contentShape`/`.onTapGesture` claimed mouse-down there too,
+            // so the window couldn't be dragged by its titlebar while the
+            // composer was open and a click up there dismissed it instead.
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: WorkspaceLayout.titlebarSpacerHeight)
+                Color.black.opacity(0.25)
+                    .contentShape(Rectangle())
+                    .onTapGesture { composerStore.cancel() }
+                    .accessibilityElement()
+                    .accessibilityLabel("Dismiss session composer")
+                    .accessibilityAddTraits(.isButton)
+            }
 
             SessionComposerPalette(isPresented: isPresented, request: request)
+                .padding(.leading, horizontalOffset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

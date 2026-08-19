@@ -122,6 +122,17 @@ private struct ProjectDisclosureRowContent: View, Equatable {
             }
         }
         .background(expandedContainerBackground)
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceComposerOverlayWillPresent)) { notification in
+            // F5 (Phase 3 review): `SessionComposerStore` is one app-wide
+            // singleton — if this row's popover stays open while the
+            // centered overlay opens, the overlay's `open(.open, ...)`
+            // silently overwrites `currentProjectBinding`/`selectedProjectId`
+            // out from under it, and `.locked`'s write-path enforcement is
+            // defeated by the second opener. Single-presentation invariant:
+            // the overlay always wins.
+            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
+            showingTemplatePicker = false
+        }
     }
 
     // MARK: - Expanded Session List

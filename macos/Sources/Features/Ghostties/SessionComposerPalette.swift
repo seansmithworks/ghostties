@@ -59,10 +59,81 @@ struct SessionComposerPalette: View {
         }
     }
 
-    private static let fieldHeight: CGFloat = 30
-    private static let fieldFontSize: CGFloat = 11
-    private static let rowFontSize: CGFloat = 12
-    private static let subtitleFontSize: CGFloat = 10
+    // MARK: - Two surface classes (Phase 3 review — "New centered-modal
+    // surface class")
+    //
+    // `.anchored` (the Phase 2 sidebar popover) and `.centered` (the Phase 3
+    // overlay card) are typographically distinct — the card grew 220pt to
+    // 360pt but originally kept the sidebar's own 11pt density, reading as a
+    // stretched popover rather than a standalone surface. `.anchored`'s
+    // values below are UNCHANGED from Phase 2 (do not restyle the sidebar
+    // popover); `.centered` gets its own scale, documented as a canonical
+    // surface class in `DESIGN.md` §3/§4/§6/§7 rather than living only here.
+    private var fieldHeight: CGFloat {
+        switch request.presentation {
+        case .anchored: return 30
+        case .centered: return 38
+        }
+    }
+
+    private var fieldFontSize: CGFloat {
+        switch request.presentation {
+        case .anchored: return 11
+        case .centered: return 15
+        }
+    }
+
+    private var rowFontSize: CGFloat {
+        switch request.presentation {
+        case .anchored: return 12
+        case .centered: return 13
+        }
+    }
+
+    private var subtitleFontSize: CGFloat {
+        switch request.presentation {
+        case .anchored: return 10
+        case .centered: return 11
+        }
+    }
+
+    /// Row vertical padding — `ComposerRow`'s existing 5pt (Phase 2,
+    /// `.anchored` only) predates the 4pt spacing scale; left as-is since
+    /// restyling the popover is out of scope. `.centered` gets the scale's
+    /// 8pt.
+    private var rowVerticalPadding: CGFloat {
+        switch request.presentation {
+        case .anchored: return 5
+        case .centered: return 8
+        }
+    }
+
+    /// Card corner radius — `.anchored` keeps its existing 10pt (unstyled,
+    /// Phase 2, not touched). `.centered` uses the DESIGN.md §7 terminal-card
+    /// radius/style (`WorkspaceLayout.terminalCornerRadius`, `.continuous`) —
+    /// the composer card is a peer surface to the terminal card, not a
+    /// one-off.
+    private var cornerRadius: CGFloat {
+        switch request.presentation {
+        case .anchored: return 10
+        case .centered: return WorkspaceLayout.terminalCornerRadius
+        }
+    }
+
+    /// DESIGN.md §7: "One radius. One style. No exceptions... Always pass
+    /// `style: .continuous`." `.anchored` keeps the unstyled default
+    /// (`.circular`) it shipped with in Phase 2; `.centered` is `.continuous`.
+    private var cornerStyle: RoundedCornerStyle {
+        switch request.presentation {
+        case .anchored: return .circular
+        case .centered: return .continuous
+        }
+    }
+
+    private var composerClipShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: cornerStyle)
+    }
+
     private static let sectionHeaderFontSize: CGFloat = 10
 
     private var isProjectLocked: Bool {
@@ -212,9 +283,10 @@ struct SessionComposerPalette: View {
                 query: query,
                 selectedIndex: $selectedIndex,
                 hoveredOptionID: $hoveredOptionID,
-                rowFontSize: Self.rowFontSize,
-                subtitleFontSize: Self.subtitleFontSize,
+                rowFontSize: rowFontSize,
+                subtitleFontSize: subtitleFontSize,
                 sectionHeaderFontSize: Self.sectionHeaderFontSize,
+                rowVerticalPadding: rowVerticalPadding,
                 onEditTemplate: { newTemplateToEdit = $0 },
                 onDuplicateTemplate: { _ = store.duplicateTemplate(id: $0.id) },
                 onDuplicateAndEditTemplate: {
@@ -238,7 +310,7 @@ struct SessionComposerPalette: View {
 
             if let writeError = composerStore.writeError {
                 Text(writeError)
-                    .font(.system(size: Self.subtitleFontSize))
+                    .font(.system(size: subtitleFontSize))
                     .foregroundStyle(Color(nsColor: .systemRed))
                     .padding(.horizontal, 10)
                     .padding(.top, 6)
@@ -254,10 +326,19 @@ struct SessionComposerPalette: View {
             }
             .compositingGroup()
         )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(composerClipShape)
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            composerClipShape
                 .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
+        )
+        // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3 review
+        // fix). `.anchored` relies on the native NSPopover chrome/shadow
+        // instead; adding a second shadow there would double up.
+        .shadow(
+            color: request.presentation == .centered
+                ? .black.opacity(WorkspaceLayout.composerModalShadowOpacity)
+                : .clear,
+            radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0
         )
         .environment(\.colorScheme, scheme)
         .onAppear {
@@ -319,13 +400,13 @@ struct SessionComposerPalette: View {
         HStack(spacing: 0) {
             ComposerQueryField(
                 query: $composerStore.searchText,
-                fontSize: Self.fieldFontSize,
+                fontSize: fieldFontSize,
                 focusTrigger: $composerStore.focusSearchFieldTrigger,
                 hasSelection: selectedOption != nil
             ) { event in
                 handle(event)
             }
-            .frame(height: Self.fieldHeight)
+            .frame(height: fieldHeight)
 
             projectControl
         }
@@ -340,19 +421,19 @@ struct SessionComposerPalette: View {
             // No hairline divider here (nit): a divider next to a static
             // label with no `▾` reads as a control that isn't one.
             Text(label)
-                .font(.system(size: Self.rowFontSize, weight: .medium))
+                .font(.system(size: rowFontSize, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
         } else {
             Divider()
-                .frame(height: Self.fieldHeight * 0.5)
+                .frame(height: fieldHeight * 0.5)
 
             Button {
                 isProjectDropdownOpen = true
             } label: {
                 HStack(spacing: 4) {
                     Text(label)
-                        .font(.system(size: Self.rowFontSize, weight: .medium))
+                        .font(.system(size: rowFontSize, weight: .medium))
                         .lineLimit(1)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 9, weight: .medium))
@@ -392,7 +473,7 @@ struct SessionComposerPalette: View {
                     .font(.system(size: 11))
                     .frame(width: 16)
                 TextField("Template name", text: $newTemplateName)
-                    .font(.system(size: Self.rowFontSize, weight: .medium))
+                    .font(.system(size: rowFontSize, weight: .medium))
                     .textFieldStyle(.plain)
                     .focused($newTemplateNameFocused)
                     .onSubmit { commitNewTemplate() }
@@ -413,7 +494,7 @@ struct SessionComposerPalette: View {
                         .font(.system(size: 11))
                         .frame(width: 16)
                     Text("New template…")
-                        .font(.system(size: Self.rowFontSize, weight: .medium))
+                        .font(.system(size: rowFontSize, weight: .medium))
                     Spacer()
                 }
                 .contentShape(Rectangle())
@@ -495,6 +576,14 @@ struct SessionComposerPalette: View {
         // `.onKeyPress` ever fire on macOS 14+.
         selectedIndex = nil
 
+        // F1 (Phase 3 review): capture the target project BEFORE precommit
+        // runs — `.locked`'s enforced project can differ from whatever
+        // `selectedProjectId` reads after `precommit` records the recent
+        // pair and closes the store, and this notification exists
+        // specifically to auto-expand the project the session actually
+        // landed in.
+        let targetProject = currentProject
+
         // N1: `precommit` is synchronous — it validates, records the
         // recent pair, and dispatches the actual session spawn from a
         // detached `Task` it does not wait on. Dismissing here, on that
@@ -504,6 +593,16 @@ struct SessionComposerPalette: View {
         let success = composerStore.precommit(template: template, coordinator: coordinator, workspaceStore: store)
         if success {
             isPresented = false
+            // F1: without this, a session created via the composer into a
+            // collapsed project spawns with no visible sidebar row — see
+            // `WorkspaceLayout.workspaceDidCreateSessionInProject`.
+            if let targetProject {
+                NotificationCenter.default.post(
+                    name: .workspaceDidCreateSessionInProject,
+                    object: coordinator.containerView?.window,
+                    userInfo: ["projectId": targetProject.id]
+                )
+            }
         } else {
             // N4: precommit failed — the composer stays open with
             // `writeError` showing. `selectedIndex` was just nil'd above,
@@ -690,6 +789,7 @@ private struct ComposerResultsTable: View {
     var rowFontSize: CGFloat
     var subtitleFontSize: CGFloat
     var sectionHeaderFontSize: CGFloat
+    var rowVerticalPadding: CGFloat
     var onEditTemplate: (AgentTemplate) -> Void
     var onDuplicateTemplate: (AgentTemplate) -> Void
     var onDuplicateAndEditTemplate: (AgentTemplate) -> Void
@@ -730,6 +830,7 @@ private struct ComposerResultsTable: View {
                                         hoveredID: $hoveredOptionID,
                                         titleFontSize: rowFontSize,
                                         subtitleFontSize: subtitleFontSize,
+                                        verticalPadding: rowVerticalPadding,
                                         onEditTemplate: onEditTemplate,
                                         onDuplicateTemplate: onDuplicateTemplate,
                                         onDuplicateAndEditTemplate: onDuplicateAndEditTemplate,
@@ -778,6 +879,7 @@ private struct ComposerRow: View {
     @Binding var hoveredID: UUID?
     var titleFontSize: CGFloat
     var subtitleFontSize: CGFloat
+    var verticalPadding: CGFloat
     var onEditTemplate: (AgentTemplate) -> Void
     var onDuplicateTemplate: (AgentTemplate) -> Void
     var onDuplicateAndEditTemplate: (AgentTemplate) -> Void
@@ -828,7 +930,7 @@ private struct ComposerRow: View {
                 Spacer()
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, verticalPadding)
             .contentShape(Rectangle())
             .background(
                 isSelected

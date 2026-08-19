@@ -8,7 +8,7 @@ struct SessionComposerRequest {
     /// How the composer is presented. Only `.anchored` (the sidebar
     /// popover) is built in Phase 2 — `.centered` is declared now so the
     /// type is stable, but Phase 3 is the first caller to actually use it.
-    enum Presentation {
+    enum Presentation: Equatable {
         case anchored
         case centered
     }

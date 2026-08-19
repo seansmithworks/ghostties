@@ -982,22 +982,39 @@ class AppDelegate: NSObject,
         return mode == "projectFirst"
     }
 
-    /// Reclaims ⌘T for "New Session" in project-first workspace mode,
-    /// overriding Ghostty's native `new_tab` binding — which would otherwise
-    /// create a real NSWindow tab, or fall back to opening a whole new
-    /// window (see `TerminalController.newTab(_:)`), neither of which
-    /// matches the sidebar-session model. Same intercept-before-
-    /// `performKeyEquivalent` technique as `setupSessionCyclingShortcut()`
-    /// above — a local monitor runs before AppKit's key-equivalent dispatch
-    /// entirely, so it reliably wins the race regardless of what's bound in
-    /// `src/config/Config.zig` or the user's own keybinds.
+    /// Just the `contentView is WorkspaceViewContainer` half of
+    /// `isProjectFirstWorkspaceWindow(_:)` above, with no sidebar-view-mode
+    /// check (F2, Phase 3 review). Used exclusively by
+    /// `setupNewSessionShortcut()`: Cmd+T must reach the container in BOTH
+    /// project-first and task-first workspace windows now, because
+    /// `WorkspaceViewContainer`'s `.workspaceNewSession` observer (Phase 3
+    /// — moved there from `WorkspaceSidebarView`) lives at the container
+    /// level and doesn't care which sidebar view mode is mounted; it opens
+    /// the composer overlay or creates a session instantly either way. Cmd+W
+    /// and Cmd+1-9 stay on `isProjectFirstWorkspaceWindow(_:)` — they're
+    /// genuinely project-first-only (task-first has no session list for
+    /// them to act on).
+    private static func isWorkspaceWindow(_ window: NSWindow) -> Bool {
+        window.contentView is WorkspaceViewContainer
+    }
+
+    /// Reclaims ⌘T for "New Session" in workspace windows (both sidebar view
+    /// modes, F2 fix — see `isWorkspaceWindow(_:)`), overriding Ghostty's
+    /// native `new_tab` binding — which would otherwise create a real
+    /// NSWindow tab, or fall back to opening a whole new window (see
+    /// `TerminalController.newTab(_:)`), neither of which matches the
+    /// sidebar-session model. Same intercept-before-`performKeyEquivalent`
+    /// technique as `setupSessionCyclingShortcut()` above — a local monitor
+    /// runs before AppKit's key-equivalent dispatch entirely, so it reliably
+    /// wins the race regardless of what's bound in `src/config/Config.zig`
+    /// or the user's own keybinds.
     private func setupNewSessionShortcut() {
         _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],
                   event.charactersIgnoringModifiers?.lowercased() == "t"
             else { return event }
 
-            guard let window = NSApp.keyWindow, Self.isProjectFirstWorkspaceWindow(window) else { return event }
+            guard let window = NSApp.keyWindow, Self.isWorkspaceWindow(window) else { return event }
 
             NSApp.sendAction(#selector(TerminalController.newWorkspaceSession(_:)), to: nil, from: nil)
             return nil
