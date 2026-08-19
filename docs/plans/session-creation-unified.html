@@ -235,14 +235,12 @@ project ▾ open:                      ┌────────────�
                                      └────────────────┘    folder picker, composer stays open</code></pre>
 
     <p data-anchor-id="composer-search">
-      <strong>Whether one field still filters both is now open, not settled</strong>
-      — see decision 3 below. Giving the project its own trailing control
-      (Treatment 2, locked) makes the original "one field filters templates
-      AND projects" idea either redundant-by-design or abandoned; Sean has
-      seen it both ways in the mockups and has not chosen. The strawman keeps
-      filtering both, so Cmd+T, type <code>bru</code>, Return still lands you
-      in a Brukas session — no submenu, no scanning — while the trailing
-      control becomes the discoverable, explicit path to the same place.
+      <strong>One field filters both — decided</strong> (decision 3 below).
+      The project still keeps its own trailing control (Treatment 2, locked)
+      alongside it, so this is not redundant: filtering both means Cmd+T,
+      type <code>bru</code>, Return still lands you in a Brukas session — no
+      submenu, no scanning — while the trailing control is the discoverable,
+      explicit path to the same place.
     </p>
 
     <p data-anchor-id="composer-noname">
@@ -600,7 +598,8 @@ project ▾ open:                      ┌────────────�
       </li>
       <li data-anchor-id="phase2-project-ordering">
         <strong>Project dropdown ordering — three tiers, no visible
-        headers.</strong> The cascade pick is first and pre-selected —
+        headers.</strong> Decided (decision 4 below, locked) — not a proposal
+        to validate. The cascade pick is first and pre-selected —
         frontmost terminal's cwd → MRU → most-recently-touched. That logic
         already exists at <code>NewTaskComposerStore.swift:168–195</code>; the
         composer inherits it rather than reimplementing it. Recently used
@@ -700,21 +699,27 @@ project ▾ open:                      ┌────────────�
         <code>layout()</code> at <code>:572</code>. Add on open, remove on close.
       </li>
       <li>
-        <strong>Route Cmd+T.</strong> Move the
-        <code>.workspaceNewSession</code> handling out of
+        <strong>Route Cmd+T — preference-driven, composer by default.</strong>
+        Move the <code>.workspaceNewSession</code> handling out of
         <code>WorkspaceSidebarView.swift:135</code> and into the container so
-        both sidebar modes receive it (fixes D2). Delete the
-        <code>selectedProject</code> guard at <code>:229</code> — open the
-        composer with the cascade instead (fixes D1).
+        both sidebar modes receive it (fixes D2). The handler reads the new
+        <code>@AppStorage</code> flag (spec in decision 2 above): default
+        (composer) deletes the <code>selectedProject</code> guard at
+        <code>:229</code> and opens the composer with the cascade instead
+        (fixes D1); flag flipped to instant, it creates immediately with the
+        cascade pick, same as Cmd+Shift+T below.
         <code>createNewSessionForSelectedProject()</code> at
         <code>:227–242</code> goes away.
       </li>
       <li>
-        <strong>Promote Cmd+Shift+T</strong> to the instant path: unhide the
-        item at <code>AppDelegate.swift:749–756</code>, retitle it
+        <strong>Promote Cmd+Shift+T — unconditionally instant, no
+        preference check.</strong> Unhide the item at
+        <code>AppDelegate.swift:749–756</code>, retitle it
         "New Session (Instant)", and point it at a new
         <code>TerminalController</code> action that posts a distinct
-        notification. The overlay is not involved.
+        notification. The overlay is not involved, and this chord ignores the
+        Cmd+T preference entirely — it is always the zero-UI path regardless
+        of what the flag is set to.
       </li>
       <li>
         <strong>Replace the cascade.</strong>
@@ -890,7 +895,7 @@ project ▾ open:                      ┌────────────�
     </table>
 
     <!-- ────────────────────────────────────────────────────────────────── -->
-    <h2 data-anchor-id="decisions">Yours to decide — three forks, each with a strawman</h2>
+    <h2 data-anchor-id="decisions">Yours to decide — one fork open, three now decided</h2>
 
     <ol data-anchor-id="decision-list">
       <li>
@@ -906,46 +911,73 @@ project ▾ open:                      ┌────────────�
       </li>
       <li>
         <strong>Cmd+T opens the composer, or stays instant?</strong>
-        <br /><strong>Strawman: Cmd+T opens the composer with everything
-        pre-filled and Return commits</strong>, and Cmd+Shift+T — already a
-        hidden alias — becomes the true zero-UI instant create. You gain a
-        visible target on the chord you actually press, and keep an instant path
-        for when you do not want one.
-        <br /><em>Alternative:</em> Cmd+T stays instant and the composer gets
-        Cmd+Option+T. Preserves muscle memory exactly, but a panel behind a
-        three-modifier chord is a panel nobody opens.
+        <br /><strong>DECIDED, with a modification — not the strawman as
+        written.</strong> Sean's words: "Open composer, gives option to make
+        it default, adding a setting to be instant or composer. Composer is
+        default." Cmd+T's behavior is now preference-driven: a user-facing
+        flag decides whether it opens the composer or creates instantly, and
+        the composer is the default. Cmd+Shift+T — already a hidden alias —
+        stays the true zero-UI instant create, unconditionally, regardless of
+        the preference. Spec below.
+        <br /><em>Not taken as written:</em> the strawman hard-wired Cmd+T to
+        the composer with no way back to instant behavior. The preference is
+        exactly the difference — Cmd+T is no longer fixed.
       </li>
       <li>
         <strong>Does the search field still filter projects, or templates
         only?</strong>
-        <br /><strong>Strawman: keep filtering both.</strong> Giving the
-        project its own dedicated trailing control (Treatment 2, locked) makes
-        the plan's original "one field filters both" idea either
-        redundant-by-design or abandoned — Sean has seen it both ways in the
-        mockups and has not chosen. Keeping both filtered means "type
-        <code>bru</code>, press Return" survives as the fast path, and the
-        trailing control becomes the discoverable, explicit path to the same
-        place.
-        <br /><em>Alternative:</em> field filters templates only; project
-        selection is exclusively via the trailing control. Cleaner mental
-        model, but kills the single-fastest path for the common case where you
-        already know the project.
+        <br /><strong>DECIDED: the field filters both</strong> — the
+        strawman, taken as written. Templates always; projects too. Typing
+        <code>bru</code> and pressing Return still lands you in a Brukas
+        session — no submenu, no scanning — and that stays the fast path; the
+        trailing project control (Treatment 2) is the discoverable, explicit
+        path to the same place.
+        <br /><em>Not taken:</em> field filters templates only, project
+        selection exclusively via the trailing control. Cleaner mental model,
+        but it would have killed the single-fastest path for the common case
+        where you already know the project.
       </li>
       <li data-anchor-id="decision-ordering-tiers">
         <strong>Should recently-used projects form their own tier, or should
         the whole list simply be alphabetical after the cascade pick?</strong>
-        <br /><strong>Strawman: keep the three tiers.</strong> Two or three
+        <br /><strong>DECIDED: three tiers</strong> — the strawman, taken as
+        written. Cascade pick pre-selected, then recently-used
+        most-recent-first, then everything else alphabetical. Two or three
         projects account for most sessions, and putting them directly under
         the pre-selected one means the common case needs no typing and no
-        scanning at all.
-        <br /><em>Alternative:</em> cascade pick, then strictly alphabetical.
-        Simpler to reason about and never reorders under you — at the cost of
+        scanning at all. Sean chose this knowing the trade: a recency tier
+        means the list changes shape between openings. Accepted knowingly —
+        do not re-open this on the "but it reorders" argument.
+        <br /><em>Not taken:</em> cascade pick, then strictly alphabetical.
+        Simpler to reason about and never reorders under you, at the cost of
         burying the projects you actually use among two dozen you do not.
-        The real tension: a recency tier means the list changes shape between
-        openings, which is exactly the property that makes today's insertion
-        order feel arbitrary. That is the trade to decide.
       </li>
     </ol>
+
+    <blockquote class="callout" data-anchor-id="decision-cmdt-preference-spec">
+      <p>
+        <strong>The Cmd+T preference, spec'd against what actually
+        exists.</strong> <code>Features/Settings/SettingsView.swift</code> is
+        a placeholder — its entire body is "Coming Soon. 🚧" plus instructions
+        pointing at a Ghostty config file, and one <code>defaults write</code>
+        flag for the update channel. There is no settings UI to add a toggle
+        to, so this follows the pattern the app already ships preferences in
+        rather than inventing one. An <code>@AppStorage</code>-backed flag —
+        the same pattern used throughout <code>Features/Ghostties/</code>
+        (<code>WorkspaceSidebarView.swift</code>,
+        <code>TemplatePickerView.swift</code>,
+        <code>NewTaskComposerStore.swift</code>) — defaulting to the
+        composer, settable via
+        <code>defaults write com.seansmithdesign.ghostties
+        ghostties.newSessionOpensComposer false</code>
+        exactly like <code>ghostties.autoUpdateChannel</code>. Documented by
+        adding one line to <code>SettingsView.swift</code>'s existing
+        instruction block, beside the update-channel line it already lists —
+        the honest, in-pattern home for it. A real Settings UI is out of
+        scope for this work; when one is eventually built, this flag is a
+        natural first row.
+      </p>
+    </blockquote>
 
     <blockquote class="callout" data-anchor-id="closing">
       <p>
