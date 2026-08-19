@@ -4,6 +4,74 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-19 — Overnight autonomous run: session-composer Phases 1–5
+
+The plan at `docs/plans/session-creation-unified.html` is corrected and its decisions locked as of
+`c19c7c0cd`. No implementation exists yet — there are no `SessionComposer*` files in
+`macos/Sources/Features/Ghostties/`.
+
+- [ ] **Phase 1 — template resolver.** New `macos/Sources/Features/Ghostties/SessionTemplateResolver.swift`
+  with `static func templates(for:store:) -> [AgentTemplate]`. Repoint both callers; delete
+  `RecentsListView.availableTemplates(for:store:)` (`:152–160`, including the invalid sort at
+  `:156`) and the three computed filters in `TemplatePickerView` (`:32–43`). Name-first template
+  creation replacing `addCustomTemplate()` (`TemplatePickerView.swift:336–339`). Dedupe on write in
+  `WorkspaceStore.addTemplate`. Empty state in YOUR TEMPLATES. Fixes D4/D5/D6. No open decisions —
+  ready to build. See plan Phase 1 anchor for full detail. | app | open
+
+- [ ] **Phase 2 — SessionComposer.** Fork `macos/Sources/Features/Command Palette/CommandPalette.swift`
+  into `Features/Ghostties/SessionComposerPalette.swift`, renamed and parameterized. Plus
+  `SessionComposerStore` mirroring `NewTaskComposerStore`. Wire to `ProjectDisclosureRow.swift:452`'s
+  popover only. See plan Phase 2 anchor for full detail. | app | open
+
+- [ ] **Phase 3 — centered overlay + Cmd+T.** `SessionComposerOverlay`, widen `TransparentHostingView`
+  (`WorkspaceViewContainer.swift:1701`) from `private` to `internal`, `@AppStorage` Cmd+T preference,
+  delete the 28-project toolbar cascade. Fixes D1/D2/D7. See plan Phase 3 anchor for full detail. |
+  app | open
+
+- [ ] **Phase 4 — project-creation convergence.** See plan Phase 4 anchor for full detail. | app | open
+
+- [ ] **Phase 5 — stop pinning everything (optional).** Only if everything above is green and time
+  remains. See plan Phase 5 anchor for full detail. | app | open
+
+**Run rules (hard limits):**
+
+- **PR per phase, stacked.** Phase 1 branches off `main`; each later phase branches off the
+  previous phase's branch and its PR targets that branch. **Never merge — Sean merges.**
+- **Stacked PRs + squash-merge conflict in this repo** (`reference_stacked-pr-squash-merge-conflict.md`).
+  Note in every PR body: merge bottom-up, rebase each after the base lands.
+- **Gate between phases:** the next phase starts only if the previous phase's suite is green and
+  two independent review rounds came back clean. A phase that fails its gate twice ends the run —
+  do not proceed to the next phase.
+- **Test gate:** unfiltered `xcodebuild test` with explicit totals against the **694 passing / 0
+  failing / 1 skipped** baseline. Use `xcrun xcresulttool get test-results summary` for real counts
+  — raw log lines carry a constant −49 offset. A summary claiming pass without the numbers is not
+  acceptable.
+- **Two review rounds minimum on any phase with a UI surface.** UI fixes in this repo have gone
+  five-for-five: every second review round has found a real defect the first missed.
+- **Reviewer is never the builder.**
+- **Build via Xcode/`xcodebuild`**, not `zig build` (broken on macOS 26). Every CLI `xcodebuild`
+  needs `ONLY_ACTIVE_ARCH=YES ARCHS=arm64`, and `derivedDataPath` must be exactly `macos/build`.
+- **Hard stop at 07:00** regardless of progress. Commit and push whatever is complete; leave
+  partial work on a clearly-labelled WIP commit naming the breakage.
+- **Never:** merge to `main`; push or PR to `upstream` (`ghostty-org/ghostty`); tag a release; `npm
+  publish`; any deploy; `killall ghostty`/`ghostties`; synthetic keystrokes or AX driving (screen
+  capture is fine, driving is never).
+- **Stage by explicit path**, never `git add -A` — sibling sessions share this worktree.
+- **PUBLIC repo** — never commit real session data or local `~/.claude` state.
+
+**Known blockers on verification:**
+
+- `screencapture` is TCC-denied for this terminal, so visual phases cannot produce screenshot
+  evidence. Sean was asked to grant Screen Recording to the terminal and relaunch before bed; **if
+  screenshots work in the new session, put before/after stills in every visual PR.** If they still
+  fail, say so explicitly per phase rather than silently skipping visual evidence.
+- The scrim decision (does the centered composer dim the terminal behind it) is still open,
+  defaulted to yes at a black scrim 0.25. It is one modifier and reversible — build with the
+  default, do not block on it.
+- `SettingsView.swift` is a placeholder with no UI; the Cmd+T preference ships as an `@AppStorage`
+  flag set via `defaults write`, documented by one added line in that file's existing instruction
+  block.
+
 ## 2026-08-18 — Session composer: palette reuse + design direction (carried)
 
 Sean picked the composer direction from mockups this session. Design decisions locked; the plan
