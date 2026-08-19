@@ -53,10 +53,11 @@
     .cellg.pick { background: rgba(255,213,79,0.09); box-shadow: inset 0 0 0 1px rgba(255,213,79,0.5); }
 
     /* ---- size ladder ---- */
-    .ladder { margin-top: 26px; display: flex; align-items: flex-end; gap: 0; }
+    .ladder { margin-top: 26px; display: flex; align-items: stretch; gap: 0; }
     .rung { border: 1px solid rgba(236,234,245,0.16); border-right-width: 0;
       padding: 14px 20px 12px; display: flex; flex-direction: column;
-      align-items: center; justify-content: flex-end; min-width: 118px; }
+      align-items: center; justify-content: flex-end; min-width: 118px;
+      height: 156px; box-sizing: border-box; }
     .rung:last-child { border-right-width: 1px; }
     .rung svg { display: block; }
     .rung .n { margin-top: 12px; font-family: "DM Mono", monospace; font-size: 9.5px;

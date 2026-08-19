@@ -167,10 +167,10 @@
     .tk .art { position: absolute; inset: 0; animation: tokbob 2.6s ease-in-out infinite; }
     @keyframes tokbob { 50% { transform: translateY(-4px); } }
     .tk svg { width: 100%; height: 100%; display: block; }
-    .tk .lab { position: absolute; left: -21px; top: 9px; width: 86px; height: 26px;
+    .tk .lab { position: absolute; left: -16px; top: 9px; width: 76px; height: 26px;
       box-sizing: border-box; display: none; align-items: center; justify-content: center;
       border: 1px solid currentColor; background: rgba(7,7,15,0.92);
-      font-family: "Silkscreen", monospace; font-size: 9px; letter-spacing: 0.02em; }
+      font-family: "Silkscreen", monospace; font-size: 8px; letter-spacing: 0.01em; }
     .sn.named .tk .gen { display: none; }
     .sn.named .tk .lab { display: flex; }
     .tk.pop .art { animation: tokpop 0.32s steps(3, jump-none) forwards; }
@@ -320,7 +320,7 @@ class Component extends DCLogic {
     const TCOL = ['#ffd54f', '#00BCD4', '#7C4DFF', '#4ade80'];
     // Names are TEXT placeholders, deliberately not marks. See the band.
     const TNAME = ['CLAUDE','CODEX','CURSOR','COPILOT','GEMINI','AIDER','DEVIN','CLINE',
-                   'ZED','WINDSURF','GOOSE','OPENHANDS','SWE','AMP'];
+                   'ZED','GOOSE','AMP','SWE','KILO','ROO'];
 
     const tokens = [];
     for (let i = 0; i < 14; i++) {
