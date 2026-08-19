@@ -28,10 +28,16 @@ struct SessionComposerOverlay: View {
 
     /// Shifts the card's center rightward off the window's center so it
     /// centers on the terminal card instead (Sean's design decision 2,
-    /// Phase 3 review) — `WorkspaceViewContainer.terminalCardHorizontalOffset`,
-    /// the live sidebar width when pinned, 0 otherwise. Applied as leading
-    /// padding on the card only; the scrim stays full-bleed underneath it.
-    var horizontalOffset: CGFloat = 0
+    /// Phase 3 review). Applied as leading padding on the card only; the
+    /// scrim stays full-bleed underneath it.
+    ///
+    /// R5 (Phase 3 review round 2): an `@ObservedObject`, not a captured
+    /// `CGFloat` — the offset used to be baked into `rootView` once at
+    /// present-time, so it went stale the moment Cmd+S/Cmd+Shift+E or
+    /// Cmd+Shift+1/2 changed the sidebar's width or mode while the composer
+    /// was still open. `WorkspaceViewContainer` writes the live value into
+    /// this same shared model instance at every site that can change it.
+    @ObservedObject var centeringModel: ComposerCenteringModel
 
     @ObservedObject private var composerStore = SessionComposerStore.shared
 
@@ -57,7 +63,7 @@ struct SessionComposerOverlay: View {
             // composer was open and a click up there dismissed it instead.
             VStack(spacing: 0) {
                 Color.clear
-                    .frame(height: WorkspaceLayout.titlebarSpacerHeight)
+                    .frame(height: centeringModel.titlebarBandHeight)
                 Color.black.opacity(0.25)
                     .contentShape(Rectangle())
                     .onTapGesture { composerStore.cancel() }
@@ -67,7 +73,7 @@ struct SessionComposerOverlay: View {
             }
 
             SessionComposerPalette(isPresented: isPresented, request: request)
-                .padding(.leading, horizontalOffset)
+                .padding(.leading, centeringModel.horizontalOffset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

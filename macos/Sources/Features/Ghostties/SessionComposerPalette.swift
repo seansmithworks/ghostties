@@ -373,6 +373,20 @@ struct SessionComposerPalette: View {
             // the bottom of the list.
             clampSelectedIndex()
         }
+        .onChange(of: composerStore.focusSearchFieldTrigger) { triggered in
+            // R8 (Phase 3 review round 2): mirrors the S5 seed in `onAppear`
+            // for the "re-open while already installed" path (F4) —
+            // `onAppear` doesn't reliably re-fire there (observed, see F4's
+            // comment in `WorkspaceViewContainer.presentComposerOverlay`),
+            // so a `selectedIndex` left `nil` by a just-completed commit
+            // (S1's reset) never gets re-seeded, and Return goes dead on a
+            // fast re-present. `focusSearchFieldTrigger` is exactly
+            // `open()`'s "already open" signal (S7) — unlike `isOpen`
+            // itself, which SwiftUI's `.onChange` won't re-fire on since it
+            // stays `true` across the whole re-open.
+            guard triggered else { return }
+            clampSelectedIndex()
+        }
         .sheet(item: $newTemplateToEdit) { template in
             TemplateEditForm(template: template)
         }
@@ -739,7 +753,11 @@ struct ComposerQueryField: View {
 
             TextField("Search templates and projects…", text: $query)
                 .padding(.vertical, 6)
-                .font(.system(size: fontSize, weight: .light))
+                // R6 (Phase 3 review round 2): `.light` isn't an allowed
+                // DESIGN.md weight (§3: `.regular`/`.medium`, `.semibold`
+                // sparingly), and DESIGN.md's own new "centered modal" row
+                // documents this field as `.regular` — reconciling to that.
+                .font(.system(size: fontSize, weight: .regular))
                 .textFieldStyle(.plain)
                 .focused($isTextFieldFocused)
                 .onExitCommand { onEvent?(.exit) }

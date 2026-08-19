@@ -1774,6 +1774,18 @@ extension TerminalController {
             guard mode == "projectFirst" else { return false }
             return !WorkspaceStore.shared.flatProjectsInVisualOrder.isEmpty
 
+        // Both post a notification only `WorkspaceViewContainer` observes
+        // (Phase 3 review — lower-priority item: "New Session (Instant)"
+        // silently no-ops in a plain terminal window"). `newWorkspaceSession(_:)`
+        // had this bug already; `newWorkspaceSessionInstant(_:)` inherits it
+        // the moment this phase promoted its menu item from hidden to
+        // visible+enabled. Unlike "Next Session"/"Previous Session" above,
+        // this doesn't need a `SessionCoordinator` reference — just the
+        // window/`contentView` check already used elsewhere in this file.
+        case #selector(TerminalController.newWorkspaceSession(_:)),
+            #selector(TerminalController.newWorkspaceSessionInstant(_:)):
+            return window?.contentView is WorkspaceViewContainer
+
         case #selector(showProjectsView(_:)):
             let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
             let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab") ?? "projects"

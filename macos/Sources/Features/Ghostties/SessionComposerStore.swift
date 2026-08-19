@@ -219,6 +219,19 @@ final class SessionComposerStore: ObservableObject {
         coordinator: SessionCoordinator,
         workspaceStore: WorkspaceStore
     ) -> Bool {
+        // R3 (Phase 3 review round 2): the keyboard path's double-Return
+        // guard (`SessionComposerPalette.commit(template:)` nil-ing
+        // `selectedIndex` synchronously) doesn't cover the mouse path —
+        // `ComposerRow`'s `Button(action:)` calls `option.action()` directly
+        // and never reads `selectedIndex`. A fast double-click on a
+        // template row (well inside the system's ~500ms double-click
+        // interval, especially during the centered overlay's 0.2s
+        // dismiss-fade before hit-testing is disabled) could otherwise fire
+        // `precommit` twice and create two sessions. `isOpen` is already set
+        // `false` synchronously below on the first successful call, so this
+        // guard rejects the second one for free.
+        guard isOpen else { return false }
+
         // `.locked` enforces at the write path — resolved from the bound
         // project, never from `selectedProjectId` — so the enum case isn't
         // decorative once Phase 3 starts relying on it. `.prefilled`/`.open`
