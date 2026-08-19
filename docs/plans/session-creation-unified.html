@@ -438,7 +438,9 @@ project ▾ open:                      ┌────────────�
             <strong>The toolbar cascade really is insertion-ordered.</strong> It
             iterates <code>store.projects</code> raw — not
             <code>flatProjectsInVisualOrder</code>. Both complaints hold: length
-            <em>and</em> order.
+            <em>and</em> order. Deleting the menu does not by itself fix the
+            ordering problem it inherited — the replacement dropdown
+            needs the explicit ordering spec in Phase 2.
           </td>
           <td>
             <code>RecentsListView.swift:489</code> —
@@ -595,6 +597,27 @@ project ▾ open:                      ┌────────────�
         is a flat <code>ForEach</code> — so the RECENT/TEMPLATES grouping must
         be added; <code>TemplatePickerView.swift:83,110</code> is the header
         precedent. Plain <code>VStack</code>, never <code>LazyVStack</code>.
+      </li>
+      <li data-anchor-id="phase2-project-ordering">
+        <strong>Project dropdown ordering — three tiers, no visible
+        headers.</strong> The cascade pick is first and pre-selected —
+        frontmost terminal's cwd → MRU → most-recently-touched. That logic
+        already exists at <code>NewTaskComposerStore.swift:168–195</code>; the
+        composer inherits it rather than reimplementing it. Recently used
+        projects come next, most recent first. Everything else is
+        alphabetical. Alphabetical is the only tier-3 ordering that stays
+        stable and predictable as projects accumulate, and filtering makes
+        tier 3 mostly a fallback for browsing rather than the primary path.
+        This fixes the defect underneath D7: today's toolbar cascade order is
+        raw insertion order — <code>ForEach(store.projects)</code>
+        (<code>RecentsListView.swift:491</code>) over a list built by
+        <code>projects.append(project)</code>
+        (<code>WorkspaceStore.swift:671</code>) and never sorted anywhere —
+        i.e. chronological by the date each folder was added. Ship gate:
+        opening the dropdown with no typing shows the cascade pick highlighted
+        at top, the tail of the list is alphabetical, and the order is
+        identical across two consecutive app launches (proving it is not
+        insertion-order-dependent).
       </li>
       <li>
         <strong>Remove or gate the focus-loss auto-dismiss.</strong>
@@ -907,6 +930,20 @@ project ▾ open:                      ┌────────────�
         selection is exclusively via the trailing control. Cleaner mental
         model, but kills the single-fastest path for the common case where you
         already know the project.
+      </li>
+      <li data-anchor-id="decision-ordering-tiers">
+        <strong>Should recently-used projects form their own tier, or should
+        the whole list simply be alphabetical after the cascade pick?</strong>
+        <br /><strong>Strawman: keep the three tiers.</strong> Two or three
+        projects account for most sessions, and putting them directly under
+        the pre-selected one means the common case needs no typing and no
+        scanning at all.
+        <br /><em>Alternative:</em> cascade pick, then strictly alphabetical.
+        Simpler to reason about and never reorders under you — at the cost of
+        burying the projects you actually use among two dozen you do not.
+        The real tension: a recency tier means the list changes shape between
+        openings, which is exactly the property that makes today's insertion
+        order feel arbitrary. That is the trade to decide.
       </li>
     </ol>
 
