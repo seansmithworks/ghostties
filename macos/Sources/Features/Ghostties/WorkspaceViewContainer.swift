@@ -1591,11 +1591,12 @@ class WorkspaceViewContainer: NSView {
 
     /// Adds the composer overlay hosting view as a subview, pinned to the
     /// container's full bounds — not `layout()` — so its dismiss layer can
-    /// span the whole terminal. Fades in (F8, Phase 3 review) to match every other
-    /// appear-over-content transition in this container (`transitionTo(_:)`'s
-    /// 0.2s convention). If the view is still attached (e.g. mid a dismiss
-    /// fade-out that this call is interrupting), just animates it back to
-    /// fully visible instead of re-adding it.
+    /// span the whole terminal. Fades in (F8, Phase 3 review) to match
+    /// every other appear-over-content transition in this container
+    /// (`transitionTo(_:)`'s 0.2s convention). If the view is still
+    /// attached (e.g. mid a dismiss fade-out that this call is
+    /// interrupting), just animates it back to fully visible instead of
+    /// re-adding it.
     private func installComposerOverlayIfNeeded() {
         composerOverlayTransitionGeneration += 1
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -1689,10 +1690,10 @@ class WorkspaceViewContainer: NSView {
 
         // R3 (Phase 3 review round 2): disable hit-testing FIRST, before the
         // fade starts — `NSView.hitTest(_:)` skips HIDDEN views but does not
-        // consider `alphaValue`, so without this the full-bounds scrim stays
+        // consider `alphaValue`, so without this the full-bounds dismiss layer stays
         // fully clickable for the entire 0.2s fade-out. A click into the
         // terminal to resume typing during that window would otherwise land
-        // on the invisible scrim's `.onTapGesture { cancel() }` (eating the
+        // on the invisible dismiss layer's `.onTapGesture { cancel() }` (eating the
         // click and re-entering dismiss, extending the dead window), and a
         // fast double-click on a template row could fire `commit()` twice —
         // `ComposerRow`'s `Button(action:)` calls `option.action()` directly
@@ -1999,7 +2000,7 @@ class WorkspaceViewContainer: NSView {
         }
 
         // Dismiss the composer overlay's hosting view whenever the composer
-        // store closes (Esc, scrim click, or a successful commit) — every
+        // store closes (Esc, dismiss-layer click, or a successful commit) — every
         // close path funnels through `SessionComposerStore.isOpen`, so this
         // is the single place the subview teardown needs to live (Phase 3).
         //
@@ -2050,7 +2051,7 @@ class WorkspaceViewContainer: NSView {
         // `!SessionComposerStore.shared.isOpen` would read the PRE-`willSet`
         // value (`true`, the value being replaced, not the `false` being
         // set) — the guard above would then always fail, and every dismiss
-        // (scrim click, Escape, everything routed through `cancel()`) would
+        // (dismiss-layer click, Escape, everything routed through `cancel()`) would
         // die silently. Keep the hop.
         SessionComposerStore.shared.$isOpen
             .receive(on: DispatchQueue.main)

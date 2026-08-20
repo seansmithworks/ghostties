@@ -184,18 +184,24 @@ struct SessionComposerPalette: View {
             title: project.name,
             subtitle: nil,
             leadingIcon: "folder",
-            // Clearing the query is load-bearing, not tidying: leaving a
+            // `SessionComposerStore.selectProject(_:)` clears the query
+            // alongside the id — load-bearing, not tidying: leaving a
             // project-scoping query like "ghos" in place after a project
             // row commits filters the newly-scoped project's OWN templates
             // against that same text, which rarely matches anything —
-            // Return would silently do nothing (D1's dead end, shadow-only
-            // elevation PR #132 review). Clearing it fires
-            // `.onChange(of: query)` -> `reselectBestMatch()`, landing on
-            // the new scope's default template so Return starts a session
-            // immediately (Raycast/Alfred drill-in semantics).
+            // Return would silently do nothing (D1's dead end, PR #132
+            // review round 2, F2). `selectedIndex = nil` here is the SAME
+            // invariant `commit(template:)` documents (N1): every action
+            // that replaces the option list nils `selectedIndex` FIRST, so
+            // a same-keystroke double-fire (`.onSubmit` +
+            // `.backport.onKeyPress`, macOS 14+) can't resolve
+            // `selectedOption` against a list this action just swapped out
+            // from under it (F1, PR #132 review round 2). `.onChange(of:
+            // query)` -> `reselectBestMatch()` re-seeds it in the same
+            // update pass, so nothing is lost.
             action: {
-                composerStore.selectedProjectId = project.id
-                composerStore.searchText = ""
+                selectedIndex = nil
+                composerStore.selectProject(project.id)
             }
         )
     }
@@ -499,7 +505,12 @@ struct SessionComposerPalette: View {
                 ProjectDropdownView(
                     selectedProjectId: composerStore.selectedProjectId
                 ) { project in
-                    composerStore.selectedProjectId = project.id
+                    // F2 (PR #132 review round 2): same dead-end as the
+                    // search-result project row — `selectProject(_:)`
+                    // clears the query so the newly scoped project's own
+                    // templates aren't filtered against a query that only
+                    // ever matched the project itself.
+                    composerStore.selectProject(project.id)
                     isProjectDropdownOpen = false
                 } onAddProject: {
                     composerStore.addProjectViaPanel(workspaceStore: store)
@@ -637,7 +648,15 @@ struct SessionComposerPalette: View {
         // `selectedIndex` pointing at the wrong row if the composer stays
         // open on a failed commit (S6). Synchronous and load-bearing (N1):
         // it is what makes a double Return a no-op if both `.onSubmit` and
-        // `.onKeyPress` ever fire on macOS 14+.
+        // `.onKeyPress` ever fire on macOS 14+. This is one instance of a
+        // repo-wide invariant, not a `commit(template:)`-specific trick:
+        // EVERY action that replaces the option list — this one, and the
+        // project row / dropdown / "+ Add project…" actions that call
+        // `SessionComposerStore.selectProject(_:)` — must nil
+        // `selectedIndex` FIRST, or a same-keystroke double-fire resolves
+        // `selectedOption` against a list the first fire already swapped
+        // out (PR #132 review round 2, F1 — a comment naming only this one
+        // site is how that bug got in).
         selectedIndex = nil
 
         // F1 (Phase 3 review): capture the target project BEFORE precommit
@@ -758,12 +777,16 @@ struct ComposerOption: Identifiable, Hashable {
 /// `Backport.onKeyPress` is a documented no-op below macOS 14
 /// (`Helpers/Backport.swift:53-68`) and the app's deployment target is
 /// 13.0, so `.onSubmit` alone is what makes Return work pre-14. If both
-/// fire on 14+, `SessionComposerPalette.commit(template:)` nil-ing
-/// `selectedIndex` SYNCHRONOUSLY before calling
-/// `SessionComposerStore.precommit()` (N1) makes the second call's
-/// `selectedOption` nil and its `.submit` handler a no-op rather than a
-/// double-commit — this repo cannot verify from source alone whether both
-/// actually fire, only that a double-fire would be harmless if they do.
+/// fire on 14+, the invariant that makes a double-fire a no-op instead of
+/// a double-commit is that EVERY `SessionComposerPalette` action which
+/// replaces the option list — `commit(template:)` (N1) and the
+/// project-selection actions that call `SessionComposerStore.selectProject(_:)`
+/// (PR #132 review round 2, F1) — nils `selectedIndex` SYNCHRONOUSLY
+/// before doing anything else, so the second fire's `selectedOption`
+/// resolves to `nil` and its handler becomes a no-op rather than acting on
+/// a list the first fire already swapped out from under it — this repo
+/// cannot verify from source alone whether both actually fire, only that a
+/// double-fire is harmless if they do.
 struct ComposerQueryField: View {
     @Binding var query: String
     var fontSize: CGFloat

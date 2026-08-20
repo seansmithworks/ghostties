@@ -167,6 +167,8 @@ Query field height: 38pt. Row vertical padding: 8pt (the 4pt spacing scale's own
 
 Any surface floating free of the sidebar (§3) is a peer to the terminal card, not a one-off: same 12pt `.continuous` corner radius (`WorkspaceLayout.terminalCornerRadius`). Current example: the session composer's `.centered` presentation card. It is lifted by shadow alone (`0.30/24/y8`, §6 — shadow-only elevation, no scrim, PR #132) — no scrim behind it, so the shadow has to carry the "on top of" read by itself. `SessionComposerOverlay` still hosts an invisible dismiss layer beneath the card (`Color.clear` + `.contentShape`) for click-outside-to-dismiss and the a11y dismiss affordance, excluding the titlebar band (0 in fullscreen, where there's no titlebar to protect) so traffic lights and window dragging aren't affected. `.anchored` (the sidebar popover presentation of the same view) is unchanged — unstyled 10pt radius, relies on the native `NSPopover` chrome/shadow instead; see §7's Known Deviations.
 
+Background is layered `.regularMaterial` (a translucent system blur) with the surface's `windowBackgroundColor` blended over it at `.blendMode(.color)` — `.ultraThinMaterial` was too transparent once the scrim stopped dimming the terminal behind it, letting live terminal content wreck the composer's own text contrast (PR #132).
+
 ```swift
 // .centered only — .anchored uses native NSPopover chrome; applying this
 // there would double up.
@@ -213,7 +215,7 @@ Three shadow levels.
 
 | Level                  | Opacity | Radius | Y   | Usage                          |
 | ---------------------- | ------- | ------ | --- | ------------------------------- |
-| Card (pinned)          | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar |
+| Card (pinned)          | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar, and browser card |
 | Overlay (documented)   | `0.20`  | `12`   | `0` | Sidebar in overlay mode         |
 | Centered composer card | `0.30`  | `24`   | `8` | Session composer, `.centered` presentation (`WorkspaceLayout.composerModalShadowOpacity`/`composerModalShadowRadius`/`composerModalShadowYOffset`) — no scrim behind it (shadow-only elevation, PR #132), so it needs to read heavier than the Overlay row it used to (coincidentally) match |
 

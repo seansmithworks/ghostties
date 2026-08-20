@@ -3,13 +3,13 @@ import SwiftUI
 /// Centered composer surfaced by Cmd+T (when the `ghostties.newSessionOpensComposer`
 /// preference is on, the default) and the sidebar toolbar's "+ New Session"
 /// button (Phase 3 of session-creation-unified — replaces the 28-project
-/// toolbar cascade, D7). Lifts `SessionComposerPalette` above the terminal by
-/// shadow alone — no dimming (Spotlight/Raycast treatment, Sean's call,
-/// (shadow-only elevation, PR #132), supersedes the earlier locked "dims the
+/// toolbar cascade, D7). Lifts `SessionComposerPalette` above the terminal
+/// by shadow alone — no dimming (Spotlight/Raycast treatment, Sean's call,
+/// shadow-only elevation, PR #132 — supersedes the earlier locked "dims the
 /// terminal" decision). Ghostties has only two shadow levels and no modal
 /// vocabulary otherwise, so the card carries its own elevated shadow
-/// (`SessionComposerPalette`, `.centered` presentation, DESIGN.md §6) to read
-/// as "on top of" the terminal instead.
+/// (`SessionComposerPalette`, `.centered` presentation, DESIGN.md §6) to
+/// read as "on top of" the terminal instead.
 ///
 /// This view still hosts an invisible dismiss layer beneath the card:
 /// click-outside-to-dismiss and the a11y dismiss affordance both depend on
@@ -29,11 +29,11 @@ import SwiftUI
 struct SessionComposerOverlay: View {
     let request: SessionComposerRequest
 
-    /// `titlebarBandHeight` is the only field this model still carries
-    /// (PR #132 removed `horizontalOffset` — the
-    /// composer now centers on the whole window, not the terminal card, so
-    /// there's no sidebar-width offset to apply). Still an `@ObservedObject`
-    /// since `WorkspaceViewContainer` writes the fullscreen-derived titlebar
+    /// `titlebarBandHeight` is the only field this model still carries (PR
+    /// #132 removed `horizontalOffset` — the composer now centers on the
+    /// whole window, not the terminal card, so there's no sidebar-width
+    /// offset to apply). Still an `@ObservedObject` since
+    /// `WorkspaceViewContainer` writes the fullscreen-derived titlebar
     /// height into this same shared model instance live.
     @ObservedObject var centeringModel: ComposerCenteringModel
 
