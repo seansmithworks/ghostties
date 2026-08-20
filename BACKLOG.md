@@ -4,6 +4,36 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-20 — ghostties.org app section: spec + HTML rebuild built
+
+**Shipped on `feat/web-redesign-round4`:**
+
+- `e5dff25ee` — root `DESIGN.md` de-staled (terracotta `#C97350` → `#5B8DEF` waiting accent, 9
+  refs).
+- `af2919f9f` → `c1cacc43c` → `c4799e03d` — `docs/design/web-redesign/app-rebuild-spec.md`: UI
+  spec extracted from source, then hardened across two adversarial rounds (17 findings, then
+  12; the first fix commit both introduced a light/dark inversion and deleted load-bearing
+  rows — the fix-regresses-cleared-paths pattern, twice in one day). Spec is canonical for the
+  rebuild; Framing block resolves photo-vs-source conflicts.
+- `c6bdb42a4` → `c91a297ca` → `015d3d59d` — `docs/design/web-redesign/rebuild/index.html`:
+  self-contained HTML rebuild of the app window, both tabs, both themes (system-following +
+  review override), 232px sidebar, true ghost cast pixel-correlated to `GhostCharacter.swift`
+  (photo cast was misidentified in v1 and 5 ghosts duplicated), all measured geometry verified
+  by Playwright (84/54/36/38/8). Review rounds found 14 then 6 blockers; key discoveries: v1 had
+  a doubled titlebar putting everything 54px low ("missing wren" was clipping); atlas-api photo
+  ghost is black not terracotta; AppKit y-up shadow offset means CSS `0 2px`.
+
+**Decisions (Sean, 2026-08-20):** Sessions primary / Projects second zoom stop (both shown); no
+agent/ghost counts in any copy — "limitless" (closes the SIX AGENTS question: no number);
+rebuild confirmed over screenshots.
+
+**Open — blocked on Sean:** three reference captures (Sessions light+dark, Projects dark — both
+existing jpgs are Projects-tab light, from a pre-`#5B8DEF` build so status colors in them are
+stale); react to two built strawmen (staged INACTIVE/ARCHIVE quiet-end content; 28px terminal
+title strip); terminal-interior richness call (currently minimal prompt, not the full TUI); B4
+scroll-zoom site integration is the next build phase (headline copy + "this is a rebuild"
+disclosure line land there).
+
 ## 2026-08-20 — ghostties.org redesign: direction locked, app fidelity raised
 
 **Decisions locked (Sean's calls, this session):**
@@ -59,13 +89,13 @@ Parked items that survive context resets. Prune at `/wrap`.
   and spawn logic all removed. | design | done
 - [x] Playfield height — resolved round 4: `ROWS` cut 10→6, drawn border now matches the grid at
   264px with `OY` 220. | design | done
-- [ ] Which sidebar tab the site features — Projects (the default a new install sees) or
-  Sessions (what Sean works in). Recommendation: Projects primary, Sessions as a second zoom
-  stop. | design | new
-- [ ] A dark-mode screenshot of the current app, matched to the light one Sean supplied, to
-  serve as the repo reference pair. Cannot be captured from a session — `screencapture` is gated
-  by the terminal's own TCC grant and fails silently, and driving the live app with synthetic
-  input is prohibited. | design | new
+- [x] Which sidebar tab the site features — resolved: **Sessions primary, Projects second zoom
+  stop, both shown**. | design | done
+- [ ] Three reference captures needed (not one) — Sessions light+dark, Projects dark. Both
+  existing jpgs are Projects-tab light, from a pre-`#5B8DEF` build, so their status colors are
+  stale. Cannot be captured from a session — `screencapture` is gated by the terminal's own TCC
+  grant and fails silently, and driving the live app with synthetic input is prohibited. |
+  design | new
 
 **Carried forward unchanged** from the 2026-08-19 section: real ElevenLabs SFX, the
 first-60-seconds section, and the 8 Round-2 boards still loading Martian Mono.
