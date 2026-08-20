@@ -8,7 +8,7 @@ struct SessionComposerRequest {
     /// How the composer is presented. Only `.anchored` (the sidebar
     /// popover) is built in Phase 2 — `.centered` is declared now so the
     /// type is stable, but Phase 3 is the first caller to actually use it.
-    enum Presentation {
+    enum Presentation: Equatable {
         case anchored
         case centered
     }
@@ -71,6 +71,30 @@ final class SessionComposerStore: ObservableObject {
     // MARK: - Visibility
 
     @Published private(set) var isOpen: Bool = false
+
+    /// The window that most recently opened the CENTERED composer overlay
+    /// (Phase 3 review round 3, Blocker 3). This store is one process-wide
+    /// singleton, but only one workspace window's overlay should be "the"
+    /// composer at a time — without this, two windows could each install
+    /// their own overlay against the same shared state (`selectedProjectId`/
+    /// `searchText`/`currentProjectBinding`), each visibly showing
+    /// whichever window opened last, with Escape in either tearing down
+    /// both. `WorkspaceViewContainer.presentComposerOverlay` writes this on
+    /// every CENTERED-overlay open (dismissing any other window's overlay
+    /// first); its `$isOpen` sink and `dismissComposerOverlayIfPresented`
+    /// check it before acting.
+    ///
+    /// Deliberately NOT written by the ANCHORED popover's `open()` call
+    /// (`SessionComposerPalette.swift`'s `.onAppear`) — a row popover in
+    /// window B while window A's centered overlay is up still leaves two
+    /// composers live against the shared store. That's pre-existing
+    /// behavior (the round-2 `NSApp.isActive` gate produced the same
+    /// outcome) and explicitly out of scope here — not chased by this
+    /// property, which only arbitrates between CENTERED overlays.
+    ///
+    /// `weak` so this never keeps a window alive and simply reads `nil`
+    /// once one is gone.
+    weak var owningWindow: NSWindow?
 
     /// When true, the search field should receive first responder on the
     /// next render cycle. Cleared by the view after the focus request is
@@ -219,6 +243,19 @@ final class SessionComposerStore: ObservableObject {
         coordinator: SessionCoordinator,
         workspaceStore: WorkspaceStore
     ) -> Bool {
+        // R3 (Phase 3 review round 2): the keyboard path's double-Return
+        // guard (`SessionComposerPalette.commit(template:)` nil-ing
+        // `selectedIndex` synchronously) doesn't cover the mouse path —
+        // `ComposerRow`'s `Button(action:)` calls `option.action()` directly
+        // and never reads `selectedIndex`. A fast double-click on a
+        // template row (well inside the system's ~500ms double-click
+        // interval, especially during the centered overlay's 0.2s
+        // dismiss-fade before hit-testing is disabled) could otherwise fire
+        // `precommit` twice and create two sessions. `isOpen` is already set
+        // `false` synchronously below on the first successful call, so this
+        // guard rejects the second one for free.
+        guard isOpen else { return false }
+
         // `.locked` enforces at the write path — resolved from the bound
         // project, never from `selectedProjectId` — so the enum case isn't
         // decorative once Phase 3 starts relying on it. `.prefilled`/`.open`
@@ -270,6 +307,15 @@ final class SessionComposerStore: ObservableObject {
     }
 
     // MARK: - Smart-default cascade
+
+    /// Resolves the same three-step smart-default cascade used by `open(projectBinding: .open, ...)`,
+    /// without opening the composer UI. Phase 3's instant-create paths
+    /// (Cmd+Shift+T, and Cmd+T when `ghostties.newSessionOpensComposer` is
+    /// off) need the cascade pick but must never touch `isOpen` or any of
+    /// the other UI-facing state `open()` resets.
+    func resolveCascadeProject(workspaceStore: WorkspaceStore) -> UUID? {
+        resolveDefaultProject(workspaceStore: workspaceStore)
+    }
 
     /// Same three-step cascade as `NewTaskComposerStore.resolveDefaultProject`
     /// (cwd of the frontmost terminal -> MRU -> most-recently-touched).

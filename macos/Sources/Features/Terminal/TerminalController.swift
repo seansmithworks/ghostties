@@ -1339,6 +1339,15 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         NotificationCenter.default.post(name: .workspaceNewSession, object: window)
     }
 
+    /// "New Session (Instant)" — Cmd+Shift+T (Phase 3 of
+    /// session-creation-unified). Distinct from `newWorkspaceSession(_:)`
+    /// above: `WorkspaceViewContainer` always creates a session immediately
+    /// for this notification, regardless of the
+    /// `ghostties.newSessionOpensComposer` preference.
+    @IBAction func newWorkspaceSessionInstant(_ sender: Any?) {
+        NotificationCenter.default.post(name: .workspaceNewSessionInstant, object: window)
+    }
+
     /// Toggle the sidebar view mode between project-first (legacy) and
     /// task-first (Concept F). v0 feature toggle. Broadcasts a notification
     /// so every open WorkspaceViewContainer swaps its hosted sidebar.
@@ -1764,6 +1773,18 @@ extension TerminalController {
             let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
             guard mode == "projectFirst" else { return false }
             return !WorkspaceStore.shared.flatProjectsInVisualOrder.isEmpty
+
+        // Both post a notification only `WorkspaceViewContainer` observes
+        // (Phase 3 review — lower-priority item: "New Session (Instant)"
+        // silently no-ops in a plain terminal window"). `newWorkspaceSession(_:)`
+        // had this bug already; `newWorkspaceSessionInstant(_:)` inherits it
+        // the moment this phase promoted its menu item from hidden to
+        // visible+enabled. Unlike "Next Session"/"Previous Session" above,
+        // this doesn't need a `SessionCoordinator` reference — just the
+        // window/`contentView` check already used elsewhere in this file.
+        case #selector(TerminalController.newWorkspaceSession(_:)),
+            #selector(TerminalController.newWorkspaceSessionInstant(_:)):
+            return window?.contentView is WorkspaceViewContainer
 
         case #selector(showProjectsView(_:)):
             let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"

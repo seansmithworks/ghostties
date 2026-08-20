@@ -125,6 +125,20 @@ Ghostties uses exactly two font families and a strict size/weight discipline.
 - No Dynamic Type in sidebar UI — density is intentional at 11pt
 - SF Mono for all monospaced content; never SF Pro in the terminal card
 
+### Centered modal — a third surface class
+
+A surface that floats free of the sidebar column entirely — not anchored to it, not part of it — does not inherit the 11pt sidebar density. It gets its own scale:
+
+| Element     | Font        | Size | Weight     |
+| ----------- | ----------- | ---- | ---------- |
+| Query field | SF Pro Text | 15pt | `.regular` |
+| Row title   | SF Pro Text | 13pt | `.medium`  |
+| Row subtitle | SF Pro Text | 11pt | —          |
+
+Query field height: 38pt. Row vertical padding: 8pt (the 4pt spacing scale's own value — not the sidebar popover's legacy 5pt, see §7's Known Deviations).
+
+**Current example:** the session composer's `.centered` presentation (`SessionComposerPalette`, floats at 360pt wide, introduced in Phase 3 of session-creation-unified). Its `.anchored` presentation — the same view, popped out of a sidebar row — stays on the sidebar scale instead, since it IS anchored to the sidebar column. The rule is about floating free of the sidebar, not about which view happens to implement it — the next surface that floats free of the sidebar uses this scale too, whether or not it's `SessionComposerPalette`.
+
 ## 4. Component Stylings
 
 ### Terminal card (pinned mode)
@@ -140,6 +154,15 @@ Ghostties uses exactly two font families and a strict size/weight discipline.
 ```swift
 // Higher opacity shadow to lift from content
 .shadow(color: .black.opacity(0.20), radius: 12)
+```
+
+### Centered modal — component stylings
+
+Any surface floating free of the sidebar (§3) is a peer to the terminal card, not a one-off: same 12pt `.continuous` corner radius (`WorkspaceLayout.terminalCornerRadius`). Current example: the session composer's `.centered` presentation card. Its shadow is its own level (§6) — `0.20/12/0` — which is NOT actually shared with the Overlay sidebar's real code values (`0.2/6/(2,0)`, see §6's Known Deviation note); it happens to match what the Overlay row is *documented* as, not what it *is*. Paired with a full-bleed black-0.25 scrim (`SessionComposerOverlay`) so the card reads as "on top of" the terminal — the scrim excludes the titlebar band (0 in fullscreen, where there's no titlebar to protect) so traffic lights and window dragging aren't affected. `.anchored` (the sidebar popover presentation of the same view) is unchanged — unstyled 10pt radius, relies on the native `NSPopover` chrome/shadow instead; see §7's Known Deviations.
+
+```swift
+.clipShape(RoundedRectangle(cornerRadius: WorkspaceLayout.terminalCornerRadius, style: .continuous))
+.shadow(color: .black.opacity(WorkspaceLayout.composerModalShadowOpacity), radius: WorkspaceLayout.composerModalShadowRadius)
 ```
 
 ### Row / hover states
@@ -173,12 +196,15 @@ Never use arbitrary values (13pt, 22pt, 7pt, etc.).
 
 ## 6. Depth & Elevation
 
-Two shadow levels only — terminal card and overlay sidebar. No shadows elsewhere.
+Three shadow levels.
 
-| Level         | Opacity | Radius | Y   | Usage                           |
-| ------------- | ------- | ------ | --- | ------------------------------- |
-| Card (pinned) | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar |
-| Overlay       | `0.20`  | `12`   | `0` | Sidebar in overlay mode         |
+| Level                  | Opacity | Radius | Y   | Usage                          |
+| ---------------------- | ------- | ------ | --- | ------------------------------- |
+| Card (pinned)          | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar |
+| Overlay (documented)   | `0.20`  | `12`   | `0` | Sidebar in overlay mode         |
+| Centered composer card | `0.20`  | `12`   | `0` | Session composer, `.centered` presentation (`WorkspaceLayout.composerModalShadowOpacity`/`composerModalShadowRadius`) |
+
+**Known deviation (pre-existing, not from Phase 3):** the "Overlay" row's actual code values (`WorkspaceViewContainer.swift`, `sidebarOverlayBackground.layer`) are opacity `0.2`, radius `6`, offset `(2, 0)` — not `0.20/12/0` as documented above. This table has been wrong since before session-creation-unified; flagged here rather than silently propagated. The centered composer card row is verified correct against its actual `.shadow(...)` call — it does NOT reuse the Overlay sidebar's real shadow, despite sharing the same *documented* numbers; it's its own level that happens to match what Overlay was supposed to be.
 
 **Critical:** `shadowPath` must be set explicitly in `layout()`. Without it, CoreAnimation rasterizes from the alpha channel every frame (GPU performance hit).
 
@@ -186,11 +212,16 @@ Two shadow levels only — terminal card and overlay sidebar. No shadows elsewhe
 
 One radius. One style. No exceptions.
 
-| Surface       | Radius | Style         |
-| ------------- | ------ | ------------- |
-| Terminal card | 12pt   | `.continuous` |
+| Surface                              | Radius | Style         |
+| ------------------------------------- | ------ | ------------- |
+| Terminal card                         | 12pt   | `.continuous` |
+| Centered composer card (`.centered`) | 12pt   | `.continuous` |
 
 Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's squircle aesthetic.
+
+### Known Deviations
+
+- **Composer popover (`.anchored` presentation, `SessionComposerPalette`).** 10pt radius, unstyled default (`.circular`), not `.continuous`. Shipped in Phase 2, before this rule was written down as covering the composer at all. Not extended further — the `.centered` presentation above is `.continuous`, and any future presentation should be too. Do not fix this by loosening the rule again; fix it by eventually restyling the popover instead.
 
 ## 8. Do's and Don'ts
 

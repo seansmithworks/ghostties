@@ -31,6 +31,21 @@ enum WorkspaceLayout {
     /// First-pass value — tunable.
     static let sidebarMaxWidth: CGFloat = 480
 
+    /// Width of the centered session composer overlay's card (Phase 3 of
+    /// session-creation-unified). Wider than `sidebarWidth` since it floats
+    /// free of the sidebar column instead of popping out of it.
+    static let composerOverlayWidth: CGFloat = 360
+
+    /// Shadow opacity for the centered composer card (Phase 3 review fix —
+    /// reuses DESIGN.md §6's "Overlay" shadow level, the same spec the
+    /// overlay sidebar uses, since the composer card is the same "floats
+    /// above content" surface class).
+    static let composerModalShadowOpacity: Double = 0.20
+
+    /// Shadow blur radius for the centered composer card. Paired with
+    /// `composerModalShadowOpacity` above.
+    static let composerModalShadowRadius: CGFloat = 12
+
     /// Height reserved at top for window traffic light controls.
     static let titlebarSpacerHeight: CGFloat = 28
 
@@ -323,9 +338,39 @@ extension Notification.Name {
     /// running sessions before the store deletes the project's records.
     static let workspaceProjectWillBeRemoved = Notification.Name("com.seansmithdesign.ghostties.workspace.projectWillBeRemoved")
 
-    /// Posted by TerminalController when the user presses Cmd+T.
-    /// The notification object is the originating NSWindow.
+    /// Posted by TerminalController when the user presses Cmd+T. The
+    /// notification object is the originating NSWindow. Observed by
+    /// `WorkspaceViewContainer` (Phase 3 of session-creation-unified — moved
+    /// from `WorkspaceSidebarView` so both sidebar view modes receive it,
+    /// D2), which opens the composer overlay or creates instantly depending
+    /// on the `ghostties.newSessionOpensComposer` preference.
     static let workspaceNewSession = Notification.Name("com.seansmithdesign.ghostties.workspace.newSession")
+
+    /// Posted by TerminalController when the user presses Cmd+Shift+T
+    /// ("New Session (Instant)", Phase 3). The notification object is the
+    /// originating NSWindow. Unlike `workspaceNewSession` above, this
+    /// ALWAYS creates a session immediately with no UI — it ignores the
+    /// `ghostties.newSessionOpensComposer` preference entirely.
+    static let workspaceNewSessionInstant = Notification.Name("com.seansmithdesign.ghostties.workspace.newSessionInstant")
+
+    /// Posted by `WorkspaceViewContainer.instantCreateSession()` and
+    /// `SessionComposerPalette.commit(template:)` right after a session is
+    /// created (F1 fix, Phase 3 review). The notification object is the
+    /// originating NSWindow; `userInfo["projectId"]` carries the `UUID` of
+    /// the project the session was created in. `WorkspaceSidebarView`
+    /// observes this to auto-expand that project — without it, a session
+    /// created via the cascade pick (Cmd+T, Cmd+Shift+T, or a composer
+    /// commit) into a collapsed project spawns with no visible row anywhere.
+    static let workspaceDidCreateSessionInProject = Notification.Name("com.seansmithdesign.ghostties.workspace.didCreateSessionInProject")
+
+    /// Posted by `WorkspaceViewContainer.presentComposerOverlay(projectBinding:)`
+    /// right before it opens the centered composer (F5 fix, Phase 3 review).
+    /// The notification object is the originating NSWindow. `ProjectDisclosureRow`
+    /// observes this and closes its own anchored composer popover, if open —
+    /// the single-presentation invariant: the centered overlay always wins
+    /// over a per-row popover, since both share the one `SessionComposerStore`
+    /// singleton's state.
+    static let workspaceComposerOverlayWillPresent = Notification.Name("com.seansmithdesign.ghostties.workspace.composerOverlayWillPresent")
 
     /// Posted by AppDelegate's Cmd+W local-event monitor, project-first
     /// workspace mode only (see `AppDelegate.isProjectFirstWorkspaceWindow(_:)`).

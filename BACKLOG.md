@@ -959,3 +959,25 @@ Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #10
 - [ ] **`duplicateTemplate` drops `mcpConfigPath`.** The memberwise copy in `WorkspaceStore.duplicateTemplate` omits `mcpConfigPath`, directly beneath its own `NOTE: Update this if AgentTemplate gains new stored properties.` Duplicating a folder-format preset silently loses its MCP config. Pre-existing on `main`, not introduced by Phase 1. | app | new
 - [ ] **Name-collision rename has no user feedback.** Typing an existing template name now silently yields "X 2", and correcting it back in the edit sheet silently keeps "X 2". Correct per the locked spec, but it dead-ends with no message. Wants one line under the name field: "A template named X already exists." | app | new
 - [ ] **Untracked `ThrottleTrailingEdgeHypothesisTests.swift` pollutes every local test run.** It sits untracked in the shared worktree, Xcode's synchronized groups compile it anyway, and 2 of its 4 tests fail by design — so a local unfiltered run reads 696/2/1 instead of the committed tree's 694/0/1. Decide whether it lands, moves, or goes. | build | new
+
+## 2026-08-19 — Session-composer Phase 3 (carried + parked)
+
+**Carried — on-objective, next thread picks these up:**
+
+- [ ] **Merge PR #131 (Phase 3)** — merge-ready at `ffb030c8d`, 3 review rounds + final pass, 11 defects fixed, suite 786/2/1. Gated on Sean's two manual checks: (1) Cmd+T then type 3 chars without clicking — does focus land in the field or in the shell behind the scrim; (2) row popover open → Cmd+T — does the composer survive. Neither is settleable by source-tracing. | app | new
+- [ ] **Phase 4 — project-creation convergence** — one `addProjectViaFolderPicker(startingAt:)` signature with a persisted `@AppStorage` last-used path + real `panel.title` (D10), used by all four callers (`WorkspaceSidebarView.swift:220`, `NewTaskComposerStore.swift:162`, `OrphanTriageStore.swift:104`, `OrphanTriageCardView.swift:137` — miss one and it keeps its own behavior); header add chains into the composer at `.locked(newProject)`; `WorkspaceViewContainer.swift:807`'s `projects.first` replaced with the composer's resolver. Branch off `main` AFTER #131 lands. | app | new
+- [ ] **Phase 5 — stop force-pinning** (optional) — drop the force-pin at `WorkspaceStore.swift:638` and `SessionCoordinator.swift:491`. Held separate because it visibly reorders existing sidebars on upgrade. Taste call, Sean's. | design | new
+
+**Merge-order hazard — check before merging anything:**
+
+- [ ] **`backlog/migrate-ghostties` branches off Phase 3's `eea7f3992`** — so it carries Phase 3's first two commits as ancestors. If it merges to `main` before #131, it silently drags unreviewed Phase 3 code onto main. Merge #131 first, or rebase that branch onto main. Belongs to a sibling session — do not rewrite it. | build | new
+
+**Parked — Phase 3 follow-ups, all recorded by round-3/4 review, none blocking:**
+
+- [ ] **Centering offset doesn't animate** — `transitionTo` sets `widthModel.width` as a plain assignment while only the constraint goes through `.animator()`, so Cmd+S makes the composer card jump instantly then the sidebar slides behind it for 200ms. Comment already corrected to state this honestly. | design | new
+- [ ] **One `widthModel.$width` subscription in `setup()`** would replace the four hand-placed `syncComposerCenteringOffset()` calls and cover `layout()`'s reclamp at `:710` without touching `layout()` — closing the documented gap. | app | new
+- [ ] **`browserShadowHost` not hidden from VoiceOver** alongside `sidebarHostingView`/`terminalShadowHost` while the composer is up. | a11y | new
+- [ ] **Install's fade-in completion has no generation guard** (`:1641-1654`) while dismiss's does (`:1716`) — Cmd+T then instant Escape posts `.layoutChanged` into an overlay already fading out. | a11y | new
+- [ ] **"Full-bleed" wording now wrong in 3 places** after the titlebar-band exclusion: `DESIGN.md` §4, `SessionComposerOverlay.swift:21-22` and `:32`. | docs | new
+- [ ] **Titlebar-band click-through** — the excluded band doesn't hit-test, so clicks fall through to the sidebar's toolbar row; the sidebar's own "+ New Session" button sits in that band and is live *through* the modal. Round-2's "no safe AppKit primitive found" reasoning was WRONG — `sidebarToggleButton.isEnabled = false` paired in install/dismiss (exactly like the `setAccessibilityHidden` pair beside it) is that primitive. Don't let the old reasoning get enshrined. | app | new
+- [ ] **#130 merged with three interactions unverified** — a `.popover` inside the composer's `.popover`; `+ Add project…` opening a modal `NSOpenPanel` inside it; edit sheet + delete inside popover content. Sean authorised the merge knowing this. Any of the three may dismiss the composer. Round 3's R1 fix (`didResignActive` instead of `windowDidResignKey`) should have closed the panel/sheet/alert cases — unconfirmed by observation. | app | new

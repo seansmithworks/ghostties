@@ -23,6 +23,30 @@ final class SidebarWidthModel: ObservableObject {
     }
 }
 
+/// Observable form of the composer overlay card's terminal-card-centering
+/// offset (R5, Phase 3 review round 2). `presentComposerOverlay` used to
+/// capture the offset once at present-time and bake it into `rootView`, so
+/// the card stayed parked at its original position after Cmd+S/Cmd+Shift+E
+/// (sidebar toggle) or Cmd+Shift+1/2 (view-mode switch) changed the sidebar
+/// width or mode while the composer was still open. Kept separate from
+/// `SidebarWidthModel` above — that one has a documented "never 0"
+/// invariant this must NOT share, since `.closed`/`.overlay` need 0 here.
+/// `WorkspaceViewContainer.syncComposerCenteringOffset()` writes it at every
+/// site that can change `sidebarMode` or the applied sidebar width.
+@MainActor
+final class ComposerCenteringModel: ObservableObject {
+    @Published var horizontalOffset: CGFloat = 0
+
+    /// Height of the scrim's titlebar-band exclusion (F7's fullscreen
+    /// follow-up, Phase 3 review round 2). Defaults to
+    /// `WorkspaceLayout.titlebarSpacerHeight`, the traffic-light band the
+    /// scrim excludes to keep window dragging working — but there's no
+    /// titlebar to protect in fullscreen, so that band was left undimmed
+    /// for no reason. `WorkspaceViewContainer.windowDidEnterOrExitFullScreen()`
+    /// writes 0 on entering fullscreen and restores the token on exit.
+    @Published var titlebarBandHeight: CGFloat = WorkspaceLayout.titlebarSpacerHeight
+}
+
 /// Wraps sidebar content in a `.frame(width:)` pin driven by `SidebarWidthModel`
 /// instead of a captured constant. Only this thin wrapper observes width
 /// changes, so the wrapped `content`'s identity — and the identity of
@@ -167,6 +191,51 @@ class WorkspaceViewContainer: NSView {
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
+
+    /// Hosting view for the centered session composer overlay (Phase 3 of
+    /// session-creation-unified). Added as a subview only while
+    /// `SessionComposerStore.shared.isOpen` is true — see
+    /// `presentComposerOverlay(projectBinding:)` and the `isOpen` subscription
+    /// in `setup()`. Pinned to the container's full bounds so
+    /// `SessionComposerOverlay`'s scrim can dim the whole terminal; not
+    /// touched by `layout()`.
+    private lazy var composerOverlayHostingView: TransparentHostingView<AnyView> = {
+        let view = TransparentHostingView<AnyView>(rootView: AnyView(EmptyView()))
+        view.translatesAutoresizingMaskIntoConstraints = false
+        // F9 (Phase 3 review): matches `sidebarHostingView` — this view is
+        // pinned by four edge constraints, so its own intrinsic-size
+        // reporting is unused work.
+        view.sizingOptions = []
+        return view
+    }()
+
+    /// UserDefaults key for the Cmd+T preference — composer (default) vs.
+    /// instant create. Mirrors `Ghostty.Config.autoUpdateChannel`'s
+    /// resolution pattern (`ghostties.autoUpdateChannel`): a plain
+    /// `UserDefaults.standard` read, since this container is an AppKit
+    /// `NSView` and can't use the `@AppStorage` property wrapper directly.
+    /// Documented in `SettingsView.swift` beside the update-channel line.
+    private static let newSessionOpensComposerDefaultsKey = "ghostties.newSessionOpensComposer"
+
+    /// Whether Cmd+T opens the composer overlay (true, the default) or
+    /// creates a session instantly with no UI (false). Unset defaults to
+    /// composer per the locked decision in session-creation-unified.
+    ///
+    /// Extracted to a testable static function (F11, Phase 3 review) taking
+    /// an explicit `UserDefaults` — this exact absent/true/false resolution
+    /// is precisely the class of bug the review pass was chartered to catch,
+    /// so it's covered directly rather than only through the instance
+    /// property below.
+    static func newSessionOpensComposer(in defaults: UserDefaults) -> Bool {
+        guard defaults.object(forKey: newSessionOpensComposerDefaultsKey) != nil else {
+            return true
+        }
+        return defaults.bool(forKey: newSessionOpensComposerDefaultsKey)
+    }
+
+    private var newSessionOpensComposerPreference: Bool {
+        Self.newSessionOpensComposer(in: .standard)
+    }
 
     /// Sidebar material backing for overlay mode. In pinned mode the shared
     /// `backgroundEffectView` already covers the sidebar area, so this is hidden.
@@ -427,6 +496,23 @@ class WorkspaceViewContainer: NSView {
             name: .workspaceSidebarViewModeChanged,
             object: nil
         )
+
+        // Blocker 3 (Phase 3 review round 3): the composer overlay's
+        // "dismiss on leaving the app" behavior now observes
+        // `NSApplication.didResignActiveNotification` directly, replacing
+        // the `NSApp.isActive` check that used to live inline in
+        // `windowDidResignKey()` — that check was asserted, not observed,
+        // to hold at the point a WINDOW resigns key, and a window resigning
+        // key is not the same event as the app deactivating. App-wide, not
+        // window-scoped, so registered once here rather than per-window in
+        // `viewDidMoveToWindow()`; `object: nil` is correct since there's
+        // only one `NSApp`.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidResignActive),
+            name: NSApplication.didResignActiveNotification,
+            object: nil
+        )
     }
 
     @available(*, unavailable)
@@ -447,6 +533,8 @@ class WorkspaceViewContainer: NSView {
         NotificationCenter.default.removeObserver(self, name: NSWindow.willEnterFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didEnterFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: NSWindow.didExitFullScreenNotification, object: fullScreenObservedWindow)
+        NotificationCenter.default.removeObserver(self, name: .workspaceNewSession, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceNewSessionInstant, object: nil)
 
         guard let window = window else { return }
         // Give the coordinator a reference to this view so it can discover
@@ -503,6 +591,27 @@ class WorkspaceViewContainer: NSView {
             object: window
         )
         fullScreenObservedWindow = window
+
+        // Cmd+T (Phase 3 of session-creation-unified). Moved here from
+        // `WorkspaceSidebarView` (D2 fix) so the container — present
+        // regardless of which sidebar view mode is currently mounted —
+        // always receives it, rather than only whichever SwiftUI sidebar
+        // view happens to observe it.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWorkspaceNewSession(_:)),
+            name: .workspaceNewSession,
+            object: window
+        )
+
+        // Cmd+Shift+T ("New Session (Instant)", Phase 3) — always creates
+        // immediately, ignoring the Cmd+T preference entirely.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWorkspaceNewSessionInstant(_:)),
+            name: .workspaceNewSessionInstant,
+            object: window
+        )
 
         // If the window is already key when we move into it, freeze immediately.
         if window.isKeyWindow {
@@ -759,6 +868,10 @@ class WorkspaceViewContainer: NSView {
             // get re-clamped.
             self?.needsLayout = true
         })
+        // R5 (Phase 3 review round 2): a view-mode switch (Cmd+Shift+1/2)
+        // changes `currentSidebarWidth` even when `sidebarMode` itself
+        // doesn't — keep the composer overlay's card-centering offset live.
+        syncComposerCenteringOffset()
         updateTrackingAreas()
         invalidateIntrinsicContentSize()
     }
@@ -912,6 +1025,10 @@ class WorkspaceViewContainer: NSView {
         sidebarWidthConstraint.constant = clamped
         currentSidebarWidth = clamped
         widthModel.width = clamped
+        // R5 (Phase 3 review round 2): keep the composer overlay's
+        // card-centering offset following the live drag, same tick as
+        // `widthModel.width` above.
+        syncComposerCenteringOffset()
     }
 
     /// Persist the drag-resized width to this view mode's UserDefaults key.
@@ -1176,6 +1293,12 @@ class WorkspaceViewContainer: NSView {
             // get re-clamped.
             self?.needsLayout = true
         })
+        // R5 (Phase 3 review round 2): `sidebarMode` was already updated at
+        // the top of this function, and `widthModel.width` (if this
+        // transition touches it) was already set synchronously above — keep
+        // the composer overlay's card-centering offset live across
+        // Cmd+S/Cmd+Shift+E sidebar toggles.
+        syncComposerCenteringOffset()
 
         // 5. Non-animatable properties.
         switch newMode {
@@ -1300,6 +1423,31 @@ class WorkspaceViewContainer: NSView {
         if sidebarMode == .overlay {
             transitionTo(.closed)
         }
+        // Blocker 3 (Phase 3 review round 3): the composer-dismiss clause
+        // that used to live here is gone. Round 2's `NSApp.isActive` gate
+        // had two problems: (1) `SessionCoordinator`/this container is
+        // per-window, so gating a PER-WINDOW resign-key notification doesn't
+        // distinguish "another Ghostties window took key" (should NOT
+        // dismiss this window's overlay — no bug here, working as intended)
+        // from "the app itself was deactivated" (should dismiss, but this
+        // notification alone can't tell); and worse, with the gate in place
+        // clicking window B never dismissed window A's overlay either,
+        // reopening round 1's original two-window finding. (2) `NSApp
+        // .isActive` inside a window-resign-key handler is ASSERTED, not
+        // observed to actually be accurate at that point in AppKit's
+        // documented ordering (`willResignActive` -> window resigns key ->
+        // `didResignActive`) — if it still read `true` there, the gate was
+        // always false and dismiss-on-leave-app was silently dead code, a
+        // revert of F5 nobody would have noticed. Fixed by not inferring
+        // app-deactivation from a window notification at all — see
+        // `applicationDidResignActive()` below, which observes
+        // `NSApplication.didResignActiveNotification` directly, and the
+        // per-overlay `owningWindow` ownership check in
+        // `presentComposerOverlay`/`dismissComposerOverlayIfPresented` that
+        // makes each container ignore dismiss signals for an overlay it
+        // doesn't own — together these replace both halves of what this
+        // clause tried to do, correctly, without reintroducing the
+        // per-container-store refactor rejected in round 2 as too large.
         // Sidebar smart-sections freeze-on-focus (plan unit 4):
         // window blur is treated as the primary release trigger. The next time
         // the window becomes key we'll re-freeze with the (potentially changed)
@@ -1316,6 +1464,17 @@ class WorkspaceViewContainer: NSView {
         WorkspaceStore.shared.releaseSnapshot()
     }
 
+    /// Blocker 3 (Phase 3 review round 3): the genuine "user left the app"
+    /// dismiss for the composer overlay — see the registration comment in
+    /// `init` and the removed-clause comment in `windowDidResignKey()`
+    /// above for what this replaces and why. Every container independently
+    /// receives this (one `NSApp`, `object: nil`); `dismissComposerOverlayIfPresented()`
+    /// already self-guards on `superview != nil`, so only the window(s)
+    /// that actually have an installed overlay do anything.
+    @objc private func applicationDidResignActive() {
+        dismissComposerOverlayIfPresented()
+    }
+
     @objc private func windowDidBecomeKey() {
         // Sidebar smart-sections freeze-on-focus (plan unit 4):
         // freeze the section layout while this window is the user's focus.
@@ -1327,6 +1486,355 @@ class WorkspaceViewContainer: NSView {
         // Fullscreen transitions reposition the traffic lights. Trigger a layout
         // pass so titlebarRowTopAnchorConstant re-reads the new close-button frame.
         needsLayout = true
+        // F7 follow-up (Phase 3 review round 2): no titlebar to protect in
+        // fullscreen, so the composer overlay's scrim shouldn't leave that
+        // band undimmed there.
+        let isFullScreen = window?.styleMask.contains(.fullScreen) ?? false
+        composerCenteringModel.titlebarBandHeight = isFullScreen ? 0 : WorkspaceLayout.titlebarSpacerHeight
+    }
+
+    // MARK: - Session Composer Overlay (Phase 3)
+
+    /// Cmd+T. Opens the composer overlay by default; creates a session
+    /// instantly (no UI) when `ghostties.newSessionOpensComposer` is off —
+    /// both paths use the same smart-default cascade (D1: no more "nothing
+    /// selected" guard).
+    @objc private func handleWorkspaceNewSession(_ notification: Notification) {
+        if newSessionOpensComposerPreference {
+            presentComposerOverlay(projectBinding: .open)
+        } else {
+            instantCreateSession()
+        }
+    }
+
+    /// Cmd+Shift+T. Always creates instantly — the Cmd+T preference is
+    /// never consulted here.
+    @objc private func handleWorkspaceNewSessionInstant(_ notification: Notification) {
+        instantCreateSession()
+    }
+
+    /// Opens the centered session composer overlay. Called from Cmd+T
+    /// (composer preference on, the default) and the sidebar toolbar's
+    /// "+ New Session" button (`NewSessionToolbarButton`, which reaches this
+    /// via `coordinator.containerView`).
+    func presentComposerOverlay(projectBinding: SessionComposerRequest.ProjectBinding) {
+        // Blocker 3 (Phase 3 review round 3): if a DIFFERENT window
+        // currently owns an open composer, dismiss its overlay first — this
+        // window is about to become the sole owner of
+        // `SessionComposerStore.shared`'s state. Without this, two windows
+        // could each install their own overlay against the same shared
+        // store, each visibly showing whichever window opened last.
+        if let currentOwner = SessionComposerStore.shared.owningWindow,
+           currentOwner !== window,
+           let ownerContainer = currentOwner.contentView as? WorkspaceViewContainer {
+            ownerContainer.dismissComposerOverlayIfPresented()
+        }
+        SessionComposerStore.shared.owningWindow = window
+
+        // F5 (Phase 3 review): single-presentation invariant — the centered
+        // overlay always wins over any open per-row anchored popover, since
+        // both share the one `SessionComposerStore` singleton's state and a
+        // second opener silently defeats the popover's `.locked` write-path
+        // enforcement otherwise. `ProjectDisclosureRow` observes this and
+        // closes its own popover.
+        NotificationCenter.default.post(name: .workspaceComposerOverlayWillPresent, object: window)
+
+        // R2 (Phase 3 review round 2): the post above sets `showingTemplatePicker
+        // = false` synchronously in any open row, but the popover's CONTENT
+        // teardown — firing its `onChange(of: isPresented)` / `onDisappear`,
+        // both of which call `composerStore.cancel()` — was NOT proven to
+        // run within this same call stack. Opening/installing the overlay
+        // synchronously right after the post let a `cancel()` from that
+        // teardown (whenever it actually lands) clobber `isOpen` back to
+        // `false` immediately after we set it, killing the just-presented
+        // overlay one frame in (and, while both were briefly alive, leaving
+        // the old `.locked` popover visibly showing a `currentProjectBinding`
+        // this call had already overwritten — the wrong-project write F5 was
+        // supposed to close).
+        //
+        // Blocker 1 (Phase 3 review round 3): deferring this half to the
+        // next runloop turn does NOT, by itself, guarantee the popover's
+        // deferred teardown (if it is in fact deferred — see the
+        // `$isOpen` sink's comment in `setup()`) lands BEFORE this block
+        // rather than after; the relative order of two independently
+        // GCD-queued `DispatchQueue.main.async` blocks competing with
+        // SwiftUI's own internal update scheduling is not something either
+        // system's public contract guarantees, and this repo could not
+        // resolve it empirically (see that same sink comment). The actual
+        // fix for the race is on the OTHER end: the `$isOpen` sink re-checks
+        // the LIVE `isOpen` value before dismissing, instead of trusting a
+        // possibly-stale emitted one, which makes the outcome correct
+        // regardless of which block runs first. This deferral is kept as
+        // belt-and-braces — it still avoids doing the open/install work
+        // inside the same call stack as the `.willPresent` post — but is
+        // NOT the mechanism that makes this race-safe; do not treat it as
+        // load-bearing on its own.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+
+            let request = SessionComposerRequest(presentation: .centered, projectBinding: projectBinding)
+            self.composerOverlayHostingView.rootView = AnyView(
+                SessionComposerOverlay(request: request, centeringModel: self.composerCenteringModel)
+                    .environmentObject(WorkspaceStore.shared)
+                    .environmentObject(self.coordinator)
+            )
+
+            // F4 (Phase 3 review): OBSERVED, not assumed — a scratch probe
+            // (NSHostingView, remove+re-add vs. rootView-reassign-only) showed
+            // `onAppear` reliably re-fires on a genuine remove+re-add of the
+            // hosting view, but does NOT re-fire when `rootView` is merely
+            // reassigned while the subview stays installed. That second case
+            // is exactly "Cmd+T while the overlay is already open"
+            // (`installComposerOverlayIfNeeded()` below is a no-op then), so
+            // `SessionComposerPalette.onAppear`'s call to
+            // `SessionComposerStore.open(...)` is not a reliable signal for
+            // it. Call `open()` explicitly here instead — it's idempotent,
+            // and when the store was already open this also sets
+            // `focusSearchFieldTrigger`, so Cmd+T while open refocuses the
+            // search field rather than doing nothing.
+            SessionComposerStore.shared.open(projectBinding: projectBinding, workspaceStore: WorkspaceStore.shared)
+
+            self.syncComposerCenteringOffset()
+            // F7 follow-up: correct even if the composer opens while
+            // already fullscreen, not just on a later enter/exit transition.
+            let isFullScreen = self.window?.styleMask.contains(.fullScreen) ?? false
+            self.composerCenteringModel.titlebarBandHeight = isFullScreen ? 0 : WorkspaceLayout.titlebarSpacerHeight
+            self.installComposerOverlayIfNeeded()
+        }
+    }
+
+    /// Offsets the composer card so it centers on the terminal card rather
+    /// than the whole window (Sean's design decision 2, Phase 3 review) —
+    /// only meaningful in `.pinned` mode, where the sidebar actually pushes
+    /// the terminal card rightward. In `.closed`/`.overlay` the terminal
+    /// card is full-width, so no offset is needed. The scrim itself stays
+    /// full-bleed regardless — the sidebar isn't usable while the composer
+    /// is up, so dimming it is honest.
+    ///
+    /// Reads `widthModel.width` (the sidebar's live APPLIED width), not
+    /// `currentSidebarWidth` (the user's stored preference) — same
+    /// distinction `resizableWidth` above already draws.
+    ///
+    /// Follow-up correction (Phase 3 review round 3): during a live DRAG
+    /// this genuinely tracks what's on screen — `handleSidebarDrag` writes
+    /// `widthModel.width` and the frame together, in step. During a
+    /// `transitionTo`/`sidebarViewModeChanged` ANIMATION it does NOT:
+    /// `widthModel.width` is set via a plain assignment (jumps to the
+    /// target immediately) while the visual constraint animates smoothly
+    /// over 0.2s via `.animator()`, so the card currently jumps to its new
+    /// position instantly and the sidebar slides behind it for 200ms rather
+    /// than the two moving together. Recorded as a follow-up, not fixed
+    /// here — it's a polish gap, not a correctness one, and animating the
+    /// offset in step needs its own `.animator()`-equivalent for a plain
+    /// `@Published` value (e.g. a `CADisplayLink`-driven interpolation or
+    /// switching this model to read the constraint's presentation layer),
+    /// which is more than this pass's scope.
+    private var terminalCardHorizontalOffset: CGFloat {
+        sidebarMode == .pinned ? widthModel.width : 0
+    }
+
+    private lazy var composerCenteringModel = ComposerCenteringModel()
+
+    /// Writes the live offset into `composerCenteringModel` — called at
+    /// every site that can change `sidebarMode` or the applied sidebar
+    /// width (R5, Phase 3 review round 2). Deliberately NOT called from
+    /// `layout()`'s resize reclamp — that file remains untouched per the
+    /// original Phase 3 constraint; a window resize (not a sidebar
+    /// toggle/mode-switch/drag) while the composer is open in pinned mode
+    /// is the one residual case this doesn't cover live.
+    private func syncComposerCenteringOffset() {
+        composerCenteringModel.horizontalOffset = terminalCardHorizontalOffset
+    }
+
+    /// Guards the fade-out `removeFromSuperview()` in
+    /// `dismissComposerOverlayIfPresented()` against a fast re-open
+    /// (Escape immediately followed by Cmd+T) — bumped on every
+    /// install/dismiss call so a dismiss's deferred completion handler can
+    /// detect it was superseded and skip yanking the freshly re-presented
+    /// overlay back out mid-animation.
+    private var composerOverlayTransitionGeneration = 0
+
+    /// Adds the composer overlay hosting view as a subview, pinned to the
+    /// container's full bounds — not `layout()` — so its scrim can dim the
+    /// whole terminal. Fades in (F8, Phase 3 review) to match every other
+    /// appear-over-content transition in this container (`transitionTo(_:)`'s
+    /// 0.2s convention). If the view is still attached (e.g. mid a dismiss
+    /// fade-out that this call is interrupting), just animates it back to
+    /// fully visible instead of re-adding it.
+    private func installComposerOverlayIfNeeded() {
+        composerOverlayTransitionGeneration += 1
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        // R3 (Phase 3 review round 2): re-enable hit-testing on (re-)present
+        // — a fast dismiss-then-reopen can land here while a previous
+        // dismiss's fade-out (see below) had it disabled.
+        composerOverlayHostingView.isHitTestDisabled = false
+        // R9 (Phase 3 review round 2): hide the sidebar and terminal from
+        // VoiceOver navigation while the overlay is up. `NSView` conforms to
+        // `NSAccessibilityProtocol` and exposes `setAccessibilityHidden(_:)`
+        // directly — SwiftUI's `.accessibilityAddTraits(.isModal)` would be
+        // a no-op here (the sidebar/terminal are separate `NSView`s in a
+        // different hosting tree, so `.isModal` has nothing to hide),
+        // confirmed by this round's reviewer, not "fixed" with it.
+        //
+        // Blocker 2 (Phase 3 review round 3): moved ABOVE the early-return
+        // guard below, matching `isHitTestDisabled` right above — both must
+        // apply on the "already installed, just re-animate to visible" path
+        // too (Escape immediately followed by Cmd+T, landing inside the
+        // fade window), or the sidebar/terminal are left VoiceOver-navigable
+        // behind a live modal with no correction. Restored unconditionally
+        // in `dismissComposerOverlayIfPresented()`, matching this call site.
+        sidebarHostingView.setAccessibilityHidden(true)
+        terminalShadowHost.setAccessibilityHidden(true)
+
+        guard composerOverlayHostingView.superview == nil else {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = reduceMotion ? 0 : 0.2
+                composerOverlayHostingView.animator().alphaValue = 1
+            }, completionHandler: { [weak self] in
+                // Blocker 2: the early-return path used to skip this
+                // entirely, so VO focus never moved into the composer on a
+                // fast re-present even though it was visible on screen again.
+                self?.postComposerLayoutChanged()
+            })
+            return
+        }
+
+        composerOverlayHostingView.alphaValue = 0
+        addSubview(composerOverlayHostingView)
+        NSLayoutConstraint.activate([
+            composerOverlayHostingView.topAnchor.constraint(equalTo: topAnchor),
+            composerOverlayHostingView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            composerOverlayHostingView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            composerOverlayHostingView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = reduceMotion ? 0 : 0.2
+            composerOverlayHostingView.animator().alphaValue = 1
+        }, completionHandler: { [weak self] in
+            self?.postComposerLayoutChanged()
+        })
+    }
+
+    /// R9/F10 (Phase 3 review round 2, deduplicated in round 3 — both
+    /// `installComposerOverlayIfNeeded()` branches need it now, Blocker 2):
+    /// posting `.layoutChanged` before the fade-in and before SwiftUI has
+    /// laid out the reassigned `rootView` announced a change without moving
+    /// VO focus into the new content (no `NSAccessibilityUIElementsKey`) —
+    /// deferred to the fade-in's completion, with the hosting view itself
+    /// as the target element so VO actually moves there.
+    private func postComposerLayoutChanged() {
+        NSAccessibility.post(
+            element: composerOverlayHostingView,
+            notification: .layoutChanged,
+            userInfo: [.uiElements: [composerOverlayHostingView as Any]]
+        )
+    }
+
+    /// Removes the composer overlay hosting view. No-op if not installed.
+    /// Fades out (F8) to match `installComposerOverlayIfNeeded()`'s fade-in,
+    /// and restores first responder to the focused terminal surface
+    /// immediately (F3, Phase 3 review) — `removeFromSuperview()` alone
+    /// hands first responder back to the WINDOW, not the terminal, the same
+    /// failure mode already solved for the command palette
+    /// (`TerminalCommandPaletteView.onChange(of: isPresented)`) and inline
+    /// tab-title editing (`TerminalWindow.tabTitleEditor(_:didFinishEditing:)`).
+    /// Without this, Escape (or any other dismiss) leaves the terminal
+    /// keyboard-dead until the user clicks it.
+    private func dismissComposerOverlayIfPresented() {
+        guard composerOverlayHostingView.superview != nil else { return }
+
+        // Blocker 3 (Phase 3 review round 3): clear ownership if this
+        // window was the owner, so the next `presentComposerOverlay` call
+        // (from any window) doesn't think a dismissed overlay is still live
+        // elsewhere.
+        if SessionComposerStore.shared.owningWindow === window {
+            SessionComposerStore.shared.owningWindow = nil
+        }
+
+        // R3 (Phase 3 review round 2): disable hit-testing FIRST, before the
+        // fade starts — `NSView.hitTest(_:)` skips HIDDEN views but does not
+        // consider `alphaValue`, so without this the full-bounds scrim stays
+        // fully clickable for the entire 0.2s fade-out. A click into the
+        // terminal to resume typing during that window would otherwise land
+        // on the invisible scrim's `.onTapGesture { cancel() }` (eating the
+        // click and re-entering dismiss, extending the dead window), and a
+        // fast double-click on a template row could fire `commit()` twice —
+        // `ComposerRow`'s `Button(action:)` calls `option.action()` directly
+        // and never reads `selectedIndex`, so the keyboard path's
+        // double-Return guard doesn't cover it.
+        composerOverlayHostingView.isHitTestDisabled = true
+
+        // R9 (Phase 3 review round 2): restore VoiceOver navigation into the
+        // sidebar and terminal — the counterpart to the hide in
+        // `installComposerOverlayIfNeeded()`.
+        sidebarHostingView.setAccessibilityHidden(false)
+        terminalShadowHost.setAccessibilityHidden(false)
+
+        // R4 (Phase 3 review round 2): only steal first responder back to
+        // the terminal if THIS window is actually key. `makeFirstResponder`
+        // doesn't steal key across windows, but `windowDidResignKey` calls
+        // this too — without the guard, every resign-key with the composer
+        // open would call `makeFirstResponder` on a window that just lost
+        // key status, which (via `BaseTerminalController`'s window-delegate
+        // `syncFocusToSurfaceTree()`, wired at nib-load and so running
+        // BEFORE this container's later `viewDidMoveToWindow` registration)
+        // re-sets `ghostty_surface_set_focus(surface, true)` on a non-key
+        // window: a blinking cursor in an inactive window, `SecureInput`
+        // scoped active while the app is inactive, and — with DECSET 1004
+        // (Claude Code's TUI, vim, tmux) — an inverted pty focus report that
+        // never self-corrects, because `SurfaceView_AppKit.focusDidChange`
+        // early-returns when `self.focused` already matches on the way back.
+        if window?.isKeyWindow == true,
+           let controller = window?.windowController as? BaseTerminalController,
+           let focusedSurface = controller.focusedSurface {
+            window?.makeFirstResponder(focusedSurface)
+        }
+
+        composerOverlayTransitionGeneration += 1
+        let myGeneration = composerOverlayTransitionGeneration
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = reduceMotion ? 0 : 0.2
+            composerOverlayHostingView.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, self.composerOverlayTransitionGeneration == myGeneration else { return }
+            self.composerOverlayHostingView.removeFromSuperview()
+        })
+    }
+
+    /// Instant session creation — Cmd+Shift+T (always) and Cmd+T when the
+    /// `ghostties.newSessionOpensComposer` preference is off. Resolves the
+    /// same smart-default cascade the composer uses, then creates directly
+    /// with the project's default template (falling back to `.shell`), with
+    /// no UI. Mirrors the deleted
+    /// `WorkspaceSidebarView.createNewSessionForSelectedProject()`, but uses
+    /// the cascade pick instead of the sidebar's `selectedProjectId`.
+    private func instantCreateSession() {
+        let store = WorkspaceStore.shared
+        guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
+              let project = store.projects.first(where: { $0.id == projectId }) else { return }
+
+        let template: AgentTemplate
+        if let defaultId = project.defaultTemplateId,
+           let defaultTemplate = store.templates.first(where: { $0.id == defaultId }) {
+            template = defaultTemplate
+        } else {
+            template = AgentTemplate.shell
+        }
+
+        // F1 (Phase 3 review): without this, a session created via the
+        // cascade pick into a collapsed project spawns with no visible
+        // sidebar row — see `WorkspaceLayout.workspaceDidCreateSessionInProject`.
+        NotificationCenter.default.post(
+            name: .workspaceDidCreateSessionInProject,
+            object: window,
+            userInfo: ["projectId": project.id]
+        )
+
+        Task {
+            await coordinator.createQuickSession(for: project, template: template)
+        }
     }
 
     // MARK: - Layout
@@ -1555,6 +2063,79 @@ class WorkspaceViewContainer: NSView {
             browserToggleButton.alphaValue = 0
         }
 
+        // Dismiss the composer overlay's hosting view whenever the composer
+        // store closes (Esc, scrim click, or a successful commit) — every
+        // close path funnels through `SessionComposerStore.isOpen`, so this
+        // is the single place the subview teardown needs to live (Phase 3).
+        //
+        // F9 (Phase 3 review) — LOAD-BEARING DEPENDENCY: this sink only
+        // fires reliably because `@Published` re-emits `willSet` on every
+        // assignment, even one that doesn't change the value. `cancel()`
+        // sets `isOpen = false` unconditionally, including when it's
+        // already `false` — if `isOpen`'s setter ever grows an equality
+        // guard (`didSet`-style "optimization" to skip redundant publishes),
+        // a cancel that lands while `isOpen` is already `false` would
+        // silently stop reaching this sink — the subview would stay
+        // installed until the next `applicationDidResignActive()` (app
+        // deactivation) or the next cross-window takeover in
+        // `presentComposerOverlay` (the other two dismiss paths, as of
+        // Blocker 3 below — `windowDidResignKey` no longer dismisses the
+        // composer at all) rather than closing when the user actually
+        // asked. Do not add that guard.
+        //
+        // Blocker 1 (Phase 3 review round 3): `.receive(on: DispatchQueue.main)`
+        // is ALWAYS an async hop for Combine's `DispatchQueue` scheduler —
+        // it never runs inline even when already on the main thread — so
+        // this closure acts on a value EMITTED at some earlier moment, not
+        // necessarily the CURRENT one. `presentComposerOverlay`'s deferred
+        // install (see its own comment) races a dismiss enqueued by a
+        // teardown `cancel()` from the popover it's replacing; which of the
+        // two GCD-queued blocks actually runs first is not something either
+        // Combine's public contract or SwiftUI's internal update scheduling
+        // guarantees — SwiftUI doesn't document whether a state-driven
+        // `onChange`/`onDisappear` fires synchronously within the same call
+        // stack as the mutation that triggers it, or is deferred to a later
+        // run-loop pass relative to a plain `DispatchQueue.main.async` block,
+        // and this was not resolved empirically (a scratch popover-teardown
+        // probe was inconclusive — the popover never actually presented in
+        // a headless test process). Re-reading the LIVE value here instead
+        // of trusting the emitted one makes the outcome ordering-independent:
+        // if a stale `false` is processed after `presentComposerOverlay`
+        // already reopened the store, this now no-ops instead of tearing
+        // the fresh overlay back down.
+        //
+        // FRAGILITY (Phase 3 review round 4) — `.receive(on: DispatchQueue.main)`
+        // below is NOT decorative; the live re-read above depends on it.
+        // `@Published` emits in `willSet`, i.e. BEFORE the stored property
+        // is actually updated — the closure below only sees the post-write
+        // value because the scheduler's async hop guarantees this closure
+        // runs strictly after the assignment that triggered it has already
+        // landed. Remove `.receive(on:)` as a "simplification" and this
+        // sink would run synchronously from within `willSet`, so
+        // `!SessionComposerStore.shared.isOpen` would read the PRE-`willSet`
+        // value (`true`, the value being replaced, not the `false` being
+        // set) — the guard above would then always fail, and every dismiss
+        // (scrim click, Escape, everything routed through `cancel()`) would
+        // die silently. Keep the hop.
+        SessionComposerStore.shared.$isOpen
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, !SessionComposerStore.shared.isOpen else { return }
+                // Blocker 3 (Phase 3 review round 3): only the window that
+                // currently owns the composer acts on a dismiss signal —
+                // otherwise a `cancel()` triggered by window B's activity
+                // (or a stale emission) could tear down window A's
+                // unrelated, still-open overlay. `dismissComposerOverlayIfPresented()`
+                // already self-guards on `superview != nil`, so this is
+                // largely redundant defense-in-depth, but explicit rather
+                // than relying on that guard alone to keep this correct.
+                guard SessionComposerStore.shared.owningWindow == nil
+                    || SessionComposerStore.shared.owningWindow === self.window
+                else { return }
+                self.dismissComposerOverlayIfPresented()
+            }
+            .store(in: &cancellables)
+
         // Bind title label to the active session name.
         coordinator.$activeSessionId
             .combineLatest(WorkspaceStore.shared.$sessions)
@@ -1698,8 +2279,26 @@ extension WorkspaceViewContainer: NSTextFieldDelegate {
 /// Used for the sidebar so it's transparent in pinned mode — the window
 /// background shows through. The overlay NSVisualEffectView provides
 /// material only in hover mode.
-private class TransparentHostingView<Content: View>: NSHostingView<Content> {
+///
+/// Internal (not `private`) since Phase 3 of session-creation-unified hosts
+/// the session composer overlay through it too — kept in this file rather
+/// than moved, so the composer overlay's own view code stays out of this
+/// 85 KB file.
+class TransparentHostingView<Content: View>: NSHostingView<Content> {
     override var isOpaque: Bool { false }
+
+    /// When `true`, this view (and everything inside it) is excluded from
+    /// hit-testing even though it's still on screen (R3, Phase 3 review
+    /// round 2). `NSView.hitTest(_:)` skips HIDDEN views but does not
+    /// consider `alphaValue` — a view fading out via `.animator().alphaValue`
+    /// stays fully clickable for the whole animation unless something like
+    /// this exists. Opt-in and off by default so the sidebar's own use of
+    /// this class (which doesn't fade the same way) is unaffected.
+    var isHitTestDisabled = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        isHitTestDisabled ? nil : super.hitTest(point)
+    }
 }
 
 // MARK: - Panel Drag Handle

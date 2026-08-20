@@ -27,10 +27,21 @@ struct SettingsView: View {
                 Text("(\"tip\" is the beta feed.)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Text("New Session (Cmd+T) — composer (default) or instant:")
+                    .padding(.top, 6)
+                Text("defaults write com.seansmithdesign.ghostties ghostties.newSessionOpensComposer -bool false")
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                Text("defaults write com.seansmithdesign.ghostties ghostties.newSessionOpensComposer -bool true")
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                Text("(\"false\" makes Cmd+T create instantly instead of opening the composer — Cmd+Shift+T is always instant either way. Debug builds use com.seansmithdesign.ghostties.dev instead.)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding()
-        .frame(minWidth: 500, maxWidth: 500, minHeight: 156, maxHeight: 156)
+        .frame(minWidth: 500, maxWidth: 500)
     }
 }
 

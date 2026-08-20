@@ -132,10 +132,6 @@ struct WorkspaceSidebarView: View {
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             selectAdjacentLiveSession(offset: -1)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceNewSession)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            createNewSessionForSelectedProject()
-        }
         .onReceive(NotificationCenter.default.publisher(for: .workspaceCloseSession)) { notification in
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             coordinator.closeCurrentSessionWithConfirmation()
@@ -144,6 +140,17 @@ struct WorkspaceSidebarView: View {
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             guard let index = notification.userInfo?["index"] as? Int else { return }
             focusVisibleSession(atIndex: index)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceDidCreateSessionInProject)) { notification in
+            // F1 (Phase 3 review): auto-expand the project a session was
+            // just created in — the cascade pick (Cmd+T, Cmd+Shift+T, or a
+            // composer commit) routinely lands in a project the user hasn't
+            // clicked and has probably collapsed, unlike the old
+            // `createNewSessionForSelectedProject()` this replaced, which
+            // always expanded the sidebar's own selection.
+            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
+            guard let projectId = notification.userInfo?["projectId"] as? UUID else { return }
+            expandedProjectIds.insert(projectId)
         }
         .sheet(isPresented: Binding(
             get: { !hasSeenOnboarding },
@@ -161,8 +168,9 @@ struct WorkspaceSidebarView: View {
         HStack(spacing: 8) {
             Spacer()
             // One labelled "new item" control per tab, right-aligned. Projects
-            // gets a plain action button; Sessions gets a menu-presenting
-            // button (project-picker flyout) — see `NewSessionToolbarButton`.
+            // gets a plain action button; Sessions gets a button that opens
+            // the centered session composer overlay (Phase 3 of
+            // session-creation-unified) — see `NewSessionToolbarButton`.
             if sidebarTab == .projects {
                 ToolbarLabelButton(systemName: "plus", label: "New Project", action: presentFolderPicker)
             } else {
@@ -211,32 +219,10 @@ struct WorkspaceSidebarView: View {
 
     // MARK: - Actions
 
-    private var selectedProject: Project? {
-        guard let id = selectedProjectId else { return nil }
-        return store.projects.first { $0.id == id }
-    }
-
     private func presentFolderPicker() {
         if let id = store.addProjectViaFolderPicker() {
             selectedProjectId = id
             expandedProjectIds.insert(id)
-        }
-    }
-
-    /// Create a new session in the currently selected project.
-    private func createNewSessionForSelectedProject() {
-        guard let project = selectedProject else { return }
-        let template: AgentTemplate
-        if let defaultId = project.defaultTemplateId,
-           let defaultTemplate = store.templates.first(where: { $0.id == defaultId }) {
-            template = defaultTemplate
-        } else {
-            template = AgentTemplate.shell
-        }
-        // Auto-expand the target project so the new session is visible.
-        expandedProjectIds.insert(project.id)
-        Task {
-            await coordinator.createQuickSession(for: project, template: template)
         }
     }
 
