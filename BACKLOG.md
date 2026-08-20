@@ -4,6 +4,14 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-20 — DESIGN.md titlebarSpacerHeight is wrong (pre-existing)
+
+- [ ] **`DESIGN.md:141` says `titlebarSpacerHeight: 38pt`; `WorkspaceLayout.swift:54` is `28`.** Found
+  during PR #132 review. Pre-existing and unrelated to that PR, so deliberately not fixed there.
+  DESIGN.md is canonical for design values, so a wrong number in it is a wrong-ground-truth bug —
+  anything scaffolded or reviewed against the 38 is measuring to a value the code has never used.
+  Determine which is correct before editing; the code value is the one actually shipping.
+
 ## 2026-08-20 — Composer: text-forward parsing + three defects (NEW, off Phase 4/5)
 
 Sean ran the two Phase 3 checks on the Dev build off merged `main`. **Both pass** —
