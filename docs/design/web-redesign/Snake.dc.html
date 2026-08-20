@@ -24,11 +24,11 @@
        ------------------------------------------------------------------ */
 
     /* playfield lattice — invisible until a coin goes in */
-    .lattice { position: absolute; left: 20px; top: 148px; width: 1320px; height: 440px;
+    .lattice { position: absolute; left: 20px; top: 148px; width: 1320px; height: 264px;
       background-image: radial-gradient(rgba(255,255,255,0.11) 1.5px, transparent 1.5px);
       background-size: 44px 44px; background-position: 22px 22px;
       opacity: 0; transition: opacity 0.7s cubic-bezier(0.25,1,0.5,1); }
-    .bounds { position: absolute; left: 20px; top: 148px; width: 1320px; height: 440px;
+    .bounds { position: absolute; left: 20px; top: 148px; width: 1320px; height: 264px;
       border: 1px solid rgba(255,213,79,0.16); opacity: 0;
       transition: opacity 0.7s cubic-bezier(0.25,1,0.5,1); }
     .sn.play .lattice, .sn.play .bounds { opacity: 1; }
@@ -60,24 +60,8 @@
     .cell.alert { border-color: rgba(255,120,96,0.65); background: rgba(255,120,96,0.10); }
     .cell.alert .v { color: #ff8a70; }
 
-    /* --- legend band: says what the tokens are, and warns when they carry names --- */
-    .band { position: absolute; left: 56px; right: 56px; top: 104px; height: 28px; z-index: 8;
-      box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 12px;
-      border: 1px solid rgba(236,234,245,0.16); background: rgba(236,234,245,0.03);
-      font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
-      letter-spacing: 0.2em; text-transform: uppercase; color: rgba(236,234,245,0.42);
-      opacity: 0; transition: opacity 0.5s 0.2s; }
-    .sn.play .band { opacity: 1; }
-    .band b { font-weight: 600; color: rgba(236,234,245,0.72); }
-    .band .warn { display: none; }
-    .sn.named .band { border-color: rgba(255,138,112,0.55); background: rgba(255,120,96,0.09);
-      color: rgba(255,178,160,0.92); }
-    .sn.named .band .plain { display: none; }
-    .sn.named .band .warn { display: inline; }
-    .sn.named .band b { color: #ff8a70; }
-
     /* --- copy: under the field now, not over it --- */
-    .copy { position: absolute; left: 56px; top: 628px; z-index: 6; max-width: 680px;
+    .copy { position: absolute; left: 56px; top: 452px; z-index: 6; max-width: 680px;
       pointer-events: none; }
     h1 { font-family: "Silkscreen", monospace; font-weight: 700; margin: 0;
       font-size: 56px; line-height: 1.08; letter-spacing: 0.005em; color: #fff;
@@ -88,7 +72,7 @@
       color: rgba(236,234,245,0.7); text-wrap: pretty; }
     .lead b { color: #eceaf5; font-weight: 600; }
 
-    .install { position: absolute; left: 56px; top: 852px; z-index: 7; display: flex; }
+    .install { position: absolute; left: 56px; top: 676px; z-index: 7; display: flex; }
     .u { display: flex; align-items: center; border: 1px solid rgba(236,234,245,0.18);
       border-right-width: 0; background: rgba(7,7,15,0.82); }
     .u:last-child { border-right-width: 1px; }
@@ -101,7 +85,7 @@
     .u.p .val { color: #ffe08a; }
 
     /* --- the coin slot: the only tell, and it stays small --- */
-    .slot { position: absolute; left: 56px; top: 916px; z-index: 7;
+    .slot { position: absolute; left: 56px; top: 740px; z-index: 7;
       display: flex; align-items: center; gap: 10px;
       font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
       letter-spacing: 0.22em; text-transform: uppercase; color: rgba(236,234,245,0.30);
@@ -117,7 +101,7 @@
     .sn.play .slot { opacity: 0; pointer-events: none; }
 
     /* keycaps only exist once you are playing */
-    .keys { position: absolute; left: 56px; top: 912px; z-index: 7; display: flex;
+    .keys { position: absolute; left: 56px; top: 736px; z-index: 7; display: flex;
       align-items: center; gap: 12px; opacity: 0; transition: opacity 0.5s 0.25s;
       font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
       letter-spacing: 0.22em; text-transform: uppercase; color: rgba(236,234,245,0.4); }
@@ -152,30 +136,6 @@
     .flash.go { animation: fl 0.42s cubic-bezier(0.5,0,0.75,0) forwards; }
     @keyframes fl { 0% { opacity: 0.5; } 100% { opacity: 0; } }
 
-    /* --- collectible tokens ---------------------------------------------
-       Two art modes on ONE board, switched by the tokenStyle dial:
-         generic  — abstract agent glyphs on the same 4px grid as the icons
-         labelled — the same plate carrying a vendor NAME as plain text
-       The labelled mode is deliberately a name in a box and never a drawing
-       of a real mark. Redrawing competitor logos on a public marketing site
-       is a trademark risk, so the placeholder is the deliverable.
-       ------------------------------------------------------------------ */
-    .tokens { position: absolute; inset: 0; z-index: 3; }
-    .tk { position: absolute; left: 0; top: 0; width: 44px; height: 44px;
-      opacity: 0; transition: opacity 0.35s; will-change: transform; }
-    .sn.play .tk.on { opacity: 1; }
-    .tk .art { position: absolute; inset: 0; animation: tokbob 2.6s ease-in-out infinite; }
-    @keyframes tokbob { 50% { transform: translateY(-4px); } }
-    .tk svg { width: 100%; height: 100%; display: block; }
-    .tk .lab { position: absolute; left: -16px; top: 9px; width: 76px; height: 26px;
-      box-sizing: border-box; display: none; align-items: center; justify-content: center;
-      border: 1px solid currentColor; background: rgba(7,7,15,0.92);
-      font-family: "Silkscreen", monospace; font-size: 8px; letter-spacing: 0.01em; }
-    .sn.named .tk .gen { display: none; }
-    .sn.named .tk .lab { display: flex; }
-    .tk.pop .art { animation: tokpop 0.32s steps(3, jump-none) forwards; }
-    @keyframes tokpop { 0% { transform: scale(1); opacity: 1; }
-                      100% { transform: scale(1.7); opacity: 0; } }
   </style>
 </helmet>
 <div class="sn" tabindex="0">
@@ -189,15 +149,9 @@
     </div>
     <div class="score">
       <div class="cell"><div class="k">herded</div><div class="v" id="s-herd">0/8</div></div>
-      <div class="cell"><div class="k">tokens</div><div class="v dim" id="s-tok">0</div></div>
       <div class="cell"><div class="k">rescues</div><div class="v dim" id="s-res">0</div></div>
       <div class="cell" id="s-cell-lost"><div class="k">stray</div><div class="v dim" id="s-lost">0</div></div>
     </div>
-  </div>
-
-  <div class="band">
-    <span class="plain"><b>tokens</b> &nbsp;generic agent glyphs &mdash; no vendor marks anywhere on the board</span>
-    <span class="warn"><b>placeholder names only</b> &nbsp;drawn vendor marks are a trademark risk on a public site &mdash; ship the plate, never the logo</span>
   </div>
 
   <div class="copy">
@@ -214,21 +168,7 @@
   <div class="slot"><span class="key">I</span><span>insert coin</span></div>
   <div class="keys">
     <span class="kk"><span class="key2">W</span><span class="key2">A</span><span class="key2">S</span><span class="key2">D</span></span>
-    <span>herd them &mdash; collect the tokens, one keeps wandering off</span>
-  </div>
-
-  <div class="tokens">
-    <sc-for list="{{ tokens }}" as="tk" hint-placeholder-count="14">
-      <div class="tk">
-        <div class="art" style="color:{{ tk.c }}">
-          <svg class="gen" viewBox="0 0 44 44" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
-            <path d="{{ tk.plate }}" fill="{{ tk.c }}" opacity="0.9"></path>
-            <path d="{{ tk.glyph }}" fill="{{ tk.c }}"></path>
-          </svg>
-          <div class="lab">{{ tk.name }}</div>
-        </div>
-      </div>
-    </sc-for>
+    <span>herd them &mdash; one keeps wandering off</span>
   </div>
 
   <div class="field">
@@ -255,8 +195,6 @@
 <script data-dc-script data-props='{
   "speed":      {"editor":"range","default":8.5,"min":3,"max":16,"step":0.5,"unit":"/s","section":"Game"},
   "strayEvery": {"editor":"range","default":9,"min":3,"max":20,"step":1,"unit":"s","section":"Game"},
-  "tokens":     {"editor":"int","default":8,"min":0,"max":14,"step":1,"section":"Tokens"},
-  "tokenStyle": {"editor":"enum","default":"generic","options":["generic","labelled"],"section":"Tokens"},
   "sound":      {"editor":"boolean","default":true,"section":"Audio"},
   "$preview":   {"width":1360,"height":980}
 }'>
@@ -306,32 +244,6 @@ class Component extends DCLogic {
       ['#7986CB', 'tall',  'taper', '#f4f5ff']
     ];
 
-    // --- collectible tokens ------------------------------------------------
-    // A hairline plate on the same 4px lattice, carrying either an abstract
-    // glyph or a name. Four glyphs, cycled: a caret, a bracket pair, a dot
-    // matrix and a stack of rules. None of them resemble a real product mark.
-    const PLATE = '10,10,24,2 10,32,24,2 10,10,2,24 32,10,2,24';
-    const GLYPH = [
-      '16,20,4,4 20,24,4,4 24,20,4,4 20,16,4,4',            // caret / diamond
-      '14,14,4,4 14,18,4,4 14,22,4,4 14,26,4,4 26,14,4,4 26,18,4,4 26,22,4,4 26,26,4,4',
-      '16,16,4,4 24,16,4,4 20,20,4,4 16,24,4,4 24,24,4,4',  // dot matrix
-      '14,16,16,4 14,22,10,4 14,28,14,4'                     // stacked rules
-    ];
-    const TCOL = ['#ffd54f', '#00BCD4', '#7C4DFF', '#4ade80'];
-    // Names are TEXT placeholders, deliberately not marks. See the band.
-    const TNAME = ['CLAUDE','CODEX','CURSOR','COPILOT','GEMINI','AIDER','DEVIN','CLINE',
-                   'ZED','GOOSE','AMP','SWE','KILO','ROO'];
-
-    const tokens = [];
-    for (let i = 0; i < 14; i++) {
-      tokens.push({
-        c: TCOL[i % TCOL.length],
-        plate: toPath(PLATE),
-        glyph: toPath(GLYPH[i % GLYPH.length]),
-        name: TNAME[i % TNAME.length]
-      });
-    }
-
     return {
       ghosts: SET.map(function (g) {
         return {
@@ -340,8 +252,7 @@ class Component extends DCLogic {
           shade: toPath(SHADE[g[2]]),
           hi:    toPath(HI[g[1]])
         };
-      }),
-      tokens: tokens
+      })
     };
   }
 
@@ -384,9 +295,6 @@ class Component extends DCLogic {
     } else if (name === 'collect') { // one rising blip per ghost
       play(660, 0, 0.045, 'square', 0.10);
       play(990, 0.045, 0.07, 'square', 0.10);
-    } else if (name === 'token') {   // brighter and shorter than a ghost
-      play(1318, 0, 0.035, 'square', 0.09);
-      play(1760, 0.035, 0.06, 'square', 0.08);
     } else if (name === 'stray') {   // something slipped away
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = 'sawtooth';
@@ -404,22 +312,21 @@ class Component extends DCLogic {
   _boot() {
     const root = document.querySelector('.sn');
     const nodes = root ? root.querySelectorAll('.gh') : [];
-    const tkNodes = root ? root.querySelectorAll('.tk') : [];
     const headEl = root ? root.querySelector('#head') : null;
-    if (!root || !headEl || nodes.length < 8 || tkNodes.length < 14) {
+    if (!root || !headEl || nodes.length < 8) {
       if (this._tries++ < 90) this._raf = requestAnimationFrame(this._boot.bind(this));
       return;
     }
 
     // v2 grid: the field is shorter and wider now that the copy sits below it
-    const CELL = 44, COLS = 30, ROWS = 10, OX = 20, OY = 148;
+    const CELL = 44, COLS = 30, ROWS = 6, OX = 20, OY = 148;
     const px = function (c) { return OX + c * CELL; };
     const py = function (r) { return OY + r * CELL; };
 
     // idle posts (free-floating) and the grid cells they snap to on coin-in.
     // Spread the full width now — nothing is sitting on top of them.
-    const IDLE = [[150,206],[336,330],[520,214],[706,382],[884,240],[1052,352],[1188,200],[420,436]];
-    const HOME = [[3,1],[7,4],[11,2],[15,5],[19,2],[23,4],[26,1],[9,8]];
+    const IDLE = [[150,174],[336,258],[520,179],[706,293],[884,197],[1052,273],[1188,170],[420,330]];
+    const HOME = [[3,1],[7,2],[11,1],[15,3],[19,1],[23,2],[26,1],[9,4]];
 
     const gs = [];
     for (let i = 0; i < nodes.length; i++) {
@@ -435,11 +342,10 @@ class Component extends DCLogic {
     let hx = 1, hy = 8, dir = [1,0], next = [1,0];
     let hpx = px(hx), hpy = py(hy);
     const trail = [[hx, hy]];
-    let f = 0, t = 0, herded = 0, rescues = 0, strays = 0, picked = 0;
+    let f = 0, t = 0, herded = 0, rescues = 0, strays = 0;
     let auto = true, lastDrop = 0;
 
     const herdEl = root.querySelector('#s-herd');
-    const tokEl  = root.querySelector('#s-tok');
     const resEl  = root.querySelector('#s-res');
     const lostEl = root.querySelector('#s-lost');
     const lostCell = root.querySelector('#s-cell-lost');
@@ -448,30 +354,6 @@ class Component extends DCLogic {
     root.querySelectorAll('.key2').forEach(function (k) {
       keyEls[k.textContent.trim().toLowerCase()] = k;
     });
-
-    // --- tokens: fixed pool of 14 nodes, only `count` of them ever live ----
-    const tks = [];
-    for (let i = 0; i < tkNodes.length; i++) {
-      tks.push({ el: tkNodes[i], cx: 0, cy: 0, live: false, respawn: 0 });
-    }
-    function occupied(cx, cy) {
-      if (cx === hx && cy === hy) return true;
-      for (const g of gs) if (g.cx === cx && g.cy === cy) return true;
-      for (const k of tks) if (k.live && k.cx === cx && k.cy === cy) return true;
-      for (const s of trail) if (s[0] === cx && s[1] === cy) return true;
-      return false;
-    }
-    function placeToken(k) {
-      for (let a = 0; a < 200; a++) {
-        const cx = Math.floor(Math.random() * COLS), cy = Math.floor(Math.random() * ROWS);
-        if (occupied(cx, cy)) continue;
-        k.cx = cx; k.cy = cy; k.live = true;
-        k.el.style.transform = 'translate3d(' + px(cx) + 'px,' + py(cy) + 'px,0)';
-        k.el.classList.remove('pop');
-        k.el.classList.add('on');
-        return;
-      }
-    }
 
     const MAP = {
       w: [0,-1], arrowup: [0,-1], a: [-1,0], arrowleft: [-1,0],
@@ -505,12 +387,11 @@ class Component extends DCLogic {
                .sort(function (a, b) { return a.rank - b.rank; });
     }
 
-    // the autopilot chases whichever loose ghost or live token is nearest, so
-    // the ambient demo shows the token loop without anyone touching a key
+    // the autopilot chases whichever loose ghost is nearest, so the ambient
+    // demo shows the herd loop without anyone touching a key
     function think() {
       const targets = [];
       for (const g of gs) if (g.rank < 0) targets.push([g.cx, g.cy]);
-      for (const k of tks) if (k.live) targets.push([k.cx, k.cy]);
       if (!targets.length) return;
       let best = targets[0], bd = 1e9;
       for (const p of targets) {
@@ -544,17 +425,6 @@ class Component extends DCLogic {
         }
       }
 
-      // tokens are collected, not herded — they pop and come back elsewhere
-      for (const k of tks) {
-        if (!k.live) continue;
-        if (k.cx === hx && k.cy === hy) {
-          k.live = false; picked++;
-          k.el.classList.add('pop');
-          k.respawn = t + 1.4;
-          self._sfx('token');
-        }
-      }
-
       const line = ranked();
       for (const g of line) {
         const s = trail[Math.min(trail.length - 1, g.rank + 1)];
@@ -576,22 +446,8 @@ class Component extends DCLogic {
 
       // live dials --------------------------------------------------------
       const step = Math.max(1, Math.round(60 / self._p('speed', 8.5)));
-      const want = Math.round(self._p('tokens', 8));
-      root.classList.toggle('named', self._p('tokenStyle', 'generic') === 'labelled');
 
       if (mode === 'play') {
-        // reconcile the live token pool against the count dial
-        let liveCount = 0;
-        for (const k of tks) if (k.live) liveCount++;
-        for (let i = 0; i < tks.length; i++) {
-          const k = tks[i];
-          if (i < want) {
-            if (!k.live && t >= k.respawn) placeToken(k);
-          } else if (k.live) {
-            k.live = false; k.el.classList.remove('on', 'pop');
-          }
-        }
-
         if (auto && f % step === 0) think();
         if (f % step === 0) move();
         f++;
@@ -627,7 +483,6 @@ class Component extends DCLogic {
         const hot = { '1,0': 'd', '-1,0': 'a', '0,1': 's', '0,-1': 'w' }[dir.join(',')];
         for (const k in keyEls) keyEls[k].classList.toggle('hot', k === hot);
         herdEl.textContent = herded + '/' + gs.length;
-        tokEl.textContent = picked;
         resEl.textContent = rescues;
         lostEl.textContent = strays;
         lostCell.classList.toggle('alert', strays > 0);

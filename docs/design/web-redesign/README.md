@@ -36,12 +36,19 @@ Publishing must target the existing artifact URL above so the link stays stable.
   `I` to insert a coin. Full-screen playfield, WASD and arrows, wrap at the
   edges so there is no lose state.
 - **App treatment: B4 scroll-zoom**, with B1 annotated captures for anything
-  that does not earn a camera move. B3 clickable replica is cut — it has to be
-  re-measured against the app every release or it starts lying.
-- **Vendor logos are never drawn.** Collectible tokens ship as generic agent
-  glyphs. The `tokenStyle: labelled` dial on `Snake.dc.html` shows named
-  placeholder plates *with the trademark warning on the board*; it exists to
-  price the idea, not to ship it.
+  that does not earn a camera move. B3 clickable replica now ships too —
+  folded into B4 rather than rivaling it, since both are DOM rebuilds of the
+  app. It carries forward the honest cost as a shipping condition: re-measured
+  against the app every release, or it starts lying.
+- **The ghost face is visor, and pupils track the cursor.** Locked round 4.
+  Visor is the only one of the five machine faces on `Ghosts.dc.html` whose
+  lit block reads as a screen rather than an eyeball, which is what lets it
+  track the cursor without becoming the Pac-Man tell. The antenna question is
+  still open.
+- **Vendor logos are never drawn, and there is no separate collectible for
+  them to live on.** The ghosts joining the tail on `Snake.dc.html` are the
+  collectible; the token-glyph layer that used to sit on top of that loop was
+  cut as a redundant second collectible.
 - **House vocabulary:** square status marks, never circles or pills. Block
   labels butted together sharing hairlines. No rounded corners or drop shadows
   on chrome. Uppercase micro-labels at 0.2em tracking.
@@ -70,8 +77,9 @@ is next opened — several are cut candidates and not worth a sweep.
 
 ## Open
 
-- **Which ghost face.** Five on `Ghosts.dc.html`; also unresolved is whether
-  they keep tracking pupils at all, since that is the strongest Pac-Man tell.
+- **Antenna placement on the ghosts.** Every ghost, or only the one that
+  strayed? The face and the tracking pupils are decided; this is what is left
+  on `Ghosts.dc.html`.
 - **The cut list itself** is a proposal, not a ruling.
 - Real ElevenLabs SFX for the game — parked until the shape is approved.
 - Section 08, *first 60 seconds*, does not exist yet and is on the ship list.

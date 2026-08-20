@@ -40,7 +40,7 @@
     .tcell.cut .v { color: #ff8a70; }
     .tcell.tot .v { color: rgba(236,234,245,0.8); }
 
-    .cols { display: flex; gap: 0; margin-top: 26px; align-items: stretch; }
+    .cols { display: flex; gap: 0; margin-top: 16px; align-items: stretch; }
     .lane { flex: 1; border: 1px solid rgba(236,234,245,0.18); border-right-width: 0;
       padding: 0 0 12px; box-sizing: border-box; min-width: 0; }
     .lane:last-child { border-right-width: 1px; }
@@ -57,7 +57,7 @@
     .lane.l-cut  .head { background: rgba(255,120,96,0.08); }
     .lane.l-cut  .head .n { color: #ff8a70; }
 
-    .item { padding: 11px 18px 12px; border-bottom: 1px solid rgba(236,234,245,0.08); }
+    .item { padding: 9px 18px 10px; border-bottom: 1px solid rgba(236,234,245,0.08); }
     .item:last-child { border-bottom: 0; }
     .item .t { font-size: 12.5px; font-weight: 600; color: #eceaf5; display: flex;
       align-items: baseline; gap: 8px; }
@@ -90,15 +90,15 @@
   </div>
 
   <div class="tally">
-    <div class="tcell tot"><div class="ml">on the canvas</div><div class="v">19</div></div>
-    <div class="tcell ship"><div class="ml">ship</div><div class="v">7</div></div>
+    <div class="tcell tot"><div class="ml">on the canvas</div><div class="v">18</div></div>
+    <div class="tcell ship"><div class="ml">ship</div><div class="v">8</div></div>
     <div class="tcell park"><div class="ml">park</div><div class="v">4</div></div>
-    <div class="tcell cut"><div class="ml">cut</div><div class="v">8</div></div>
+    <div class="tcell cut"><div class="ml">cut</div><div class="v">6</div></div>
   </div>
 
   <div class="cols">
     <div class="lane l-ship" id="lane-ship">
-      <div class="head"><span class="n">SHIP</span><span class="d">the page is these seven things and nothing else</span></div>
+      <div class="head"><span class="n">SHIP</span><span class="d">the page is these eight things and nothing else</span></div>
 
       <div class="item"><div class="t"><span class="mark"></span>Snake hero, opt-in<span class="ref">A</span></div>
         <div class="w">The identity. A page until someone presses <b>I</b>. Nothing else on the canvas
@@ -107,6 +107,10 @@
       <div class="item"><div class="t"><span class="mark"></span>B4 scroll-zoom<span class="ref">B4</span></div>
         <div class="w">The app section. DOM and real text so it holds at 4x, and the seven-pixel status
           dot finally gets shown at seven hundred.</div></div>
+
+      <div class="item"><div class="t"><span class="mark"></span>B3 clickable replica<span class="ref">B3</span></div>
+        <div class="w">Folds into B4, not a rival &mdash; both rebuild the app in DOM. Condition of
+          shipping: <b>re-measured against the app every release</b>, or it lies.</div></div>
 
       <div class="item"><div class="t"><span class="mark"></span>B1 annotated captures<span class="ref">B1</span></div>
         <div class="w">For the two or three features that do not earn a camera move. Cheapest to build,
@@ -153,10 +157,6 @@
     <div class="lane l-cut" id="lane-cut">
       <div class="head"><span class="n">CUT</span><span class="d">say no now so it stops costing attention</span></div>
 
-      <div class="item"><div class="t"><span class="mark"></span>B3 clickable replica<span class="ref">B3</span></div>
-        <div class="w">Carries a <b>permanent re-measure cost every release</b> or it quietly starts
-          lying. B4 gets most of the value with none of that.</div></div>
-
       <div class="item"><div class="t"><span class="mark"></span>C1 pixel morph<span class="ref">C1</span></div>
         <div class="w">Already rejected. Keep it cut &mdash; it is the kind of thing that gets revived
           because the demo loops nicely.</div></div>
@@ -178,10 +178,6 @@
       <div class="item"><div class="t"><span class="mark"></span>Vendor-logo tokens<span class="ref">A</span></div>
         <div class="w">Trademark risk on a public marketing site. The labelled dial exists to show you
           what it would cost, not to ship. <b>Generic glyphs only.</b></div></div>
-
-      <div class="item"><div class="t"><span class="mark"></span>T1 / T2 specimen boards<span class="ref">T1 T2</span></div>
-        <div class="w">The decision is made. They are history now, not options &mdash; leaving them
-          live invites re-litigating a locked call.</div></div>
     </div>
   </div>
 
