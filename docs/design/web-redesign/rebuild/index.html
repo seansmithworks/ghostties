@@ -1,0 +1,624 @@
+<!-- Hand-built rebuild of the Ghostties macOS app window (chrome + sidebar + terminal card surface). Not a screenshot; every measurement traces to docs/design/web-redesign/app-rebuild-spec.md, version c4799e03d. Ghost pixel grids transcribed from macos/Sources/Features/Ghostties/Models/GhostCharacter.swift; chevron from PixelChevronView.swift. Specific named-ghost-to-project assignments below are illustrative (source has no name->photo mapping) — see inline comments. -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghostties — App Window Rebuild</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --chrome-bg: #F0E9E6;
+    --sidebar-surface: #EEE9E5; /* photo-derived: WorkspaceViewContainer.swift:58-64 .sidebar material over chrome bg, no literal composited hex in source */
+    --canvas-bg: #FAF7F3;
+    --card-face: #F7F7F7; /* explicit build instruction: flat card face, out of scope per spec Framing-d which would use canvas token instead */
+    --text-primary: #1A1A1A;
+    --text-secondary: #636363;
+    --tertiary-label: rgba(0,0,0,0.26);
+    --secondary-label: rgba(0,0,0,0.50);
+    --active-row: rgba(0,0,0,0.04);
+    --expanded-container: #FFFFFF;
+    --hover-session-row: rgba(0,0,0,0.05);
+    --hover-child-row: rgba(0,0,0,0.04);
+    --hover-project-header: rgba(0,0,0,0.06);
+    --shadow-card: rgba(0,0,0,0.15);
+    --shadow-active-row: rgba(0,0,0,0.1);
+    --status-gold: #FFC400;
+    --status-orange: #F97316;
+    --status-blue: #5B8DEF;
+    --status-green: #28CD41;
+    --status-red: #FF3B30;
+    --idle-dot: rgba(0,0,0,0.30);
+    --inactive-dot: rgba(0,0,0,0.12);
+    --tl-red: #FC3C55;
+    --tl-yellow: #ECCC00;
+    --tl-green: #2FD954;
+  }
+  html[data-theme="dark"], html:not([data-theme="light"]):not([data-theme="dark"]) {
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-theme="light"]) {
+      --chrome-bg: #242424;
+      --sidebar-surface: #262626; /* photo-derived: no dark photo exists (spec Gaps); approximated as chrome + small lift, consistent with light delta */
+      --canvas-bg: #2E2E2E;
+      --card-face: #1E1E1E; /* photo-derived: no explicit dark card-face hex in brief or spec; used as dark analog to light #F7F7F7 */
+      --text-primary: #F0EFED;
+      --text-secondary: #9A9A9A;
+      --tertiary-label: rgba(255,255,255,0.26);
+      --secondary-label: rgba(255,255,255,0.55);
+      --active-row: rgba(255,255,255,0.06);
+      --expanded-container: #292929;
+      --hover-session-row: rgba(255,255,255,0.05);
+      --hover-child-row: rgba(255,255,255,0.04);
+      --hover-project-header: rgba(255,255,255,0.06);
+    }
+  }
+  html[data-theme="dark"] {
+    --chrome-bg: #242424;
+    --sidebar-surface: #262626;
+    --canvas-bg: #2E2E2E;
+    --card-face: #1E1E1E;
+    --text-primary: #F0EFED;
+    --text-secondary: #9A9A9A;
+    --tertiary-label: rgba(255,255,255,0.26);
+    --secondary-label: rgba(255,255,255,0.55);
+    --active-row: rgba(255,255,255,0.06);
+    --expanded-container: #292929;
+    --hover-session-row: rgba(255,255,255,0.05);
+    --hover-child-row: rgba(255,255,255,0.04);
+    --hover-project-header: rgba(255,255,255,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #d8d3ce;
+    font-family: -apple-system, "SF Pro Text", "Inter", sans-serif;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 40px 0;
+  }
+
+  .window-wrap { position: relative; }
+
+  .window {
+    width: 900px;
+    height: 560px;
+    border-radius: 10px; /* NOT FOUND in source — native macOS chrome, photo-estimated ~10px, spec Gaps */
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    background: var(--canvas-bg);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .titlebar {
+    height: 54px; /* toolbarRowTopAnchorConstant*2, photo cross-check ~54px */
+    flex: 0 0 54px;
+    background: var(--chrome-bg);
+    position: relative;
+  }
+  .traffic-lights {
+    position: absolute;
+    left: 12px; /* centers x=27.5 -> 27.5-16=11.5 window origin offset from left edge, photo-measured */
+    top: 19px; /* centerline y=27, diameter 16 -> top = 27-16/2-... adjusted to 19 for 16px dot centered at y=27 */
+    display: flex;
+    gap: 8px; /* 24px center spacing - 16px diameter = 8px gap */
+  }
+  .tl-dot { width: 16px; height: 16px; border-radius: 50%; }
+  .tl-dot.red { background: var(--tl-red); }
+  .tl-dot.yellow { background: var(--tl-yellow); }
+  .tl-dot.green { background: var(--tl-green); }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+
+  .sidebar {
+    width: 232px; /* Framing-b: build at 232 to match photo pair, not the 220 fallback token */
+    flex: 0 0 232px;
+    background: var(--sidebar-surface);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .toolbar-row {
+    height: 54px;
+    flex: 0 0 54px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px; /* WorkspaceSidebarView.swift:172 */
+    justify-content: flex-end;
+  }
+  .toolbar-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px; /* WorkspaceSidebarView.swift:513-521 */
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    background: none;
+    border: none;
+    cursor: default;
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+  .toolbar-btn svg { width: 10px; height: 10px; }
+  .toolbar-btn:hover { color: var(--text-primary); background: var(--hover-project-header); }
+
+  .sidebar-view { flex: 1; overflow: hidden; padding: 4px 8px; display: flex; flex-direction: column; } /* list padding: WorkspaceSidebarView.swift:82-83 */
+  .sidebar-view[hidden] { display: none; }
+
+  /* --- Top-level group header (Pinned) --- */
+  .group-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 24px;
+    margin-bottom: 2px; /* photo-derived: closes the 2px gap between header block and first project row (84 - (54+4+24) = 2) */
+    padding: 4px 12px 4px 8px; /* WorkspaceSidebarView.swift:436-445 */
+    color: var(--text-secondary);
+  }
+  .group-header svg.icon { width: 9px; height: 9px; fill: var(--tertiary-label); }
+  .group-header .label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+
+  /* --- Project rows (collapsed / expanded), pitch = 32 row + 4 gap = 36 --- */
+  .project-list { display: flex; flex-direction: column; }
+  .project-block { margin-bottom: 4px; }
+  .project-header {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px 0 8px; /* ProjectDisclosureRow.swift:346-347 */
+    gap: 10px; /* ProjectDisclosureRow.swift:305 */
+    border-radius: 6px;
+    cursor: default;
+  }
+  .project-header:hover { background: var(--hover-project-header); }
+  .ghost-col { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex: 0 0 16px; }
+  .ghost-col svg { fill: currentColor; }
+  .project-header .ghost-col svg { width: 12px; height: 12px; }
+  .project-name {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.13px;
+    color: var(--text-primary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project-add {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    flex: 0 0 24px;
+  }
+  .project-add svg { width: 10px; height: 10px; fill: var(--text-secondary); }
+
+  .project-children {
+    background: var(--expanded-container);
+    border-radius: 6px;
+    padding: 2px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px; /* ProjectDisclosureRow.swift:113 VStack(spacing:2) */
+    margin-top: 2px;
+  }
+  .session-row {
+    height: 28px; /* SessionDetailView.swift:75 */
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px 0 28px; /* 8pt + 20pt indent under project, SessionDetailView.swift:74 / ProjectDisclosureRow.swift:176 */
+    border-radius: 6px;
+    position: relative;
+  }
+  .session-row:hover { background: var(--hover-child-row); }
+  .session-row.is-active {
+    background: var(--active-row);
+    box-shadow: 0 1px 2px var(--shadow-active-row); /* SessionDetailView.swift:80-83 */
+  }
+  .session-row .name {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .session-row.state-processing .name { font-weight: 400; }
+  .session-row.state-waiting .name { font-weight: 500; }
+  .session-row .ghost-col { width: 16px; height: 16px; flex: 0 0 16px; }
+  .session-row .ghost-col svg { width: 12px; height: 12px; }
+
+  .new-session-row {
+    display: flex;
+    align-items: center;
+    gap: 6px; /* ProjectDisclosureRow.swift:436-443 */
+    padding: 4px 8px 4px 20px; /* ProjectDisclosureRow.swift:448-450 */
+    color: var(--tertiary-label);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .new-session-row svg { width: 10px; height: 10px; fill: currentColor; }
+
+  /* --- Sessions tab --- */
+  .bucket-header {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 8px 12px 4px 8px; /* RecentsListView.swift:557-569 */
+    color: var(--text-secondary);
+    cursor: default;
+  }
+  .bucket-header .chev-col { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex: 0 0 16px; }
+  .bucket-header .chev-col svg { width: 8px; height: 8px; fill: var(--text-secondary); transition: transform 0.2s ease-in-out; }
+  .bucket-header.collapsed .chev-col svg { transform: rotate(-90deg); }
+  .bucket-header .label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+  .bucket-body { display: flex; flex-direction: column; }
+  .bucket-body.collapsed { display: none; }
+
+  .recents-row {
+    height: 36px; /* RecentsRowView.swift:104 */
+    display: flex;
+    align-items: center;
+    gap: 10px; /* RecentsRowView.swift:51 */
+    padding: 0 10px 0 8px; /* RecentsRowView.swift:102-103 */
+    border-radius: 6px; /* RecentsRowView.swift:134 */
+  }
+  .recents-row:hover { background: var(--hover-session-row); }
+  .recents-row.is-active { background: var(--active-row); }
+  .recents-row .ghost-col { width: 16px; height: 16px; flex: 0 0 16px; display: flex; align-items: center; justify-content: center; }
+  .recents-row .ghost-col svg { width: 14px; height: 14px; }
+  .recents-row .text-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; } /* VStack(spacing:1) RecentsRowView.swift:59 */
+  .recents-row .name { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recents-row .subline { font-size: 10px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recents-row .timestamp { font-size: 10px; color: var(--text-secondary); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+
+  /* --- Ghost status color classes --- */
+  .gs-idle { color: var(--text-primary); }
+  .gs-idle-muted { color: var(--tertiary-label); }
+  .gs-idle-secondary { color: var(--secondary-label); }
+  .gs-waiting { color: var(--status-blue); }
+  .gs-processing { color: var(--status-green); }
+  .gs-needs-decision { color: var(--status-gold); }
+  .gs-long-running { color: var(--status-orange); }
+  .gs-error { color: var(--status-red); }
+  .gs-inactive { color: var(--tertiary-label); }
+
+  /* --- Canvas / terminal card --- */
+  .canvas { flex: 1; background: var(--canvas-bg); padding: 8px; display: flex; min-width: 0; } /* terminalInset: 8 all sides */
+  .terminal-card {
+    flex: 1;
+    background: var(--card-face);
+    border-radius: 12px; /* .continuous 12pt */
+    box-shadow: 0 -2px 8px var(--shadow-card); /* WorkspaceLayout.swift:70-79: radius 8 offset (0,-2) — offset direction as cited, not re-derived */
+    padding: 20px 24px;
+    font-family: "SF Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow: hidden;
+  }
+  .terminal-card .prompt-line { white-space: pre-wrap; line-height: 1.5; }
+  .terminal-card .muted { color: var(--text-secondary); }
+
+  /* --- Reduced-motion-gated animations --- */
+  @media (prefers-reduced-motion: no-preference) {
+    .gs-processing.animated { animation: ghostBounce 1.2s ease-in-out infinite; } /* SessionDetailView.swift:100-107 */
+    .gs-waiting.animated { animation: ghostPulseWaiting 2.0s ease-in-out infinite; } /* SessionDetailView.swift:117-128 */
+    .gs-needs-decision.animated { animation: ghostPulseAttention 1.0s ease-in-out infinite; } /* SessionDetailView.swift:117-131 */
+    .project-children { animation: none; }
+    .bucket-body { transition: none; }
+  }
+  @keyframes ghostBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+  @keyframes ghostPulseWaiting {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  @keyframes ghostPulseAttention {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  /* --- Review control (outside the window replica) --- */
+  .review-control {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    display: flex;
+    gap: 8px;
+    background: rgba(0,0,0,0.75);
+    padding: 8px;
+    border-radius: 8px;
+    font-family: -apple-system, sans-serif;
+    z-index: 10;
+  }
+  .review-control button {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: none;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    cursor: pointer;
+  }
+  .review-control button:hover { background: rgba(255,255,255,0.25); }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+<symbol id="ghost-blinky" viewBox="0 0 12 12"><rect x="3" y="0" width="1" height="1"/><rect x="4" y="0" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="6" y="0" width="1" height="1"/><rect x="7" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="9" y="1" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="9" y="2" width="1" height="1"/><rect x="10" y="2" width="1" height="1"/><rect x="1" y="3" width="1" height="1"/><rect x="2" y="3" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="6" y="3" width="1" height="1"/><rect x="9" y="3" width="1" height="1"/><rect x="10" y="3" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="2" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/><rect x="9" y="4" width="1" height="1"/><rect x="10" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="1" y="5" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="4" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/><rect x="8" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="5" width="1" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="4" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="9" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="0" y="7" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="3" y="7" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="9" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/><rect x="0" y="8" width="1" height="1"/><rect x="1" y="8" width="1" height="1"/><rect x="2" y="8" width="1" height="1"/><rect x="3" y="8" width="1" height="1"/><rect x="4" y="8" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="6" y="8" width="1" height="1"/><rect x="7" y="8" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="11" y="8" width="1" height="1"/><rect x="0" y="9" width="1" height="1"/><rect x="1" y="9" width="1" height="1"/><rect x="2" y="9" width="1" height="1"/><rect x="3" y="9" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="5" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="7" y="9" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/><rect x="11" y="9" width="1" height="1"/><rect x="0" y="10" width="1" height="1"/><rect x="1" y="10" width="1" height="1"/><rect x="3" y="10" width="1" height="1"/><rect x="4" y="10" width="1" height="1"/><rect x="7" y="10" width="1" height="1"/><rect x="8" y="10" width="1" height="1"/><rect x="10" y="10" width="1" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="0" y="11" width="1" height="1"/><rect x="4" y="11" width="1" height="1"/><rect x="7" y="11" width="1" height="1"/><rect x="11" y="11" width="1" height="1"/></symbol>
+<symbol id="ghost-pinky" viewBox="0 0 12 12"><rect x="4" y="0" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="6" y="0" width="1" height="1"/><rect x="7" y="0" width="1" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="9" y="1" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="9" y="2" width="1" height="1"/><rect x="10" y="2" width="1" height="1"/><rect x="1" y="3" width="1" height="1"/><rect x="4" y="3" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="6" y="3" width="1" height="1"/><rect x="7" y="3" width="1" height="1"/><rect x="10" y="3" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/><rect x="7" y="4" width="1" height="1"/><rect x="10" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="1" y="5" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="4" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/><rect x="8" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="5" width="1" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="4" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="9" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="0" y="7" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="3" y="7" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="9" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/><rect x="0" y="8" width="1" height="1"/><rect x="1" y="8" width="1" height="1"/><rect x="2" y="8" width="1" height="1"/><rect x="3" y="8" width="1" height="1"/><rect x="4" y="8" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="6" y="8" width="1" height="1"/><rect x="7" y="8" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="11" y="8" width="1" height="1"/><rect x="0" y="9" width="1" height="1"/><rect x="1" y="9" width="1" height="1"/><rect x="2" y="9" width="1" height="1"/><rect x="3" y="9" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="5" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="7" y="9" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/><rect x="11" y="9" width="1" height="1"/><rect x="0" y="10" width="1" height="1"/><rect x="1" y="10" width="1" height="1"/><rect x="2" y="10" width="1" height="1"/><rect x="5" y="10" width="1" height="1"/><rect x="6" y="10" width="1" height="1"/><rect x="9" y="10" width="1" height="1"/><rect x="10" y="10" width="1" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="0" y="11" width="1" height="1"/><rect x="11" y="11" width="1" height="1"/></symbol>
+<symbol id="ghost-inky" viewBox="0 0 12 12"><rect x="3" y="0" width="1" height="1"/><rect x="4" y="0" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="6" y="0" width="1" height="1"/><rect x="7" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="9" y="1" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="9" y="2" width="1" height="1"/><rect x="10" y="2" width="1" height="1"/><rect x="1" y="3" width="1" height="1"/><rect x="2" y="3" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="8" y="3" width="1" height="1"/><rect x="9" y="3" width="1" height="1"/><rect x="10" y="3" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="2" y="4" width="1" height="1"/><rect x="3" y="4" width="1" height="1"/><rect x="8" y="4" width="1" height="1"/><rect x="9" y="4" width="1" height="1"/><rect x="10" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="1" y="5" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="4" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/><rect x="8" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="5" width="1" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="4" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="9" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="0" y="7" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="3" y="7" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="9" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/><rect x="0" y="8" width="1" height="1"/><rect x="1" y="8" width="1" height="1"/><rect x="2" y="8" width="1" height="1"/><rect x="3" y="8" width="1" height="1"/><rect x="4" y="8" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="6" y="8" width="1" height="1"/><rect x="7" y="8" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="11" y="8" width="1" height="1"/><rect x="0" y="9" width="1" height="1"/><rect x="1" y="9" width="1" height="1"/><rect x="2" y="9" width="1" height="1"/><rect x="3" y="9" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="5" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="7" y="9" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/><rect x="11" y="9" width="1" height="1"/><rect x="0" y="10" width="1" height="1"/><rect x="2" y="10" width="1" height="1"/><rect x="3" y="10" width="1" height="1"/><rect x="5" y="10" width="1" height="1"/><rect x="6" y="10" width="1" height="1"/><rect x="8" y="10" width="1" height="1"/><rect x="9" y="10" width="1" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="0" y="11" width="1" height="1"/><rect x="3" y="11" width="1" height="1"/><rect x="8" y="11" width="1" height="1"/><rect x="11" y="11" width="1" height="1"/></symbol>
+<symbol id="ghost-clyde" viewBox="0 0 12 12"><rect x="2" y="0" width="1" height="1"/><rect x="3" y="0" width="1" height="1"/><rect x="4" y="0" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="6" y="0" width="1" height="1"/><rect x="7" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/><rect x="9" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="9" y="1" width="1" height="1"/><rect x="10" y="1" width="1" height="1"/><rect x="0" y="2" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="9" y="2" width="1" height="1"/><rect x="10" y="2" width="1" height="1"/><rect x="11" y="2" width="1" height="1"/><rect x="0" y="3" width="1" height="1"/><rect x="1" y="3" width="1" height="1"/><rect x="4" y="3" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="6" y="3" width="1" height="1"/><rect x="7" y="3" width="1" height="1"/><rect x="10" y="3" width="1" height="1"/><rect x="11" y="3" width="1" height="1"/><rect x="0" y="4" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/><rect x="7" y="4" width="1" height="1"/><rect x="10" y="4" width="1" height="1"/><rect x="11" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="1" y="5" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="4" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/><rect x="8" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="5" width="1" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="4" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="9" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="0" y="7" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="3" y="7" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="9" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/><rect x="0" y="8" width="1" height="1"/><rect x="1" y="8" width="1" height="1"/><rect x="2" y="8" width="1" height="1"/><rect x="3" y="8" width="1" height="1"/><rect x="4" y="8" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="6" y="8" width="1" height="1"/><rect x="7" y="8" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="11" y="8" width="1" height="1"/><rect x="0" y="9" width="1" height="1"/><rect x="1" y="9" width="1" height="1"/><rect x="2" y="9" width="1" height="1"/><rect x="3" y="9" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="5" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="7" y="9" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/><rect x="11" y="9" width="1" height="1"/><rect x="0" y="10" width="1" height="1"/><rect x="1" y="10" width="1" height="1"/><rect x="2" y="10" width="1" height="1"/><rect x="4" y="10" width="1" height="1"/><rect x="5" y="10" width="1" height="1"/><rect x="6" y="10" width="1" height="1"/><rect x="7" y="10" width="1" height="1"/><rect x="9" y="10" width="1" height="1"/><rect x="10" y="10" width="1" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="0" y="11" width="1" height="1"/><rect x="5" y="11" width="1" height="1"/><rect x="6" y="11" width="1" height="1"/><rect x="11" y="11" width="1" height="1"/></symbol>
+<symbol id="ghost-specter" viewBox="0 0 12 12"><rect x="3" y="0" width="1" height="1"/><rect x="4" y="0" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="6" y="0" width="1" height="1"/><rect x="7" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="9" y="1" width="1" height="1"/><rect x="10" y="1" width="1" height="1"/><rect x="0" y="2" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="9" y="2" width="1" height="1"/><rect x="10" y="2" width="1" height="1"/><rect x="11" y="2" width="1" height="1"/><rect x="0" y="3" width="1" height="1"/><rect x="1" y="3" width="1" height="1"/><rect x="4" y="3" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="6" y="3" width="1" height="1"/><rect x="7" y="3" width="1" height="1"/><rect x="10" y="3" width="1" height="1"/><rect x="11" y="3" width="1" height="1"/><rect x="0" y="4" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/><rect x="7" y="4" width="1" height="1"/><rect x="11" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="1" y="5" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="4" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/><rect x="8" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="5" width="1" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="4" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="9" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="0" y="7" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="3" y="7" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="9" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/><rect x="0" y="8" width="1" height="1"/><rect x="1" y="8" width="1" height="1"/><rect x="2" y="8" width="1" height="1"/><rect x="3" y="8" width="1" height="1"/><rect x="4" y="8" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="6" y="8" width="1" height="1"/><rect x="7" y="8" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="11" y="8" width="1" height="1"/><rect x="0" y="9" width="1" height="1"/><rect x="1" y="9" width="1" height="1"/><rect x="2" y="9" width="1" height="1"/><rect x="3" y="9" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="5" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="7" y="9" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/><rect x="11" y="9" width="1" height="1"/><rect x="0" y="10" width="1" height="1"/><rect x="1" y="10" width="1" height="1"/><rect x="4" y="10" width="1" height="1"/><rect x="5" y="10" width="1" height="1"/><rect x="6" y="10" width="1" height="1"/><rect x="7" y="10" width="1" height="1"/><rect x="10" y="10" width="1" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="0" y="11" width="1" height="1"/><rect x="5" y="11" width="1" height="1"/><rect x="6" y="11" width="1" height="1"/><rect x="11" y="11" width="1" height="1"/></symbol>
+<symbol id="ghost-wisp" viewBox="0 0 12 12"><rect x="4" y="0" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="6" y="0" width="1" height="1"/><rect x="7" y="0" width="1" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="9" y="1" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="9" y="2" width="1" height="1"/><rect x="10" y="2" width="1" height="1"/><rect x="0" y="3" width="1" height="1"/><rect x="1" y="3" width="1" height="1"/><rect x="2" y="3" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="6" y="3" width="1" height="1"/><rect x="9" y="3" width="1" height="1"/><rect x="10" y="3" width="1" height="1"/><rect x="11" y="3" width="1" height="1"/><rect x="0" y="4" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="2" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/><rect x="9" y="4" width="1" height="1"/><rect x="10" y="4" width="1" height="1"/><rect x="11" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="1" y="5" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="4" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/><rect x="8" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="5" width="1" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="4" y="6" width="1" height="1"/><rect x="5" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/><rect x="7" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="9" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="0" y="7" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="3" y="7" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="9" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/><rect x="1" y="8" width="1" height="1"/><rect x="2" y="8" width="1" height="1"/><rect x="3" y="8" width="1" height="1"/><rect x="4" y="8" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="6" y="8" width="1" height="1"/><rect x="7" y="8" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="1" y="9" width="1" height="1"/><rect x="2" y="9" width="1" height="1"/><rect x="3" y="9" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="5" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="7" y="9" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/><rect x="2" y="10" width="1" height="1"/><rect x="3" y="10" width="1" height="1"/><rect x="5" y="10" width="1" height="1"/><rect x="6" y="10" width="1" height="1"/><rect x="8" y="10" width="1" height="1"/><rect x="9" y="10" width="1" height="1"/><rect x="3" y="11" width="1" height="1"/><rect x="8" y="11" width="1" height="1"/></symbol>
+<symbol id="ghost-phantom" viewBox="0 0 12 12"><rect x="2" y="0" width="1" height="1"/><rect x="3" y="0" width="1" height="1"/><rect x="4" y="0" width="1" height="1"/><rect x="5" y="0" width="1" height="1"/><rect x="6" y="0" width="1" height="1"/><rect x="7" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/><rect x="9" y="0" width="1" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="2" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="6" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/><rect x="8" y="1" width="1" height="1"/><rect x="9" y="1" width="1" height="1"/><rect x="10" y="1" width="1" height="1"/><rect x="0" y="2" width="1" height="1"/><rect x="1" y="2" width="1" height="1"/><rect x="2" y="2" width="1" height="1"/><rect x="3" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="5" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/><rect x="8" y="2" width="1" height="1"/><rect x="9" y="2" width="1" height="1"/><rect x="10" y="2" width="1" height="1"/><rect x="11" y="2" width="1" height="1"/><rect x="0" y="3" width="1" height="1"/><rect x="1" y="3" width="1" height="1"/><rect x="2" y="3" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="8" y="3" width="1" height="1"/><rect x="9" y="3" width="1" height="1"/><rect x="10" y="3" width="1" height="1"/><rect x="11" y="3" width="1" height="1"/><rect x="0" y="4" width="1" height="1"/><rect x="1" y="4" width="1" height="1"/><rect x="2" y="4" width="1" height="1"/><rect x="5" y="4" width="1" height="1"/><rect x="8" y="4" width="1" height="1"/><rect x="9" y="4" width="1" height="1"/><rect x="10" y="4" width="1" height="1"/><rect x="11" y="4" width="1" height="1"/><rect x="0" y="5" width="1" height="1"/><rect x="1" y="5" width="1" height="1"/><rect x="2" y="5" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="4" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="6" y="5" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/><rect x="8" y="5" width="1" height="1"/><rect x="9" y="5" width="1" height="1"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="5" width="1" height="1"/><rect x="0" y="6" width="1" height="1"/><rect x="1" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="3" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="9" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="0" y="7" width="1" height="1"/><rect x="1" y="7" width="1" height="1"/><rect x="2" y="7" width="1" height="1"/><rect x="3" y="7" width="1" height="1"/><rect x="4" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="6" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/><rect x="8" y="7" width="1" height="1"/><rect x="9" y="7" width="1" height="1"/><rect x="10" y="7" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/><rect x="0" y="8" width="1" height="1"/><rect x="1" y="8" width="1" height="1"/><rect x="2" y="8" width="1" height="1"/><rect x="3" y="8" width="1" height="1"/><rect x="4" y="8" width="1" height="1"/><rect x="5" y="8" width="1" height="1"/><rect x="6" y="8" width="1" height="1"/><rect x="7" y="8" width="1" height="1"/><rect x="8" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="11" y="8" width="1" height="1"/><rect x="0" y="9" width="1" height="1"/><rect x="1" y="9" width="1" height="1"/><rect x="2" y="9" width="1" height="1"/><rect x="3" y="9" width="1" height="1"/><rect x="4" y="9" width="1" height="1"/><rect x="5" y="9" width="1" height="1"/><rect x="6" y="9" width="1" height="1"/><rect x="7" y="9" width="1" height="1"/><rect x="8" y="9" width="1" height="1"/><rect x="9" y="9" width="1" height="1"/><rect x="10" y="9" width="1" height="1"/><rect x="11" y="9" width="1" height="1"/><rect x="0" y="10" width="1" height="1"/><rect x="2" y="10" width="1" height="1"/><rect x="3" y="10" width="1" height="1"/><rect x="4" y="10" width="1" height="1"/><rect x="7" y="10" width="1" height="1"/><rect x="8" y="10" width="1" height="1"/><rect x="9" y="10" width="1" height="1"/><rect x="11" y="10" width="1" height="1"/><rect x="0" y="11" width="1" height="1"/><rect x="3" y="11" width="1" height="1"/><rect x="8" y="11" width="1" height="1"/><rect x="11" y="11" width="1" height="1"/></symbol>
+<symbol id="chevron" viewBox="0 0 7 5"><rect x="0" y="0" width="1" height="1"/><rect x="6" y="0" width="1" height="1"/><rect x="0" y="1" width="2" height="1"/><rect x="5" y="1" width="2" height="1"/><rect x="1" y="2" width="2" height="1"/><rect x="4" y="2" width="2" height="1"/><rect x="2" y="3" width="3" height="1"/><rect x="3" y="4" width="1" height="1"/></symbol>
+  </defs>
+</svg>
+
+<div class="window-wrap">
+  <div class="window">
+    <div class="titlebar">
+      <div class="traffic-lights">
+        <div class="tl-dot red"></div>
+        <div class="tl-dot yellow"></div>
+        <div class="tl-dot green"></div>
+      </div>
+    </div>
+    <div class="body">
+      <aside class="sidebar">
+        <div class="toolbar-row">
+          <button class="toolbar-btn" id="toolbar-btn">
+            <svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg>
+            <span id="toolbar-label">New Project</span>
+          </button>
+        </div>
+
+        <!-- ============ PROJECTS TAB (mirrors app-sessions.jpg exactly) ============ -->
+        <div class="sidebar-view" id="view-projects">
+          <div class="project-list">
+            <div class="group-header">
+              <svg class="icon" viewBox="0 0 9 9" fill="currentColor"><rect x="3" y="0" width="3" height="6"/><rect x="1" y="6" width="7" height="1"/><rect x="4" y="7" width="1" height="2"/></svg>
+              <span class="label">Pinned</span>
+            </div>
+
+            <!-- atlas-api: idle, collapsed, no children (photo: dark/primary ghost) -->
+            <div class="project-block">
+              <div class="project-header">
+                <span class="ghost-col gs-idle"><svg><use href="#ghost-blinky"/></svg></span>
+                <span class="project-name">atlas-api</span>
+              </div>
+            </div>
+
+            <!-- fieldwork: waiting (photo terracotta -> spec-mandated blue), expanded, 1 child -->
+            <div class="project-block">
+              <div class="project-header">
+                <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-pinky"/></svg></span>
+                <span class="project-name">fieldwork</span>
+                <span class="project-add"><svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg></span>
+              </div>
+              <div class="project-children">
+                <div class="session-row state-waiting">
+                  <span class="name">Claude Code 1</span>
+                  <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-wisp"/></svg></span>
+                </div>
+                <div class="new-session-row">
+                  <svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg>
+                  <span>New Session</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- pendulum: idle, collapsed -->
+            <div class="project-block">
+              <div class="project-header">
+                <span class="ghost-col gs-idle"><svg><use href="#ghost-inky"/></svg></span>
+                <span class="project-name">pendulum</span>
+              </div>
+            </div>
+
+            <!-- silo: idle, collapsed -->
+            <div class="project-block">
+              <div class="project-header">
+                <span class="ghost-col gs-idle"><svg><use href="#ghost-clyde"/></svg></span>
+                <span class="project-name">silo</span>
+              </div>
+            </div>
+
+            <!-- switchboard: waiting (photo terracotta -> blue), expanded, 4 children (2 waiting, 2 processing per photo pixel-sample) -->
+            <div class="project-block">
+              <div class="project-header">
+                <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-specter"/></svg></span>
+                <span class="project-name">switchboard</span>
+                <span class="project-add"><svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg></span>
+              </div>
+              <div class="project-children">
+                <div class="session-row state-waiting">
+                  <span class="name">Claude Code 1</span>
+                  <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-phantom"/></svg></span>
+                </div>
+                <div class="session-row state-waiting">
+                  <span class="name">Claude Code 2</span>
+                  <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-clyde"/></svg></span>
+                </div>
+                <div class="session-row state-processing">
+                  <span class="name">Claude Code 3</span>
+                  <span class="ghost-col gs-processing animated"><svg><use href="#ghost-inky"/></svg></span>
+                </div>
+                <div class="session-row state-processing is-active">
+                  <span class="name">Claude Code 4</span>
+                  <span class="ghost-col gs-processing animated"><svg><use href="#ghost-blinky"/></svg></span>
+                </div>
+                <div class="new-session-row">
+                  <svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg>
+                  <span>New Session</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- trove: idle, collapsed -->
+            <div class="project-block">
+              <div class="project-header">
+                <span class="ghost-col gs-idle"><svg><use href="#ghost-wisp"/></svg></span>
+                <span class="project-name">trove</span>
+              </div>
+            </div>
+
+            <!-- wren: idle, collapsed -->
+            <div class="project-block">
+              <div class="project-header">
+                <span class="ghost-col gs-idle"><svg><use href="#ghost-phantom"/></svg></span>
+                <span class="project-name">wren</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ SESSIONS TAB (spec §3, flat buckets, no reference photo) ============ -->
+        <div class="sidebar-view" id="view-sessions" hidden>
+          <!-- ACTIVE: the 5 sessions visible in app-sessions.jpg, all currently running/awaiting response.
+               INACTIVE/ARCHIVE have no photo source (spec §8: no Sessions-tab photo exists) — rendered
+               structurally correct with count 0 rather than inventing session names not in the photos. -->
+          <div class="bucket-header" id="bucket-active-header">
+            <span class="chev-col"><svg><use href="#chevron"/></svg></span>
+            <span class="label">Active 5</span>
+          </div>
+          <div class="bucket-body" id="bucket-active-body">
+            <div class="recents-row is-active">
+              <span class="ghost-col gs-processing animated"><svg><use href="#ghost-blinky"/></svg></span>
+              <span class="text-col">
+                <span class="name">Claude Code 4</span>
+                <span class="subline">switchboard</span>
+              </span>
+              <span class="timestamp">now</span>
+            </div>
+            <div class="recents-row">
+              <span class="ghost-col gs-processing animated"><svg><use href="#ghost-inky"/></svg></span>
+              <span class="text-col">
+                <span class="name">Claude Code 3</span>
+                <span class="subline">switchboard</span>
+              </span>
+              <span class="timestamp">1m</span>
+            </div>
+            <div class="recents-row">
+              <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-clyde"/></svg></span>
+              <span class="text-col">
+                <span class="name">Claude Code 2</span>
+                <span class="subline">switchboard</span>
+              </span>
+              <span class="timestamp">3m</span>
+            </div>
+            <div class="recents-row">
+              <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-phantom"/></svg></span>
+              <span class="text-col">
+                <span class="name">Claude Code 1</span>
+                <span class="subline">switchboard</span>
+              </span>
+              <span class="timestamp">4m</span>
+            </div>
+            <div class="recents-row">
+              <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-wisp"/></svg></span>
+              <span class="text-col">
+                <span class="name">Claude Code 1</span>
+                <span class="subline">fieldwork</span>
+              </span>
+              <span class="timestamp">6m</span>
+            </div>
+          </div>
+
+          <div class="bucket-header" id="bucket-inactive-header">
+            <span class="chev-col"><svg><use href="#chevron"/></svg></span>
+            <span class="label">Inactive 0</span>
+          </div>
+          <div class="bucket-body" id="bucket-inactive-body"></div>
+
+          <div class="bucket-header collapsed" id="bucket-archive-header">
+            <span class="chev-col"><svg><use href="#chevron"/></svg></span>
+            <span class="label">Archive 0</span>
+          </div>
+          <div class="bucket-body collapsed" id="bucket-archive-body"></div>
+        </div>
+      </aside>
+
+      <main class="canvas">
+        <div class="terminal-card">
+          <div class="prompt-line">$ <span class="muted">~/switchboard</span></div>
+          <div class="prompt-line">&gt; implement HMAC signature verification for inbound webhooks</div>
+          <div class="prompt-line muted">&hellip;</div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+
+<div class="review-control">
+  <button id="theme-toggle" type="button">Dark</button>
+  <button id="view-toggle" type="button">Sessions</button>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var themeBtn = document.getElementById('theme-toggle');
+  var viewBtn = document.getElementById('view-toggle');
+  var viewProjects = document.getElementById('view-projects');
+  var viewSessions = document.getElementById('view-sessions');
+  var toolbarLabel = document.getElementById('toolbar-label');
+
+  themeBtn.addEventListener('click', function () {
+    var isDark = root.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      root.setAttribute('data-theme', 'light');
+      themeBtn.textContent = 'Dark';
+    } else {
+      root.setAttribute('data-theme', 'dark');
+      themeBtn.textContent = 'Light';
+    }
+  });
+
+  viewBtn.addEventListener('click', function () {
+    var onProjects = !viewSessions.hasAttribute('hidden') ? false : true;
+    if (onProjects) {
+      viewProjects.setAttribute('hidden', '');
+      viewSessions.removeAttribute('hidden');
+      viewBtn.textContent = 'Projects';
+      toolbarLabel.textContent = 'New Session';
+    } else {
+      viewSessions.setAttribute('hidden', '');
+      viewProjects.removeAttribute('hidden');
+      viewBtn.textContent = 'Sessions';
+      toolbarLabel.textContent = 'New Project';
+    }
+  });
+
+  ['bucket-active', 'bucket-inactive', 'bucket-archive'].forEach(function (id) {
+    var header = document.getElementById(id + '-header');
+    var body = document.getElementById(id + '-body');
+    header.addEventListener('click', function () {
+      header.classList.toggle('collapsed');
+      body.classList.toggle('collapsed');
+    });
+  });
+})();
+</script>
+</body>
+</html>
