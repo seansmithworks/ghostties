@@ -234,7 +234,7 @@
       "x": 1600,
       "y": -140,
       "w": 660,
-      "text": "B4 - SCROLL-ZOOM, built from your note\n\nFour camera stops: the whole window, the sidebar, one status dot, then gt list. It pulls back out at the end so the detail has somewhere to land.\n\nThe recreation is DOM and real text rather than a bitmap, so it stays sharp at 4x - that is the whole reason to rebuild rather than crop a screenshot. Same drift risk as the replica: re-measure it against the app each release.\n\nDials above the board: stop (auto, or pin any one) and dwell. Pin a stop and drag dwell to feel the pacing.\n\nStop 02 is the argument for the whole idea. The status dot is seven pixels in the real app and it is the entire product; the only way to make that land is to show it at seven hundred."
+      "text": "B4 - SCROLL-ZOOM, built from your note\n\nFour camera stops: the whole window, the sidebar, the ghost mark, then gt list. It pulls back out at the end so the detail has somewhere to land.\n\nThe recreation is DOM and real text rather than a bitmap, so it stays sharp at 4x - that is the whole reason to rebuild rather than crop a screenshot. Same drift risk as the replica: re-measure it against the app each release.\n\nDials above the board: stop (auto, or pin any one) and dwell. Pin a stop and drag dwell to feel the pacing.\n\nStop 02 is the argument for the whole idea. There is no dot bolted onto the mascot - the status mark IS the ghost glyph, tinted, rendered at 14 point in the real app; the only way to make that land is to magnify it and show the mascot and the status indicator turning out to be the same object."
     },
     {
       "id": "n-decrypt",
