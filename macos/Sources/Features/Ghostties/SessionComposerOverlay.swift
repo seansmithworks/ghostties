@@ -5,13 +5,13 @@ import SwiftUI
 /// button (Phase 3 of session-creation-unified — replaces the 28-project
 /// toolbar cascade, D7). Lifts `SessionComposerPalette` above the terminal by
 /// shadow alone — no dimming (Spotlight/Raycast treatment, Sean's call,
-/// `fix/composer-shadow-no-scrim`, supersedes the earlier locked "dims the
+/// (shadow-only elevation, PR #132), supersedes the earlier locked "dims the
 /// terminal" decision). Ghostties has only two shadow levels and no modal
 /// vocabulary otherwise, so the card carries its own elevated shadow
 /// (`SessionComposerPalette`, `.centered` presentation, DESIGN.md §6) to read
 /// as "on top of" the terminal instead.
 ///
-/// This view still hosts an invisible full-bleed layer beneath the card:
+/// This view still hosts an invisible dismiss layer beneath the card:
 /// click-outside-to-dismiss and the a11y dismiss affordance both depend on
 /// having something to hit-test against, so the layer survives as
 /// `Color.clear` with an explicit `.contentShape` even though it no longer
@@ -30,7 +30,7 @@ struct SessionComposerOverlay: View {
     let request: SessionComposerRequest
 
     /// `titlebarBandHeight` is the only field this model still carries
-    /// (`fix/composer-shadow-no-scrim` removed `horizontalOffset` — the
+    /// (PR #132 removed `horizontalOffset` — the
     /// composer now centers on the whole window, not the terminal card, so
     /// there's no sidebar-width offset to apply). Still an `@ObservedObject`
     /// since `WorkspaceViewContainer` writes the fullscreen-derived titlebar
@@ -57,8 +57,9 @@ struct SessionComposerOverlay: View {
             // couldn't be dragged by its titlebar while the composer was
             // open, and a click up there would dismiss it instead.
             // `Color.clear` no longer dims the terminal (shadow-only
-            // treatment), but it still needs the explicit `.contentShape`
-            // below — an unstyled `Color.clear` doesn't hit-test on its own.
+            // treatment), but it still relies on the explicit
+            // `.contentShape(Rectangle())` below to act as a tap target —
+            // do not remove it.
             VStack(spacing: 0) {
                 Color.clear
                     .frame(height: centeringModel.titlebarBandHeight)

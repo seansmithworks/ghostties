@@ -184,7 +184,19 @@ struct SessionComposerPalette: View {
             title: project.name,
             subtitle: nil,
             leadingIcon: "folder",
-            action: { composerStore.selectedProjectId = project.id }
+            // Clearing the query is load-bearing, not tidying: leaving a
+            // project-scoping query like "ghos" in place after a project
+            // row commits filters the newly-scoped project's OWN templates
+            // against that same text, which rarely matches anything —
+            // Return would silently do nothing (D1's dead end, shadow-only
+            // elevation PR #132 review). Clearing it fires
+            // `.onChange(of: query)` -> `reselectBestMatch()`, landing on
+            // the new scope's default template so Return starts a session
+            // immediately (Raycast/Alfred drill-in semantics).
+            action: {
+                composerStore.selectedProjectId = project.id
+                composerStore.searchText = ""
+            }
         )
     }
 
@@ -347,7 +359,7 @@ struct SessionComposerPalette: View {
                 .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
         )
         // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3 review
-        // fix, retuned in `fix/composer-shadow-no-scrim` now that the shadow
+        // fix, retuned in PR #132 (shadow-only elevation) now that the shadow
         // carries the "on top of" read alone, with no scrim behind it).
         // `.anchored` relies on the native NSPopover chrome/shadow instead;
         // adding a second shadow there would double up.

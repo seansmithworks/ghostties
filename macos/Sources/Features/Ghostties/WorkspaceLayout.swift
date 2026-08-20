@@ -36,7 +36,7 @@ enum WorkspaceLayout {
     /// free of the sidebar column instead of popping out of it.
     static let composerOverlayWidth: CGFloat = 360
 
-    /// Shadow opacity for the centered composer card (`fix/composer-shadow-no-scrim`
+    /// Shadow opacity for the centered composer card (shadow-only elevation, PR #132
     /// — with the scrim removed, the card's own shadow is the only thing
     /// separating it from the terminal, so it needs to read heavier than the
     /// old scrim-backed 0.20).

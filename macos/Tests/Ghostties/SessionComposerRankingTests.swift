@@ -127,6 +127,16 @@ final class SessionComposerRankingTests: XCTestCase {
         XCTAssertEqual(SessionComposerRanking.bestMatchIndex(in: items, query: "", title: { $0 }), 0)
     }
 
+    func testBestMatchIndexReturnsZeroForEmptyItems() {
+        let items: [String] = []
+        XCTAssertEqual(SessionComposerRanking.bestMatchIndex(in: items, query: "ghos", title: { $0 }), 0)
+    }
+
+    func testBestMatchIndexReturnsZeroWhenNothingMatches() {
+        let items = ["Claude Code", "Shell"]
+        XCTAssertEqual(SessionComposerRanking.bestMatchIndex(in: items, query: "zzz", title: { $0 }), 0)
+    }
+
     // MARK: - SessionComposerProjectOrdering — the three-tier gate
 
     func testOrderPutsCascadePickFirst() {

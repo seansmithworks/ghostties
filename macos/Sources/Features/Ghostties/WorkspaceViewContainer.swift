@@ -24,7 +24,7 @@ final class SidebarWidthModel: ObservableObject {
 }
 
 /// Observable model backing the composer overlay's titlebar hit-test band.
-/// `fix/composer-shadow-no-scrim` removed `horizontalOffset` — the composer
+/// PR #132 removed `horizontalOffset` — the composer
 /// now centers on the whole window instead of the terminal card, so there is
 /// no sidebar-width offset left to track.
 @MainActor
@@ -189,8 +189,8 @@ class WorkspaceViewContainer: NSView {
     /// `SessionComposerStore.shared.isOpen` is true — see
     /// `presentComposerOverlay(projectBinding:)` and the `isOpen` subscription
     /// in `setup()`. Pinned to the container's full bounds so
-    /// `SessionComposerOverlay`'s scrim can dim the whole terminal; not
-    /// touched by `layout()`.
+    /// `SessionComposerOverlay`'s dismiss layer can span the whole terminal;
+    /// not touched by `layout()`.
     private lazy var composerOverlayHostingView: TransparentHostingView<AnyView> = {
         let view = TransparentHostingView<AnyView>(rootView: AnyView(EmptyView()))
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -1464,8 +1464,8 @@ class WorkspaceViewContainer: NSView {
         // pass so titlebarRowTopAnchorConstant re-reads the new close-button frame.
         needsLayout = true
         // F7 follow-up (Phase 3 review round 2): no titlebar to protect in
-        // fullscreen, so the composer overlay's scrim shouldn't leave that
-        // band undimmed there.
+        // fullscreen, so the composer overlay's dismiss layer shouldn't leave
+        // that band unclaimed there.
         let isFullScreen = window?.styleMask.contains(.fullScreen) ?? false
         composerCenteringModel.titlebarBandHeight = isFullScreen ? 0 : WorkspaceLayout.titlebarSpacerHeight
     }
@@ -1590,8 +1590,8 @@ class WorkspaceViewContainer: NSView {
     private var composerOverlayTransitionGeneration = 0
 
     /// Adds the composer overlay hosting view as a subview, pinned to the
-    /// container's full bounds — not `layout()` — so its scrim can dim the
-    /// whole terminal. Fades in (F8, Phase 3 review) to match every other
+    /// container's full bounds — not `layout()` — so its dismiss layer can
+    /// span the whole terminal. Fades in (F8, Phase 3 review) to match every other
     /// appear-over-content transition in this container (`transitionTo(_:)`'s
     /// 0.2s convention). If the view is still attached (e.g. mid a dismiss
     /// fade-out that this call is interrupting), just animates it back to
