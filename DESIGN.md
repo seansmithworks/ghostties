@@ -8,7 +8,7 @@ colors:
   canvasBackground: "#FAF7F3"
   textPrimary: "#1a1a1a"
   textSecondary: "#636363"
-  accent: "#C97350"
+  accent: "#5B8DEF"
   border: "#e5e5e3"
   destructive: "#dc3545"
   success: "#2d7d46"
@@ -58,14 +58,14 @@ components:
 
 ## 1. Visual Theme & Atmosphere
 
-Ghostties is a workspace tool, not a content surface. The sidebar UI is dense, informational, and intentionally quiet — it defers to the terminal content it frames. Warmth comes from the palette (terracotta accent, warm chrome/canvas tones) and the 24-ghost character set, not from decorative elements or copy.
+Ghostties is a workspace tool, not a content surface. The sidebar UI is dense, informational, and intentionally quiet — it defers to the terminal content it frames. Warmth comes from the palette (blue accent, warm chrome/canvas tones) and the 24-ghost character set, not from decorative elements or copy.
 
 **Key Characteristics:**
 
 - Full dark and light mode support — both are primary targets
 - SF Pro Text for all UI; SF Mono for terminal content and design doc hex values
 - Warm two-layer background model (chrome + canvas)
-- Terracotta (`#C97350`) as the only saturated accent — reserved for `waiting` state
+- Blue (`#5B8DEF`) as the only saturated accent — reserved for `waiting` state
 - 12pt continuous corner radius on the terminal card
 - Shadows only on the terminal card — nowhere else
 - No gradients, no decorative borders, no visual noise
@@ -94,12 +94,12 @@ The sidebar itself is `.background(.clear)` in both modes — chrome reads throu
 | **Canvas background** | `#FAF7F3` | `#2D2D2D` | `canvasBackgroundLight/Dark` |
 | **Text Primary**      | `#1a1a1a` | `#f0efed` | `textPrimary`                |
 | **Text Secondary**    | `#636363` | `#9a9a9a` | `textSecondary`              |
-| **Accent (waiting)**  | `#C97350` | `#C97350` | `waitingTerracotta`          |
+| **Accent (waiting)**  | `#5B8DEF` | `#5B8DEF` | `statusYourTurnBlue`         |
 | **Border**            | `#e5e5e3` | `#2a2a2a` | `border`                     |
 | **Destructive**       | `#dc3545` | `#dc3545` | `destructive`                |
 | **Success**           | `#2d7d46` | `#2d7d46` | `success`                    |
 
-**Accent rule:** Terracotta is reserved exclusively for the `waiting` activity indicator state. Do not use it for hover, selection, or other indicator states.
+**Accent rule:** Blue (`#5B8DEF`) is reserved exclusively for the `waiting` activity indicator state. Do not use it for hover, selection, or other indicator states.
 
 ### Implementation
 
@@ -150,7 +150,7 @@ Use `cardBackgroundLight/Dark`, `expandedContainerLight/Dark`, `activeRowLight/D
 
 | State       | Color                         |
 | ----------- | ----------------------------- |
-| Waiting     | `waitingTerracotta` `#C97350` |
+| Waiting     | `statusYourTurnBlue` `#5B8DEF` |
 | Running     | — (system)                    |
 | Idle / done | — (muted)                     |
 
@@ -200,7 +200,7 @@ Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's sq
 - Use chrome/canvas tokens for background layers — never bind to terminal theme
 - Set `shadowPath` explicitly in `layout()` before the card renders
 - Keep sidebar UI at 11pt SF Pro Text — resist upsizing for "readability"
-- Reserve terracotta for the `waiting` indicator state only
+- Reserve blue (`#5B8DEF`) for the `waiting` indicator state only
 - Support both dark and light mode — always test both
 - Use `randomUnused(excluding:)` when assigning ghost characters to new sessions
 - Full-bleed 1024×1024 for the app icon — no rounded corners, no drop shadow (macOS applies its own squircle tile)
@@ -209,7 +209,7 @@ Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's sq
 
 - Bind chrome or canvas background to the user's terminal theme (`surface.derivedConfig.backgroundColor`)
 - Hardcode hex or pt values in view files — always use `WorkspaceLayout` tokens
-- Use terracotta for hover, selection, or states other than `waiting`
+- Use blue for hover, selection, or states other than `waiting`
 - Mix corner radii — 12pt continuous everywhere on the terminal card
 - Add shadows outside the card and overlay contexts
 - Use `update_styles` in Paper MCP to change SVG attributes — use `write_html(mode: "replace")` instead
@@ -242,7 +242,7 @@ When generating SwiftUI or AppKit views for this project:
 - Read this file first — do not guess tokens
 - All colors from `WorkspaceLayout.swift` — never `Color(red:green:blue:)` in view files
 - Chrome and canvas are the only two background layers — never bind to the user's terminal theme
-- Terracotta (`#C97350`) is reserved for the `waiting` indicator state only
+- Blue (`#5B8DEF`) is reserved for the `waiting` indicator state only
 - Corner radius is 12pt `.continuous` on the terminal card — nowhere else unless explicitly specified
 - `shadowPath` must be set in `layout()` — not left to CoreAnimation
 - SF Pro Text 11pt for sidebar UI; SF Mono for terminal content
