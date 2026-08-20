@@ -4,56 +4,39 @@ import Testing
 
 /// Tests for the Phase 4 project-picker convergence (D10 fix):
 /// `WorkspaceStore.addProjectViaFolderPicker` persists the last-used
-/// directory via `@AppStorage("ghostties.lastProjectPickerDirectory")` so
-/// the panel reopens where the user last was.
+/// directory via `@AppStorage("ghostties.lastProjectPickerDirectory")` on a
+/// `static` property, read and written entirely outside any SwiftUI view.
 ///
 /// `addProjectViaFolderPicker` itself calls `NSOpenPanel.runModal()`, which
-/// blocks on UI and cannot run in a unit test. What IS genuinely testable
-/// without UI is the persistence contract the fix depends on: the exact
-/// `UserDefaults.standard` key round-trips a directory path, and an empty
-/// value is treated as "no starting directory" (the store's `!isEmpty`
-/// guard). These tests exercise `UserDefaults.standard` directly under that
-/// key, saving and restoring the real value so the suite doesn't leak state
-/// into other tests or the developer's actual defaults.
+/// blocks on UI and cannot run in a unit test. What IS testable — and is
+/// the genuinely risky mechanic here — is whether `@AppStorage` on a static
+/// property actually persists through `UserDefaults.standard` under the
+/// key. This test writes through `WorkspaceStore`'s `#if DEBUG` accessor
+/// (exercising the real wrapper), then reads `UserDefaults.standard` under
+/// the key as a literal string, so a typo in the `@AppStorage` key in
+/// production would make this test fail. It saves and restores the real
+/// value so the suite doesn't leak state into other tests or the
+/// developer's actual defaults.
 struct WorkspaceStoreProjectPickerTests {
 
-    private static let key = "ghostties.lastProjectPickerDirectory"
-
-    @Test("Last-used picker directory round-trips through UserDefaults")
-    func lastPickerDirectoryRoundTrips() {
+    @Test("Last-used picker directory round-trips through the real @AppStorage-backed UserDefaults key")
+    @MainActor
+    func lastPickerDirectoryRoundTripsThroughAppStorage() {
+        let key = "ghostties.lastProjectPickerDirectory"
         let defaults = UserDefaults.standard
-        let saved = defaults.string(forKey: Self.key)
+        let saved = defaults.string(forKey: key)
         defer {
             if let saved {
-                defaults.set(saved, forKey: Self.key)
+                defaults.set(saved, forKey: key)
             } else {
-                defaults.removeObject(forKey: Self.key)
+                defaults.removeObject(forKey: key)
             }
         }
 
         let path = "/Users/example/Code/some-project"
-        defaults.set(path, forKey: Self.key)
+        WorkspaceStore.testLastProjectPickerDirectoryPath = path
 
-        #expect(defaults.string(forKey: Self.key) == path)
-    }
-
-    @Test("Absent last-used directory reads back as empty, the store's no-starting-directory sentinel")
-    func absentLastPickerDirectoryReadsEmpty() {
-        let defaults = UserDefaults.standard
-        let saved = defaults.string(forKey: Self.key)
-        defer {
-            if let saved {
-                defaults.set(saved, forKey: Self.key)
-            } else {
-                defaults.removeObject(forKey: Self.key)
-            }
-        }
-
-        defaults.removeObject(forKey: Self.key)
-
-        // @AppStorage's declared default is "" when the key is absent —
-        // this is the exact value `addProjectViaFolderPicker` checks with
-        // `!isEmpty` before setting `panel.directoryURL`.
-        #expect((defaults.string(forKey: Self.key) ?? "").isEmpty)
+        #expect(defaults.string(forKey: key) == path)
+        #expect(WorkspaceStore.testLastProjectPickerDirectoryPath == path)
     }
 }
