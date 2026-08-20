@@ -122,12 +122,22 @@
     height: 54px;
     flex: 0 0 54px;
     width: 100%;
-    position: relative; /* hosts the traffic lights (fix 1); full-width band at window top, not sidebar-scoped */
+    position: relative; /* hosts the traffic lights (fix 1) and the toolbar-actions column (fix 2); full-width band at window top, not sidebar-scoped */
     background: var(--canvas-bg);
     display: flex;
     align-items: center;
     padding: 0 12px; /* WorkspaceSidebarView.swift:172 */
+  }
+  .toolbar-actions {
+    position: absolute; /* fix 2: right-align over the sidebar column (232px), not the window's far right */
+    left: 0;
+    top: 0;
+    height: 54px;
+    width: 232px; /* matches .sidebar width exactly */
+    display: flex;
+    align-items: center;
     justify-content: flex-end;
+    padding-right: 25px; /* photo-true: + glyph trailing edge at x≈207 of 232 */
   }
   .toolbar-btn {
     display: flex;
@@ -426,10 +436,12 @@
         <div class="tl-dot yellow"></div>
         <div class="tl-dot green"></div>
       </div>
-      <button class="toolbar-btn" id="toolbar-btn">
-        <svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
-        <span id="toolbar-label">New Project</span>
-      </button>
+      <div class="toolbar-actions"> <!-- fix 2: sits over the sidebar column, not the window's far right -->
+        <button class="toolbar-btn" id="toolbar-btn">
+          <svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
+          <span id="toolbar-label">New Project</span>
+        </button>
+      </div>
     </div>
     <div class="body">
       <aside class="sidebar">

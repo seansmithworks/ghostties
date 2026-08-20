@@ -225,6 +225,42 @@
       "w": 1360,
       "h": 900,
       "title": "F · Field (retired)"
+    },
+    {
+      "file": "AppSessionsLight.dc.html",
+      "page": "page-1",
+      "x": 0,
+      "y": 3480,
+      "w": 1320,
+      "h": 700,
+      "title": "App window — Sessions tab, light (static)"
+    },
+    {
+      "file": "AppSessionsDark.dc.html",
+      "page": "page-1",
+      "x": 1480,
+      "y": 3480,
+      "w": 1320,
+      "h": 700,
+      "title": "App window — Sessions tab, dark (static)"
+    },
+    {
+      "file": "AppProjectsLight.dc.html",
+      "page": "page-1",
+      "x": 2960,
+      "y": 3480,
+      "w": 1320,
+      "h": 700,
+      "title": "App window — Projects tab, light (static)"
+    },
+    {
+      "file": "AppProjectsDark.dc.html",
+      "page": "page-1",
+      "x": 4440,
+      "y": 3480,
+      "w": 1320,
+      "h": 700,
+      "title": "App window — Projects tab, dark (static)"
     }
   ],
   "annotations": [
@@ -395,6 +431,14 @@
       "y": -1690,
       "w": 660,
       "text": "TYPE - the spec, not another option\n\nT1, T2 and T3 were three competing pairings. This board is the winner written down as a system: three families, one ramp each, and the rules that make it read as designed rather than defaulted.\n\nThe conformance box in the bottom right is the uncomfortable part. EIGHT Round 2 boards still load Martian Mono where this spec says Archivo - Main, Anatomy, AppAnnotated, AppMasks, AppReplica, CastOfEight, PixelMorph and ScrollFocus. Only Snake, AppZoom, Decrypt and TypeGrotesk are on spec today. Worth fixing as each board is next opened rather than as one sweep, because several of them are on the cut list anyway.\n\nDials: displayScale, proseScale, measure, tracking. The tracking dial drives every micro-label on the board at once, so the 0.2em house rule is testable rather than asserted."
+    },
+    {
+      "id": "n-app-static-row",
+      "page": "page-1",
+      "x": 0,
+      "y": 3350,
+      "w": 660,
+      "text": "APP STATIC STATES - hand-tune source\n\nFour static artboards seeded from docs/design/web-redesign/rebuild/index.html (the spec-hardened replica). Each bakes in one view (Sessions or Projects) and one theme (light or dark), no JS toggles, no review control, no animation - built for hand-tuning in this editor. Sessions and Projects each carry a photo-matched Projects-tab source and a staged (strawman) Sessions-tab content set, per the rebuild file's own inline notes.\n\nThe toolbar New Project / New Session button was corrected here and in rebuild/index.html to sit over the sidebar column, not the window's far right."
     }
   ],
   "launch": {
