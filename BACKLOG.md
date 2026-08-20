@@ -4,10 +4,78 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-20 — ghostties.org redesign: direction locked, app fidelity raised
+
+**Decisions locked (Sean's calls, this session):**
+
+- **Cut list accepted with two amendments.** B3 clickable replica comes OUT of CUT. T1/T2
+  specimen boards stay live as boards rather than being cut. New tally: **8 ship / 4 park / 6
+  cut** (was 7/4/8).
+- **Ghosts keep tracking pupils.** This rules out the `readout` face, which has status blocks
+  where eyes would go — the round-3 strawman argued for readout and is now superseded.
+- **Direction is a combination of A (opt-in Snake game hero) and B4 (scroll-zoom app section).**
+  Both were already on the SHIP list, so the cut list is unaffected. B1 annotated captures drops
+  to a supporting role.
+- **Light and dark both ship, following the system theme,** across the whole site — not
+  dark-only. Every board on the canvas is currently dark, so this is a real lift.
+- **The app section is an HTML/DOM rebuild, not screenshots.** Sean asked for pixel-perfect
+  recreation. The theme decision forces it: a raster capture cannot follow the system theme.
+  Accepted cost: the per-release re-measure burden that originally got B3 cut. Three mitigations
+  agreed — build from `DESIGN.md` tokens rather than hand-typed values, keep one real light/dark
+  capture pair in the repo as the reference to diff against, and state once in the section that
+  it is a rebuild.
+
+**Findings — things that turned out to be wrong:**
+
+- **`DESIGN.md` is stale.** Its frontmatter documents `accent: "#C97350"` (terracotta) as the
+  waiting-state color. The source uses `statusYourTurnBlue` `#5B8DEF`
+  (`macos/Sources/Features/Ghostties/WorkspaceLayout.swift:138-140`), and a comment at `:127`
+  exists specifically to warn that terracotta is NOT the session-status waiting color. The code
+  is correct; DESIGN.md needs updating. Since DESIGN.md is canonical for design values, anything
+  built from it inherits the error.
+- **The live status palette**, from source: `#FFC400` gold (needs decision), `#5B8DEF` blue
+  (your turn / waiting), `#F97316` orange (long-running), system green (processing), system red
+  (error), idle = `Color.primary.opacity(0.30)`, inactive = `opacity(0.12)`.
+- **There is no status "dot."** The status mark IS the ghost glyph itself, tinted — 14pt on the
+  Sessions tab, 12pt on the Projects tab. B4's planned payoff stop was "the seven-pixel status
+  dot shown at seven hundred pixels"; that framing needs rewriting, and the real version is
+  stronger because mascot and status are the same object.
+- **`projectFirst` is the DEFAULT sidebar mode**
+  (`macos/Sources/Features/Ghostties/WorkspaceViewContainer.swift:90`; key
+  `ghostties.sidebarViewMode`, other value `taskFirst`). An earlier claim in this session that
+  the site's current poster showed "an app that no longer exists" was WRONG — the poster shows
+  the Projects tab, which is what a new install opens on. What IS stale in that poster:
+  terracotta/green ghost glyphs (no longer status colors), Claude Code v2.1.186, Opus 4.8.
+- **Snake board: "SIX AGENTS." headline vs eight ghosts on the field.** The set is eight
+  hardcoded entries in `Snake.dc.html`'s `renderVals()`; there is no dial for the count. A real
+  copy/art mismatch, not a render artifact.
+
+**Open — blocked on Sean:**
+
+- [ ] Ghost face and dome. Recommendation is `visor` — the only face that can carry a tracking
+  pupil without reading as a Pac-Man eye, since its lit block sits inside a slit that reads as a
+  screen. Dome (tall/wide/round) also unpicked. | design | new
+- [ ] Collectible tokens on the Snake board — recommendation is CUT. The ghosts joining the tail
+  already are the collectible; the token glyphs are a second, weaker one, and they cost two dead
+  scoreboard cells (RESCUES, STRAY) plus a legend band that addresses the designer, not the
+  visitor. | design | new
+- [ ] Playfield height. Copy-below-the-field is right; the field is roughly three times taller
+  than the action needs, which makes it read as a void. | design | new
+- [ ] Which sidebar tab the site features — Projects (the default a new install sees) or
+  Sessions (what Sean works in). Recommendation: Projects primary, Sessions as a second zoom
+  stop. | design | new
+- [ ] A dark-mode screenshot of the current app, matched to the light one Sean supplied, to
+  serve as the repo reference pair. Cannot be captured from a session — `screencapture` is gated
+  by the terminal's own TCC grant and fails silently, and driving the live app with synthetic
+  input is prohibited. | design | new
+
+**Carried forward unchanged** from the 2026-08-19 section: real ElevenLabs SFX, the
+first-60-seconds section, and the 8 Round-2 boards still loading Martian Mono.
+
 ## 2026-08-19 — ghostties.org redesign: ROUND 3 BUILT, awaiting Sean's review (carried)
 
-Branch `feat/web-redesign-round3` @ `89d7e3963`, pushed. Diverged from `worktree-session-2` —
-**consolidate the two before any further web work.**
+Branch `feat/web-redesign-round3` @ `89d7e3963`, pushed. `worktree-session-2` sits at
+`439518bff`, the merge-base — this branch is strictly 3 commits ahead. Nothing to consolidate.
 
 **Done 2026-08-19 (round 3, commits `6aed18963` + `89d7e3963`):**
 
@@ -24,12 +92,14 @@ Branch `feat/web-redesign-round3` @ `89d7e3963`, pushed. Diverged from `worktree
 
 **Open — Sean's calls, all live on the canvas:**
 
-- [ ] **React to the cut list.** Strawman. The two likely objections: B3 clickable replica cut,
-  and T1/T2 cut as boards rather than just as options. | design | carried
-- [ ] **Pick a ghost face.** Five on the board; strawman argument is `readout`. Also open on the
-  board: do they keep tracking pupils at all, since that is the strongest Pac-Man tell. | design | carried
-- [ ] **Confirm Snake v2 reads as a hero** with the copy below the field, and whether tokens add
-  to the loop or clutter it. | design | carried
+- [x] **React to the cut list** — resolved 2026-08-20: accepted with two amendments (B3 back in,
+  T1/T2 stay live as boards). See the 2026-08-20 section below. | design | carried
+- [ ] **Pick a ghost face.** Five on the board; strawman argument is `readout`. Whether they keep
+  tracking pupils is resolved 2026-08-20 — yes, which rules out `readout`. Face/dome pick itself
+  is still open; see the 2026-08-20 section below. | design | carried
+- [x] **Confirm Snake v2 reads as a hero** — resolved 2026-08-20: direction locked as A (Snake
+  hero) combined with B4. Whether tokens clutter the loop reopened as its own item below
+  (recommendation: cut). | design | carried
 
 **Found this round, not fixed:**
 
