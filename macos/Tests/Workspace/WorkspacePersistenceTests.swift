@@ -148,8 +148,8 @@ struct WorkspacePersistenceTests {
 
     @Test func projectMemberwiseInitDefaultsIsPinnedToFalse() {
         // New semantics: a project constructed without specifying isPinned is NOT pinned.
-        // The explicit `isPinned: true` at WorkspaceStore.addProject(at:) remains intact;
-        // only the struct's default changes.
+        // WorkspaceStore.addProject(at:pinned:) now defaults to unpinned too —
+        // only the picker path opts in with `pinned: true`.
         let project = Project(name: "Unpinned", rootPath: "/tmp/Unpinned")
         #expect(project.isPinned == false)
     }

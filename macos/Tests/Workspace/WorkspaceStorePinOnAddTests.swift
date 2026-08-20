@@ -64,4 +64,83 @@ struct WorkspaceStorePinOnAddTests {
         let project = store.projects.first(where: { $0.rootPath == path })
         #expect(project?.isPinned == true)
     }
+
+    // MARK: - Freeze-snapshot no-op (the actual duplicate-path fix)
+    //
+    // `isPinned == true` alone doesn't discriminate old vs. new behavior on
+    // the re-add-existing branch: the OLD code also force-set `isPinned =
+    // true` on an already-pinned project, so that assertion passes either
+    // way. What Phase 5 actually changes is whether the early-return path
+    // calls `releaseSnapshot()` + `persist()` at all.
+    //
+    // `sectionSignature` alone is NOT a reliable witness here: a pinned
+    // project's section membership never changes regardless of activity
+    // (see `computeSectionedProjects` — `isPinned` short-circuits straight
+    // to `.pinned`), so releasing-vs-not-releasing the snapshot can produce
+    // an identical signature even when release genuinely happened. The real
+    // witness is `persistCallCount` (`#if DEBUG`, exists precisely to let
+    // tests assert "this path never even attempted to persist" — see the
+    // doc comment on the property). Both assertions are kept for belt and
+    // suspenders, but `persistCallCount` is the one that actually
+    // discriminates: verified by temporarily relaxing the production guard
+    // from `guard pinned, !projects[index].isPinned else { return }` to
+    // `guard pinned else { return }` and re-running this file — the relaxed
+    // guard makes `reAddingAlreadyPinnedProjectWithPinnedTrueIsAPureNoOp`
+    // fail (persistCallCount increments) while `sectionSignature` alone
+    // stayed equal and would have missed the regression.
+
+    @Test func reAddingUnpinnedProjectWithDefaultArgsIsAPureNoOp() {
+        let url = tmpURL("noop-unpinned")
+        let path = url.standardizedFileURL.path
+        let existing = Project(name: "NoopUnpinned", rootPath: path, isPinned: false)
+        let store = WorkspaceStore(testingProjects: [existing], testingSessions: [])
+
+        store.freezeSnapshot()
+        let frozenSignature = store.sectionSignature
+        let persistCountBefore = store.persistCallCount
+
+        // Auto-registration rediscovering an unpinned project. Must not
+        // release the snapshot or persist — nothing structurally changed.
+        store.addProject(at: url)
+
+        #expect(store.sectionSignature == frozenSignature)
+        #expect(store.persistCallCount == persistCountBefore)
+    }
+
+    @Test func reAddingAlreadyPinnedProjectWithPinnedTrueIsAPureNoOp() {
+        let url = tmpURL("noop-pinned")
+        let path = url.standardizedFileURL.path
+        let existing = Project(name: "NoopPinned", rootPath: path, isPinned: true)
+        let store = WorkspaceStore(testingProjects: [existing], testingSessions: [])
+
+        store.freezeSnapshot()
+        let frozenSignature = store.sectionSignature
+        let persistCountBefore = store.persistCallCount
+
+        // Explicit re-add of an already-pinned project (e.g. picking the same
+        // folder twice). No pin-state change, so this must also be a no-op —
+        // it must NOT call releaseSnapshot()/persist() just because `pinned`
+        // was passed as true.
+        store.addProject(at: url, pinned: true)
+
+        #expect(store.sectionSignature == frozenSignature)
+        #expect(store.persistCallCount == persistCountBefore)
+    }
+
+    @Test func addingNewUnpinnedProjectStillReleasesFrozenSnapshot() {
+        // The auto-register path (default args) creating a genuinely NEW
+        // project is a structural change and must still drop the snapshot,
+        // same as the existing pinned-picker-add coverage in
+        // WorkspaceStoreFreezeTests.
+        let existing = Project(name: "Existing", rootPath: "/tmp/Existing", isPinned: true)
+        let store = WorkspaceStore(testingProjects: [existing], testingSessions: [])
+
+        store.freezeSnapshot()
+        let frozenSignature = store.sectionSignature
+
+        let url = tmpURL("new-unpinned")
+        store.addProject(at: url)
+
+        #expect(store.sectionSignature != frozenSignature)
+    }
 }

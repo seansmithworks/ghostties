@@ -464,7 +464,9 @@ final class SessionCoordinator: ObservableObject {
     /// Resolution order:
     ///   1. If a `Project` already exists in `WorkspaceStore` with `name`,
     ///      reuse it (its `rootPath` wins — don't clobber the user's setup).
-    ///   2. Otherwise register a new pinned `Project(name:, rootPath:)`.
+    ///   2. Otherwise auto-register a new, unpinned `Project(name:, rootPath:)`
+    ///      — this is a background registration, not an explicit "add
+    ///      project" action, so it must not force the pinned section.
     ///   3. If that project already has a live session, focus it (same path as
     ///      `focusLastSession(forProject:)`).
     ///   4. Else spawn a new Shell session via `createQuickSession`. The
