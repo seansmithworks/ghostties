@@ -90,10 +90,11 @@ struct WorkspaceStoreFreezeTests {
         store.freezeSnapshot()
         #expect(ids(in: .pinned, of: store.sectionedProjects) == [existing.id])
 
-        // Use a real URL — addProject pins it and assigns a ghost.
+        // Use a real URL, pinned explicitly — addProject only pins on an
+        // explicit request now, and assigns a ghost.
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("workspace-freeze-test-\(UUID().uuidString)", isDirectory: true)
-        store.addProject(at: tmp)
+        store.addProject(at: tmp, pinned: true)
 
         // Snapshot must have been released — both projects visible in `.pinned`.
         let pinnedNames = store.sectionedProjects.first(where: { $0.0 == .pinned })?.1.map(\.name) ?? []

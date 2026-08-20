@@ -493,14 +493,16 @@ final class SessionCoordinator: ObservableObject {
         let store = WorkspaceStore.shared
 
         // 1/2. Resolve or register the project. `addProject(at:)` handles
-        // duplicate-path detection and promotes an existing record's pin
-        // status without clobbering its `rootPath` or ghost character.
+        // duplicate-path detection without clobbering an existing record's
+        // `rootPath` or ghost character.
         let project: Project = {
             if let existing = store.projects.first(where: { $0.name == name }) {
                 return existing
             }
-            // Register as a pinned project so it shows up in the legacy
-            // sidebar too. `addProject(at:)` does the standardization.
+            // Auto-register unpinned — this is a background/implicit
+            // registration, not an explicit user "add project" action, so it
+            // must not force the project into the pinned sidebar section.
+            // `addProject(at:)` does the standardization.
             let url = URL(fileURLWithPath: rootPath, isDirectory: true)
             store.addProject(at: url)
             // Re-fetch by path (name may diverge — URL.lastPathComponent
