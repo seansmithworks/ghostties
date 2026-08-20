@@ -52,15 +52,13 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 **Open — blocked on Sean:**
 
-- [ ] Ghost face and dome. Recommendation is `visor` — the only face that can carry a tracking
-  pupil without reading as a Pac-Man eye, since its lit block sits inside a slit that reads as a
-  screen. Dome (tall/wide/round) also unpicked. | design | new
-- [ ] Collectible tokens on the Snake board — recommendation is CUT. The ghosts joining the tail
-  already are the collectible; the token glyphs are a second, weaker one, and they cost two dead
-  scoreboard cells (RESCUES, STRAY) plus a legend band that addresses the designer, not the
-  visitor. | design | new
-- [ ] Playfield height. Copy-below-the-field is right; the field is roughly three times taller
-  than the action needs, which makes it read as a void. | design | new
+- [x] Ghost face and dome — resolved round 4: **visor + tall**, locked in the board's DECIDED
+  box (not just a dial default). | design | done
+- [x] Collectible tokens on the Snake board — resolved round 4: **cut entirely**. The ghosts
+  joining the tail already are the collectible; art, both dials, legend band, scoreboard cell,
+  and spawn logic all removed. | design | done
+- [x] Playfield height — resolved round 4: `ROWS` cut 10→6, drawn border now matches the grid at
+  264px with `OY` 220. | design | done
 - [ ] Which sidebar tab the site features — Projects (the default a new install sees) or
   Sessions (what Sean works in). Recommendation: Projects primary, Sessions as a second zoom
   stop. | design | new
@@ -71,6 +69,43 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 **Carried forward unchanged** from the 2026-08-19 section: real ElevenLabs SFX, the
 first-60-seconds section, and the 8 Round-2 boards still loading Martian Mono.
+
+**Round 4 shipped 2026-08-20** — three commits on `feat/web-redesign-round4`: `bcb7cd46c` (the
+four locked decisions above), `7d5ee8ad4` (seven fixes from an adversarial review), `2b5224f54`
+(one regression fix plus a factual correction). Republished to the existing artifact URL
+`7abace9c-8541-4960-ad29-eec5ffb4b593` (24 artboards, 2 images, canvas.json — verified by the
+seeder's `--check`).
+
+**What the review round caught (process evidence, not a task list):**
+
+The adversarial review round found **six defects** the builder's own verification missed, making
+this repo **six-for-six** on round-two UI reviews finding real defects. The worst:
+`CutList.dc.html` still carried a "Vendor-logo tokens" entry arguing trademark risk and closing
+"Generic glyphs only" — asserting the token system ships, on the board whose job is recording
+decisions, while the Snake annotation simultaneously claimed the cut was "flagged on the cut
+list." Two boards contradicting each other in the same round.
+
+The follow-on matters more than any single defect: **the fix commit itself regressed a cleared
+decision.** `7d5ee8ad4` closed the board's dead bottom band by restoring `.lattice` and `.bounds`
+to `height: 440px` while `ROWS` stayed 6 — so the drawn field border was 176px taller than the
+reachable grid, putting the void back inside the playfield. Caught by the orchestrator on
+inspection, fixed in `2b5224f54`. This is the documented "fix commits regress already-cleared
+paths" pattern firing again.
+
+Two defects were found outside any review agent's brief, by the orchestrator reading renders
+directly: the B4 cut-list entry promising a "seven-pixel status dot" that does not exist, and the
+same claim surviving on `AppZoom.dc.html` and the `n-appzoom` sticky note. All three corrected —
+the true version is that the status mark IS the ghost glyph, tinted at 14pt.
+
+**Still open on the boards:**
+
+- [ ] The "SIX AGENTS." headline vs eight hardcoded ghosts in `Snake.dc.html`'s `renderVals()`.
+  Deliberately untouched across all three commits — Sean has not ruled on it. Either the headline
+  becomes EIGHT or the set drops to six. | design | carried
+- [ ] Three pre-existing issues an adversarial review confirmed are NOT from this work, left
+  alone: the Ghosts size-ladder label reading "28px · favicon" against a note saying the favicon
+  is 32; the Snake game clock being rAF-tick-based so it runs roughly 2x on ProMotion displays;
+  the Snake pupil rect overhanging the visor slit by ~2px at extreme angles. | design | new
 
 ## 2026-08-19 — ghostties.org redesign: ROUND 3 BUILT, awaiting Sean's review (carried)
 
