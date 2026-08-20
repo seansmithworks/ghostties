@@ -1,4 +1,4 @@
-<!-- Hand-built rebuild of the Ghostties macOS app window (chrome + sidebar + terminal card surface). Not a screenshot; every measurement traces to docs/design/web-redesign/app-rebuild-spec.md, version c4799e03d. Ghost pixel grids transcribed from macos/Sources/Features/Ghostties/Models/GhostCharacter.swift; chevron from PixelChevronView.swift. Specific named-ghost-to-project assignments below are illustrative (source has no name->photo mapping) — see inline comments. -->
+<!-- Hand-built rebuild of the Ghostties macOS app window (chrome + sidebar + terminal card surface). Not a screenshot; every measurement traces to docs/design/web-redesign/app-rebuild-spec.md, version c4799e03d. Ghost pixel grids transcribed from macos/Sources/Features/Ghostties/Models/GhostCharacter.swift; chevron from PixelChevronView.swift. Specific named-ghost-to-project assignments below are illustrative (source has no name->photo mapping) — see inline comments. Round 3 (adad81d96 -> this commit) applies 12 photo-read fixes against a color-corrected reference photo; where a fix overrides a literal source value, see inline photo-true comments. -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,7 +11,7 @@
     --sidebar-surface: #EEE9E5; /* photo-derived: WorkspaceViewContainer.swift:58-64 .sidebar material over chrome bg, no literal composited hex in source */
     --canvas-bg: #FAF7F3;
     --card-face: #F7F7F7; /* explicit build instruction: flat card face, out of scope per spec Framing-d which would use canvas token instead */
-    --text-primary: #1A1A1A;
+    --text-primary: rgba(0,0,0,0.85);
     --text-secondary: #636363;
     --tertiary-label: rgba(0,0,0,0.26);
     --secondary-label: rgba(0,0,0,0.50);
@@ -20,12 +20,12 @@
     --hover-session-row: rgba(0,0,0,0.05);
     --hover-child-row: rgba(0,0,0,0.04);
     --hover-project-header: rgba(0,0,0,0.06);
-    --shadow-card: rgba(0,0,0,0.15);
-    --shadow-active-row: rgba(0,0,0,0.1);
+    --shadow-card: rgba(0,0,0,0.22);
+    --shadow-active-row: rgba(0,0,0,0.06);
     --status-gold: #FFC400;
     --status-orange: #F97316;
     --status-blue: #5B8DEF;
-    --status-green: #28CD41;
+    --status-green: #34C759;
     --status-red: #FF3B30;
     --inactive-dot: rgba(0,0,0,0.12);
     --tl-red: #FC3C55;
@@ -42,6 +42,7 @@
       --tertiary-label: rgba(255,255,255,0.26);
       --secondary-label: rgba(255,255,255,0.55);
       --active-row: rgba(255,255,255,0.06);
+      --status-green: #32D74B;
       --expanded-container: #292929;
       --hover-session-row: rgba(255,255,255,0.05);
       --hover-child-row: rgba(255,255,255,0.04);
@@ -58,6 +59,7 @@
     --tertiary-label: rgba(255,255,255,0.26);
     --secondary-label: rgba(255,255,255,0.55);
     --active-row: rgba(255,255,255,0.06);
+    --status-green: #32D74B;
     --expanded-container: #292929;
     --hover-session-row: rgba(255,255,255,0.05);
     --hover-child-row: rgba(255,255,255,0.04);
@@ -82,10 +84,10 @@
 
   .window-wrap { position: relative; }
 
-  .window {
-    width: 900px;
+  .window { /* strawman: window proportion */
+    width: 1180px;
     height: 560px;
-    border-radius: 10px; /* NOT FOUND in source — native macOS chrome, photo-estimated ~10px, spec Gaps */
+    border-radius: 26px; /* photo-true: macOS 26 continuous corner, circle-fit r≈26.5 */
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0,0,0,0.35);
     background: var(--canvas-bg);
@@ -119,7 +121,9 @@
   .toolbar-row {
     height: 54px;
     flex: 0 0 54px;
-    position: relative; /* hosts the traffic lights (fix 1) */
+    width: 100%;
+    position: relative; /* hosts the traffic lights (fix 1); full-width band at window top, not sidebar-scoped */
+    background: var(--canvas-bg);
     display: flex;
     align-items: center;
     padding: 0 12px; /* WorkspaceSidebarView.swift:172 */
@@ -130,7 +134,7 @@
     align-items: center;
     gap: 4px; /* WorkspaceSidebarView.swift:513-521 */
     color: var(--secondary-label);
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 500;
     background: none;
     border: none;
@@ -152,12 +156,12 @@
     height: 24px;
     margin-bottom: 2px; /* photo-derived: closes the 2px gap between header block and first project row (84 - (54+4+24) = 2) */
     padding: 4px 12px 4px 8px; /* WorkspaceSidebarView.swift:436-445 */
-    color: var(--text-secondary);
+    color: var(--tertiary-label);
   }
   .group-header .icon-col { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex: 0 0 16px; }
-  .group-header svg.icon { width: 9px; height: 9px; fill: var(--tertiary-label); }
+  .group-header svg.icon { width: 14px; height: 14px; fill: var(--tertiary-label); }
   .group-header .label {
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 600;
     letter-spacing: 0.6px;
     text-transform: uppercase;
@@ -170,8 +174,8 @@
     height: 32px;
     display: flex;
     align-items: center;
-    padding: 0 12px 0 8px; /* ProjectDisclosureRow.swift:346-347 */
-    gap: 10px; /* ProjectDisclosureRow.swift:305 */
+    padding: 0 12px 0 9px; /* ProjectDisclosureRow.swift:346-347 says 8, nudged +1 to land name ink at x=45 */
+    gap: 11px; /* ProjectDisclosureRow.swift:305 says 10, nudged +1 to land name ink at x=45 */
     border-radius: 6px;
     cursor: default;
   }
@@ -180,9 +184,8 @@
   .ghost-col svg { fill: currentColor; }
   .project-header .ghost-col svg { width: 12px; height: 12px; }
   .project-name {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 500;
-    letter-spacing: -0.13px;
     color: var(--text-primary);
     flex: 1;
     white-space: nowrap;
@@ -199,6 +202,7 @@
   .project-block.expanded {
     background: var(--expanded-container);
     border-radius: 8px; /* ProjectDisclosureRow.swift:113-124: wraps header + children + New Session */
+    padding-bottom: 2px;
   }
   .project-children {
     display: flex;
@@ -207,7 +211,7 @@
     margin-top: 2px;
   }
   .session-row {
-    height: 28px; /* SessionDetailView.swift:75 */
+    height: 30px; /* photo-true: SessionDetailView.swift:75 says 28 */
     display: flex;
     align-items: center;
     gap: 4px;
@@ -219,11 +223,11 @@
   .session-row:hover { background: var(--hover-child-row); }
   .session-row.is-active {
     background: var(--active-row);
-    box-shadow: 0 1px 2px var(--shadow-active-row); /* SessionDetailView.swift:80-83 */
+    box-shadow: 0 1px 3px var(--shadow-active-row); /* SessionDetailView.swift:80-83 */
   }
   .session-row .name {
     flex: 1;
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--text-primary);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -238,7 +242,7 @@
     gap: 6px; /* ProjectDisclosureRow.swift:436-443 */
     padding: 4px 8px 4px 28px; /* 20 outer (.padding(.leading,20)) + 8 inner (.padding(.horizontal,8)), ProjectDisclosureRow.swift:448-450 */
     color: var(--tertiary-label);
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 500;
   }
   .new-session-row:hover { color: var(--secondary-label); } /* ProjectDisclosureRow.swift:448 .tertiary -> .secondary on hover */
@@ -253,7 +257,7 @@
     align-items: center;
     gap: 10px; /* fix 6: matches sidebarIconLabelSpacing so label ink aligns with row name ink */
     padding: 8px 12px 4px 8px; /* RecentsListView.swift:557-569 */
-    color: var(--text-secondary);
+    color: var(--tertiary-label);
     cursor: pointer;
   }
   .bucket-header:focus-visible { outline: 2px solid var(--status-blue); outline-offset: -2px; }
@@ -261,7 +265,7 @@
   .bucket-header .chev-col svg { width: 8px; height: 8px; fill: var(--tertiary-label); } /* PixelChevronView default color, no override at RecentsListView.swift:566 */
   .bucket-header.collapsed .chev-col svg { transform: rotate(-90deg); }
   .bucket-header .label {
-    font-size: 10px;
+    font-size: 10.5px;
     font-weight: 600;
     letter-spacing: 0.6px;
     text-transform: uppercase;
@@ -282,9 +286,9 @@
   .recents-row .ghost-col { width: 16px; height: 16px; flex: 0 0 16px; display: flex; align-items: center; justify-content: center; }
   .recents-row .ghost-col svg { width: 14px; height: 14px; }
   .recents-row .text-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; } /* VStack(spacing:1) RecentsRowView.swift:59 */
-  .recents-row .name { font-size: 12px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .recents-row .subline { font-size: 10px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .recents-row .timestamp { font-size: 10px; color: var(--text-secondary); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+  .recents-row .name { font-size: 12.5px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recents-row .subline { font-size: 10.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recents-row .timestamp { font-size: 10.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
   .recents-row.is-archived .name,
   .recents-row.is-archived .subline,
   .recents-row.is-archived .timestamp { color: var(--tertiary-label); }
@@ -302,14 +306,14 @@
   .gs-inactive { color: var(--inactive-dot); }
 
   /* --- Canvas / terminal card --- */
-  .canvas { flex: 1; background: var(--canvas-bg); padding: 8px; display: flex; min-width: 0; } /* terminalInset: 8 all sides */
+  .canvas { flex: 1; background: var(--canvas-bg); padding: 0 8px 8px 8px; display: flex; min-width: 0; } /* terminalInset: 8 sides, 0 top — card butts the toolbar band (fix 1) */
   .terminal-card {
     flex: 1;
     display: flex;
     flex-direction: column;
     background: var(--card-face);
     border-radius: 12px; /* .continuous 12pt */
-    box-shadow: 0 2px 8px var(--shadow-card); /* WorkspaceLayout.swift:70-79: offset (0,-2) is AppKit y-up = slight downward cast in CSS y-down */
+    box-shadow: 0 3px 18px var(--shadow-card); /* WorkspaceLayout.swift:70-79: offset (0,-2) is AppKit y-up = slight downward cast in CSS y-down */
     overflow: hidden;
   }
   /* strawman: canvas-colored title strip, WorkspaceLayout.terminalTitleBarHeight = 28 */
@@ -416,25 +420,24 @@
 
 <div class="window-wrap">
   <div class="window">
+    <div class="toolbar-row"> <!-- fix 1: full-width band at window top, not sidebar-scoped -->
+      <div class="traffic-lights">
+        <div class="tl-dot red"></div>
+        <div class="tl-dot yellow"></div>
+        <div class="tl-dot green"></div>
+      </div>
+      <button class="toolbar-btn" id="toolbar-btn">
+        <svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
+        <span id="toolbar-label">New Project</span>
+      </button>
+    </div>
     <div class="body">
       <aside class="sidebar">
-        <div class="toolbar-row">
-          <div class="traffic-lights">
-            <div class="tl-dot red"></div>
-            <div class="tl-dot yellow"></div>
-            <div class="tl-dot green"></div>
-          </div>
-          <button class="toolbar-btn" id="toolbar-btn">
-            <svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg>
-            <span id="toolbar-label">New Project</span>
-          </button>
-        </div>
-
         <!-- ============ PROJECTS TAB (mirrors app-sessions.jpg exactly) ============ -->
         <div class="sidebar-view" id="view-projects">
           <div class="project-list">
             <div class="group-header">
-              <span class="icon-col"><svg class="icon" viewBox="0 0 9 9" fill="currentColor"><rect x="3" y="0" width="3" height="6"/><rect x="1" y="6" width="7" height="1"/><rect x="4" y="7" width="1" height="2"/></svg></span>
+              <span class="icon-col"><svg class="icon" viewBox="0 0 14 14" fill="currentColor"><rect x="4" y="0" width="6" height="1"/><rect x="2" y="1" width="10" height="1"/><rect x="2" y="2" width="10" height="1"/><rect x="2" y="3" width="10" height="1"/><rect x="2" y="4" width="10" height="1"/><rect x="3" y="5" width="8" height="1"/><rect x="5" y="6" width="4" height="1"/><rect x="6" y="7" width="2" height="6"/></svg></span>
               <span class="label">Pinned</span>
             </div>
 
@@ -451,7 +454,7 @@
               <div class="project-header">
                 <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-clyde"/></svg></span>
                 <span class="project-name">fieldwork</span>
-                <span class="project-add"><svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg></span>
+                <span class="project-add"><svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg></span>
               </div>
               <div class="project-children">
                 <div class="session-row state-waiting">
@@ -459,7 +462,7 @@
                   <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-shade"/></svg></span>
                 </div>
                 <div class="new-session-row">
-                  <svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg>
+                  <svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
                   <span>New Session</span>
                 </div>
               </div>
@@ -486,7 +489,7 @@
               <div class="project-header">
                 <span class="ghost-col gs-waiting animated"><svg><use href="#ghost-pinky"/></svg></span>
                 <span class="project-name">switchboard</span>
-                <span class="project-add"><svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg></span>
+                <span class="project-add"><svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg></span>
               </div>
               <div class="project-children">
                 <div class="session-row state-waiting">
@@ -506,7 +509,7 @@
                   <span class="ghost-col gs-processing animated"><svg><use href="#ghost-mist"/></svg></span>
                 </div>
                 <div class="new-session-row">
-                  <svg viewBox="0 0 10 10" fill="currentColor"><rect x="4" y="0" width="2" height="10"/><rect x="0" y="4" width="10" height="2"/></svg>
+                  <svg viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>
                   <span>New Session</span>
                 </div>
               </div>
