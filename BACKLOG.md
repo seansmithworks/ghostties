@@ -4,6 +4,40 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-20 — Session state at bedtime wrap (carried)
+
+Two PRs open, neither merged. Sean merges; never merge unprompted.
+
+- [ ] **PR #132 — composer shadow-only + window-centered + D1 ranking.** Head `b23c8c614`,
+  branch `fix/composer-shadow-no-scrim`. Three independent review rounds, all findings fixed,
+  round 3 declared the code clean. Suite 745/742/2/1 (the 2 are the untracked
+  `ThrottleTrailingEdgeHypothesisTests` baseline). *Carried:* needs Sean's eye on the shadow +
+  his two manual checks before merge.
+- [ ] **PR #133 — Phase 4 project-creation convergence.** Head `9a5ddd4f5`, branch
+  `feat/session-composer-phase4`, worktree `.claude/worktrees/agent-aea826310125c8a31`.
+  **UNVERIFIED** — the builder was killed just before opening the PR, so no build result, no
+  suite result, and no review round exist. Spot-check by the orchestrator found all four parts
+  present and no scope violation, but that is not a substitute. *Carried:* needs build + full
+  suite + an independent review before it is reviewable.
+- [ ] **`.locked` gets its first real call site in #133.** It had zero before. The composer's
+  `.locked` guards (`commit()` resolving from the bound project, `filteredProjectOptions`
+  hiding project rows) are exercised for the first time by that PR and have never run.
+- [ ] **Nothing tests the F1 `selectedIndex = nil` fix.** `selectedIndex` is SwiftUI `@State`
+  and this repo has no view-test harness, so that fix rests on three reviewers' reasoning, not
+  on a test. Named because #130 shipped a dead key handler past 726 green tests.
+- [ ] **D5 — click `+ New Session` → anchored at origin, keyboard stays centered.** *Parked,*
+  undecided. Machinery exists (`.anchored` + `ProjectDisclosureRow.swift:466`); the only real
+  change is splitting `WorkspaceViewContainer.swift:1575`'s hardcoded `.centered` by trigger.
+  Recommendation on file: ship with native NSPopover chrome and judge the divergence on screen.
+- [ ] **Phase 5 — stop force-pinning** (`WorkspaceStore.swift:638`, `SessionCoordinator.swift:491`).
+  *Parked,* undecided. The plan holds it separate deliberately: it visibly reorders existing
+  sidebars on upgrade, which is a taste call rather than a bug fix.
+- [ ] **Composer command grammar spec** published as an Artifact
+  (`https://claude.ai/code/artifact/de9d09b5-f31a-4a9d-ad07-5047cb53a32f`). Three decisions
+  await Sean: positional vs sigils, project-vs-template collision precedence, and whether a
+  bare trailing token becomes the session name. Tokenizing alone fixes D2 and needs none of
+  the three settled — that is the recommended first slice.
+
 ## 2026-08-20 — DESIGN.md titlebarSpacerHeight is wrong (pre-existing)
 
 - [ ] **`DESIGN.md:141` says `titlebarSpacerHeight: 38pt`; `WorkspaceLayout.swift:54` is `28`.** Found
