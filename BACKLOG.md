@@ -22,17 +22,50 @@ Parked items that survive context resets. Prune at `/wrap`.
   by Playwright (84/54/36/38/8). Review rounds found 14 then 6 blockers; key discoveries: v1 had
   a doubled titlebar putting everything 54px low ("missing wren" was clipping); atlas-api photo
   ghost is black not terracotta; AppKit y-up shadow offset means CSS `0 2px`.
+- `7f8a3e036` — twelve photo-read fixes to `rebuild/index.html` from a fairness-corrected image
+  comparison against the reference photo: full-width toolbar band (card was floating 44px high),
+  card shadow `0 3px 18px rgba(0,0,0,0.22)` (the seam read as a bright ridge, not the app's dark
+  valley), sidebar type +3.5% with negative tracking dropped, hairline `+` glyphs (were 2.7× the
+  app's ink), section headers to tertiary, `--text-primary` `rgba(0,0,0,0.85)`, `--status-green`
+  `#34C759`, window radius 26px, window widened 900→1180 as a proportion strawman.
+- `9ef21add3` — four static canvas artboards (`AppSessionsLight/Dark`, `AppProjectsLight/Dark`)
+  seeded from the corrected rebuild, plus a toolbar-button position fix applied to both boards
+  and `rebuild/index.html`. Canvas republished to the existing artifact URL
+  `7abace9c-8541-4960-ad29-eec5ffb4b593` (28 artboards, 2 images, canvas.json; `--check` printed
+  31 files). Published state was verified byte-identical to the repo before overwriting — no
+  unsaved GUI edits were lost.
 
 **Decisions (Sean, 2026-08-20):** Sessions primary / Projects second zoom stop (both shown); no
 agent/ghost counts in any copy — "limitless" (closes the SIX AGENTS question: no number);
-rebuild confirmed over screenshots.
+rebuild confirmed over screenshots. **Pipeline changed (Sean's call):** optical-fidelity
+iteration moves to the design canvas. The rebuild SEEDS boards, Sean hand-tunes them, and the
+approved board state becomes the build contract for the site section (HTML-vs-HTML
+verification, not HTML-vs-native-screenshot). Measure→review→fix rounds against app screenshots
+are NOT to be re-entered for how-it-reads questions.
 
-**Open — blocked on Sean:** three reference captures (Sessions light+dark, Projects dark — both
-existing jpgs are Projects-tab light, from a pre-`#5B8DEF` build so status colors in them are
-stale); react to two built strawmen (staged INACTIVE/ARCHIVE quiet-end content; 28px terminal
-title strip); terminal-interior richness call (currently minimal prompt, not the full TUI); B4
-scroll-zoom site integration is the next build phase (headline copy + "this is a rebuild"
-disclosure line land there).
+**Findings:**
+
+- **The reference jpgs are Display-P3 captures with the ICC profile stripped.** Read raw they
+  make every saturated color look too loud (terracotta `#C97350` reads `#BC7757`; `.systemGreen
+  #34C759` reads `#69C566`); neutrals are unaffected, which is why greys always matched. Any
+  future comparison needs the fairness pipeline (2x render → Lanczos downscale → sRGB→P3
+  renumber → matched JPEG) or a P3→sRGB conversion of photo picks. Ask Sean for profile-intact
+  PNGs next time.
+- **The photos predate current source in three places:** session rows measure 30px (source says
+  28), there is no terminal title strip (source has `terminalTitleBarHeight = 28`), and status
+  ghosts are terracotta (source is `#5B8DEF`). Where they disagree, the rebuild now follows the
+  photo for how-it-reads geometry and source for color, per the spec's Framing block.
+
+**Open — blocked on Sean:**
+
+- [ ] Tune the four app artboards on the canvas — the approved state becomes the build contract
+  | design | new
+- [ ] Three reference captures: Sessions tab light + dark, Projects tab dark (both existing jpgs
+  are Projects-tab light, pre-`#5B8DEF`, P3-stripped) | design | carried
+- [ ] Two strawmen to keep or kill: staged INACTIVE/ARCHIVE quiet-end content, and the 28px
+  terminal title strip | design | carried
+- [ ] Terminal interior richness: minimal prompt (current) vs the full staged Claude Code TUI
+  from the photo | design | carried
 
 ## 2026-08-20 — ghostties.org redesign: direction locked, app fidelity raised
 
