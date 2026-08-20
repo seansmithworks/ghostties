@@ -944,22 +944,63 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: - Folder Picker
 
+    /// Last directory a project-folder picker was pointed at, persisted so
+    /// the panel reopens where the user left off instead of always starting
+    /// at the default location (D10). Stores the CHOSEN project's PARENT
+    /// directory, not the project itself, so the next pick starts one level
+    /// up from the last add rather than re-suggesting the same folder.
+    @AppStorage("ghostties.lastProjectPickerDirectory")
+    private static var lastProjectPickerDirectoryPath: String = ""
+
+    #if DEBUG
+    /// Test-only accessor for `lastProjectPickerDirectoryPath`, exercising
+    /// the real `@AppStorage` wrapper from outside a SwiftUI view. Keeps the
+    /// production property `private` while still letting tests verify the
+    /// `@AppStorage`-on-a-static-property mechanic actually round-trips.
+    static var testLastProjectPickerDirectoryPath: String {
+        get { lastProjectPickerDirectoryPath }
+        set { lastProjectPickerDirectoryPath = newValue }
+    }
+    #endif
+
     /// Presents an NSOpenPanel and adds the selected directory as a project.
+    /// This is the SINGLE picker entry point every call site (sidebar
+    /// header, session composer, task composer, orphan triage) converges
+    /// on — see `docs/plans/session-creation-unified.html` Phase 4.
+    ///
+    /// - Parameter message: Panel message text. Defaults to the generic
+    ///   copy; callers with task-specific context (e.g. `OrphanTriageStore`)
+    ///   pass their own wording so convergence doesn't silently lose it.
+    ///
     /// Returns the new or existing project's ID, or nil if the user cancelled.
     @discardableResult
-    func addProjectViaFolderPicker() -> UUID? {
+    func addProjectViaFolderPicker(
+        message: String = "Choose a project folder"
+    ) -> UUID? {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose a project folder"
+        panel.title = "Add Project"
+        panel.message = message
         panel.prompt = "Add Project"
+        if !Self.lastProjectPickerDirectoryPath.isEmpty {
+            var isDirectory: ObjCBool = false
+            let path = Self.lastProjectPickerDirectoryPath
+            if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+                panel.directoryURL = URL(fileURLWithPath: path, isDirectory: true)
+            }
+        }
 
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         addProject(at: url)
-        return projects.first(where: {
+        let id = projects.first(where: {
             $0.rootPath == url.standardizedFileURL.path
         })?.id
+        if id != nil {
+            Self.lastProjectPickerDirectoryPath = url.deletingLastPathComponent().path
+        }
+        return id
     }
 
     // MARK: - Project Ghost Color
