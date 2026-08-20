@@ -1070,14 +1070,14 @@ Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #10
 - [ ] **Titlebar-band click-through** — the excluded band doesn't hit-test, so clicks fall through to the sidebar's toolbar row; the sidebar's own "+ New Session" button sits in that band and is live *through* the modal. Round-2's "no safe AppKit primitive found" reasoning was WRONG — `sidebarToggleButton.isEnabled = false` paired in install/dismiss (exactly like the `setAccessibilityHidden` pair beside it) is that primitive. Don't let the old reasoning get enshrined. | app | new
 - [ ] **#130 merged with three interactions unverified** — a `.popover` inside the composer's `.popover`; `+ Add project…` opening a modal `NSOpenPanel` inside it; edit sheet + delete inside popover content. Sean authorised the merge knowing this. Any of the three may dismiss the composer. Round 3's R1 fix (`didResignActive` instead of `windowDidResignKey`) should have closed the panel/sheet/alert cases — unconfirmed by observation. | app | new
 
-## 2026-08-20 — Session-composer Phases 4 + composer polish (two PRs open, neither merged)
+## 2026-08-20 — Session-composer Phase 4 + composer polish — BOTH MERGED
 
-**Shipped to PR, awaiting Sean's merge:**
+**MERGED to `main` 2026-08-20** — #132 `6f20199a2`, then #133 `4fdf232f4`; `main` @ `4fdf232f4`. Merge order held (#132 first) so no intermediate `main` shipped the unfixed locked label. Verified on `main` by content, not merge status: `.lineLimit(1)` present, `startingAt` gone, `fileExists` guard present, DEBUG test accessor present, DESIGN.md paragraph present, first `.locked` call site present.
 
 - [x] ~~Phase 4 — project-creation convergence~~ — built as **PR #133**, `9a5ddd4f5` + review fix `6d9ab1c8c`. Corrections to the Phase 3 entry above, which was written from a stale plan: there are **five** picker call sites, not four (Phase 2/3 added `SessionComposerStore.swift:304`), and the browser project pick is at `WorkspaceViewContainer.swift:920`, **not `:807`**. `TemplatePickerView.swift:620` is a plain-text *file* picker and was correctly excluded. Build green, 735/0/1/736 in its worktree.
 - [x] ~~Composer shadow-only elevation + window-centering + cross-section ranking~~ — **PR #132**, `add99d095` + review fix `638025256`. Four review rounds.
 
-**Merge order matters: #132 before #133.** #132 carries the `.lineLimit(1)` fix for the locked-project label; #133 is what makes that label render for the first time (`ProjectBinding.locked` had **zero** production call sites before it). Merging #133 first puts a wrapping/crushing composer header on `main` until #132 lands. Files are disjoint, so either order merges cleanly — this is about what `main` looks like in between.
+~~**Merge order matters: #132 before #133.**~~ **DONE — merged in that order.** #132 carries the `.lineLimit(1)` fix for the locked-project label; #133 is what makes that label render for the first time (`ProjectBinding.locked` had **zero** production call sites before it). Merging #133 first puts a wrapping/crushing composer header on `main` until #132 lands. Files are disjoint, so either order merges cleanly — this is about what `main` looks like in between.
 
 **Needs Sean — runtime checks no amount of source-tracing can settle:**
 
@@ -1114,4 +1114,4 @@ Read the code before touching this. `docs/plans/session-creation-unified.html` �
 
 **Strawman (Sean to accept or redline): pin on explicit add, never on auto-register.** Give `addProject(at:)` a `pinned: Bool = false` parameter; the folder-picker path passes `true`, `SessionCoordinator`'s cwd auto-register passes `false`, and the re-add branch only re-pins when `pinned` is true. This satisfies the plan's own stated principle ("explicit pinning stays user-driven") and is a smaller, more defensible change than "drop the force-pin," which would also unpin projects the user deliberately added.
 
-- [ ] **BLOCKED until #133 merges.** Phase 5 edits `addProject` and the `addProject(at: url)` call at `WorkspaceStore.swift:959` — that call sits inside the region #133 rewrote, so building it on a third branch now guarantees a conflict. Sequence: merge #132 → merge #133 → branch Phase 5 off `main`. | app | needs-Sean
+- [ ] **UNBLOCKED — #133 merged `4fdf232f4`.** Branch Phase 5 off `main`. (Was: Phase 5 edits `addProject` and the `addProject(at: url)` call at `WorkspaceStore.swift:959` — that call sits inside the region #133 rewrote, so building it on a third branch now guarantees a conflict. that conflict risk is now moot.) Next: Sean accepts or redlines the strawman above. | app | needs-Sean
