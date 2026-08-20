@@ -468,16 +468,17 @@ struct SessionComposerPalette: View {
 
     @ViewBuilder
     private var projectControl: some View {
-        let label = currentProject?.name ?? "Select project"
-
         if isProjectLocked {
             // No hairline divider here (nit): a divider next to a static
             // label with no `▾` reads as a control that isn't one.
-            Text(label)
+            Text(currentProject?.name ?? "")
                 .font(.system(size: rowFontSize, weight: .medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
                 .padding(.horizontal, 8)
         } else {
+            let label = currentProject?.name ?? "Select project"
+
             Divider()
                 .frame(height: fieldHeight * 0.5)
 

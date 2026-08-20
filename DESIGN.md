@@ -180,6 +180,8 @@ Background is layered `.regularMaterial` (a translucent system blur) with the su
 )
 ```
 
+The composer's trailing project control (`projectControl`) has two visual states, keyed off `isProjectLocked`. Locked renders a static secondary-styled label with no divider and no chevron — a divider beside a chevron-less label reads as a control that isn't one, so it's omitted deliberately. Unlocked renders a hairline divider followed by a button with the label and a 9pt `chevron.down`. Both states truncate the label to a single line (`.lineLimit(1)`) rather than wrapping — the control sits in a `queryRow` HStack under `WorkspaceLayout.composerOverlayWidth`'s fixed 360pt width, and project names come from `url.lastPathComponent` of a user-picked folder, so long names are the normal case.
+
 ### Row / hover states
 
 Use `cardBackgroundLight/Dark`, `expandedContainerLight/Dark`, `activeRowLight/Dark` tokens from `WorkspaceLayout.swift`. Do not create new hover colors.
