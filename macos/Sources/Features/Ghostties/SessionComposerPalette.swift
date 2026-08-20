@@ -648,15 +648,18 @@ struct SessionComposerPalette: View {
         // `selectedIndex` pointing at the wrong row if the composer stays
         // open on a failed commit (S6). Synchronous and load-bearing (N1):
         // it is what makes a double Return a no-op if both `.onSubmit` and
-        // `.onKeyPress` ever fire on macOS 14+. This is one instance of a
-        // repo-wide invariant, not a `commit(template:)`-specific trick:
-        // EVERY action that replaces the option list — this one, and the
-        // project row / dropdown / "+ Add project…" actions that call
-        // `SessionComposerStore.selectProject(_:)` — must nil
-        // `selectedIndex` FIRST, or a same-keystroke double-fire resolves
-        // `selectedOption` against a list the first fire already swapped
-        // out (PR #132 review round 2, F1 — a comment naming only this one
-        // site is how that bug got in).
+        // `.onKeyPress` ever fire on macOS 14+. Scoped to what's actually
+        // reachable via Return: every `ComposerOption.action` in
+        // `flattenedOptions` — this one and the search-result project row
+        // (`makeOption(for project:)`) — nils `selectedIndex` FIRST for the
+        // same reason. The trailing project dropdown and "+ Add project…"
+        // are mouse-only Buttons outside `flattenedOptions`, so
+        // `handle(.submit)` can never resolve `selectedOption` into them —
+        // they don't need this guard, and `addProjectViaPanel` (on
+        // `SessionComposerStore`) couldn't apply it anyway, having no
+        // access to this view's `@State` (PR #132 review round 3 — a prior
+        // draft of this comment claimed all four sites nil'd first; only
+        // these two do).
         selectedIndex = nil
 
         // F1 (Phase 3 review): capture the target project BEFORE precommit
@@ -778,14 +781,17 @@ struct ComposerOption: Identifiable, Hashable {
 /// (`Helpers/Backport.swift:53-68`) and the app's deployment target is
 /// 13.0, so `.onSubmit` alone is what makes Return work pre-14. If both
 /// fire on 14+, the invariant that makes a double-fire a no-op instead of
-/// a double-commit is that EVERY `SessionComposerPalette` action which
-/// replaces the option list — `commit(template:)` (N1) and the
-/// project-selection actions that call `SessionComposerStore.selectProject(_:)`
-/// (PR #132 review round 2, F1) — nils `selectedIndex` SYNCHRONOUSLY
-/// before doing anything else, so the second fire's `selectedOption`
-/// resolves to `nil` and its handler becomes a no-op rather than acting on
-/// a list the first fire already swapped out from under it — this repo
-/// cannot verify from source alone whether both actually fire, only that a
+/// a double-commit is scoped to `handle(.submit)`'s own reach: every
+/// `ComposerOption.action` in `flattenedOptions` — `commit(template:)`
+/// (N1) and the search-result project row's action — nils `selectedIndex`
+/// SYNCHRONOUSLY first, so the second fire's `selectedOption` resolves to
+/// `nil` and its handler becomes a no-op rather than acting on a list the
+/// first fire already swapped out from under it. The trailing project
+/// dropdown and "+ Add project…" don't need this: they're mouse-only
+/// Buttons that `handle(.submit)` never reaches, and `addProjectViaPanel`
+/// (on `SessionComposerStore`) has no access to this `@State` regardless
+/// (PR #132 review round 3) — this repo cannot verify from source alone
+/// whether `.onSubmit`/`.onKeyPress` actually both fire, only that a
 /// double-fire is harmless if they do.
 struct ComposerQueryField: View {
     @Binding var query: String
