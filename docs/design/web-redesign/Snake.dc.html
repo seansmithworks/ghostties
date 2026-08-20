@@ -20,15 +20,15 @@
        v2 layout. The playfield now owns the top of the board and the hero
        copy sits under it, so the first thing read is the field, not a
        headline lying across it. Everything is absolutely positioned, so the
-       legend band can appear and disappear without moving anything.
+       scoreboard can appear and disappear without moving anything.
        ------------------------------------------------------------------ */
 
     /* playfield lattice — invisible until a coin goes in */
-    .lattice { position: absolute; left: 20px; top: 148px; width: 1320px; height: 264px;
+    .lattice { position: absolute; left: 20px; top: 148px; width: 1320px; height: 440px;
       background-image: radial-gradient(rgba(255,255,255,0.11) 1.5px, transparent 1.5px);
       background-size: 44px 44px; background-position: 22px 22px;
       opacity: 0; transition: opacity 0.7s cubic-bezier(0.25,1,0.5,1); }
-    .bounds { position: absolute; left: 20px; top: 148px; width: 1320px; height: 264px;
+    .bounds { position: absolute; left: 20px; top: 148px; width: 1320px; height: 440px;
       border: 1px solid rgba(255,213,79,0.16); opacity: 0;
       transition: opacity 0.7s cubic-bezier(0.25,1,0.5,1); }
     .sn.play .lattice, .sn.play .bounds { opacity: 1; }
@@ -61,7 +61,7 @@
     .cell.alert .v { color: #ff8a70; }
 
     /* --- copy: under the field now, not over it --- */
-    .copy { position: absolute; left: 56px; top: 452px; z-index: 6; max-width: 680px;
+    .copy { position: absolute; left: 56px; top: 628px; z-index: 6; max-width: 680px;
       pointer-events: none; }
     h1 { font-family: "Silkscreen", monospace; font-weight: 700; margin: 0;
       font-size: 56px; line-height: 1.08; letter-spacing: 0.005em; color: #fff;
@@ -72,7 +72,7 @@
       color: rgba(236,234,245,0.7); text-wrap: pretty; }
     .lead b { color: #eceaf5; font-weight: 600; }
 
-    .install { position: absolute; left: 56px; top: 676px; z-index: 7; display: flex; }
+    .install { position: absolute; left: 56px; top: 852px; z-index: 7; display: flex; }
     .u { display: flex; align-items: center; border: 1px solid rgba(236,234,245,0.18);
       border-right-width: 0; background: rgba(7,7,15,0.82); }
     .u:last-child { border-right-width: 1px; }
@@ -85,7 +85,7 @@
     .u.p .val { color: #ffe08a; }
 
     /* --- the coin slot: the only tell, and it stays small --- */
-    .slot { position: absolute; left: 56px; top: 740px; z-index: 7;
+    .slot { position: absolute; left: 56px; top: 916px; z-index: 7;
       display: flex; align-items: center; gap: 10px;
       font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
       letter-spacing: 0.22em; text-transform: uppercase; color: rgba(236,234,245,0.30);
@@ -101,7 +101,7 @@
     .sn.play .slot { opacity: 0; pointer-events: none; }
 
     /* keycaps only exist once you are playing */
-    .keys { position: absolute; left: 56px; top: 736px; z-index: 7; display: flex;
+    .keys { position: absolute; left: 56px; top: 912px; z-index: 7; display: flex;
       align-items: center; gap: 12px; opacity: 0; transition: opacity 0.5s 0.25s;
       font-family: "Archivo", sans-serif; font-weight: 500; font-size: 8.5px;
       letter-spacing: 0.22em; text-transform: uppercase; color: rgba(236,234,245,0.4); }
@@ -339,7 +339,7 @@ class Component extends DCLogic {
     }
 
     let mode = 'idle';
-    let hx = 1, hy = 8, dir = [1,0], next = [1,0];
+    let hx = 1, hy = 3, dir = [1,0], next = [1,0];
     let hpx = px(hx), hpy = py(hy);
     const trail = [[hx, hy]];
     let f = 0, t = 0, herded = 0, rescues = 0, strays = 0;

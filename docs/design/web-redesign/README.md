@@ -59,13 +59,15 @@ Top row of page 1, above everything else:
 
 | Board | What it is |
 | --- | --- |
-| `CutList.dc.html` | Seven ship, four park, eight cut, each with its reason. A strawman. |
+| `CutList.dc.html` | Eight ship, four park, six cut, each with its reason. A strawman. |
 | `Ghosts.dc.html` | The robot pass — five machine faces, an antenna, and a size ladder down to 12px. |
 | `TypeSpec.dc.html` | The locked pairing written up as a ramp, plus a conformance box. |
 
 `Snake.dc.html` was rebuilt as v2 in the same round: hero copy pushed below the
 playfield, collectible tokens added, five dials exposed, and the app-window peek
-cut for room.
+cut for room. **Superseded by round 4:** the token layer was cut as a
+redundant second collectible (see "Decisions locked so far" above) and the
+board now exposes three dials — `speed`, `strayEvery`, `sound`.
 
 ## Known drift
 
