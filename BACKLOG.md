@@ -4,6 +4,34 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-20 — Composer: text-forward parsing + three defects (NEW, off Phase 4/5)
+
+Sean ran the two Phase 3 checks on the Dev build off merged `main`. **Both pass** —
+Cmd+T lands focus in the field (three characters typed with no click), and right-click a
+sidebar session row then Cmd+T keeps the composer alive. Checks 1 and 2 in the section
+below are closed by this.
+
+Testing surfaced three defects and one feature direction. None are Phase 4 or Phase 5.
+
+- [ ] **D1 — cross-section ranking doesn't exist, so Enter can launch the wrong thing.**
+  `SessionComposerPalette` renders fixed sections (Recent → Templates → Projects) and ranks
+  only *within* each. Typing `ghos` puts "Linear Sync" first — a legitimate `.substring`
+  match on its description "Syncs Linear issues into Ghostties tasks" — above the actual
+  `ghostties` project. The default selection is therefore the wrong row, and Enter commits it.
+  Fix: rank across all sections by `MatchTier` before sectioning, or exclude subtitle matches
+  from tier-1 candidacy. `SessionComposerRanking.matchTier` already returns the tier needed.
+- [ ] **D2 — multi-token queries return nothing.** `SessionComposerRanking.sorted` matches the
+  whole query string against each title/subtitle. `ghostties shell` is not a substring of
+  either "ghostties" or "Shell", so the list goes blank. Needs tokenization, not a new matcher.
+- [ ] **D3 — scrim reads as broken.** `SessionComposerOverlay.swift:67` does paint
+  `Color.black.opacity(0.25)`, and the titlebar band is visibly brighter in Sean's screenshots,
+  so it IS rendering. Two candidate causes for "doesn't work": the F7 titlebar exclusion makes
+  the dim look like a clipping bug, and the palette's own `.ultraThinMaterial` over a dimmed
+  field leaves the panel grey instead of popping. Needs a look on-screen, not from stills.
+- [ ] **D4 — text-forward command grammar.** Target: `ghostties cco -n "ghostties website"`
+  parses to project=ghostties, template=cco, name="ghostties website", launched on Enter with
+  no pointer. Deterministic tokenizer + the existing fuzzy matcher — no LLM. See notes below.
+
 ## 2026-08-20 — Phase 3 merged with two manual checks still unrun
 
 PR #131 merged to `main` as `75b36b8c3` (merge commit, not squash). Merged on Sean's "lfg" before
