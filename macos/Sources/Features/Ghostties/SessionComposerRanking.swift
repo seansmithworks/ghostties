@@ -84,6 +84,40 @@ enum SessionComposerRanking {
             }
             .map { $0.item }
     }
+
+    /// D1: the best-tier match across a WHOLE flattened, multi-section list
+    /// (e.g. the session composer's RECENT + TEMPLATES + PROJECTS rows,
+    /// rendered as three fixed sections but selected as one list). `sorted`
+    /// above only ranks WITHIN a single list — a caller that concatenates
+    /// several independently-sorted sections and then picks index 0 gets
+    /// whichever section happens to render first, not the best match
+    /// overall (e.g. a `.substring` match in an earlier section beating an
+    /// `.exactPrefix` match in a later one, purely by render order).
+    ///
+    /// Returns 0 for an empty `items`, a blank `query`, or when nothing
+    /// matches (every item is untiered) — i.e. current/render order is
+    /// preserved in every case where there's no ranking signal to act on.
+    /// Ties keep the earliest index for the same reason.
+    static func bestMatchIndex<T>(
+        in items: [T],
+        query: String,
+        title: (T) -> String,
+        subtitle: (T) -> String? = { _ in nil }
+    ) -> Int {
+        guard !items.isEmpty else { return 0 }
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return 0 }
+
+        var bestIndex = 0
+        var bestTier: MatchTier?
+        for (index, item) in items.enumerated() {
+            guard let tier = matchTier(title: title(item), subtitle: subtitle(item), query: query) else { continue }
+            if bestTier == nil || tier < bestTier! {
+                bestTier = tier
+                bestIndex = index
+            }
+        }
+        return bestIndex
+    }
 }
 
 /// The three-tier project dropdown ordering (locked decision, no visible

@@ -263,6 +263,21 @@ struct SessionComposerPalette: View {
         }
     }
 
+    /// D1 fix: the best-tier option across the WHOLE flattened list, not
+    /// just index 0. RECENT → TEMPLATES → PROJECTS render in that fixed
+    /// section order (`flattenedOptions`), and `SessionComposerRanking.sorted`
+    /// only ranks WITHIN each section — so a `.substring` match on a
+    /// Templates row's subtitle used to always beat an `.exactPrefix` match
+    /// on a Projects row purely because Templates renders above Projects
+    /// (e.g. typing "ghos" selected a "Linear Sync" template whose
+    /// description mentions "Ghostties" over the "ghostties" project
+    /// itself). Ties — including a blank query, where every option is
+    /// untiered — keep index 0, i.e. current section order, so unambiguous
+    /// queries and the empty-query default are unchanged.
+    private func bestSelectionIndex(in options: [ComposerOption]) -> UInt {
+        UInt(SessionComposerRanking.bestMatchIndex(in: options, query: query, title: { $0.title }, subtitle: { $0.subtitle }))
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -321,7 +336,7 @@ struct SessionComposerPalette: View {
         .frame(width: paletteWidth)
         .background(
             ZStack {
-                Rectangle().fill(.ultraThinMaterial)
+                Rectangle().fill(.regularMaterial)
                 Rectangle().fill(backgroundColor).blendMode(.color)
             }
             .compositingGroup()
@@ -332,13 +347,16 @@ struct SessionComposerPalette: View {
                 .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
         )
         // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3 review
-        // fix). `.anchored` relies on the native NSPopover chrome/shadow
-        // instead; adding a second shadow there would double up.
+        // fix, retuned in `fix/composer-shadow-no-scrim` now that the shadow
+        // carries the "on top of" read alone, with no scrim behind it).
+        // `.anchored` relies on the native NSPopover chrome/shadow instead;
+        // adding a second shadow there would double up.
         .shadow(
             color: request.presentation == .centered
                 ? .black.opacity(WorkspaceLayout.composerModalShadowOpacity)
                 : .clear,
-            radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0
+            radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0,
+            y: request.presentation == .centered ? WorkspaceLayout.composerModalShadowYOffset : 0
         )
         .environment(\.colorScheme, scheme)
         .onAppear {
@@ -346,7 +364,10 @@ struct SessionComposerPalette: View {
             // S5: row 0 is the project's default template (Phase 1's
             // default-first ordering) and the legend reads "↵ start" — seed
             // the selection so Return isn't a dead key on first open.
-            selectedIndex = 0
+            // `bestSelectionIndex` is index 0 here since the query is blank
+            // on first open (D1's cross-section ranking only applies once
+            // there's a query to rank against).
+            selectedIndex = bestSelectionIndex(in: flattenedOptions)
         }
         .onChange(of: isPresented) { presented in
             if !presented {
@@ -364,7 +385,7 @@ struct SessionComposerPalette: View {
             // latches `SessionComposerStore.isOpen` true forever (B3).
             composerStore.cancel()
         }
-        .onChange(of: query) { _ in clampSelectedIndex() }
+        .onChange(of: query) { _ in reselectBestMatch() }
         .onChange(of: composerStore.selectedProjectId) { _ in
             // N5: changing the project via the dropdown or a project row
             // changes `flattenedOptions.count` with `query` unchanged, so
@@ -567,18 +588,35 @@ struct SessionComposerPalette: View {
     /// `selectedProjectId` triggers (N5) — either can change
     /// `flattenedOptions.count`.
     private func clampSelectedIndex() {
-        let count = flattenedOptions.count
-        guard count > 0 else {
+        let options = flattenedOptions
+        guard !options.isEmpty else {
             selectedIndex = nil
             return
         }
         if let current = selectedIndex {
-            if current >= UInt(count) {
-                selectedIndex = UInt(count - 1)
+            if current >= UInt(options.count) {
+                selectedIndex = UInt(options.count - 1)
             }
         } else {
-            selectedIndex = 0
+            selectedIndex = bestSelectionIndex(in: options)
         }
+    }
+
+    /// D1: query-driven reselection, distinct from `clampSelectedIndex`
+    /// above. `clampSelectedIndex` deliberately PRESERVES a still-valid
+    /// index (N5's fix, for the `selectedProjectId` trigger, where the list
+    /// changing shape shouldn't discard a user's manual arrow selection).
+    /// A query keystroke is different: every keystroke re-ranks the whole
+    /// list, so the top match needs to be reselected live even when the old
+    /// index is still in bounds — that's the D1 bug itself (a stale index-0
+    /// silently stayed valid while the query changed underneath it).
+    private func reselectBestMatch() {
+        let options = flattenedOptions
+        guard !options.isEmpty else {
+            selectedIndex = nil
+            return
+        }
+        selectedIndex = bestSelectionIndex(in: options)
     }
 
     private func commit(template: AgentTemplate) {
@@ -620,9 +658,9 @@ struct SessionComposerPalette: View {
         } else {
             // N4: precommit failed — the composer stays open with
             // `writeError` showing. `selectedIndex` was just nil'd above,
-            // so Return is dead until the user types or arrows; re-seed
-            // row 0 so Return works again immediately.
-            selectedIndex = 0
+            // so Return is dead until the user types or arrows; re-seed the
+            // best match (D1) so Return works again immediately.
+            selectedIndex = bestSelectionIndex(in: flattenedOptions)
         }
     }
 
