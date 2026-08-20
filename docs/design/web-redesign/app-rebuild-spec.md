@@ -6,8 +6,11 @@ No literal is invented; where source lacks one it's marked **NOT FOUND — needs
 ## Framing: two different builds
 
 `app-sessions.jpg`/`app-tasks.jpg` and the Swift source are **two different
-builds**. **Source is authoritative for COLOR. Photos for GEOMETRY.** Known
-divergences — build to the resolution given, not to whichever side "looks right":
+builds**. Source is authoritative for color and for component geometry.
+Photos are authoritative for composed vertical rhythm and sidebar width —
+where a composed measurement disagrees with a sum of source components,
+build the measurement and note the delta. Known divergences — build to the
+resolution given, not to whichever side "looks right":
 
 | # | Divergence | Build value |
 |---|---|---|
@@ -23,13 +26,13 @@ dark-mode photo exists yet (Sean is capturing them) — see §8.
 
 | Value | Source | Citation |
 |---|---|---|
-| Traffic lights | Native `standardWindowButton`, not custom-drawn | `WorkspaceViewContainer.swift:771`; **NOT FOUND — needs runtime measurement** |
+| Traffic lights | Native `standardWindowButton`, not custom-drawn; photo-measured: centers x=27.5/51.5/75.5 (24px spacing), diameter ≈16px, centerline y=27, colors `#FC3C55`/`#ECCC00`/`#2FD954` | `WorkspaceViewContainer.swift:771`; `app-tasks.jpg` 1:1 |
 | Window corner radius | Native macOS chrome, not set in app code | **NOT FOUND** (~10px in photos) |
 | Titlebar spacer height (taskFirst only) | `titlebarSpacerHeight = 28` | `WorkspaceViewContainer.swift:689,693`; `WorkspaceLayout.swift:35` |
 | Titlebar toolbar row height (projectFirst — both photos) | `toolbarRowTopAnchorConstant * 2`, dynamic. projectFirst does NOT use `titlebarSpacerHeight`; uses `.ignoresSafeArea(.container, edges: .top)` | `WorkspaceSidebarView.swift:175`; `WorkspaceViewContainer.swift:666-674,717-721` |
 | Measured (projectFirst, cross-check only) | Traffic-light centerline y≈27; toolbar row ≈54px; first header top y≈58 | runtime, not source |
 | Sidebar material | `NSVisualEffectView`, `.sidebar`, `.behindWindow`, `.active` | `WorkspaceViewContainer.swift:58-64` |
-| Chrome bg (light/dark) | `#F0E9E6` / `#242424` | `WorkspaceLayout.swift:109,112` |
+| Chrome bg (light/dark) | `#F0E9E6` / `#242424` (`white:0.14`, generic-gray colorspace, approximate) | `WorkspaceLayout.swift:109,112` |
 | Canvas bg (light/dark) | `#FAF7F3` / `#2E2E2E` (`white:0.18`, generic-gray colorspace, approximate) | `WorkspaceLayout.swift:119,123` |
 | Terminal card radius / inset / shadow | radius 12; inset 8 all sides; `black.opacity(0.15)` radius 8 offset `(0,-2)` | `WorkspaceLayout.swift:67,83,70-79` |
 
@@ -43,8 +46,8 @@ dark-mode photo exists yet (Sean is capturing them) — see §8.
 | List padding (Projects tab) | horizontal 8, vertical 4 | `WorkspaceSidebarView.swift:82-83` |
 | **Sessions/Projects tab switcher** | No visible in-sidebar control — `sidebarTab` is an `@AppStorage` enum toggled via View menu | `WorkspaceSidebarView.swift:7-10,39,46-93` |
 | Toolbar row padding | 12pt horizontal | `WorkspaceSidebarView.swift:172` |
-| Toolbar content — forks by tab | Projects: `ToolbarLabelButton(plus,"New Project")`. Sessions: `NewSessionToolbarButton` `Menu`, disabled with no projects. Both icon+label — bare "+" is Framing-c | `WorkspaceSidebarView.swift:166-167`; `RecentsListView.swift:483-528` |
-| Toolbar button icon/label/color | icon 10pt `.medium`; label 12pt `.medium`; `.secondary`→`.primary` hover | `WorkspaceSidebarView.swift:514-521` |
+| Toolbar content — forks by tab | Projects: `ToolbarLabelButton(plus,"New Project")`. Sessions: `NewSessionToolbarButton` `Menu`, disabled with no projects. Both icon+label — bare "+" is Framing-c | `WorkspaceSidebarView.swift:166-169`; `RecentsListView.swift:483-528` |
+| Toolbar button icon/label/color | `HStack(spacing:4)` icon↔label; icon 10pt `.medium`; label 12pt `.medium`; `.secondary`→`.primary` hover | `WorkspaceSidebarView.swift:513-521`; `RecentsListView.swift:510` |
 
 ## 3. Sessions tab rows (`RecentsRowView` — flat list, no reference photo)
 
@@ -68,7 +71,8 @@ dark-mode photo exists yet (Sean is capturing them) — see §8.
 | Project name | 13pt `.medium`, tracking `-0.13`, 1 line | `ProjectDisclosureRow.swift:328-331` |
 | Hover bg / "+" button | Hover light `rgba(0,0,0,.06)`/dark `rgba(255,255,255,.06)`, 6pt radius; "+" (expanded only) 10pt `.medium` icon, 24×24pt hit target | `ProjectDisclosureRow.swift:349-352,335-340` |
 | **No disclosure chevron** — whole row is the tap target | — | `ProjectDisclosureRow.swift:296-354` |
-| Expanded container bg / spacing | Dark `Color(white:0.16)`≈`#292929`, Light `Color.white` (dark cited first, source order); `VStack(spacing:2)` | `WorkspaceLayout.swift:95,98`; `ProjectDisclosureRow.swift:390-395,113` |
+| Expanded container bg / spacing | Dark `Color(white:0.16)`≈`#292929`, Light `Color.white`; `VStack(spacing:2)` | `WorkspaceLayout.swift:95,98`; `ProjectDisclosureRow.swift:390-395,113` |
+| Vertical rhythm (projectFirst, photo-measured 1:1) | Toolbar row 0–54 · list top pad 4 · section-header block 24 (label center ≈y68) · first project row top 84 · collapsed project-row pitch 36 (32 row + 2 outer LazyVStack + 2 inner VStack collapsed slot) · +8 top pad before each non-Pinned section | `WorkspaceSidebarView.swift:66,70,82-83`; `ProjectDisclosureRow.swift:113,348`; `app-tasks.jpg` |
 
 ### Session child row (`SessionRow`, `SessionDetailView.swift`)
 
@@ -76,7 +80,7 @@ dark-mode photo exists yet (Sean is capturing them) — see §8.
 |---|---|---|
 | Element order | `HStack { name; Spacer(); ghostIndicator }` — glyph **trailing**, opposite of §3's leading | `SessionDetailView.swift:33-73` |
 | Row height / padding | 28pt; horizontal 8pt +20pt left indent under project; `HStack(spacing:4)` | `SessionDetailView.swift:75,74,33`; `ProjectDisclosureRow.swift:176` |
-| Session name | 12pt: `.semibold` if `needsAttention`, `.medium` if `waiting`, else `.regular`. Color `.primary`, except `.idle` (`secondaryLabelColor`), `.inactive` (`textSecondaryLight/Dark`) | `SessionDetailView.swift:53,168-176` |
+| Session name | 12pt: `.semibold` if `needsAttention`, `.medium` if `waiting`, else `.regular`. Color `.primary`, except `.idle` (`secondaryLabelColor`), `.inactive` (`textSecondaryLight/Dark`) — overridden to `.primary` whenever `isActive`, regardless of indicator state | `SessionDetailView.swift:53,168-176,169` |
 | Ghost glyph | 12×12pt in 16×16pt frame; `.filled`, `.outline` (1pt) when `.inactive` | `SessionDetailView.swift:144-145,142` |
 | Row bg | Active `activeRowLight/Dark` (§6); hover light `rgba(0,0,0,.04)` / dark `rgba(255,255,255,.04)`; radius 6pt | `SessionDetailView.swift:178-185,76-78` |
 | Active-row shadow | `black.opacity(0.1)`, radius 2, y 1 | `SessionDetailView.swift:80-83` |
@@ -88,7 +92,7 @@ dark-mode photo exists yet (Sean is capturing them) — see §8.
 | In-row group header (`SessionGroupHeader`, only when `groups.count > 1`, buckets Active/Recent/Idle) | `HStack(spacing:5)`: icon 8pt `.semibold` tertiary in 10pt frame + 9pt `.semibold` uppercase tracking `0.5` label (`sessionGroupHeaderForeground`); padding h8/v2, `.leading 20`, top 2 first bucket else 6 | `ProjectDisclosureRow.swift:533-548,552-553,144-145,139,142` |
 | "+ New Session" row (below session list) | `HStack(spacing:6)`: plus 10pt `.medium` + "New Session" 11pt `.medium`; padding h8/v4, `.leading 20`; `.tertiary`→`.secondary` hover | `ProjectDisclosureRow.swift:436-443,449-450,121,448` |
 | Top-level group header (Pinned/Active Now/Recent/All Projects) | icon 9pt `.semibold` tertiary + 10pt `.semibold` uppercase tracking `0.6` label; padding leading 8/trailing 12/vertical 4 | `WorkspaceSidebarView.swift:436-445,449-451` |
-| Sessions-tab bucket header (Active/Inactive/Archive) | `PixelChevronView` 16×16pt + 10pt `.semibold` uppercase tracking `0.6` label; padding leading 8/trailing 12/top 8/bottom 4 | `RecentsListView.swift:557-569,573-576` |
+| Sessions-tab bucket header (Active/Inactive/Archive) | `PixelChevronView` 8×8 glyph in 16×16pt frame + 10pt `.semibold` uppercase tracking `0.6` label; padding leading 8/trailing 12/top 8/bottom 4 | `RecentsListView.swift:557-569,573-576`; `PixelChevronView.swift:36-37` |
 
 ## 5. Type ramp
 
@@ -117,7 +121,7 @@ Web fallback (suggestion only): `-apple-system, "SF Pro Text", "Inter", sans-ser
 | Waiting / your turn (blue) | `#5B8DEF` (replaces terracotta — Framing a) | `WorkspaceLayout.swift:140` |
 | Processing / Error | `.systemGreen` ~`#28CD41`L/`#32D74B`D; `.systemRed` ~`#FF3B30`L/`#FF453A`D — verify vs. screenshots | `RecentsRowView.swift:125,121` |
 | Idle / Inactive (Sessions-tab dot) | `primary.opacity(0.30)` / `(0.12)`: light black, dark white | `RecentsRowView.swift:126-127` |
-| Idle / Inactive (Projects-tab child row+ghost) | `secondaryLabelColor` / `tertiaryLabelColor` — NOT `primary.opacity` | `SessionDetailView.swift:162,164` |
+| Idle / Inactive (Projects-tab child ghost) | `secondaryLabelColor` / `tertiaryLabelColor` — NOT `primary.opacity` | `SessionDetailView.swift:162,164` |
 | Idle/inactive project ghost (header row) | `activityNormalForeground` (`Color.primary`) if `lastActiveAt`≤24h, else `activityMutedForeground` (`tertiaryLabelColor`) | `WorkspaceStore.swift:987-1000` |
 
 ### Background/text layers
@@ -126,11 +130,12 @@ Web fallback (suggestion only): `-apple-system, "SF Pro Text", "Inter", sans-ser
 |---|---|---|---|
 | Chrome background | `#F0E9E6` | `#242424` | `WorkspaceLayout.swift:109,112` |
 | Canvas background | `#FAF7F3` | `#2E2E2E` (approx., generic-gray colorspace) | `WorkspaceLayout.swift:119,123` |
-| Text primary | `Color.primary` | `Color.primary` | semantic, dynamic — verify vs. screenshots |
+| Text primary | `#1A1A1A` | `#F0EFED` | photo-measured / Apple `labelColor` |
 | Text secondary | `#636363` | `#9A9A9A` | `WorkspaceLayout.swift:186,189` |
-| Active row tint | `black.opacity(0.04)` | `white.opacity(0.06)` (dark cited first, source order) | `WorkspaceLayout.swift:101,104` |
-| Expanded container | `Color(white:0.16)`≈`#292929` | `Color.white` (dark cited first, source order) | `WorkspaceLayout.swift:95,98` |
-| Section-header label (top-level + Sessions buckets) | `#636363` | `#9A9A9A` | `WorkspaceLayout.swift:186,189,196-198,445`; `RecentsListView.swift:569` |
+| Active row tint | `black.opacity(0.04)` | `white.opacity(0.06)` | `WorkspaceLayout.swift:101,104` |
+| Expanded container | `Color.white` | `Color(white:0.16)`≈`#292929` | `WorkspaceLayout.swift:95,98` |
+| `tertiaryLabelColor` / `secondaryLabelColor` | `rgba(0,0,0,0.26)` / `rgba(0,0,0,0.50)` | `rgba(255,255,255,0.26)` / `rgba(255,255,255,0.55)` | Apple semantic, photo-verified (header pin icon ≈26% black on #EEE9E5) |
+| Section-header label (top-level + Sessions buckets) | `#636363` | `#9A9A9A` | `WorkspaceLayout.swift:186,189,196-198`; `WorkspaceSidebarView.swift:445`; `RecentsListView.swift:569` |
 | In-row group header label | `#636363` | `#9A9A9A` | `WorkspaceLayout.swift:204-206` |
 | Hover: Sessions row / Projects session row / project header | `rgba(0,0,0,.05/.04/.06)` | `rgba(255,255,255,.05/.04/.06)` | `RecentsRowView.swift:144`; `SessionDetailView.swift:184`; `ProjectDisclosureRow.swift:351` |
 | Photo-measured (light, ref. only) | Sidebar ≈`#EEE9E5`-`#EDE5E2` (`.sidebar` over `#F0E9E6`); card face ≈`#F7F7F7` (Framing d) | verify vs. dark photo | `WorkspaceViewContainer.swift:58-64` |
