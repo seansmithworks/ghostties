@@ -29,9 +29,8 @@ Two PRs open, neither merged. Sean merges; never merge unprompted.
   undecided. Machinery exists (`.anchored` + `ProjectDisclosureRow.swift:466`); the only real
   change is splitting `WorkspaceViewContainer.swift:1575`'s hardcoded `.centered` by trigger.
   Recommendation on file: ship with native NSPopover chrome and judge the divergence on screen.
-- [ ] **Phase 5 — stop force-pinning** (`WorkspaceStore.swift:638`, `SessionCoordinator.swift:491`).
-  *Parked,* undecided. The plan holds it separate deliberately: it visibly reorders existing
-  sidebars on upgrade, which is a taste call rather than a bug fix.
+- [x] ~~**Phase 5 — stop force-pinning**~~ — **MERGED** as #134 `9c26e1be5` (2026-08-20). Pin on
+  explicit add, never on auto-register. See the 2026-08-20 Phase 5 entry at the bottom of this file.
 - [ ] **Composer command grammar spec** published as an Artifact
   (`https://claude.ai/code/artifact/de9d09b5-f31a-4a9d-ad07-5047cb53a32f`). Three decisions
   await Sean: positional vs sigils, project-vs-template collision precedence, and whether a
@@ -1114,4 +1113,14 @@ Read the code before touching this. `docs/plans/session-creation-unified.html` �
 
 **Strawman (Sean to accept or redline): pin on explicit add, never on auto-register.** Give `addProject(at:)` a `pinned: Bool = false` parameter; the folder-picker path passes `true`, `SessionCoordinator`'s cwd auto-register passes `false`, and the re-add branch only re-pins when `pinned` is true. This satisfies the plan's own stated principle ("explicit pinning stays user-driven") and is a smaller, more defensible change than "drop the force-pin," which would also unpin projects the user deliberately added.
 
-- [ ] **UNBLOCKED — #133 merged `4fdf232f4`.** Branch Phase 5 off `main`. (Was: Phase 5 edits `addProject` and the `addProject(at: url)` call at `WorkspaceStore.swift:959` — that call sits inside the region #133 rewrote, so building it on a third branch now guarantees a conflict. that conflict risk is now moot.) Next: Sean accepts or redlines the strawman above. | app | needs-Sean
+- [x] ~~**UNBLOCKED — #133 merged `4fdf232f4`.** Branch Phase 5 off `main`.~~ Sean accepted the strawman verbatim; built, reviewed, merged same day — see next section. | app | done
+
+## 2026-08-20 — Phase 5 MERGED — session-composer stack COMPLETE
+
+**#134 merged to `main` as `9c26e1be5`** (real merge commit; branch `feat/session-composer-phase5` deleted from origin). All five phases of `docs/plans/session-creation-unified.html` are now shipped: #129 → #130 → #131 → #132/#133 → #134.
+
+What shipped: `addProject(at:pinned: Bool = false)` — picker funnel passes `pinned: true`, `SessionCoordinator` auto-register inherits `false`, duplicate/re-add is a pure no-op unless explicitly pinning an unpinned project (never unpins, never persists/releases the freeze snapshot when nothing changed). Two review rounds (round 1: no blockers, 3 should-fixes fixed in `885c62863`; round 2: code clean, PR-body accuracy fixed). Suite 0 failed / 748 passed / 1 skipped in a fresh worktree; the key no-op test is mutant-verified (fails under a relaxed guard). Also fixes a latent bug: renamed projects were force-re-pinned on every task-row click (name-vs-path resolution mismatch).
+
+- [ ] **Sean's Dev-instance pass — three checks, one sitting:** (1) "+ New Project" → long multi-word folder → type 3 chars WITHOUT clicking: does focus land in the composer field or the shell behind it? (2) Does the locked project label truncate or wrap the card header? (3) NEW from Phase 5: task-row click on an unregistered project now enters the sidebar at the bottom ("All") and slides up to "Active Now" on session focus, instead of appearing pinned at top — and for existing users the "Pinned" section starts empty until they pin manually. Taste verdict on both beats. | app | needs-Sean
+- [ ] **Pre-existing doc nits in `SessionCoordinator` (~:467-470), flagged by review, deliberately not fixed:** doc item 2 writes `Project(name:, rootPath:)` but production names from `url.lastPathComponent`; doc item 3 omits `forceSpawn`. Predate Phase 5. | app | new
+- [ ] **Stale plan snapshot:** `docs/plans/session-creation-unified.html` §Phase 5 (`:459`) still describes the old always-pin semantics; plan is now fully shipped so the whole doc is archival. | docs | new
