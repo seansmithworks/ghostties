@@ -4,6 +4,24 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-20 — Phase 3 merged with two manual checks still unrun
+
+PR #131 merged to `main` as `75b36b8c3` (merge commit, not squash). Merged on Sean's "lfg" before
+the two runtime checks below were performed. Both are behavioral, not correctness-of-diff — Phase 3
+passed four review rounds — but neither has been observed working. A Dev build off merged `main`
+is being produced so Sean can run them.
+
+- [ ] **Check 1 — Cmd+T focus.** Press Cmd+T, then type three characters without clicking anything.
+  Do they land in the composer's text field? Suspect surface: focus assignment on overlay present.
+- [ ] **Check 2 — popover → Cmd+T survival.** Open a session-row popover, then press Cmd+T. Does the
+  composer appear and stay, or does the popover's dismissal tear it down? Suspect surface: the
+  `$isOpen` sink / dismiss-race path.
+- [ ] **#130's three nested-popover interactions** also merged unverified. If Check 2 fails they are
+  probably the same seam, not three separate bugs.
+
+If either check fails, fix forward on a branch off `main` — do not revert #131, `backlog/migrate-ghostties`
+already builds on these commits.
+
 ## 2026-08-19 — Overnight autonomous run: session-composer Phases 1–5
 
 **Actual outcome:** Phases 1 and 2 were built, reviewed, and opened as stacked PRs. Phases 3–5 were
