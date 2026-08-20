@@ -99,24 +99,15 @@ final class OrphanTriageStore: ObservableObject {
 
     // MARK: - D7 empty-projects flow
 
-    /// Present NSOpenPanel, insert the chosen path into `WorkspaceStore`, and
-    /// auto-select the new or existing project in the picker.
+    /// Delegates to `WorkspaceStore.addProjectViaFolderPicker`, keeping this
+    /// flow's task-specific panel message and its auto-select-by-path
+    /// behavior (Phase 4 convergence — see
+    /// `docs/plans/session-creation-unified.html`).
     func addProjectViaFolderPicker(workspaceStore: WorkspaceStore) {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose a project folder to associate with this task"
-        panel.prompt = "Add Project"
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        workspaceStore.addProject(at: url)
-
-        // Auto-select the project we just added (or found by path if it already existed).
-        let stdPath = url.standardizedFileURL.path
-        if let match = workspaceStore.projects.first(where: { $0.rootPath == stdPath }) {
-            selectedProjectId = match.id
-        }
+        guard let newId = workspaceStore.addProjectViaFolderPicker(
+            message: "Choose a project folder to associate with this task"
+        ) else { return }
+        selectedProjectId = newId
     }
 
     // MARK: - Validation

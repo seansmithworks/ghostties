@@ -917,7 +917,11 @@ class WorkspaceViewContainer: NSView {
             if let manager = existingManager {
                 embedBrowserInPanel(manager)
                 animateBrowserPanel(visible: true)
-            } else if let project = WorkspaceStore.shared.projects.first {
+            } else if let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: WorkspaceStore.shared),
+                      let project = WorkspaceStore.shared.projects.first(where: { $0.id == projectId }) {
+                // Phase 4: use the composer's smart-default cascade instead
+                // of an arbitrary `.first` pick (see
+                // docs/plans/session-creation-unified.html).
                 // Create a new browser session — this will call showBrowserContent,
                 // which embeds into the side panel and animates it open.
                 Task { @MainActor in
