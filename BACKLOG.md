@@ -1069,3 +1069,49 @@ Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #10
 - [x] ~~"Full-bleed" wording now wrong in 3 places~~ — **CLOSED in PR #132.** `DESIGN.md` §4 and `SessionComposerOverlay.swift` both now say "invisible dismiss layer" instead of "full-bleed" — accurate now that the layer excludes the titlebar band outside fullscreen.
 - [ ] **Titlebar-band click-through** — the excluded band doesn't hit-test, so clicks fall through to the sidebar's toolbar row; the sidebar's own "+ New Session" button sits in that band and is live *through* the modal. Round-2's "no safe AppKit primitive found" reasoning was WRONG — `sidebarToggleButton.isEnabled = false` paired in install/dismiss (exactly like the `setAccessibilityHidden` pair beside it) is that primitive. Don't let the old reasoning get enshrined. | app | new
 - [ ] **#130 merged with three interactions unverified** — a `.popover` inside the composer's `.popover`; `+ Add project…` opening a modal `NSOpenPanel` inside it; edit sheet + delete inside popover content. Sean authorised the merge knowing this. Any of the three may dismiss the composer. Round 3's R1 fix (`didResignActive` instead of `windowDidResignKey`) should have closed the panel/sheet/alert cases — unconfirmed by observation. | app | new
+
+## 2026-08-20 — Session-composer Phases 4 + composer polish (two PRs open, neither merged)
+
+**Shipped to PR, awaiting Sean's merge:**
+
+- [x] ~~Phase 4 — project-creation convergence~~ — built as **PR #133**, `9a5ddd4f5` + review fix `6d9ab1c8c`. Corrections to the Phase 3 entry above, which was written from a stale plan: there are **five** picker call sites, not four (Phase 2/3 added `SessionComposerStore.swift:304`), and the browser project pick is at `WorkspaceViewContainer.swift:920`, **not `:807`**. `TemplatePickerView.swift:620` is a plain-text *file* picker and was correctly excluded. Build green, 735/0/1/736 in its worktree.
+- [x] ~~Composer shadow-only elevation + window-centering + cross-section ranking~~ — **PR #132**, `add99d095` + review fix `638025256`. Four review rounds.
+
+**Merge order matters: #132 before #133.** #132 carries the `.lineLimit(1)` fix for the locked-project label; #133 is what makes that label render for the first time (`ProjectBinding.locked` had **zero** production call sites before it). Merging #133 first puts a wrapping/crushing composer header on `main` until #132 lands. Files are disjoint, so either order merges cleanly — this is about what `main` looks like in between.
+
+**Needs Sean — runtime checks no amount of source-tracing can settle:**
+
+- [ ] **Focus after the folder panel closes.** New path only: click **+ New Project** in the sidebar header → pick a folder → *without clicking anything*, type three characters. They must land in the composer's search field. The composer opens immediately after an `NSOpenPanel` modal tears down, and AppKit restores the pre-modal first responder on its own schedule; whether SwiftUI's `DispatchQueue.main.async { isTextFieldFocused = true }` survives that race is not knowable from source. Distinct from the Cmd+T focus check above — different trigger, different teardown. | app | needs-Sean
+- [ ] **Locked-label truncation.** Same pass as above: name the picked folder something long and multi-word (`Acme Corporation Website Redesign`). The locked project label must truncate to one line, not wrap the card header or crush the search field. Validates `638025256`. | app | needs-Sean
+
+**Decided, recorded so it doesn't get re-raised as a bug:**
+
+- [x] ~~Sidebar "+ New Project" ignores `ghostties.newSessionOpensComposer`~~ — **deliberate.** Cmd+T honors that preference; the header button does not. "New Project" is a different action from "New Session," and honoring it would need a project-pinned variant of `instantCreateSession()` — more code than the inconsistency costs. Reviewer flagged it, call is to leave it.
+- [x] ~~`startingAt:` parameter on `addProjectViaFolderPicker`~~ — **dropped.** Zero call sites; the `@AppStorage` persistence already delivers reopen-where-you-left-off. The Phase 3 entry above still names it in the signature; that entry is stale.
+
+**Parked — small, non-blocking:**
+
+- [ ] **Picker persists the last directory only when the add resolves an ID.** `6d9ab1c8c` moved the write after `addProject(at:)` and guarded it on a non-nil lookup. Correct for the failure case, but it also means a path-standardization miss (symlink, trailing slash, case-insensitive volume) would now silently skip the persist where it previously always wrote. No known trigger; noting the semantics changed. | app | new
+
+**Process note worth keeping:** the two new tests that shipped with `9a5ddd4f5` were **vacuous** — neither referenced `WorkspaceStore` at all, both only round-tripped `UserDefaults`, and both re-declared the storage key as their own literal, so a typo in the production key would have passed. Deleting the entire feature left them green. Replaced with one test that writes through the `@AppStorage` wrapper and reads back by literal key, proven by introducing a key typo, watching it fail, and reverting. **A passing test count is not coverage** — this suite went 736→735 and got stronger.
+
+### Round-2 review (Fable, T0) — clean, five nits, all parked
+
+First round-2 UI review in this repo that found **no** blocker and no defect, breaking a six-for-six streak. Merge order independently confirmed by `git merge-tree`: exactly one file in both PRs (`WorkspaceViewContainer.swift`, non-adjacent hunks), zero conflict markers either way.
+
+- [ ] **`fileExists` guard narrows the stall class, doesn't remove it.** A *mounted-but-unresponsive* SMB/NFS path still blocks at the synchronous stat before `runModal()`. Not a regression — the old code hit the same hang inside the panel's own directory resolution. Real fix if it ever bites: only restore the persisted path when its volume is local. | app | new
+- [ ] **Test references a `#if DEBUG` accessor without its own guard** (`WorkspaceStoreProjectPickerTests.swift:37`). Harmless today — `xcodebuild test` uses Debug, and the release workflow builds Release without running tests — but a Release-config test run would fail to *compile* the test target. | build | new
+- [ ] **Test restores prior defaults via `defaults.set`, not through the `@AppStorage` wrapper.** Asymmetric but harmless: no in-process reader exists. Confirmed the `defer` restore *does* cover failure — Swift Testing's `#expect` records and continues rather than throwing, so no synthetic path can leak into Sean's real defaults. | build | new
+- [ ] **Zero-width `Text("")` keeps its 16pt horizontal padding** if `currentProject` is ever nil while locked (`SessionComposerPalette.swift:474`). Near-unreachable, and the empty fallback is a deliberate choice over the actionless "Select project" it replaced. | design | new
+
+### Phase 5 — three facts in the plan are WRONG; do not build from it as written
+
+Read the code before touching this. `docs/plans/session-creation-unified.html` §Phase 5 is stale in three ways:
+
+1. **It is about `Project.isPinned`, not session-name pinning.** Chasing `isNamePinned` leads to `renameSession`, which is correct user-driven behavior the plan explicitly wants kept.
+2. **Its line numbers are ~100 off.** The real force-pin sites are `WorkspaceStore.swift:657` (re-add re-pins) and `:668` (new project constructed `isPinned: true`). `SessionCoordinator.swift` contains **zero** `isPinned` references — its "site" at `:505` merely calls `addProject(at:)` and inherits the force-pin.
+3. **The upgrade-reorder concern it holds the phase back for is already solved.** `WorkspacePersistence.migratePinSemanticsIfNeeded` already exists: a one-time migration flipping every project to `isPinned = false`, gated on `hasShownPinMigrationNotice`, with an explanatory toast. The scary part shipped already — and the force-pin is what quietly undoes it over time.
+
+**Strawman (Sean to accept or redline): pin on explicit add, never on auto-register.** Give `addProject(at:)` a `pinned: Bool = false` parameter; the folder-picker path passes `true`, `SessionCoordinator`'s cwd auto-register passes `false`, and the re-add branch only re-pins when `pinned` is true. This satisfies the plan's own stated principle ("explicit pinning stays user-driven") and is a smaller, more defensible change than "drop the force-pin," which would also unpin projects the user deliberately added.
+
+- [ ] **BLOCKED until #133 merges.** Phase 5 edits `addProject` and the `addProject(at: url)` call at `WorkspaceStore.swift:959` — that call sits inside the region #133 rewrote, so building it on a third branch now guarantees a conflict. Sequence: merge #132 → merge #133 → branch Phase 5 off `main`. | app | needs-Sean
