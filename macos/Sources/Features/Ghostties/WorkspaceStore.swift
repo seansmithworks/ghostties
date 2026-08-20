@@ -650,10 +650,14 @@ final class WorkspaceStore: ObservableObject {
 
     // MARK: - Project Actions
 
-    func addProject(at url: URL) {
+    func addProject(at url: URL, pinned: Bool = false) {
         let path = url.standardizedFileURL.path
         // Don't add duplicates (same path).
         if let index = projects.firstIndex(where: { $0.rootPath == path }) {
+            // Only re-pin on an explicit pinned add, and only when it actually
+            // changes something. Never unpin an existing pinned project just
+            // because it was silently auto-registered again.
+            guard pinned, !projects[index].isPinned else { return }
             projects[index].isPinned = true
             // Re-pinning is a structural change — release any held freeze snapshot
             // so the sidebar re-buckets immediately.
@@ -665,7 +669,7 @@ final class WorkspaceStore: ObservableObject {
         let project = Project(
             name: url.lastPathComponent,
             rootPath: path,
-            isPinned: true,
+            isPinned: pinned,
             ghostCharacter: GhostCharacter.randomUnused(excluding: allAssignedGhosts())
         )
         projects.append(project)
@@ -993,7 +997,7 @@ final class WorkspaceStore: ObservableObject {
         }
 
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        addProject(at: url)
+        addProject(at: url, pinned: true)
         let id = projects.first(where: {
             $0.rootPath == url.standardizedFileURL.path
         })?.id

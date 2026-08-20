@@ -464,7 +464,9 @@ final class SessionCoordinator: ObservableObject {
     /// Resolution order:
     ///   1. If a `Project` already exists in `WorkspaceStore` with `name`,
     ///      reuse it (its `rootPath` wins — don't clobber the user's setup).
-    ///   2. Otherwise register a new pinned `Project(name:, rootPath:)`.
+    ///   2. Otherwise auto-register a new, unpinned `Project(name:, rootPath:)`
+    ///      — this is a background registration, not an explicit "add
+    ///      project" action, so it must not force the pinned section.
     ///   3. If that project already has a live session, focus it (same path as
     ///      `focusLastSession(forProject:)`).
     ///   4. Else spawn a new Shell session via `createQuickSession`. The
@@ -493,14 +495,16 @@ final class SessionCoordinator: ObservableObject {
         let store = WorkspaceStore.shared
 
         // 1/2. Resolve or register the project. `addProject(at:)` handles
-        // duplicate-path detection and promotes an existing record's pin
-        // status without clobbering its `rootPath` or ghost character.
+        // duplicate-path detection without clobbering an existing record's
+        // `rootPath` or ghost character.
         let project: Project = {
             if let existing = store.projects.first(where: { $0.name == name }) {
                 return existing
             }
-            // Register as a pinned project so it shows up in the legacy
-            // sidebar too. `addProject(at:)` does the standardization.
+            // Auto-register unpinned — this is a background/implicit
+            // registration, not an explicit user "add project" action, so it
+            // must not force the project into the pinned sidebar section.
+            // `addProject(at:)` does the standardization.
             let url = URL(fileURLWithPath: rootPath, isDirectory: true)
             store.addProject(at: url)
             // Re-fetch by path (name may diverge — URL.lastPathComponent
