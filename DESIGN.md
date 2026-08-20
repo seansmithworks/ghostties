@@ -50,6 +50,10 @@ components:
     shadowRadius: 8
   overlay-sidebar:
     shadowOpacity: 0.20
+  composer-modal:
+    shadowOpacity: 0.30
+    shadowOffset: "0, 8"
+    shadowRadius: 24
 ---
 
 # Design System: Ghostties
@@ -67,7 +71,10 @@ Ghostties is a workspace tool, not a content surface. The sidebar UI is dense, i
 - Warm two-layer background model (chrome + canvas)
 - Terracotta (`#C97350`) as the only saturated accent — reserved for `waiting` state
 - 12pt continuous corner radius on the terminal card
-- Shadows only on the terminal card — nowhere else
+- Shadows on the terminal card, the overlay sidebar, the browser card, and
+  surfaces that float free of the sidebar (the session composer's
+  `.centered` presentation). A floating surface is lifted by shadow alone;
+  it never dims the content behind it.
 - No gradients, no decorative borders, no visual noise
 
 **Design References:** Ghostty terminal UI, Dia Browser sidebar restraint
@@ -158,12 +165,22 @@ Query field height: 38pt. Row vertical padding: 8pt (the 4pt spacing scale's own
 
 ### Centered modal — component stylings
 
-Any surface floating free of the sidebar (§3) is a peer to the terminal card, not a one-off: same 12pt `.continuous` corner radius (`WorkspaceLayout.terminalCornerRadius`). Current example: the session composer's `.centered` presentation card. Its shadow is its own level (§6) — `0.20/12/0` — which is NOT actually shared with the Overlay sidebar's real code values (`0.2/6/(2,0)`, see §6's Known Deviation note); it happens to match what the Overlay row is *documented* as, not what it *is*. Paired with a full-bleed black-0.25 scrim (`SessionComposerOverlay`) so the card reads as "on top of" the terminal — the scrim excludes the titlebar band (0 in fullscreen, where there's no titlebar to protect) so traffic lights and window dragging aren't affected. `.anchored` (the sidebar popover presentation of the same view) is unchanged — unstyled 10pt radius, relies on the native `NSPopover` chrome/shadow instead; see §7's Known Deviations.
+Any surface floating free of the sidebar (§3) is a peer to the terminal card, not a one-off: same 12pt `.continuous` corner radius (`WorkspaceLayout.terminalCornerRadius`). Current example: the session composer's `.centered` presentation card. It is lifted by shadow alone (`0.30/24/y8`, §6 — shadow-only elevation, no scrim, PR #132) — no scrim behind it, so the shadow has to carry the "on top of" read by itself. `SessionComposerOverlay` still hosts an invisible dismiss layer beneath the card (`Color.clear` + `.contentShape`) for click-outside-to-dismiss and the a11y dismiss affordance, excluding the titlebar band (0 in fullscreen, where there's no titlebar to protect) so traffic lights and window dragging aren't affected. `.anchored` (the sidebar popover presentation of the same view) is unchanged — unstyled 10pt radius, relies on the native `NSPopover` chrome/shadow instead; see §7's Known Deviations.
+
+Background is layered `.regularMaterial` (a translucent system blur) with the surface's `windowBackgroundColor` blended over it at `.blendMode(.color)` — `.ultraThinMaterial` was too transparent once the scrim stopped dimming the terminal behind it, letting live terminal content wreck the composer's own text contrast (PR #132). Unlike the shadow below, this material composite is applied unconditionally in code — it is NOT `.centered`-only, and `.anchored` (the sidebar popover) inherits it too.
 
 ```swift
+// .centered only — .anchored uses native NSPopover chrome; applying this
+// there would double up.
 .clipShape(RoundedRectangle(cornerRadius: WorkspaceLayout.terminalCornerRadius, style: .continuous))
-.shadow(color: .black.opacity(WorkspaceLayout.composerModalShadowOpacity), radius: WorkspaceLayout.composerModalShadowRadius)
+.shadow(
+    color: .black.opacity(WorkspaceLayout.composerModalShadowOpacity),
+    radius: WorkspaceLayout.composerModalShadowRadius,
+    y: WorkspaceLayout.composerModalShadowYOffset
+)
 ```
+
+The composer's trailing project control (`projectControl`) has two visual states, keyed off `isProjectLocked`. Locked renders a static secondary-styled label with no divider and no chevron — a divider beside a chevron-less label reads as a control that isn't one, so it's omitted deliberately. Unlocked renders a hairline divider followed by a button with the label and a 9pt `chevron.down`. Both states truncate the label to a single line (`.lineLimit(1)`) rather than wrapping — the control sits in a `queryRow` HStack under `WorkspaceLayout.composerOverlayWidth`'s fixed 360pt width, and project names come from `url.lastPathComponent` of a user-picked folder, so long names are the normal case.
 
 ### Row / hover states
 
@@ -200,11 +217,11 @@ Three shadow levels.
 
 | Level                  | Opacity | Radius | Y   | Usage                          |
 | ---------------------- | ------- | ------ | --- | ------------------------------- |
-| Card (pinned)          | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar |
+| Card (pinned)          | `0.15`  | `8`    | `2` | Terminal card in pinned sidebar, and browser card |
 | Overlay (documented)   | `0.20`  | `12`   | `0` | Sidebar in overlay mode         |
-| Centered composer card | `0.20`  | `12`   | `0` | Session composer, `.centered` presentation (`WorkspaceLayout.composerModalShadowOpacity`/`composerModalShadowRadius`) |
+| Centered composer card | `0.30`  | `24`   | `8` | Session composer, `.centered` presentation (`WorkspaceLayout.composerModalShadowOpacity`/`composerModalShadowRadius`/`composerModalShadowYOffset`) — no scrim behind it (shadow-only elevation, PR #132), so it needs to read heavier than the Overlay row it used to (coincidentally) match |
 
-**Known deviation (pre-existing, not from Phase 3):** the "Overlay" row's actual code values (`WorkspaceViewContainer.swift`, `sidebarOverlayBackground.layer`) are opacity `0.2`, radius `6`, offset `(2, 0)` — not `0.20/12/0` as documented above. This table has been wrong since before session-creation-unified; flagged here rather than silently propagated. The centered composer card row is verified correct against its actual `.shadow(...)` call — it does NOT reuse the Overlay sidebar's real shadow, despite sharing the same *documented* numbers; it's its own level that happens to match what Overlay was supposed to be.
+**Known deviation (pre-existing, not from Phase 3):** the "Overlay" row's actual code values (`WorkspaceViewContainer.swift`, `sidebarOverlayBackground.layer`) are opacity `0.2`, radius `6`, offset `(2, 0)` — not `0.20/12/0` as documented above. This table has been wrong since before session-creation-unified; flagged here rather than silently propagated. The centered composer card row is its own level, independently tuned in PR #132 — it no longer coincides with the Overlay row's documented numbers.
 
 **Critical:** `shadowPath` must be set explicitly in `layout()`. Without it, CoreAnimation rasterizes from the alpha channel every frame (GPU performance hit).
 
@@ -242,7 +259,7 @@ Always pass `style: .continuous` to `RoundedRectangle` — it matches Apple's sq
 - Hardcode hex or pt values in view files — always use `WorkspaceLayout` tokens
 - Use terracotta for hover, selection, or states other than `waiting`
 - Mix corner radii — 12pt continuous everywhere on the terminal card
-- Add shadows outside the card and overlay contexts
+- Add shadows outside the card, overlay, browser, and floating-modal contexts listed in §1
 - Use `update_styles` in Paper MCP to change SVG attributes — use `write_html(mode: "replace")` instead
 
 ## 9. Device Targets

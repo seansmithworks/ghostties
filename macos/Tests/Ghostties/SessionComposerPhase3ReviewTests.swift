@@ -110,6 +110,26 @@ struct SessionComposerPhase3ReviewTests {
         }
     }
 
+    /// PR #132 review round 2, F2: `selectProject(_:)` must clear the
+    /// query alongside the id — a project-scoping query left in place
+    /// (e.g. "ghos", used to find the project row itself) filters the
+    /// newly-scoped project's OWN templates against that same text, which
+    /// almost never matches anything, silently emptying the results list.
+    @Test func selectProjectClearsSearchText() {
+        let projectA = makeProject(name: "A")
+        let projectB = makeProject(name: "B")
+        let store = WorkspaceStore(testingProjects: [projectA, projectB], testingSessions: [])
+        let composerStore = SessionComposerStore(isolatedForTesting: ())
+
+        composerStore.open(projectBinding: .open, workspaceStore: store)
+        composerStore.searchText = "ghos"
+
+        composerStore.selectProject(projectB.id)
+
+        #expect(composerStore.selectedProjectId == projectB.id)
+        #expect(composerStore.searchText == "")
+    }
+
     /// The FIRST open() (nothing was open before) must NOT set the refocus
     /// trigger — that's specifically the "re-invoke while already open"
     /// signal, not a general side effect of opening.

@@ -23,26 +23,18 @@ final class SidebarWidthModel: ObservableObject {
     }
 }
 
-/// Observable form of the composer overlay card's terminal-card-centering
-/// offset (R5, Phase 3 review round 2). `presentComposerOverlay` used to
-/// capture the offset once at present-time and bake it into `rootView`, so
-/// the card stayed parked at its original position after Cmd+S/Cmd+Shift+E
-/// (sidebar toggle) or Cmd+Shift+1/2 (view-mode switch) changed the sidebar
-/// width or mode while the composer was still open. Kept separate from
-/// `SidebarWidthModel` above — that one has a documented "never 0"
-/// invariant this must NOT share, since `.closed`/`.overlay` need 0 here.
-/// `WorkspaceViewContainer.syncComposerCenteringOffset()` writes it at every
-/// site that can change `sidebarMode` or the applied sidebar width.
+/// Observable model backing the composer overlay's titlebar hit-test band.
+/// PR #132 removed `horizontalOffset` — the composer
+/// now centers on the whole window instead of the terminal card, so there is
+/// no sidebar-width offset left to track.
 @MainActor
 final class ComposerCenteringModel: ObservableObject {
-    @Published var horizontalOffset: CGFloat = 0
-
-    /// Height of the scrim's titlebar-band exclusion (F7's fullscreen
-    /// follow-up, Phase 3 review round 2). Defaults to
+    /// Height of the dismiss layer's titlebar-band exclusion (F7's
+    /// fullscreen follow-up, Phase 3 review round 2). Defaults to
     /// `WorkspaceLayout.titlebarSpacerHeight`, the traffic-light band the
-    /// scrim excludes to keep window dragging working — but there's no
-    /// titlebar to protect in fullscreen, so that band was left undimmed
-    /// for no reason. `WorkspaceViewContainer.windowDidEnterOrExitFullScreen()`
+    /// dismiss layer excludes to keep window dragging working — but there's
+    /// no titlebar to protect in fullscreen, so that band was left
+    /// unclaimed for no reason. `WorkspaceViewContainer.windowDidEnterOrExitFullScreen()`
     /// writes 0 on entering fullscreen and restores the token on exit.
     @Published var titlebarBandHeight: CGFloat = WorkspaceLayout.titlebarSpacerHeight
 }
@@ -197,8 +189,8 @@ class WorkspaceViewContainer: NSView {
     /// `SessionComposerStore.shared.isOpen` is true — see
     /// `presentComposerOverlay(projectBinding:)` and the `isOpen` subscription
     /// in `setup()`. Pinned to the container's full bounds so
-    /// `SessionComposerOverlay`'s scrim can dim the whole terminal; not
-    /// touched by `layout()`.
+    /// `SessionComposerOverlay`'s dismiss layer can span the whole terminal;
+    /// not touched by `layout()`.
     private lazy var composerOverlayHostingView: TransparentHostingView<AnyView> = {
         let view = TransparentHostingView<AnyView>(rootView: AnyView(EmptyView()))
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -868,10 +860,6 @@ class WorkspaceViewContainer: NSView {
             // get re-clamped.
             self?.needsLayout = true
         })
-        // R5 (Phase 3 review round 2): a view-mode switch (Cmd+Shift+1/2)
-        // changes `currentSidebarWidth` even when `sidebarMode` itself
-        // doesn't — keep the composer overlay's card-centering offset live.
-        syncComposerCenteringOffset()
         updateTrackingAreas()
         invalidateIntrinsicContentSize()
     }
@@ -1025,10 +1013,6 @@ class WorkspaceViewContainer: NSView {
         sidebarWidthConstraint.constant = clamped
         currentSidebarWidth = clamped
         widthModel.width = clamped
-        // R5 (Phase 3 review round 2): keep the composer overlay's
-        // card-centering offset following the live drag, same tick as
-        // `widthModel.width` above.
-        syncComposerCenteringOffset()
     }
 
     /// Persist the drag-resized width to this view mode's UserDefaults key.
@@ -1293,13 +1277,6 @@ class WorkspaceViewContainer: NSView {
             // get re-clamped.
             self?.needsLayout = true
         })
-        // R5 (Phase 3 review round 2): `sidebarMode` was already updated at
-        // the top of this function, and `widthModel.width` (if this
-        // transition touches it) was already set synchronously above — keep
-        // the composer overlay's card-centering offset live across
-        // Cmd+S/Cmd+Shift+E sidebar toggles.
-        syncComposerCenteringOffset()
-
         // 5. Non-animatable properties.
         switch newMode {
         case .pinned:
@@ -1487,8 +1464,8 @@ class WorkspaceViewContainer: NSView {
         // pass so titlebarRowTopAnchorConstant re-reads the new close-button frame.
         needsLayout = true
         // F7 follow-up (Phase 3 review round 2): no titlebar to protect in
-        // fullscreen, so the composer overlay's scrim shouldn't leave that
-        // band undimmed there.
+        // fullscreen, so the composer overlay's dismiss layer shouldn't leave
+        // that band unclaimed there.
         let isFullScreen = window?.styleMask.contains(.fullScreen) ?? false
         composerCenteringModel.titlebarBandHeight = isFullScreen ? 0 : WorkspaceLayout.titlebarSpacerHeight
     }
@@ -1594,7 +1571,6 @@ class WorkspaceViewContainer: NSView {
             // search field rather than doing nothing.
             SessionComposerStore.shared.open(projectBinding: projectBinding, workspaceStore: WorkspaceStore.shared)
 
-            self.syncComposerCenteringOffset()
             // F7 follow-up: correct even if the composer opens while
             // already fullscreen, not just on a later enter/exit transition.
             let isFullScreen = self.window?.styleMask.contains(.fullScreen) ?? false
@@ -1603,48 +1579,7 @@ class WorkspaceViewContainer: NSView {
         }
     }
 
-    /// Offsets the composer card so it centers on the terminal card rather
-    /// than the whole window (Sean's design decision 2, Phase 3 review) —
-    /// only meaningful in `.pinned` mode, where the sidebar actually pushes
-    /// the terminal card rightward. In `.closed`/`.overlay` the terminal
-    /// card is full-width, so no offset is needed. The scrim itself stays
-    /// full-bleed regardless — the sidebar isn't usable while the composer
-    /// is up, so dimming it is honest.
-    ///
-    /// Reads `widthModel.width` (the sidebar's live APPLIED width), not
-    /// `currentSidebarWidth` (the user's stored preference) — same
-    /// distinction `resizableWidth` above already draws.
-    ///
-    /// Follow-up correction (Phase 3 review round 3): during a live DRAG
-    /// this genuinely tracks what's on screen — `handleSidebarDrag` writes
-    /// `widthModel.width` and the frame together, in step. During a
-    /// `transitionTo`/`sidebarViewModeChanged` ANIMATION it does NOT:
-    /// `widthModel.width` is set via a plain assignment (jumps to the
-    /// target immediately) while the visual constraint animates smoothly
-    /// over 0.2s via `.animator()`, so the card currently jumps to its new
-    /// position instantly and the sidebar slides behind it for 200ms rather
-    /// than the two moving together. Recorded as a follow-up, not fixed
-    /// here — it's a polish gap, not a correctness one, and animating the
-    /// offset in step needs its own `.animator()`-equivalent for a plain
-    /// `@Published` value (e.g. a `CADisplayLink`-driven interpolation or
-    /// switching this model to read the constraint's presentation layer),
-    /// which is more than this pass's scope.
-    private var terminalCardHorizontalOffset: CGFloat {
-        sidebarMode == .pinned ? widthModel.width : 0
-    }
-
     private lazy var composerCenteringModel = ComposerCenteringModel()
-
-    /// Writes the live offset into `composerCenteringModel` — called at
-    /// every site that can change `sidebarMode` or the applied sidebar
-    /// width (R5, Phase 3 review round 2). Deliberately NOT called from
-    /// `layout()`'s resize reclamp — that file remains untouched per the
-    /// original Phase 3 constraint; a window resize (not a sidebar
-    /// toggle/mode-switch/drag) while the composer is open in pinned mode
-    /// is the one residual case this doesn't cover live.
-    private func syncComposerCenteringOffset() {
-        composerCenteringModel.horizontalOffset = terminalCardHorizontalOffset
-    }
 
     /// Guards the fade-out `removeFromSuperview()` in
     /// `dismissComposerOverlayIfPresented()` against a fast re-open
@@ -1655,12 +1590,13 @@ class WorkspaceViewContainer: NSView {
     private var composerOverlayTransitionGeneration = 0
 
     /// Adds the composer overlay hosting view as a subview, pinned to the
-    /// container's full bounds — not `layout()` — so its scrim can dim the
-    /// whole terminal. Fades in (F8, Phase 3 review) to match every other
-    /// appear-over-content transition in this container (`transitionTo(_:)`'s
-    /// 0.2s convention). If the view is still attached (e.g. mid a dismiss
-    /// fade-out that this call is interrupting), just animates it back to
-    /// fully visible instead of re-adding it.
+    /// container's full bounds — not `layout()` — so its dismiss layer can
+    /// span the whole terminal. Fades in (F8, Phase 3 review) to match
+    /// every other appear-over-content transition in this container
+    /// (`transitionTo(_:)`'s 0.2s convention). If the view is still
+    /// attached (e.g. mid a dismiss fade-out that this call is
+    /// interrupting), just animates it back to fully visible instead of
+    /// re-adding it.
     private func installComposerOverlayIfNeeded() {
         composerOverlayTransitionGeneration += 1
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -1754,10 +1690,10 @@ class WorkspaceViewContainer: NSView {
 
         // R3 (Phase 3 review round 2): disable hit-testing FIRST, before the
         // fade starts — `NSView.hitTest(_:)` skips HIDDEN views but does not
-        // consider `alphaValue`, so without this the full-bounds scrim stays
+        // consider `alphaValue`, so without this the full-bounds dismiss layer stays
         // fully clickable for the entire 0.2s fade-out. A click into the
         // terminal to resume typing during that window would otherwise land
-        // on the invisible scrim's `.onTapGesture { cancel() }` (eating the
+        // on the invisible dismiss layer's `.onTapGesture { cancel() }` (eating the
         // click and re-entering dismiss, extending the dead window), and a
         // fast double-click on a template row could fire `commit()` twice —
         // `ComposerRow`'s `Button(action:)` calls `option.action()` directly
@@ -2064,7 +2000,7 @@ class WorkspaceViewContainer: NSView {
         }
 
         // Dismiss the composer overlay's hosting view whenever the composer
-        // store closes (Esc, scrim click, or a successful commit) — every
+        // store closes (Esc, dismiss-layer click, or a successful commit) — every
         // close path funnels through `SessionComposerStore.isOpen`, so this
         // is the single place the subview teardown needs to live (Phase 3).
         //
@@ -2115,7 +2051,7 @@ class WorkspaceViewContainer: NSView {
         // `!SessionComposerStore.shared.isOpen` would read the PRE-`willSet`
         // value (`true`, the value being replaced, not the `false` being
         // set) — the guard above would then always fail, and every dismiss
-        // (scrim click, Escape, everything routed through `cancel()`) would
+        // (dismiss-layer click, Escape, everything routed through `cancel()`) would
         // die silently. Keep the hop.
         SessionComposerStore.shared.$isOpen
             .receive(on: DispatchQueue.main)

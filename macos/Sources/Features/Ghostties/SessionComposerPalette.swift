@@ -184,7 +184,25 @@ struct SessionComposerPalette: View {
             title: project.name,
             subtitle: nil,
             leadingIcon: "folder",
-            action: { composerStore.selectedProjectId = project.id }
+            // `SessionComposerStore.selectProject(_:)` clears the query
+            // alongside the id — load-bearing, not tidying: leaving a
+            // project-scoping query like "ghos" in place after a project
+            // row commits filters the newly-scoped project's OWN templates
+            // against that same text, which rarely matches anything —
+            // Return would silently do nothing (D1's dead end, PR #132
+            // review round 2, F2). `selectedIndex = nil` here is the SAME
+            // invariant `commit(template:)` documents (N1): every action
+            // that replaces the option list nils `selectedIndex` FIRST, so
+            // a same-keystroke double-fire (`.onSubmit` +
+            // `.backport.onKeyPress`, macOS 14+) can't resolve
+            // `selectedOption` against a list this action just swapped out
+            // from under it (F1, PR #132 review round 2). `.onChange(of:
+            // query)` -> `reselectBestMatch()` re-seeds it in the same
+            // update pass, so nothing is lost.
+            action: {
+                selectedIndex = nil
+                composerStore.selectProject(project.id)
+            }
         )
     }
 
@@ -263,6 +281,21 @@ struct SessionComposerPalette: View {
         }
     }
 
+    /// D1 fix: the best-tier option across the WHOLE flattened list, not
+    /// just index 0. RECENT → TEMPLATES → PROJECTS render in that fixed
+    /// section order (`flattenedOptions`), and `SessionComposerRanking.sorted`
+    /// only ranks WITHIN each section — so a `.substring` match on a
+    /// Templates row's subtitle used to always beat an `.exactPrefix` match
+    /// on a Projects row purely because Templates renders above Projects
+    /// (e.g. typing "ghos" selected a "Linear Sync" template whose
+    /// description mentions "Ghostties" over the "ghostties" project
+    /// itself). Ties — including a blank query, where every option is
+    /// untiered — keep index 0, i.e. current section order, so unambiguous
+    /// queries and the empty-query default are unchanged.
+    private func bestSelectionIndex(in options: [ComposerOption]) -> UInt {
+        UInt(SessionComposerRanking.bestMatchIndex(in: options, query: query, title: { $0.title }, subtitle: { $0.subtitle }))
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -321,7 +354,7 @@ struct SessionComposerPalette: View {
         .frame(width: paletteWidth)
         .background(
             ZStack {
-                Rectangle().fill(.ultraThinMaterial)
+                Rectangle().fill(.regularMaterial)
                 Rectangle().fill(backgroundColor).blendMode(.color)
             }
             .compositingGroup()
@@ -332,13 +365,16 @@ struct SessionComposerPalette: View {
                 .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
         )
         // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3 review
-        // fix). `.anchored` relies on the native NSPopover chrome/shadow
-        // instead; adding a second shadow there would double up.
+        // fix, retuned in PR #132 (shadow-only elevation) now that the shadow
+        // carries the "on top of" read alone, with no scrim behind it).
+        // `.anchored` relies on the native NSPopover chrome/shadow instead;
+        // adding a second shadow there would double up.
         .shadow(
             color: request.presentation == .centered
                 ? .black.opacity(WorkspaceLayout.composerModalShadowOpacity)
                 : .clear,
-            radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0
+            radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0,
+            y: request.presentation == .centered ? WorkspaceLayout.composerModalShadowYOffset : 0
         )
         .environment(\.colorScheme, scheme)
         .onAppear {
@@ -346,7 +382,10 @@ struct SessionComposerPalette: View {
             // S5: row 0 is the project's default template (Phase 1's
             // default-first ordering) and the legend reads "↵ start" — seed
             // the selection so Return isn't a dead key on first open.
-            selectedIndex = 0
+            // `bestSelectionIndex` is index 0 here since the query is blank
+            // on first open (D1's cross-section ranking only applies once
+            // there's a query to rank against).
+            selectedIndex = bestSelectionIndex(in: flattenedOptions)
         }
         .onChange(of: isPresented) { presented in
             if !presented {
@@ -364,7 +403,7 @@ struct SessionComposerPalette: View {
             // latches `SessionComposerStore.isOpen` true forever (B3).
             composerStore.cancel()
         }
-        .onChange(of: query) { _ in clampSelectedIndex() }
+        .onChange(of: query) { _ in reselectBestMatch() }
         .onChange(of: composerStore.selectedProjectId) { _ in
             // N5: changing the project via the dropdown or a project row
             // changes `flattenedOptions.count` with `query` unchanged, so
@@ -429,16 +468,17 @@ struct SessionComposerPalette: View {
 
     @ViewBuilder
     private var projectControl: some View {
-        let label = currentProject?.name ?? "Select project"
-
         if isProjectLocked {
             // No hairline divider here (nit): a divider next to a static
             // label with no `▾` reads as a control that isn't one.
-            Text(label)
+            Text(currentProject?.name ?? "")
                 .font(.system(size: rowFontSize, weight: .medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
                 .padding(.horizontal, 8)
         } else {
+            let label = currentProject?.name ?? "Select project"
+
             Divider()
                 .frame(height: fieldHeight * 0.5)
 
@@ -466,7 +506,12 @@ struct SessionComposerPalette: View {
                 ProjectDropdownView(
                     selectedProjectId: composerStore.selectedProjectId
                 ) { project in
-                    composerStore.selectedProjectId = project.id
+                    // F2 (PR #132 review round 2): same dead-end as the
+                    // search-result project row — `selectProject(_:)`
+                    // clears the query so the newly scoped project's own
+                    // templates aren't filtered against a query that only
+                    // ever matched the project itself.
+                    composerStore.selectProject(project.id)
                     isProjectDropdownOpen = false
                 } onAddProject: {
                     composerStore.addProjectViaPanel(workspaceStore: store)
@@ -567,18 +612,35 @@ struct SessionComposerPalette: View {
     /// `selectedProjectId` triggers (N5) — either can change
     /// `flattenedOptions.count`.
     private func clampSelectedIndex() {
-        let count = flattenedOptions.count
-        guard count > 0 else {
+        let options = flattenedOptions
+        guard !options.isEmpty else {
             selectedIndex = nil
             return
         }
         if let current = selectedIndex {
-            if current >= UInt(count) {
-                selectedIndex = UInt(count - 1)
+            if current >= UInt(options.count) {
+                selectedIndex = UInt(options.count - 1)
             }
         } else {
-            selectedIndex = 0
+            selectedIndex = bestSelectionIndex(in: options)
         }
+    }
+
+    /// D1: query-driven reselection, distinct from `clampSelectedIndex`
+    /// above. `clampSelectedIndex` deliberately PRESERVES a still-valid
+    /// index (N5's fix, for the `selectedProjectId` trigger, where the list
+    /// changing shape shouldn't discard a user's manual arrow selection).
+    /// A query keystroke is different: every keystroke re-ranks the whole
+    /// list, so the top match needs to be reselected live even when the old
+    /// index is still in bounds — that's the D1 bug itself (a stale index-0
+    /// silently stayed valid while the query changed underneath it).
+    private func reselectBestMatch() {
+        let options = flattenedOptions
+        guard !options.isEmpty else {
+            selectedIndex = nil
+            return
+        }
+        selectedIndex = bestSelectionIndex(in: options)
     }
 
     private func commit(template: AgentTemplate) {
@@ -587,7 +649,18 @@ struct SessionComposerPalette: View {
         // `selectedIndex` pointing at the wrong row if the composer stays
         // open on a failed commit (S6). Synchronous and load-bearing (N1):
         // it is what makes a double Return a no-op if both `.onSubmit` and
-        // `.onKeyPress` ever fire on macOS 14+.
+        // `.onKeyPress` ever fire on macOS 14+. Scoped to what's actually
+        // reachable via Return: every `ComposerOption.action` in
+        // `flattenedOptions` — this one and the search-result project row
+        // (`makeOption(for project:)`) — nils `selectedIndex` FIRST for the
+        // same reason. The trailing project dropdown and "+ Add project…"
+        // are mouse-only Buttons outside `flattenedOptions`, so
+        // `handle(.submit)` can never resolve `selectedOption` into them —
+        // they don't need this guard, and `addProjectViaPanel` (on
+        // `SessionComposerStore`) couldn't apply it anyway, having no
+        // access to this view's `@State` (PR #132 review round 3 — a prior
+        // draft of this comment claimed all four sites nil'd first; only
+        // these two do).
         selectedIndex = nil
 
         // F1 (Phase 3 review): capture the target project BEFORE precommit
@@ -620,9 +693,9 @@ struct SessionComposerPalette: View {
         } else {
             // N4: precommit failed — the composer stays open with
             // `writeError` showing. `selectedIndex` was just nil'd above,
-            // so Return is dead until the user types or arrows; re-seed
-            // row 0 so Return works again immediately.
-            selectedIndex = 0
+            // so Return is dead until the user types or arrows; re-seed the
+            // best match (D1) so Return works again immediately.
+            selectedIndex = bestSelectionIndex(in: flattenedOptions)
         }
     }
 
@@ -708,12 +781,19 @@ struct ComposerOption: Identifiable, Hashable {
 /// `Backport.onKeyPress` is a documented no-op below macOS 14
 /// (`Helpers/Backport.swift:53-68`) and the app's deployment target is
 /// 13.0, so `.onSubmit` alone is what makes Return work pre-14. If both
-/// fire on 14+, `SessionComposerPalette.commit(template:)` nil-ing
-/// `selectedIndex` SYNCHRONOUSLY before calling
-/// `SessionComposerStore.precommit()` (N1) makes the second call's
-/// `selectedOption` nil and its `.submit` handler a no-op rather than a
-/// double-commit — this repo cannot verify from source alone whether both
-/// actually fire, only that a double-fire would be harmless if they do.
+/// fire on 14+, the invariant that makes a double-fire a no-op instead of
+/// a double-commit is scoped to `handle(.submit)`'s own reach: every
+/// `ComposerOption.action` in `flattenedOptions` — `commit(template:)`
+/// (N1) and the search-result project row's action — nils `selectedIndex`
+/// SYNCHRONOUSLY first, so the second fire's `selectedOption` resolves to
+/// `nil` and its handler becomes a no-op rather than acting on a list the
+/// first fire already swapped out from under it. The trailing project
+/// dropdown and "+ Add project…" don't need this: they're mouse-only
+/// Buttons that `handle(.submit)` never reaches, and `addProjectViaPanel`
+/// (on `SessionComposerStore`) has no access to this `@State` regardless
+/// (PR #132 review round 3) — this repo cannot verify from source alone
+/// whether `.onSubmit`/`.onKeyPress` actually both fire, only that a
+/// double-fire is harmless if they do.
 struct ComposerQueryField: View {
     @Binding var query: String
     var fontSize: CGFloat

@@ -83,6 +83,60 @@ final class SessionComposerRankingTests: XCTestCase {
         XCTAssertEqual(result, ["accumulate", "Claude Code"])
     }
 
+    // MARK: - bestMatchIndex — D1's cross-section selection gate
+
+    /// D1 regression: typing "ghos" with an "ghostties" project (an exact
+    /// prefix match) and a "Linear Sync" template whose description
+    /// mentions "Ghostties" (a substring-on-subtitle match) must select the
+    /// project, not the template — even though the template renders in an
+    /// earlier section (index 0) and the project in a later one.
+    func testBestMatchIndexPicksExactPrefixProjectOverSubstringSubtitleTemplateInAnEarlierSection() {
+        struct Row { let title: String; let subtitle: String? }
+
+        // Simulates `flattenedOptions`: TEMPLATES section (index 0) then
+        // PROJECTS section (index 1), matching the composer's fixed
+        // RECENT → TEMPLATES → PROJECTS render order.
+        let rows = [
+            Row(title: "Linear Sync", subtitle: "Syncs Linear issues into Ghostties tasks"),
+            Row(title: "ghostties", subtitle: nil)
+        ]
+
+        let index = SessionComposerRanking.bestMatchIndex(
+            in: rows,
+            query: "ghos",
+            title: { $0.title },
+            subtitle: { $0.subtitle }
+        )
+
+        XCTAssertEqual(index, 1, "exact-prefix project match must win over a substring-subtitle template match, regardless of section order")
+    }
+
+    /// When two rows land in the same tier, section/render order must be
+    /// preserved — the fix must not disturb unambiguous queries.
+    func testBestMatchIndexPreservesSectionOrderOnATie() {
+        struct Row { let title: String }
+
+        let rows = [Row(title: "Claude Code"), Row(title: "Claude Shell")]
+        let index = SessionComposerRanking.bestMatchIndex(in: rows, query: "claude", title: { $0.title })
+
+        XCTAssertEqual(index, 0, "both rows are exact-prefix matches; earliest (section) order must win the tie")
+    }
+
+    func testBestMatchIndexReturnsZeroForBlankQuery() {
+        let items = ["Zed", "Alpha"]
+        XCTAssertEqual(SessionComposerRanking.bestMatchIndex(in: items, query: "", title: { $0 }), 0)
+    }
+
+    func testBestMatchIndexReturnsZeroForEmptyItems() {
+        let items: [String] = []
+        XCTAssertEqual(SessionComposerRanking.bestMatchIndex(in: items, query: "ghos", title: { $0 }), 0)
+    }
+
+    func testBestMatchIndexReturnsZeroWhenNothingMatches() {
+        let items = ["Claude Code", "Shell"]
+        XCTAssertEqual(SessionComposerRanking.bestMatchIndex(in: items, query: "zzz", title: { $0 }), 0)
+    }
+
     // MARK: - SessionComposerProjectOrdering — the three-tier gate
 
     func testOrderPutsCascadePickFirst() {

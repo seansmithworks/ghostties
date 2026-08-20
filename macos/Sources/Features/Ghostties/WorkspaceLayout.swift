@@ -36,15 +36,19 @@ enum WorkspaceLayout {
     /// free of the sidebar column instead of popping out of it.
     static let composerOverlayWidth: CGFloat = 360
 
-    /// Shadow opacity for the centered composer card (Phase 3 review fix —
-    /// reuses DESIGN.md §6's "Overlay" shadow level, the same spec the
-    /// overlay sidebar uses, since the composer card is the same "floats
-    /// above content" surface class).
-    static let composerModalShadowOpacity: Double = 0.20
+    /// Shadow opacity for the centered composer card (shadow-only elevation, PR #132
+    /// — with the scrim removed, the card's own shadow is the only thing
+    /// separating it from the terminal, so it needs to read heavier than the
+    /// old scrim-backed 0.20).
+    static let composerModalShadowOpacity: Double = 0.30
 
     /// Shadow blur radius for the centered composer card. Paired with
     /// `composerModalShadowOpacity` above.
-    static let composerModalShadowRadius: CGFloat = 12
+    static let composerModalShadowRadius: CGFloat = 24
+
+    /// Shadow Y offset for the centered composer card. Paired with
+    /// `composerModalShadowOpacity`/`composerModalShadowRadius` above.
+    static let composerModalShadowYOffset: CGFloat = 8
 
     /// Height reserved at top for window traffic light controls.
     static let titlebarSpacerHeight: CGFloat = 28

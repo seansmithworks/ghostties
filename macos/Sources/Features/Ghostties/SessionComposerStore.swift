@@ -293,6 +293,23 @@ final class SessionComposerStore: ObservableObject {
         return true
     }
 
+    // MARK: - Project selection
+
+    /// The single write path for changing `selectedProjectId` from any of
+    /// the composer's project-selection controls (search-result row,
+    /// trailing dropdown, "+ Add project…"). Clears `searchText` alongside
+    /// the id: a query that scoped the OLD project (e.g. "ghos", used to
+    /// find the project itself) almost never matches anything in the newly
+    /// selected project's own templates, so leaving it in place silently
+    /// empties the results list and strands the user on a dead field
+    /// (fixed in PR #132 review, round 2 — F2). Hoisted here rather than
+    /// duplicated at each call site so the fix can't be applied to two
+    /// sites and missed on a third again.
+    func selectProject(_ id: UUID) {
+        selectedProjectId = id
+        searchText = ""
+    }
+
     // MARK: - Add project via NSOpenPanel
 
     /// Invoked from the open project dropdown's "+ Add project…" row.
@@ -302,7 +319,7 @@ final class SessionComposerStore: ObservableObject {
     /// `mruProjectId`) — without closing the composer (ship gate 2).
     func addProjectViaPanel(workspaceStore: WorkspaceStore) {
         guard let newId = workspaceStore.addProjectViaFolderPicker() else { return }
-        selectedProjectId = newId
+        selectProject(newId)
         recordRecentProject(newId)
     }
 
