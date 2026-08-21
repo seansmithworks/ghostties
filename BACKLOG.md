@@ -4,6 +4,21 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-20 — Dev-pass findings (Sean, live on `df0c1b8de` build)
+
+First runtime pass on a build containing all five composer phases. Two long-open checks CLOSED by observation, two new defects found.
+
+**CLOSED — composer focus lands correctly.** "+ New Project" → native panel → pick folder → panel closes → composer opens with the new project locked. Typing three characters without clicking put them in the composer field, not the shell behind it. This was the check carried since Phase 3 and never settleable by source-tracing. Filtering works as specced (templates + projects, match bolded).
+
+**CLOSED — dismiss-on-app-switch is deliberate, not a bug.** Clicking out of the Ghostties window dismisses the composer. That is `applicationDidResignActive()` in `WorkspaceViewContainer.swift`, added as a Phase 3 round-3 blocker fix specifically so app-deactivation dismisses while another *Ghostties window* taking key does not. Matches Spotlight/Raycast convention.
+
+**CORRECTION to a claim made this session:** "Pinned will be empty after Phase 5" was WRONG. Phase 5 is not retroactive — it stops future auto-registers from pinning but never unpins existing records. Sean's six projects stay pinned until manually unpinned. The code is right; the prediction was not.
+
+- [ ] **Enter on a no-match state is a silent dead key.** `SessionComposerPalette.swift:714` — `.submit` does `selectedOption?.action()`; with no matches `selectedOption` is nil, so Enter does nothing with zero feedback: no shake, no disabled affordance, no "nothing to run" copy. Sean's words: "it doesn't give any error or feedback, a shake not allowed like password or text for an error state." Independent of the grammar work — worth fixing on its own. | design | new
+- [ ] **Trailing command text has nowhere to go — the grammar gap, now demonstrated live.** Typing `ghostties cco -n "test"` resolves the *project* correctly (selector flips to `ghostties`) and then treats the remaining `cco -n "test"` as filter text → "No matches". This is exactly the case the composer command-grammar spec addresses, and it is the concrete repro to build against. Sean expected this to work from prior discussion — the grammar was scoped but never built; the composer today is strictly a filter. See the grammar-spec Artifact item below (three decisions open; tokenizing alone is the recommended first slice and needs none of them settled). | app | new
+
+- [ ] **STILL UNTESTED: locked-label truncation.** Every Dev-pass attempt so far used short project names (Snippost, ghostties, Brukas). Needs one run with a genuinely long multi-word folder name to see whether the locked label truncates cleanly or wraps and pushes the card header around. | design | needs-Sean
+
 ## 2026-08-20 — Session state at bedtime wrap (carried)
 
 Two PRs open, neither merged. Sean merges; never merge unprompted.
