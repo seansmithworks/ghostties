@@ -1075,3 +1075,15 @@ Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #10
 **Parked — design, Sean's call:**
 
 - [ ] **Status representation vs. per-session ghost icons** — half of this resolved itself: #122 removed the `✳` glyph from names, so the row no longer carries two competing status channels. The remaining question is whether the ghost icon is the right status channel at all. Design decision. Captured in `tease-capture.md`. | design | parked
+
+## 2026-08-21 — Screen Recording grant keeps re-prompting (other thread)
+
+- [ ] **Screen Recording grant is re-requested after it's been given, repeatedly** — Sean has
+  granted it "so many times." Extends the 2026-08-14 item (grant shows ON, `screencapture` still
+  fails). Leading hypothesis: TCC keys the grant to the binary's code requirement, and every local
+  build re-signs ad-hoc with a fresh cdhash, so each new build is a *different* app to TCC — the
+  stored grant points at a binary that no longer exists. Consistent with both symptoms (toggle
+  visibly ON but denied, and repeated re-prompting). Check whether a stable signing identity for
+  local Debug builds fixes it. Note `screencapture` is gated by the *terminal's* grant, not the
+  app's — see `reference_screencapture-responsible-app-is-the-terminal.md`. **Explicitly routed to
+  a separate thread** (2026-08-21) — do not fold into the web-redesign objective. | env | needs-Sean
