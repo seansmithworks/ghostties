@@ -185,15 +185,19 @@ final class SessionComposerCommandParserTests: XCTestCase {
     /// UUIDs essentially never collide, so the assertion is vacuous by
     /// construction).
     ///
-    /// Replaced with an assertion that actually discriminates: two
-    /// INDEPENDENT calls must return the SAME id. Under the real
-    /// production line (`id: AgentTemplate.shell.id`) that's always true.
-    /// Under the `id: UUID()` mutant, two separate calls mint two
+    /// Replaced with an assertion that discriminates against that specific
+    /// mutant: two INDEPENDENT calls must return the SAME id. Under the
+    /// real production line (`id: AgentTemplate.shell.id`) that's always
+    /// true. Under the `id: UUID()` mutant, two separate calls mint two
     /// different random UUIDs, so this fails hard instead of trivially
-    /// passing. Manually verified: broke `makeAdHocTemplate`'s `id:`
-    /// argument to `UUID()`, ran the suite, confirmed BOTH assertions in
-    /// this test go red; restored the production line and confirmed green
-    /// (see PR description / task report for the red/green run output).
+    /// passing. On its own it does not prove the id IS
+    /// `AgentTemplate.shell.id` — a stable-but-wrong id (e.g.
+    /// `AgentTemplate.claudeCode.id`, a hardcoded UUID) would pass this
+    /// assertion too. That check is the pre-existing assertion above.
+    /// Manually verified: broke `makeAdHocTemplate`'s `id:` argument to
+    /// `UUID()`, ran the suite, confirmed BOTH assertions in this test go
+    /// red; restored the production line and confirmed green (see PR
+    /// description / task report for the red/green run output).
     func testMakeAdHocTemplateIdMatchesRealShellTemplateSymbolNotALocalCopy() {
         let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: ["cco"])
         // Deliberately re-derive from the production singleton rather than
@@ -213,9 +217,14 @@ final class SessionComposerCommandParserTests: XCTestCase {
     // SwiftUI `View` reading `@EnvironmentObject` state — no testable seam
     // without a view harness this repo doesn't have. The fix is the
     // resolution RULE (`resolveCommitProjectId`), extracted here as a pure
-    // function specifically so the rule itself has real coverage; the
-    // view's job is reduced to calling it with the right two ids, which is
-    // one line, not independently tested.
+    // function specifically so the rule itself has real coverage. This is
+    // rule coverage, not call-site coverage: the three tests below exercise
+    // `commandProjectId ?? selectedProjectId` in isolation, but the call
+    // site passes both arguments by name (`commit(template:)`, around
+    // `SessionComposerPalette.swift:791-794`) with no independent test —
+    // swapping `commandProjectId:`/`selectedProjectId:` there, the exact
+    // polarity error this rule exists to prevent, leaves all three tests
+    // passing.
 
     func testResolveCommitProjectIdPrefersCommandProjectOverSelection() {
         let commandProjectId = UUID()

@@ -76,7 +76,7 @@ struct SessionComposerPalette: View {
     // of; `.centered` is wider since it floats free of the sidebar column.
     private var paletteWidth: CGFloat {
         switch request.presentation {
-        case .anchored: return WorkspaceLayout.sidebarWidth
+        case .anchored: return WorkspaceLayout.sidebarWidth - 16
         case .centered: return WorkspaceLayout.composerOverlayWidth
         }
     }
@@ -389,11 +389,15 @@ struct SessionComposerPalette: View {
         // Shake-clearance wrapper (finding: `.anchored` is an NSPopover
         // sized exactly to its content — a shake applied to the composer's
         // root, with no margin around it, clips or draws over the popover
-        // chrome). The card itself stays `paletteWidth` wide; this adds a
-        // 6pt-per-side clear inset AROUND it so the ±6pt lateral translation
-        // has room in both `.anchored` and `.centered`.
+        // chrome). The card itself stays `paletteWidth` wide; this adds an
+        // 8pt-per-side clear inset AROUND it (DESIGN.md §2/§6 spacing
+        // scale — 8 is the nearest valid step above the ±6pt shake
+        // amplitude) so the ±6pt lateral translation has room in both
+        // `.anchored` and `.centered`. `paletteWidth`'s `.anchored` case
+        // subtracts this same 16pt (8pt × 2 sides) so the net popover
+        // width still matches the sidebar exactly.
         composerCard
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3
             // review fix, retuned in PR #132 (shadow-only elevation) now
             // that the shadow carries the "on top of" read alone, with no
