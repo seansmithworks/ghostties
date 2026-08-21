@@ -19,6 +19,23 @@ First runtime pass on a build containing all five composer phases. Two long-open
 
 - [ ] **STILL UNTESTED: locked-label truncation.** Every Dev-pass attempt so far used short project names (Snippost, ghostties, Brukas). Needs one run with a genuinely long multi-word folder name to see whether the locked label truncates cleanly or wraps and pushes the card header around. | design | needs-Sean
 
+### Command grammar slice 1 — PLANNED, NOT BUILT (carried)
+
+An implementer was dispatched and killed at wrap **before creating its branch** — no branch, no files, nothing to verify. Re-dispatch from this brief.
+
+**Parsing rule.** Split on whitespace honoring double quotes. Tokenize ONLY when there are ≥2 tokens AND token 1 exactly matches a project `name` or folder basename (case-insensitive) AND the binding is not `.locked`. Otherwise today's whole-string filter, byte-identical — that is what protects the fast path. (Correction: `bru`+Return does **not** start a session today; `SessionComposerPalette.swift:202-206` only re-scopes and clears. The real fast path is `bru`+Return+Return.)
+
+**The remainder does NOT blanket-run.** It still filters that project's templates AND appends a `Run "<remainder>"` row in a new COMMAND section; matching templates rank first. Blanket-running would break `ghostties orchestrator` — execing a nonexistent binary instead of reaching the Orchestrator template. **Never claim `-n`** as an app flag; it belongs to Sean's own `cco` function.
+
+**Two silent runtime blockers** (detail: `reference_composer-adhoc-command-two-blockers.md` in project memory): `AgentTemplate.shellEscape` (`AgentTemplate.swift:180`) single-quotes the ENTIRE `command` string, so a multi-word command becomes one argv word; and `cco` is a zsh **function** that dies under `/bin/sh -c` because zshrc is never sourced. Synthesize exactly `AgentTemplate(id: AgentTemplate.shell.id, name: <tok1>, kind: .custom, command: <tok1>, agent: .init(additionalFlags: <rest>))` — `agent:` buys the login-shell wrapper (`SessionCoordinator.swift:223-244`), and reusing `shell.id` stops `WorkspacePersistence.validate` (`:228-230`) deleting the session on relaunch. Accepted degradation: relaunching an ad-hoc session relaunches plain Shell.
+
+**Files:** NEW `SessionComposerCommandParser.swift` (pure, testable) + NEW `SessionComposerCommandParserTests.swift`; EDIT `SessionComposerPalette.swift` only (filter chain at `:241`/`:245`/`:258`/`:295`/`:311-315`, COMMAND section, shake). **Off-limits:** `createSession`/`createQuickSession` bodies, `buildCommand`/`shellEscape`, `CommandPalette.swift` (upstream), both indicator caches, any new `AgentTemplate` field, any `store.addTemplate` call.
+
+**Acceptance, each with evidence:** (1) the repro spawns a ghostties session running `cco -n test` — proof is the `exec 'cco' '-n' 'test'` line in the generated wrapper under `SessionCoordinator.launcherScriptDir`, read from disk, not a screenshot; (2) single-token parse returns `projectId == nil`; (3) quoted arg survives; (4) synthesized id `== AgentTemplate.shell.id`; (5) no-match Enter shakes (3 cycles / 6pt / 0.25s; red 400ms border under reduce-motion); (6) `grep -c createQuickSession` unchanged from `df0c1b8de`.
+
+- [ ] **Sean's calls once it's on screen:** COMMAND section label and row copy · whether the launch banner still prints (it will show the command name) · the shake's feel. | design | needs-Sean
+- [ ] **Unverified by the planner:** whether `.onSubmit` and `.onKeyPress` both fire on macOS 14+ (pre-existing, documented at `SessionComposerPalette.swift:820-836`). | app | new
+
 ## 2026-08-20 — Session state at bedtime wrap (carried)
 
 Two PRs open, neither merged. Sean merges; never merge unprompted.
