@@ -46,6 +46,17 @@ struct SessionComposerPalette: View {
     @State private var templateToDelete: AgentTemplate?
     @FocusState private var newTemplateNameFocused: Bool
 
+    // MARK: - No-match Enter feedback (command grammar slice 1)
+
+    /// Drives `ShakeEffect` — 3 cycles / 6pt, animated over 0.25s. Bumped by
+    /// one on every no-match Return; the animation reads the delta, not the
+    /// absolute value, so back-to-back no-match Returns each restart a full
+    /// shake rather than compounding.
+    @State private var shakeTrigger: CGFloat = 0
+    /// Reduce-motion fallback: a 400ms red border pulse instead of the
+    /// shake, toggled true then back false after the duration.
+    @State private var showNoMatchBorder = false
+
     // MARK: - DESIGN.md scale (D11) — see `TemplatePickerView` for precedent.
     // `paletteWidth` pulls from `WorkspaceLayout` tokens (DESIGN.md §2
     // forbids hardcoded pt values where an equivalent token exists); the
@@ -146,8 +157,74 @@ struct SessionComposerPalette: View {
     }
 
     private var currentProject: Project? {
+        // Command grammar slice 1: a resolved `<project> <remainder>` parse
+        // takes precedence over `selectedProjectId` — the remainder needs
+        // to filter THAT project's templates even though the dropdown
+        // selection hasn't changed (selectProject(_:) also clears the
+        // query, which would erase what's being typed).
+        if let commandProject { return commandProject }
         guard let id = composerStore.selectedProjectId else { return nil }
         return store.projects.first(where: { $0.id == id })
+    }
+
+    // MARK: - Command grammar (slice 1)
+
+    /// Tokenizes `query` against the known project list. `.none` (the
+    /// common case) means "no command recognized" — every downstream
+    /// filter below falls through to the ordinary whole-string query,
+    /// byte-identical to before this parser existed.
+    private var commandParse: SessionComposerCommandParser.ParseResult {
+        SessionComposerCommandParser.parse(query: query, projects: store.projects, isLocked: isProjectLocked)
+    }
+
+    private var commandProject: Project? {
+        guard let projectId = commandParse.projectId else { return nil }
+        return store.projects.first(where: { $0.id == projectId })
+    }
+
+    /// The text template/recent options are ranked against. A resolved
+    /// command scopes filtering to the remainder (`cco -n test`, not the
+    /// whole `ghostties cco -n test` query) — otherwise nothing in the
+    /// project's own template list would ever match the project name that
+    /// prefixes it.
+    private var templateFilterQuery: String {
+        commandProject != nil ? commandParse.remainderText : query
+    }
+
+    /// The `Run "<remainder>"` row appended in a new COMMAND section once a
+    /// command is recognized. Blanket-running the remainder happens ONLY
+    /// here, behind the same ≥2-token + project-match gate as the rest of
+    /// the grammar — `filteredTemplateOptions` above still ranks any
+    /// matching template first, so `ghostties orchestrator` keeps reaching
+    /// the Orchestrator template instead of trying to exec a nonexistent
+    /// `orchestrator` binary.
+    private var commandOptions: [ComposerOption] {
+        guard let commandProject,
+              let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: commandParse.remainderTokens)
+        else { return [] }
+
+        let projectId = commandProject.id
+        return [
+            ComposerOption(
+                id: SessionComposerCommandParser.runRowId,
+                title: "Run \"\(commandParse.remainderText)\"",
+                subtitle: commandProject.name,
+                leadingIcon: "terminal",
+                action: { commitCommand(projectId: projectId, template: template) }
+            )
+        ]
+    }
+
+    /// Commits the synthesized ad-hoc template into the RESOLVED command
+    /// project, which may differ from `composerStore.selectedProjectId`
+    /// (typing a command never changes the dropdown selection — see
+    /// `currentProject` above). Setting `selectedProjectId` directly here,
+    /// rather than via `selectProject(_:)`, is deliberate: `selectProject`
+    /// also clears `searchText`, which would blank the command that's
+    /// about to be committed out from under `commit(template:)`.
+    private func commitCommand(projectId: UUID, template: AgentTemplate) {
+        composerStore.selectedProjectId = projectId
+        commit(template: template)
     }
 
     // MARK: - Options
@@ -239,7 +316,7 @@ struct SessionComposerPalette: View {
     }
 
     private var filteredRecentOptions: [ComposerOption] {
-        SessionComposerRanking.sorted(recentOptions, query: query, title: { $0.title }, subtitle: { $0.subtitle })
+        SessionComposerRanking.sorted(recentOptions, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
 
     private var filteredTemplateOptions: [ComposerOption] {
@@ -247,7 +324,7 @@ struct SessionComposerPalette: View {
         let base = availableTemplates
             .map(makeOption)
             .filter { !recentIds.contains($0.id) }
-        return SessionComposerRanking.sorted(base, query: query, title: { $0.title }, subtitle: { $0.subtitle })
+        return SessionComposerRanking.sorted(base, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
 
     /// Query-matching projects (S2, locked decision: "the search field
@@ -260,15 +337,21 @@ struct SessionComposerPalette: View {
         // resolves from the bound project, never `selectedProjectId`), so
         // letting a project row re-scope the list here would show project B
         // while `commit()` still creates in locked project A.
-        guard !isProjectLocked, !query.isEmpty else { return [] }
+        // A resolved command already scopes the list to one project (N3's
+        // own reasoning, extended here): showing project search results
+        // alongside a command's TEMPLATES/COMMAND rows would let a project
+        // row re-scope mid-command, contradicting the command that's
+        // already been typed.
+        guard !isProjectLocked, commandProject == nil, !query.isEmpty else { return [] }
         let options = store.projects.map(makeOption)
         return SessionComposerRanking.sorted(options, query: query, title: { $0.title })
     }
 
     /// The full flattened list, in on-screen order, used for keyboard
-    /// navigation and selection clamping.
+    /// navigation and selection clamping. COMMAND renders last — matching
+    /// templates in TEMPLATES rank first, per the locked design.
     private var flattenedOptions: [ComposerOption] {
-        filteredRecentOptions + filteredTemplateOptions + filteredProjectOptions
+        filteredRecentOptions + filteredTemplateOptions + filteredProjectOptions + commandOptions
     }
 
     private var selectedOption: ComposerOption? {
@@ -293,7 +376,7 @@ struct SessionComposerPalette: View {
     /// untiered — keep index 0, i.e. current section order, so unambiguous
     /// queries and the empty-query default are unchanged.
     private func bestSelectionIndex(in options: [ComposerOption]) -> UInt {
-        UInt(SessionComposerRanking.bestMatchIndex(in: options, query: query, title: { $0.title }, subtitle: { $0.subtitle }))
+        UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
     }
 
     // MARK: - Body
@@ -311,7 +394,8 @@ struct SessionComposerPalette: View {
                 sections: [
                     (title: filteredRecentOptions.isEmpty ? nil : "RECENT", options: filteredRecentOptions),
                     (title: "TEMPLATES", options: filteredTemplateOptions),
-                    (title: filteredProjectOptions.isEmpty ? nil : "PROJECTS", options: filteredProjectOptions)
+                    (title: filteredProjectOptions.isEmpty ? nil : "PROJECTS", options: filteredProjectOptions),
+                    (title: commandOptions.isEmpty ? nil : "COMMAND", options: commandOptions)
                 ],
                 query: query,
                 selectedIndex: $selectedIndex,
@@ -364,6 +448,14 @@ struct SessionComposerPalette: View {
             composerClipShape
                 .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
         )
+        // No-match Enter feedback: a 400ms red border pulse under
+        // reduce-motion, standing in for the shake below (`triggerNoMatchFeedback`).
+        .overlay(
+            composerClipShape
+                .stroke(Color(nsColor: .systemRed), lineWidth: 2)
+                .opacity(showNoMatchBorder ? 1 : 0)
+        )
+        .modifier(ShakeEffect(animatableData: shakeTrigger))
         // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3 review
         // fix, retuned in PR #132 (shadow-only elevation) now that the shadow
         // carries the "on top of" read alone, with no scrim behind it).
@@ -714,6 +806,9 @@ struct SessionComposerPalette: View {
         case .submit:
             selectedOption?.action()
 
+        case .submitNoMatch:
+            triggerNoMatchFeedback()
+
         case .move(.up):
             if flattenedOptions.isEmpty { break }
             let current = selectedIndex ?? UInt(flattenedOptions.count)
@@ -727,6 +822,43 @@ struct SessionComposerPalette: View {
         case .move:
             break
         }
+    }
+
+    /// Enter with no row highlighted (empty results, or a dead-key press
+    /// before selection is seeded) used to be a silent no-op. 3 cycles /
+    /// 6pt over 0.25s via `ShakeEffect`; under reduce-motion, a 400ms red
+    /// border pulse instead.
+    private func triggerNoMatchFeedback() {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            showNoMatchBorder = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                showNoMatchBorder = false
+            }
+        } else {
+            withAnimation(.linear(duration: 0.25)) {
+                shakeTrigger += 1
+            }
+        }
+    }
+}
+
+/// Standard sine-wave shake: `amount` pt of lateral travel, `shakesPerUnit`
+/// full cycles per unit of `animatableData`. Driving `animatableData` by +1
+/// with a 0.25s linear animation and `shakesPerUnit = 3` produces exactly
+/// 3 cycles / 6pt / 0.25s (the no-match Enter spec) — SwiftUI interpolates
+/// `animatableData` continuously across the animation's duration, and one
+/// unit of `animatableData` sweeps the sine through `shakesPerUnit` full
+/// periods (argument spans `2π · shakesPerUnit`).
+private struct ShakeEffect: GeometryEffect {
+    var animatableData: CGFloat
+    var amount: CGFloat = 6
+    var shakesPerUnit: CGFloat = 3
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(
+            translationX: amount * sin(animatableData * 2 * .pi * shakesPerUnit),
+            y: 0
+        ))
     }
 }
 
@@ -808,6 +940,10 @@ struct ComposerQueryField: View {
     enum KeyboardEvent {
         case exit
         case submit
+        /// Return pressed with no row highlighted (empty results list) —
+        /// distinct from `.submit` so the parent can play the no-match
+        /// shake/border feedback instead of silently swallowing the key.
+        case submitNoMatch
         case move(MoveCommandDirection)
     }
 
@@ -845,11 +981,17 @@ struct ComposerQueryField: View {
                 // B1: `.onSubmit` is the ONLY Return handler that works
                 // below macOS 14 — the app's deployment target is 13.0.
                 .onSubmit {
-                    guard hasSelection else { return }
+                    guard hasSelection else {
+                        onEvent?(.submitNoMatch)
+                        return
+                    }
                     onEvent?(.submit)
                 }
                 .backport.onKeyPress(.return) { _ in
-                    guard hasSelection else { return .ignored }
+                    guard hasSelection else {
+                        onEvent?(.submitNoMatch)
+                        return .handled
+                    }
                     onEvent?(.submit)
                     return .handled
                 }
