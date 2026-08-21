@@ -76,7 +76,7 @@ struct SessionComposerPalette: View {
     // of; `.centered` is wider since it floats free of the sidebar column.
     private var paletteWidth: CGFloat {
         switch request.presentation {
-        case .anchored: return WorkspaceLayout.sidebarWidth - 16
+        case .anchored: return WorkspaceLayout.sidebarWidth - 16 // offsets `body`'s 8pt-per-side shake-clearance padding (16pt total) so net popover width matches the sidebar
         case .centered: return WorkspaceLayout.composerOverlayWidth
         }
     }
@@ -390,14 +390,19 @@ struct SessionComposerPalette: View {
         // sized exactly to its content — a shake applied to the composer's
         // root, with no margin around it, clips or draws over the popover
         // chrome). The card itself stays `paletteWidth` wide; this adds an
-        // 8pt-per-side clear inset AROUND it (DESIGN.md §2/§6 spacing
-        // scale — 8 is the nearest valid step above the ±6pt shake
-        // amplitude) so the ±6pt lateral translation has room in both
-        // `.anchored` and `.centered`. `paletteWidth`'s `.anchored` case
-        // subtracts this same 16pt (8pt × 2 sides) so the net popover
-        // width still matches the sidebar exactly.
+        // 8pt clear inset on ALL FOUR SIDES (DESIGN.md §5 Layout Tokens —
+        // 8 is the nearest valid step above the ±6pt shake amplitude) so
+        // the ±6pt lateral translation has room in both `.anchored` and
+        // `.centered`. Symmetric, not horizontal-only: it's the same
+        // component in both presentations, so it gets the same pattern —
+        // an inset flush top/bottom but padded left/right would read as a
+        // clipping bug rather than a frame. `paletteWidth`'s `.anchored`
+        // case subtracts this same 16pt (8pt × 2 sides) so the net
+        // popover width still matches the sidebar exactly; `.centered`'s
+        // card width (`composerOverlayWidth`) is unaffected since only
+        // the outer padding grows.
         composerCard
-            .padding(.horizontal, 8)
+            .padding(8)
             // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3
             // review fix, retuned in PR #132 (shadow-only elevation) now
             // that the shadow carries the "on top of" read alone, with no
@@ -485,8 +490,8 @@ struct SessionComposerPalette: View {
 
     /// The composer's visible card — background, clip shape, border, the
     /// no-match feedback overlays, and the shake itself. Kept separate from
-    /// `body` so the shake-clearance inset (`body`'s `.padding(.horizontal,
-    /// 6)`) wraps it rather than the shake living on the true root, which
+    /// `body` so the shake-clearance inset (`body`'s `.padding(8)`) wraps
+    /// it rather than the shake living on the true root, which
     /// left no room to translate inside an `.anchored` NSPopover sized
     /// exactly to its content.
     private var composerCard: some View {

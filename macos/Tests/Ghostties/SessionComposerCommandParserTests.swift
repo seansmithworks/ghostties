@@ -221,7 +221,7 @@ final class SessionComposerCommandParserTests: XCTestCase {
     // rule coverage, not call-site coverage: the three tests below exercise
     // `commandProjectId ?? selectedProjectId` in isolation, but the call
     // site passes both arguments by name (`commit(template:)`, around
-    // `SessionComposerPalette.swift:791-794`) with no independent test —
+    // `SessionComposerPalette.swift:800-803`) with no independent test —
     // swapping `commandProjectId:`/`selectedProjectId:` there, the exact
     // polarity error this rule exists to prevent, leaves all three tests
     // passing.
