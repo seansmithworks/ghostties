@@ -119,12 +119,40 @@ enum SessionComposerCommandParser {
     static func makeAdHocTemplate(remainderTokens: [String]) -> AgentTemplate? {
         guard let first = remainderTokens.first else { return nil }
         let rest = Array(remainderTokens.dropFirst())
+
+        // Blocker fix: a quoted first remainder token (`ghostties "npm run
+        // dev"`) survives `tokenize` as one token containing internal
+        // whitespace. Putting that whole into `command` reintroduces the
+        // `shellEscape` blocker verbatim — `buildCommand()` would quote it
+        // as a single argv word (`'npm run dev'`), which the shell can't
+        // resolve. Re-split the first token on whitespace: only its first
+        // word becomes `command`; every word after it flows into
+        // `additionalFlags` ahead of the rest of the remainder. This also
+        // covers an unbalanced-quote remainder (`ghostties "` tokenizes to
+        // `["ghostties", ""]`) — an empty or whitespace-only first token
+        // splits to zero words, so `command` guards below and this
+        // returns `nil` instead of committing a live `Run ""` row.
+        let firstWords = first.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard let command = firstWords.first else { return nil }
+        let flags = Array(firstWords.dropFirst()) + rest
+
         return AgentTemplate(
             id: AgentTemplate.shell.id,
-            name: first,
+            name: command,
             kind: .custom,
-            command: first,
-            agent: AgentTemplate.AgentConfig(additionalFlags: rest)
+            command: command,
+            agent: AgentTemplate.AgentConfig(additionalFlags: flags)
         )
+    }
+
+    /// Resolves which project a commit should land in: a resolved command
+    /// project (typed `<project> <remainder>`) takes precedence over
+    /// whatever project is currently selected in the dropdown. Pure/testable
+    /// extraction of the write-path polarity fixed by the "scopes list to
+    /// project A, commits into project B" blocker — `SessionComposerPalette`
+    /// itself has no testable seam for this (a SwiftUI `View` reading
+    /// `@EnvironmentObject` state), so this is the seam.
+    static func resolveCommitProjectId(commandProjectId: UUID?, selectedProjectId: UUID?) -> UUID? {
+        commandProjectId ?? selectedProjectId
     }
 }

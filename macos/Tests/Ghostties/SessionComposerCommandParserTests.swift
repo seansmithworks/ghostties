@@ -120,6 +120,41 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertNil(SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: []))
     }
 
+    /// Blocker fix: `tokenize("ghostties \"")` (an unbalanced trailing
+    /// quote) flushes an empty token, yielding `remainderTokens == [""]` —
+    /// `makeAdHocTemplate` used to guard only `.isEmpty` on the ARRAY, not
+    /// on the first token's content, so this produced a live `Run ""` row
+    /// that committed `exec ''` on Return.
+    func testMakeAdHocTemplateReturnsNilForBlankFirstToken() {
+        XCTAssertNil(SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: [""]))
+        XCTAssertNil(SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: ["   "]))
+    }
+
+    /// Blocker fix: a quoted first remainder token survives `tokenize` as
+    /// one token containing internal whitespace (`ghostties "npm run
+    /// dev"` -> `remainderTokens == ["npm run dev"]`). Putting that whole
+    /// string into `command` reintroduces the `shellEscape` blocker
+    /// verbatim — `buildCommand()` quotes it as ONE argv word
+    /// (`'npm run dev'`), which the shell can't resolve and the session
+    /// dies not-found, silently. This test calls the REAL production
+    /// `buildCommand()` / `shellEscape`, not a re-declared copy, and fails
+    /// without the fix (it asserted `command == "npm run dev"` and
+    /// `buildCommand() == "'npm run dev'"` before the fix).
+    func testMakeAdHocTemplateReSplitsQuotedFirstTokenIntoPerWordArgv() {
+        let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: ["npm run dev"])
+        XCTAssertEqual(template?.command, "npm")
+        XCTAssertEqual(template?.agent?.additionalFlags, ["run", "dev"])
+        XCTAssertEqual(template?.buildCommand(), "'npm' 'run' 'dev'")
+    }
+
+    /// The re-split first token's extra words must land BEFORE the rest of
+    /// the remainder, preserving argument order end to end.
+    func testMakeAdHocTemplateReSplitFirstTokenPrecedesRestOfRemainder() {
+        let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: ["npm run", "--watch"])
+        XCTAssertEqual(template?.command, "npm")
+        XCTAssertEqual(template?.agent?.additionalFlags, ["run", "--watch"])
+    }
+
     /// Static evidence for acceptance #1 (the repro must spawn a session
     /// running `cco -n test`), calling the REAL `AgentTemplate.buildCommand()`
     /// / `shellEscape` — not a re-declared copy. `SessionCoordinator.createSession`
@@ -142,11 +177,23 @@ final class SessionComposerCommandParserTests: XCTestCase {
 
     /// Mutant-verification for acceptance #4, per this repo's
     /// `feedback_vacuous-tests-pass-green` lesson: a test that only checks
-    /// a locally-declared literal proves nothing. This test asserts against
-    /// the REAL production symbol (`AgentTemplate.shell.id`), so breaking
-    /// production would fail it — see the paired manual verification in the
-    /// PR description, which broke `makeAdHocTemplate`'s `id:` argument to a
-    /// fresh `UUID()` and confirmed this test goes red before restoring it.
+    /// a locally-declared literal proves nothing. The original second
+    /// assertion here, `XCTAssertNotEqual(template?.id, UUID())`, compared
+    /// against a FRESHLY MINTED random UUID — that passes unconditionally
+    /// regardless of what `makeAdHocTemplate` actually does, including
+    /// under the exact `id: UUID()` mutant it claimed to guard (two random
+    /// UUIDs essentially never collide, so the assertion is vacuous by
+    /// construction).
+    ///
+    /// Replaced with an assertion that actually discriminates: two
+    /// INDEPENDENT calls must return the SAME id. Under the real
+    /// production line (`id: AgentTemplate.shell.id`) that's always true.
+    /// Under the `id: UUID()` mutant, two separate calls mint two
+    /// different random UUIDs, so this fails hard instead of trivially
+    /// passing. Manually verified: broke `makeAdHocTemplate`'s `id:`
+    /// argument to `UUID()`, ran the suite, confirmed BOTH assertions in
+    /// this test go red; restored the production line and confirmed green
+    /// (see PR description / task report for the red/green run output).
     func testMakeAdHocTemplateIdMatchesRealShellTemplateSymbolNotALocalCopy() {
         let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: ["cco"])
         // Deliberately re-derive from the production singleton rather than
@@ -154,6 +201,48 @@ final class SessionComposerCommandParserTests: XCTestCase {
         // can't silently desync this assertion from what actually matters:
         // `WorkspacePersistence.validate` recognizing the id as a known template.
         XCTAssertEqual(template?.id, AgentTemplate.shell.id)
-        XCTAssertNotEqual(template?.id, UUID())
+
+        let secondTemplate = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: ["bru"])
+        XCTAssertEqual(template?.id, secondTemplate?.id)
+    }
+
+    // MARK: - Commit-path project resolution (finding 1 — scopes list to
+    // project A, commits into project B)
+    //
+    // The bug itself lives in `SessionComposerPalette.commit(template:)`, a
+    // SwiftUI `View` reading `@EnvironmentObject` state — no testable seam
+    // without a view harness this repo doesn't have. The fix is the
+    // resolution RULE (`resolveCommitProjectId`), extracted here as a pure
+    // function specifically so the rule itself has real coverage; the
+    // view's job is reduced to calling it with the right two ids, which is
+    // one line, not independently tested.
+
+    func testResolveCommitProjectIdPrefersCommandProjectOverSelection() {
+        let commandProjectId = UUID()
+        let selectedProjectId = UUID()
+        XCTAssertEqual(
+            SessionComposerCommandParser.resolveCommitProjectId(
+                commandProjectId: commandProjectId,
+                selectedProjectId: selectedProjectId
+            ),
+            commandProjectId
+        )
+    }
+
+    func testResolveCommitProjectIdFallsBackToSelectionWhenNoCommand() {
+        let selectedProjectId = UUID()
+        XCTAssertEqual(
+            SessionComposerCommandParser.resolveCommitProjectId(
+                commandProjectId: nil,
+                selectedProjectId: selectedProjectId
+            ),
+            selectedProjectId
+        )
+    }
+
+    func testResolveCommitProjectIdReturnsNilWhenNeitherIsSet() {
+        XCTAssertNil(
+            SessionComposerCommandParser.resolveCommitProjectId(commandProjectId: nil, selectedProjectId: nil)
+        )
     }
 }
