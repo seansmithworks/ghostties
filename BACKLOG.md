@@ -67,6 +67,31 @@ are NOT to be re-entered for how-it-reads questions.
 - [ ] Terminal interior richness: minimal prompt (current) vs the full staged Claude Code TUI
   from the photo | design | carried
 
+## 2026-08-20 (later) — ghostties.org: scope reconciliation (read-only session)
+
+Compared current state against the original redesign scope (`a77f5a558`, the ten-section content
+map on `Anatomy.dc.html`, and the round-3 cut list). No code changed.
+
+**Where it stands:** direction work is complete — every axis the redesign opened is closed
+(Arcade, pixel+grotesk, visor ghost, A+B4, cut list ruled 8 ship / 4 park / 6 cut). Build work is
+one section deep: all app-section fidelity, nothing in `web/`. **0 of 10 mapped sections are
+rebuilt in production**; the live site is still hero + 2 videos + install, exactly as the Anatomy
+board described it on day one.
+
+**Two scope additions vs. the original, both carrying real cost:** B3 was CUT in round 2
+(`Main.dc.html` still says so — "re-measured every release or it lies") and round 4 reinstated it
+folded into B4; and both-themes-following-system, added 2026-08-20, is what forces the DOM rebuild
+at all since a raster capture cannot follow a system theme.
+
+**Parked (off-objective, do not promote into the next thread):**
+
+- [ ] Sections 02, 05, 06, 07 have no captures and **08 "first 60 seconds" has no assets at all**,
+  despite the cut list calling it the biggest unspoken objection and the cheapest to answer.
+  Section 08 is already tracked as carried under the 2026-08-19 entry; this is the scope-level
+  read of the same gap. | web | parked
+- [ ] `rebuild/preview-*.png` (4 files) are one commit stale — rendered 09:11, the toolbar-button
+  fix landed 09:15. Re-render before anyone cites them as current. | design | new
+
 ## 2026-08-20 — ghostties.org redesign: direction locked, app fidelity raised
 
 **Decisions locked (Sean's calls, this session):**
