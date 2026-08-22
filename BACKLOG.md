@@ -1087,3 +1087,50 @@ Sidebar/UX wave night. Ten PRs merged: the six-PR overnight wave (#96, #100, #10
   local Debug builds fixes it. Note `screencapture` is gated by the *terminal's* grant, not the
   app's — see `reference_screencapture-responsible-app-is-the-terminal.md`. **Explicitly routed to
   a separate thread** (2026-08-21) — do not fold into the web-redesign objective. | env | needs-Sean
+
+## 2026-08-21 — app section: pipeline reversed to automated real screenshots
+
+**Decision (Sean, 2026-08-21):** the HTML replica is NO LONGER the shipping asset. The site's
+app section ships **real screenshots of the app, produced automatically.** This reverses the
+08-20 "rebuild not screenshots" call; the deciding input was Sean's "it will keep changing" — a
+replica caps around 95% fidelity and needs re-tuning on every app change, a capture is 100% and
+needs re-taking. `docs/design/web-redesign/rebuild/index.html` and `app-rebuild-spec.md` survive
+as reference and as the measurement source, not as shipped output.
+
+**Superseded — do NOT resume:** tuning the four App* canvas artboards as the build contract, and
+propagating tuned deltas back into the boards + rebuild. Both existed to perfect a replica.
+
+**Proven this session (`f97171190`, spike):**
+
+- XCUITest captures the app window at **true 2x** (1280x705 pt -> 2560x1410 px) and needs **no
+  Screen Recording permission** — it runs through `testmanagerd`, not ScreenCaptureKit. The
+  broken TCC grant does not block asset production.
+- `XCUIElement.screenshot()` clips to window bounds: rounded corners survive, **shadow does
+  not**. `XCUIScreen.main.screenshot()` keeps the shadow but captures the whole display —
+  in the spike run it picked up the desktop and a chunk of another live session's content.
+  **Resolution: capture the window element, add the shadow in CSS.** Closes both the shadow
+  question and the privacy leak with one decision.
+- The UI-test runner is **sandboxed** and cannot write PNGs to an arbitrary host path (`/tmp`
+  fails with `Operation not permitted`). Write into `FileManager.default.temporaryDirectory`
+  and copy out afterwards.
+- **Pre-existing repo bug, diagnosed not fixed:** `TEST_TARGET_NAME = Ghostty` in
+  `project.pbxproj` names a target that does not exist (it is `Ghostties`), so the generated
+  `.xctestrun` gets no `UITargetAppPath` and plain `xcodebuild test` fails for **all**
+  GhosttyUITests — reproduced against the pre-existing `GhosttyTitlebarTabsUITests`. The spike
+  worked around it at the CLI layer only.
+
+**Plan — open:**
+
+- [ ] **Fix `TEST_TARGET_NAME`** in `macos/Ghostties.xcodeproj/project.pbxproj` (`Ghostty` ->
+  `Ghostties`) so `xcodebuild test` runs UI tests without patching the `.xctestrun`. | build | quick
+- [ ] **Capture fixture behind a launch argument** — canned workspace (invented project and
+  session names) plus a canned terminal transcript, so no real project names, no hostname, and
+  no dev build badge can reach a published asset. Privacy-critical: the spike capture showed all
+  three. | app | new
+- [ ] **`scripts/capture-marketing.sh`** — build, run the capture tests, write 2x window PNGs,
+  convert to WebP, emit `<picture>` sources. One command, repeatable after any app change.
+  Bonus: the same rig doubles as a visual-regression suite. | build | new
+- [ ] **Build the B4 scroll-zoom section in `web/`** on the generated assets, with headline copy.
+  The "this is a rebuild" disclosure line is **no longer needed** — the assets are real. | web | new
+- [ ] **Terminal interior content** — minimal prompt vs staged Claude Code TUI. Now scoped as
+  "what goes in the canned transcript." | design | needs-Sean
