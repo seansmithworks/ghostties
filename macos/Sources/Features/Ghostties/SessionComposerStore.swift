@@ -189,6 +189,7 @@ final class SessionComposerStore: ObservableObject {
         searchText = ""
         writeError = nil
         currentProjectBinding = projectBinding
+        pendingChipUndo = nil
 
         switch projectBinding {
         case .locked(let project), .prefilled(let project):
@@ -210,6 +211,7 @@ final class SessionComposerStore: ObservableObject {
         isOpen = false
         searchText = ""
         writeError = nil
+        pendingChipUndo = nil
     }
 
     // MARK: - Commit
@@ -308,6 +310,54 @@ final class SessionComposerStore: ObservableObject {
     func selectProject(_ id: UUID) {
         selectedProjectId = id
         searchText = ""
+    }
+
+    // MARK: - Breadcrumb chip cascade + undo (Slice A)
+
+    /// Whether `changeProjectChip(to:currentlyShown:)` actually cascaded or
+    /// was a no-op. Exposed so callers (and tests) can assert on the exact
+    /// branch rather than inferring it from state deltas.
+    enum ProjectChipChangeResult: Equatable {
+        case changed
+        case noOp
+    }
+
+    /// What the most recent `changeProjectChip` cascade cleared, restorable
+    /// as ONE step via `undoProjectChipChange()` (breadcrumb spec, decision
+    /// #2, ⌘Z). `nil` once restored, once a fresh cascade overwrites it, or
+    /// before any cascade has happened.
+    private(set) var pendingChipUndo: (previousProjectId: UUID?, previousSearchText: String)?
+
+    /// Change the project chip to `projectId`, cascading per the breadcrumb
+    /// spec's decision #2: the typed remainder is branch-agnostic today, but
+    /// a different project invalidates it (a different project's templates
+    /// don't apply), so the cascade clears `searchText` alongside the id —
+    /// exactly `selectProject(_:)`'s existing behavior, reused rather than
+    /// duplicated.
+    ///
+    /// `currentlyShown` is the id the CHIP is actually rendering right now —
+    /// which the palette derives as `currentProject?.id` and can differ from
+    /// `selectedProjectId` when a typed command has resolved a different
+    /// project (`commandProject`). Comparing against the displayed identity,
+    /// not the raw stored one, is what makes decision #2's "re-picking the
+    /// value already selected is a no-op, not a clear" hold for the
+    /// typed-command path too.
+    @discardableResult
+    func changeProjectChip(to projectId: UUID, currentlyShown: UUID?) -> ProjectChipChangeResult {
+        guard projectId != currentlyShown else { return .noOp }
+        pendingChipUndo = (previousProjectId: selectedProjectId, previousSearchText: searchText)
+        selectProject(projectId)
+        return .changed
+    }
+
+    /// Restore the segment(s) cleared by the most recent `changeProjectChip`
+    /// cascade, as one step (⌘Z). A no-op if nothing is pending — e.g. a
+    /// second ⌘Z in a row, or no chip change has happened yet this session.
+    func undoProjectChipChange() {
+        guard let pending = pendingChipUndo else { return }
+        selectedProjectId = pending.previousProjectId
+        searchText = pending.previousSearchText
+        pendingChipUndo = nil
     }
 
     // MARK: - Add project via NSOpenPanel
