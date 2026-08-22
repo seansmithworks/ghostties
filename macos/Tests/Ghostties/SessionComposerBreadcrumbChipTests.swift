@@ -161,4 +161,58 @@ struct SessionComposerBreadcrumbChipTests {
         #expect(store.selectedProjectId == projectA.id)
         #expect(store.searchText == "cco -n test")
     }
+
+    // MARK: - F8 (round-2 review): popChipToText / noteSearchTextEditedByTyping
+
+    /// `popChipToText(projectName:)` is the single write path for the A5
+    /// "backspace the chip back to raw text" gesture: it must clear
+    /// `selectedProjectId` (the chip has nothing selected anymore) AND set
+    /// `searchText` to the popped project's name (not clear it, unlike
+    /// `selectProject(_:)`, which this deliberately does NOT reuse).
+    @Test func popChipToTextClearsSelectionAndSetsSearchTextToProjectName() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        store.selectedProjectId = projectA.id
+        store.searchText = "cco -n test"
+
+        store.popChipToText(projectName: "A")
+
+        #expect(store.selectedProjectId == nil)
+        #expect(store.searchText == "A")
+    }
+
+    /// D4: typing by hand must disarm a pending chip-undo. Without this, ⌘Z
+    /// after typing past a chip change would discard the typed keystrokes
+    /// with no way back — AppKit's own text-undo never sees them, since this
+    /// binding writes `searchText` directly, bypassing the field editor's
+    /// undo manager.
+    @Test func noteSearchTextEditedByTypingDisarmsPendingChipUndo() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        let projectB = makeProject(name: "B")
+        store.selectedProjectId = projectA.id
+        store.searchText = "cco -n test"
+
+        store.changeProjectChip(to: projectB.id, currentlyShown: projectA.id)
+        #expect(store.pendingChipUndo != nil)
+
+        store.noteSearchTextEditedByTyping()
+
+        #expect(store.pendingChipUndo == nil)
+    }
+
+    /// A no-op call (nothing pending yet) must not somehow arm or otherwise
+    /// mutate state — it only ever clears.
+    @Test func noteSearchTextEditedByTypingIsANoOpWithNothingPending() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        store.selectedProjectId = projectA.id
+        store.searchText = "cco"
+
+        store.noteSearchTextEditedByTyping()
+
+        #expect(store.pendingChipUndo == nil)
+        #expect(store.selectedProjectId == projectA.id)
+        #expect(store.searchText == "cco")
+    }
 }

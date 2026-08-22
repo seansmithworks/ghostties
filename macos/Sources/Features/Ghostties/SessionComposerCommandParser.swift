@@ -41,9 +41,18 @@ enum SessionComposerCommandParser {
         static let none = ParseResult(projectId: nil, remainderTokens: [])
     }
 
-    /// Split `input` on whitespace, honoring double quotes so a quoted
-    /// argument (`"ghostties website"`) survives as a single token instead
-    /// of splitting on its internal space. Quote characters themselves are
+    /// Straight `"` plus the curly quotes macOS's "Use smart quotes and
+    /// dashes" substitutes it with by default (FB, round-2 review) — a
+    /// pasted or typed `"` can arrive as U+201C/U+201D by the time it lands
+    /// in `searchText`, and without this both `tokenize` and
+    /// `splitOnFirstToken` would silently fail to recognize it as a quote
+    /// boundary at all.
+    private static let quoteCharacters: Set<Character> = ["\"", "\u{201C}", "\u{201D}"]
+
+    /// Split `input` on whitespace, honoring double quotes (straight or
+    /// curly, see `quoteCharacters`) so a quoted argument
+    /// (`"ghostties website"`) survives as a single token instead of
+    /// splitting on its internal space. Quote characters themselves are
     /// stripped from the resulting tokens.
     static func tokenize(_ input: String) -> [String] {
         var tokens: [String] = []
@@ -52,7 +61,7 @@ enum SessionComposerCommandParser {
         var inQuotes = false
 
         for char in input {
-            if char == "\"" {
+            if quoteCharacters.contains(char) {
                 inQuotes.toggle()
                 hasCurrent = true
                 continue
@@ -129,7 +138,7 @@ enum SessionComposerCommandParser {
         // Skip token 1 itself, honoring quotes exactly as `tokenize` does.
         while index < rawQuery.endIndex {
             let char = rawQuery[index]
-            if char == "\"" {
+            if quoteCharacters.contains(char) {
                 inQuotes.toggle()
                 sawFirstToken = true
                 index = rawQuery.index(after: index)
@@ -182,7 +191,17 @@ enum SessionComposerCommandParser {
         // and must NOT count as sticky. A genuine separator was consumed
         // only when `prefix` itself ends in whitespace.
         guard split.prefix.last?.isWhitespace == true else { return nil }
-        let token = split.prefix.trimmingCharacters(in: .whitespaces)
+        // F2 fix (round-2 review): `trimmingCharacters(in: .whitespaces)`
+        // only strips whitespace — `tokenize` also strips quote characters,
+        // so a quoted multi-word name (`"ghostties web" `) produced a token
+        // of `"\"ghostties web\""`, quotes still attached, which never
+        // matched `matches(_:token:)` against the bare project name. That
+        // silently defeated the sticky chip for every multi-word or quoted
+        // project name — exactly the D3 dead end this function exists to
+        // close. `tokenize(split.prefix).first` runs the SAME quote-aware
+        // scan `splitOnFirstToken` above already mirrors, so it agrees with
+        // what `tokenize` calls token 1 for both plain and quoted names.
+        guard let token = tokenize(split.prefix).first else { return nil }
         guard let project = projects.first(where: { matches($0, token: token) }) else { return nil }
         return project.id
     }

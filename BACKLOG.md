@@ -81,8 +81,21 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
         including the fragility items (`pendingChipUndo` publishing,
         `popChipToText` bypassing the single write path, chip open-state
         toggle-vs-set inconsistency).
-  - [ ] A8 — review round 2 against the round-1 fix commit, seeded with what round 1 cleared
-  - [ ] A9 — review round 3 if round 2 changed layout (the rule is eight-for-eight here)
+  - [x] A8 — review round 2 against the round-1 fix commit, seeded with what round 1 cleared.
+        Found F1/F2 (blockers — inverted `layoutPriority` collapsed the chip to `g…` every
+        render; `stickyChipProjectId` never matched a quoted multi-word project name), F3/F4/F5
+        (defects — unclamped selection on the sticky transition; a tautological B1 round-trip
+        test that could not fail; `.locked` falling through to the interactive picker when its
+        project can't resolve), F6–F9 (stale comment + dead keyboard handlers, DESIGN.md drift,
+        untested new store surface, an un-tokenized `Color.secondary.opacity(0.15)`), plus two
+        unconfirmed risks (FA — a second live ↑/↓/Return registration while the picker is open;
+        FB — smart quotes defeating the command grammar for a reason unrelated to the parser)
+        resolved by construction. All fixed 2026-08-22 — see task report for the full
+        fixed/judgment-call breakdown and the F2/F4 red-then-green proofs.
+  - [ ] A9 — review round 3, REQUIRED: round 2's fix commit changed layout (F1's
+        `layoutPriority` removal, F5's `.locked` branch restructure) — the eight-for-eight rule
+        means this needs an independent pass before Slice A is considered closed, not just green
+        tests.
 - [ ] **Slice B — branch segment resolving to a worktree.** Never `git checkout` in the project
   dir (would yank the branch from under a parallel session). Enumerate existing worktrees first;
   creation only behind an explicit `+ new worktree` row. Needs caching — shelling per keystroke

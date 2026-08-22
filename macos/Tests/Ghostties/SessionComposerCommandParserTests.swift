@@ -282,6 +282,20 @@ final class SessionComposerCommandParserTests: XCTestCase {
             XCTFail("expected a split for a resolved command")
             return
         }
+        // F4 fix (round-2 review): `split.prefix + split.remainder ==
+        // original` is TAUTOLOGICAL — slicing any string at any index and
+        // concatenating the two halves reproduces the original string no
+        // matter where the split point lands, so this assertion could never
+        // fail even if `splitOnFirstToken` split at the wrong boundary
+        // entirely. The discriminating assertion is on `split.remainder`'s
+        // actual VALUE — this is what proves the split landed after "ghostties "
+        // specifically, quotes and all, not just "somewhere". Proven
+        // red-then-green against production code (task report has the
+        // captured output): moving the split point by one character in
+        // `splitOnFirstToken` turns this red while the old tautological
+        // assertion stayed green.
+        XCTAssertEqual(split.remainder, #"cco -n "npm run dev""#)
+
         // `get` returns `split.remainder` verbatim; `set` re-prepends
         // `split.prefix` verbatim — simulate a no-op edit (typing the same
         // remainder back in) and confirm the round trip reproduces the
@@ -340,5 +354,44 @@ final class SessionComposerCommandParserTests: XCTestCase {
         let project = makeProject(name: "ghostties")
         let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "unknown ", projects: [project], isLocked: false)
         XCTAssertNil(id)
+    }
+
+    /// F2 (round-2 review): a quoted multi-word project name — DESIGN.md
+    /// calls multi-word basenames "the normal case" — must stay sticky
+    /// through the empty-remainder backspace exactly like a single-word
+    /// name does above. The prior implementation extracted the token with
+    /// `split.prefix.trimmingCharacters(in: .whitespaces)`, which strips
+    /// whitespace only; `tokenize` also strips the quote characters
+    /// wrapping a multi-word name, so the extracted token was
+    /// `"\"ghostties web\""` — quotes still attached — which never matched
+    /// `matches(_:token:)` against the bare project name "ghostties web".
+    /// Proven red against that code (task report has the captured output).
+    func testStickyChipProjectIdResolvesForQuotedMultiWordProjectName() {
+        let project = makeProject(name: "ghostties web")
+        let id = SessionComposerCommandParser.stickyChipProjectId(
+            rawQuery: #""ghostties web" "#,
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(id, project.id)
+    }
+
+    // MARK: - FB (round-2 review): curly quotes (macOS's default "smart
+    // quotes and dashes" substitution) must be recognized as quote
+    // boundaries, not just the straight `"`.
+
+    func testTokenizeTreatsCurlyQuotesAsQuoteCharacters() {
+        let tokens = SessionComposerCommandParser.tokenize("ghostties \u{201C}npm run dev\u{201D}")
+        XCTAssertEqual(tokens, ["ghostties", "npm run dev"])
+    }
+
+    func testStickyChipProjectIdResolvesForCurlyQuotedMultiWordProjectName() {
+        let project = makeProject(name: "ghostties web")
+        let id = SessionComposerCommandParser.stickyChipProjectId(
+            rawQuery: "\u{201C}ghostties web\u{201D} ",
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(id, project.id)
     }
 }
