@@ -394,4 +394,84 @@ final class SessionComposerCommandParserTests: XCTestCase {
         )
         XCTAssertEqual(id, project.id)
     }
+
+    // MARK: - Slice B (composer breadcrumb spec): typable `>` segment
+    // separator. Parser only — no UI, no store changes.
+
+    /// `>` as separator, with and without surrounding spaces.
+    func testParseRecognizesChevronAsBranchSeparatorWithSpaces() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(query: "ghostties > main", projects: [project], isLocked: false)
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertEqual(result.branchToken, "main")
+        XCTAssertTrue(result.remainderTokens.isEmpty)
+    }
+
+    func testParseRecognizesChevronAsBranchSeparatorWithoutSpaces() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(query: "ghostties>main", projects: [project], isLocked: false)
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertEqual(result.branchToken, "main")
+        XCTAssertTrue(result.remainderTokens.isEmpty)
+    }
+
+    /// A `>` in the command remainder (past the branch segment) must stay a
+    /// literal argv word, not a further segment separator — a shell
+    /// redirect must survive.
+    func testParseKeepsChevronLiteralInRemainderPastBranchSegment() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties > main > npm run build > log.txt",
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(result.branchToken, "main")
+        XCTAssertEqual(result.remainderTokens, ["npm", "run", "build", ">", "log.txt"])
+    }
+
+    /// A quoted `>` must stay a literal character inside the quoted
+    /// argument, never a segment separator — the `!inQuotes` guard applies
+    /// to chevron exactly as it already does to whitespace.
+    func testParseKeepsQuotedChevronLiteral() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(query: #"ghostties "a > b""#, projects: [project], isLocked: false)
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertNil(result.branchToken)
+        XCTAssertEqual(result.remainderTokens, ["a > b"])
+    }
+
+    /// Sticky chip triggered via `>` (no space) — mirrors the existing
+    /// whitespace-triggered sticky chip.
+    func testStickyChipProjectIdTriggeredByChevronWithNoSpace() {
+        let project = makeProject(name: "ghostties")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "ghostties>", projects: [project], isLocked: false)
+        XCTAssertEqual(id, project.id)
+    }
+
+    /// Named fast-path regression: with `>` now recognized as a segment
+    /// separator, the single-token query must stay byte-identical to slice
+    /// 1 — `commandProject` (driven by `parse(query:).projectId`) may only
+    /// go non-nil when the text before a `>` (or whitespace) exactly
+    /// matches a project name. A bare single-token query, even one that
+    /// matches a project name outright, must still return `projectId ==
+    /// nil` so `templateFilterQuery` falls through to the raw query
+    /// unchanged.
+    func testParseSingleTokenQueryStaysNilProjectIdEvenWithChevronSupportAdded() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(query: "ghostties", projects: [project], isLocked: false)
+        XCTAssertNil(result.projectId)
+        XCTAssertNil(result.branchToken)
+        XCTAssertTrue(result.remainderTokens.isEmpty)
+    }
+
+    /// Disambiguation rule: a bare second token is a remainder, never a
+    /// branch, unless an explicit `>` introduced it.
+    func testParseTreatsBareSecondTokenAsRemainderNotBranch() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(query: "ghostties main cco", projects: [project], isLocked: false)
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertNil(result.branchToken)
+        XCTAssertEqual(result.remainderTokens, ["main", "cco"])
+        XCTAssertEqual(result.remainderText, "main cco")
+    }
 }

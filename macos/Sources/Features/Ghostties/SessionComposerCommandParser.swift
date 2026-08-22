@@ -28,6 +28,18 @@ enum SessionComposerCommandParser {
     struct ParseResult: Equatable {
         let projectId: UUID?
         let remainderTokens: [String]
+        /// Slice B (composer breadcrumb spec): the branch segment's raw
+        /// token, present only when an explicit `>` introduced it (see
+        /// the disambiguation rule on `parse(query:)`). `nil` for every
+        /// slice-1 shape — explicit default keeps every existing
+        /// construction site (including `.none` below) byte-identical.
+        let branchToken: String?
+
+        init(projectId: UUID?, remainderTokens: [String], branchToken: String? = nil) {
+            self.projectId = projectId
+            self.remainderTokens = remainderTokens
+            self.branchToken = branchToken
+        }
 
         /// The remainder tokens rejoined with single spaces, for display
         /// (`Run "<remainderText>"`) and for scoping the project's own
@@ -49,12 +61,23 @@ enum SessionComposerCommandParser {
     /// boundary at all.
     private static let quoteCharacters: Set<Character> = ["\"", "\u{201C}", "\u{201D}"]
 
-    /// Split `input` on whitespace, honoring double quotes (straight or
-    /// curly, see `quoteCharacters`) so a quoted argument
-    /// (`"ghostties website"`) survives as a single token instead of
-    /// splitting on its internal space. Quote characters themselves are
-    /// stripped from the resulting tokens.
-    static func tokenize(_ input: String) -> [String] {
+    /// Whether `c` is a segment separator: always whitespace, plus `>`
+    /// when `separatorsIncludeChevron` is set. Shared by `tokenize` and
+    /// `splitOnFirstToken` so the two scans agree on where a boundary is —
+    /// Slice B's typable `>` (composer breadcrumb spec, decision #3).
+    private static func isSegmentSeparator(_ c: Character, separatorsIncludeChevron: Bool) -> Bool {
+        c.isWhitespace || (separatorsIncludeChevron && c == ">")
+    }
+
+    /// Split `input` on whitespace (and, when `separatorsIncludeChevron` is
+    /// true, `>` as well), honoring double quotes (straight or curly, see
+    /// `quoteCharacters`) so a quoted argument (`"ghostties website"`)
+    /// survives as a single token instead of splitting on its internal
+    /// space. Quote characters themselves are stripped from the resulting
+    /// tokens; so is a `>` acting as a separator. `separatorsIncludeChevron`
+    /// defaults to `false` so every existing caller stays byte-identical —
+    /// `>` is only ever a separator where a caller opts in.
+    static func tokenize(_ input: String, separatorsIncludeChevron: Bool = false) -> [String] {
         var tokens: [String] = []
         var current = ""
         var hasCurrent = false
@@ -66,7 +89,7 @@ enum SessionComposerCommandParser {
                 hasCurrent = true
                 continue
             }
-            if char.isWhitespace, !inQuotes {
+            if isSegmentSeparator(char, separatorsIncludeChevron: separatorsIncludeChevron), !inQuotes {
                 if hasCurrent {
                     tokens.append(current)
                     current = ""
@@ -83,24 +106,71 @@ enum SessionComposerCommandParser {
         return tokens
     }
 
-    /// Parse `query` for the `<project> <remainder...>` command grammar.
+    /// Parse `query` for the `<project> [> <branch>] <remainder...>` command
+    /// grammar (Slice B, composer breadcrumb spec adds the optional branch
+    /// segment on top of slice 1's `<project> <remainder...>`).
     ///
-    /// Tokenizes ONLY when ALL of: there are ≥2 tokens, token 1 exactly
-    /// matches a project `name` or folder basename (case-insensitive), and
-    /// `isLocked` is false. Any other case returns `.none` — the caller
-    /// must treat that as "no command", not as an error, and keep filtering
-    /// the raw query exactly as it did before this parser existed.
+    /// Tokenizes ONLY when ALL of: there is a project segment AND something
+    /// after it, that first segment exactly matches a project `name` or
+    /// folder basename (case-insensitive), and `isLocked` is false. Any
+    /// other case returns `.none` — the caller must treat that as "no
+    /// command", not as an error, and keep filtering the raw query exactly
+    /// as it did before this parser existed.
+    ///
+    /// Disambiguation rule (load-bearing): token 2 is a branch ONLY when an
+    /// explicit `>` introduced it. A branch name and a template name are
+    /// both bare words, and this parser never consults disk — so
+    /// `ghostties cco` stays a template (unchanged from slice 1),
+    /// `ghostties > main > cco` resolves branch `main` with remainder
+    /// `cco`, and `ghostties main cco` is remainder `main cco`, not a
+    /// branch, because no `>` ever appeared.
     static func parse(query: String, projects: [Project], isLocked: Bool) -> ParseResult {
         guard !isLocked else { return .none }
 
-        let tokens = tokenize(query)
-        guard tokens.count >= 2 else { return .none }
+        // Segment-aware split for the project: `>` counts as a separator
+        // here so `ghostties>main` and `ghostties > main` both find the
+        // project boundary correctly.
+        guard let projectSplit = splitOnFirstToken(query, separatorsIncludeChevron: true) else {
+            return .none
+        }
+        guard !projectSplit.remainder.isEmpty else { return .none }
 
-        guard let project = projects.first(where: { matches($0, token: tokens[0]) }) else {
+        guard let projectToken = tokenize(projectSplit.prefix, separatorsIncludeChevron: true).first else {
+            return .none
+        }
+        guard let project = projects.first(where: { matches($0, token: projectToken) }) else {
             return .none
         }
 
-        return ParseResult(projectId: project.id, remainderTokens: Array(tokens.dropFirst()))
+        // A `>` was consumed as part of the separator between the project
+        // token and the remainder if and only if the prefix (token +
+        // separator run) contains one — the token itself can never contain
+        // a bare `>`, since a `>` there would have been consumed as a
+        // separator instead.
+        let branchIntroducedByChevron = projectSplit.prefix.contains(">")
+
+        guard branchIntroducedByChevron else {
+            // No explicit `>` after the project: the whole remainder is
+            // the command, tokenized on whitespace ONLY — so a `>` further
+            // inside (a shell redirect argument) stays a literal argv word
+            // instead of being treated as a segment separator.
+            let remainderTokens = tokenize(projectSplit.remainder, separatorsIncludeChevron: false)
+            return ParseResult(projectId: project.id, remainderTokens: remainderTokens)
+        }
+
+        // Segment-aware split again for the branch.
+        guard let branchSplit = splitOnFirstToken(projectSplit.remainder, separatorsIncludeChevron: true) else {
+            // `ghostties > ` with nothing after: branch not typed yet.
+            return ParseResult(projectId: project.id, remainderTokens: [])
+        }
+        guard let branchToken = tokenize(branchSplit.prefix, separatorsIncludeChevron: true).first else {
+            return ParseResult(projectId: project.id, remainderTokens: [])
+        }
+
+        // Final remainder: whitespace-only tokenize, so any further `>`
+        // (e.g. a shell redirect) survives as a literal argv word.
+        let remainderTokens = tokenize(branchSplit.remainder, separatorsIncludeChevron: false)
+        return ParseResult(projectId: project.id, remainderTokens: remainderTokens, branchToken: branchToken)
     }
 
     /// Splits `rawQuery` into `(prefix, remainder)` on the boundary token 1
@@ -124,14 +194,18 @@ enum SessionComposerCommandParser {
     /// quote character never survived into `searchText` at all. Slicing the
     /// ORIGINAL string instead of rebuilding one has no reconstruction step
     /// to lose anything in.
-    static func splitOnFirstToken(_ rawQuery: String) -> (prefix: String, remainder: String)? {
+    static func splitOnFirstToken(
+        _ rawQuery: String,
+        separatorsIncludeChevron: Bool = false
+    ) -> (prefix: String, remainder: String)? {
         var index = rawQuery.startIndex
         var inQuotes = false
         var sawFirstToken = false
 
-        // Skip leading whitespace before token 1 (mirrors `tokenize`, which
+        // Skip leading separators before token 1 (mirrors `tokenize`, which
         // never emits a leading empty token).
-        while index < rawQuery.endIndex, rawQuery[index].isWhitespace {
+        while index < rawQuery.endIndex,
+              isSegmentSeparator(rawQuery[index], separatorsIncludeChevron: separatorsIncludeChevron) {
             index = rawQuery.index(after: index)
         }
 
@@ -144,16 +218,17 @@ enum SessionComposerCommandParser {
                 index = rawQuery.index(after: index)
                 continue
             }
-            if char.isWhitespace, !inQuotes { break }
+            if isSegmentSeparator(char, separatorsIncludeChevron: separatorsIncludeChevron), !inQuotes { break }
             sawFirstToken = true
             index = rawQuery.index(after: index)
         }
         guard sawFirstToken else { return nil }
 
-        // Skip the whitespace run separating token 1 from the remainder —
-        // NOT included in `remainder`, but IS included in `prefix` (it's
+        // Skip the separator run between token 1 and the remainder — NOT
+        // included in `remainder`, but IS included in `prefix` (it's
         // re-prepended verbatim on every edit).
-        while index < rawQuery.endIndex, rawQuery[index].isWhitespace {
+        while index < rawQuery.endIndex,
+              isSegmentSeparator(rawQuery[index], separatorsIncludeChevron: separatorsIncludeChevron) {
             index = rawQuery.index(after: index)
         }
 
@@ -183,14 +258,19 @@ enum SessionComposerCommandParser {
     /// and retyping stays inside the same two-token shape the whole time.
     static func stickyChipProjectId(rawQuery: String, projects: [Project], isLocked: Bool) -> UUID? {
         guard !isLocked else { return nil }
-        guard let split = splitOnFirstToken(rawQuery), split.remainder.isEmpty else { return nil }
+        // Chevron-aware so `ghostties>` (Slice B's typable `>`) triggers
+        // the sticky chip exactly like `ghostties ` already does — `>` is a
+        // synonym for space here, not a different grammar.
+        guard let split = splitOnFirstToken(rawQuery, separatorsIncludeChevron: true), split.remainder.isEmpty else {
+            return nil
+        }
         // `splitOnFirstToken("bru")` ALSO returns an empty remainder when
         // there was never a separator at all (end of string reached mid
         // token) — that's the ordinary single-token project-search case
         // (`testParseSingleTokenReturnsNilEvenWhenItMatchesAProjectName`)
         // and must NOT count as sticky. A genuine separator was consumed
-        // only when `prefix` itself ends in whitespace.
-        guard split.prefix.last?.isWhitespace == true else { return nil }
+        // only when `prefix` itself ends in a separator character.
+        guard split.prefix.last?.isWhitespace == true || split.prefix.last == ">" else { return nil }
         // F2 fix (round-2 review): `trimmingCharacters(in: .whitespaces)`
         // only strips whitespace — `tokenize` also strips quote characters,
         // so a quoted multi-word name (`"ghostties web" `) produced a token
@@ -201,7 +281,7 @@ enum SessionComposerCommandParser {
         // close. `tokenize(split.prefix).first` runs the SAME quote-aware
         // scan `splitOnFirstToken` above already mirrors, so it agrees with
         // what `tokenize` calls token 1 for both plain and quoted names.
-        guard let token = tokenize(split.prefix).first else { return nil }
+        guard let token = tokenize(split.prefix, separatorsIncludeChevron: true).first else { return nil }
         guard let project = projects.first(where: { matches($0, token: token) }) else { return nil }
         return project.id
     }
