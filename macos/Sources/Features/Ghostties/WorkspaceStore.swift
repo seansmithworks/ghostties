@@ -157,46 +157,7 @@ final class WorkspaceStore: ObservableObject {
         self.hasShownPinMigrationNotice = state.hasShownPinMigrationNotice
         self.hasDismissedPinMigrationNotice = state.hasDismissedPinMigrationNotice
         #if DEBUG
-        // Scratch capture hook (composer breadcrumb chip screenshots,
-        // 2026-08-22) — never wired to real disk state. Gated behind a
-        // launch argument so it can never fire outside an explicit UI test,
-        // and `persistenceDisabled` stops any of this fixture data from
-        // ever reaching `~/Library/Application Support/Ghostties/workspace.json`.
-        // Read from the launch ENVIRONMENT, never argv — Ghostty's own core
-        // CLI parser scans argv for config directives and pops a
-        // "Configuration Errors" dialog on any unrecognized token (verified
-        // by hand against a `-key value` launch argument in an earlier
-        // capture rig; see `MarketingCaptureUITests`'s own doc comment on
-        // `feature/marketing-capture-fixture` for the same finding).
-        let environment = ProcessInfo.processInfo.environment
-        let isComposerChipCapture = environment["GHOSTTIES_COMPOSER_CHIP_CAPTURE"] == "1"
-        let isComposerChipCaptureEmpty = environment["GHOSTTIES_COMPOSER_CHIP_CAPTURE_EMPTY"] == "1"
-        let isComposerChipCaptureLongName = environment["GHOSTTIES_COMPOSER_CHIP_CAPTURE_LONGNAME"] == "1"
-        self.persistenceDisabled = isComposerChipCapture || isComposerChipCaptureEmpty || isComposerChipCaptureLongName
-        if isComposerChipCaptureEmpty {
-            // Unresolved-chip state (B2) only reproduces with zero projects —
-            // any real project list lets `resolveDefaultProject`'s cascade
-            // pick one deterministically.
-            self.projects = []
-            self.sessions = []
-        } else if isComposerChipCaptureLongName {
-            // Isolated, single-project list: the anchored per-row "New
-            // Session" popover only anchors correctly to the FIRST sidebar
-            // row (see project memory — same shape as the LazyVStack row
-            // identity bug). Putting the long name in a list of one sidesteps
-            // that without touching production code for a capture-only case.
-            self.projects = [
-                Project(id: UUID(), name: "ghostties-website-redesign", rootPath: "/tmp/ghostties-website-redesign")
-            ]
-            self.sessions = []
-        } else if isComposerChipCapture {
-            self.projects = [
-                Project(id: UUID(), name: "atlas-api", rootPath: "/tmp/atlas-api"),
-                Project(id: UUID(), name: "fieldwork", rootPath: "/tmp/fieldwork"),
-                Project(id: UUID(), name: "ghostties-website-redesign", rootPath: "/tmp/ghostties-website-redesign")
-            ]
-            self.sessions = []
-        }
+        self.persistenceDisabled = false
         #endif
 
         // Pin migration is a layout-changing event but `frozenSnapshot` defaults
