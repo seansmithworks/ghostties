@@ -1248,3 +1248,44 @@ recipe in `web/DESIGN.md` — sends no CSP header, so it looked perfect locally 
 shipped dead. Fix is self-hosting the WOFF2 (`font-src 'self'` already allows it), never widening
 the CSP. **Any future web verification must check against the deployed headers, not a local
 static server.**
+
+## 2026-08-22 (wrap) — objective changed: stop building sections, plan the whole-site migration
+
+Sections 03 + 04 shipped to `feat/web-redesign-round4` @ `8b5a4c31b` (build `afc3b6d38`, review
+fixes `fa0b92631`, gt-block width `932a5e625`, copy correction `8b5a4c31b`). **Sean saw the page
+and the reaction is the finding:** it looks essentially unchanged. The diff says why — **414
+insertions, 0 deletions.** Not one line of the existing site was touched.
+
+**Root cause, and it is structural, not a bug.** The redesign has **no migration plan**. The
+content map (`Anatomy.dc.html`) describes a ten-section page built from scratch; production is the
+old hero + two videos + install. Nobody ever decided how you get from one to the other. Two of my
+scoping calls maximised the mismatch — the builder was told not to touch existing sections, and the
+new fonts were scoped to only the two new sections — both deliberate safety choices for
+unsupervised overnight work, both correct in isolation, and together they guarantee a page that
+reads as untouched with two foreign sections bolted underneath.
+
+**Section-by-section into the live page can never produce a finished site to judge.** That is the
+whole lesson. It also explains the two symptoms already logged today (duplicate content, headings
+starting at "03") — they are not separate defects, they are this one.
+
+- [ ] **NEXT OBJECTIVE — a migration/rebuild plan, then the build.** Strawman to apply or redline,
+  not to re-ask: build the redesign as a **complete separate page** — Arcade shell (`#06060e`
+  ground, `#ffd54f` accent), Snake hero (01), all ten sections at the locked direction's fidelity,
+  real captures where they exist and honest placeholders where they do not — then swap it in as one
+  move. Sections 03 + 04 become its 03 and 04 rather than orphans. | web | new
+- [ ] **Nothing of the locked direction is in `web/` except type.** Silkscreen/Archivo/DM Mono are
+  self-hosted and working, but scoped to two sections. The Arcade palette, the ghosts, the
+  scanlines, the visor treatment, the Snake game — **all still only `.dc.html` boards** in
+  `docs/design/web-redesign/`. **2 of 10 sections built.** | web | carried
+- [ ] **Purge `5215ce015` from public history BEFORE this branch merges** — carried 2× since
+  2026-08-22. Sean deferred it deliberately ("finished site first, then clean up"), which is fine,
+  but the deadline is real: this repo merges with real merge commits, so merging makes the leaked
+  blob a permanent ancestor of `main` and turns a branch-only rewrite into a `main` rewrite.
+  | security | carried
+- [ ] **Merge hazard flagged by the composer thread:** this branch carries `386cbf39f`
+  (`TEST_TARGET_NAME` fix), which arms nine GUI-driving UI tests that type shell text at whatever
+  holds focus. Check before merging. [[feedback_test-target-name-fix-arms-gui-tests]] | build | new
+
+**Closed today:** rig verification (idempotency + clean build, both proven); the real-session leak
+at the branch tip; the false "ordered so whoever is blocked on you is on top" claim — Sean chose to
+fix the copy, not the app's sort, so the lead is now his sentence minus the false clause.
