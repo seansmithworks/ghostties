@@ -187,6 +187,27 @@ Un-tokenised sizes, all single-use inside one page block: 0.6875rem/11px
 (changelog `h3`, homepage footer), 18px (licenses `h2`, hero terminal),
 1.25rem/20px (changelog `h2`), 30px (product heading).
 
+### Round-4 board fonts (index only, `03 — The Sidebar` / `04 — The GT List`)
+
+Three fonts, self-hosted from `web/assets/fonts/` — **not** loaded from
+Google Fonts. `font-src 'self'` in `vercel.json` blocks the Google Fonts CDN
+in production; loading it via `<link>` (how this shipped originally) silently
+fails every rule back to `--font-ui` on the live site while looking correct
+locally, where `python3 -m http.server` sends no CSP. Each weight below is
+one `.woff2`, latin subset only, `font-display: swap`, licensed OFL (licence
+text sits beside each file as `OFL-*.txt`).
+
+| Font | Weights | Use |
+| --- | --- | --- |
+| Silkscreen | 400, 700 | `.board-sidebar h2` / `.board-gtlist h2` — the two pixel-face section headings |
+| Archivo | 400, 500, 600, 800 | `.board-sidebar`, `.board-gtlist` body text and `.lead` |
+| DM Mono | 300, 400, 500 | `.status-row`, `.gt-pre`, `.lane-ramp` — the captured-stdout and status-key mono text |
+
+Archivo ships as one variable-font file backing all four declared weights
+(the browser selects the instance); DM Mono and Silkscreen are separate
+static files per weight. Scoped to these two sections only, same as the rest
+of this block — not promoted to the shared `--font-ui`/`--font-mono` stacks.
+
 **The tokenised sizes above are now all `rem`**, converted in the
 2026-08-03 fix pass so they scale with the user's font-size setting instead
 of ignoring it. The un-tokenised sizes right above this were converted too —
@@ -272,6 +293,42 @@ the seven pages that is down from 131 occurrences of 29 distinct literals.
 5. `rgba(0,0,0,0.7)` and 6. `rgba(0,0,0,0.35)` — the two layers of the product
    card's drop shadow. The only shadow on the site; tokenise if a second one
    ever appears.
+
+### Round-4 board colours (index only)
+
+Not counted in the six above — these are a set (six lane colours, seven
+status colours), not single literals, and each set is used more than once
+within its own section. Kept as page-block literals, not `:root` tokens,
+because they're specific to the `03`/`04` board sections' own semantics and
+don't recur anywhere else on the site.
+
+**Lane colours** (`.lane-needsyou`, `.lane-running`, `.lane-review`,
+`.lane-inbox`, `.lane-backlog`, `.lane-done`) — each used twice: once
+colouring the lane token inside `.gt-pre`'s captured `gt list` output, once
+as a `.lane-ramp` chip. `.lane-backlog` (`#949494`, 5.071:1) and `.lane-done`
+(`#909090`, 4.818:1) were raised from `#808080`/`#585858` (3.89:1/2.16:1) to
+clear WCAG AA for real body-size text; the other four already passed.
+
+**Status colours** (the `--mark` custom property set inline per
+`.status-mark`, one per row in the sidebar status key) — five are exact
+literals from `WorkspaceStore.swift`'s hardcoded `Color(hex:)` values
+(`needsAttention` `#FFC400`, `waiting` `#5B8DEF`, `longRunning` `#F97316`).
+The other two source from **dynamic** system colors and needed sampling, not
+copying, since there's no single hex to copy:
+
+- `error` — `#FF453A`. `WorkspaceStore.swift` uses `Color(nsColor: .systemRed)`,
+  which resolves per-appearance. No red ghost appears in the committed dark
+  capture to sample directly, so this is Apple's documented dark-appearance
+  `systemRed` value, not a screenshot sample.
+- `processing` — `#68CE67`. `WorkspaceStore.swift` uses
+  `Color(nsColor: .systemGreen)`. Sampled directly from the green ghost icon
+  in `assets/app-sessions-dark@2x.png` (the committed dark capture) — the
+  light-appearance value (`#65C466`, sampled from the equivalent light
+  capture) does not apply since this section is dark-only.
+- `idle` — `rgba(255,255,255,0.85)`, matching `Color.primary`'s dark-appearance
+  label alpha, not opaque white.
+- `inactive` — `rgba(255,255,255,0.25)`, matching `tertiaryLabelColor`'s 25%
+  alpha, not 35%.
 
 Two more things this file does not fix:
 
