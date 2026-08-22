@@ -30,6 +30,9 @@
   <meta property="og:image:height" content="1280">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:image" content="https://ghostties.org/assets/social-card.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Archivo:wght@400;500;600;800&family=DM+Mono:wght@300;400;500&display=swap">
   <link rel="stylesheet" href="/style.css">
   <style>
     /* Homepage only. Shared tokens, reset, and footer base: /style.css */
@@ -609,6 +612,236 @@
         padding: 15px;
       }
     }
+
+    /* --- 03 THE SIDEBAR / 04 GT LIST ---
+       Static B1 foundation for the round-4 redesign. Scoped to these two
+       sections only via the .board- prefix so the rest of the page is
+       untouched. Dark capture only — the site is dark-only today; the light
+       PNG/WebP pair sits in /assets unused until the site-wide theme lands. */
+    .board-sidebar,
+    .board-gtlist {
+      font-family: "Archivo", var(--font-ui);
+    }
+
+    .board-sidebar h2,
+    .board-gtlist h2 {
+      font-family: "Silkscreen", var(--font-ui);
+      font-size: 0.8125rem; /* 13px */
+      letter-spacing: 0.24em;
+    }
+
+    .board-sidebar .lead,
+    .board-gtlist .lead {
+      font-family: "Archivo", var(--font-ui);
+      font-weight: 500;
+    }
+
+    /* Status key (section 03) — priority order IS the claim, so the list
+       renders top (highest priority, wins in a project header) to bottom. */
+    .status-key {
+      margin: 0 auto 56px;
+      max-width: 640px;
+      text-align: left;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .status-key-list {
+      list-style: none;
+      margin: 0;
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--line-faint);
+      font-family: "DM Mono", var(--font-mono);
+      font-size: var(--size-small);
+    }
+
+    .status-row:last-child {
+      border-bottom: none;
+    }
+
+    .status-priority {
+      width: 1.5ch;
+      flex: 0 0 auto;
+      color: var(--text-faint);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Square marks only — a circular status dot is a named AI-slop tell. */
+    .status-mark {
+      width: 10px;
+      height: 10px;
+      flex: 0 0 auto;
+      background: var(--mark);
+    }
+
+    /* .inactive renders as an outline, matching the source comment
+       ("collapsed, outline ghost") instead of a filled square. */
+    .status-mark--outline {
+      background: transparent;
+      border: 1.5px solid var(--mark);
+    }
+
+    .status-name {
+      width: 15ch;
+      flex: 0 0 auto;
+      color: var(--text-heading);
+    }
+
+    .status-hex {
+      width: 8ch;
+      flex: 0 0 auto;
+      color: var(--text-faint);
+    }
+
+    .status-meaning {
+      flex: 1;
+      color: var(--text-body);
+    }
+
+    /* gt list (section 04) — real, selectable stdout from the built gt
+       binary, not hand-typed text. */
+    .gt-block {
+      margin: 0 auto 40px;
+      max-width: 720px;
+      text-align: left;
+      background: var(--surface-raised);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 20px 24px;
+      overflow-x: auto;
+    }
+
+    .gt-line {
+      display: flex;
+      flex-wrap: wrap;
+      column-gap: 1.5ch;
+      font-family: "DM Mono", var(--font-mono);
+      font-size: var(--size-small);
+      line-height: 1.7;
+      color: var(--text-body);
+    }
+
+    .gt-id {
+      flex: 0 0 auto;
+      min-width: 15ch;
+      white-space: nowrap;
+    }
+
+    .gt-lane {
+      flex: 0 0 auto;
+      min-width: 10ch;
+      white-space: nowrap;
+    }
+
+    .gt-title {
+      flex: 1 1 auto;
+    }
+
+    .gt-project {
+      flex: 0 0 auto;
+      color: var(--text-faint);
+    }
+
+    @media (max-width: 480px) {
+      .gt-id,
+      .gt-lane {
+        min-width: 0;
+      }
+    }
+
+    .lane-needsyou {
+      color: #ff5f5f;
+    }
+
+    .lane-running {
+      color: #87d787;
+    }
+
+    .lane-review {
+      color: #d7af5f;
+    }
+
+    .lane-inbox {
+      color: #87afd7;
+    }
+
+    .lane-backlog {
+      color: #808080;
+    }
+
+    .lane-done {
+      color: #585858;
+    }
+
+    /* Lane priority ramp — block labels butted together sharing hairlines,
+       per the site's ruled-in convention (no pill chips). */
+    .lane-ramp {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      font-family: "DM Mono", var(--font-mono);
+      font-size: var(--size-small);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .lane-chip {
+      padding: 8px 14px;
+      border-right: 1px solid var(--line-strong);
+    }
+
+    .lane-chip:last-child {
+      border-right: none;
+    }
+
+    .lane-chip::after {
+      content: "\2192"; /* → */
+      margin-left: 10px;
+      color: var(--text-faint);
+    }
+
+    .lane-chip:last-child::after {
+      content: none;
+    }
+
+    @media (max-width: 480px) {
+      .status-row {
+        flex-wrap: wrap;
+      }
+
+      .status-meaning {
+        flex-basis: 100%;
+        padding-left: calc(1.5ch + 10px + 12px);
+      }
+
+      .lane-ramp {
+        flex-direction: column;
+      }
+
+      .lane-chip {
+        border-right: none;
+        border-bottom: 1px solid var(--line-strong);
+        text-align: center;
+      }
+
+      .lane-chip:last-child {
+        border-bottom: none;
+      }
+
+      .lane-chip::after {
+        content: none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -748,6 +981,95 @@
         </div>
       </div>
       <div class="product-caption">gt list &mdash; every task, one lane</div>
+    </section>
+
+    <section class="product board-sidebar" id="the-sidebar">
+      <h2>03 &mdash; The Sidebar</h2>
+      <p class="lead">Every session in one window, ordered so whoever is blocked on you is on top. The single strongest thing the app does.</p>
+      <div class="product-window">
+        <div class="product-card">
+          <!-- Light capture staged in /assets; swaps in with the site-wide theme work. -->
+          <picture>
+            <source srcset="/assets/app-sessions-dark@2x.webp" type="image/webp">
+            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar with every session in one window, sorted so the session needing you sits on top" width="1280" height="705">
+          </picture>
+        </div>
+      </div>
+      <div class="product-caption">every session, ordered by who's blocking you</div>
+
+      <div class="status-key">
+        <ol class="status-key-list" aria-label="Session status priority, highest first">
+          <li class="status-row">
+            <span class="status-priority">6</span>
+            <span class="status-mark" style="--mark: #ff3b30" aria-hidden="true"></span>
+            <span class="status-name">error</span>
+            <span class="status-hex">#FF3B30</span>
+            <span class="status-meaning">errored</span>
+          </li>
+          <li class="status-row">
+            <span class="status-priority">5</span>
+            <span class="status-mark" style="--mark: #ffc400" aria-hidden="true"></span>
+            <span class="status-name">needsAttention</span>
+            <span class="status-hex">#FFC400</span>
+            <span class="status-meaning">agent blocked on user input (permission prompt, question)</span>
+          </li>
+          <li class="status-row">
+            <span class="status-priority">4</span>
+            <span class="status-mark" style="--mark: #5b8def" aria-hidden="true"></span>
+            <span class="status-name">waiting</span>
+            <span class="status-hex">#5B8DEF</span>
+            <span class="status-meaning">silent, not at shell prompt (subprocess may be running)</span>
+          </li>
+          <li class="status-row">
+            <span class="status-priority">3</span>
+            <span class="status-mark" style="--mark: #f97316" aria-hidden="true"></span>
+            <span class="status-name">longRunning</span>
+            <span class="status-hex">#F97316</span>
+            <span class="status-meaning">processing for 30+ min continuously</span>
+          </li>
+          <li class="status-row">
+            <span class="status-priority">2</span>
+            <span class="status-mark" style="--mark: #34c759" aria-hidden="true"></span>
+            <span class="status-name">processing</span>
+            <span class="status-hex">#34C759</span>
+            <span class="status-meaning">actively producing output</span>
+          </li>
+          <li class="status-row">
+            <span class="status-priority">1</span>
+            <span class="status-mark" style="--mark: #ffffff" aria-hidden="true"></span>
+            <span class="status-name">idle</span>
+            <span class="status-hex">&mdash;</span>
+            <span class="status-meaning">at shell prompt, nothing to do</span>
+          </li>
+          <li class="status-row">
+            <span class="status-priority">0</span>
+            <span class="status-mark status-mark--outline" style="--mark: rgba(255, 255, 255, 0.35)" aria-hidden="true"></span>
+            <span class="status-name">inactive</span>
+            <span class="status-hex">&mdash;</span>
+            <span class="status-meaning">exited/completed/killed &mdash; collapsed, outline ghost</span>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="product board-gtlist" id="gt-list">
+      <h2>04 &mdash; The GT List</h2>
+      <p class="lead">One command answers &ldquo;what is actually going on&rdquo; across every project. The thing nothing else does.</p>
+
+      <div class="gt-block" role="group" aria-label="Real output of gt list against a fixture task directory">
+        <div class="gt-line"><span class="gt-id">wire-status-badge</span><span class="gt-lane lane-needsyou">needs-you</span><span class="gt-title">Wire status badge to session state</span><span class="gt-project">[project: switchboard]</span></div>
+        <div class="gt-line"><span class="gt-id">audit-nightly-job</span><span class="gt-lane lane-running">running</span><span class="gt-title">Audit nightly ingestion job</span><span class="gt-project">[project: fieldwork]</span></div>
+        <div class="gt-line"><span class="gt-id">migrate-schema</span><span class="gt-lane lane-running">running</span><span class="gt-title">Migrate task schema to v2</span><span class="gt-project">[project: atlas-api]</span></div>
+        <div class="gt-line"><span class="gt-id">review-lane-copy</span><span class="gt-lane lane-review">review</span><span class="gt-title">Review lane copy for clarity</span><span class="gt-project">[project: pendulum]</span></div>
+        <div class="gt-line"><span class="gt-id">triage-inbox-dupes</span><span class="gt-lane lane-inbox">inbox</span><span class="gt-title">Triage duplicate inbox entries</span><span class="gt-project">[project: silo]</span></div>
+        <div class="gt-line"><span class="gt-id">sync-export-format</span><span class="gt-lane lane-backlog">backlog</span><span class="gt-title">Sync export format across clients</span><span class="gt-project">[project: trove]</span></div>
+        <div class="gt-line"><span class="gt-id">retire-legacy-hook</span><span class="gt-lane lane-done">graveyard</span><span class="gt-title">Retire legacy pre-commit hook</span><span class="gt-project">[project: wren]</span></div>
+      </div>
+
+      <div class="lane-ramp" aria-label="Lane priority order, highest first">
+        <span class="lane-chip lane-needsyou">needsYou</span><span class="lane-chip lane-running">running</span><span class="lane-chip lane-review">review</span><span class="lane-chip lane-inbox">inbox</span><span class="lane-chip lane-backlog">backlog</span><span class="lane-chip lane-done">done</span>
+      </div>
+      <div class="product-caption">gt list &mdash; sorted by lane priority, then task id</div>
     </section>
   </main>
 
