@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ghostties — v2 skeleton</title>
+  <meta name="description" content="Ghostties — a multi-agent workspace terminal. Now in beta.">
+  <link rel="stylesheet" href="/v2.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <div class="cabinet">
+    <div class="maze" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <header class="hud">
+      <span class="one">1UP</span>
+      <span class="brand">GHOSTTIES</span>
+      <span>v0.1.0-beta.23</span>
+      <span class="r">
+        <a href="/changelog">CHANGELOG</a>
+        <a href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener">GITHUB</a>
+      </span>
+    </header>
+
+    <main id="main">
+
+      <!-- ============================================================
+           01 — HERO
+           ============================================================ -->
+      <section id="hero" class="hero">
+        <div class="section-label">
+          <span class="num mono-tag">01</span>
+          <span class="micro">Hero</span>
+        </div>
+        <div class="head">
+          <h1 class="h-xl">TOO MANY<br><span class="amber">TERMINALS.</span></h1>
+          <p class="lead" style="margin-top: 24px;">
+            Ghostties runs every Claude Code session in <strong>one window</strong> —
+            a sidebar of live agents, status you can read at a glance, and
+            <code>gt list</code> to see every task across every project.
+          </p>
+        </div>
+
+        <!-- Install row — real, working copy-buttons and DMG link, lifted
+             verbatim from index.html's terminal lines 4–6. -->
+        <div class="install-row">
+          <button type="button" class="cab-btn primary term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">
+            BREW INSTALL <small>--cask seansmithworks/tap/ghostties</small><span class="copy-icon" aria-hidden="true">⧉</span>
+          </button>
+          <button type="button" class="cab-btn secondary term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">
+            NPX <small>ghostties-install</small><span class="copy-icon" aria-hidden="true">⧉</span>
+          </button>
+          <a class="cab-btn tertiary" href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>.DMG</a>
+          <span class="insert-coin" aria-hidden="true">◄ INSERT COIN</span>
+        </div>
+        <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
+
+        <!-- pass 2 mounts the Snake hero game here — do not build the game
+             in this pass. Leave this element empty. -->
+        <div id="snake-mount" data-pass2 aria-hidden="true"></div>
+      </section>
+
+      <!-- ============================================================
+           02 — THE PROBLEM (abstract diagram, DOM/CSS only — no capture)
+           ============================================================ -->
+      <section id="the-problem">
+        <div class="section-label">
+          <span class="num mono-tag">02</span>
+          <span class="micro">The problem</span>
+        </div>
+        <p class="lead">Six windows deep in a terminal sprawl, none of them telling you which one is actually waiting on you.</p>
+        <p class="body-text" style="margin-top: 12px;">
+          Every one of these rectangles is an abstract stand-in for a terminal window —
+          not a screenshot of any real app, on purpose. This is what the desktop looks
+          like before Ghostties collapses it into one sidebar.
+        </p>
+        <div class="window-sprawl" aria-hidden="true">
+          <div class="sprawl-win"></div>
+          <div class="sprawl-win"></div>
+          <div class="sprawl-win"></div>
+          <div class="sprawl-win"></div>
+          <div class="sprawl-win"></div>
+          <div class="sprawl-win"></div>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           03 — THE SIDEBAR — lifted verbatim from index.html#the-sidebar,
+           restyled into the Arcade shell. Copy unchanged.
+           ============================================================ -->
+      <section class="board-sidebar" id="the-sidebar">
+        <div class="section-label">
+          <span class="num mono-tag">03</span>
+          <span class="micro">The sidebar</span>
+        </div>
+        <h2>The Sidebar</h2>
+        <p class="lead">Every session in one window. The single strongest thing the app does.</p>
+        <div class="projects-figure">
+          <picture>
+            <source srcset="/assets/app-sessions-dark@2x.webp" type="image/webp">
+            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to" width="1280" height="705" loading="lazy">
+          </picture>
+        </div>
+        <p class="projects-caption">every session, one window, live status</p>
+
+        <div class="status-key">
+          <div class="status-key-header" aria-hidden="true">priority — 6 highest ↓ 0 lowest</div>
+          <ol class="status-key-list" aria-label="Session status priority, highest first">
+            <li class="status-row">
+              <span class="status-priority">6</span>
+              <!-- Dark-appearance systemRed. No red ghost appears in the
+                   committed dark capture to sample directly, so this is
+                   Apple's documented dark-mode systemRed value, not a sample. -->
+              <span class="status-mark" style="--mark: #ff453a" aria-hidden="true"></span>
+              <span class="status-name">error</span>
+              <span class="status-hex">#FF453A</span>
+              <span class="status-meaning">errored</span>
+            </li>
+            <li class="status-row">
+              <span class="status-priority">5</span>
+              <span class="status-mark" style="--mark: #ffc400" aria-hidden="true"></span>
+              <span class="status-name">needsAttention</span>
+              <span class="status-hex">#FFC400</span>
+              <span class="status-meaning">agent blocked on user input (permission prompt, question)</span>
+            </li>
+            <li class="status-row">
+              <span class="status-priority">4</span>
+              <span class="status-mark" style="--mark: #5b8def" aria-hidden="true"></span>
+              <span class="status-name">waiting</span>
+              <span class="status-hex">#5B8DEF</span>
+              <span class="status-meaning">silent, not at shell prompt (subprocess may be running)</span>
+            </li>
+            <li class="status-row">
+              <span class="status-priority">3</span>
+              <span class="status-mark" style="--mark: #f97316" aria-hidden="true"></span>
+              <span class="status-name">longRunning</span>
+              <span class="status-hex">#F97316</span>
+              <span class="status-meaning">processing for 30+ min continuously</span>
+            </li>
+            <li class="status-row">
+              <span class="status-priority">2</span>
+              <!-- Sampled from the ghost icon in app-sessions-dark@2x.png
+                   (dark-appearance systemGreen), not the light-mode literal. -->
+              <span class="status-mark" style="--mark: #68ce67" aria-hidden="true"></span>
+              <span class="status-name">processing</span>
+              <span class="status-hex">#68CE67</span>
+              <span class="status-meaning">actively producing output</span>
+            </li>
+            <li class="status-row">
+              <span class="status-priority">1</span>
+              <!-- Color.primary, not opaque white: dark-appearance label
+                   color resolves to ~85% white. -->
+              <span class="status-mark" style="--mark: rgba(255, 255, 255, 0.85)" aria-hidden="true"></span>
+              <span class="status-name">idle</span>
+              <span class="status-hex">—</span>
+              <span class="status-meaning">at shell prompt, nothing to do</span>
+            </li>
+            <li class="status-row">
+              <span class="status-priority">0</span>
+              <!-- tertiaryLabelColor: 25% white, not 35%. -->
+              <span class="status-mark status-mark--outline" style="--mark: rgba(255, 255, 255, 0.25)" aria-hidden="true"></span>
+              <span class="status-name">inactive</span>
+              <span class="status-hex">—</span>
+              <span class="status-meaning">exited/completed/killed — collapsed, outline ghost</span>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           04 — GT LIST — lifted verbatim from index.html#gt-list,
+           restyled into the Arcade shell. Terminal stdout unchanged.
+           ============================================================ -->
+      <section class="board-gtlist" id="gt-list">
+        <div class="section-label">
+          <span class="num mono-tag">04</span>
+          <span class="micro">GT List</span>
+        </div>
+        <h2>The GT List</h2>
+        <p class="lead">One command answers &ldquo;what is actually going on&rdquo; across every project. The thing nothing else does.</p>
+
+        <p class="gt-example-label">Example output — not a live capture</p>
+        <div class="gt-block"><pre class="gt-pre" aria-label="Example output of gt list against a fixture task directory, not a live capture">wire-status-badge  <span class="lane-needsyou">needs-you</span>   Wire status badge to session state  [project: switchboard]
+audit-nightly-job  <span class="lane-running">running</span>     Audit nightly ingestion job  [project: fieldwork]
+migrate-schema  <span class="lane-running">running</span>     Migrate task schema to v2  [project: atlas-api]
+review-lane-copy  <span class="lane-review">review</span>      Review lane copy for clarity  [project: pendulum]
+triage-inbox-dupes  <span class="lane-inbox">inbox</span>       Triage duplicate inbox entries  [project: silo]
+sync-export-format  <span class="lane-backlog">backlog</span>     Sync export format across clients  [project: trove]
+retire-legacy-hook  <span class="lane-done">graveyard</span>   Retire legacy pre-commit hook  [project: wren]</pre></div>
+
+        <div class="lane-ramp" aria-label="Lane priority order, highest first">
+          <span class="lane-chip lane-needsyou">needs-you</span><span class="lane-chip lane-running">running</span><span class="lane-chip lane-review">review</span><span class="lane-chip lane-inbox">inbox</span><span class="lane-chip lane-backlog">backlog</span><span class="lane-chip lane-done">graveyard</span>
+        </div>
+        <p class="projects-caption">gt list — sorted by lane priority, then task id</p>
+      </section>
+
+      <!-- ============================================================
+           05 — TASK NOTES (DOM only, no capture)
+           ============================================================ -->
+      <section id="task-notes">
+        <div class="section-label">
+          <span class="num mono-tag">05</span>
+          <span class="micro">Task notes</span>
+        </div>
+        <h2 class="h-m">Task Notes</h2>
+        <p class="lead">Per-task markdown that lives next to the work, in <code>.ghostties/tasks</code>.</p>
+        <div class="task-note-example">
+          <div class="task-note-path">.ghostties/tasks/wire-status-badge.md</div>
+          <pre class="task-note-body"># wire-status-badge
+
+Wire the sidebar status badge to the session's live indicator state
+instead of the cached snapshot.
+
+- [x] Read state from WorkspaceStore, not SessionCoordinator's cache
+- [ ] Verify both caches agree after a rename
+- [ ] Add a regression test for the two-cache coupling</pre>
+        </div>
+      </section>
+
+      <!-- ============================================================
+           06 — PROJECTS & ARCHIVE (real captures)
+           ============================================================ -->
+      <section id="projects-archive">
+        <div class="section-label">
+          <span class="num mono-tag">06</span>
+          <span class="micro">Projects &amp; archive</span>
+        </div>
+        <h2 class="h-m">Projects &amp; Archive</h2>
+        <p class="lead">It stays usable at twenty sessions, not just six. Answers the scaling doubt.</p>
+
+        <div class="projects-figure">
+          <picture data-app-state="projects" data-app-theme="light" class="theme-light-only">
+            <source srcset="/assets/app-projects-light@2x.webp" type="image/webp">
+            <img src="/assets/app-projects-light@2x.png" alt="Ghostties Projects tab, light mode" width="1280" height="705" loading="lazy">
+          </picture>
+          <picture data-app-state="projects" data-app-theme="dark" class="theme-dark-only">
+            <source srcset="/assets/app-projects-dark@2x.webp" type="image/webp">
+            <img src="/assets/app-projects-dark@2x.png" alt="Ghostties Projects tab, dark mode" width="1280" height="705" loading="lazy">
+          </picture>
+        </div>
+        <p class="projects-caption">Projects tab — follows your system appearance</p>
+      </section>
+
+      <!-- ============================================================
+           07 — STILL GHOSTTY
+           ============================================================ -->
+      <section id="still-ghostty">
+        <div class="section-label">
+          <span class="num mono-tag">07</span>
+          <span class="micro">Still Ghostty</span>
+        </div>
+        <h2 class="h-m">Still Ghostty</h2>
+        <p class="lead">Your config, themes and keybinds survive. Upstream credit paid properly, in public.</p>
+        <ul class="still-ghostty-list">
+          <li><span class="mark" aria-hidden="true"></span> Your <code>~/.config/ghostty/config</code> loads unchanged — Ghostties is a fork, not a rewrite.</li>
+          <li><span class="mark" aria-hidden="true"></span> Themes, keybinds and font settings all carry over.</li>
+          <li><span class="mark" aria-hidden="true"></span> The terminal engine (Zig + Metal) is upstream <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>, untouched.</li>
+          <li><span class="mark" aria-hidden="true"></span> The sidebar is an additional surface, not a replacement — Ghostties users are still Ghostty users.</li>
+        </ul>
+      </section>
+
+      <!-- ============================================================
+           08 — FIRST 60 SECONDS (structure + step sequence only —
+           real prose comes in a later pass)
+           ============================================================ -->
+      <section id="first-60-seconds">
+        <div class="section-label">
+          <span class="num mono-tag">08</span>
+          <span class="micro">First 60 seconds</span>
+        </div>
+        <h2 class="h-m">First 60 Seconds</h2>
+        <p class="lead">What actually happens after install — where it puts things, what it touches, how to leave.</p>
+        <!-- PLACEHOLDER COPY: writer pass fills these in with real detail
+             about install location, first-run permissions, and uninstall. -->
+        <ol class="steps">
+          <li>Install places the app in /Applications and nothing else — placeholder, confirm exact scope.</li>
+          <li>First launch reads your existing Ghostty config, if one exists — placeholder.</li>
+          <li>The sidebar opens via a keyboard shortcut you can change or ignore — placeholder.</li>
+          <li>Uninstalling removes the app and its own preferences, leaves your Ghostty config alone — placeholder.</li>
+        </ol>
+      </section>
+
+      <!-- ============================================================
+           09 — INSTALL & CHANNELS
+           ============================================================ -->
+      <section id="install-channels">
+        <div class="section-label">
+          <span class="num mono-tag">09</span>
+          <span class="micro">Install &amp; channels</span>
+        </div>
+        <h2 class="h-m">Install &amp; Channels</h2>
+        <p class="lead">brew, npx, dmg. Requirements, beta vs stable, how auto-update works.</p>
+        <div class="install-grid">
+          <div class="install-cell">
+            <b>BREW</b>
+            <span>brew install --cask<br>seansmithworks/tap/ghostties</span>
+          </div>
+          <div class="install-cell">
+            <b>NPX</b>
+            <span>npx ghostties-install</span>
+          </div>
+          <div class="install-cell">
+            <b>DMG</b>
+            <span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>Ghostties.dmg</a><br>v0.1.0-beta.23</span>
+          </div>
+          <div class="install-cell">
+            <b>REQUIREMENTS</b>
+            <span>macOS 13 or later</span>
+          </div>
+        </div>
+        <p class="body-text channels-note">
+          Current release is <strong>v0.1.0-beta.23</strong> on the beta channel.
+          Auto-update ships via Sparkle — installs check for a new build on
+          launch and apply it in the background.
+        </p>
+      </section>
+
+      <!-- ============================================================
+           10 — SOURCE & CHANGELOG
+           ============================================================ -->
+      <section id="source-changelog">
+        <div class="section-label">
+          <span class="num mono-tag">10</span>
+          <span class="micro">Source &amp; changelog</span>
+        </div>
+        <h2 class="h-m">Source &amp; Changelog</h2>
+        <p class="lead">A real person builds this in the open, and it is still moving.</p>
+        <div class="source-links">
+          <a href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener">github.com/SeanSmithWorks/ghostties</a>
+          <a href="/changelog">Changelog</a>
+          <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">Built on Ghostty</a>
+        </div>
+      </section>
+
+    </main>
+
+    <footer>
+      <span class="footer-icons">
+        <a href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener" aria-label="GitHub">
+          <svg viewBox="0 0 24 24"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+        </a>
+      </span>
+      <span class="footer-links">
+        <span>&copy; 2026</span>
+        <a href="/changelog">Changelog</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+      </span>
+    </footer>
+  </div>
+
+  <script>
+    // Clipboard copy for the hero install row — same behavior as index.html.
+    const copyStatus = document.getElementById('copy-status');
+    document.querySelectorAll('.term-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const text = btn.dataset.copy;
+        navigator.clipboard.writeText(text).then(() => {
+          copyStatus.textContent = 'Copied';
+          setTimeout(() => { copyStatus.textContent = ''; }, 2000);
+        });
+      });
+    });
+  </script>
+</body>
+</html>
