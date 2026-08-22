@@ -1168,3 +1168,44 @@ same day (stale `csreq` pinning an old signing identity; fix is `tccutil reset S
   grep matches 0 lines, `ROOT` is empty, and the next line is `[ -n "$ROOT" ] || exit 0`, so
   every out-of-scope Write/Edit exits silently. Verified against a live card. Fix: match
   `'│ Repo:'` and strip the rail in the `sed`. Global tooling, not this repo. | tooling | new
+
+## 2026-08-22 (later) — capture rig VERIFIED; real-session leak found in the committed assets
+
+**The rig is proven.** Clean rebuild from scratch → `TEST BUILD SUCCEEDED`; all four
+`MarketingCaptureUITests` passed; re-run is reproducible — three of four states re-render within
+**0.006–0.021% of pixels** (isolated subpixel antialiasing, max channel delta ≤ 180). Idempotency
+and a from-zero build are both closed. `scripts/capture-marketing.sh` can be trusted and re-run
+after any app change.
+
+**The fourth state was not a rig product at all.** `app-sessions-dark@2x.png` as committed in
+`5215ce015` differed by **82% of pixels** — because it was never a fixture capture. It was a
+full-screen shot of a live Ghostties window, and it leaked:
+
+- real project names — Ghostties vNext, Ghostties Website, Ghost Concept, Career-ops,
+  Ghostties Screen Recording, GooseWorks Ad
+- real session counts — ACTIVE 7 / INACTIVE 3 / **ARCHIVE 150**
+- the **complete text of an in-progress Claude Code conversation**, including commit SHAs
+  (`5a460ee0b`, `be69856a7`, `#112`) and internal planning prose
+- the `.webp` beside it was derived from the same image and leaked identically
+
+This is the exact failure `feedback_public-repo-no-real-session-data.md` warns about, and
+`reference_xcuitest-marketing-capture.md` predicted the mechanism: the pre-fixture spike used
+`XCUIScreen.main.screenshot()`, which captures the whole display. One of its outputs was committed
+alongside the three genuine fixture renders and never re-checked.
+
+- [x] Branch tip cleaned — `2165c2f86` replaces all four states with verified fixture renders,
+  pushed to `origin/feat/web-redesign-round4`.
+- [ ] **Purge the blob from history — needs Sean.** `5215ce015` is pushed to a **PUBLIC** repo, so
+  the object stays reachable by SHA even after the branch moves. It is **NOT on `main`** (verified
+  `git merge-base --is-ancestor` → not an ancestor), so the default branch was never exposed.
+  Removing it needs an interactive rebase **plus a force-push**, which stands against the standing
+  never-`--force` rule, **plus** a GitHub Support cached-object purge — the same path as the
+  still-open B1 item under `project_security-remediation-plan.md`. Sean's call, three options:
+  rewrite + force-push + support request / support request alone / accept and move on.
+  | security | needs-Sean
+
+**Method note for next time:** `git status` reported all eight assets as modified after the re-run,
+which reads as "the rig is non-deterministic." It was not — a **per-pixel diff separated 0.02%
+antialiasing noise from an 82% content swap**, and only the diff found the leak. Byte-comparison
+alone would have justified either "flaky rig, ignore" or "re-commit all eight," and both would have
+carried the leak forward.
