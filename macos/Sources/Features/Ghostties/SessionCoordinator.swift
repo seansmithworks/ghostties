@@ -264,7 +264,9 @@ final class SessionCoordinator: ObservableObject {
 
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = template.workingDirectory ?? project.rootPath
-        config.command = finalCommand
+        config.command = CaptureFixture.isActive
+            ? Self.captureFixtureCommand(for: session.id)
+            : finalCommand
         config.environmentVariables = Self.spawnEnvironment(
             template: template,
             taskFilePath: sourceTaskFilePath,
@@ -995,6 +997,14 @@ final class SessionCoordinator: ObservableObject {
         }
 
         return command
+    }
+
+    // MARK: - Marketing Capture Fixture
+
+    /// The command every fixture-mode session runs instead of a real shell —
+    /// see `CaptureFixture.writeTranscriptScript(id:)`.
+    nonisolated private static func captureFixtureCommand(for sessionId: UUID) -> String {
+        CaptureFixture.writeTranscriptScript(id: sessionId.uuidString)
     }
 
     // MARK: - Launcher Script Lifecycle
