@@ -121,7 +121,12 @@ struct BuildInfoBadgeView: View {
     private let info = BuildInfoSnapshot.current
 
     var body: some View {
-        if isEnabled {
+        // Force-hidden under the marketing-capture fixture regardless of the
+        // AppStorage default — a captured screenshot must never be able to
+        // leak the version/build-date/uptime readout, even if a future
+        // caller forgets to also pass the AppStorage override launch
+        // argument. See `CaptureFixture`.
+        if isEnabled && !CaptureFixture.isActive {
             Text(justCopied ? "Copied build info" : info.shortLabel)
                 .font(.system(size: 9))
                 .foregroundColor(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)

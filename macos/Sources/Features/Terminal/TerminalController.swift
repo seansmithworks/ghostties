@@ -44,17 +44,33 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
          withSurfaceTree tree: SplitTree<Ghostty.SurfaceView>? = nil,
          parent: NSWindow? = nil
     ) {
+        // Marketing-capture fixture: this path also covers the default
+        // "untitled" window macOS opens at cold launch (before any Ghosties
+        // project/session is picked) plus every other `newWindow(ghostty)`
+        // call site that passes no explicit base config — none of those go
+        // through `SessionCoordinator.createSession`, so without this a
+        // fixture-mode capture would still show the user's real login shell
+        // (hostname, real cwd) in a freshly opened window. Only applies to
+        // genuinely fresh windows (`tree == nil`) — never overrides a real
+        // split-tree restoration. See `CaptureFixture`.
+        let resolvedBase: Ghostty.SurfaceConfiguration? = {
+            guard CaptureFixture.isActive, tree == nil else { return base }
+            var config = base ?? Ghostty.SurfaceConfiguration()
+            config.command = CaptureFixture.writeTranscriptScript(id: "default-window")
+            return config
+        }()
+
         // The window we manage is not restorable if we've specified a command
         // to execute. We do this because the restored window is meaningless at the
         // time of writing this: it'd just restore to a shell in the same directory
         // as the script. We may want to revisit this behavior when we have scrollback
         // restoration.
-        self.restorable = (base?.command ?? "") == ""
+        self.restorable = (resolvedBase?.command ?? "") == ""
 
         // Setup our initial derived config based on the current app config
         self.derivedConfig = DerivedConfig(ghostty.config)
 
-        super.init(ghostty, baseConfig: base, surfaceTree: tree)
+        super.init(ghostty, baseConfig: resolvedBase, surfaceTree: tree)
 
         // Setup our notifications for behaviors
         let center = NotificationCenter.default

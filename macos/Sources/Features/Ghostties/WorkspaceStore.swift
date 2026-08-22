@@ -10,7 +10,24 @@ import SwiftUI
 @MainActor
 final class WorkspaceStore: ObservableObject {
     /// Shared instance used by all windows. Created once on first access.
-    static let shared = WorkspaceStore()
+    ///
+    /// When the marketing-capture fixture is active (`GHOSTTIES_CAPTURE_FIXTURE=1`
+    /// launch environment variable — see `CaptureFixture`), this is seeded with an
+    /// invented project/session cast instead of loading the real
+    /// `workspace.json`, so an automated screenshot can never contain Sean's
+    /// real project or session names. The DEBUG gate mirrors
+    /// `CaptureFixture.makeStore()`'s own gate — the capture rig always
+    /// builds the Debug configuration (see the `Ghostties` scheme's
+    /// `TestAction`), and this branch leans on `WorkspaceStore`'s DEBUG-only
+    /// test initializer, so it cannot exist in a Release build regardless.
+    static let shared: WorkspaceStore = {
+        #if DEBUG
+        if CaptureFixture.isActive {
+            return CaptureFixture.makeStore()
+        }
+        #endif
+        return WorkspaceStore()
+    }()
 
     /// `sectionedProjects`/`sessionGroups(forProject:)` below are memoized —
     /// invalidating on every mutation via `didSet` (rather than scattering
