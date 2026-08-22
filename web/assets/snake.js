@@ -238,9 +238,9 @@
     var auto = true;
     var soundOn = false;
     var ac = null;
-    // Idle mode autoplays the herd loop (the ambient demo) unless the
-    // visitor asked for reduced motion — then nothing moves until they
-    // explicitly insert a coin.
+    // Gates the ambient float (ghosts drifting, pupils tracking) in idle.
+    // Off for reduced-motion visitors — nothing moves until they explicitly
+    // insert a coin, at which point startGame() turns it on.
     var simActive = !reducedMotion;
 
     layoutGrid();
@@ -486,12 +486,16 @@
         return;
       }
 
-      // The herd loop runs in both modes — idle autoplays it as the
-      // ambient demo; "play" only adds the HUD, keycaps and manual steering.
-      var step = Math.max(1, Math.round(60 / speed));
-      if (auto && f % step === 0) think();
-      if (f % step === 0) move();
-      f++;
+      // The herd loop (think/move) is play-only, per the locked decision
+      // that the page is a page until someone inserts a coin: idle ghosts
+      // drift on their ambient float below, but the head does not move
+      // and nothing is herded until mode === 'play'.
+      if (mode === "play") {
+        var step = Math.max(1, Math.round(60 / speed));
+        if (auto && f % step === 0) think();
+        if (f % step === 0) move();
+        f++;
+      }
 
       var tx = px(hx),
         ty = py(hy);

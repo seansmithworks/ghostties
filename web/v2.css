@@ -358,6 +358,7 @@ section:last-of-type {
   .hud .one,
   .gh,
   .snake-head i,
+  .hero .insert-coin,
   .train,
   .pellets i,
   h1.h-xl {
@@ -439,18 +440,27 @@ button.cab-btn {
 .hero .insert-coin {
   margin-left: 4px;
   font: inherit;
-  font-family: var(--font-display);
-  font-size: 11px;
-  color: var(--ink-quiet);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
   background: none;
-  border: none;
-  padding: 4px 2px;
+  border: 1px solid var(--ink-quiet);
+  border-radius: 0;
+  padding: 10px 14px;
   cursor: pointer;
   animation: blip 1.6s steps(2, jump-none) infinite;
 }
-.hero .insert-coin:hover,
+.hero .insert-coin:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+}
 .hero .insert-coin:focus-visible {
   color: var(--amber);
+  border-color: var(--amber);
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
 }
 .snake-wrap.is-playing .hero .insert-coin {
   animation: none;
@@ -568,8 +578,11 @@ button.cab-btn {
   width: var(--cell, 34px);
   height: var(--cell, 34px);
   z-index: 5;
-  /* Visible in idle too — it's the autopilot cursor driving the ambient
-     herd demo, not just a "play mode" reveal. */
+  /* Frame + core mark distinguishes the player from ghost bodies (dome
+     sprites with a visor face) — a hard-edged square outline the ghosts
+     never carry, at any cell size. No box-shadow/glow on it, per the
+     house vocabulary. */
+  border: 2px solid var(--ink);
   will-change: transform;
 }
 .snake-head i {
@@ -579,7 +592,6 @@ button.cab-btn {
   width: 56%;
   height: 56%;
   background: var(--amber);
-  box-shadow: 0 0 18px rgba(255, 213, 79, 0.7);
   animation: snake-cursor 0.9s steps(2, jump-none) infinite;
 }
 @keyframes snake-cursor {
