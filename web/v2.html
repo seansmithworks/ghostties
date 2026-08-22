@@ -54,13 +54,18 @@
             NPX <small>ghostties-install</small><span class="copy-icon" aria-hidden="true">⧉</span>
           </button>
           <a class="cab-btn tertiary" href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>.DMG</a>
-          <span class="insert-coin" aria-hidden="true">◄ INSERT COIN</span>
+          <button type="button" class="insert-coin" id="snake-start" aria-label="Insert coin — play a hidden game">◄ INSERT COIN</button>
         </div>
         <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
 
-        <!-- pass 2 mounts the Snake hero game here — do not build the game
-             in this pass. Leave this element empty. -->
-        <div id="snake-mount" data-pass2 aria-hidden="true"></div>
+        <!-- Snake hero game. Decorative until started, so the mount stays
+             out of the accessibility tree; the start button and sound
+             toggle are real controls that live outside it. Logic lives in
+             /assets/snake.js, not here. -->
+        <div class="snake-wrap">
+          <div id="snake-mount" aria-hidden="true"></div>
+          <button type="button" class="snake-sound" id="snake-sound" aria-pressed="false">SOUND OFF</button>
+        </div>
       </section>
 
       <!-- ============================================================
@@ -229,7 +234,7 @@ instead of the cached snapshot.
           <span class="micro">Projects &amp; archive</span>
         </div>
         <h2 class="h-m">Projects &amp; Archive</h2>
-        <p class="lead">It stays usable at twenty sessions, not just six. Answers the scaling doubt.</p>
+        <p class="lead">It stays usable whether you're running a couple of sessions or a sprawling pile of them. Answers the scaling doubt.</p>
 
         <div class="projects-figure">
           <picture data-app-state="projects" data-app-theme="light" class="theme-light-only">
@@ -365,5 +370,6 @@ instead of the cached snapshot.
       });
     });
   </script>
+  <script src="/assets/snake.js" defer></script>
 </body>
 </html>

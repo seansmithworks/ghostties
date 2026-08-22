@@ -357,6 +357,7 @@ section:last-of-type {
   .scanlines,
   .hud .one,
   .gh,
+  .snake-head i,
   .train,
   .pellets i,
   h1.h-xl {
@@ -437,17 +438,207 @@ button.cab-btn {
 
 .hero .insert-coin {
   margin-left: 4px;
+  font: inherit;
   font-family: var(--font-display);
   font-size: 11px;
   color: var(--ink-quiet);
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  cursor: pointer;
   animation: blip 1.6s steps(2, jump-none) infinite;
 }
+.hero .insert-coin:hover,
+.hero .insert-coin:focus-visible {
+  color: var(--amber);
+}
+.snake-wrap.is-playing .hero .insert-coin {
+  animation: none;
+}
 
-/* Snake mount point — pass 2 fills this. Zero-height placeholder so the
-   page layout doesn't jump when the game is inserted. */
+/* ---------------------------------------------------------------------
+   Snake hero game — see /assets/snake.js for the logic. This block owns
+   layout only; the game never fights the install row for space, it sits
+   below it in normal flow.
+   --------------------------------------------------------------------- */
+.snake-wrap {
+  position: relative;
+  margin-top: 40px;
+}
 #snake-mount {
-  margin-top: 56px;
-  height: 0;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(
+      96% 70% at 50% 30%,
+      transparent 55%,
+      rgba(6, 6, 14, 0.9) 100%
+    ),
+    var(--bg);
+  overflow: hidden;
+}
+.snake-frame {
+  position: relative;
+}
+.snake-hud {
+  display: flex;
+  gap: 1px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.snake-wrap.is-playing .snake-hud {
+  opacity: 1;
+}
+.snake-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+  border-left: 1px solid var(--line-soft);
+}
+.snake-stat:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+.snake-stat .k {
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-quiet);
+}
+.snake-stat .v {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--amber);
+}
+.snake-stat.dim .v {
+  color: var(--ink-dim);
+}
+.snake-stat[data-lost-cell].alert {
+  border-left-color: rgba(255, 120, 96, 0.5);
+}
+.snake-stat[data-lost-cell].alert .v {
+  color: #ff8a70;
+}
+
+.snake-field {
+  position: relative;
+  background-image: radial-gradient(
+    rgba(233, 230, 245, 0.09) 1.2px,
+    transparent 1.2px
+  );
+  background-size: var(--cell, 34px) var(--cell, 34px);
+}
+
+.gh {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cell, 34px);
+  height: var(--cell, 34px);
+  will-change: transform;
+}
+.gh svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.4));
+}
+.gh.lost {
+  animation: snake-lost-pulse 1.05s steps(2, jump-none) infinite;
+}
+@keyframes snake-lost-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+.gh .ring {
+  opacity: 0;
+}
+.gh.lost .ring {
+  opacity: 1;
+}
+
+.snake-head {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cell, 34px);
+  height: var(--cell, 34px);
+  z-index: 5;
+  /* Visible in idle too — it's the autopilot cursor driving the ambient
+     herd demo, not just a "play mode" reveal. */
+  will-change: transform;
+}
+.snake-head i {
+  position: absolute;
+  left: 22%;
+  top: 22%;
+  width: 56%;
+  height: 56%;
+  background: var(--amber);
+  box-shadow: 0 0 18px rgba(255, 213, 79, 0.7);
+  animation: snake-cursor 0.9s steps(2, jump-none) infinite;
+}
+@keyframes snake-cursor {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.snake-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  background: var(--amber);
+  opacity: 0;
+}
+.snake-flash.go {
+  animation: snake-fl 0.42s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+@keyframes snake-fl {
+  0% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.snake-sound {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 9;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--ink-quiet);
+  background: rgba(6, 6, 14, 0.6);
+  border: 1px solid var(--line-soft);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.snake-sound:hover,
+.snake-sound:focus-visible {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.snake-sound[aria-pressed="true"] {
+  color: var(--amber);
+  border-color: rgba(255, 213, 79, 0.4);
+}
+
+@media (max-width: 480px) {
+  .snake-hud {
+    padding: 8px 10px;
+  }
+  .snake-stat {
+    padding: 0 8px;
+  }
 }
 
 /* ---------------------------------------------------------------------
