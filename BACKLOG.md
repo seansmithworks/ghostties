@@ -17,7 +17,10 @@ All six acceptance criteria closed. Criterion 1 proven from disk, not a screensh
 Four review rounds; rounds 2 and 3 each found real defects the prior round missed
 (now **eight-for-eight** on the "never accept one review round on UI work here" rule).
 
-- [ ] **Open the PR for slice 1.** Sean's call — nothing merges unprompted. | app | carried
+- [x] **Open the PR for slice 1.** Opened 2026-08-22 as
+  [#136](https://github.com/SeanSmithWorks/ghostties/pull/136) at Sean's explicit go-ahead —
+  `feat/composer-command-grammar-slice1` (`ffce47094`) → `main` (`ab56f3a2b`). `git merge-tree`
+  confirmed a clean merge, so **no rebase was needed**. Merge is still Sean's. | app | carried
 - [ ] **Slice A — breadcrumb chips.** Spec at `docs/plans/composer-breadcrumb-spec.html`,
   all four decisions settled 2026-08-22. Replaces the trailing project dropdown with inline
   chips; retires the label-width squeeze rather than tuning it. Build chip pickers as an
@@ -25,6 +28,21 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
   a `.popover` nested in the composer's `.popover` and has never been verified.
   **`⌘Z` chip-aware undo is new scope** — the composer has no undo stack; AppKit's text undo
   knows nothing about chips. | app | new
+  Dispatched 2026-08-22 on `feat/composer-breadcrumb-chips`, branched off slice 1 (`ffce47094`)
+  so the stack retargets cleanly. Phases, flipped as each lands:
+  - [ ] A1 — chip model + render resolved leading tokens as chips in the query field
+  - [ ] A2 — inline chip picker inside the card; delete the trailing `projectControl`
+        (both the locked and unlocked branches); `.locked` becomes a chip with no picker affordance
+  - [ ] A3 — cascade rule (repo change clears the command; re-picking the same value is a no-op)
+  - [ ] A4 — `⌘Z` chip-aware undo restoring a cleared segment as ONE step
+  - [ ] A5 — keyboard: backspace at position 0 pops the last chip back to text; left-arrow
+        from field start focuses the chip; Return/Down opens its picker; Esc closes the picker
+        without closing the composer
+  - [ ] A6 — fix the dropdown checkmark/label disagreement via one source of truth
+        (parked finding, retired on the way through)
+  - [ ] A7 — review round 1 (separate agent, full diff)
+  - [ ] A8 — review round 2 against the round-1 fix commit, seeded with what round 1 cleared
+  - [ ] A9 — review round 3 if round 2 changed layout (the rule is eight-for-eight here)
 - [ ] **Slice B — branch segment resolving to a worktree.** Never `git checkout` in the project
   dir (would yank the branch from under a parallel session). Enumerate existing worktrees first;
   creation only behind an explicit `+ new worktree` row. Needs caching — shelling per keystroke
