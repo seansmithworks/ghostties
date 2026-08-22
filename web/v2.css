@@ -212,6 +212,20 @@ video {
   letter-spacing: 0.08em;
 }
 
+/* Inline code — TypeSpec.dc.html's ".prose code" treatment (DM Mono, amber,
+   faint amber pill). Sized relative to the surrounding text (0.85em) rather
+   than a fixed px, since it appears inside .lead (22px), .body-text (16px)
+   and .still-ghostty-list li (13px) — a flat size would either oversize in
+   the hero or vanish in the smallest context. */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--amber);
+  background: rgba(255, 213, 79, 0.09);
+  padding: 1px 5px;
+  border-radius: 0;
+}
+
 /* ---------------------------------------------------------------------
    Cabinet shell — maze grid, scanlines, vignette, HUD strip.
    --------------------------------------------------------------------- */
@@ -400,7 +414,7 @@ section:last-of-type {
   letter-spacing: 0.03em;
   padding: 14px 18px;
   border: 3px solid;
-  border-radius: 4px;
+  border-radius: 0;
   background: transparent;
   display: inline-flex;
   align-items: center;
@@ -409,8 +423,9 @@ section:last-of-type {
   color: inherit;
 }
 button.cab-btn {
-  font: inherit;
   font-family: var(--font-display);
+  font-size: 14px;
+  line-height: normal;
 }
 .cab-btn small {
   font-family: var(--font-mono);
@@ -682,7 +697,7 @@ button.cab-btn {
   height: 140px;
   border: 2px solid var(--line-strong);
   background: rgba(233, 230, 245, 0.03);
-  border-radius: 3px;
+  border-radius: 0;
 }
 .sprawl-win::before {
   content: "";
@@ -753,17 +768,11 @@ button.cab-btn {
    03 — THE SIDEBAR / 04 — GT LIST (lifted markup, restyled)
    --------------------------------------------------------------------- */
 
-.board-sidebar h2,
-.board-gtlist h2 {
-  font-family: var(--font-display);
-  font-size: 20px;
-}
-
 .status-key {
   margin-top: 32px;
   max-width: 640px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
 }
 .status-key-header {
@@ -833,13 +842,38 @@ button.cab-btn {
   color: var(--ink-faint);
 }
 .gt-block {
+  position: relative;
   margin-top: 12px;
   max-width: 780px;
   background: rgba(233, 230, 245, 0.03);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 20px 24px;
   overflow-x: auto;
+  /* Visible scrollbar hint instead of the default invisible-until-hover
+     overlay scrollbar (macOS/most mobile browsers hide it entirely). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.gt-block::-webkit-scrollbar {
+  height: 6px;
+}
+.gt-block::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+}
+/* Edge fade — the affordance that content continues past the visible
+   frame. Harmless when the content already fits (nothing is cropped by
+   it since it sits over the box's own padding), so it doesn't need a
+   scroll-state class to toggle it. */
+.gt-block::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 28px;
+  background: linear-gradient(to right, transparent, rgba(6, 6, 14, 0.85));
+  pointer-events: none;
 }
 .gt-pre {
   margin: 0;
@@ -873,7 +907,7 @@ button.cab-btn {
   display: flex;
   flex-wrap: wrap;
   border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: 0;
   overflow: hidden;
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -896,7 +930,7 @@ button.cab-btn {
   margin-top: 32px;
   max-width: 620px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
 }
 .task-note-path {
@@ -924,7 +958,7 @@ button.cab-btn {
 .projects-figure {
   margin-top: 32px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
 }
 .projects-figure img {
@@ -963,7 +997,7 @@ button.cab-btn {
   display: grid;
   gap: 0;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
 }
 .still-ghostty-list li {
   display: flex;
@@ -973,6 +1007,11 @@ button.cab-btn {
   border-bottom: 1px solid var(--line-soft);
   font-size: 13px;
   color: var(--ink-dim);
+}
+/* Caps the prose measure without shrinking the row itself — the hairline
+   stays full-width (house style), only the text column is capped. */
+.still-ghostty-list .measure {
+  max-width: 52ch;
 }
 .still-ghostty-list li:last-child {
   border-bottom: none;
@@ -996,6 +1035,10 @@ button.cab-btn {
   font-size: 14px;
   color: var(--ink-dim);
 }
+.steps .measure {
+  display: block;
+  max-width: 52ch;
+}
 .steps li:last-child {
   border-bottom: none;
 }
@@ -1010,7 +1053,7 @@ button.cab-btn {
   align-items: center;
   justify-content: center;
   border: 2px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: 0;
   font-family: var(--font-display);
   font-size: 12px;
   color: var(--amber);
@@ -1025,13 +1068,19 @@ button.cab-btn {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
 }
 .install-cell {
   padding: 18px 20px;
   border-right: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
+  /* Every cell's right/bottom edge overlaps by 1px onto whatever sits next
+     to it — a neighboring cell's border in the interior, or the grid
+     container's own border at the right column and last row. overflow:
+     hidden on .install-grid clips the 1px overhang past the container edge,
+     so the result is one hairline everywhere instead of two. */
+  margin: 0 -1px -1px 0;
 }
 .install-cell b {
   display: block;
@@ -1063,7 +1112,7 @@ button.cab-btn {
 }
 .source-links a {
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 10px 16px;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -1152,6 +1201,32 @@ footer a:hover {
   }
   .install-row {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+  }
+  /* Narrow cabinet buttons: the label stays on one line at full size (this
+     is the primary conversion action, it does not get to shrink into
+     illegibility); the long command wraps to its own full-width row below
+     it instead of fighting the label for space inline. */
+  .cab-btn {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    justify-content: flex-start;
+  }
+  .cab-btn small {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+  /* Lane ramp: six chips wrap unevenly (4+2) at narrow widths, leaving a
+     dead cell and reading as a broken L. Stack to one column instead so
+     every chip is full-width with no leftover cell. */
+  .lane-ramp {
+    flex-direction: column;
+  }
+  .lane-chip {
+    border-right: none;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .lane-chip:last-child {
+    border-bottom: none;
   }
 }

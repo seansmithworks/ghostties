@@ -78,6 +78,7 @@
           <span class="num mono-tag">02</span>
           <span class="micro">The problem</span>
         </div>
+        <h2 class="h-m">The Problem</h2>
         <p class="lead">Deep in a terminal sprawl, none of the windows telling you which one is actually waiting on you.</p>
         <p class="body-text" style="margin-top: 12px;">
           Every one of these rectangles is an abstract stand-in for a terminal window —
@@ -105,12 +106,16 @@
           <span class="num mono-tag">03</span>
           <span class="micro">The sidebar</span>
         </div>
-        <h2>The Sidebar</h2>
+        <h2 class="h-l">The Sidebar</h2>
         <p class="lead">Every session in one window. The single strongest thing the app does.</p>
         <div class="projects-figure">
-          <picture>
+          <picture data-app-state="sessions" data-app-theme="light" class="theme-light-only">
+            <source srcset="/assets/app-sessions-light@2x.webp" type="image/webp">
+            <img src="/assets/app-sessions-light@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to, light mode" width="1280" height="705" loading="lazy">
+          </picture>
+          <picture data-app-state="sessions" data-app-theme="dark" class="theme-dark-only">
             <source srcset="/assets/app-sessions-dark@2x.webp" type="image/webp">
-            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to" width="1280" height="705" loading="lazy">
+            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to, dark mode" width="1280" height="705" loading="lazy">
           </picture>
         </div>
         <p class="projects-caption">every session, one window, live status</p>
@@ -188,11 +193,11 @@
           <span class="num mono-tag">04</span>
           <span class="micro">GT List</span>
         </div>
-        <h2>The GT List</h2>
+        <h2 class="h-l">The GT List</h2>
         <p class="lead">One command answers &ldquo;what is actually going on&rdquo; across every project. The thing nothing else does.</p>
 
         <p class="gt-example-label">Example output — not a live capture</p>
-        <div class="gt-block"><pre class="gt-pre" aria-label="Example output of gt list against a fixture task directory, not a live capture">wire-status-badge  <span class="lane-needsyou">needs-you</span>   Wire status badge to session state  [project: switchboard]
+        <div class="gt-block" tabindex="0" aria-label="Example gt list output, scrollable horizontally"><pre class="gt-pre" aria-label="Example output of gt list against a fixture task directory, not a live capture">wire-status-badge  <span class="lane-needsyou">needs-you</span>   Wire status badge to session state  [project: switchboard]
 audit-nightly-job  <span class="lane-running">running</span>     Audit nightly ingestion job  [project: fieldwork]
 migrate-schema  <span class="lane-running">running</span>     Migrate task schema to v2  [project: atlas-api]
 review-lane-copy  <span class="lane-review">review</span>      Review lane copy for clarity  [project: pendulum]
@@ -264,10 +269,10 @@ instead of the cached snapshot.
         <h2 class="h-m">Still Ghostty</h2>
         <p class="lead">Your config, themes and keybinds survive. Upstream credit paid properly, in public.</p>
         <ul class="still-ghostty-list">
-          <li><span class="mark" aria-hidden="true"></span> Your <code>~/.config/ghostty/config</code> loads unchanged — Ghostties is a fork, not a rewrite.</li>
-          <li><span class="mark" aria-hidden="true"></span> Themes, keybinds and font settings all carry over.</li>
-          <li><span class="mark" aria-hidden="true"></span> The terminal engine (Zig + Metal) is upstream <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>, untouched.</li>
-          <li><span class="mark" aria-hidden="true"></span> The sidebar is an additional surface, not a replacement — Ghostties users are still Ghostty users.</li>
+          <li><span class="mark" aria-hidden="true"></span><span class="measure">Your <code>~/.config/ghostty/config</code> loads unchanged — Ghostties is a fork, not a rewrite.</span></li>
+          <li><span class="mark" aria-hidden="true"></span><span class="measure">Themes, keybinds and font settings all carry over.</span></li>
+          <li><span class="mark" aria-hidden="true"></span><span class="measure">The terminal engine (Zig + Metal) is upstream <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>, untouched.</span></li>
+          <li><span class="mark" aria-hidden="true"></span><span class="measure">The sidebar is an additional surface, not a replacement — Ghostties users are still Ghostty users.</span></li>
         </ul>
       </section>
 
@@ -285,10 +290,10 @@ instead of the cached snapshot.
         <!-- PLACEHOLDER COPY: writer pass fills these in with real detail
              about install location, first-run permissions, and uninstall. -->
         <ol class="steps">
-          <li>Install places the app in /Applications and nothing else — placeholder, confirm exact scope.</li>
-          <li>First launch reads your existing Ghostty config, if one exists — placeholder.</li>
-          <li>The sidebar opens via a keyboard shortcut you can change or ignore — placeholder.</li>
-          <li>Uninstalling removes the app and its own preferences, leaves your Ghostty config alone — placeholder.</li>
+          <li><span class="measure">Install places the app in /Applications and nothing else — placeholder, confirm exact scope.</span></li>
+          <li><span class="measure">First launch reads your existing Ghostty config, if one exists — placeholder.</span></li>
+          <li><span class="measure">The sidebar opens via a keyboard shortcut you can change or ignore — placeholder.</span></li>
+          <li><span class="measure">Uninstalling removes the app and its own preferences, leaves your Ghostty config alone — placeholder.</span></li>
         </ol>
       </section>
 

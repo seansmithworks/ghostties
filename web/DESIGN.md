@@ -377,3 +377,51 @@ concludes from this document that the system is finished.
   its own variant (an icons span plus a three-link row, no Licenses link).
   Collapsing them to one is a taste call, and deleting the homepage override
   is all it takes.
+
+---
+
+## 8. v2 redesign token set (`web/v2.css`) — in-progress system, not the live site
+
+`v2.html`/`v2.css` (Arcade shell, `feat/web-redesign-round4`) is a sandbox for
+the redesign in flight, served at `/v2` alongside the live `index.html`. It
+declares its own `:root` block, deliberately **not** merged into `style.css`'s
+tokens above — the two pages don't share a design system yet, and nothing in
+§3–§5 of this document applies to `/v2`. Document it here so it isn't an
+undocumented parallel system; promote it into the shared tokens (and delete
+this section) if and when `/v2` replaces `index.html`.
+
+### Colour
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `--bg` | `#06060e` | Page background |
+| `--ink` | `#e9e6f5` | Headings, primary text |
+| `--ink-dim` | `rgba(233,230,245,0.66)` | `.lead` |
+| `--ink-faint` | `rgba(233,230,245,0.5)` | `.body-text`, `.small-text`, captions |
+| `--ink-quiet` | `rgba(233,230,245,0.52)` | Insert-coin border/text — tuned to clear both 4.5:1 text and 3:1 non-text AA floors against `--bg` |
+| `--amber` | `#ffd54f` | The one saturated accent — links, primary CTA, inline `code`, headline highlight |
+| `--cyan` | `#00e5ff` | HUD "1UP" blip, section numbers, secondary CTA border |
+| `--purple` | `#7c4dff` | Maze grid lines only |
+| `--line` | `rgba(233,230,245,0.16)` | Outer frame hairlines (cards, grids) |
+| `--line-soft` | `rgba(233,230,245,0.09)` | Interior row separators |
+| `--line-strong` | `rgba(233,230,245,0.24)` | Emphasized borders (lane ramp, source links, tertiary button) |
+
+### Type
+
+| Token | Stack | Use |
+| --- | --- | --- |
+| `--font-display` | `"Silkscreen", monospace` | `h1`–`h2` (`.h-xl`/`.h-l`/`.h-m`/`.h-s`), cabinet buttons, step counters |
+| `--font-prose` | `"Archivo", sans-serif` | Body copy (`.lead`, `.body-text`, `.small-text`, `.micro`) |
+| `--font-mono` | `"DM Mono", monospace` | Commands, file paths, inline `code`, captured stdout |
+
+Self-hosted from `web/assets/fonts/` (`font-src 'self'` blocks any CDN) — same
+three families as the "Round-4 board fonts" set in §4 above, which only
+covered `index.html`'s two lifted sections; `/v2` uses them page-wide.
+
+### House vocabulary (locked, `docs/design/web-redesign/README.md`)
+
+Square status marks, never circles or pills. Block labels butted together
+sharing hairlines. **No rounded corners or drop shadows on chrome** — the one
+named exception is the amber `box-shadow` glow on `.cab-btn.primary`, which
+reads as arcade CRT bloom, not a drop shadow. Uppercase micro-labels at
+0.2em tracking (`.micro`, `.mono-tag`).
