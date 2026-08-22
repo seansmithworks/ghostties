@@ -3208,3 +3208,39 @@ Eight findings went to the orchestrator builder thread; seven shipped as `b8326e
 ### Open
 
 `ORCHESTRATOR.md`'s PICKUP block is dated 2026-08-14 and does not reflect beta.23-era work owned by other threads.
+
+## August 21–22, 2026 — Screen Recording silent denial root-caused
+
+### Headline
+
+`screencapture` had been failing for weeks with `could not create image from display` while Ghostties sat visibly enabled in System Settings. Root cause: the TCC row pinned an **Apple Development** certificate from when the app was a local Xcode build; `/Applications/Ghostties.app` is now **Developer ID** signed, so the stored code requirement could never match. `kTCCServiceScreenCapture` is a no-prompt service, so it denied in silence. Fixed with one command, no relaunch.
+
+### Commits
+
+- `4d4b81003` — `docs(solutions): TCC screen-recording silent denial after signing change` (pushed to origin/main)
+
+### Why it survived so many attempts
+
+Every intuitive fix is structurally incapable of working:
+
+- Toggling off/on flips the row's `allowed` bit; it never rewrites the stored `csreq`
+- Relaunching re-arms whatever the row says, and the row was permanently wrong
+- ScreenCapture never re-prompts, so nothing self-heals
+
+Only deleting the row helps: `tccutil reset ScreenCapture com.seansmithdesign.ghostties`. Verified working immediately in the already-running process (PID 1288, launched ~11h earlier) — **no relaunch required**, which matters because relaunching Ghostties kills every Claude Code session inside it.
+
+### Diagnostic that cracked it
+
+```
+/usr/bin/log show --last 3m --predicate 'subsystem == "com.apple.TCC"' --style compact
+```
+
+`log` is a **zsh builtin** — bare `log show` fails with `too many arguments`; the absolute path is required. No `sudo` needed, unlike reading `TCC.db` directly. The output names both the stored and actual requirements, and the `AUTHREQ_ATTRIBUTION` line settles which app is the *responsible* process.
+
+### Prior guidance was wrong, and that was the cost
+
+`reference_screencapture-responsible-app-is-the-terminal.md` had recorded the cause as a *likely* code-requirement mismatch and prescribed "reset **then relaunch**", warning the relaunch would kill the session. That warning is why the fix kept being deferred. The relaunch was inferred, never observed. Both the memory file and its `MEMORY.md` index line now record the confirmed cause and that reset alone suffices.
+
+### Not recurring
+
+The stored requirement pins the certificate, not the build — no `cdhash` in it. Future betas and Sparkle updates signed with the same Developer ID match fine. This was a one-time break from crossing signing-identity classes around beta.22.
