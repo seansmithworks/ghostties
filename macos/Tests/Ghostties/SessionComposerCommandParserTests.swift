@@ -254,4 +254,91 @@ final class SessionComposerCommandParserTests: XCTestCase {
             SessionComposerCommandParser.resolveCommitProjectId(commandProjectId: nil, selectedProjectId: nil)
         )
     }
+
+    // MARK: - B1 (breadcrumb chip review): the query field binding must be
+    // lossless.
+    //
+    // `SessionComposerPalette.queryFieldText` used to `get`
+    // `commandParse.remainderText` — `remainderTokens.joined(separator: " ")`
+    // — and `set` by re-prepending the matched token with a single hardcoded
+    // space. SwiftUI writes a binding's `get` value straight back into the
+    // field on the next render, so that round trip being lossy is exactly
+    // what made `ghostties cco -n "test"` untypable: a trailing space was
+    // eaten the instant it was typed, and a typed quote character never
+    // survived into `searchText` at all.
+
+    /// The permanent regression test for the ACTUAL fix:
+    /// `splitOnFirstToken` slices `searchText` directly rather than
+    /// rebuilding it, so `prefix + remainder` round-trips through `parse`
+    /// exactly — quotes, internal whitespace, and all. This is what
+    /// `queryFieldText`'s `get`/`set` are wired to now.
+    func testSplitOnFirstTokenRoundTripsThroughReparseWithQuotedArgument() {
+        let project = makeProject(name: "ghostties")
+        let original = #"ghostties cco -n "npm run dev""#
+        let firstParse = SessionComposerCommandParser.parse(query: original, projects: [project], isLocked: false)
+        XCTAssertEqual(firstParse.remainderTokens, ["cco", "-n", "npm run dev"])
+
+        guard let split = SessionComposerCommandParser.splitOnFirstToken(original) else {
+            XCTFail("expected a split for a resolved command")
+            return
+        }
+        // `get` returns `split.remainder` verbatim; `set` re-prepends
+        // `split.prefix` verbatim — simulate a no-op edit (typing the same
+        // remainder back in) and confirm the round trip reproduces the
+        // exact same tokens.
+        let reconstructed = split.prefix + split.remainder
+        XCTAssertEqual(reconstructed, original)
+
+        let secondParse = SessionComposerCommandParser.parse(query: reconstructed, projects: [project], isLocked: false)
+        XCTAssertEqual(secondParse.remainderTokens, firstParse.remainderTokens)
+    }
+
+    /// The trailing-whitespace case B1 called out explicitly: a space typed
+    /// after the last remainder token must survive into `searchText`
+    /// unchanged, not be trimmed away by a tokenize/rejoin round trip.
+    func testSplitOnFirstTokenPreservesTrailingWhitespaceInRemainder() {
+        let project = makeProject(name: "ghostties")
+        let original = "ghostties cco -n test "
+        guard let split = SessionComposerCommandParser.splitOnFirstToken(original) else {
+            XCTFail("expected a split")
+            return
+        }
+        XCTAssertEqual(split.remainder, "cco -n test ")
+        XCTAssertEqual(split.prefix + split.remainder, original)
+    }
+
+    func testSplitOnFirstTokenReturnsNilForBlankInput() {
+        XCTAssertNil(SessionComposerCommandParser.splitOnFirstToken(""))
+        XCTAssertNil(SessionComposerCommandParser.splitOnFirstToken("   "))
+    }
+
+    // MARK: - D3 (breadcrumb chip review): sticky chip through an
+    // empty-remainder backspace.
+
+    func testStickyChipProjectIdResolvesWhenRemainderIsEmptyAfterASeparator() {
+        let project = makeProject(name: "ghostties")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "ghostties ", projects: [project], isLocked: false)
+        XCTAssertEqual(id, project.id)
+    }
+
+    func testStickyChipProjectIdReturnsNilWithNoSeparatorEverTyped() {
+        // The ordinary single-token project-search case — must NOT be
+        // treated as sticky just because the token happens to match a
+        // project (mirrors `testParseSingleTokenReturnsNilEvenWhenItMatchesAProjectName`).
+        let project = makeProject(name: "bru")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "bru", projects: [project], isLocked: false)
+        XCTAssertNil(id)
+    }
+
+    func testStickyChipProjectIdReturnsNilWhenLocked() {
+        let project = makeProject(name: "ghostties")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "ghostties ", projects: [project], isLocked: true)
+        XCTAssertNil(id)
+    }
+
+    func testStickyChipProjectIdReturnsNilWhenFirstTokenMatchesNoProject() {
+        let project = makeProject(name: "ghostties")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "unknown ", projects: [project], isLocked: false)
+        XCTAssertNil(id)
+    }
 }

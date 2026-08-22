@@ -50,6 +50,17 @@ enum WorkspaceLayout {
     /// `composerModalShadowOpacity`/`composerModalShadowRadius` above.
     static let composerModalShadowYOffset: CGFloat = 8
 
+    /// Breadcrumb project chip background, resting state (composer
+    /// breadcrumb spec, Slice A). Named token rather than an ad-hoc
+    /// `Color.secondary.opacity(0.15)` inlined at the call site (DESIGN.md
+    /// review finding) — same rationale as `activeRowLight`/`activeRowDark`
+    /// below: one place to retune the chip's surface color from.
+    static let composerChipBackground = Color.secondary.opacity(0.15)
+
+    /// Breadcrumb project chip background while its inline picker is open.
+    /// Paired with `composerChipBackground` above.
+    static let composerChipBackgroundActive = Color.secondary.opacity(0.25)
+
     /// Height reserved at top for window traffic light controls.
     static let titlebarSpacerHeight: CGFloat = 28
 

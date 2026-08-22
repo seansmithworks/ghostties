@@ -54,21 +54,55 @@ struct SessionComposerBreadcrumbChipTests {
     /// value already selected" means. A typed command can resolve a
     /// DIFFERENT project than `selectedProjectId` still reads (A6); picking
     /// that same resolved project via the chip must still be recognized as
-    /// a no-op.
-    @Test func changeProjectChipComparesAgainstCurrentlyShownNotRawSelectedProjectId() {
+    /// a no-op, and picking a project that MATCHES the stale
+    /// `selectedProjectId` but NOT what's actually shown must still cascade.
+    ///
+    /// Replaces `changeProjectChipComparesAgainstCurrentlyShownNotRawSelectedProjectId`
+    /// (breadcrumb chip review, inert-test finding): that test passed
+    /// `to: projectB.id, currentlyShown: projectB.id` — structurally
+    /// identical to the no-op test above it (equal `to`/`currentlyShown`,
+    /// full stop) regardless of what `selectedProjectId` was set to, since
+    /// `changeProjectChip`'s own guard never reads `selectedProjectId` at
+    /// all. It could not discriminate the STORE's `currentlyShown` param
+    /// from the STORE's own `selectedProjectId` property because the two
+    /// scenarios it exercised never diverged in a way the guard's single
+    /// `projectId != currentlyShown` comparison could tell apart.
+    ///
+    /// This version picks `to: projectA.id` (which equals the STALE
+    /// `selectedProjectId`) while `currentlyShown: projectB.id` (the
+    /// actually-displayed, command-resolved project) — the two diverge on
+    /// purpose. Mutant-verified: swapping the guard to compare against
+    /// `self.selectedProjectId` instead of the `currentlyShown` parameter
+    /// turns this from `.noOp`/unchanged into `.changed`/cleared, so this
+    /// test goes red under that mutation where the old one did not (see
+    /// task report for the captured red output).
+    ///
+    /// Caveat this test does NOT close: the review's actual finding was
+    /// about `SessionComposerPalette.changeProjectChip(to:)`'s CALL SITE
+    /// (`SessionComposerPalette.swift`) silently reverting to pass
+    /// `composerStore.selectedProjectId` instead of the resolved
+    /// "currently shown" id — that call site now routes through
+    /// `SessionComposerCommandParser.resolveCommitProjectId` (tested in
+    /// `SessionComposerCommandParserTests`) rather than re-deriving the
+    /// value inline, but neither that test file nor this one can observe
+    /// the CALL SITE itself reverting to skip that function outright — this
+    /// repo has no SwiftUI view-test harness, the same accepted gap
+    /// `resolveCommitProjectId`'s own doc comment already documents.
+    @Test func changeProjectChipDiscriminatesCurrentlyShownFromStaleSelectedProjectId() {
         let store = SessionComposerStore(isolatedForTesting: ())
         let projectA = makeProject(name: "A")
         let projectB = makeProject(name: "B")
         store.selectedProjectId = projectA.id
         store.searchText = "b cco"
 
-        // `currentlyShown` here stands in for `currentProject?.id`, which
-        // would resolve to projectB via the command parse even though
-        // `selectedProjectId` still reads projectA.
-        let result = store.changeProjectChip(to: projectB.id, currentlyShown: projectB.id)
+        // Picking projectA (== the stale `selectedProjectId`) while the chip
+        // ACTUALLY shows projectB must still cascade — it is NOT a re-pick
+        // of what's displayed.
+        let result = store.changeProjectChip(to: projectA.id, currentlyShown: projectB.id)
 
-        #expect(result == .noOp)
-        #expect(store.searchText == "b cco")
+        #expect(result == .changed)
+        #expect(store.selectedProjectId == projectA.id)
+        #expect(store.searchText == "")
     }
 
     // MARK: - A4: ⌘Z undo, one step

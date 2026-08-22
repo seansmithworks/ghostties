@@ -77,6 +77,12 @@ struct SessionComposerPalette: View {
     /// `shakeTrigger` 0→2 and doubling the shake to 6 cycles.
     @State private var isHandlingNoMatchFeedback = false
 
+    /// D6: guards `closeChipPickerOrDismiss` against a same-turn double-fire
+    /// from its two `.onExitCommand` call sites (`queryRow`'s and
+    /// `ComposerQueryField`'s own `.exit` event) — same pattern as
+    /// `isHandlingNoMatchFeedback` above.
+    @State private var isHandlingExitCommand = false
+
     // MARK: - DESIGN.md scale (D11) — see `TemplatePickerView` for precedent.
     // `paletteWidth` pulls from `WorkspaceLayout` tokens (DESIGN.md §2
     // forbids hardcoded pt values where an equivalent token exists); the
@@ -198,41 +204,61 @@ struct SessionComposerPalette: View {
     }
 
     private var commandProject: Project? {
-        guard let projectId = commandParse.projectId else { return nil }
-        return store.projects.first(where: { $0.id == projectId })
-    }
-
-    /// The literal token 1 text the parser matched against a project name
-    /// (not `project.name` itself — preserves whatever casing/basename the
-    /// user actually typed). `nil` whenever no command is resolved.
-    /// Breadcrumb chip (A1): the query field displays only the REMAINDER
-    /// once a command resolves a project, but the parser still needs the
-    /// full `<token> <remainder>` string on every keystroke (`query`
-    /// reads `composerStore.searchText` directly, unchanged) — this is
-    /// what `queryFieldText`'s setter re-prepends on every edit.
-    private var commandMatchedToken: String? {
-        guard commandParse.projectId != nil else { return nil }
-        return SessionComposerCommandParser.tokenize(query).first
+        if let projectId = commandParse.projectId {
+            return store.projects.first(where: { $0.id == projectId })
+        }
+        // D3 fix: a genuine ≥2-token command whose remainder has been
+        // backspaced down to nothing falls out of `commandParse` (it
+        // requires ≥2 tokens), which used to drop the chip back to
+        // whatever `selectedProjectId` still read — see
+        // `SessionComposerCommandParser.stickyChipProjectId`'s doc comment
+        // for the full failure mode. Keeps the chip resolved through that
+        // empty-remainder state.
+        guard let stickyId = SessionComposerCommandParser.stickyChipProjectId(
+            rawQuery: composerStore.searchText,
+            projects: store.projects,
+            isLocked: isProjectLocked
+        ) else { return nil }
+        return store.projects.first(where: { $0.id == stickyId })
     }
 
     /// The breadcrumb chip's displayed/editable text (A1). When a typed
     /// command has resolved a project, this is the remainder ONLY — the
     /// resolved token renders as the chip instead, and edits reconstruct
-    /// the full stored string by re-prepending `commandMatchedToken`.
-    /// Otherwise it is `composerStore.searchText` unchanged, exactly as
-    /// before chips existed.
+    /// the full stored string by re-prepending the ORIGINAL prefix (the
+    /// matched token plus whatever whitespace separated it, taken verbatim
+    /// from `searchText`). Otherwise it is `composerStore.searchText`
+    /// unchanged, exactly as before chips existed.
+    ///
+    /// B1 fix: this used to `get` `commandParse.remainderText` — a display
+    /// string rebuilt as `remainderTokens.joined(separator: " ")` — and `set`
+    /// by re-prepending the matched token with a single hardcoded space. That
+    /// round trip silently ate trailing whitespace and stripped quote
+    /// characters (SwiftUI writes the `get`'s lossy value straight back into
+    /// the field on the next render), making `ghostties cco -n "test"`
+    /// untypable: the first space after `-n` never survived. Routing through
+    /// `SessionComposerCommandParser.splitOnFirstToken` instead means BOTH
+    /// halves are exact substrings of the real `searchText` — there is no
+    /// reconstruction step left to lose anything in.
     private var queryFieldText: Binding<String> {
         Binding(
             get: {
-                if commandProject != nil { return commandParse.remainderText }
-                return composerStore.searchText
+                guard commandProject != nil,
+                      let split = SessionComposerCommandParser.splitOnFirstToken(composerStore.searchText)
+                else { return composerStore.searchText }
+                return split.remainder
             },
             set: { newValue in
-                if let token = commandMatchedToken, commandProject != nil {
-                    composerStore.searchText = newValue.isEmpty ? token : "\(token) \(newValue)"
-                } else {
+                // D4: any real keystroke disarms a pending chip-undo — see
+                // `SessionComposerStore.noteSearchTextEditedByTyping()`.
+                composerStore.noteSearchTextEditedByTyping()
+                guard commandProject != nil,
+                      let split = SessionComposerCommandParser.splitOnFirstToken(composerStore.searchText)
+                else {
                     composerStore.searchText = newValue
+                    return
                 }
+                composerStore.searchText = split.prefix + newValue
             }
         )
     }
@@ -546,10 +572,20 @@ struct SessionComposerPalette: View {
             queryRow
                 // A4: ⌘Z restores the chip cascade's cleared segment(s) as
                 // one step. Scoped to only exist while something is
-                // actually pending — AppKit's own text-undo already owns
-                // ⌘Z inside the field for ordinary typing, and this never
-                // needs to contend with it when there's nothing chip-side
-                // to restore.
+                // actually pending. D4 fix: this DOES contend with AppKit's
+                // own text undo, despite an earlier version of this comment
+                // claiming otherwise — this `Button`'s shortcut writes
+                // `searchText`/`selectedProjectId` directly, bypassing the
+                // field editor's undo manager entirely, so typing after a
+                // chip change followed by ⌘Z used to discard those
+                // keystrokes with NO way to get them back (a second ⌘Z had
+                // nothing left to restore them from either). Fixed by
+                // disarming `pendingChipUndo` the moment the user edits
+                // `searchText` by typing (`queryFieldText`'s setter calls
+                // `SessionComposerStore.noteSearchTextEditedByTyping()`) —
+                // once that happens this overlay's `Button` simply stops
+                // existing, so a stray ⌘Z falls through to AppKit's own
+                // text undo instead of silently eating new keystrokes.
                 .overlay {
                     if composerStore.pendingChipUndo != nil {
                         Button(action: undoChipCascade) { Color.clear }
@@ -642,26 +678,59 @@ struct SessionComposerPalette: View {
     // `.popover` — the old trailing control's picker was a `.popover`
     // nested inside the composer's own `.popover`, on the known-fragile
     // list and never verified; two chips would have doubled that risk.
+    //
+    // B2 fix: the chip is now ALWAYS present, even with no project selected
+    // (`currentProject == nil`) — it renders a "Select project" placeholder
+    // that still opens the picker. The prior version only rendered anything
+    // here `if let project = currentProject`, which had no fallback at all
+    // once the trailing dropdown's old always-present control was deleted:
+    // backspacing a picker-selected chip back to raw text
+    // (`popChipToText`), or a fresh install with zero projects, left NO
+    // project control on screen whatsoever — `+ Add project…` (the only way
+    // to escape zero projects) was unreachable.
+
+    /// Cap on the chip's rendered width (D7) — the width bug this slice
+    /// exists to retire, reintroduced by moving the control from a trailing
+    /// sibling to a leading one in the SAME `HStack`, with no cap and no
+    /// `layoutPriority`. A long folder basename in the `.anchored` card
+    /// (204pt total) could squeeze the query field down to a sliver, same
+    /// failure mode as the control this slice replaced. `queryRowField`
+    /// below also gives the field `layoutPriority(1)` so the chip is what
+    /// yields space, never the other way around.
+    private static let chipMaxWidth: CGFloat = 96
 
     private var queryRow: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                if let project = currentProject {
-                    projectChip(project)
-                    Text("›")
-                        .font(.system(size: fieldFontSize, weight: .regular))
-                        .foregroundStyle(.tertiary)
-                }
+            HStack(spacing: 8) {
+                projectChip(currentProject)
+                    .layoutPriority(0)
+
+                Text("›")
+                    .font(.system(size: fieldFontSize, weight: .regular))
+                    .foregroundStyle(.tertiary)
+                    // Decorative separator between the chip and the field —
+                    // carries no information VoiceOver needs (nit).
+                    .accessibilityHidden(true)
 
                 ComposerQueryField(
                     query: queryFieldText,
                     fontSize: fieldFontSize,
                     focusTrigger: $composerStore.focusSearchFieldTrigger,
-                    hasSelection: selectedOption != nil
+                    hasSelection: selectedOption != nil,
+                    // D6: while the inline picker is open, the field's own
+                    // ↑/↓/Return handlers must go quiet — see
+                    // `ComposerQueryField.isPickerOpen`'s doc comment.
+                    isPickerOpen: isProjectChipPickerOpen,
+                    // Nit: the placeholder still said "...and projects" even
+                    // once a chip has already picked the project — the
+                    // field only filters that project's templates at that
+                    // point, never projects.
+                    placeholder: currentProject != nil ? "Search templates…" : "Search templates and projects…"
                 ) { event in
                     handle(event)
                 }
                 .frame(height: fieldHeight)
+                .layoutPriority(1)
             }
             .padding(.horizontal, 10)
 
@@ -678,38 +747,67 @@ struct SessionComposerPalette: View {
     }
 
     /// The chip itself. `.locked` renders a static label with no picker
-    /// affordance (A2) — matching the old trailing control's locked branch,
-    /// which had "no hairline divider... a divider beside a chevron-less
-    /// label reads as a control that isn't one."
+    /// affordance (A2) — matching the old trailing control's locked branch.
+    /// Sean's call, flagged as a strawman rather than settled: `.locked`
+    /// drops the pill background entirely (plain secondary text + the `›`)
+    /// instead of inheriting the interactive chip's pill — a pill with no
+    /// picker behind it reads as a control that isn't one, same reasoning
+    /// DESIGN.md already records for the control this replaced.
+    ///
+    /// `project == nil` (B2) renders a "Select project" placeholder in the
+    /// SAME interactive chip shape rather than nothing — this is the only
+    /// project affordance in the composer once the trailing control was
+    /// deleted, so it must survive every reachable state: no project chosen
+    /// yet, a chip popped back to raw text, and zero projects on a fresh
+    /// install (where its only job is making `+ Add project…` reachable via
+    /// the picker it opens).
     @ViewBuilder
-    private func projectChip(_ project: Project) -> some View {
-        let label = Text(project.name)
-            .font(.system(size: rowFontSize, weight: .medium))
-            .lineLimit(1)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            // 5pt corner radius matches `ComposerRow`'s existing row
-            // highlight in this same file — not a new arbitrary value.
-            .background(Color.secondary.opacity(isProjectChipPickerOpen ? 0.25 : 0.15))
-            .cornerRadius(5)
-
-        if isProjectLocked {
-            label
+    private func projectChip(_ project: Project?) -> some View {
+        if isProjectLocked, let project {
+            Text(project.name)
+                .font(.system(size: fieldFontSize, weight: .regular))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: Self.chipMaxWidth, alignment: .leading)
         } else {
+            let label = Text(project?.name ?? "Select project")
+                .font(.system(size: fieldFontSize, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .frame(maxWidth: Self.chipMaxWidth, alignment: .leading)
+                .background(isProjectChipPickerOpen ? WorkspaceLayout.composerChipBackgroundActive : WorkspaceLayout.composerChipBackground)
+                // 5pt matches `ComposerRow`'s existing row highlight in this
+                // same file — not a new arbitrary radius. `.clipShape(...,
+                // style: .continuous)` replaces the deprecated, non-`.continuous`
+                // `.cornerRadius(5)` API per DESIGN.md §7 ("Always pass
+                // `style: .continuous`").
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+
             Button {
+                // Mouse click TOGGLES (click-to-open, click-again-to-close —
+                // the ordinary disclosure-control gesture); Return/Down
+                // below only ever OPEN. Deliberately different, not an
+                // oversight flagged and left as-is (review fragility note):
+                // a keyboard route that could CLOSE the picker on Down would
+                // make Down ambiguous with "move to the next row inside an
+                // already-open picker" once D6's picker-level Down handler
+                // exists. The two inputs don't fire in the same turn, so the
+                // differing polarity is not a double-fire risk in practice.
                 isProjectChipPickerOpen.toggle()
             } label: {
                 label
             }
             .buttonStyle(.plain)
             .focused($isChipFocused)
+            .accessibilityHint("Opens project picker")
             // A5: Return or Down opens the picker while the chip has
-            // keyboard focus (reached via left-arrow at the field's
-            // start — see `handle(_:)`'s `.move(.left)` case). Backported
-            // per this file's existing precedent (`ComposerQueryField`'s
-            // Return handling) — a no-op below macOS 14, degrading to
-            // mouse-only chip interaction there.
+            // keyboard focus. Backported per this file's existing precedent
+            // (`ComposerQueryField`'s Return handling) — a no-op below
+            // macOS 14, degrading to mouse-only chip interaction there.
             .backport.onKeyPress(.return) { _ in
                 guard isChipFocused else { return .ignored }
                 isProjectChipPickerOpen = true
@@ -968,16 +1066,22 @@ struct SessionComposerPalette: View {
             let current = selectedIndex ?? UInt.max
             selectedIndex = (current >= UInt(flattenedOptions.count - 1)) ? 0 : current + 1
 
-        case .move(.left):
-            // A5: left-arrow from the field's start focuses the chip. The
-            // field only forwards `.left` via `onMoveCommand` when the
-            // caret is already at the true start of the text (AppKit's
-            // field editor consumes moveLeft: internally otherwise), so no
-            // extra "is the caret at 0" check is needed here.
-            if !isProjectLocked, currentProject != nil {
-                isChipFocused = true
-            }
-
+        // D5: left-arrow-focuses-chip is DEAD. `NSTextView` implements
+        // `moveLeft:` unconditionally and no-ops at caret position 0 rather
+        // than forwarding to `.onMoveCommand` — the prior version of this
+        // handler asserted the opposite ("the field only forwards `.left`
+        // when the caret is at true start") with no runtime evidence behind
+        // it. Genuinely intercepting `moveLeft:` at position 0 needs an
+        // `NSViewRepresentable` wrapper around the field editor (reading
+        // its `selectedRange` directly) — out of scope for this pass, and a
+        // `.leftArrow` `.keyboardShortcut` alternative (this file's usual
+        // fallback for a `.onMoveCommand` gap) is worse than no route at
+        // all: it would fire on EVERY left-arrow press, including mid-word,
+        // and yank focus off the field. Removed rather than left asserted
+        // but unverified. The chip stays reachable by mouse click; `isChipFocused`
+        // (`.focused($isChipFocused)` on the chip's `Button`) is still wired
+        // for whatever focus route the system provides (e.g. VoiceOver/Tab).
+        // This pass adds no NEW keyboard route into it from inside the field.
         case .move:
             break
         }
@@ -988,11 +1092,25 @@ struct SessionComposerPalette: View {
     /// A2/A3: change the chip via the inline picker. The cascade rule
     /// (clear-on-change, no-op-on-repick) and the ⌘Z undo capture both live
     /// on `SessionComposerStore` — testable there without constructing this
-    /// view. `currentProject?.id`, not the store's raw `selectedProjectId`,
-    /// is what "currently shown" means (A6's single source of truth).
+    /// view. "Currently shown" (A6's single source of truth) is resolved
+    /// through `SessionComposerCommandParser.resolveCommitProjectId` — the
+    /// SAME precedence rule `currentProject` itself applies (a resolved
+    /// command project wins over `selectedProjectId`) — rather than
+    /// re-deriving it inline as `currentProject?.id`, so this call site is
+    /// backed by the one place that rule has real unit coverage. The
+    /// inert-test review finding (breadcrumb chip review) flagged that
+    /// coverage as call-site-only and unreachable from a store-level test;
+    /// routing through the shared, tested function is what's actually
+    /// achievable without a SwiftUI view-test harness this repo doesn't
+    /// have — see `resolveCommitProjectId`'s own doc comment for the same
+    /// honest limitation.
     private func changeProjectChip(to project: Project) {
         isProjectChipPickerOpen = false
-        composerStore.changeProjectChip(to: project.id, currentlyShown: currentProject?.id)
+        let currentlyShownId = SessionComposerCommandParser.resolveCommitProjectId(
+            commandProjectId: commandProject?.id,
+            selectedProjectId: composerStore.selectedProjectId
+        )
+        composerStore.changeProjectChip(to: project.id, currentlyShown: currentlyShownId)
     }
 
     /// A4: ⌘Z restores the segment(s) the most recent chip change cleared,
@@ -1002,19 +1120,35 @@ struct SessionComposerPalette: View {
     }
 
     /// A5: backspace at position 0 (field empty) pops the chip back into
-    /// raw editable text. Guarded to the picker-selected chip only —
-    /// `commandProject != nil` means the chip came from a typed command,
-    /// whose remainder can't be empty here (the parser requires ≥2 tokens
-    /// to resolve one), so this path is never reachable for it.
+    /// raw editable text. Guarded on `commandParse.projectId == nil` rather
+    /// than `commandProject == nil` (D3 fix): a genuine ≥2-token command
+    /// always has SOME remainder text, so this event (field already empty)
+    /// can never fire while one is live — but the sticky empty-remainder
+    /// state (`stickyChipProjectId`) DOES leave the field empty with
+    /// `commandProject` non-nil, and that state must stay poppable so
+    /// backspacing all the way through a mid-typed command's project name
+    /// still works, rather than becoming a second dead end next to the one
+    /// this function exists to fix.
     private func popChipToText() {
-        guard !isProjectLocked, commandProject == nil, let project = currentProject else { return }
-        composerStore.selectedProjectId = nil
-        composerStore.searchText = project.name
+        guard !isProjectLocked, commandParse.projectId == nil, let project = currentProject else { return }
+        composerStore.popChipToText(projectName: project.name)
     }
 
     /// A5: Esc closes the inline picker without closing the composer when
     /// it's open; otherwise it's an ordinary composer dismiss.
+    ///
+    /// D6 fix: guarded against a same-turn double-fire, matching every other
+    /// double-fire site in this file (`isHandlingNoMatchFeedback` above is
+    /// the same pattern) — this one was the odd one out, unguarded. Reached
+    /// from TWO `.onExitCommand` sites (`queryRow`'s and `ComposerQueryField`'s
+    /// own `.exit` event) — if both fired in the same turn, the first call
+    /// closes the picker and the second, unguarded, would close the whole
+    /// composer instead of leaving it open with the picker now dismissed.
     private func closeChipPickerOrDismiss() {
+        guard !isHandlingExitCommand else { return }
+        isHandlingExitCommand = true
+        DispatchQueue.main.async { isHandlingExitCommand = false }
+
         if isProjectChipPickerOpen {
             isProjectChipPickerOpen = false
         } else {
@@ -1138,6 +1272,18 @@ struct ComposerQueryField: View {
     /// `.handled` unconditionally, swallowing Return against an empty
     /// list).
     var hasSelection: Bool
+    /// D6: whether the breadcrumb chip's inline picker is currently open.
+    /// While `true`, this field's own ↑/↓/Return handlers go quiet — the
+    /// picker (`ProjectDropdownView.keyboardCaptureLayer`) becomes the only
+    /// live ↑/↓/Return handler on screen. Clicking the chip to open the
+    /// picker does NOT move first responder away from this field (deliberate
+    /// — see this type's own doc comment on why focus-loss auto-dismiss was
+    /// removed), so without this gate the field's hidden ↑/↓ `Button`s and
+    /// `.onSubmit` kept responding: Return committed whatever TEMPLATE row
+    /// was highlighted and dismissed the whole composer instead of choosing
+    /// a project from the now-open picker.
+    var isPickerOpen: Bool
+    var placeholder: String
     var onEvent: ((KeyboardEvent) -> Void)?
     @FocusState private var isTextFieldFocused: Bool
 
@@ -1159,24 +1305,24 @@ struct ComposerQueryField: View {
     var body: some View {
         ZStack {
             Group {
-                Button { onEvent?(.move(.up)) } label: { Color.clear }
+                Button { guard !isPickerOpen else { return }; onEvent?(.move(.up)) } label: { Color.clear }
                     .buttonStyle(PlainButtonStyle())
                     .keyboardShortcut(.upArrow, modifiers: [])
-                Button { onEvent?(.move(.down)) } label: { Color.clear }
+                Button { guard !isPickerOpen else { return }; onEvent?(.move(.down)) } label: { Color.clear }
                     .buttonStyle(PlainButtonStyle())
                     .keyboardShortcut(.downArrow, modifiers: [])
 
-                Button { onEvent?(.move(.up)) } label: { Color.clear }
+                Button { guard !isPickerOpen else { return }; onEvent?(.move(.up)) } label: { Color.clear }
                     .buttonStyle(PlainButtonStyle())
                     .keyboardShortcut(.init("p"), modifiers: [.control])
-                Button { onEvent?(.move(.down)) } label: { Color.clear }
+                Button { guard !isPickerOpen else { return }; onEvent?(.move(.down)) } label: { Color.clear }
                     .buttonStyle(PlainButtonStyle())
                     .keyboardShortcut(.init("n"), modifiers: [.control])
             }
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
 
-            TextField("Search templates and projects…", text: $query)
+            TextField(placeholder, text: $query)
                 .padding(.vertical, 6)
                 // R6 (Phase 3 review round 2): `.light` isn't an allowed
                 // DESIGN.md weight (§3: `.regular`/`.medium`, `.semibold`
@@ -1186,10 +1332,13 @@ struct ComposerQueryField: View {
                 .textFieldStyle(.plain)
                 .focused($isTextFieldFocused)
                 .onExitCommand { onEvent?(.exit) }
-                .onMoveCommand { onEvent?(.move($0)) }
+                .onMoveCommand { guard !isPickerOpen else { return }; onEvent?(.move($0)) }
                 // B1: `.onSubmit` is the ONLY Return handler that works
                 // below macOS 14 — the app's deployment target is 13.0.
+                // D6: quiet while the picker is open (see `isPickerOpen`'s
+                // doc comment) — Return there belongs to the picker.
                 .onSubmit {
+                    guard !isPickerOpen else { return }
                     guard hasSelection else {
                         onEvent?(.submitNoMatch)
                         return
@@ -1197,6 +1346,7 @@ struct ComposerQueryField: View {
                     onEvent?(.submit)
                 }
                 .backport.onKeyPress(.return) { _ in
+                    guard !isPickerOpen else { return .ignored }
                     guard hasSelection else {
                         onEvent?(.submitNoMatch)
                         return .handled
@@ -1457,6 +1607,13 @@ private struct ProjectDropdownView: View {
 
     @EnvironmentObject private var store: WorkspaceStore
 
+    /// D6: which row (0..<`orderedProjects.count` for project rows,
+    /// `orderedProjects.count` for the trailing "+ Add project…" row) is
+    /// keyboard-highlighted. Seeded to the currently-shown project on
+    /// appear — this view is only ever mounted while the picker is open, so
+    /// `onAppear` firing once per open is exactly the right lifetime.
+    @State private var highlightedIndex: Int = 0
+
     // N6: this view has no search field of its own — the main composer
     // field does the filtering (locked decision) — so a local `query`
     // and a `filteredProjects` indirection over it were dead: always
@@ -1471,10 +1628,14 @@ private struct ProjectDropdownView: View {
         )
     }
 
+    /// Every navigable row: project rows plus the trailing "+ Add project…"
+    /// row.
+    private var rowCount: Int { orderedProjects.count + 1 }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(orderedProjects) { project in
+                ForEach(Array(orderedProjects.enumerated()), id: \.element.id) { index, project in
                     Button {
                         onSelect(project)
                     } label: {
@@ -1486,6 +1647,7 @@ private struct ProjectDropdownView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .contentShape(Rectangle())
+                        .background(index == highlightedIndex ? Color.secondary.opacity(0.15) : Color.clear)
                     }
                     .buttonStyle(.plain)
                 }
@@ -1504,6 +1666,7 @@ private struct ProjectDropdownView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .contentShape(Rectangle())
+                    .background(highlightedIndex == orderedProjects.count ? Color.secondary.opacity(0.15) : Color.clear)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -1513,6 +1676,50 @@ private struct ProjectDropdownView: View {
         // A2: no fixed `sidebarWidth` frame anymore — inline, this fills
         // whatever width the composer card (`paletteWidth`) already gives
         // it instead of a width sized for the old standalone popover.
+        // Pre-existing 240pt cap, not retuned as part of this pass.
         .frame(maxHeight: 240)
+        .overlay(keyboardCaptureLayer)
+        .onAppear {
+            highlightedIndex = orderedProjects.firstIndex(where: { $0.id == selectedProjectId }) ?? 0
+        }
+    }
+
+    /// D6 fix: while this view is on screen, ↑/↓/Return must move ITS OWN
+    /// highlight and commit ITS OWN row — not the composer field's
+    /// template list. `SessionComposerPalette.ComposerQueryField.isPickerOpen`
+    /// gates the field's equivalent handlers off; these are the only live
+    /// ↑/↓/Return handlers while the picker is open. Same hidden-`Button` +
+    /// `.keyboardShortcut` pattern `ComposerQueryField` already uses (works
+    /// down to macOS 13, unlike `Backport.onKeyPress`).
+    private var keyboardCaptureLayer: some View {
+        Group {
+            Button {
+                highlightedIndex = (highlightedIndex - 1 + rowCount) % rowCount
+            } label: { Color.clear }
+                .buttonStyle(PlainButtonStyle())
+                .keyboardShortcut(.upArrow, modifiers: [])
+
+            Button {
+                highlightedIndex = (highlightedIndex + 1) % rowCount
+            } label: { Color.clear }
+                .buttonStyle(PlainButtonStyle())
+                .keyboardShortcut(.downArrow, modifiers: [])
+
+            Button {
+                commitHighlighted()
+            } label: { Color.clear }
+                .buttonStyle(PlainButtonStyle())
+                .keyboardShortcut(.return, modifiers: [])
+        }
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
+    private func commitHighlighted() {
+        if highlightedIndex < orderedProjects.count {
+            onSelect(orderedProjects[highlightedIndex])
+        } else {
+            onAddProject()
+        }
     }
 }

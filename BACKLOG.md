@@ -30,17 +30,57 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
   knows nothing about chips. | app | new
   Dispatched 2026-08-22 on `feat/composer-breadcrumb-chips`, branched off slice 1 (`ffce47094`)
   so the stack retargets cleanly. Phases, flipped as each lands:
-  - [ ] A1 — chip model + render resolved leading tokens as chips in the query field
-  - [ ] A2 — inline chip picker inside the card; delete the trailing `projectControl`
-        (both the locked and unlocked branches); `.locked` becomes a chip with no picker affordance
-  - [ ] A3 — cascade rule (repo change clears the command; re-picking the same value is a no-op)
-  - [ ] A4 — `⌘Z` chip-aware undo restoring a cleared segment as ONE step
-  - [ ] A5 — keyboard: backspace at position 0 pops the last chip back to text; left-arrow
+  - [x] A1 — chip model + render resolved leading tokens as chips in the query field.
+        Fixed 2026-08-22 (round-1 review, B1): the query field binding was lossy
+        (`remainderText` reconstruction ate trailing whitespace and stripped quotes,
+        making `ghostties cco -n "test"` untypable) — rewired to slice the original
+        `searchText` via `SessionComposerCommandParser.splitOnFirstToken` instead of
+        rebuilding it from tokens.
+  - [x] A2 — inline chip picker inside the card; delete the trailing `projectControl`
+        (both the locked and unlocked branches); `.locked` becomes a chip with no picker affordance.
+        Fixed 2026-08-22 (round-1 review, B2): the chip only rendered `if let project`,
+        so popping a chip to text or a zero-project fresh install left NO project
+        affordance on screen at all (`+ Add project…` unreachable). The chip is now
+        always present — a "Select project" placeholder when unresolved — and its
+        picker is keyboard-operable (D6: ↑/↓/Return now move/commit ITS OWN highlight
+        while open, instead of leaking through to the field's template-list handlers
+        and dismissing the whole composer).
+  - [x] A3 — cascade rule (repo change clears the command; re-picking the same value is a no-op).
+        Verified correct at the store level; the call site (`changeProjectChip(to:)`) now
+        routes "currently shown" through the same tested precedence rule
+        (`resolveCommitProjectId`) instead of re-deriving it inline (round-1 review,
+        inert-test finding).
+  - [x] A4 — `⌘Z` chip-aware undo restoring a cleared segment as ONE step. Fixed
+        2026-08-22 (round-1 review, D4): ⌘Z after typing past a chip change used to
+        discard those keystrokes for good (AppKit's own text-undo never saw them,
+        since this binding writes `searchText` directly). `pendingChipUndo` now
+        disarms on the next real keystroke and is `@Published` (was accidentally
+        working only because a later line happened to touch other published state).
+  - [x] A5 — keyboard: backspace at position 0 pops the last chip back to text; left-arrow
         from field start focuses the chip; Return/Down opens its picker; Esc closes the picker
-        without closing the composer
-  - [ ] A6 — fix the dropdown checkmark/label disagreement via one source of truth
-        (parked finding, retired on the way through)
-  - [ ] A7 — review round 1 (separate agent, full diff)
+        without closing the composer.
+        Backspace-to-empty fixed 2026-08-22 (round-1 review, D3): backspacing a
+        command's remainder to nothing used to drop the chip to whatever project was
+        previously selected and lose the typed name with no way to retype it — the
+        chip now stays "sticky" through an empty remainder
+        (`SessionComposerCommandParser.stickyChipProjectId`).
+        **Left-arrow-focuses-chip REMOVED, not fixed** (round-1 review, D5): the
+        `.onMoveCommand` route it relied on is dead — `NSTextView` never forwards
+        `moveLeft:` at caret position 0 — and the prior comment asserted otherwise
+        with no runtime evidence. A real fix needs an `NSViewRepresentable` wrapper
+        around the field editor; out of scope here, and the file's usual fallback
+        (a `.leftArrow` `.keyboardShortcut`) is worse than nothing (fires on every
+        left-arrow, yanking focus mid-word). The chip stays mouse-reachable. Esc
+        double-fire is now guarded (D6), matching every other double-fire site in
+        this file.
+  - [x] A6 — fix the dropdown checkmark/label disagreement via one source of truth
+        (parked finding, retired on the way through).
+  - [x] A7 — review round 1 (separate agent, full diff). Found B1/B2 (blockers),
+        D3–D7/D9 (defects), several DESIGN.md-scale nits, and one inert test.
+        All fixed 2026-08-22 — see above and the task report for the full list,
+        including the fragility items (`pendingChipUndo` publishing,
+        `popChipToText` bypassing the single write path, chip open-state
+        toggle-vs-set inconsistency).
   - [ ] A8 — review round 2 against the round-1 fix commit, seeded with what round 1 cleared
   - [ ] A9 — review round 3 if round 2 changed layout (the rule is eight-for-eight here)
 - [ ] **Slice B — branch segment resolving to a worktree.** Never `git checkout` in the project
@@ -50,7 +90,7 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
 
 **Parked — review findings deliberately not fixed in slice 1:**
 
-- [ ] **The project dropdown's checkmark disagrees with its label** about which project is
+- [x] **The project dropdown's checkmark disagrees with its label** about which project is
   selected. Pre-existing, surfaced by review round 1. Slice A's one-source-of-truth kills it. | app | parked
 - [ ] **Row titles wrap ~3 chars sooner at the 204pt card** (they have no `lineLimit`, so they
   wrap rather than truncate), costing one visible row. Adding a limit swaps wrapping for
