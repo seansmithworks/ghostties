@@ -99,10 +99,18 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
         FB — smart quotes defeating the command grammar for a reason unrelated to the parser)
         resolved by construction. All fixed 2026-08-22 — see task report for the full
         fixed/judgment-call breakdown and the F2/F4 red-then-green proofs.
-  - [ ] A9 — review round 3, REQUIRED: round 2's fix commit changed layout (F1's
-        `layoutPriority` removal, F5's `.locked` branch restructure) — the eight-for-eight rule
-        means this needs an independent pass before Slice A is considered closed, not just green
-        tests.
+  - [x] A9 — review rounds 3 and 4, both run against the round-2 fix commit (F1's
+        `layoutPriority` removal, F5's `.locked` branch restructure). Round 3 cleared the layout
+        change on source-reading alone; round 4 caught what round 3 missed — `.frame(maxWidth:)`
+        on the chip's `Text` is a greedy cap, not a ceiling, so every project name rendered at the
+        same fixed slab width regardless of length. Fixed in `46c4b2a1b` (see below).
+  - [x] Round-4 width fix (`46c4b2a1b`) — `.frame(maxWidth: chipMaxWidth)` had shipped wrong three
+        review rounds running because it reads correct on inspection: a flexible max-only frame is
+        greedy, offered more space than its content needs it clamps to the maximum rather than
+        reporting its own ideal size. Source-reading alone cleared it twice; a screenshot settled
+        it — short and long project names produced pixel-identical pill widths before the fix,
+        measurably different widths after. Frame deleted; `Text` with `.lineLimit(1)` +
+        `.truncationMode(.tail)` is not greedy on its own.
 - [ ] **Slice B — branch segment resolving to a worktree.** Never `git checkout` in the project
   dir (would yank the branch from under a parallel session). Enumerate existing worktrees first;
   creation only behind an explicit `+ new worktree` row. Needs caching — shelling per keystroke
@@ -121,6 +129,24 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
   `ghostties > cco` produces a `Run "> cco"` row rather than a chip transition — committing that
   row would attempt to exec a literal `>`. Needs `tokenize` (or a layer above it) to recognize `>`
   as a chip-advance token distinct from ordinary whitespace-delimited text. | app | new
+- [ ] **Chip-capture UI test harness (`d2a2f48fa`) was reverted, not fixed — rebuild it properly.**
+  An independent review found it armed nine dormant `GhosttyUITests` classes that drive the GUI
+  (`app.typeText`, Finder `XCUIApplication` clicks, Cmd+W) as soon as `TEST_TARGET_NAME` was
+  fixed, because the shared scheme already had `GhosttyUITests` at `skipped = "NO"` — fixing the
+  name alone means an unfiltered `xcodebuild test` fires those tests at whatever holds focus. The
+  fixture was also non-hermetic: it stubbed `projects`/`sessions` but `templates`, `sidebarMode`,
+  and `lastSelectedProjectId` still loaded from real disk, so every captured PNG contained real
+  template names. A proper rebuild needs all three: stub `templates`/`sidebarMode`/
+  `lastSelectedProjectId` so captures are hermetic; mark `GhosttyUITests` `skipped = "YES"` in the
+  shared scheme (or otherwise keep GUI-driving tests out of the default invocation) before
+  re-enabling `TEST_TARGET_NAME`; and capture the locked-chip state by hand instead of automating
+  an `NSOpenPanel` with blind global keystrokes. | app | new
+- [ ] **`TEST_TARGET_NAME = Ghostty` is genuinely stale and still broken on this branch** —
+  UI tests silently do not run under it. Fixing it is only safe together with the scheme change
+  above (mark `GhosttyUITests` skipped in the shared scheme first). The same
+  `TEST_TARGET_NAME` fix already exists on commit `2165c2f86` (marketing-capture work) with
+  no scheme change alongside it — that branch carries the identical hazard and needs checking
+  before it merges. | app | new
 
 **Parked — review findings deliberately not fixed in slice 1:**
 
