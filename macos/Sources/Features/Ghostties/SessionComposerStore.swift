@@ -189,6 +189,7 @@ final class SessionComposerStore: ObservableObject {
         searchText = ""
         writeError = nil
         currentProjectBinding = projectBinding
+        pendingChipUndo = nil
 
         switch projectBinding {
         case .locked(let project), .prefilled(let project):
@@ -210,6 +211,7 @@ final class SessionComposerStore: ObservableObject {
         isOpen = false
         searchText = ""
         writeError = nil
+        pendingChipUndo = nil
     }
 
     // MARK: - Commit
@@ -308,6 +310,89 @@ final class SessionComposerStore: ObservableObject {
     func selectProject(_ id: UUID) {
         selectedProjectId = id
         searchText = ""
+    }
+
+    /// Pop the breadcrumb chip back into raw editable text (A5): clear the
+    /// selection and replace `searchText` with the given project name.
+    /// `selectProject(_:)` doesn't fit here — it clears `searchText`, and
+    /// this operation needs to SET it to the popped project's name — so this
+    /// is its own single write path for the same reason `selectProject(_:)`
+    /// is one: `SessionComposerPalette.popChipToText()` used to write
+    /// `selectedProjectId` directly, which is exactly the "fix applied to
+    /// two sites and missed on a third" failure this file's `selectProject(_:)`
+    /// doc comment already warns about.
+    func popChipToText(projectName: String) {
+        selectedProjectId = nil
+        searchText = projectName
+    }
+
+    // MARK: - Breadcrumb chip cascade + undo (Slice A)
+
+    /// Whether `changeProjectChip(to:currentlyShown:)` actually cascaded or
+    /// was a no-op. Exposed so callers (and tests) can assert on the exact
+    /// branch rather than inferring it from state deltas.
+    enum ProjectChipChangeResult: Equatable {
+        case changed
+        case noOp
+    }
+
+    /// What the most recent `changeProjectChip` cascade cleared, restorable
+    /// as ONE step via `undoProjectChipChange()` (breadcrumb spec, decision
+    /// #2, ⌘Z). `nil` once restored, once a fresh cascade overwrites it, or
+    /// before any cascade has happened.
+    /// `@Published` (D4 fix / fragility note): this was a plain `var` before
+    /// — the ⌘Z `Button` in `SessionComposerPalette` only ever appeared
+    /// because `changeProjectChip` happens to touch OTHER published state
+    /// (`selectedProjectId`/`searchText`) one line after setting this, which
+    /// incidentally forced a re-render. Nothing guaranteed that ordering;
+    /// publishing this directly is what actually makes the ⌘Z affordance's
+    /// appearance/disappearance a real, provable contract.
+    @Published private(set) var pendingChipUndo: (previousProjectId: UUID?, previousSearchText: String)?
+
+    /// Change the project chip to `projectId`, cascading per the breadcrumb
+    /// spec's decision #2: the typed remainder is branch-agnostic today, but
+    /// a different project invalidates it (a different project's templates
+    /// don't apply), so the cascade clears `searchText` alongside the id —
+    /// exactly `selectProject(_:)`'s existing behavior, reused rather than
+    /// duplicated.
+    ///
+    /// `currentlyShown` is the id the CHIP is actually rendering right now —
+    /// which the palette derives as `currentProject?.id` and can differ from
+    /// `selectedProjectId` when a typed command has resolved a different
+    /// project (`commandProject`). Comparing against the displayed identity,
+    /// not the raw stored one, is what makes decision #2's "re-picking the
+    /// value already selected is a no-op, not a clear" hold for the
+    /// typed-command path too.
+    @discardableResult
+    func changeProjectChip(to projectId: UUID, currentlyShown: UUID?) -> ProjectChipChangeResult {
+        guard projectId != currentlyShown else { return .noOp }
+        pendingChipUndo = (previousProjectId: selectedProjectId, previousSearchText: searchText)
+        selectProject(projectId)
+        return .changed
+    }
+
+    /// Restore the segment(s) cleared by the most recent `changeProjectChip`
+    /// cascade, as one step (⌘Z). A no-op if nothing is pending — e.g. a
+    /// second ⌘Z in a row, or no chip change has happened yet this session.
+    func undoProjectChipChange() {
+        guard let pending = pendingChipUndo else { return }
+        selectedProjectId = pending.previousProjectId
+        searchText = pending.previousSearchText
+        pendingChipUndo = nil
+    }
+
+    /// D4 fix: disarm the pending chip-undo the moment the user types
+    /// anything by hand. `changeProjectChip` itself also writes `searchText`
+    /// (clearing it as part of the cascade this undo exists to restore) —
+    /// that write goes through `selectProject(_:)`, NOT this method, so it
+    /// can't disarm the very undo it just armed. Only
+    /// `SessionComposerPalette.queryFieldText`'s setter (real keystrokes)
+    /// calls this. Without it, ⌘Z after typing past a chip change discarded
+    /// those keystrokes with no way back — AppKit's own text-undo never saw
+    /// them (this binding writes `searchText` directly, bypassing the field
+    /// editor's undo manager), so a second ⌘Z couldn't recover them either.
+    func noteSearchTextEditedByTyping() {
+        pendingChipUndo = nil
     }
 
     // MARK: - Add project via NSOpenPanel

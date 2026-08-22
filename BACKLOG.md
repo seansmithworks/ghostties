@@ -17,7 +17,10 @@ All six acceptance criteria closed. Criterion 1 proven from disk, not a screensh
 Four review rounds; rounds 2 and 3 each found real defects the prior round missed
 (now **eight-for-eight** on the "never accept one review round on UI work here" rule).
 
-- [ ] **Open the PR for slice 1.** Sean's call — nothing merges unprompted. | app | carried
+- [x] **Open the PR for slice 1.** Opened 2026-08-22 as
+  [#136](https://github.com/SeanSmithWorks/ghostties/pull/136) at Sean's explicit go-ahead —
+  `feat/composer-command-grammar-slice1` (`ffce47094`) → `main` (`ab56f3a2b`). `git merge-tree`
+  confirmed a clean merge, so **no rebase was needed**. Merge is still Sean's. | app | carried
 - [ ] **Slice A — breadcrumb chips.** Spec at `docs/plans/composer-breadcrumb-spec.html`,
   all four decisions settled 2026-08-22. Replaces the trailing project dropdown with inline
   chips; retires the label-width squeeze rather than tuning it. Build chip pickers as an
@@ -25,14 +28,129 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
   a `.popover` nested in the composer's `.popover` and has never been verified.
   **`⌘Z` chip-aware undo is new scope** — the composer has no undo stack; AppKit's text undo
   knows nothing about chips. | app | new
+  Dispatched 2026-08-22 on `feat/composer-breadcrumb-chips`, branched off slice 1 (`ffce47094`)
+  so the stack retargets cleanly. Phases, flipped as each lands:
+  - [x] A1 — chip model + render resolved leading tokens as chips in the query field.
+        Fixed 2026-08-22 (round-1 review, B1): the query field binding was lossy
+        (`remainderText` reconstruction ate trailing whitespace and stripped quotes,
+        making `ghostties cco -n "test"` untypable) — rewired to slice the original
+        `searchText` via `SessionComposerCommandParser.splitOnFirstToken` instead of
+        rebuilding it from tokens.
+  - [x] A2 — inline chip picker inside the card; delete the trailing `projectControl`
+        (both the locked and unlocked branches); `.locked` becomes a chip with no picker affordance.
+        Fixed 2026-08-22 (round-1 review, B2): the chip only rendered `if let project`,
+        so popping a chip to text or a zero-project fresh install left NO project
+        affordance on screen at all (`+ Add project…` unreachable). The chip is now
+        always present — a "Select project" placeholder when unresolved — and its
+        picker is keyboard-operable (D6: ↑/↓/Return now move/commit ITS OWN highlight
+        while open, instead of leaking through to the field's template-list handlers
+        and dismissing the whole composer).
+  - [x] A3 — cascade rule (repo change clears the command; re-picking the same value is a no-op).
+        Verified correct at the store level; the call site (`changeProjectChip(to:)`) now
+        routes "currently shown" through the same tested precedence rule
+        (`resolveCommitProjectId`) instead of re-deriving it inline (round-1 review,
+        inert-test finding).
+  - [x] A4 — `⌘Z` chip-aware undo restoring a cleared segment as ONE step. Fixed
+        2026-08-22 (round-1 review, D4): ⌘Z after typing past a chip change used to
+        discard those keystrokes for good (AppKit's own text-undo never saw them,
+        since this binding writes `searchText` directly). `pendingChipUndo` now
+        disarms on the next real keystroke and is `@Published` (was accidentally
+        working only because a later line happened to touch other published state).
+  - [x] A5 — keyboard: backspace at position 0 pops the last chip back to text; Esc closes
+        the picker without closing the composer. **The chip itself is mouse-only** — the spec's
+        keyboard line for the chip (left-arrow focuses it, Return/Down opens its picker) is
+        UNIMPLEMENTED, not merely deferred. Left-arrow-focuses-chip was removed as dead code
+        (D5, see below) and never replaced; once that route was gone, the Return/Down handlers
+        that opened the picker on chip focus were also deleted (F6, round-2 review) since they
+        asserted a keyboard capability (reaching the chip) that had already gone unreachable via
+        any route this file controls. The chip is reachable today only by mouse click, or by
+        whatever focus route the system itself supplies for a focusable `Button` (Tab under Full
+        Keyboard Access, VoiceOver) — not by the arrow-key navigation the spec describes.
+        Backspace-to-empty fixed 2026-08-22 (round-1 review, D3): backspacing a
+        command's remainder to nothing used to drop the chip to whatever project was
+        previously selected and lose the typed name with no way to retype it — the
+        chip now stays "sticky" through an empty remainder
+        (`SessionComposerCommandParser.stickyChipProjectId`).
+        **Left-arrow-focuses-chip REMOVED, not fixed** (round-1 review, D5): the
+        `.onMoveCommand` route it relied on is dead — `NSTextView` never forwards
+        `moveLeft:` at caret position 0 — and the prior comment asserted otherwise
+        with no runtime evidence. A real fix needs an `NSViewRepresentable` wrapper
+        around the field editor; out of scope here, and the file's usual fallback
+        (a `.leftArrow` `.keyboardShortcut`) is worse than nothing (fires on every
+        left-arrow, yanking focus mid-word). The chip stays mouse-reachable. Esc
+        double-fire is now guarded (D6), matching every other double-fire site in
+        this file.
+  - [x] A6 — fix the dropdown checkmark/label disagreement via one source of truth
+        (parked finding, retired on the way through).
+  - [x] A7 — review round 1 (separate agent, full diff). Found B1/B2 (blockers),
+        D3–D7/D9 (defects), several DESIGN.md-scale nits, and one inert test.
+        All fixed 2026-08-22 — see above and the task report for the full list,
+        including the fragility items (`pendingChipUndo` publishing,
+        `popChipToText` bypassing the single write path, chip open-state
+        toggle-vs-set inconsistency).
+  - [x] A8 — review round 2 against the round-1 fix commit, seeded with what round 1 cleared.
+        Found F1/F2 (blockers — inverted `layoutPriority` collapsed the chip to `g…` every
+        render; `stickyChipProjectId` never matched a quoted multi-word project name), F3/F4/F5
+        (defects — unclamped selection on the sticky transition; a tautological B1 round-trip
+        test that could not fail; `.locked` falling through to the interactive picker when its
+        project can't resolve), F6–F9 (stale comment + dead keyboard handlers, DESIGN.md drift,
+        untested new store surface, an un-tokenized `Color.secondary.opacity(0.15)`), plus two
+        unconfirmed risks (FA — a second live ↑/↓/Return registration while the picker is open;
+        FB — smart quotes defeating the command grammar for a reason unrelated to the parser)
+        resolved by construction. All fixed 2026-08-22 — see task report for the full
+        fixed/judgment-call breakdown and the F2/F4 red-then-green proofs.
+  - [x] A9 — review rounds 3 and 4, both run against the round-2 fix commit (F1's
+        `layoutPriority` removal, F5's `.locked` branch restructure). Round 3 cleared the layout
+        change on source-reading alone; round 4 caught what round 3 missed — `.frame(maxWidth:)`
+        on the chip's `Text` is a greedy cap, not a ceiling, so every project name rendered at the
+        same fixed slab width regardless of length. Fixed in `46c4b2a1b` (see below).
+  - [x] Round-4 width fix (`46c4b2a1b`) — `.frame(maxWidth: chipMaxWidth)` had shipped wrong three
+        review rounds running because it reads correct on inspection: a flexible max-only frame is
+        greedy, offered more space than its content needs it clamps to the maximum rather than
+        reporting its own ideal size. Source-reading alone cleared it twice; a screenshot settled
+        it — short and long project names produced pixel-identical pill widths before the fix,
+        measurably different widths after. Frame deleted; `Text` with `.lineLimit(1)` +
+        `.truncationMode(.tail)` is not greedy on its own.
 - [ ] **Slice B — branch segment resolving to a worktree.** Never `git checkout` in the project
   dir (would yank the branch from under a parallel session). Enumerate existing worktrees first;
   creation only behind an explicit `+ new worktree` row. Needs caching — shelling per keystroke
   is not viable. Nothing in the composer path knows about worktrees today. | app | new
+- [ ] **Smart dashes break `--` flags.** macOS's system-level smart-substitution converts a typed
+  `--` into an em dash, so `ghostties claude --resume` launches as `— resume`/`—resume` instead of
+  the intended flag — found while verifying the composer's quote-handling fix. Unlike curly
+  quotes, this **cannot** be normalized inside the command parser without risking mangling
+  legitimate prose arguments that happen to contain a real em dash or double hyphen; it needs
+  either a field-editor-level fix (disabling smart dashes on this specific `NSTextView`) or a
+  documented limitation. Also correct the in-code comment on the existing quote-substitution fix —
+  it currently implies the parser broadly handles smart-substitution artifacts; it only covers
+  curly quotes, not dashes. | app | new
+- [ ] **The typable `>` separator (breadcrumb spec decision #3, DECIDED) was never built.**
+  `SessionComposerCommandParser.tokenize` splits on whitespace only, so typing
+  `ghostties > cco` produces a `Run "> cco"` row rather than a chip transition — committing that
+  row would attempt to exec a literal `>`. Needs `tokenize` (or a layer above it) to recognize `>`
+  as a chip-advance token distinct from ordinary whitespace-delimited text. | app | new
+- [ ] **Chip-capture UI test harness (`d2a2f48fa`) was reverted, not fixed — rebuild it properly.**
+  An independent review found it armed nine dormant `GhosttyUITests` classes that drive the GUI
+  (`app.typeText`, Finder `XCUIApplication` clicks, Cmd+W) as soon as `TEST_TARGET_NAME` was
+  fixed, because the shared scheme already had `GhosttyUITests` at `skipped = "NO"` — fixing the
+  name alone means an unfiltered `xcodebuild test` fires those tests at whatever holds focus. The
+  fixture was also non-hermetic: it stubbed `projects`/`sessions` but `templates`, `sidebarMode`,
+  and `lastSelectedProjectId` still loaded from real disk, so every captured PNG contained real
+  template names. A proper rebuild needs all three: stub `templates`/`sidebarMode`/
+  `lastSelectedProjectId` so captures are hermetic; mark `GhosttyUITests` `skipped = "YES"` in the
+  shared scheme (or otherwise keep GUI-driving tests out of the default invocation) before
+  re-enabling `TEST_TARGET_NAME`; and capture the locked-chip state by hand instead of automating
+  an `NSOpenPanel` with blind global keystrokes. | app | new
+- [ ] **`TEST_TARGET_NAME = Ghostty` is genuinely stale and still broken on this branch** —
+  UI tests silently do not run under it. Fixing it is only safe together with the scheme change
+  above (mark `GhosttyUITests` skipped in the shared scheme first). The same
+  `TEST_TARGET_NAME` fix already exists on commit `2165c2f86` (marketing-capture work) with
+  no scheme change alongside it — that branch carries the identical hazard and needs checking
+  before it merges. | app | new
 
 **Parked — review findings deliberately not fixed in slice 1:**
 
-- [ ] **The project dropdown's checkmark disagrees with its label** about which project is
+- [x] **The project dropdown's checkmark disagrees with its label** about which project is
   selected. Pre-existing, surfaced by review round 1. Slice A's one-source-of-truth kills it. | app | parked
 - [ ] **Row titles wrap ~3 chars sooner at the 204pt card** (they have no `lineLimit`, so they
   wrap rather than truncate), costing one visible row. Adding a limit swaps wrapping for

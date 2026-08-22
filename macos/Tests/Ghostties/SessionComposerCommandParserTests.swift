@@ -254,4 +254,144 @@ final class SessionComposerCommandParserTests: XCTestCase {
             SessionComposerCommandParser.resolveCommitProjectId(commandProjectId: nil, selectedProjectId: nil)
         )
     }
+
+    // MARK: - B1 (breadcrumb chip review): the query field binding must be
+    // lossless.
+    //
+    // `SessionComposerPalette.queryFieldText` used to `get`
+    // `commandParse.remainderText` — `remainderTokens.joined(separator: " ")`
+    // — and `set` by re-prepending the matched token with a single hardcoded
+    // space. SwiftUI writes a binding's `get` value straight back into the
+    // field on the next render, so that round trip being lossy is exactly
+    // what made `ghostties cco -n "test"` untypable: a trailing space was
+    // eaten the instant it was typed, and a typed quote character never
+    // survived into `searchText` at all.
+
+    /// The permanent regression test for the ACTUAL fix:
+    /// `splitOnFirstToken` slices `searchText` directly rather than
+    /// rebuilding it, so `prefix + remainder` round-trips through `parse`
+    /// exactly — quotes, internal whitespace, and all. This is what
+    /// `queryFieldText`'s `get`/`set` are wired to now.
+    func testSplitOnFirstTokenRoundTripsThroughReparseWithQuotedArgument() {
+        let project = makeProject(name: "ghostties")
+        let original = #"ghostties cco -n "npm run dev""#
+        let firstParse = SessionComposerCommandParser.parse(query: original, projects: [project], isLocked: false)
+        XCTAssertEqual(firstParse.remainderTokens, ["cco", "-n", "npm run dev"])
+
+        guard let split = SessionComposerCommandParser.splitOnFirstToken(original) else {
+            XCTFail("expected a split for a resolved command")
+            return
+        }
+        // F4 fix (round-2 review): `split.prefix + split.remainder ==
+        // original` is TAUTOLOGICAL — slicing any string at any index and
+        // concatenating the two halves reproduces the original string no
+        // matter where the split point lands, so this assertion could never
+        // fail even if `splitOnFirstToken` split at the wrong boundary
+        // entirely. The discriminating assertion is on `split.remainder`'s
+        // actual VALUE — this is what proves the split landed after "ghostties "
+        // specifically, quotes and all, not just "somewhere". Proven
+        // red-then-green against production code (task report has the
+        // captured output): moving the split point by one character in
+        // `splitOnFirstToken` turns this red while the old tautological
+        // assertion stayed green.
+        XCTAssertEqual(split.remainder, #"cco -n "npm run dev""#)
+
+        // `get` returns `split.remainder` verbatim; `set` re-prepends
+        // `split.prefix` verbatim — simulate a no-op edit (typing the same
+        // remainder back in) and confirm the round trip reproduces the
+        // exact same tokens.
+        let reconstructed = split.prefix + split.remainder
+        XCTAssertEqual(reconstructed, original)
+
+        let secondParse = SessionComposerCommandParser.parse(query: reconstructed, projects: [project], isLocked: false)
+        XCTAssertEqual(secondParse.remainderTokens, firstParse.remainderTokens)
+    }
+
+    /// The trailing-whitespace case B1 called out explicitly: a space typed
+    /// after the last remainder token must survive into `searchText`
+    /// unchanged, not be trimmed away by a tokenize/rejoin round trip.
+    func testSplitOnFirstTokenPreservesTrailingWhitespaceInRemainder() {
+        let project = makeProject(name: "ghostties")
+        let original = "ghostties cco -n test "
+        guard let split = SessionComposerCommandParser.splitOnFirstToken(original) else {
+            XCTFail("expected a split")
+            return
+        }
+        XCTAssertEqual(split.remainder, "cco -n test ")
+        XCTAssertEqual(split.prefix + split.remainder, original)
+    }
+
+    func testSplitOnFirstTokenReturnsNilForBlankInput() {
+        XCTAssertNil(SessionComposerCommandParser.splitOnFirstToken(""))
+        XCTAssertNil(SessionComposerCommandParser.splitOnFirstToken("   "))
+    }
+
+    // MARK: - D3 (breadcrumb chip review): sticky chip through an
+    // empty-remainder backspace.
+
+    func testStickyChipProjectIdResolvesWhenRemainderIsEmptyAfterASeparator() {
+        let project = makeProject(name: "ghostties")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "ghostties ", projects: [project], isLocked: false)
+        XCTAssertEqual(id, project.id)
+    }
+
+    func testStickyChipProjectIdReturnsNilWithNoSeparatorEverTyped() {
+        // The ordinary single-token project-search case — must NOT be
+        // treated as sticky just because the token happens to match a
+        // project (mirrors `testParseSingleTokenReturnsNilEvenWhenItMatchesAProjectName`).
+        let project = makeProject(name: "bru")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "bru", projects: [project], isLocked: false)
+        XCTAssertNil(id)
+    }
+
+    func testStickyChipProjectIdReturnsNilWhenLocked() {
+        let project = makeProject(name: "ghostties")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "ghostties ", projects: [project], isLocked: true)
+        XCTAssertNil(id)
+    }
+
+    func testStickyChipProjectIdReturnsNilWhenFirstTokenMatchesNoProject() {
+        let project = makeProject(name: "ghostties")
+        let id = SessionComposerCommandParser.stickyChipProjectId(rawQuery: "unknown ", projects: [project], isLocked: false)
+        XCTAssertNil(id)
+    }
+
+    /// F2 (round-2 review): a quoted multi-word project name — DESIGN.md
+    /// calls multi-word basenames "the normal case" — must stay sticky
+    /// through the empty-remainder backspace exactly like a single-word
+    /// name does above. The prior implementation extracted the token with
+    /// `split.prefix.trimmingCharacters(in: .whitespaces)`, which strips
+    /// whitespace only; `tokenize` also strips the quote characters
+    /// wrapping a multi-word name, so the extracted token was
+    /// `"\"ghostties web\""` — quotes still attached — which never matched
+    /// `matches(_:token:)` against the bare project name "ghostties web".
+    /// Proven red against that code (task report has the captured output).
+    func testStickyChipProjectIdResolvesForQuotedMultiWordProjectName() {
+        let project = makeProject(name: "ghostties web")
+        let id = SessionComposerCommandParser.stickyChipProjectId(
+            rawQuery: #""ghostties web" "#,
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(id, project.id)
+    }
+
+    // MARK: - FB (round-2 review): curly quotes (macOS's default "smart
+    // quotes and dashes" substitution) must be recognized as quote
+    // boundaries, not just the straight `"`.
+
+    func testTokenizeTreatsCurlyQuotesAsQuoteCharacters() {
+        let tokens = SessionComposerCommandParser.tokenize("ghostties \u{201C}npm run dev\u{201D}")
+        XCTAssertEqual(tokens, ["ghostties", "npm run dev"])
+    }
+
+    func testStickyChipProjectIdResolvesForCurlyQuotedMultiWordProjectName() {
+        let project = makeProject(name: "ghostties web")
+        let id = SessionComposerCommandParser.stickyChipProjectId(
+            rawQuery: "\u{201C}ghostties web\u{201D} ",
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(id, project.id)
+    }
 }
