@@ -1134,3 +1134,37 @@ propagating tuned deltas back into the boards + rebuild. Both existed to perfect
   The "this is a rebuild" disclosure line is **no longer needed** — the assets are real. | web | new
 - [ ] **Terminal interior content** — minimal prompt vs staged Claude Code TUI. Now scoped as
   "what goes in the canned transcript." | design | needs-Sean
+
+## 2026-08-22 — capture rig built (unverified), thread checkpointed
+
+**Landed on `feat/web-redesign-round4`:** `386cbf39f` TEST_TARGET_NAME fix · `a86d5662e` fixture
+mode · `5215ce015` `scripts/capture-marketing.sh` + four 2x assets in
+`docs/design/web-redesign/captures/`. All pushed.
+
+- [ ] **Re-verify `scripts/capture-marketing.sh`** — the agent was stopped mid-verification. It
+  had confirmed one end-to-end run only: **no idempotency re-run and no full-suite run**. Treat
+  the script and the four committed assets as working-but-unproven until re-run. | build | carried
+- [ ] **Sean redlines the fixture transcript** — the canned Claude Code session in the capture is
+  a strawman built without him (invented cast: switchboard/fieldwork/pendulum/silo/trove/wren, a
+  Go connection-lock fix). Apply or redline; do not re-ask whether to build one. | design | carried
+- [ ] **Build sections 03 SIDEBAR + 04 GT LIST in `web/`** on the generated captures — the two
+  sections the content map marks as doing the work. First real `web/` change of the redesign.
+  | web | new
+- [ ] **02 THE PROBLEM needs an asset decision** — "six windows of sprawl" is a *before* shot, not
+  an app capture, so the rig does not produce it. Recording, composed still, or illustration?
+  | design | needs-Sean
+- [ ] **08 FIRST 60 SECONDS deferred, deliberately** — Sean's call 2026-08-22: it is a closer and
+  makes no sense until the core of the site exists. Do not promote it. | web | parked
+
+**Closed:** the 2026-08-21 Screen Recording re-prompt item — root-caused by another thread the
+same day (stale `csreq` pinning an old signing identity; fix is `tccutil reset ScreenCapture
+<bundle-id>`, no relaunch). Write-up at `docs/solutions/runtime-errors/`. Moot for capture anyway
+— XCUITest never needed the grant.
+
+**Off-objective, parked (do NOT carry into web work):**
+
+- [ ] **`~/.claude/hooks/scope-guard.sh` has never fired** — it reads the scope card with
+  `grep '^Repo:'`, but `scope-init.sh` writes the line with the frame rail (`│ Repo: …`). The
+  grep matches 0 lines, `ROOT` is empty, and the next line is `[ -n "$ROOT" ] || exit 0`, so
+  every out-of-scope Write/Edit exits silently. Verified against a live card. Fix: match
+  `'│ Repo:'` and strip the rail in the `sed`. Global tooling, not this repo. | tooling | new
