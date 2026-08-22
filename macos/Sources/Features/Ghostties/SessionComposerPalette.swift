@@ -710,28 +710,34 @@ struct SessionComposerPalette: View {
     // project control on screen whatsoever — `+ Add project…` (the only way
     // to escape zero projects) was unreachable.
 
-    /// Cap on the chip's rendered width (D7) — the width bug this slice
-    /// exists to retire, reintroduced by moving the control from a trailing
-    /// sibling to a leading one in the SAME `HStack`, with no cap. A long
-    /// folder basename in the `.anchored` card (204pt total) could squeeze
-    /// the query field down to a sliver, same failure mode as the control
-    /// this slice replaced.
+    /// D7/round-4 fix: there is no width cap on the chip. Three prior rounds
+    /// each shipped `.frame(maxWidth: chipMaxWidth)` on the chip's `Text`,
+    /// and each time it was wrong for the same reason: `.frame(maxWidth:)`
+    /// on a flexible axis is greedy, not a ceiling — offered more space than
+    /// the view's own ideal size, it returns the *proposed* size clamped to
+    /// the maximum, not its content size. A short name (`atlas-api`) and a
+    /// long one (`ghostties-website-redesign`) both got proposed the same
+    /// width by the parent `HStack`, so both rendered as the same fixed
+    /// 96pt slab — a short name padded with dead tinted background, a long
+    /// one truncated for no reason. Screenshots proved this identically in
+    /// both the `.anchored` and locked/`.centered` cards.
     ///
-    /// F1 fix (round-2 review): NEITHER child below carries `.layoutPriority`
-    /// anymore — a prior version gave the field `layoutPriority(1)` and the
-    /// chip `layoutPriority(0)`, believing that made the chip yield space
-    /// first. It did the opposite: an `HStack` allocates available width to
-    /// its HIGHEST-priority child first, proposing that child
-    /// `available − Σ(ideal/minimum widths of the lower-priority children)`.
-    /// With the field at priority 1, the field claimed nearly the whole row
-    /// and the CHIP — the lower-priority child — was squeezed down to its
-    /// minimum (one grapheme + ellipsis + padding), collapsing to `g…` even
-    /// with plenty of room and a short project name. With no priorities set,
-    /// `Text` (inside the chip) reports its own ideal width up to
-    /// `chipMaxWidth`, and the greedy `TextField` — which has no maximum —
-    /// absorbs whatever remains. That is the specified behavior: the chip
-    /// yields only when a long name actually needs the cap.
-    private static let chipMaxWidth: CGFloat = 96
+    /// The fix is to have no `.frame(maxWidth:)` at all. `Text` with
+    /// `.lineLimit(1)` + `.truncationMode(.tail)` is NOT greedy on its own:
+    /// offered more space than it needs, it reports its own ideal width;
+    /// offered less, it truncates. F1 (round-2 review, still true) already
+    /// established that neither child in the `HStack` below carries
+    /// `.layoutPriority` — with none set, the chip's `Text` claims only what
+    /// its content needs and the `TextField`, which has no maximum, absorbs
+    /// the rest. That is what makes a short chip hug its text and a long
+    /// chip truncate only when the row genuinely runs out of room, instead
+    /// of both being clamped to one arbitrary number.
+    ///
+    /// No hard ceiling is enforced for the wide `.centered` card. A true cap
+    /// would need `ViewThatFits(in: .horizontal)` (macOS 13-safe), not a
+    /// max-only frame — not added here because it wasn't proven necessary
+    /// against the capture harness; the `HStack`'s own space division was
+    /// sufficient in every observed card width.
 
     private var queryRow: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -806,12 +812,11 @@ struct SessionComposerPalette: View {
     @ViewBuilder
     private func projectChip(_ project: Project?) -> some View {
         if isProjectLocked {
-            Text(project?.name ?? "")
+            Text(project?.name ?? "Project unavailable")
                 .font(.system(size: fieldFontSize, weight: .regular))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: Self.chipMaxWidth, alignment: .leading)
                 // F7/a11y: a bare `Text` reads its content with no context —
                 // VoiceOver announced a naked folder name. Frames it as the
                 // locked project, and degrades to a neutral label rather
@@ -825,7 +830,6 @@ struct SessionComposerPalette: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .frame(maxWidth: Self.chipMaxWidth, alignment: .leading)
                 .background(isProjectChipPickerOpen ? WorkspaceLayout.composerChipBackgroundActive : WorkspaceLayout.composerChipBackground)
                 // 5pt matches `ComposerRow`'s existing row highlight in this
                 // same file — not a new arbitrary radius. `.clipShape(...,

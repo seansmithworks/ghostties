@@ -56,9 +56,16 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
         since this binding writes `searchText` directly). `pendingChipUndo` now
         disarms on the next real keystroke and is `@Published` (was accidentally
         working only because a later line happened to touch other published state).
-  - [x] A5 — keyboard: backspace at position 0 pops the last chip back to text; left-arrow
-        from field start focuses the chip; Return/Down opens its picker; Esc closes the picker
-        without closing the composer.
+  - [x] A5 — keyboard: backspace at position 0 pops the last chip back to text; Esc closes
+        the picker without closing the composer. **The chip itself is mouse-only** — the spec's
+        keyboard line for the chip (left-arrow focuses it, Return/Down opens its picker) is
+        UNIMPLEMENTED, not merely deferred. Left-arrow-focuses-chip was removed as dead code
+        (D5, see below) and never replaced; once that route was gone, the Return/Down handlers
+        that opened the picker on chip focus were also deleted (F6, round-2 review) since they
+        asserted a keyboard capability (reaching the chip) that had already gone unreachable via
+        any route this file controls. The chip is reachable today only by mouse click, or by
+        whatever focus route the system itself supplies for a focusable `Button` (Tab under Full
+        Keyboard Access, VoiceOver) — not by the arrow-key navigation the spec describes.
         Backspace-to-empty fixed 2026-08-22 (round-1 review, D3): backspacing a
         command's remainder to nothing used to drop the chip to whatever project was
         previously selected and lose the typed name with no way to retype it — the
@@ -100,6 +107,20 @@ Four review rounds; rounds 2 and 3 each found real defects the prior round misse
   dir (would yank the branch from under a parallel session). Enumerate existing worktrees first;
   creation only behind an explicit `+ new worktree` row. Needs caching — shelling per keystroke
   is not viable. Nothing in the composer path knows about worktrees today. | app | new
+- [ ] **Smart dashes break `--` flags.** macOS's system-level smart-substitution converts a typed
+  `--` into an em dash, so `ghostties claude --resume` launches as `— resume`/`—resume` instead of
+  the intended flag — found while verifying the composer's quote-handling fix. Unlike curly
+  quotes, this **cannot** be normalized inside the command parser without risking mangling
+  legitimate prose arguments that happen to contain a real em dash or double hyphen; it needs
+  either a field-editor-level fix (disabling smart dashes on this specific `NSTextView`) or a
+  documented limitation. Also correct the in-code comment on the existing quote-substitution fix —
+  it currently implies the parser broadly handles smart-substitution artifacts; it only covers
+  curly quotes, not dashes. | app | new
+- [ ] **The typable `>` separator (breadcrumb spec decision #3, DECIDED) was never built.**
+  `SessionComposerCommandParser.tokenize` splits on whitespace only, so typing
+  `ghostties > cco` produces a `Run "> cco"` row rather than a chip transition — committing that
+  row would attempt to exec a literal `>`. Needs `tokenize` (or a layer above it) to recognize `>`
+  as a chip-advance token distinct from ordinary whitespace-delimited text. | app | new
 
 **Parked — review findings deliberately not fixed in slice 1:**
 
