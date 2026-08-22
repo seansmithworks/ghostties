@@ -1209,3 +1209,42 @@ which reads as "the rig is non-deterministic." It was not — a **per-pixel diff
 antialiasing noise from an 82% content swap**, and only the diff found the leak. Byte-comparison
 alone would have justified either "flaky rig, ignore" or "re-commit all eight," and both would have
 carried the leak forward.
+
+## 2026-08-22 (later still) — sections 03 + 04 built; two decisions land on Sean
+
+First real `web/` changes of the redesign. `afc3b6d38` on `feat/web-redesign-round4` adds section
+03 THE SIDEBAR (fixture capture + seven-state status key) and 04 GT LIST (real `gt` stdout + lane
+ramp), with Silkscreen/Archivo/DM Mono scoped to the two new sections. Independent review found 8
+confirmed defects; a fix pass is in flight for 7 of them. **Two are not defects — they are Sean's
+calls, and both are blocking honest copy.**
+
+- [ ] **The section 03 headline claim is false about the app.** The locked content-map line is
+  "Every session in one window, **ordered so whoever is blocked on you is on top**." The app does
+  not do that: `RecentsListView.sorted(sessions:)`
+  (`macos/Sources/Features/Ghostties/RecentsListView.swift:470-472`) is the **identity function** —
+  its own doc comment says "no sortOrder, no reshuffling." Sessions are bucketed
+  ACTIVE/INACTIVE/ARCHIVE and otherwise left in workspace order. `SessionIndicatorState`'s
+  `Comparable` conformance drives **project-header ghost colour only**, not any session sort.
+  The shipped capture refutes the sentence on the same screen: rows 1–2 are green `processing`
+  (priority 2), rows 3–5 blue `waiting` (priority 4) — recency order, with lower-priority sessions
+  above higher-priority ones — and the status key 200px below explicitly ranks `waiting` above
+  `processing`. Three ways out: **(a)** rewrite the copy to what the app does, **(b)** change the
+  app so the session list sorts by indicator priority, **(c)** ship it as aspirational. Copy was
+  left untouched pending this. | web · product | needs-Sean
+- [ ] **The page now says the same two things twice.** The pre-existing video sections
+  (`web/index.html:968-984`) already cover the sidebar ("every session, one window") and gt list
+  ("gt list — every task, one lane"). The new sections re-prove both in a different visual
+  language, so the page reads sidebar-video → gtlist-video → sidebar-still → gtlist-text. Related:
+  the new headings start at "**03**" with no 01 or 02 anywhere on the page, which reads as a
+  half-deployed site. Do the videos get replaced, or do 01/02 get built to close the gap?
+  | web | needs-Sean
+
+**Finding worth keeping:** the highest-severity defect was invisible to local rendering. The live
+CSP (`web/vercel.json`, confirmed with `curl -sI https://ghostties.org/`) is `style-src 'self'
+'unsafe-inline'; font-src 'self'` — **Google Fonts is blocked in production.** Every new font rule
+would have fallen back to system sans, which is the one typographic tell
+`feedback_web-redesign-constraints.md` names by name. `python3 -m http.server` — the verification
+recipe in `web/DESIGN.md` — sends no CSP header, so it looked perfect locally and would have
+shipped dead. Fix is self-hosting the WOFF2 (`font-src 'self'` already allows it), never widening
+the CSP. **Any future web verification must check against the deployed headers, not a local
+static server.**
