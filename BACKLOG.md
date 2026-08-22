@@ -1288,3 +1288,16 @@ What shipped: `addProject(at:pinned: Bool = false)` — picker funnel passes `pi
 - [ ] **Sean's Dev-instance pass — three checks, one sitting:** (1) "+ New Project" → long multi-word folder → type 3 chars WITHOUT clicking: does focus land in the composer field or the shell behind it? (2) Does the locked project label truncate or wrap the card header? (3) NEW from Phase 5: task-row click on an unregistered project now enters the sidebar at the bottom ("All") and slides up to "Active Now" on session focus, instead of appearing pinned at top — and for existing users the "Pinned" section starts empty until they pin manually. Taste verdict on both beats. | app | needs-Sean
 - [ ] **Pre-existing doc nits in `SessionCoordinator` (~:467-470), flagged by review, deliberately not fixed:** doc item 2 writes `Project(name:, rootPath:)` but production names from `url.lastPathComponent`; doc item 3 omits `forceSpawn`. Predate Phase 5. | app | new
 - [ ] **Stale plan snapshot:** `docs/plans/session-creation-unified.html` §Phase 5 (`:459`) still describes the old always-pin semantics; plan is now fully shipped so the whole doc is archival. | docs | new
+
+## 2026-08-22 — Slice B dispatched (branch segment → worktree)
+
+Branch `feat/composer-branch-segment` off `main` @ `5e6636022`. Spec: `docs/plans/composer-breadcrumb-spec.html` §"Slice B". Phases written at dispatch, flipped as they land.
+
+- [x] ~~**B-plan** — build brief returned; five decisions recommended, build order revised (separator moves ahead of the chip).~~ | app | done
+- [x] **B1** — worktree enumeration (`git worktree list --porcelain`) behind a cache; never per-keystroke. | app | done
+- [ ] **B2** — typable `>` separator (was B4; promoted — the branch segment exists only when an explicit `>` introduced it, so the chip cannot precede it). | app | new
+- [ ] **B3** — branch chip: third segment, lists existing worktrees, cascade rule (branch change clears nothing). | app | new
+- [ ] **B4** — `+ new worktree` row — explicit only, never implicit; all four failure modes surface in `writeError`. | app | new
+- [ ] **B5** — review rounds (never one; rule is twelve-for-twelve here) + unfiltered suite vs. 789/0/1 baseline. | app | new
+
+Parked, not in Slice B: the breadcrumb chip has **no keyboard route** (left-arrow focus was deleted as unverifiable, stranding the Return/Down handlers). Slice A polish, non-blocking. | app | parked

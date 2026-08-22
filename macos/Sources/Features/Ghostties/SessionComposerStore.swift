@@ -106,11 +106,76 @@ final class SessionComposerStore: ObservableObject {
     @Published var selectedProjectId: UUID?
     @Published var searchText: String = ""
 
+    // MARK: - Worktree cache (Slice B, B1)
+
+    /// Cached `git worktree list --porcelain` results for the currently
+    /// selected project, minus the project's own root worktree (the store
+    /// filters that out here, not in `GitWorktreeEnumerator`, since only the
+    /// store knows which path is "the project itself"). No UI reads this
+    /// yet — the branch chip's picker is a later step.
+    @Published private(set) var worktrees: [GitWorktreeEnumerator.Worktree] = []
+
+    /// Set for the duration of a `refreshWorktrees` call so a later step's
+    /// picker can show a loading state instead of a silent empty list.
+    @Published private(set) var isRefreshingWorktrees: Bool = false
+
+    /// Monotonic counter guarding against a stale `refreshWorktrees` call
+    /// landing after a newer one — this store is a process-wide singleton,
+    /// so a slow enumeration for project A must not overwrite project B's
+    /// already-returned result if the user switched projects (or reopened
+    /// the composer) before A's `Task.detached` finished.
+    private var worktreeRefreshToken: Int = 0
+
+    /// Re-enumerates worktrees for `repoPath` off the main actor, discarding
+    /// the result if a newer call has since been made. 2-second timeout —
+    /// matches `SessionCoordinator.createSession`'s detached-task-plus-timeout
+    /// shape — so a hung or missing `git` never hangs the composer; it just
+    /// yields an empty list.
+    @MainActor
+    func refreshWorktrees(for repoPath: String?) async {
+        worktreeRefreshToken += 1
+        let token = worktreeRefreshToken
+
+        guard let repoPath else {
+            worktrees = []
+            isRefreshingWorktrees = false
+            return
+        }
+
+        isRefreshingWorktrees = true
+
+        let listTask = Task.detached(priority: .userInitiated) { () -> [GitWorktreeEnumerator.Worktree] in
+            GitWorktreeEnumerator.list(repoPath: repoPath)
+        }
+        let timeoutTask = Task {
+            try await Task.sleep(for: .seconds(2))
+            listTask.cancel()
+        }
+        let result = await listTask.value
+        timeoutTask.cancel()
+
+        // Discard if a newer refresh has since been kicked off. Already back
+        // on the main actor here (this method is `@MainActor`) — no
+        // `MainActor.run` needed.
+        guard token == worktreeRefreshToken else { return }
+
+        worktrees = result.filter { $0.path != repoPath }
+        isRefreshingWorktrees = false
+    }
+
     /// The binding this open() call was made with, retained so `commit()`
     /// can enforce `.locked` at the write path even if `selectedProjectId`
     /// has drifted (Phase 3 is the first caller that relies on `.locked`
     /// meaning locked).
     private(set) var currentProjectBinding: SessionComposerRequest.ProjectBinding = .open
+
+    /// The `WorkspaceStore` passed to the most recent `open(...)` call,
+    /// retained weakly so `changeProjectChip(to:currentlyShown:)` — which
+    /// `SessionComposerPalette` calls without a `WorkspaceStore` argument —
+    /// can still resolve the newly-chosen project's `rootPath` to trigger a
+    /// worktree refresh. `weak` because this store outlives any one
+    /// workspace window; it must never keep one alive.
+    private weak var cachedWorkspaceStore: WorkspaceStore?
 
     // MARK: - Error state
 
@@ -190,6 +255,8 @@ final class SessionComposerStore: ObservableObject {
         writeError = nil
         currentProjectBinding = projectBinding
         pendingChipUndo = nil
+        worktrees = []
+        cachedWorkspaceStore = workspaceStore
 
         switch projectBinding {
         case .locked(let project), .prefilled(let project):
@@ -202,6 +269,11 @@ final class SessionComposerStore: ObservableObject {
             focusSearchFieldTrigger = true
         }
         isOpen = true
+
+        if let projectId = selectedProjectId,
+           let project = workspaceStore.projects.first(where: { $0.id == projectId }) {
+            Task { await self.refreshWorktrees(for: project.rootPath) }
+        }
     }
 
     /// Close the composer without writing anything (Esc / cancel / popover
@@ -212,6 +284,7 @@ final class SessionComposerStore: ObservableObject {
         searchText = ""
         writeError = nil
         pendingChipUndo = nil
+        worktrees = []
     }
 
     // MARK: - Commit
@@ -368,6 +441,11 @@ final class SessionComposerStore: ObservableObject {
         guard projectId != currentlyShown else { return .noOp }
         pendingChipUndo = (previousProjectId: selectedProjectId, previousSearchText: searchText)
         selectProject(projectId)
+
+        if let project = cachedWorkspaceStore?.projects.first(where: { $0.id == projectId }) {
+            Task { await self.refreshWorktrees(for: project.rootPath) }
+        }
+
         return .changed
     }
 
