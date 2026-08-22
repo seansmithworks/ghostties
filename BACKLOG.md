@@ -4,6 +4,52 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-22 — Composer command grammar slice 1 SHIPPED to branch; breadcrumb spec'd
+
+Slice 1 is complete and verified end-to-end. Branch `feat/composer-command-grammar-slice1`
+@ `f5ee65b8f` (code head `a13de1f16`), pushed, **no PR opened — Sean opens/merges**.
+Branched off `df0c1b8de`; `origin/main` has since advanced to `4d4b81003` (one docs commit),
+so a rebase may be wanted before the PR.
+
+All six acceptance criteria closed. Criterion 1 proven from disk, not a screenshot —
+`~/.ghostties/cache/launchers/<uuid>.sh` contained `exec 'cco' '-n' 'test'` under the
+`#!/bin/zsh -l` + `. ~/.zshrc` wrapper. Verified on two runs. Suite 770/0/1.
+Four review rounds; rounds 2 and 3 each found real defects the prior round missed
+(now **eight-for-eight** on the "never accept one review round on UI work here" rule).
+
+- [ ] **Open the PR for slice 1.** Sean's call — nothing merges unprompted. | app | carried
+- [ ] **Slice A — breadcrumb chips.** Spec at `docs/plans/composer-breadcrumb-spec.html`,
+  all four decisions settled 2026-08-22. Replaces the trailing project dropdown with inline
+  chips; retires the label-width squeeze rather than tuning it. Build chip pickers as an
+  **inline expansion inside the card, not a nested popover** — the project dropdown is already
+  a `.popover` nested in the composer's `.popover` and has never been verified.
+  **`⌘Z` chip-aware undo is new scope** — the composer has no undo stack; AppKit's text undo
+  knows nothing about chips. | app | new
+- [ ] **Slice B — branch segment resolving to a worktree.** Never `git checkout` in the project
+  dir (would yank the branch from under a parallel session). Enumerate existing worktrees first;
+  creation only behind an explicit `+ new worktree` row. Needs caching — shelling per keystroke
+  is not viable. Nothing in the composer path knows about worktrees today. | app | new
+
+**Parked — review findings deliberately not fixed in slice 1:**
+
+- [ ] **The project dropdown's checkmark disagrees with its label** about which project is
+  selected. Pre-existing, surfaced by review round 1. Slice A's one-source-of-truth kills it. | app | parked
+- [ ] **Row titles wrap ~3 chars sooner at the 204pt card** (they have no `lineLimit`, so they
+  wrap rather than truncate), costing one visible row. Adding a limit swaps wrapping for
+  truncation — a design choice, not a bug fix. | design | parked
+- [ ] **The locked/unlocked project label has no `layoutPriority` and no width cap**, so a long
+  name both truncates and halves the search field. Threshold dropped from ~26 to ~23 chars at
+  204pt. Closes the long-owed truncate-vs-wrap question: it **truncates**, never wraps. | design | parked
+- [ ] **`ghostties "" cco` produces no Run row** — an empty quoted first token splits to zero
+  words and returns nil even when valid tokens follow. Marginal input. | app | parked
+- [ ] **No test seam for the write-target rule.** The three `resolveCommitProjectId` tests are
+  rule coverage, not call-site coverage — swapping the two args at the call site leaves all
+  three green. A real seam exists in `SessionComposerStore.precommit`, but taking it would have
+  breached slice 1's scope fence. | quality | parked
+- [ ] **RECENT shows "Shell" after an ad-hoc run** (templateId is `AgentTemplate.shell.id` by
+  design), and `ComposerResultsTable` highlights against the full query while rows are filtered
+  by the remainder, so match highlighting disappears in command mode. | app | parked
+
 ## 2026-08-20 — Session state at bedtime wrap (carried)
 
 Two PRs open, neither merged. Sean merges; never merge unprompted.
