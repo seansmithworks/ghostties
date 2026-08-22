@@ -77,7 +77,10 @@
   --ink: #e9e6f5;
   --ink-dim: rgba(233, 230, 245, 0.66);
   --ink-faint: rgba(233, 230, 245, 0.5);
-  --ink-quiet: rgba(233, 230, 245, 0.34);
+  /* 0.52 measures 4.82:1 on --bg — passes AA text (4.5:1) and the 3:1
+     non-text floor used for the insert-coin border. Was 0.34 (2.63:1),
+     failing both. */
+  --ink-quiet: rgba(233, 230, 245, 0.52);
   --amber: #ffd54f;
   --cyan: #00e5ff;
   --purple: #7c4dff;
@@ -359,9 +362,7 @@ section:last-of-type {
   .gh,
   .snake-head i,
   .hero .insert-coin,
-  .train,
-  .pellets i,
-  h1.h-xl {
+  .snake-flash {
     animation: none !important;
   }
 }
@@ -462,8 +463,13 @@ button.cab-btn {
   outline: 2px solid var(--amber);
   outline-offset: 2px;
 }
-.snake-wrap.is-playing .hero .insert-coin {
+/* Owned by the .hero ancestor (not .snake-wrap, which is a sibling of
+   .install-row and can never match here) so the stylesheet, not
+   startGame()'s inline styles, controls the hidden state. */
+.hero.is-playing .insert-coin {
   animation: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ---------------------------------------------------------------------
@@ -630,7 +636,10 @@ button.cab-btn {
   letter-spacing: 0.14em;
   color: var(--ink-quiet);
   background: rgba(6, 6, 14, 0.6);
-  border: 1px solid var(--line-soft);
+  /* --line-soft (0.09 alpha) is under the 3:1 non-text floor for a real
+     control boundary; --ink-quiet already clears both 4.5:1 (text) and
+     3:1 (border), so reuse it here rather than adding a third token. */
+  border: 1px solid var(--ink-quiet);
   padding: 5px 8px;
   cursor: pointer;
 }
@@ -717,6 +726,18 @@ button.cab-btn {
   left: 70%;
   transform: rotate(1deg);
   z-index: 4;
+}
+.sprawl-win:nth-child(7) {
+  top: 60px;
+  left: 82%;
+  transform: rotate(-2deg);
+  z-index: 2;
+}
+.sprawl-win:nth-child(8) {
+  top: 20px;
+  left: 92%;
+  transform: rotate(3deg);
+  z-index: 1;
 }
 
 @media (max-width: 480px) {

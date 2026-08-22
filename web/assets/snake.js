@@ -118,7 +118,13 @@
     var mount = document.getElementById("snake-mount");
     var startBtn = document.getElementById("snake-start");
     var soundBtn = document.getElementById("snake-sound");
+    var heroSection = document.getElementById("hero");
+    var statusEl = document.getElementById("snake-status");
     if (!wrap || !mount || !startBtn || !soundBtn) return;
+
+    function announce(msg) {
+      if (statusEl) statusEl.textContent = msg;
+    }
 
     var reducedMotion = window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -134,7 +140,8 @@
     hud.innerHTML =
       '<span class="snake-stat"><span class="k">Herded</span><span class="v" data-herd>0/8</span></span>' +
       '<span class="snake-stat dim"><span class="k">Rescues</span><span class="v" data-res>0</span></span>' +
-      '<span class="snake-stat" data-lost-cell><span class="k">Stray</span><span class="v" data-lost>0</span></span>';
+      '<span class="snake-stat" data-lost-cell><span class="k">Stray</span><span class="v" data-lost>0</span></span>' +
+      '<span class="snake-stat dim snake-exit-hint"><span class="k">Esc</span><span class="v">Exit</span></span>';
     frameEl.appendChild(hud);
 
     var field = document.createElement("div");
@@ -221,6 +228,10 @@
     }
 
     // --- game state ------------------------------------------------------
+    // Whether the playfield is actually on screen — gates preventDefault()
+    // on WASD/arrows so the game only ever steals scroll keys while it is
+    // visible, per the IntersectionObserver set up below.
+    var fieldVisible = false;
     var mode = "idle";
     var hx = 1,
       hy = 2,
@@ -356,15 +367,44 @@
       mode = "play";
       simActive = true; // reduced-motion users get their first motion here, explicitly
       wrap.classList.add("is-playing");
+      if (heroSection) heroSection.classList.add("is-playing");
+      // The mount is decorative (aria-hidden) until this moment; once it's
+      // a real running game it needs to be in the a11y tree, and focus
+      // needs to leave the button we're about to hide.
+      mount.setAttribute("aria-hidden", "false");
+      frameEl.tabIndex = -1;
+      frameEl.setAttribute("role", "application");
+      frameEl.setAttribute(
+        "aria-label",
+        "Snake game. Use arrow keys or WASD to herd ghosts. Press Escape to exit.",
+      );
       startBtn.setAttribute("aria-hidden", "true");
       startBtn.tabIndex = -1;
-      startBtn.style.opacity = "0";
-      startBtn.style.pointerEvents = "none";
       flashEl.classList.remove("go");
       // force reflow so re-adding the class restarts the animation
       void flashEl.offsetWidth;
       flashEl.classList.add("go");
       sfx("coin");
+      frameEl.focus();
+      announce(
+        "Game started. Use arrow keys or WASD to herd ghosts. Press Escape to exit.",
+      );
+    }
+
+    function endGame() {
+      if (mode !== "play") return;
+      mode = "idle";
+      auto = true;
+      wrap.classList.remove("is-playing");
+      if (heroSection) heroSection.classList.remove("is-playing");
+      mount.setAttribute("aria-hidden", "true");
+      frameEl.removeAttribute("tabindex");
+      frameEl.removeAttribute("role");
+      frameEl.removeAttribute("aria-label");
+      startBtn.removeAttribute("aria-hidden");
+      startBtn.tabIndex = 0;
+      startBtn.focus();
+      announce("Game stopped. Press Insert Coin to play again.");
     }
 
     startBtn.addEventListener("click", startGame);
@@ -380,9 +420,18 @@
         return;
       }
 
+      if (k === "escape") {
+        e.preventDefault();
+        endGame();
+        return;
+      }
+
       var d = MAP[k];
       if (!d) return;
-      e.preventDefault(); // safe now — only once the game is actually running
+      // Only steal WASD/arrows while the playfield is actually on screen —
+      // otherwise these are just page-scroll keys and must stay that way.
+      if (!fieldVisible) return;
+      e.preventDefault(); // safe now — only once the game is actually running and visible
       auto = false;
       if (d[0] !== -dir[0] || d[1] !== -dir[1]) next = d;
     }
@@ -563,6 +612,7 @@
         ? new IntersectionObserver(
             function (entries) {
               var visible = entries[0] && entries[0].isIntersecting;
+              fieldVisible = !!visible;
               if (visible) startLoop();
               else stopLoop();
             },
@@ -570,7 +620,10 @@
           )
         : null;
     if (io) io.observe(mount);
-    else startLoop();
+    else {
+      fieldVisible = true;
+      startLoop();
+    }
 
     function teardown() {
       stopLoop();
@@ -578,9 +631,30 @@
       window.removeEventListener("resize", layoutGrid);
       if (ro) ro.disconnect();
       if (io) io.disconnect();
-      if (ac) ac.close();
+      if (ac) {
+        ac.close();
+        ac = null;
+      }
     }
     window.addEventListener("pagehide", teardown);
+
+    // Safari (and others) can restore this page from bfcache instead of
+    // reloading it. pagehide's teardown removed the keydown listener and
+    // disconnected both observers, so without this the restored page shows
+    // a frozen playfield that no longer responds to "I" or the arrow keys.
+    function reinit() {
+      window.addEventListener("keydown", onKeyDown);
+      if (ro) ro.observe(mount);
+      else window.addEventListener("resize", layoutGrid);
+      if (io) io.observe(mount);
+      else {
+        fieldVisible = true;
+        startLoop();
+      }
+    }
+    window.addEventListener("pageshow", function (e) {
+      if (e.persisted) reinit();
+    });
   }
 
   if (document.readyState === "loading") {

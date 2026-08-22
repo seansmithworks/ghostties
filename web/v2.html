@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ghostties — v2 skeleton</title>
+  <title>Ghostties — one window, every agent</title>
   <meta name="description" content="Ghostties — a multi-agent workspace terminal. Now in beta.">
+  <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="/v2.css">
 </head>
 <body>
@@ -66,6 +67,7 @@
           <div id="snake-mount" aria-hidden="true"></div>
           <button type="button" class="snake-sound" id="snake-sound" aria-pressed="false">SOUND OFF</button>
         </div>
+        <div class="visually-hidden" role="status" aria-live="assertive" id="snake-status"></div>
       </section>
 
       <!-- ============================================================
@@ -76,13 +78,15 @@
           <span class="num mono-tag">02</span>
           <span class="micro">The problem</span>
         </div>
-        <p class="lead">Six windows deep in a terminal sprawl, none of them telling you which one is actually waiting on you.</p>
+        <p class="lead">Deep in a terminal sprawl, none of the windows telling you which one is actually waiting on you.</p>
         <p class="body-text" style="margin-top: 12px;">
           Every one of these rectangles is an abstract stand-in for a terminal window —
           not a screenshot of any real app, on purpose. This is what the desktop looks
           like before Ghostties collapses it into one sidebar.
         </p>
         <div class="window-sprawl" aria-hidden="true">
+          <div class="sprawl-win"></div>
+          <div class="sprawl-win"></div>
           <div class="sprawl-win"></div>
           <div class="sprawl-win"></div>
           <div class="sprawl-win"></div>
