@@ -432,6 +432,15 @@ button.cab-btn {
   font-size: 11px;
   letter-spacing: 0;
   opacity: 0.6;
+  text-align: left;
+}
+/* Groups the command text with its copy icon so the two are one flex item —
+   forcing this pair, not the icon alone, onto its own wrapped line keeps
+   them on the same row at narrow widths (see the 480px breakpoint below). */
+.cab-btn .cab-cmd {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 .cab-btn.primary {
   border-color: var(--amber);
@@ -848,6 +857,11 @@ button.cab-btn {
   background: rgba(233, 230, 245, 0.03);
   border: 1px solid var(--line);
   border-radius: 0;
+}
+/* The scroll container is now a separate, inner element so the edge fade
+   below (painted on .gt-block, which no longer scrolls) stays pinned to
+   the frame instead of traveling with the scrolled content. */
+.gt-scroll {
   padding: 20px 24px;
   overflow-x: auto;
   /* Visible scrollbar hint instead of the default invisible-until-hover
@@ -855,16 +869,17 @@ button.cab-btn {
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
-.gt-block::-webkit-scrollbar {
+.gt-scroll::-webkit-scrollbar {
   height: 6px;
 }
-.gt-block::-webkit-scrollbar-thumb {
+.gt-scroll::-webkit-scrollbar-thumb {
   background: var(--line-strong);
 }
 /* Edge fade — the affordance that content continues past the visible
    frame. Harmless when the content already fits (nothing is cropped by
    it since it sits over the box's own padding), so it doesn't need a
-   scroll-state class to toggle it. */
+   scroll-state class to toggle it. Lives on .gt-block, not .gt-scroll, so
+   it never scrolls with the content it's fading. */
 .gt-block::after {
   content: "";
   position: absolute;
@@ -1011,7 +1026,7 @@ button.cab-btn {
 /* Caps the prose measure without shrinking the row itself — the hairline
    stays full-width (house style), only the text column is capped. */
 .still-ghostty-list .measure {
-  max-width: 52ch;
+  max-width: 64ch;
 }
 .still-ghostty-list li:last-child {
   border-bottom: none;
@@ -1037,7 +1052,7 @@ button.cab-btn {
 }
 .steps .measure {
   display: block;
-  max-width: 52ch;
+  max-width: 64ch;
 }
 .steps li:last-child {
   border-bottom: none;
@@ -1212,8 +1227,14 @@ footer a:hover {
     row-gap: 6px;
     justify-content: flex-start;
   }
-  .cab-btn small {
+  /* The command + copy icon wrap together as one unit (.cab-cmd), not the
+     command alone — otherwise the icon, later in DOM order, gets shoved to
+     a lone third line once the command claims the full second one. */
+  .cab-btn .cab-cmd {
     flex-basis: 100%;
+    justify-content: flex-start;
+  }
+  .cab-btn small {
     white-space: normal;
   }
   /* Lane ramp: six chips wrap unevenly (4+2) at narrow widths, leaving a

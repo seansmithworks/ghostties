@@ -365,6 +365,7 @@
     function startGame() {
       if (mode !== "idle") return;
       mode = "play";
+      lastDrop = t; // don't let idle-time elapsed since the last game count toward a stray
       simActive = true; // reduced-motion users get their first motion here, explicitly
       wrap.classList.add("is-playing");
       if (heroSection) heroSection.classList.add("is-playing");
@@ -385,7 +386,7 @@
       void flashEl.offsetWidth;
       flashEl.classList.add("go");
       sfx("coin");
-      frameEl.focus();
+      frameEl.focus({ preventScroll: true });
       announce(
         "Game started. Use arrow keys or WASD to herd ghosts. Press Escape to exit.",
       );
@@ -403,7 +404,40 @@
       frameEl.removeAttribute("aria-label");
       startBtn.removeAttribute("aria-hidden");
       startBtn.tabIndex = 0;
-      startBtn.focus();
+      startBtn.focus({ preventScroll: true });
+
+      // Restore a true idle state — after Escape the hero must be
+      // indistinguishable from a fresh load, not a frozen/abandoned game
+      // a stray "I" could resume.
+      hx = 1;
+      hy = 2;
+      dir = [1, 0];
+      next = [1, 0];
+      trail = [[hx, hy]];
+      f = 0;
+      herded = 0;
+      rescues = 0;
+      strays = 0;
+      lastDrop = t;
+      hpx = px(hx);
+      hpy = py(hy);
+      headEl.style.transform =
+        "translate3d(" + hpx.toFixed(1) + "px," + hpy.toFixed(1) + "px,0)";
+      for (var i = 0; i < gs.length; i++) {
+        var g = gs[i];
+        g.rank = -1;
+        g.lost = false;
+        g.el.classList.remove("lost");
+        g.x = g.ix;
+        g.y = g.iy;
+        g.el.style.transform =
+          "translate3d(" + g.x.toFixed(1) + "px," + g.y.toFixed(1) + "px,0)";
+      }
+      herdEl.textContent = "0/" + gs.length;
+      resEl.textContent = "0";
+      lostEl.textContent = "0";
+      lostCell.classList.remove("alert");
+
       announce("Game stopped. Press Insert Coin to play again.");
     }
 
@@ -415,6 +449,10 @@
 
       if (mode === "idle") {
         if (k !== "i") return; // never hijack scroll/typing before play starts
+        // Only insert-coin while the playfield is actually on screen —
+        // otherwise "i" is just a stray keystroke and must not teleport
+        // the visitor to a hero they aren't looking at.
+        if (!fieldVisible) return;
         e.preventDefault();
         startGame();
         return;

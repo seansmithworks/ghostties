@@ -383,7 +383,8 @@ concludes from this document that the system is finished.
 ## 8. v2 redesign token set (`web/v2.css`) — in-progress system, not the live site
 
 `v2.html`/`v2.css` (Arcade shell, `feat/web-redesign-round4`) is a sandbox for
-the redesign in flight, served at `/v2` alongside the live `index.html`. It
+the redesign in flight, served at `/v2.html` alongside the live `index.html`
+(`vercel.json` has no `/v2` rewrite, so the extension is required). It
 declares its own `:root` block, deliberately **not** merged into `style.css`'s
 tokens above — the two pages don't share a design system yet, and nothing in
 §3–§5 of this document applies to `/v2`. Document it here so it isn't an
@@ -398,7 +399,7 @@ this section) if and when `/v2` replaces `index.html`.
 | `--ink` | `#e9e6f5` | Headings, primary text |
 | `--ink-dim` | `rgba(233,230,245,0.66)` | `.lead` |
 | `--ink-faint` | `rgba(233,230,245,0.5)` | `.body-text`, `.small-text`, captions |
-| `--ink-quiet` | `rgba(233,230,245,0.52)` | Insert-coin border/text — tuned to clear both 4.5:1 text and 3:1 non-text AA floors against `--bg` |
+| `--ink-quiet` | `rgba(233,230,245,0.52)` | Insert-coin border (text is `--ink-dim`); also `.snake-stat .k` and `.snake-sound` — tuned to clear both 4.5:1 text and 3:1 non-text AA floors against `--bg` |
 | `--amber` | `#ffd54f` | The one saturated accent — links, primary CTA, inline `code`, headline highlight |
 | `--cyan` | `#00e5ff` | HUD "1UP" blip, section numbers, secondary CTA border |
 | `--purple` | `#7c4dff` | Maze grid lines only |

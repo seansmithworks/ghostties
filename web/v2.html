@@ -49,10 +49,10 @@
              verbatim from index.html's terminal lines 4–6. -->
         <div class="install-row">
           <button type="button" class="cab-btn primary term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">
-            BREW INSTALL <small>--cask seansmithworks/tap/ghostties</small><span class="copy-icon" aria-hidden="true">⧉</span>
+            BREW INSTALL <span class="cab-cmd"><small>--cask seansmithworks/tap/ghostties</small><span class="copy-icon" aria-hidden="true">⧉</span></span>
           </button>
           <button type="button" class="cab-btn secondary term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">
-            NPX <small>ghostties-install</small><span class="copy-icon" aria-hidden="true">⧉</span>
+            NPX <span class="cab-cmd"><small>ghostties-install</small><span class="copy-icon" aria-hidden="true">⧉</span></span>
           </button>
           <a class="cab-btn tertiary" href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>.DMG</a>
           <button type="button" class="insert-coin" id="snake-start" aria-label="Insert coin — play a hidden game">◄ INSERT COIN</button>
@@ -67,7 +67,7 @@
           <div id="snake-mount" aria-hidden="true"></div>
           <button type="button" class="snake-sound" id="snake-sound" aria-pressed="false">SOUND OFF</button>
         </div>
-        <div class="visually-hidden" role="status" aria-live="assertive" id="snake-status"></div>
+        <div class="visually-hidden" role="status" aria-live="polite" id="snake-status"></div>
       </section>
 
       <!-- ============================================================
@@ -79,7 +79,7 @@
           <span class="micro">The problem</span>
         </div>
         <h2 class="h-m">The Problem</h2>
-        <p class="lead">Deep in a terminal sprawl, none of the windows telling you which one is actually waiting on you.</p>
+        <p class="lead">Deep in a terminal sprawl, none of the windows tells you which one is actually waiting on you.</p>
         <p class="body-text" style="margin-top: 12px;">
           Every one of these rectangles is an abstract stand-in for a terminal window —
           not a screenshot of any real app, on purpose. This is what the desktop looks
@@ -197,13 +197,13 @@
         <p class="lead">One command answers &ldquo;what is actually going on&rdquo; across every project. The thing nothing else does.</p>
 
         <p class="gt-example-label">Example output — not a live capture</p>
-        <div class="gt-block" tabindex="0" aria-label="Example gt list output, scrollable horizontally"><pre class="gt-pre" aria-label="Example output of gt list against a fixture task directory, not a live capture">wire-status-badge  <span class="lane-needsyou">needs-you</span>   Wire status badge to session state  [project: switchboard]
+        <div class="gt-block"><div class="gt-scroll"><pre class="gt-pre" aria-label="Example output of gt list against a fixture task directory, not a live capture">wire-status-badge  <span class="lane-needsyou">needs-you</span>   Wire status badge to session state  [project: switchboard]
 audit-nightly-job  <span class="lane-running">running</span>     Audit nightly ingestion job  [project: fieldwork]
 migrate-schema  <span class="lane-running">running</span>     Migrate task schema to v2  [project: atlas-api]
 review-lane-copy  <span class="lane-review">review</span>      Review lane copy for clarity  [project: pendulum]
 triage-inbox-dupes  <span class="lane-inbox">inbox</span>       Triage duplicate inbox entries  [project: silo]
 sync-export-format  <span class="lane-backlog">backlog</span>     Sync export format across clients  [project: trove]
-retire-legacy-hook  <span class="lane-done">graveyard</span>   Retire legacy pre-commit hook  [project: wren]</pre></div>
+retire-legacy-hook  <span class="lane-done">graveyard</span>   Retire legacy pre-commit hook  [project: wren]</pre></div></div>
 
         <div class="lane-ramp" aria-label="Lane priority order, highest first">
           <span class="lane-chip lane-needsyou">needs-you</span><span class="lane-chip lane-running">running</span><span class="lane-chip lane-review">review</span><span class="lane-chip lane-inbox">inbox</span><span class="lane-chip lane-backlog">backlog</span><span class="lane-chip lane-done">graveyard</span>
@@ -377,6 +377,25 @@ instead of the cached snapshot.
           setTimeout(() => { copyStatus.textContent = ''; }, 2000);
         });
       });
+    });
+
+    // The gt-list example only actually scrolls above a certain width; below
+    // it, mark it a tab stop and announce it as scrollable — above it, it's
+    // an inert element that shouldn't be in the tab order at all.
+    document.querySelectorAll('.gt-scroll').forEach((el) => {
+      const sync = () => {
+        if (el.scrollWidth > el.clientWidth + 1) {
+          el.setAttribute('tabindex', '0');
+          el.setAttribute('role', 'group');
+          el.setAttribute('aria-label', 'Example gt list output, scrollable horizontally');
+        } else {
+          el.removeAttribute('tabindex');
+          el.removeAttribute('role');
+          el.removeAttribute('aria-label');
+        }
+      };
+      sync();
+      window.addEventListener('resize', sync);
     });
   </script>
   <script src="/assets/snake.js" defer></script>
