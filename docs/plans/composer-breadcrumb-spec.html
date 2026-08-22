@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Composer breadcrumb + optional branch</title>
+<link rel="stylesheet" href="http://localhost:4849/assets/plan.css">
+</head>
+<body>
+
+<h1>Composer breadcrumb + optional branch</h1>
+<p class="doc-meta">Ghostties · 2026-08-22 · spec, awaiting your comments · follows slice 1 (<code>a13de1f16</code>)</p>
+
+<h2>The grammar</h2>
+
+<p><strong>Every segment after the first is optional, and omitting one means "default."</strong></p>
+
+<pre><code>ghostties                        → scope to repo, nothing launched
+ghostties cco                    → repo + template, default branch
+ghostties &gt; main &gt; cco -n "test" → repo + branch + ad-hoc command</code></pre>
+
+<ul>
+<li><strong>Omitted branch means "wherever the project points right now"</strong> — not a remembered last-used branch. No hidden state, nothing to go stale, and it is exactly today's behavior.</li>
+<li><strong>The parser does not change.</strong> Slice 1 already tokenizes on whitespace at ≥2 tokens. <code>&gt;</code> is rendering, not syntax — which retires the "positional vs sigils" question from the original grammar spec.</li>
+<li><strong>Single token stays byte-identical</strong>, protecting the fast path exactly as slice 1 does.</li>
+</ul>
+
+<h2>Two slices, in this order</h2>
+
+<table>
+<thead><tr><th>Slice</th><th>What it does</th><th>Why this order</th></tr></thead>
+<tbody>
+<tr><td><strong>A — breadcrumb chips</strong></td><td>Resolved leading tokens render as inline chips with <code>&gt;</code> separators. Each chip is a picker. Replaces the trailing project dropdown.</td><td>Pure rendering. No new concepts, and it retires a live layout bug.</td></tr>
+<tr><td><strong>B — branch segment</strong></td><td>A branch chip resolving to a worktree, never a checkout.</td><td>Needs branch enumeration, caching, and a worktree-creation confirm path. Real feature, not a tweak.</td></tr>
+</tbody>
+</table>
+
+<h2>Slice A fixes a bug we are already carrying</h2>
+
+<p>The project label is a trailing control competing with the search field for width, with no <code>layoutPriority</code> and no cap on either. A long project name both truncates and halves the field. Moving the project <em>into</em> the field as a chip removes the second control entirely — the layout problem disappears rather than getting tuned.</p>
+
+<p>It also makes the parse visible. Today the only signal that token 1 resolved is a label changing in the corner.</p>
+
+<blockquote class="callout">
+<strong>Build the chip picker as an inline expansion inside the card, not a nested popover.</strong> The project dropdown is already a <code>.popover</code> nested inside the composer's own <code>.popover</code> — on the known-fragile list, never verified, and a child taking key can dismiss the parent. From a sidebar row, two chips means two chances to lose the composer. An inline expansion fixes the existing fragility instead of doubling it. Cmd+T is unaffected either way; the centered overlay is not a popover.
+</blockquote>
+
+<h2>Decisions you own</h2>
+
+<table>
+<thead><tr><th>#</th><th>Decision</th><th>Recommendation</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Chip separator glyph — <code>&gt;</code>, <code>/</code>, or <code>›</code></td><td><code>›</code> — reads as a breadcrumb, not a shell redirect or a path. <strong>You never type it.</strong> The app draws it between chips; you advance a segment with space or <code>&gt;</code> (decision 3). If you ever want the glyph by hand it is <kbd>⌥⇧4</kbd> on a US layout.</td></tr>
+<tr><td>2</td><td><strong>DECIDED</strong> — chip change cascades right</td><td>Changing a segment clears everything to its right, because the right depends on the left. <code>⌘Z</code> restores. Sean's call, 2026-08-22.</td></tr>
+<tr><td>3</td><td><strong>DECIDED</strong> — typable separator</td><td><code>&gt;</code> only, as a synonym for space. <strong><code>/</code> is reserved</strong> — it is the natural prefix for skills later, and a separator that also means "skill" is a collision we would have to unpick. Sean's call, 2026-08-22.</td></tr>
+<tr><td>4</td><td><strong>DECIDED</strong> — unmatched branch offers creation</td><td>Yes, behind an explicit <code>+ new worktree</code> row — never implicitly. Sean's call, 2026-08-22.</td></tr>
+</tbody>
+</table>
+
+<h2>The cascade rule</h2>
+
+<ul>
+<li><strong>Change the repo, and branch and command both clear.</strong> A branch name is meaningless in another repo, and templates can be repo-scoped, so keeping either would leave a stale selection pointing at the wrong thing.</li>
+<li><strong>Change the branch, and nothing clears.</strong> A command is branch-agnostic — <code>cco -n "xyz"</code> means the same thing on any branch.</li>
+<li><strong>Re-picking the same value is a no-op</strong>, not a clear. Clicking the repo chip and choosing the repo already selected must not wipe what you typed.</li>
+<li><strong><code>⌘Z</code> restores the cleared segments</strong> as one undo step, so a mis-click costs nothing.</li>
+</ul>
+
+<blockquote class="callout">
+<strong>Undo is new scope.</strong> The composer has no undo stack today — <code>⌘Z</code> in the field is AppKit's own text undo and knows nothing about chips. A chip-aware undo that restores a cleared branch and command as a single step has to be built. Small, but it is not free, and it is the one part of slice A that is not pure rendering.
+</blockquote>
+
+<details>
+<summary>Slice A — implementation detail</summary>
+<ul>
+<li><strong>Rendering:</strong> resolved leading tokens become chips; the remainder stays live editable text in the same field. Chips are not text — backspace at position 0 pops the last chip back to text.</li>
+<li><strong>Delete the trailing <code>projectControl</code></strong> (<code>SessionComposerPalette.swift</code>, the locked and unlocked branches both). The <code>.locked</code> case becomes a chip rendered without a picker affordance.</li>
+<li><strong>Reuse <code>ProjectDropdownView</code>'s list content</strong> (<code>:1283</code>) but present it inline, not via <code>.popover</code> at <code>:629</code>.</li>
+<li><strong>Fixes on the way through:</strong> the dropdown's checkmark currently disagrees with the label about which project is selected — one source of truth kills it.</li>
+<li><strong>Keyboard:</strong> left-arrow from field start focuses the previous chip; Return or Down opens its picker; Esc closes the picker without closing the composer.</li>
+</ul>
+</details>
+
+<details>
+<summary>Slice B — branch as worktree, and why not checkout</summary>
+<ul>
+<li><strong>Never <code>git checkout</code> in the project directory.</strong> You run 2–7 parallel sessions against shared trees; a checkout from a launcher would yank the branch out from under another session's uncommitted work. This is the whole reason branch resolves to a worktree.</li>
+<li><strong>Resolve to an existing worktree first.</strong> Enumerate via <code>git worktree list --porcelain</code>; the branch chip lists what already exists before it offers to make anything.</li>
+<li><strong>Creation is explicit</strong> — a <code>+ new worktree</code> row, never an implicit side effect of typing a name that does not match.</li>
+<li><strong>Enumeration needs caching.</strong> Shelling out per keystroke is not viable. <code>SessionDraftStore.swift:291-300</code> already shells to <code>git rev-parse --abbrev-ref HEAD</code>, so the pattern exists — but it is one call at draft time, not a per-keystroke list.</li>
+<li><strong>Nothing in the composer path knows about worktrees today.</strong> Only <code>TaskModel</code>, <code>TaskStore</code>, and <code>OrphanTriageStore</code> mention them.</li>
+</ul>
+</details>
+
+<details>
+<summary>What slice 1 already settled, so this spec does not re-open it</summary>
+<ul>
+<li><strong>Session naming needs no rule.</strong> An unpinned session's sidebar name is the live terminal title, so <code>-n test</code> reaches the name by itself a few seconds after launch. Observed on two runs.</li>
+<li><strong>The remainder does not blanket-run</strong> — it filters that project's templates <em>and</em> appends a <code>Run "…"</code> row. Blanket-running would break <code>ghostties orchestrator</code>.</li>
+<li><strong>Ad-hoc commands need the login-shell wrapper.</strong> <code>exec 'cco' '-n' 'test'</code> verified on disk; <code>cco</code> is a zsh function and dies under <code>/bin/sh -c</code>.</li>
+<li><strong>Never claim <code>-n</code></strong> as an app flag — it is yours.</li>
+</ul>
+</details>
+
+</body>
+</html>

@@ -46,6 +46,28 @@ struct SessionComposerPalette: View {
     @State private var templateToDelete: AgentTemplate?
     @FocusState private var newTemplateNameFocused: Bool
 
+    // MARK: - No-match Enter feedback (command grammar slice 1)
+
+    /// Drives `ShakeEffect` — 3 cycles / 6pt, animated over 0.25s. Bumped by
+    /// one on every no-match Return. `ShakeEffect.effectValue` reads the
+    /// ABSOLUTE value of `animatableData`, not a delta — bumping by whole
+    /// integers works cleanly anyway because `shakesPerUnit` is an integer,
+    /// so every whole increment lands the sine argument back on a
+    /// zero-crossing, letting back-to-back no-match Returns restart a clean
+    /// shake instead of visibly jumping mid-cycle.
+    @State private var shakeTrigger: CGFloat = 0
+    /// Reduce-motion fallback: a 400ms red border pulse instead of the
+    /// shake, toggled true then back false after the duration.
+    @State private var showNoMatchBorder = false
+    /// Guards `.submitNoMatch` against a same-turn double-fire from
+    /// `.onSubmit` + `Backport.onKeyPress` both firing on macOS 14+ (unlike
+    /// `.submit`, nothing here synchronously invalidates a second handler's
+    /// input — there's no list to swap out from under it). Set true
+    /// synchronously on the first fire, cleared on the next runloop turn, so
+    /// a second fire landing in the SAME turn is a no-op instead of driving
+    /// `shakeTrigger` 0→2 and doubling the shake to 6 cycles.
+    @State private var isHandlingNoMatchFeedback = false
+
     // MARK: - DESIGN.md scale (D11) — see `TemplatePickerView` for precedent.
     // `paletteWidth` pulls from `WorkspaceLayout` tokens (DESIGN.md §2
     // forbids hardcoded pt values where an equivalent token exists); the
@@ -54,7 +76,7 @@ struct SessionComposerPalette: View {
     // of; `.centered` is wider since it floats free of the sidebar column.
     private var paletteWidth: CGFloat {
         switch request.presentation {
-        case .anchored: return WorkspaceLayout.sidebarWidth
+        case .anchored: return WorkspaceLayout.sidebarWidth - 16 // offsets `body`'s 8pt-per-side shake-clearance padding (16pt total) so net popover width matches the sidebar
         case .centered: return WorkspaceLayout.composerOverlayWidth
         }
     }
@@ -146,8 +168,61 @@ struct SessionComposerPalette: View {
     }
 
     private var currentProject: Project? {
+        // Command grammar slice 1: a resolved `<project> <remainder>` parse
+        // takes precedence over `selectedProjectId` — the remainder needs
+        // to filter THAT project's templates even though the dropdown
+        // selection hasn't changed (selectProject(_:) also clears the
+        // query, which would erase what's being typed).
+        if let commandProject { return commandProject }
         guard let id = composerStore.selectedProjectId else { return nil }
         return store.projects.first(where: { $0.id == id })
+    }
+
+    // MARK: - Command grammar (slice 1)
+
+    /// Tokenizes `query` against the known project list. `.none` (the
+    /// common case) means "no command recognized" — every downstream
+    /// filter below falls through to the ordinary whole-string query,
+    /// byte-identical to before this parser existed.
+    private var commandParse: SessionComposerCommandParser.ParseResult {
+        SessionComposerCommandParser.parse(query: query, projects: store.projects, isLocked: isProjectLocked)
+    }
+
+    private var commandProject: Project? {
+        guard let projectId = commandParse.projectId else { return nil }
+        return store.projects.first(where: { $0.id == projectId })
+    }
+
+    /// The text template/recent options are ranked against. A resolved
+    /// command scopes filtering to the remainder (`cco -n test`, not the
+    /// whole `ghostties cco -n test` query) — otherwise nothing in the
+    /// project's own template list would ever match the project name that
+    /// prefixes it.
+    private var templateFilterQuery: String {
+        commandProject != nil ? commandParse.remainderText : query
+    }
+
+    /// The `Run "<remainder>"` row appended in a new COMMAND section once a
+    /// command is recognized. Blanket-running the remainder happens ONLY
+    /// here, behind the same ≥2-token + project-match gate as the rest of
+    /// the grammar — `filteredTemplateOptions` above still ranks any
+    /// matching template first, so `ghostties orchestrator` keeps reaching
+    /// the Orchestrator template instead of trying to exec a nonexistent
+    /// `orchestrator` binary.
+    private var commandOptions: [ComposerOption] {
+        guard let commandProject,
+              let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: commandParse.remainderTokens)
+        else { return [] }
+
+        return [
+            ComposerOption(
+                id: SessionComposerCommandParser.runRowId,
+                title: "Run \"\(commandParse.remainderText)\"",
+                subtitle: commandProject.name,
+                leadingIcon: "terminal",
+                action: { commit(template: template) }
+            )
+        ]
     }
 
     // MARK: - Options
@@ -239,7 +314,7 @@ struct SessionComposerPalette: View {
     }
 
     private var filteredRecentOptions: [ComposerOption] {
-        SessionComposerRanking.sorted(recentOptions, query: query, title: { $0.title }, subtitle: { $0.subtitle })
+        SessionComposerRanking.sorted(recentOptions, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
 
     private var filteredTemplateOptions: [ComposerOption] {
@@ -247,7 +322,7 @@ struct SessionComposerPalette: View {
         let base = availableTemplates
             .map(makeOption)
             .filter { !recentIds.contains($0.id) }
-        return SessionComposerRanking.sorted(base, query: query, title: { $0.title }, subtitle: { $0.subtitle })
+        return SessionComposerRanking.sorted(base, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
 
     /// Query-matching projects (S2, locked decision: "the search field
@@ -260,15 +335,25 @@ struct SessionComposerPalette: View {
         // resolves from the bound project, never `selectedProjectId`), so
         // letting a project row re-scope the list here would show project B
         // while `commit()` still creates in locked project A.
+        //
+        // A resolved command does NOT suppress this section (reverted —
+        // that suppression was never in the brief and made a multi-word
+        // project name unreachable: with projects "ghostties" and
+        // "ghostties web", typing "ghostties web" resolves token 1 against
+        // the first project and, with PROJECTS hidden, offers only
+        // `Run "web"` — the project being named disappears from the list.
+        // A mis-parse must stay recoverable, so PROJECTS keeps ranking
+        // against the raw `query` exactly as it does with no command typed.
         guard !isProjectLocked, !query.isEmpty else { return [] }
         let options = store.projects.map(makeOption)
         return SessionComposerRanking.sorted(options, query: query, title: { $0.title })
     }
 
     /// The full flattened list, in on-screen order, used for keyboard
-    /// navigation and selection clamping.
+    /// navigation and selection clamping. COMMAND renders last — matching
+    /// templates in TEMPLATES rank first, per the locked design.
     private var flattenedOptions: [ComposerOption] {
-        filteredRecentOptions + filteredTemplateOptions + filteredProjectOptions
+        filteredRecentOptions + filteredTemplateOptions + filteredProjectOptions + commandOptions
     }
 
     private var selectedOption: ComposerOption? {
@@ -293,16 +378,126 @@ struct SessionComposerPalette: View {
     /// untiered — keep index 0, i.e. current section order, so unambiguous
     /// queries and the empty-query default are unchanged.
     private func bestSelectionIndex(in options: [ComposerOption]) -> UInt {
-        UInt(SessionComposerRanking.bestMatchIndex(in: options, query: query, title: { $0.title }, subtitle: { $0.subtitle }))
+        UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
     }
 
     // MARK: - Body
 
     var body: some View {
-        let backgroundColor = Color(nsColor: .windowBackgroundColor)
-        let scheme: ColorScheme = OSColor(backgroundColor).isLightColor ? .light : .dark
+        let scheme: ColorScheme = OSColor(Color(nsColor: .windowBackgroundColor)).isLightColor ? .light : .dark
 
-        VStack(alignment: .leading, spacing: 0) {
+        // Shake-clearance wrapper (finding: `.anchored` is an NSPopover
+        // sized exactly to its content — a shake applied to the composer's
+        // root, with no margin around it, clips or draws over the popover
+        // chrome). The card itself stays `paletteWidth` wide; this adds an
+        // 8pt clear inset on ALL FOUR SIDES (DESIGN.md §5 Layout Tokens —
+        // 8 is the nearest valid step above the ±6pt shake amplitude) so
+        // the ±6pt lateral translation has room in both `.anchored` and
+        // `.centered`. Symmetric, not horizontal-only: it's the same
+        // component in both presentations, so it gets the same pattern —
+        // an inset flush top/bottom but padded left/right would read as a
+        // clipping bug rather than a frame. `paletteWidth`'s `.anchored`
+        // case subtracts this same 16pt (8pt × 2 sides) so the net
+        // popover width still matches the sidebar exactly; `.centered`'s
+        // card width (`composerOverlayWidth`) is unaffected since only
+        // the outer padding grows.
+        composerCard
+            .padding(8)
+            // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3
+            // review fix, retuned in PR #132 (shadow-only elevation) now
+            // that the shadow carries the "on top of" read alone, with no
+            // scrim behind it). `.anchored` relies on the native NSPopover
+            // chrome/shadow instead; adding a second shadow there would
+            // double up.
+            .shadow(
+                color: request.presentation == .centered
+                    ? .black.opacity(WorkspaceLayout.composerModalShadowOpacity)
+                    : .clear,
+                radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0,
+                y: request.presentation == .centered ? WorkspaceLayout.composerModalShadowYOffset : 0
+            )
+            .environment(\.colorScheme, scheme)
+            .onAppear {
+                composerStore.open(projectBinding: request.projectBinding, workspaceStore: store)
+                // S5: row 0 is the project's default template (Phase 1's
+                // default-first ordering) and the legend reads "↵ start" —
+                // seed the selection so Return isn't a dead key on first
+                // open. `bestSelectionIndex` is index 0 here since the
+                // query is blank on first open (D1's cross-section ranking
+                // only applies once there's a query to rank against).
+                selectedIndex = bestSelectionIndex(in: flattenedOptions)
+            }
+            .onChange(of: isPresented) { presented in
+                if !presented {
+                    composerStore.cancel()
+                    isAddingTemplate = false
+                    newTemplateName = ""
+                }
+            }
+            .onDisappear {
+                // The only reliable teardown hook for popover content — the
+                // row hosting this popover can leave the hierarchy (project
+                // removed, sidebar view-mode switch, `windowDidResignKey` /
+                // `mouseExited` closing the popover) without
+                // `onChange(of: isPresented)` ever firing, which otherwise
+                // latches `SessionComposerStore.isOpen` true forever (B3).
+                composerStore.cancel()
+            }
+            .onChange(of: query) { _ in reselectBestMatch() }
+            .onChange(of: composerStore.selectedProjectId) { _ in
+                // N5: changing the project via the dropdown or a project row
+                // changes `flattenedOptions.count` with `query` unchanged, so
+                // the query-only clamp above never ran — `selectedOption`
+                // fell back to `options.last` and the highlight silently
+                // jumped to the bottom of the list.
+                clampSelectedIndex()
+            }
+            .onChange(of: composerStore.focusSearchFieldTrigger) { triggered in
+                // R8 (Phase 3 review round 2): mirrors the S5 seed in
+                // `onAppear` for the "re-open while already installed" path
+                // (F4) — `onAppear` doesn't reliably re-fire there (observed,
+                // see F4's comment in
+                // `WorkspaceViewContainer.presentComposerOverlay`), so a
+                // `selectedIndex` left `nil` by a just-completed commit
+                // (S1's reset) never gets re-seeded, and Return goes dead on
+                // a fast re-present. `focusSearchFieldTrigger` is exactly
+                // `open()`'s "already open" signal (S7) — unlike `isOpen`
+                // itself, which SwiftUI's `.onChange` won't re-fire on since
+                // it stays `true` across the whole re-open.
+                guard triggered else { return }
+                clampSelectedIndex()
+            }
+            .sheet(item: $newTemplateToEdit) { template in
+                TemplateEditForm(template: template)
+            }
+            .alert(
+                "Delete Template?",
+                isPresented: $showDeleteConfirmation,
+                presenting: templateToDelete
+            ) { template in
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    store.removeTemplate(id: template.id)
+                }
+            } message: { template in
+                if store.templateInUse(id: template.id) {
+                    Text("Sessions using \"\(template.name)\" will keep their current configuration but won't be relaunchable with this template.")
+                } else {
+                    Text("This will permanently remove \"\(template.name)\".")
+                }
+            }
+    }
+
+    /// The composer's visible card — background, clip shape, border, the
+    /// no-match feedback overlays, and the shake itself. Kept separate from
+    /// `body` so the shake-clearance inset (`body`'s `.padding(8)`) wraps
+    /// it rather than the shake living on the true root, which
+    /// left no room to translate inside an `.anchored` NSPopover sized
+    /// exactly to its content.
+    private var composerCard: some View {
+        let backgroundColor = Color(nsColor: .windowBackgroundColor)
+
+        return VStack(alignment: .leading, spacing: 0) {
             queryRow
 
             Divider()
@@ -311,7 +506,8 @@ struct SessionComposerPalette: View {
                 sections: [
                     (title: filteredRecentOptions.isEmpty ? nil : "RECENT", options: filteredRecentOptions),
                     (title: "TEMPLATES", options: filteredTemplateOptions),
-                    (title: filteredProjectOptions.isEmpty ? nil : "PROJECTS", options: filteredProjectOptions)
+                    (title: filteredProjectOptions.isEmpty ? nil : "PROJECTS", options: filteredProjectOptions),
+                    (title: commandOptions.isEmpty ? nil : "COMMAND", options: commandOptions)
                 ],
                 query: query,
                 selectedIndex: $selectedIndex,
@@ -364,87 +560,14 @@ struct SessionComposerPalette: View {
             composerClipShape
                 .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
         )
-        // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3 review
-        // fix, retuned in PR #132 (shadow-only elevation) now that the shadow
-        // carries the "on top of" read alone, with no scrim behind it).
-        // `.anchored` relies on the native NSPopover chrome/shadow instead;
-        // adding a second shadow there would double up.
-        .shadow(
-            color: request.presentation == .centered
-                ? .black.opacity(WorkspaceLayout.composerModalShadowOpacity)
-                : .clear,
-            radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0,
-            y: request.presentation == .centered ? WorkspaceLayout.composerModalShadowYOffset : 0
+        // No-match Enter feedback: a 400ms red border pulse under
+        // reduce-motion, standing in for the shake below (`triggerNoMatchFeedback`).
+        .overlay(
+            composerClipShape
+                .stroke(Color(nsColor: .systemRed), lineWidth: 2)
+                .opacity(showNoMatchBorder ? 1 : 0)
         )
-        .environment(\.colorScheme, scheme)
-        .onAppear {
-            composerStore.open(projectBinding: request.projectBinding, workspaceStore: store)
-            // S5: row 0 is the project's default template (Phase 1's
-            // default-first ordering) and the legend reads "↵ start" — seed
-            // the selection so Return isn't a dead key on first open.
-            // `bestSelectionIndex` is index 0 here since the query is blank
-            // on first open (D1's cross-section ranking only applies once
-            // there's a query to rank against).
-            selectedIndex = bestSelectionIndex(in: flattenedOptions)
-        }
-        .onChange(of: isPresented) { presented in
-            if !presented {
-                composerStore.cancel()
-                isAddingTemplate = false
-                newTemplateName = ""
-            }
-        }
-        .onDisappear {
-            // The only reliable teardown hook for popover content — the row
-            // hosting this popover can leave the hierarchy (project
-            // removed, sidebar view-mode switch, `windowDidResignKey` /
-            // `mouseExited` closing the popover) without
-            // `onChange(of: isPresented)` ever firing, which otherwise
-            // latches `SessionComposerStore.isOpen` true forever (B3).
-            composerStore.cancel()
-        }
-        .onChange(of: query) { _ in reselectBestMatch() }
-        .onChange(of: composerStore.selectedProjectId) { _ in
-            // N5: changing the project via the dropdown or a project row
-            // changes `flattenedOptions.count` with `query` unchanged, so
-            // the query-only clamp above never ran — `selectedOption` fell
-            // back to `options.last` and the highlight silently jumped to
-            // the bottom of the list.
-            clampSelectedIndex()
-        }
-        .onChange(of: composerStore.focusSearchFieldTrigger) { triggered in
-            // R8 (Phase 3 review round 2): mirrors the S5 seed in `onAppear`
-            // for the "re-open while already installed" path (F4) —
-            // `onAppear` doesn't reliably re-fire there (observed, see F4's
-            // comment in `WorkspaceViewContainer.presentComposerOverlay`),
-            // so a `selectedIndex` left `nil` by a just-completed commit
-            // (S1's reset) never gets re-seeded, and Return goes dead on a
-            // fast re-present. `focusSearchFieldTrigger` is exactly
-            // `open()`'s "already open" signal (S7) — unlike `isOpen`
-            // itself, which SwiftUI's `.onChange` won't re-fire on since it
-            // stays `true` across the whole re-open.
-            guard triggered else { return }
-            clampSelectedIndex()
-        }
-        .sheet(item: $newTemplateToEdit) { template in
-            TemplateEditForm(template: template)
-        }
-        .alert(
-            "Delete Template?",
-            isPresented: $showDeleteConfirmation,
-            presenting: templateToDelete
-        ) { template in
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                store.removeTemplate(id: template.id)
-            }
-        } message: { template in
-            if store.templateInUse(id: template.id) {
-                Text("Sessions using \"\(template.name)\" will keep their current configuration but won't be relaunchable with this template.")
-            } else {
-                Text("This will permanently remove \"\(template.name)\".")
-            }
-        }
+        .modifier(ShakeEffect(animatableData: shakeTrigger))
     }
 
     // MARK: - Query row (search field + trailing project control)
@@ -663,6 +786,22 @@ struct SessionComposerPalette: View {
         // these two do).
         selectedIndex = nil
 
+        // BLOCKER fix (command grammar slice 1): a resolved command project
+        // must win over whatever `selectedProjectId` still reads, for EVERY
+        // row that reaches `commit(template:)` — not just the synthesized
+        // Run row. Before this, `precommit` resolved the write target from
+        // `composerStore.selectedProjectId`, which typing a command never
+        // changes (see `currentProject`), so a `.exactPrefix` template row
+        // auto-selected under a command like `ghostties orchestrator` would
+        // commit into whatever project the dropdown was still showing.
+        // Setting `selectedProjectId` directly here, rather than via
+        // `selectProject(_:)`, is deliberate: `selectProject` also clears
+        // `searchText`, which would blank the command mid-commit.
+        composerStore.selectedProjectId = SessionComposerCommandParser.resolveCommitProjectId(
+            commandProjectId: commandProject?.id,
+            selectedProjectId: composerStore.selectedProjectId
+        )
+
         // F1 (Phase 3 review): capture the target project BEFORE precommit
         // runs — `.locked`'s enforced project can differ from whatever
         // `selectedProjectId` reads after `precommit` records the recent
@@ -714,6 +853,9 @@ struct SessionComposerPalette: View {
         case .submit:
             selectedOption?.action()
 
+        case .submitNoMatch:
+            triggerNoMatchFeedback()
+
         case .move(.up):
             if flattenedOptions.isEmpty { break }
             let current = selectedIndex ?? UInt(flattenedOptions.count)
@@ -727,6 +869,47 @@ struct SessionComposerPalette: View {
         case .move:
             break
         }
+    }
+
+    /// Enter with no row highlighted (empty results, or a dead-key press
+    /// before selection is seeded) used to be a silent no-op. 3 cycles /
+    /// 6pt over 0.25s via `ShakeEffect`; under reduce-motion, a 400ms red
+    /// border pulse instead.
+    private func triggerNoMatchFeedback() {
+        guard !isHandlingNoMatchFeedback else { return }
+        isHandlingNoMatchFeedback = true
+        DispatchQueue.main.async { isHandlingNoMatchFeedback = false }
+
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            showNoMatchBorder = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                showNoMatchBorder = false
+            }
+        } else {
+            withAnimation(.linear(duration: 0.25)) {
+                shakeTrigger += 1
+            }
+        }
+    }
+}
+
+/// Standard sine-wave shake: `amount` pt of lateral travel, `shakesPerUnit`
+/// full cycles per unit of `animatableData`. Driving `animatableData` by +1
+/// with a 0.25s linear animation and `shakesPerUnit = 3` produces exactly
+/// 3 cycles / 6pt / 0.25s (the no-match Enter spec) — SwiftUI interpolates
+/// `animatableData` continuously across the animation's duration, and one
+/// unit of `animatableData` sweeps the sine through `shakesPerUnit` full
+/// periods (argument spans `2π · shakesPerUnit`).
+private struct ShakeEffect: GeometryEffect {
+    var animatableData: CGFloat
+    var amount: CGFloat = 6
+    var shakesPerUnit: CGFloat = 3
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(
+            translationX: amount * sin(animatableData * 2 * .pi * shakesPerUnit),
+            y: 0
+        ))
     }
 }
 
@@ -798,9 +981,11 @@ struct ComposerQueryField: View {
     @Binding var query: String
     var fontSize: CGFloat
     @Binding var focusTrigger: Bool
-    /// Whether there's a highlighted row to commit. When false, Return is a
-    /// deliberate no-op (nit: `.onKeyPress` used to return `.handled`
-    /// unconditionally, swallowing Return against an empty list).
+    /// Whether there's a highlighted row to commit. When false, Return
+    /// fires `.submitNoMatch` (shake/border feedback) instead of `.submit`
+    /// — no longer a silent no-op (nit: `.onKeyPress` used to return
+    /// `.handled` unconditionally, swallowing Return against an empty
+    /// list).
     var hasSelection: Bool
     var onEvent: ((KeyboardEvent) -> Void)?
     @FocusState private var isTextFieldFocused: Bool
@@ -808,6 +993,10 @@ struct ComposerQueryField: View {
     enum KeyboardEvent {
         case exit
         case submit
+        /// Return pressed with no row highlighted (empty results list) —
+        /// distinct from `.submit` so the parent can play the no-match
+        /// shake/border feedback instead of silently swallowing the key.
+        case submitNoMatch
         case move(MoveCommandDirection)
     }
 
@@ -845,11 +1034,17 @@ struct ComposerQueryField: View {
                 // B1: `.onSubmit` is the ONLY Return handler that works
                 // below macOS 14 — the app's deployment target is 13.0.
                 .onSubmit {
-                    guard hasSelection else { return }
+                    guard hasSelection else {
+                        onEvent?(.submitNoMatch)
+                        return
+                    }
                     onEvent?(.submit)
                 }
                 .backport.onKeyPress(.return) { _ in
-                    guard hasSelection else { return .ignored }
+                    guard hasSelection else {
+                        onEvent?(.submitNoMatch)
+                        return .handled
+                    }
                     onEvent?(.submit)
                     return .handled
                 }
