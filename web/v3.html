@@ -151,7 +151,14 @@
        activating the plate again) returns the coin. Keyboard route:
        press "c". Hidden entirely under prefers-reduced-motion (see
        v3.css) — the field is a static no-op there, so there is nothing
-       for the plate to arm. -->
+       for the plate to arm.
+
+       There is also a real coin drifting in the field itself
+       (assets/ghost-field.js) — the one object that stays grabbable
+       before coin-in, unlike every ghost. Dragging it onto this slot
+       arms the field exactly like clicking the plate does; the plate's
+       own choreography (this script, below) reacts to the "gx-armchange"
+       event GXField fires so the two paths never disagree. -->
   <button type="button" class="gx-coin" id="gx-coin-btn" aria-label="Insert coin" title="Insert coin (C)">
     <span class="gx-coin-bezel" aria-hidden="true">
       <span class="gx-coin-panel">
@@ -246,12 +253,17 @@
         }
       }
 
-      function coinIn() {
-        if (!window.GXField || btn.classList.contains('gx-coin-firing')) return;
-        window.GXField.coinIn();
+      // The plate never drives its own choreography directly — it only
+      // asks GXField to change state (click, "c", or letting GXField's own
+      // Escape handler run) and then reacts to "gx-armchange", the one
+      // event GXField fires on every real state transition regardless of
+      // how it was reached (drag-drop onto the slot, the plate, or the key
+      // route). That keeps the coin's physical position, the plate's
+      // label/credit, and the field's interactivity from ever disagreeing.
+      function armedVisuals() {
         btn.classList.add('gx-coin-firing');
-        // Coin fall + lamp flash play immediately; the credit flip and the
-        // armed border/label settle land together at t=200ms (coin-slot-spec.md).
+        // Lamp flash plays immediately; the credit flip and the armed
+        // border/label settle land together at t=200ms (coin-slot-spec.md).
         setTimeout(function () {
           btn.classList.add('gx-coin-armed');
           render(true);
@@ -262,19 +274,22 @@
         }, 420);
       }
 
-      function coinOut() {
-        if (!window.GXField) return;
-        window.GXField.coinOut();
+      function disarmedVisuals() {
         btn.classList.remove('gx-coin-firing');
         btn.classList.remove('gx-coin-armed');
         render(false);
         announce(false);
       }
 
+      document.addEventListener('gx-armchange', function (e) {
+        if (e.detail && e.detail.armed) armedVisuals();
+        else disarmedVisuals();
+      });
+
       function toggle() {
         if (!window.GXField) return;
-        if (window.GXField.isArmed()) coinOut();
-        else coinIn();
+        if (window.GXField.isArmed()) window.GXField.coinOut();
+        else window.GXField.coinIn();
       }
 
       btn.addEventListener('click', toggle);
@@ -284,16 +299,6 @@
         var tag = (e.target && e.target.tagName) || '';
         if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
         toggle();
-      });
-
-      // GXField handles its own Escape-to-disarm; mirror the plate here.
-      document.addEventListener('keydown', function (e) {
-        if (e.key !== 'Escape') return;
-        setTimeout(function () {
-          if (window.GXField && !window.GXField.isArmed() && btn.classList.contains('gx-coin-armed')) {
-            coinOut();
-          }
-        }, 0);
       });
     })();
   </script>

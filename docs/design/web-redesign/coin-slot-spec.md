@@ -149,6 +149,66 @@ Live region `#gx-coin-status` (`role="status" aria-live="polite"`, in `v3.html`)
 
 No number appears anywhere except the credit count, which counts coins, not ghosts.
 
+## The coin — a physical, grabbable object
+
+The coin is no longer a decorative flourish that plays once on plate-press. It is a
+single physical object drifting in the ambient ghost field (`assets/ghost-field.js`,
+alongside the ghosts), and dragging it into this plate's slot is *how* the field arms —
+not a side effect of pressing a button.
+
+- **One coin, drawn like the ghosts.** Same technique (inline SVG built from a small
+  pixel grid, no image files), an 8×8 grid at 4px/cell, filled `#e8b545` with a soft
+  top-edge highlight gradient for shine — no new asset pipeline.
+- **Drift pacing matches the ghosts', kept under ~0.6px/frame** — ambient, not urgent.
+  Same wall-bounce clamp as every ghost.
+- **Grabbable before coin-in, when no ghost is.** Every `.gx-ghost` is `pointer-events:
+  none` until `.gx-armed`; the coin is `pointer-events: auto` unconditionally, because
+  it's the one thing that has to be interactive precomputed-armed in order to arm
+  anything. Cursor is `grab` at rest, `grabbing` while dragged.
+- **Lives in its own stacking context, not inside `#gx-field`.** The field paints under
+  page content (`z-index: 0`, vs. `main`'s `1`) by design, so ghosts drift behind text —
+  correct for ambient background sprites, but it would leave the coin permanently
+  ungrabbable wherever it happened to drift under a heading or button. The coin element
+  is appended to `<body>` instead, `z-index: 50` — above page content, still under the
+  plate (`90`) and skip-link (`100`) — so it's reachable anywhere on the page.
+- **Pointer Events, not separate mouse/touch handlers** (`pointerdown`/`pointermove`/
+  `pointerup` with `setPointerCapture`), so one code path drives both mouse and touch
+  drag with no duplication. `touch-action: none` on the token stops the browser
+  scrolling the page mid-drag on mobile.
+- **Drop tolerance is generous.** The hit test on release is the plate's own bounding
+  box inflated by 40px on every side — a pixel-perfect target on a drifting object is
+  miserable to hit, on a touchscreen especially.
+- **Dropped on the slot → inserts.** The coin animates into the slot (translate + scale
+  down + rotate, 220ms, matching the existing coin-fall easing) and is hidden
+  (`display: none`) once it lands — it is genuinely gone while the game is armed, not
+  just invisible-but-present. `GXField.coinIn()` arms the field from this path exactly
+  like it does from a plate click or the `"c"` key.
+- **Dropped anywhere else → keeps drifting.** The existing throw-velocity math (drop
+  delta × damping, capped) carries over unchanged from the ghost drag code — the coin
+  picks up release velocity like a thrown ghost does.
+- **Coin return is symmetric.** `GXField.coinOut()` (Escape, or the plate again) reverses
+  the insert animation from the slot's position outward, then hands the coin back to
+  normal drift physics with a small "pop" velocity. The state is visibly reversible, not
+  just functionally.
+
+### One state, several listeners — not several flags
+
+`armed` (in `ghost-field.js`) is the only truth. The coin's position/visibility, the
+plate's label/credit/aria, and every ghost's `pointer-events` all derive from it, never
+from a second `coinInserted`-style flag that could drift out of sync. Concretely:
+
+- `coinIn()`/`coinOut()` are the single entry points, reachable from drag-drop landing on
+  the slot, the plate's click handler, the `"c"` key, or GXField's own Escape listener —
+  every path funnels through the same two functions, so the coin, the plate, and the
+  ghosts' interactivity can't disagree about which path was used.
+- They run `coinInsert()`/`coinEject()` (the coin's own animation) directly, and then
+  dispatch a `"gx-armchange"` `CustomEvent` on `document` with `{ armed: true|false }`.
+- The plate's script (`v3.html`) no longer runs its choreography (panel flash, label
+  swap, credit flip, live-region announce) inline inside its own click handler — it
+  listens for `"gx-armchange"` and reacts to whatever GXField reports, so a coin-drag
+  arm gets the identical plate choreography a click-arm gets, with no duplicated code
+  path to fall out of sync.
+
 ## Accessibility
 
 - **It is a real `<button type="button">`.** Enter and Space activate natively — no

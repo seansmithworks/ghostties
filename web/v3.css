@@ -884,6 +884,50 @@ footer a:hover {
   z-index: 3;
 }
 
+/* Coin token — one physical object, drifts under the field's own drift
+   pacing. Unlike every .gx-ghost, it is pointer-events: auto *before*
+   coin-in too (dragging it to the plate is what arms the field), so it
+   never inherits the .gx-armed gate above. z-index sits above the ghosts
+   (2-3) so it's always reachable, below the plate (90) and hover labels
+   (300). */
+.gx-coin-token {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  will-change: transform;
+  /* 50, not the ghosts' 2-4: appended to <body>, so this is its own
+     stacking context, above page content (main is z-index 1) so the
+     coin stays reachable wherever it drifts, but under the plate (90)
+     and skip-link (100). */
+  z-index: 50;
+}
+.gx-coin-token svg {
+  display: block;
+  filter:
+    drop-shadow(0 0 4px rgba(232, 181, 69, 0.55))
+    drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+}
+.gx-coin-token.gx-coin-dragging {
+  cursor: grabbing;
+  z-index: 200;
+}
+.gx-coin-token.gx-coin-dragging svg {
+  filter:
+    drop-shadow(0 0 8px rgba(232, 181, 69, 0.8))
+    drop-shadow(0 10px 16px rgba(0, 0, 0, 0.6));
+}
+@media (hover: hover) {
+  .gx-coin-token:hover svg {
+    filter:
+      drop-shadow(0 0 6px rgba(232, 181, 69, 0.7))
+      drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+  }
+}
+
 .gx-ghost svg {
   display: block;
   overflow: visible;

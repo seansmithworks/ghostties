@@ -318,6 +318,85 @@
   var PX = 5;
   var _uid = 0;
 
+  // ── Coin (single physical object, drifts with the field, grabbable
+  //    before arming) ──────────────────────────────────────────────────
+  var COIN_PX = 4;
+  var COIN_GRID = [
+    "..XXXX..",
+    ".XXXXXX.",
+    "XXXXXXXX",
+    "XXXXXXXX",
+    "XXXXXXXX",
+    "XXXXXXXX",
+    ".XXXXXX.",
+    "..XXXX..",
+  ];
+
+  function buildCoinSVG() {
+    var rows = COIN_GRID.length,
+      cols = COIN_GRID[0].length;
+    var W = cols * COIN_PX,
+      H = rows * COIN_PX;
+    var gid = "gxc" + _uid++;
+    var body = "",
+      shine = "";
+    COIN_GRID.forEach(function (row, r) {
+      row.split("").forEach(function (cell, c) {
+        if (cell !== "X") return;
+        var x = c * COIN_PX,
+          y = r * COIN_PX;
+        body +=
+          '<rect x="' +
+          x +
+          '" y="' +
+          y +
+          '" width="' +
+          COIN_PX +
+          '" height="' +
+          COIN_PX +
+          '"/>';
+        if (r < 3)
+          shine +=
+            '<rect x="' +
+            x +
+            '" y="' +
+            y +
+            '" width="' +
+            COIN_PX +
+            '" height="' +
+            COIN_PX +
+            '"/>';
+      });
+    });
+    return (
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' +
+      W +
+      '" height="' +
+      H +
+      '" viewBox="0 0 ' +
+      W +
+      " " +
+      H +
+      '" style="image-rendering:pixelated;display:block;overflow:visible">' +
+      '<defs><linearGradient id="' +
+      gid +
+      '" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="#fff6d8" stop-opacity="0.85"/>' +
+      '<stop offset="55%" stop-color="#fff6d8" stop-opacity="0.1"/>' +
+      '<stop offset="100%" stop-color="#fff6d8" stop-opacity="0"/>' +
+      "</linearGradient></defs>" +
+      '<g fill="#e8b545">' +
+      body +
+      "</g>" +
+      '<g fill="url(#' +
+      gid +
+      ')">' +
+      shine +
+      "</g>" +
+      "</svg>"
+    );
+  }
+
   function buildSVG(ghost) {
     var pixels = ghost.pixels,
       eyeRows = ghost.eyeRows || [],
@@ -788,6 +867,194 @@
       };
     });
 
+    // ── Coin token — one physical object, drifts under the ghosts' own
+    // pacing (< 0.6px/frame), stays grabbable (pointer-events: auto) the
+    // whole time, including before coin-in, unlike every ghost. Dragging
+    // it onto the plate's slot is what arms the field; released elsewhere
+    // it keeps drifting with the drop velocity, same throw feel as ghosts.
+    //
+    // Appended to <body>, not `field`: #gx-field is a low-z-index (0)
+    // stacking context so page content (z-index 1+) always paints over
+    // everything inside it, which is correct for ghosts (ambient
+    // background) but would leave the coin permanently ungrabbable
+    // wherever it drifts under a heading, button, or the product frame.
+    // The coin needs its own stacking context above page content to stay
+    // reachable everywhere, per spec.
+    var COIN_W = COIN_GRID[0].length * COIN_PX;
+    var COIN_H = COIN_GRID.length * COIN_PX;
+    var coinEl = document.createElement("div");
+    coinEl.className = "gx-coin-token";
+    coinEl.setAttribute("aria-hidden", "true");
+    coinEl.innerHTML = buildCoinSVG();
+    document.body.appendChild(coinEl);
+
+    var coin = {
+      el: coinEl,
+      w: COIN_W,
+      h: COIN_H,
+      x: 100 + Math.random() * Math.max(1, VW - COIN_W - 200),
+      y: 100 + Math.random() * Math.max(1, VH - COIN_H - 200),
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: (Math.random() - 0.5) * 0.5,
+      bobPhase: Math.random() * Math.PI * 2,
+      t: 0,
+      state: "drifting", // drifting | dragging | inserting | inSlot | ejecting
+      animTimer: null,
+    };
+
+    function slotTargetPoint() {
+      var slotEl = document.querySelector(".gx-coin-slot");
+      var plateEl = document.getElementById("gx-coin-btn");
+      var r =
+        (slotEl || plateEl) && (slotEl || plateEl).getBoundingClientRect();
+      if (!r) return { x: VW - 60, y: 20 };
+      return {
+        x: r.left + r.width / 2 - coin.w / 2,
+        y: r.top + r.height / 2 - coin.h / 2,
+      };
+    }
+
+    function coinInsert() {
+      if (coin.state === "inserting" || coin.state === "inSlot") return;
+      coin.state = "inserting";
+      coin.el.classList.remove("gx-coin-dragging");
+      var target = slotTargetPoint();
+      if (coin.animTimer) clearTimeout(coin.animTimer);
+      coin.el.style.transition =
+        "transform 220ms cubic-bezier(.5,0,.75,0), opacity 220ms cubic-bezier(.5,0,.75,0)";
+      coin.el.style.transform =
+        "translate(" +
+        target.x +
+        "px," +
+        target.y +
+        "px) scale(0.35) rotate(180deg)";
+      coin.el.style.opacity = "0";
+      coin.animTimer = setTimeout(function () {
+        coin.el.style.display = "none";
+        coin.el.style.transition = "";
+        coin.state = "inSlot";
+      }, 230);
+    }
+
+    function coinEject() {
+      if (coin.state === "ejecting" || coin.state === "drifting") return;
+      var target = slotTargetPoint();
+      coin.x = target.x;
+      coin.y = target.y;
+      coin.state = "ejecting";
+      if (coin.animTimer) clearTimeout(coin.animTimer);
+      coin.el.style.transition = "none";
+      coin.el.style.display = "";
+      coin.el.style.transform =
+        "translate(" +
+        target.x +
+        "px," +
+        target.y +
+        "px) scale(0.35) rotate(180deg)";
+      coin.el.style.opacity = "0";
+      // Force reflow so the animate-in transition below actually starts
+      // from the state just set, instead of the browser coalescing it.
+      void coin.el.offsetWidth;
+      coin.animTimer = setTimeout(function () {
+        coin.el.style.transition =
+          "transform 260ms cubic-bezier(.25,1,.5,1), opacity 260ms cubic-bezier(.25,1,.5,1)";
+        coin.el.style.transform =
+          "translate(" +
+          target.x +
+          "px," +
+          target.y +
+          "px) scale(1) rotate(0deg)";
+        coin.el.style.opacity = "1";
+        coin.animTimer = setTimeout(function () {
+          coin.el.style.transition = "";
+          coin.state = "drifting";
+          var ang = Math.random() * Math.PI * 2;
+          coin.vx = Math.cos(ang) * 0.4;
+          coin.vy = Math.sin(ang) * 0.4 - 0.3;
+        }, 260);
+      }, 16);
+    }
+
+    var coinDrag = {
+      active: false,
+      offX: 0,
+      offY: 0,
+      lastX: 0,
+      lastY: 0,
+      vx: 0,
+      vy: 0,
+    };
+
+    function coinSlotHitTest(clientX, clientY) {
+      var slotEl = document.querySelector(".gx-coin-slot");
+      var plateEl = document.getElementById("gx-coin-btn");
+      var target = plateEl || slotEl;
+      if (!target) return false;
+      var r = target.getBoundingClientRect();
+      var pad = 40;
+      return (
+        clientX >= r.left - pad &&
+        clientX <= r.right + pad &&
+        clientY >= r.top - pad &&
+        clientY <= r.bottom + pad
+      );
+    }
+
+    coinEl.addEventListener("pointerdown", function (e) {
+      if (coin.state !== "drifting") return;
+      coin.state = "dragging";
+      coinDrag.active = true;
+      coinDrag.offX = coin.x - e.clientX;
+      coinDrag.offY = coin.y - e.clientY;
+      coinDrag.lastX = e.clientX;
+      coinDrag.lastY = e.clientY;
+      coinDrag.vx = coinDrag.vy = 0;
+      coinEl.classList.add("gx-coin-dragging");
+      try {
+        coinEl.setPointerCapture(e.pointerId);
+      } catch (err) {}
+      e.preventDefault();
+    });
+
+    coinEl.addEventListener("pointermove", function (e) {
+      if (!coinDrag.active) return;
+      coinDrag.vx = e.clientX - coinDrag.lastX;
+      coinDrag.vy = e.clientY - coinDrag.lastY;
+      coinDrag.lastX = e.clientX;
+      coinDrag.lastY = e.clientY;
+      coin.x = e.clientX + coinDrag.offX;
+      coin.y = e.clientY + coinDrag.offY;
+    });
+
+    function coinDragEnd(e) {
+      if (!coinDrag.active) return;
+      coinDrag.active = false;
+      coinEl.classList.remove("gx-coin-dragging");
+      try {
+        coinEl.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+      if (coinSlotHitTest(e.clientX, e.clientY)) {
+        coinIn();
+        return;
+      }
+      coin.vx = coinDrag.vx * 0.35;
+      coin.vy = coinDrag.vy * 0.35;
+      var spd = Math.hypot(coin.vx, coin.vy);
+      if (spd > 3) {
+        coin.vx = (coin.vx / spd) * 3;
+        coin.vy = (coin.vy / spd) * 3;
+      }
+      coin.state = "drifting";
+    }
+
+    coinEl.addEventListener("pointerup", coinDragEnd);
+    coinEl.addEventListener("pointercancel", function (e) {
+      if (!coinDrag.active) return;
+      coinDrag.active = false;
+      coinEl.classList.remove("gx-coin-dragging");
+      coin.state = "drifting";
+    });
+
     var dragging = null,
       dOffX = 0,
       dOffY = 0;
@@ -952,6 +1219,45 @@
       updateParticles();
       drawParticles();
 
+      if (coin.state === "drifting") {
+        coin.t++;
+        coin.x += coin.vx;
+        coin.y += coin.vy;
+        if (coin.x < 0) {
+          coin.x = 0;
+          coin.vx = Math.abs(coin.vx);
+        }
+        if (coin.x + coin.w > VW) {
+          coin.x = VW - coin.w;
+          coin.vx = -Math.abs(coin.vx);
+        }
+        if (coin.y < 0) {
+          coin.y = 0;
+          coin.vy = Math.abs(coin.vy);
+        }
+        if (coin.y + coin.h > VH) {
+          coin.y = VH - coin.h;
+          coin.vy = -Math.abs(coin.vy);
+        }
+        var coinBob = Math.sin(coin.t * 0.03 + coin.bobPhase) * 4;
+        var coinSpin = (Math.sin(coin.t * 0.015 + coin.bobPhase) * 10).toFixed(
+          1,
+        );
+        coin.el.style.transform =
+          "translate(" +
+          coin.x +
+          "px," +
+          (coin.y + coinBob) +
+          "px) rotate(" +
+          coinSpin +
+          "deg)";
+      } else if (coin.state === "dragging") {
+        coin.t++;
+        var coinBobD = Math.sin(coin.t * 0.08 + coin.bobPhase) * 2;
+        coin.el.style.transform =
+          "translate(" + coin.x + "px," + (coin.y + coinBobD) + "px)";
+      }
+
       ghosts.forEach(function (g) {
         g.t++;
         if (g === dragging) {
@@ -1114,13 +1420,24 @@
     // Before coin-in, the field is pure drift: no drag, no hover card, no
     // click-to-high-five, no click ripple. Coin-in arms per-ghost
     // pointer-events (see .gx-armed .gx-ghost in v3.css) and this `armed`
-    // flag, which every user-driven handler above checks.
+    // flag, which every user-driven handler above checks. `armed` is the
+    // one source of truth; the coin's own position/visibility (drifting
+    // vs. in the slot) is driven from here too — coinInsert()/coinEject()
+    // run regardless of whether coin-in was reached by drag-drop, the "c"
+    // key, or the plate itself, so the visuals never disagree between
+    // paths. The plate's own choreography (label/credit/panel) listens
+    // for "gx-armchange" instead of running inline here, for the same
+    // reason.
     function coinIn() {
       if (armed) return;
       armed = true;
+      coinInsert();
       field.classList.add("gx-armed");
       field.setAttribute("aria-hidden", "false");
       document.body.classList.add("gx-coin-in");
+      document.dispatchEvent(
+        new CustomEvent("gx-armchange", { detail: { armed: true } }),
+      );
     }
 
     function coinOut() {
@@ -1133,6 +1450,10 @@
       field.classList.remove("gx-armed");
       field.setAttribute("aria-hidden", "true");
       document.body.classList.remove("gx-coin-in");
+      coinEject();
+      document.dispatchEvent(
+        new CustomEvent("gx-armchange", { detail: { armed: false } }),
+      );
     }
 
     function toggleCoin() {
