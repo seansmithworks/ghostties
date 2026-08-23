@@ -456,6 +456,49 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(text(result.remainderRange, in: result.source), "npm run build > log.txt")
     }
 
+    /// B3 (round-1 review), both halves. `ghostties > > refactor the
+    /// parser` — Sean's own skip-a-level shape (BACKLOG D6): two chevrons
+    /// close an EMPTY operator run and open a thread run with no operator
+    /// ever resolved. Before the fix this reached `commandOptions` (via
+    /// `parse`'s adapter) reporting the THREAD NAME as the ad-hoc command —
+    /// `Run "refactor the parser"` would have executed the thread name as
+    /// a shell command. Tests both the `parsePath` half (no operator
+    /// segment, empty or otherwise) and the `parse` adapter half (no
+    /// remainder reported at all, since parse() has no thread-name
+    /// concept to fall back to).
+    ///
+    /// Mutation (parsePath half): restore `filled.insert(.operation)`
+    /// outside the `stop > start` guard — `result.segments.contains {
+    /// $0.kind == .operation }` alone wouldn't catch this (no segment is
+    /// EVER appended for an empty run, guard or no guard — the append was
+    /// already correctly guarded), so this only proves the `filled` state
+    /// hygiene half, not the observable bug; the adapter assertion below
+    /// is what actually proves the fix. Mutation (parse adapter half):
+    /// drop the `openRunIsThread` guard in `parse`'s remainder derivation
+    /// — this goes red because `remainderTokens` would then contain
+    /// `["refactor", "the", "parser"]`. Ran red against both mutations
+    /// independently, confirmed green after reverting each.
+    func testAdapterDoesNotExecuteThreadNameAsAdHocCommand() {
+        let project = makeProject(name: "ghostties")
+        let path = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties > > refactor the parser",
+            projects: [project],
+            templates: [],
+            isLocked: false
+        )
+        XCTAssertFalse(path.segments.contains { $0.kind == .operation })
+        XCTAssertEqual(path.activeKind, .thread)
+        XCTAssertEqual(text(path.remainderRange, in: path.source), "refactor the parser")
+
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties > > refactor the parser",
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertTrue(result.remainderTokens.isEmpty, "the thread name must never be reported as the ad-hoc command")
+    }
+
     /// The other half of the old test's real requirement: a redirect inside
     /// quotes must stay a literal argv word straight through `parse`'s flat
     /// adapter — unaffected by the path-grammar rewrite, since quoting still
@@ -472,6 +515,21 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(result.projectId, project.id)
         XCTAssertNil(result.branchToken)
         XCTAssertEqual(result.remainderTokens, ["npm run build > log.txt"])
+
+        // D7 (round-1 review): stopping at `tokenize` output doesn't prove
+        // the redirect survives all the way to the argv that actually gets
+        // executed — `makeAdHocTemplate`/`buildCommand()` (`AgentTemplate`)
+        // is where that's earned, via the per-token-escaped
+        // `additionalFlags` carrier. Mutation-proof: reverting
+        // `makeAdHocTemplate`'s re-split-first-token fix (putting the whole
+        // `"npm run build > log.txt"` into `command` unsplit) turns
+        // `buildCommand()` into `''npm run build > log.txt''` — one
+        // unrunnable argv word — which fails this assertion; confirmed by
+        // temporarily reverting that fix, running red, then restoring it.
+        let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: result.remainderTokens)
+        XCTAssertEqual(template?.command, "npm")
+        XCTAssertEqual(template?.agent?.additionalFlags, ["run", "build", ">", "log.txt"])
+        XCTAssertEqual(template?.buildCommand(), "'npm' 'run' 'build' '>' 'log.txt'")
     }
 
     /// A quoted `>` must stay a literal character inside the quoted
@@ -701,22 +759,36 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertNil(trimmedResult.projectId, "the trimmed query has lost its terminator and must NOT resolve")
     }
 
-    /// `parsePath`, `PathParse.remainderRange`. Mutation: try every token
-    /// independently instead of stopping at the first unmatched one — `dev`
-    /// in `npm run dev` would get claimed as a project once `npm`/`run`
-    /// fail, corrupting the ad-hoc command mid-string.
+    /// `parsePath`, `PathParse.remainderRange`. D4 (round-1 review): the
+    /// original version of this test was inert — two OTHER rules (there is
+    /// no second project in scope to claim, and `dev` can never become a
+    /// second `.project` segment since `.project` is already filled) were
+    /// already sufficient to pass it; deleting the "matching stops" rule
+    /// entirely left it green. The real property this rule protects is
+    /// that a LATER token cannot claim a type that's still unfilled once
+    /// matching has stopped — proven here with a token (`main`) that WOULD
+    /// match a real, still-open type (`.branch`, via `knownBranchNames`) if
+    /// it were retried independently, but must not be, because `npm`
+    /// (immediately before it) already ended matching for good.
+    ///
+    /// Mutation: retry every terminated token against all currently-unfilled
+    /// types independently (i.e. delete the "matching stops" rule) — `main`
+    /// would then claim `.branch`, and this goes red. Ran red against that
+    /// mutation (removed the `openRunKind == nil` gate's exclusivity so a
+    /// later token could still reach the branch-match check), confirmed
+    /// green again after restoring it.
     func testGreedyMatchingStopsAtFirstUnmatchedToken() {
         let project = makeProject(name: "ghostties")
-        let devProject = makeProject(name: "dev", rootPath: "/Users/sean/Code/dev")
         let result = SessionComposerCommandParser.parsePath(
-            rawQuery: "ghostties npm run dev",
-            projects: [project, devProject],
+            rawQuery: "ghostties npm main ",
+            projects: [project],
             templates: [],
+            knownBranchNames: ["main"],
             isLocked: false
         )
         XCTAssertEqual(result.projectId, project.id)
-        XCTAssertFalse(result.segments.contains { $0.resolved == .project(devProject.id) })
-        XCTAssertEqual(text(result.remainderRange, in: result.source), "npm run dev")
+        XCTAssertFalse(result.segments.contains { $0.kind == .branch }, "main must not be retried as a branch once matching stopped at npm")
+        XCTAssertEqual(text(result.remainderRange, in: result.source), "npm main")
     }
 
     /// `parsePath`, `ParseResult.remainderTokens` (via the `parse` adapter).
@@ -728,6 +800,39 @@ final class SessionComposerCommandParserTests: XCTestCase {
         let result = SessionComposerCommandParser.parse(query: "ghostties npm run dev", projects: [project], isLocked: false)
         XCTAssertEqual(result.projectId, project.id)
         XCTAssertEqual(result.remainderTokens, ["npm", "run", "dev"])
+    }
+
+    /// B2 (round-1 review): pins the truncation behavior for the flat,
+    /// no-leading-chevron shape — there was no test on it at all, which is
+    /// exactly how a later "fix" could silently walk it back. This IS the
+    /// correct, intentional behavior under the greedy rewrite: `>` is
+    /// grammar, not shell syntax, once any operator text is being typed —
+    /// an unquoted redirect needs quoting
+    /// (`testParseKeepsQuotedChevronLiteralInAdHocRemainder` covers that).
+    /// See `parse`'s own doc comment for the redirect-truncation note.
+    ///
+    /// Mutation: disable rule 4 case 2's chevron close (`parsePath`'s
+    /// `kind == .operation` branch) so a `>` never closes an open ad-hoc
+    /// run — this goes red because the run keeps absorbing everything
+    /// through `log.txt`, and `remainderTokens` becomes
+    /// `["npm","run","build",">","log.txt"]` again (the pre-rewrite
+    /// shape). Note the truncation is earned entirely inside `parsePath`
+    /// (the closed segment's own range already excludes `> log.txt`); the
+    /// adapter's final `tokenize` call operates on already-truncated text,
+    /// so mutating ITS `separatorsIncludeChevron` flag does not affect this
+    /// test at all — tried that first, confirmed it stays green under that
+    /// mutation, which is why the real mutation above is the one that
+    /// matters. Ran red against the `parsePath`-level mutation, confirmed
+    /// green after reverting.
+    func testFlatFormRedirectTruncatesAtChevron() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties npm run build > log.txt",
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertEqual(result.remainderTokens, ["npm", "run", "build"])
     }
 
     /// `parsePath`, `Resolution.template`. Mutation: classify a known
@@ -862,7 +967,23 @@ final class SessionComposerCommandParserTests: XCTestCase {
     /// by re-joining tokens with a hardcoded separator instead of slicing
     /// `source` by range — a trailing space (or, in another test, quotes)
     /// would silently drop from a real, on-screen segment.
-    func testSegmentRangeRoundTripsVerbatimIncludingTrailingWhitespace() {
+    /// D5 (round-1 review): renamed and strengthened. The original name
+    /// promised trailing-whitespace behavior but never asserted it — a
+    /// resolved segment's range excludes its trailing separator BY
+    /// CONSTRUCTION (the separator is consumed but never included when a
+    /// word token's raw range is recorded), so this now proves that
+    /// boundary explicitly instead of only re-testing quote preservation
+    /// (already covered, for the operator segment, by
+    /// `testSegmentRangeKeepsQuotedArgumentQuotesIntact` below).
+    ///
+    /// Mutation: extend a resolved word token's range to include the
+    /// separator run that terminated it (e.g. `range.length += 1` at the
+    /// project-match site) — the trailing-whitespace assertion goes red
+    /// (the range now reaches into the two trailing spaces), while the
+    /// quote-preservation assertion would still pass, which is exactly why
+    /// the original test's name was misleading. Ran red against that
+    /// mutation, confirmed green after reverting.
+    func testSegmentRangeKeepsQuotedProjectNameQuotesIntactAndExcludesTrailingWhitespace() {
         let project = makeProject(name: "My Project")
         let raw = "\"My Project\"  "
         let result = SessionComposerCommandParser.parsePath(
@@ -875,6 +996,10 @@ final class SessionComposerCommandParserTests: XCTestCase {
         // The segment's own range covers exactly the quoted token as typed —
         // verbatim, quotes included, no re-join.
         XCTAssertEqual(segment.text(in: result.source), "\"My Project\"")
+        // And it stops exactly at the closing quote — the two trailing
+        // spaces (the terminator) are NOT part of the segment's range.
+        let rawLength = (raw as NSString).length
+        XCTAssertEqual(segment.range.location + segment.range.length, rawLength - 2)
     }
 
     /// `Segment.range`, `Segment.text(in:)`. Mutation: strip quotes when
@@ -937,18 +1062,75 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(result.source, raw)
     }
 
-    /// `PathParse.remainderRange`. Mutation: end the remainder at the next
-    /// token boundary instead of running to end-of-string — a multi-token
-    /// ad-hoc command would truncate to its first unmatched word.
-    func testRemainderRangeRunsToEndOfStringUnlessChevronCloses() {
+    /// `PathParse.remainderRange`. Nit (round-1 review): renamed — the old
+    /// name promised BOTH halves of "runs to end of string unless chevron
+    /// closes" but only ever tested the first half, and even that half
+    /// overstated its own claim: an open run runs to the end of the last
+    /// WORD (`--watch`), not literally to `source`'s `endIndex` (a trailing
+    /// space or two, common while live-typing, would leave a gap between
+    /// the two). Now tests both halves explicitly.
+    ///
+    /// Mutation (no-chevron half): end the remainder at the next token
+    /// boundary instead of running to the end of the last word — a
+    /// multi-token ad-hoc command would truncate to its first unmatched
+    /// word.
+    func testRemainderRangeRunsToEndOfLastWordUnlessChevronCloses() {
         let project = makeProject(name: "ghostties")
-        let result = SessionComposerCommandParser.parsePath(
+        let openEnded = SessionComposerCommandParser.parsePath(
             rawQuery: "ghostties npm run dev --watch",
             projects: [project],
             templates: [],
             isLocked: false
         )
-        XCTAssertEqual(text(result.remainderRange, in: result.source), "npm run dev --watch")
+        XCTAssertEqual(text(openEnded.remainderRange, in: openEnded.source), "npm run dev --watch")
+
+        // Chevron half: a later `>` closes the open run early — the
+        // remainder must NOT keep running to the end of the string once
+        // that happens. Mutation: ignore `>` while inside an operation
+        // run (revert B3/rule-4-case-2's close) — this half goes red
+        // since the closed segment's range would then never exist and
+        // `remainderRange` would run all the way to "the parser" instead.
+        let chevronClosed = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties npm run dev > the parser",
+            projects: [project],
+            templates: [],
+            isLocked: false
+        )
+        let closedAdHoc = chevronClosed.segments.first { $0.kind == .operation && $0.resolved == .adHoc }
+        XCTAssertEqual(closedAdHoc.map { text($0.range, in: chevronClosed.source) }, "npm run dev")
+        XCTAssertEqual(text(chevronClosed.remainderRange, in: chevronClosed.source), "the parser")
+    }
+
+    /// B1 (round-1 review): `PathParse.activeKind`,
+    /// `openedByFinalUnterminatedToken`. The blocker's own worked example —
+    /// a run that predates the final, still-being-typed token must NOT
+    /// have its `activeKind` overridden to "first unfilled type"; only a
+    /// run OPENED BY that exact final token gets the override (see the
+    /// companion `testCompletingSplicesOverTrailingTermInARealParsePathResult`
+    /// for that case).
+    ///
+    /// Mutation: apply the B1 override unconditionally whenever the query
+    /// ends in an unterminated token, instead of only when THAT token is
+    /// what opened the run — this goes red because `activeKind` would
+    /// report `.branch` (first unfilled) instead of `.operation`. Ran red
+    /// against that mutation (dropped the `openedByFinalUnterminatedToken`
+    /// gate, applying the override whenever `trailingTermRange == nil` was
+    /// false), confirmed green after reverting.
+    func testActiveKindStaysOperationWhenRunPredatesTheFinalToken() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties cco -n te",
+            projects: [project],
+            templates: [],
+            isLocked: false
+        )
+        XCTAssertEqual(result.activeKind, .operation)
+        // "te" lands INSIDE the run "cco" already opened — legitimate
+        // in-progress ad-hoc command text, not a completable lookup
+        // target, so unlike the B1 test above there is no trailing term
+        // here to complete against a known list.
+        XCTAssertNil(result.trailingTermRange)
+        XCTAssertEqual(text(result.remainderRange, in: result.source), "cco -n te")
     }
 
     /// `PathParse.activeKind`. Mutation: return `.project` (or any non-nil
@@ -988,21 +1170,49 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertTrue(withBranches.segments.contains { $0.kind == .branch && $0.resolved == .branch("main") })
     }
 
-    /// `completing(parse:with:)`. Mutation: rebuild the result from the
-    /// completed prefix only, dropping whatever followed the trailing term
-    /// — a hand-constructed `PathParse` with a mid-string
-    /// `trailingTermRange` proves the splice preserves the tail verbatim,
-    /// not just the common (term-at-end) case every real `parsePath` call
-    /// happens to produce.
-    func testCompletingSplicesOverTrailingTermAndPreservesTheTail() {
-        let source = "ghostties gho REST OF THE QUERY"
-        let termRange = NSRange(location: 10, length: 3) // "gho"
-        let parse = SessionComposerCommandParser.PathParse(
-            source: source, segments: [], trailingTermRange: termRange,
-            activeKind: .project, remainderRange: nil, projectId: nil
+    /// `completing(parse:with:)`. D6 (round-1 review): the previous version
+    /// hand-built a `PathParse` with a MID-STRING `trailingTermRange`
+    /// followed by real trailing content ("REST OF THE QUERY") — a state
+    /// `parsePath` could never actually produce, before OR after B1: an
+    /// unterminated token is by construction always the LAST token in the
+    /// scan (nothing can follow it in the raw string), so "preserves
+    /// whatever comes after the term" was never a reachable scenario to
+    /// begin with, hand-built or not. What B1 DID make reachable for the
+    /// first time is a non-nil `trailingTermRange` on anything OTHER than
+    /// the whole-query single-word case — i.e. completing a LATER segment
+    /// (branch, here) while a project has already resolved ahead of it.
+    /// This test now exercises exactly that, through a real `parsePath`
+    /// call, splicing over the real trailing term and reparsing the
+    /// spliced result to confirm the branch actually resolves — the
+    /// closest real analogue to "the tail survives" available: everything
+    /// BEFORE the term (`"ghostties "`) must also survive the splice
+    /// untouched.
+    ///
+    /// Mutation: rebuild the completed string from the value alone,
+    /// dropping the untouched prefix before the term (`"ghostties "`) —
+    /// this goes red because the reparsed project would then be nil. Ran
+    /// red against that mutation (returned `value + " "` alone from
+    /// `completing`, discarding `parse.source`'s prefix), confirmed green
+    /// after reverting.
+    func testCompletingSplicesOverTrailingTermInARealParsePathResult() {
+        let project = makeProject(name: "ghostties")
+        // "m" is the still-being-typed branch token — unterminated, NOT the
+        // first token (project "ghostties" already resolved ahead of it) —
+        // exactly the case B1 fixed `trailingTermRange` for.
+        let parse = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties m", projects: [project], templates: [], isLocked: false
         )
-        let result = SessionComposerCommandParser.completing(parse: parse, with: "ghostties")
-        XCTAssertEqual(result, "ghostties ghostties  REST OF THE QUERY")
+        XCTAssertNotNil(parse.trailingTermRange, "B1: a later unterminated token must still set trailingTermRange")
+        XCTAssertEqual(parse.activeKind, .branch)
+
+        let completed = SessionComposerCommandParser.completing(parse: parse, with: "main")
+        XCTAssertEqual(completed, "ghostties main ")
+
+        let reparsed = SessionComposerCommandParser.parsePath(
+            rawQuery: completed, projects: [project], templates: [], knownBranchNames: ["main"], isLocked: false
+        )
+        XCTAssertEqual(reparsed.projectId, project.id, "the untouched prefix before the term must survive the splice")
+        XCTAssertTrue(reparsed.segments.contains { $0.kind == .branch && $0.resolved == .branch("main") })
     }
 
     /// `completing(parse:with:)`. Mutation: omit the trailing space after

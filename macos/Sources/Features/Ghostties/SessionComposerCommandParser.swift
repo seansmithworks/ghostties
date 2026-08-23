@@ -173,6 +173,18 @@ enum SessionComposerCommandParser {
         }
 
         /// The ONLY way a caller obtains this segment's display string.
+        ///
+        /// `Range(range, in: source)` only fails (returning `""` here) when
+        /// `range` doesn't land on a UTF-16 scalar boundary in `source` at
+        /// all — a genuinely different string, or one shorter than the
+        /// range implies. A STALE range that's still in-bounds for a
+        /// DIFFERENT-but-similar `source` (e.g. one more keystroke) does
+        /// NOT fail this guard — it silently returns whatever text happens
+        /// to sit at those offsets now, which is wrong but not obviously
+        /// so. Always call this with the exact `source` the range was
+        /// produced against (`PathParse.source`, verbatim) — this matters
+        /// more once D11 hands these same ranges to `NSTextStorage`, where
+        /// the same silent-wrong-text failure mode applies.
         func text(in source: String) -> String {
             guard let r = Range(range, in: source) else { return "" }
             return String(source[r])
@@ -275,7 +287,10 @@ enum SessionComposerCommandParser {
     /// at the top of this section. `rawQuery` must be the RAW, untrimmed
     /// search text — trimming erases the trailing-whitespace signal
     /// termination depends on (mirrors why `stickyChipProjectId` below also
-    /// takes a raw query).
+    /// takes a raw query). `parse(query:...)` below is the one caller that
+    /// still passes a pre-trimmed string — deliberately, see its own doc
+    /// comment for why that's safe for its specific, narrower contract
+    /// rather than a violation of this one.
     ///
     /// `templates`/`knownBranchNames` are caller-supplied so this stays
     /// pure and disk-free — the parser never looks anything up itself.
@@ -318,6 +333,21 @@ enum SessionComposerCommandParser {
         // unterminated token is by construction the LAST token in the scan
         // (nothing can follow it), so this only ever matters once, here.
         var hasProcessedAnyToken = false
+        // B1 (round-1 review): set true only when THIS unterminated word is
+        // what opened the run below — i.e. the token the user is still
+        // typing is itself the reason matching gave up. In that one case,
+        // `activeKind` must report the type that was STILL BEING TRIED
+        // against it (first unfilled among project/branch/operation), not
+        // the run's own classification — the suggestion list should keep
+        // offering branch/project candidates for a token the user hasn't
+        // finished, even though a fallback ad-hoc/thread run opens
+        // underneath it for D13's "what if they hit Return right now"
+        // remainder. A run opened by an EARLIER token (ordinary rule 3, or
+        // a `>`) leaves this false, and `activeKind` follows `openRunKind`
+        // as before — this is what keeps `ghostties cco -n te` reporting
+        // `.operation` (its run opened at "cco", a different, already-
+        // terminated token).
+        var openedByFinalUnterminatedToken = false
 
         func nextFreeTextKind() -> SegmentKind {
             filled.contains(.operation) ? .thread : .operation
@@ -330,8 +360,14 @@ enum SessionComposerCommandParser {
             case .word(let range, let matchText, let terminated):
                 if openRunKind == nil {
                     if !terminated {
+                        // B1 fix: this must be set regardless of whether we
+                        // continue below without opening a run (the bare
+                        // first-token case, still a valid Tab-complete
+                        // target) or fall through to open one — the run
+                        // opening is a D13 fallback, not evidence that
+                        // completion no longer applies to this token.
+                        trailingTermRange = range
                         if isFirstToken {
-                            trailingTermRange = range
                             continue
                         }
                         // Not the first token, and not terminated: skip
@@ -341,6 +377,7 @@ enum SessionComposerCommandParser {
                         openRunKind = nextFreeTextKind()
                         openRunStart = range.location
                         openRunEnd = range.location + range.length
+                        openedByFinalUnterminatedToken = true
                         continue
                     }
                     if !filled.contains(.project),
@@ -382,15 +419,27 @@ enum SessionComposerCommandParser {
             case .chevron(let range):
                 if let kind = openRunKind {
                     if kind == .operation {
-                        // Rule 4, case 2: close the ad-hoc run, advance to thread.
+                        // Rule 4, case 2: close the ad-hoc run, advance to
+                        // thread. B3 fix (round-1 review): only mark
+                        // `.operation` filled (and only emit a segment) when
+                        // the run actually had content — `ghostties > >
+                        // refactor the parser` (Sean's skip-a-level shape,
+                        // BACKLOG D6) closes an EMPTY operator run here.
+                        // Marking `.operation` filled with nothing behind it
+                        // was a lie the surrounding code never told anyone
+                        // about, but it's still wrong state to carry even
+                        // though nothing currently re-reads `filled` after a
+                        // run has opened (a run, once open, never reverts to
+                        // matching-live) — see the adapter fix below for the
+                        // part of this bug that WAS observable.
                         if let start = openRunStart, let stop = openRunEnd, stop > start {
                             segments.append(Segment(
                                 kind: .operation,
                                 range: NSRange(location: start, length: stop - start),
                                 resolved: .adHoc
                             ))
+                            filled.insert(.operation)
                         }
-                        filled.insert(.operation)
                         openRunKind = .thread
                         openRunStart = nil
                         openRunEnd = nil
@@ -416,14 +465,21 @@ enum SessionComposerCommandParser {
         }
 
         var remainderRange: NSRange?
-        if let kind = openRunKind, let start = openRunStart, let stop = openRunEnd, stop > start {
+        if openRunKind != nil, let start = openRunStart, let stop = openRunEnd, stop > start {
             remainderRange = NSRange(location: start, length: stop - start)
-            _ = kind // kind is exposed via `activeKind` below
         }
 
-        let activeKind: SegmentKind = openRunKind
-            ?? [.project, .branch, .operation].first(where: { !filled.contains($0) })
-            ?? .thread
+        // B1 fix: when the run was opened by the very last, still-typing
+        // token (not an earlier one), report the type STILL BEING TRIED
+        // against that token — not the run's own fallback classification —
+        // so the suggestion list keeps offering the right candidates while
+        // the user is mid-word. See `openedByFinalUnterminatedToken`'s
+        // declaration above for the full reasoning and why this never
+        // disagrees with `openRunKind` when the true answer is `.thread`.
+        let firstUnfilledKind = [SegmentKind.project, .branch, .operation].first(where: { !filled.contains($0) })
+        let activeKind: SegmentKind = openedByFinalUnterminatedToken
+            ? (firstUnfilledKind ?? .thread)
+            : (openRunKind ?? firstUnfilledKind ?? .thread)
 
         return PathParse(
             source: rawQuery,
@@ -459,11 +515,34 @@ enum SessionComposerCommandParser {
     /// existing caller of `parse` has a branch list to offer) — kept as a
     /// real (not dead) code path for that reason, not vestigial.
     ///
+    /// `query` is the caller's already-TRIMMED search text (its existing
+    /// contract, unchanged by this rewrite) — NOT the raw `rawQuery`
+    /// `parsePath` otherwise requires. This is safe here specifically
+    /// because every one of `parse`'s test literals is either a single bare
+    /// token (whose termination is unaffected by trimming — there was
+    /// nothing trailing to trim) or already ends mid-word with no
+    /// meaningful trailing whitespace of its own. A caller that DOES need
+    /// the trailing-space/`>` termination signal (D2 completion, D12
+    /// suggestion scoping) must call `parsePath` directly with the raw
+    /// `searchText`, not through this adapter.
+    ///
     /// Behavior note: as of the path-grammar rewrite, `>` no longer
     /// introduces a branch segment through this adapter — it closes
     /// whatever free-text run is open and advances (rule 4). A bare
     /// `ghostties > main` now resolves project `ghostties` with ad-hoc
     /// remainder `main`, not a branch.
+    ///
+    /// Redirect-truncation note (round-1 review, B2): the flat,
+    /// no-leading-chevron shape (`ghostties npm run build > log.txt`, no
+    /// space/`>` between project and the command) now truncates the
+    /// remainder AT the first unquoted `>` — `["npm","run","build"]`, NOT
+    /// `["npm","run","build",">","log.txt"]`. This is an intentional
+    /// consequence of the greedy rewrite, not a bug: `>` is grammar now,
+    /// not shell syntax, so an unquoted redirect inside an ad-hoc command
+    /// needs quoting (`testParseKeepsQuotedChevronLiteralInAdHocRemainder`
+    /// covers the quoted form; `testFlatFormRedirectTruncatesAtChevron`
+    /// pins the unquoted truncation itself so a later "fix" can't silently
+    /// walk it back).
     static func parse(query: String, projects: [Project], isLocked: Bool) -> ParseResult {
         let path = parsePath(rawQuery: query, projects: projects, templates: [], isLocked: isLocked)
         guard let projectId = path.projectId else { return .none }
@@ -473,14 +552,36 @@ enum SessionComposerCommandParser {
             return token
         }.first
 
-        // The remainder this adapter reports is "the command": whichever ad-hoc
-        // operator run exists — closed via an explicit `>` (rare, requires a
-        // second remainder past it, which this flat `ParseResult` can't express
-        // and so is dropped, matching pre-rewrite behavior of only ever
-        // reporting one remainder), or still open at end of string (the
-        // ordinary case, `ghostties cco -n test`).
-        let remainderRange: NSRange? = path.segments.first(where: { $0.kind == .operation && $0.resolved == .adHoc })?.range
-            ?? path.remainderRange
+        // The remainder this adapter reports is "the command." Two sources,
+        // tried in order:
+        //
+        // 1. A CLOSED ad-hoc operator segment — settled by an explicit `>`
+        //    (`ghostties main cco > refactor the parser` closes ad-hoc
+        //    "main cco" before the thread name even starts). Safe to report
+        //    unconditionally: it's already a fact, regardless of what comes
+        //    after it in the query, and `parse`'s flat `ParseResult` has no
+        //    way to also report the thread name past it anyway (dropped,
+        //    matching pre-rewrite behavior of only ever reporting one
+        //    remainder).
+        // 2. The STILL-OPEN run (`path.remainderRange`) — but ONLY when it's
+        //    still classified as the operator, not a thread. B3 fix (round-1
+        //    review): without this guard, `ghostties > > refactor the
+        //    parser` (Sean's skip-a-level shape, BACKLOG D6) — an explicit
+        //    `>` closing an EMPTY operator run, then a second `>` opening
+        //    a thread run with no operator ever having resolved — fell
+        //    through to `path.remainderRange`, which by then holds the
+        //    THREAD text, and reported "refactor the parser" as the ad-hoc
+        //    command. `path.activeKind` is the reliable signal here: it can
+        //    diverge from the run's own classification while a token is
+        //    still being typed (see `openedByFinalUnterminatedToken` in
+        //    `parsePath`), but ONLY in the direction of reporting
+        //    `.project`/`.branch` instead of `.operation` — it never
+        //    reports anything OTHER than `.thread` when the run truly is a
+        //    thread run, so gating on it here can't misclassify a
+        //    genuine in-progress ad-hoc command as a thread.
+        let closedAdHocRange = path.segments.first(where: { $0.kind == .operation && $0.resolved == .adHoc })?.range
+        let openRunIsThread = path.activeKind == .thread
+        let remainderRange: NSRange? = closedAdHocRange ?? (openRunIsThread ? nil : path.remainderRange)
 
         guard let range = remainderRange, let bounds = Range(range, in: query) else {
             return ParseResult(projectId: projectId, remainderTokens: [], branchToken: branchToken)
