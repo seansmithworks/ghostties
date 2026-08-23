@@ -1,5 +1,32 @@
 # Session Notes — Ghostties
 
+## Aug 23, 2026 — Linear→Ghostties sync run; preset's MCP binary is uninstalled
+
+Sean asked for a Linear sync from a plain `~/Code` session. It ran, but only after working
+around two gaps in the `linear-sync` preset.
+
+**What shipped.** 41 Linear issues assigned to Sean and not Done/Canceled were written into
+`~/.ghostties/tasks/` as `SSD-*.md` — 33 `backlog`, 4 `running`, 3 `review`, 1 `inbox`.
+Verified on disk: 43 files total (the 2 pre-existing shell tasks untouched), 41 carrying
+`source: linear`, lane counts matching. Status flow-back was a no-op — no linear-sourced
+task was in `done`.
+
+**What was wrong.** No `ghostties` MCP server was connected (`claude mcp list` shows Linear
+but not Ghostties), and `ghostties-mcp` is not on PATH at all. The only copy is the
+gitignored SwiftPM product, and it was two tools behind source — `create_task` had no
+`source_id` property, the field the dedup contract keys on. Rebuilt with
+`swift build -c release --product ghostties-mcp` (8.5s), then drove the server directly over
+stdio JSON-RPC from Bash rather than registering it mid-session.
+
+**Two deliberate degradations,** both flagged to Sean at the time: `project_paths` in the
+preset defaults is `{}`, so no row carries a `project-path`; and Notes were seeded with the
+Linear issue URL rather than the description, because `list_issues` truncates descriptions
+and full bodies would have been 41 separate `get_issue` calls.
+
+No ghostties source changed — the rebuild is a gitignored artifact. Open items in
+`BACKLOG.md` under 2026-08-23; durable detail in
+`reference_linear-sync-preset-ships-no-installed-binary.md`.
+
 ## Aug 16–17, 2026 — beta.23 shipped, verified end-to-end
 
 ### Headline

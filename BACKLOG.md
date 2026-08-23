@@ -4,6 +4,32 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-23 — linear-sync preset has no installed MCP binary
+
+Surfaced while running a Linear→Ghostties sync from an ordinary `~/Code` session. Full
+detail: `reference_linear-sync-preset-ships-no-installed-binary.md` in the project memory
+dir. 41 tasks were written successfully by driving the server over stdio; these are the
+gaps that made that necessary.
+
+- [ ] **`ghostties-mcp` is not installed anywhere on PATH.** The preset's
+  `macos/Resources/presets/linear-sync/mcp-servers.json` declares it as bare
+  `command: "ghostties-mcp"`, but the only copy is the gitignored SwiftPM product at
+  `cli/.build/<triple>/release/ghostties-mcp`. **Decide or kill:** strawman is a
+  `make install-mcp` (or a `scripts/` one-liner) that symlinks the release build into
+  `~/.local/bin`, plus a line in the preset README. Alternative is having the app ship
+  and register the binary itself, which is more work but removes the manual step.
+- [ ] **`project_paths` in `macos/Resources/presets/linear-sync/defaults.json` is `{}`.**
+  Every synced row therefore carries no `project-path`, so clicking it launches the
+  template without landing in the repo — the main thing that makes a synced row useful.
+  **Decide or kill:** strawman is to seed it with the mappings the current Linear
+  projects imply — `Ghostties` → `~/Code/ghostties`, `Brukas Launch` → `~/Code/Pico Focus`,
+  `SeanSmithDesign.com` → the site repo — and leave non-code projects (Career Ops, Job
+  Search) unmapped on purpose.
+- [ ] **The checked-out release binary was 2 tools behind source** (10 vs `allTools()`'s 12)
+  and `create_task` lacked `source_id`, which is what the sync dedup contract keys on.
+  Rebuilt this session, but nothing prevents the drift recurring. *Parked* — the install
+  item above is the real fix; a version check at sync time would only paper over it.
+
 ## 2026-08-22 — Composer command grammar slice 1 SHIPPED to branch; breadcrumb spec'd
 
 Slice 1 is complete and verified end-to-end. Branch `feat/composer-command-grammar-slice1`
