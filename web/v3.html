@@ -57,7 +57,7 @@
             <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing live Claude Code sessions in one window, each labeled by project and status" width="1280" height="705">
           </picture>
         </figure>
-        <p class="product-frame-caption">a first look — the real hero film is still being cut</p>
+        <p class="product-frame-caption">a real capture — motion is next</p>
       </section>
 
       <!-- ============================================================
@@ -137,14 +137,28 @@
         <a href="/changelog">Changelog</a>
         <a href="/privacy">Privacy</a>
         <a href="/support">Support</a>
-        <!-- Insert-coin — discreet, keyboard-reachable too (press "c").
-             Arms the ghost field's drag/high-five/hover-card interactivity.
-             Escape (or clicking again) disarms it. -->
-        <button type="button" class="gx-coin" id="gx-coin-btn" aria-label="Insert coin">◄ COIN</button>
       </span>
     </footer>
     <div class="visually-hidden" role="status" aria-live="polite" id="gx-coin-status"></div>
   </div>
+
+  <!-- Coin entry plate — a real machine part, not a promoted button. Fixed
+       top-right; the only thing that carries presence is the lamp glowing
+       behind the slot. Arms the ghost field's drag/high-five/hover-card
+       interactivity; Escape (or activating the plate again) returns the
+       coin. Keyboard route: press "c". Hidden entirely under
+       prefers-reduced-motion (see v3.css) — the field is a static no-op
+       there, so there is nothing for the plate to arm. -->
+  <button type="button" class="gx-coin" id="gx-coin-btn" aria-label="Insert coin" title="Insert coin (C)">
+    <span class="gx-coin-slot" aria-hidden="true">
+      <span class="gx-coin-lamp"></span>
+      <svg class="gx-coin-piece" viewBox="0 0 6 6"><path d="M1 0h4v1h1v4H5v1H1V5H0V1h1z"/></svg>
+    </span>
+    <span class="gx-coin-info" aria-hidden="true">
+      <span class="gx-coin-label">INSERT COIN</span>
+      <span class="gx-coin-credit">CREDIT <b>0</b></span>
+    </span>
+  </button>
 
   <script>
     // Clipboard copy for the hero install row.
@@ -173,22 +187,78 @@
       poster: '/assets/app-sessions-dark@2x.webp'
     };
 
-    // Insert-coin — footer button + secret "c" key route.
+    // Coin plate — footer button replaced by the fixed top-right plate,
+    // plus the secret "c" key route (kept; see coin-slot-spec.md build notes).
     (function () {
       var btn = document.getElementById('gx-coin-btn');
+      if (!btn) return;
       var status = document.getElementById('gx-coin-status');
+      var label = btn.querySelector('.gx-coin-label');
+      var digit = btn.querySelector('.gx-coin-credit b');
+      var clearTimer = null;
 
-      function announce() {
+      // The plate's text/aria/title are read straight from GXField.isArmed()
+      // at every call site below (click, the "c" key, and Escape) — never a
+      // separate flag that can drift out of sync with real arming state.
+      function render(armed) {
+        if (armed) {
+          label.textContent = 'ESC TO EXIT';
+          digit.textContent = '1';
+          btn.setAttribute('aria-label', 'Return coin and exit the ghost field');
+          btn.setAttribute('title', 'Return coin (Esc)');
+        } else {
+          label.textContent = 'INSERT COIN';
+          digit.textContent = '0';
+          btn.setAttribute('aria-label', 'Insert coin');
+          btn.setAttribute('title', 'Insert coin (C)');
+        }
+      }
+
+      function announce(armed) {
+        if (clearTimer) {
+          clearTimeout(clearTimer);
+          clearTimer = null;
+        }
+        if (armed) {
+          status.textContent = 'Credit 1. The ghost field is live. Press Escape to return your coin.';
+        } else {
+          status.textContent = 'Coin returned. The ghost field is ambient again.';
+          clearTimer = setTimeout(function () {
+            status.textContent = '';
+            clearTimer = null;
+          }, 3000);
+        }
+      }
+
+      function coinIn() {
+        if (!window.GXField || btn.classList.contains('gx-coin-firing')) return;
+        window.GXField.coinIn();
+        btn.classList.add('gx-coin-firing');
+        // Coin fall + lamp flash play immediately; the credit flip and the
+        // armed border/label settle land together at t=200ms (coin-slot-spec.md).
+        setTimeout(function () {
+          btn.classList.add('gx-coin-armed');
+          render(true);
+          announce(true);
+        }, 200);
+        setTimeout(function () {
+          btn.classList.remove('gx-coin-firing');
+        }, 420);
+      }
+
+      function coinOut() {
         if (!window.GXField) return;
-        status.textContent = window.GXField.isArmed()
-          ? 'Ghost field armed — press Escape to exit'
-          : '';
+        window.GXField.coinOut();
+        btn.classList.remove('gx-coin-firing');
+        btn.classList.remove('gx-coin-armed');
+        render(false);
+        announce(false);
       }
 
       function toggle() {
         if (!window.GXField) return;
-        window.GXField.toggleCoin();
-        announce();
+        if (window.GXField.isArmed()) coinOut();
+        else coinIn();
       }
 
       btn.addEventListener('click', toggle);
@@ -200,9 +270,14 @@
         toggle();
       });
 
-      // GXField announces its own Escape handling; mirror the status text.
+      // GXField handles its own Escape-to-disarm; mirror the plate here.
       document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') setTimeout(announce, 0);
+        if (e.key !== 'Escape') return;
+        setTimeout(function () {
+          if (window.GXField && !window.GXField.isArmed() && btn.classList.contains('gx-coin-armed')) {
+            coinOut();
+          }
+        }, 0);
       });
     })();
   </script>
