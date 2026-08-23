@@ -142,21 +142,32 @@
     <div class="visually-hidden" role="status" aria-live="polite" id="gx-coin-status"></div>
   </div>
 
-  <!-- Coin entry plate — a real machine part, not a promoted button. Fixed
-       top-right; the only thing that carries presence is the lamp glowing
-       behind the slot. Arms the ghost field's drag/high-five/hover-card
-       interactivity; Escape (or activating the plate again) returns the
-       coin. Keyboard route: press "c". Hidden entirely under
-       prefers-reduced-motion (see v3.css) — the field is a static no-op
-       there, so there is nothing for the plate to arm. -->
+  <!-- Coin entry plate — a lit arcade coin plate, not a promoted button.
+       Fixed top-right; a black bezel houses a backlit red panel with a
+       tall slot on the left and stacked INSERT / COIN type. Direction is
+       from the user's own reference photos (coin-slot-spec.md), which
+       superseded an earlier discreet dark-plate concept. Arms the ghost
+       field's drag/high-five/hover-card interactivity; Escape (or
+       activating the plate again) returns the coin. Keyboard route:
+       press "c". Hidden entirely under prefers-reduced-motion (see
+       v3.css) — the field is a static no-op there, so there is nothing
+       for the plate to arm. -->
   <button type="button" class="gx-coin" id="gx-coin-btn" aria-label="Insert coin" title="Insert coin (C)">
-    <span class="gx-coin-slot" aria-hidden="true">
-      <span class="gx-coin-lamp"></span>
-      <svg class="gx-coin-piece" viewBox="0 0 6 6"><path d="M1 0h4v1h1v4H5v1H1V5H0V1h1z"/></svg>
-    </span>
-    <span class="gx-coin-info" aria-hidden="true">
-      <span class="gx-coin-label">INSERT COIN</span>
-      <span class="gx-coin-credit">CREDIT <b>0</b></span>
+    <span class="gx-coin-bezel" aria-hidden="true">
+      <span class="gx-coin-panel">
+        <span class="gx-coin-slot">
+          <span class="gx-coin-lamp"></span>
+          <svg class="gx-coin-piece" viewBox="0 0 6 6"><path d="M1 0h4v1h1v4H5v1H1V5H0V1h1z"/></svg>
+        </span>
+        <span class="gx-coin-info">
+          <span class="gx-coin-label">
+            <span class="gx-coin-label-line" data-line="1">INSERT</span>
+            <span class="gx-coin-rule"></span>
+            <span class="gx-coin-label-line" data-line="2">COIN</span>
+          </span>
+          <span class="gx-coin-credit">CR <b>0</b></span>
+        </span>
+      </span>
     </span>
   </button>
 
@@ -187,27 +198,32 @@
       poster: '/assets/app-sessions-dark@2x.webp'
     };
 
-    // Coin plate — footer button replaced by the fixed top-right plate,
-    // plus the secret "c" key route (kept; see coin-slot-spec.md build notes).
+    // Coin plate — lit backlit plate fixed top-right, stacked
+    // INSERT/COIN (ESC/EXIT armed) label lines either side of the double
+    // rule, plus the secret "c" key route (kept; see coin-slot-spec.md).
     (function () {
       var btn = document.getElementById('gx-coin-btn');
       if (!btn) return;
       var status = document.getElementById('gx-coin-status');
-      var label = btn.querySelector('.gx-coin-label');
+      var labelLines = btn.querySelectorAll('.gx-coin-label-line');
       var digit = btn.querySelector('.gx-coin-credit b');
       var clearTimer = null;
 
       // The plate's text/aria/title are read straight from GXField.isArmed()
       // at every call site below (click, the "c" key, and Escape) — never a
       // separate flag that can drift out of sync with real arming state.
+      // The label is two stacked lines (INSERT/COIN, ESC/EXIT) either side
+      // of the double rule, so render() writes both lines, not one string.
       function render(armed) {
         if (armed) {
-          label.textContent = 'ESC TO EXIT';
+          labelLines[0].textContent = 'ESC';
+          labelLines[1].textContent = 'EXIT';
           digit.textContent = '1';
           btn.setAttribute('aria-label', 'Return coin and exit the ghost field');
           btn.setAttribute('title', 'Return coin (Esc)');
         } else {
-          label.textContent = 'INSERT COIN';
+          labelLines[0].textContent = 'INSERT';
+          labelLines[1].textContent = 'COIN';
           digit.textContent = '0';
           btn.setAttribute('aria-label', 'Insert coin');
           btn.setAttribute('title', 'Insert coin (C)');
