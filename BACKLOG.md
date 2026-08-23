@@ -1329,3 +1329,30 @@ Branch `feat/composer-branch-segment` off `main` @ `5e6636022`. Spec: `docs/plan
 - [ ] **B-keyboard** — the `+ new worktree` / no-worktree creation rows are mouse-only; the hidden-Button arrow-key capture layer was not extended to cover them. | app | new
 
 Parked, not in Slice B: the breadcrumb chip has **no keyboard route** (left-arrow focus was deleted as unverifiable, stranding the Return/Down handlers). Slice A polish, non-blocking. | app | parked
+
+## 2026-08-23 — Composer direction change: type-first, chips on demand (Sean)
+
+Sean, testing the Slice B build live: *"Overall I'm not sure I like the two chips… I want it to be something I can just type in. Text entry end to end. When hitting Cmd+T I have an intent. Lower the barriers to entry. Let me backspace to delete as well. Maybe on hover the chips are shown, maybe on tab entry."*
+
+This reverses Slice A's chips-as-primary model. **The engine is unaffected** — the parser, worktree enumeration, cache, creation path and launch override (B1–B4, three review rounds) all stand. What changes is the interaction layer: resolved segments must stop *consuming* text into a non-editable prefix.
+
+Note this also deletes an entire bug class: every prefix/remainder blocker in review rounds 1–3 existed because the field's text and the chips are two representations of one string. One representation, no divergence.
+
+- [x] ~~**C1** — model decided (Sean 2026-08-23): **A first, then B.** Plain field + resolution line now; inline-styled text as the finish.~~ | app | done
+- [ ] **C1a** — build model A: field holds the literal string, nothing consumed, resolution shown as a quiet line beneath with clickable segments as the picker entry points. Slice B held unmerged; C lands with it. | app | in-flight
+- [ ] **C2** — chips become on-demand (hover / Tab), not permanent furniture. | app | new
+- [ ] **C3** — backspace deletes through a resolved segment like ordinary text, on macOS 13 too (`Backport.onKeyPress` is dead below 14). | app | new
+- [ ] **C4** — re-review both chips (project + branch) under the new model; Slice A's chip is in scope, not just Slice B's. | app | new
+- [ ] Humanize `writeError` — currently renders git's raw `fatal: …` text in the composer card. Correct content, terminal tone. | app | new
+
+## 2026-08-23 — Composer: path grammar + autocomplete (Sean, live testing model A)
+
+Direction beyond model A. Sean: *"we don't force branch/worktree but allow the foldering… let people choose if possible"* — `Ghostties > branch > operator > name of thread`, every segment optional, `>` opts you into depth. Also: *"It would be awesome to have a tab to fill. So if I start typing `gho` I see `ghostties` there and can tab forward to complete."*
+
+Corrected in discussion: branch and worktree cannot both be segments — git allows a branch in only one worktree, so picking the branch *is* picking its worktree. Four segments: **project › branch › operator › thread**.
+
+- [ ] **D1** — parser generalizes from two fixed positions to an ordered segment list, each with its own resolver. Slice B's engine (enumeration, cache, creation, launch override) is reused, not rewritten. | app | new
+- [ ] **D2** — Tab-to-complete: typing `gho` shows the completion and Tab accepts it. Needs ghost text inline, which is model B's AppKit text view — model A can only do Tab-accepts-highlighted-row. | app | new
+- [ ] **D3** — **the suggestion list must be scoped to the segment being typed.** Currently typing a project name shows the picker list AND templates AND a PROJECTS section stacked together (screenshot 2026-08-23). Sean: *"this is a lot — I would have expected any list/suggestion below to be replaced."* One list, one segment. | app | new
+- [ ] **D4** — operator segment: ad-hoc command allowed, or known templates only? Slice 1's login-shell wrapper already makes ad-hoc work. **Unanswered — Sean's call.** | app | needs-Sean
+- [ ] **D5** — thread-name segment must feed the existing `-n` naming path, never introduce a competing one ([[decision_session-naming-stays-one-way]]). | app | new
