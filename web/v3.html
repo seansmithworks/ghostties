@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ghostties — one window, every agent</title>
+  <meta name="description" content="Ghostties — a multi-agent workspace terminal. Now in beta.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="/v3.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- Ambient ghost field — full-bleed background, pure drift until coin-in.
+       Decorative: aria-hidden, out of the tab order, pointer-events: none
+       (see #gx-field in v3.css). Populated by /assets/ghost-field.js. -->
+  <div id="gx-field" aria-hidden="true"></div>
+
+  <div class="cabinet">
+    <div class="maze" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <main id="main">
+
+      <!-- ============================================================
+           01 — HERO
+           ============================================================ -->
+      <section id="hero" class="hero">
+        <div class="section-label">
+          <span class="num mono-cmd">01</span>
+          <span class="micro">Hero</span>
+        </div>
+        <div class="head">
+          <h1 class="h-xl">TOO MANY<br><span class="amber">TERMINALS.</span></h1>
+          <p class="lead" style="margin-top: 24px;">
+            Ghostties runs every Claude Code session in <strong>one window</strong> —
+            a sidebar of live agents, with status you can read at a glance.
+          </p>
+        </div>
+
+        <div class="install-row">
+          <button type="button" class="cab-btn primary term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">
+            BREW INSTALL <span class="cab-cmd"><small>--cask seansmithworks/tap/ghostties</small><span class="copy-icon" aria-hidden="true">⧉</span></span>
+          </button>
+          <button type="button" class="cab-btn secondary term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">
+            NPX <span class="cab-cmd"><small>ghostties-install</small><span class="copy-icon" aria-hidden="true">⧉</span></span>
+          </button>
+          <a class="cab-btn tertiary" href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>.DMG</a>
+        </div>
+        <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
+        <p class="body-text" style="margin-top: 8px;">macOS 13+, Apple Silicon. Currently in beta.</p>
+
+        <!-- Product frame — 16:9 placeholder for the hero film (not yet
+             recorded). Source is set from HERO_VIDEO below, one JS constant,
+             so swapping in the real hero-dark.mp4 / hero-light.mp4 later is
+             a one-path change. Plays once on load, rests, replays on
+             hover/click, never loops — the ghost field owns continuous
+             motion. Respects prefers-reduced-motion (poster only, click to
+             play). -->
+        <figure class="product-frame">
+          <video id="hero-video" muted playsinline preload="none" poster="/assets/product-sessions-poster.jpg" aria-label="Ghostties product preview — click or hover to play"></video>
+        </figure>
+        <p class="product-frame-caption">a first look — the real hero film is still being cut</p>
+      </section>
+
+      <!-- ============================================================
+           02 — SIDEBAR (real captures, theme-aware)
+           ============================================================ -->
+      <section id="sidebar" class="board-sidebar">
+        <div class="section-label">
+          <span class="num mono-cmd">02</span>
+          <span class="micro">The sidebar</span>
+        </div>
+        <h2 class="h-l">The Sidebar</h2>
+        <p class="lead">Every session in one window. The single strongest thing the app does.</p>
+        <div class="projects-figure">
+          <picture data-app-state="sessions" data-app-theme="light" class="theme-light-only">
+            <source srcset="/assets/app-sessions-light@2x.webp" type="image/webp">
+            <img src="/assets/app-sessions-light@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to, light mode" width="1280" height="705" loading="lazy">
+          </picture>
+          <picture data-app-state="sessions" data-app-theme="dark" class="theme-dark-only">
+            <source srcset="/assets/app-sessions-dark@2x.webp" type="image/webp">
+            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to, dark mode" width="1280" height="705" loading="lazy">
+          </picture>
+        </div>
+        <p class="projects-caption">every session, one window, live status — follows your system appearance</p>
+      </section>
+
+      <!-- ============================================================
+           03 — STILL GHOSTTY (adapted from v2, trimmed to one paragraph)
+           ============================================================ -->
+      <section id="still-ghostty">
+        <div class="section-label">
+          <span class="num mono-cmd">03</span>
+          <span class="micro">Still Ghostty</span>
+        </div>
+        <h2 class="h-m">Still Ghostty</h2>
+        <p class="lead measure" style="max-width: 64ch;">
+          Ghostties is a fork of
+          <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>,
+          not a rewrite — your config, themes and keybinds load unchanged, the terminal
+          engine underneath is still upstream Ghostty, and the sidebar is an additional
+          surface, not a replacement.
+        </p>
+      </section>
+
+      <!-- ============================================================
+           04 — GET STARTED (adapted from v2's install section, trimmed)
+           ============================================================ -->
+      <section id="get-started">
+        <div class="section-label">
+          <span class="num mono-cmd">04</span>
+          <span class="micro">Get started</span>
+        </div>
+        <h2 class="h-m">Get Started</h2>
+        <p class="lead">brew, npx, or a direct download. Requirements and how updates arrive.</p>
+        <div class="install-grid">
+          <div class="install-cell">
+            <b>BREW</b>
+            <span>brew install --cask<br>seansmithworks/tap/ghostties</span>
+          </div>
+          <div class="install-cell">
+            <b>NPX</b>
+            <span>npx ghostties-install</span>
+          </div>
+          <div class="install-cell">
+            <b>DMG</b>
+            <span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>Ghostties.dmg</a><br>v0.1.0-beta.23</span>
+          </div>
+          <div class="install-cell">
+            <b>REQUIREMENTS</b>
+            <span>macOS 13 or later, Apple Silicon</span>
+          </div>
+        </div>
+        <p class="body-text channels-note">
+          Current release is <strong>v0.1.0-beta.23</strong> on the beta channel.
+          Auto-update ships via Sparkle — installs check for a new build on
+          launch and apply it in the background.
+        </p>
+      </section>
+
+    </main>
+
+    <footer id="site-footer">
+      <span class="footer-icons">
+        <a href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener" aria-label="GitHub">
+          <svg viewBox="0 0 24 24"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+        </a>
+      </span>
+      <span class="footer-links">
+        <span>&copy; 2026</span>
+        <a href="/changelog">Changelog</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+        <!-- Insert-coin — discreet, keyboard-reachable too (press "c").
+             Arms the ghost field's drag/high-five/hover-card interactivity.
+             Escape (or clicking again) disarms it. -->
+        <button type="button" class="gx-coin" id="gx-coin-btn" aria-label="Insert coin">◄ COIN</button>
+      </span>
+    </footer>
+    <div class="visually-hidden" role="status" aria-live="polite" id="gx-coin-status"></div>
+  </div>
+
+  <script>
+    // Clipboard copy for the hero install row.
+    var copyStatus = document.getElementById('copy-status');
+    document.querySelectorAll('.term-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var text = btn.dataset.copy;
+        navigator.clipboard.writeText(text).then(function () {
+          copyStatus.textContent = 'Copied';
+          setTimeout(function () { copyStatus.textContent = ''; }, 2000);
+        });
+      });
+    });
+
+    // Hero video — one obvious place to swap in the real hero film later.
+    // Today: assets/product-sessions.mp4. When the 14s hero film ships,
+    // point this at hero-dark.mp4 / hero-light.mp4 (wire a
+    // matchMedia('(prefers-color-scheme: dark)') check here at that point).
+    var HERO_VIDEO = {
+      src: '/assets/product-sessions.mp4',
+      poster: '/assets/product-sessions-poster.jpg'
+    };
+
+    (function () {
+      var video = document.getElementById('hero-video');
+      video.src = HERO_VIDEO.src;
+      video.poster = HERO_VIDEO.poster;
+      video.loop = false;
+
+      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function playOnce() {
+        video.currentTime = 0;
+        video.play().catch(function () {});
+      }
+
+      video.addEventListener('ended', function () {
+        video.currentTime = 0;
+      });
+      video.addEventListener('click', playOnce);
+      video.addEventListener('mouseenter', playOnce);
+
+      if (!prefersReduced) {
+        // Autoplay once on load, then rest — muted + playsinline satisfy
+        // browser autoplay policy without a user gesture.
+        window.addEventListener('load', playOnce, { once: true });
+      }
+      // If prefersReduced: poster only, click/hover above still plays it
+      // on demand — that's the explicit user gesture the setting allows.
+    })();
+
+    // Insert-coin — footer button + secret "c" key route.
+    (function () {
+      var btn = document.getElementById('gx-coin-btn');
+      var status = document.getElementById('gx-coin-status');
+
+      function announce() {
+        if (!window.GXField) return;
+        status.textContent = window.GXField.isArmed()
+          ? 'Ghost field armed — press Escape to exit'
+          : '';
+      }
+
+      function toggle() {
+        if (!window.GXField) return;
+        window.GXField.toggleCoin();
+        announce();
+      }
+
+      btn.addEventListener('click', toggle);
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'c' && e.key !== 'C') return;
+        var tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+        toggle();
+      });
+
+      // GXField announces its own Escape handling; mirror the status text.
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') setTimeout(announce, 0);
+      });
+    })();
+  </script>
+  <script src="/assets/ghost-field.js" defer></script>
+</body>
+</html>

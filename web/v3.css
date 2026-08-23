@@ -1,0 +1,982 @@
+/* ghostties.org v3 — five-section rebuild on the Arcade shell.
+   Self-hosted fonts only — font-src 'self' in vercel.json blocks any CDN.
+   Licences: OFL, see the matching OFL-*.txt beside each file in
+   /assets/fonts. Same font set and token values as v2.css (kept in sync by
+   hand — v3 is a sandbox, not yet merged into a shared token file). */
+
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/assets/fonts/dmmono-300-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/fonts/dmmono-400-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/fonts/dmmono-500-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/fonts/silkscreen-400-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/assets/fonts/silkscreen-700-latin.woff2") format("woff2");
+}
+
+:root {
+  --bg: #06060e;
+  --ink: #e9e6f5;
+  --ink-dim: rgba(233, 230, 245, 0.66);
+  --ink-faint: rgba(233, 230, 245, 0.5);
+  --ink-quiet: rgba(233, 230, 245, 0.52);
+  --amber: #ffd54f;
+  --cyan: #00e5ff;
+  --line: rgba(233, 230, 245, 0.16);
+  --line-soft: rgba(233, 230, 245, 0.09);
+  --line-strong: rgba(233, 230, 245, 0.24);
+
+  --font-display: "Silkscreen", monospace;
+  --font-prose: "Archivo", sans-serif;
+  --font-mono: "DM Mono", monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-prose);
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+a {
+  color: var(--amber);
+  text-decoration: none;
+}
+a:hover {
+  color: #fff;
+}
+
+img,
+picture,
+video {
+  max-width: 100%;
+  display: block;
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--amber);
+  color: #06060e;
+  padding: 10px 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.skip-link:focus {
+  left: 16px;
+  top: 16px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------
+   Type ramp — same scale as v2.css.
+   --------------------------------------------------------------------- */
+
+.h-xl,
+.h-l,
+.h-m,
+.h-s {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0;
+  color: #fff;
+}
+.h-xl {
+  font-size: 56px;
+  line-height: 1.08;
+}
+.h-l {
+  font-size: 40px;
+  line-height: 1.1;
+}
+.h-m {
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.lead {
+  font-family: var(--font-prose);
+  font-size: 22px;
+  line-height: 1.5;
+  max-width: 52ch;
+  color: var(--ink-dim);
+  margin: 0;
+}
+.body-text {
+  font-family: var(--font-prose);
+  font-size: 16px;
+  line-height: 1.66;
+  max-width: 52ch;
+  color: var(--ink-faint);
+  margin: 0;
+}
+.micro {
+  font-family: var(--font-prose);
+  font-weight: 600;
+  font-size: 8.5px;
+  line-height: 1.4;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(233, 230, 245, 0.5);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--amber);
+  background: rgba(255, 213, 79, 0.09);
+  padding: 1px 5px;
+  border-radius: 0;
+}
+
+/* ---------------------------------------------------------------------
+   Cabinet shell — same grid/vignette/scanline treatment as v2, minus the
+   HUD (v3 has no marquee bar).
+   --------------------------------------------------------------------- */
+
+.cabinet {
+  position: relative;
+  min-height: 100vh;
+}
+
+.maze {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(124, 77, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 77, 255, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    78% 62% at 50% 30%,
+    transparent 40%,
+    rgba(0, 0, 0, 0.72) 100%
+  );
+}
+
+.scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.34) 0 1px,
+    transparent 1px 3px
+  );
+  animation: v3-roll 8s linear infinite;
+}
+@keyframes v3-roll {
+  to {
+    transform: translateY(3px);
+  }
+}
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+section {
+  position: relative;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 96px 32px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.section-label {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.section-label .num {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--cyan);
+}
+
+.mark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: none;
+  background: var(--amber);
+}
+
+/* ---------------------------------------------------------------------
+   01 — HERO
+   --------------------------------------------------------------------- */
+
+.hero .head {
+  max-width: 720px;
+}
+.hero h1 .amber {
+  color: var(--amber);
+  text-shadow:
+    0 0 26px rgba(255, 213, 79, 0.5),
+    0 0 62px rgba(255, 152, 0, 0.25);
+}
+.hero .lead {
+  margin-top: 24px;
+}
+
+.install-row {
+  margin-top: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+.cab-btn {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  padding: 14px 18px;
+  border: 3px solid;
+  border-radius: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: inherit;
+}
+button.cab-btn {
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: normal;
+}
+.cab-btn small {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  opacity: 0.6;
+  text-align: left;
+}
+.cab-btn .cab-cmd {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.cab-btn.primary {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(255, 213, 79, 0.09);
+  box-shadow:
+    0 0 22px rgba(255, 213, 79, 0.22),
+    inset 0 0 22px rgba(255, 213, 79, 0.06);
+}
+.cab-btn.secondary {
+  border-color: rgba(0, 229, 255, 0.55);
+  color: #7ce9f7;
+}
+.cab-btn.tertiary {
+  border-color: var(--line-strong);
+  color: var(--ink-faint);
+}
+.cab-btn .copy-icon {
+  font-size: 12px;
+}
+
+/* Hero product frame — 16:9 placeholder for the not-yet-recorded hero film.
+   The <video> src/poster are set from one JS constant (HERO_VIDEO in
+   v3.html) so swapping in hero-dark.mp4 / hero-light.mp4 later is a
+   one-path change. */
+.product-frame {
+  margin-top: 56px;
+  max-width: 780px;
+  border: 1px solid var(--line);
+  background: #0b0b16;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.product-frame video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  background: #0b0b16;
+  cursor: pointer;
+}
+.product-frame-caption {
+  margin-top: 12px;
+  max-width: 780px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+/* ---------------------------------------------------------------------
+   02 — SIDEBAR (theme-aware real captures)
+   --------------------------------------------------------------------- */
+
+.projects-figure {
+  margin-top: 32px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  overflow: hidden;
+}
+.projects-figure img {
+  width: 100%;
+  height: auto;
+}
+.projects-caption {
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.theme-dark-only {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  .theme-light-only {
+    display: none;
+  }
+  .theme-dark-only {
+    display: block;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   03 — STILL GHOSTTY
+   --------------------------------------------------------------------- */
+
+.still-ghostty-list {
+  margin-top: 24px;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 0;
+}
+.still-ghostty-list li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+.still-ghostty-list .measure {
+  max-width: 64ch;
+}
+.still-ghostty-list li:last-child {
+  border-bottom: none;
+}
+
+/* ---------------------------------------------------------------------
+   04 — GET STARTED
+   --------------------------------------------------------------------- */
+
+.install-grid {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 0;
+  overflow: hidden;
+}
+.install-cell {
+  padding: 18px 20px;
+  border-right: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  margin: 0 -1px -1px 0;
+}
+.install-cell b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.install-cell span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.6;
+}
+.channels-note {
+  margin-top: 20px;
+}
+
+/* ---------------------------------------------------------------------
+   Footer
+   --------------------------------------------------------------------- */
+
+footer {
+  position: relative;
+  z-index: 1;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  border-top: 1px solid var(--line);
+}
+footer a {
+  color: var(--ink-faint);
+}
+footer a:hover {
+  color: var(--amber);
+}
+.footer-icons {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.footer-icons svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+.footer-links {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+/* Insert-coin — discreet, footer-margin control. Small, quiet, blinking
+   like an idle cabinet — a secret to find, not a promoted feature. */
+.gx-coin {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-quiet);
+  background: none;
+  border: 1px solid var(--ink-quiet);
+  border-radius: 0;
+  padding: 6px 10px;
+  cursor: pointer;
+  animation: v3-blip 1.6s steps(2, jump-none) infinite;
+}
+.gx-coin:hover,
+.gx-coin:focus-visible {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+@keyframes v3-blip {
+  50% {
+    opacity: 0.35;
+  }
+}
+body.gx-coin-in .gx-coin {
+  color: var(--amber);
+  border-color: var(--amber);
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanlines,
+  .gx-coin {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Ambient ghost field (assets/ghost-field.js)
+   Required constraints (see the port's header comment for detail):
+     - full-bleed, position: fixed; inset: 0
+     - pointer-events: none by default — never blocks page content/CTAs
+     - namespaced gx- selectors throughout, to avoid colliding with the
+       rest of the site's markup
+   --------------------------------------------------------------------- */
+
+#gx-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.gx-fx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.gx-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform;
+  z-index: 2;
+}
+#gx-field.gx-armed .gx-ghost {
+  pointer-events: auto;
+  cursor: grab;
+}
+.gx-ghost.gx-dragging {
+  cursor: grabbing;
+  z-index: 200;
+}
+.gx-ghost.gx-boss {
+  z-index: 3;
+}
+
+.gx-ghost svg {
+  display: block;
+  overflow: visible;
+  image-rendering: pixelated;
+  transition:
+    transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+    filter 0.45s ease;
+}
+
+#gx-field.gx-armed .gx-ghost:not(.gx-dragging):hover svg {
+  image-rendering: auto;
+  transform: perspective(var(--persp)) rotateX(var(--rx)) rotateY(var(--ry))
+    scale(1.8) translateZ(14px);
+  filter: brightness(1.6) saturate(1.3) drop-shadow(0 0 5px var(--glow))
+    drop-shadow(0 0 22px var(--glow)) drop-shadow(0 0 55px var(--glow))
+    drop-shadow(0 26px 40px rgba(0, 0, 0, 0.95));
+}
+#gx-field.gx-armed .gx-ghost.gx-boss:not(.gx-dragging):hover svg {
+  transform: perspective(var(--persp)) rotateX(var(--rx)) rotateY(var(--ry))
+    scale(2.1) translateZ(18px);
+}
+.gx-ghost.gx-dragging svg {
+  image-rendering: auto;
+  transform: perspective(180px) rotateX(-6deg) scale(1.35) translateZ(10px);
+  filter: brightness(1.45) drop-shadow(0 0 10px var(--glow))
+    drop-shadow(0 0 30px var(--glow))
+    drop-shadow(0 32px 44px rgba(0, 0, 0, 0.98));
+  transition:
+    transform 0.2s ease,
+    filter 0.2s ease;
+}
+.gx-ghost.gx-chasing svg {
+  filter: brightness(1.3) drop-shadow(0 0 8px var(--glow))
+    drop-shadow(0 0 20px var(--glow));
+}
+.gx-ghost.gx-boss svg {
+  filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 12px var(--glow));
+}
+
+.gx-ghost svg .gx-glass {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+#gx-field.gx-armed .gx-ghost:not(.gx-dragging):hover svg .gx-glass,
+.gx-ghost.gx-dragging svg .gx-glass {
+  opacity: 0.9;
+}
+
+.gx-ghost svg .gx-blink-cover {
+  opacity: 0;
+  transition: opacity 0.06s ease;
+}
+
+.gx-ghost::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 15%;
+  width: 70%;
+  height: 7px;
+  background: var(--glow);
+  border-radius: 50%;
+  filter: blur(9px);
+  opacity: 0;
+  transform: scaleX(0.8);
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease;
+  pointer-events: none;
+}
+#gx-field.gx-armed .gx-ghost:not(.gx-dragging):hover::after {
+  opacity: 0.5;
+  transform: scaleX(1.3);
+}
+.gx-ghost.gx-boss::after {
+  opacity: 0.35;
+  transform: scaleX(1.1);
+  filter: blur(14px);
+}
+.gx-ghost.gx-dragging::after {
+  opacity: 0.6;
+  transform: scaleX(1.5) translateY(10px);
+  filter: blur(16px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+@keyframes gx-bump-flash {
+  0% {
+    filter: brightness(3) saturate(0.2);
+  }
+  40% {
+    filter: brightness(1.8);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+.gx-ghost.gx-bump {
+  animation: gx-bump-flash 0.22s ease-out forwards;
+}
+
+@keyframes gx-jump-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.3) translateY(-10px);
+  }
+  70% {
+    transform: scale(0.93) translateY(3px);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.gx-ghost.gx-highfive svg {
+  animation: gx-jump-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Hover trading card */
+.gx-label {
+  position: absolute;
+  bottom: calc(100% + 16px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.78) translateY(10px);
+  width: 230px;
+  background:
+    linear-gradient(160deg, rgba(28, 24, 40, 0.98), rgba(8, 6, 16, 0.98)),
+    var(--glow);
+  border: 2px solid var(--glow);
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  z-index: 300;
+  box-shadow:
+    0 0 20px var(--glow),
+    0 10px 32px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.gx-label::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--glow) 40%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+.gx-label::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--glow);
+}
+#gx-field.gx-armed .gx-ghost:not(.gx-dragging):hover .gx-label {
+  opacity: 1;
+  transform: translateX(-50%) scale(1) translateY(0);
+}
+
+.gx-label-top {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 9px;
+  position: relative;
+}
+.gx-label-rating {
+  text-align: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.13);
+  padding-right: 6px;
+}
+.gx-rating-num {
+  display: block;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--glow);
+  line-height: 1;
+  text-shadow: 0 0 14px var(--glow);
+  font-variant-numeric: tabular-nums;
+}
+.gx-rating-tier {
+  display: block;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.3em;
+  margin-top: 3px;
+  font-weight: bold;
+}
+.gx-label-id {
+  text-align: left;
+  min-width: 0;
+}
+.gx-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 900;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+.gx-role {
+  display: block;
+  font-size: 8px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin-top: 5px;
+}
+.gx-portrait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 10px 16px;
+  height: 130px;
+  position: relative;
+  background:
+    radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--glow) 22%, transparent),
+      transparent 65%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.45));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.gx-portrait::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px
+  );
+  background-size: 8px 8px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.gx-portrait svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 0 6px var(--glow)) drop-shadow(0 0 18px var(--glow));
+}
+.gx-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.gx-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px;
+  background: rgba(0, 0, 0, 0.45);
+}
+.gx-stat-val {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--glow);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  min-width: 22px;
+}
+.gx-stat-key {
+  font-size: 8px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.18em;
+}
+
+.gx-ghost.gx-boss .gx-label {
+  border-width: 3px;
+  box-shadow:
+    0 0 32px var(--glow),
+    0 0 60px var(--glow),
+    0 10px 32px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.gx-ghost.gx-boss .gx-rating-tier {
+  color: var(--glow);
+  text-shadow: 0 0 8px var(--glow);
+}
+.gx-ghost.gx-boss .gx-label-top::after {
+  content: "★";
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  color: var(--glow);
+  font-size: 13px;
+  text-shadow: 0 0 10px var(--glow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gx-ghost svg,
+  .gx-ghost::after,
+  .gx-label {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero h1 {
+    font-size: 40px !important;
+  }
+  .product-frame {
+    margin-top: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  section {
+    padding: 64px 20px;
+  }
+  .install-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cab-btn {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    justify-content: flex-start;
+  }
+  .cab-btn .cab-cmd {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+  .cab-btn small {
+    white-space: normal;
+  }
+  footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
