@@ -475,182 +475,113 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(result.remainderText, "main cco")
     }
 
-    // MARK: - resolvedFieldSplit (should-fix 10 / blocker 1, Slice B review round 2)
-    //
-    // Hoisted out of `SessionComposerPalette` specifically so blocker 1 —
-    // a regression in this exact function shipped by the round-1 fix —
-    // has real coverage going forward.
+    // MARK: - resolutionLineSegments (model A rebuild — replaces the
+    // breadcrumb chips with the composer's type-first field + resolution
+    // line). Pure, so the model backing what the resolution line renders is
+    // testable without a SwiftUI view-test harness (this repo's usual gap).
 
-    /// The ordinary case: project resolved, no branch typed. Only the
-    /// project segment is consumed into `prefix`.
-    func testResolvedFieldSplitConsumesOnlyProjectWhenNoBranchTyped() {
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: "ghostties cco -n test",
-            hasResolvedProject: true,
-            branchToken: nil
+    /// A resolved parse: project and branch both picked, template
+    /// resolved — every segment shows its plain, non-error label.
+    func testResolutionLineSegmentsForAResolvedParse() {
+        let segments = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: "ghostties",
+            isProjectLocked: false,
+            isBranchSegmentEligible: true,
+            isCreatingWorktree: false,
+            typedBranchResolution: .resolved(path: "/tmp/ghostties-worktrees/feature-x"),
+            currentBranchLabel: "feature-x",
+            templateTitle: "Claude Code"
         )
-        XCTAssertEqual(split?.prefix, "ghostties ")
-        XCTAssertEqual(split?.remainder, "cco -n test")
+        XCTAssertEqual(segments.projectLabel, "ghostties")
+        XCTAssertTrue(segments.isProjectClickable)
+        XCTAssertEqual(segments.branchLabel, "feature-x")
+        XCTAssertFalse(segments.branchIsError)
+        XCTAssertEqual(segments.templateLabel, "Claude Code")
     }
 
-    /// A resolved branch WITH a genuine remainder after it: both segments
-    /// are consumed into `prefix`, and the field shows only the remainder —
-    /// the original finding-15 fix this function preserves.
-    func testResolvedFieldSplitConsumesBothSegmentsWhenBranchHasARemainder() {
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: "ghostties > main > cco",
-            hasResolvedProject: true,
-            branchToken: "main"
+    /// An unresolved typed branch renders a legible, on-screen message in
+    /// the error state — this is the acceptance criterion the deleted
+    /// chips never met: an unresolved branch was only ever visible as a
+    /// `writeError` message AFTER a failed Return, never on the resolution
+    /// line itself.
+    func testResolutionLineSegmentsForAnUnresolvedBranch() {
+        let segments = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: "ghostties",
+            isProjectLocked: false,
+            isBranchSegmentEligible: true,
+            isCreatingWorktree: false,
+            typedBranchResolution: .unresolved(token: "does-not-exist"),
+            currentBranchLabel: "does-not-exist",
+            templateTitle: "cco"
         )
-        XCTAssertEqual(split?.prefix, "ghostties > main > ")
-        XCTAssertEqual(split?.remainder, "cco")
+        XCTAssertEqual(segments.branchLabel, "branch \"does-not-exist\" not found")
+        XCTAssertTrue(segments.branchIsError)
     }
 
-    /// Blocker 1's exact repro, at the moment the trap used to spring:
-    /// the branch segment's own remainder has just been backspaced to
-    /// nothing (`"ghostties > mian "` — typo intentional, matches the task
-    /// repro). The branch token must NOT be folded into `prefix` here — it
-    /// must still be part of the visible, editable `remainder`, or it
-    /// becomes unreachable (no macOS-13-safe route back into a hidden
-    /// prefix).
-    func testResolvedFieldSplitKeepsBranchTokenLiveWhenItsOwnRemainderIsEmpty() {
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: "ghostties > mian ",
-            hasResolvedProject: true,
-            branchToken: "mian"
+    /// An empty field: no project selected, no branch typed, but a
+    /// template IS still resolved (the project's default, seeded on open) —
+    /// this is what makes the resolution line answer "where will this go?"
+    /// from the very first frame, per the brief's acceptance criterion.
+    func testResolutionLineSegmentsForAnEmptyField() {
+        let segments = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: nil,
+            isProjectLocked: false,
+            isBranchSegmentEligible: false,
+            isCreatingWorktree: false,
+            typedBranchResolution: .notTyped,
+            currentBranchLabel: nil,
+            templateTitle: "Claude Code"
         )
-        XCTAssertEqual(split?.prefix, "ghostties > ")
-        XCTAssertEqual(split?.remainder, "mian ", "the typed branch token must stay in the EDITABLE remainder, not vanish into the hidden prefix")
+        XCTAssertEqual(segments.projectLabel, "Select project")
+        XCTAssertTrue(segments.isProjectClickable)
+        XCTAssertNil(segments.branchLabel, "a non-git/ineligible project must render NO branch segment, not a disabled one")
+        XCTAssertEqual(segments.templateLabel, "Claude Code")
     }
 
-    /// Same case with no trailing separator at all — the branch token was
-    /// just typed and nothing follows it yet.
-    func testResolvedFieldSplitKeepsBranchTokenLiveWithNoTrailingSeparator() {
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: "ghostties > main",
-            hasResolvedProject: true,
-            branchToken: "main"
+    /// `.locked` project: never clickable, and falls back to "Project
+    /// unavailable" (not "Select project") if the locked project can't
+    /// resolve — a locked composer must never expose a live picker
+    /// affordance, mirroring the deleted chip's own `.locked` rule.
+    func testResolutionLineSegmentsForALockedProject() {
+        let resolved = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: "ghostties",
+            isProjectLocked: true,
+            isBranchSegmentEligible: false,
+            isCreatingWorktree: false,
+            typedBranchResolution: .notTyped,
+            currentBranchLabel: nil,
+            templateTitle: "Claude Code"
         )
-        XCTAssertEqual(split?.prefix, "ghostties > ")
-        XCTAssertEqual(split?.remainder, "main")
+        XCTAssertEqual(resolved.projectLabel, "ghostties")
+        XCTAssertFalse(resolved.isProjectClickable)
+
+        let unresolved = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: nil,
+            isProjectLocked: true,
+            isBranchSegmentEligible: false,
+            isCreatingWorktree: false,
+            typedBranchResolution: .notTyped,
+            currentBranchLabel: nil,
+            templateTitle: nil
+        )
+        XCTAssertEqual(unresolved.projectLabel, "Project unavailable")
+        XCTAssertFalse(unresolved.isProjectClickable)
+        XCTAssertEqual(unresolved.templateLabel, "No match")
     }
 
-    /// Continuing to backspace the now-live branch token must keep working
-    /// via ordinary field editing — each character removed reproduces the
-    /// same "keep it live" split, all the way down to empty.
-    func testResolvedFieldSplitKeepsWorkingAsTheBranchTokenIsBackspacedToNothing() {
-        for partial in ["mia", "mi", "m", ""] {
-            let searchText = "ghostties > \(partial)"
-            let split = SessionComposerCommandParser.resolvedFieldSplit(
-                searchText: searchText,
-                hasResolvedProject: true,
-                branchToken: partial.isEmpty ? nil : partial
-            )
-            if partial.isEmpty {
-                // No branch token left at all once the last character is
-                // gone — only the project segment is consumed.
-                XCTAssertEqual(split?.prefix, "ghostties > ")
-                XCTAssertEqual(split?.remainder, "")
-            } else {
-                XCTAssertEqual(split?.prefix, "ghostties > ", "partial = \(partial)")
-                XCTAssertEqual(split?.remainder, partial, "partial = \(partial)")
-            }
-        }
-    }
-
-    /// No resolved project at all — the whole string is the remainder,
-    /// nothing is consumed.
-    func testResolvedFieldSplitReturnsNilWithNoResolvedProject() {
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: "ghostties cco",
-            hasResolvedProject: false,
-            branchToken: nil
+    /// "Creating…" overrides whatever `currentBranchLabel` would otherwise
+    /// show — mirrors the deleted branch chip's own precedence exactly.
+    func testResolutionLineSegmentsShowsCreatingWhileWorktreeCreationIsInFlight() {
+        let segments = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: "ghostties",
+            isProjectLocked: false,
+            isBranchSegmentEligible: true,
+            isCreatingWorktree: true,
+            typedBranchResolution: .notTyped,
+            currentBranchLabel: "main",
+            templateTitle: "cco"
         )
-        XCTAssertNil(split)
-    }
-
-    // MARK: - resolvedFieldSplit round-trips through parse (SF-5, Slice B
-    // review round 3)
-    //
-    // Every test above hand-supplies `branchToken:` as a literal the test
-    // author computed by hand — in production, `branchToken` comes ONLY
-    // from `parse(query:)`'s real output
-    // (`SessionComposerPalette.commandParse.branchToken`). Nothing above
-    // asserted the two agree, which is the whole contract: round 2's
-    // blocker 1 was exactly this divergence (a regression in
-    // `resolvedFieldSplit` that shipped with zero coverage catching it).
-    // These feed `parse`'s actual `ParseResult` straight into
-    // `resolvedFieldSplit` instead of a hand-picked `branchToken`.
-
-    func testResolvedFieldSplitRoundTripsThroughParseWithNoBranchTyped() {
-        let project = makeProject(name: "ghostties")
-        let searchText = "ghostties cco -n test"
-        let parsed = SessionComposerCommandParser.parse(query: searchText, projects: [project], isLocked: false)
-
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: searchText,
-            hasResolvedProject: parsed.projectId != nil,
-            branchToken: parsed.branchToken
-        )
-
-        XCTAssertEqual(split?.prefix, "ghostties ")
-        XCTAssertEqual(split?.remainder, "cco -n test")
-    }
-
-    func testResolvedFieldSplitRoundTripsThroughParseWithATypedBranchAndRemainder() {
-        let project = makeProject(name: "ghostties")
-        let searchText = "ghostties > main > cco"
-        let parsed = SessionComposerCommandParser.parse(query: searchText, projects: [project], isLocked: false)
-        XCTAssertEqual(parsed.branchToken, "main", "sanity check: parse must actually resolve a branch token here for this test to prove anything")
-
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: searchText,
-            hasResolvedProject: parsed.projectId != nil,
-            branchToken: parsed.branchToken,
-            isBranchChipEligible: true
-        )
-
-        XCTAssertEqual(split?.prefix, "ghostties > main > ")
-        XCTAssertEqual(split?.remainder, "cco")
-    }
-
-    /// Round-trips blocker 1's exact repro (empty branch remainder) through
-    /// real `parse` output, rather than the hand-picked `branchToken: "mian"`
-    /// the original blocker-1 test above uses.
-    func testResolvedFieldSplitRoundTripsThroughParseWhenBranchRemainderIsEmpty() {
-        let project = makeProject(name: "ghostties")
-        let searchText = "ghostties > mian "
-        let parsed = SessionComposerCommandParser.parse(query: searchText, projects: [project], isLocked: false)
-
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: searchText,
-            hasResolvedProject: parsed.projectId != nil,
-            branchToken: parsed.branchToken
-        )
-
-        XCTAssertEqual(split?.prefix, "ghostties > ")
-        XCTAssertEqual(split?.remainder, "mian ")
-    }
-
-    /// BL-3 (Slice B review round 3): a project that isn't a git repo has no
-    /// branch chip to carry the segment (`isBranchChipEligible: false`), so
-    /// even though `parse` still resolves a `branchToken` (it never consults
-    /// disk), the split must NOT fold it away — the field must keep showing
-    /// it, since nothing on screen renders a chip for it.
-    func testResolvedFieldSplitRoundTripsThroughParseAndKeepsBranchVisibleWhenNoChipIsEligible() {
-        let project = makeProject(name: "notes")
-        let searchText = "notes > foo bar"
-        let parsed = SessionComposerCommandParser.parse(query: searchText, projects: [project], isLocked: false)
-        XCTAssertEqual(parsed.branchToken, "foo", "sanity check: parse resolves a branch token even for a non-git project — it never consults disk")
-
-        let split = SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: searchText,
-            hasResolvedProject: parsed.projectId != nil,
-            branchToken: parsed.branchToken,
-            isBranchChipEligible: false
-        )
-
-        XCTAssertEqual(split?.prefix, "notes > ")
-        XCTAssertEqual(split?.remainder, "foo bar", "the branch token must stay visible in the field — no chip exists to carry it")
+        XCTAssertEqual(segments.branchLabel, "Creating…")
+        XCTAssertFalse(segments.branchIsError)
     }
 }

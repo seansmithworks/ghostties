@@ -162,24 +162,15 @@ struct SessionComposerBreadcrumbChipTests {
         #expect(store.searchText == "cco -n test")
     }
 
-    // MARK: - F8 (round-2 review): popChipToText / noteSearchTextEditedByTyping
-
-    /// `popChipToText(projectName:)` is the single write path for the A5
-    /// "backspace the chip back to raw text" gesture: it must clear
-    /// `selectedProjectId` (the chip has nothing selected anymore) AND set
-    /// `searchText` to the popped project's name (not clear it, unlike
-    /// `selectProject(_:)`, which this deliberately does NOT reuse).
-    @Test func popChipToTextClearsSelectionAndSetsSearchTextToProjectName() {
-        let store = SessionComposerStore(isolatedForTesting: ())
-        let projectA = makeProject(name: "A")
-        store.selectedProjectId = projectA.id
-        store.searchText = "cco -n test"
-
-        store.popChipToText(projectName: "A")
-
-        #expect(store.selectedProjectId == nil)
-        #expect(store.searchText == "A")
-    }
+    // MARK: - F8 (round-2 review): noteSearchTextEditedByTyping
+    //
+    // `popChipToTextClearsSelectionAndSetsSearchTextToProjectName` used to
+    // live here, testing `SessionComposerStore.popChipToText(projectName:)`
+    // — the single write path for the A5 "backspace the chip back to raw
+    // text" gesture. Deleted alongside that method (model A rebuild): the
+    // field has no non-editable chip segment to pop back to text anymore,
+    // so the gesture, its store method, and this test are all dead code
+    // together, not independently.
 
     /// D4: typing by hand must disarm a pending chip-undo. Without this, ⌘Z
     /// after typing past a chip change would discard the typed keystrokes

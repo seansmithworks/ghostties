@@ -203,19 +203,18 @@ enum SessionComposerCommandParser {
     /// VERBATIM from `rawQuery` — no re-tokenizing, no rejoining. `nil` when
     /// `rawQuery` has no separable first token (blank/whitespace-only).
     ///
-    /// This exists specifically so the breadcrumb chip's editable text
-    /// (`SessionComposerPalette.queryFieldText`) can be lossless (B1,
-    /// composer breadcrumb spec review). The binding used to reconstruct the
-    /// remainder from `remainderText` — `remainderTokens.joined(separator: "
-    /// ")` — which silently drops trailing whitespace and un-quotes a
-    /// quoted argument (by design for DISPLAY purposes: `remainderText`
-    /// backs `Run "<remainder>"` and the template filter, neither of which
-    /// needs to round-trip). SwiftUI writes that lossy reconstruction back
-    /// into the field on the very next update pass, so a space typed after
-    /// "ghostties cco -n" was eaten the instant it was typed, and a typed
-    /// quote character never survived into `searchText` at all. Slicing the
-    /// ORIGINAL string instead of rebuilding one has no reconstruction step
-    /// to lose anything in.
+    /// Originally added so the (since-deleted) breadcrumb chip's editable
+    /// text could be lossless (B1, composer breadcrumb spec review) — that
+    /// binding used to reconstruct the remainder from `remainderText` —
+    /// `remainderTokens.joined(separator: " ")` — which silently drops
+    /// trailing whitespace and un-quotes a quoted argument, and SwiftUI
+    /// wrote that lossy reconstruction back into the field on the very next
+    /// update pass. The model A rebuild deleted the chip and its
+    /// prefix-consuming field binding entirely (the field now holds
+    /// `searchText` verbatim, no split needed for display), but this
+    /// function stays: `stickyChipProjectId` below still calls it to find
+    /// the project-token boundary, engine-side, unrelated to how the field
+    /// renders.
     static func splitOnFirstToken(
         _ rawQuery: String,
         separatorsIncludeChevron: Bool = false
@@ -370,75 +369,15 @@ enum SessionComposerCommandParser {
         commandProjectId ?? selectedProjectId
     }
 
-    /// Computes the verbatim `(prefix, remainder)` split consumed by however
-    /// much of the command grammar has resolved right now — project only,
-    /// or project + branch. Chevron-aware, chained exactly the way
-    /// `parse(query:)` itself splits in two steps. Hoisted out of
-    /// `SessionComposerPalette` (should-fix 10, Slice B review round 2) so
-    /// it is unit-testable — it used to be `private` to a SwiftUI `View`,
-    /// this repo has no view-test harness, and blocker 1 (a regression in
-    /// this exact function) shipped with zero coverage as a direct result.
-    ///
-    /// Blocker 1 fix (round 2): the branch segment is folded into `prefix`
-    /// ONLY when doing so still leaves genuine remainder text behind it
-    /// (`!branchSplit.remainder.isEmpty`) — otherwise the branch token
-    /// itself disappears into the hidden prefix the moment its own
-    /// remainder empties out (e.g. backspacing a typed remainder down to
-    /// nothing), with no macOS-13-safe route back into it:
-    /// `SessionComposerPalette`'s backspace-at-start gesture is
-    /// `Backport.onKeyPress`-only, a documented no-op below macOS 14 — on
-    /// that OS the field would go permanently empty with no way to reach
-    /// the swallowed text again short of Esc, which cancels the whole
-    /// composer. Falling back to `projectSplit` here means the branch token
-    /// stays live, ordinary, editable TEXT via the field's normal
-    /// `NSTextField` editing on EVERY macOS version — no keyboard route
-    /// required at all.
-    ///
-    /// Trade-off, stated plainly: a freshly-typed branch with nothing after
-    /// it yet (`ghostties > main`, nothing typed past "main") now shows
-    /// "main" in both the chip and the field for that one transient state,
-    /// rather than only the chip (the finding-15 fix's original goal).
-    /// Accepted because the alternative is an unrecoverable trap, not
-    /// merely a cosmetic wart — and it only occurs in the narrow window
-    /// where the branch segment has no remainder after it yet.
-    /// `isBranchChipEligible` (BL-3 fix, Slice B review round 3): whether a
-    /// branch chip will actually RENDER to carry the folded-away segment.
-    /// Defaults to `true` so every pre-existing call/test site (none of
-    /// which passed this) stays byte-identical.
-    ///
-    /// The branch segment used to fold into the hidden `prefix` whenever
-    /// `branchToken != nil` and a remainder survived it — an UNRELATED
-    /// condition to whether `SessionComposerPalette.queryRow` actually
-    /// renders a branch chip (`isBranchChipEligible`, gated on
-    /// `composerStore.isGitRepo`). For a non-git project, `> foo` still
-    /// parses a branch token (this parser never consults disk — see
-    /// `parse(query:)`'s disambiguation rule), but no chip exists to show
-    /// it: the token silently disappeared from the field with nothing on
-    /// screen naming it, and `Return` failed with "No worktree found for
-    /// branch 'foo'" — a token the user could not see anywhere. Folding the
-    /// branch segment away is only safe when something visible (the chip)
-    /// is what's carrying it — the same principle the round-2 fix already
-    /// applied to the remainder-empty case, now applied consistently to the
-    /// chip-not-rendered case too.
-    static func resolvedFieldSplit(
-        searchText: String,
-        hasResolvedProject: Bool,
-        branchToken: String?,
-        isBranchChipEligible: Bool = true
-    ) -> (prefix: String, remainder: String)? {
-        guard hasResolvedProject,
-              let projectSplit = splitOnFirstToken(searchText, separatorsIncludeChevron: true)
-        else { return nil }
-
-        guard isBranchChipEligible,
-              branchToken != nil,
-              let branchSplit = splitOnFirstToken(projectSplit.remainder, separatorsIncludeChevron: true),
-              !branchSplit.remainder.isEmpty
-        else {
-            return projectSplit
-        }
-        return (prefix: projectSplit.prefix + branchSplit.prefix, remainder: branchSplit.remainder)
-    }
+    // `resolvedFieldSplit` used to live here — it computed the verbatim
+    // `(prefix, remainder)` split the deleted breadcrumb chips' field
+    // binding consumed into a hidden, non-editable prefix. Deleted with the
+    // chips themselves (model A rebuild): the field now holds `searchText`
+    // verbatim, with no split needed for display — see
+    // `SessionComposerPalette.searchTextBinding`. Its test coverage
+    // (`SessionComposerCommandParserTests`'s `resolvedFieldSplit` sections)
+    // was deleted alongside it, since it tested a transform that no longer
+    // exists.
 
     /// Resolves which worktree path a commit should launch into: mirrors
     /// `resolveCommitProjectId`'s precedence idiom exactly — a resolved
@@ -561,5 +500,79 @@ enum SessionComposerCommandParser {
         case .pending:
             return .failure(SessionComposerCommitError(message: "Still checking branches for this project — try again in a moment."))
         }
+    }
+
+    // MARK: - Resolution line (model A rebuild — replaces the breadcrumb
+    // chips' label logic)
+
+    /// What the resolution line's three segments show, computed from the
+    /// same inputs the deleted chips read (`SessionComposerPalette`'s
+    /// `currentProject`/`typedBranchResolution`/`currentBranchLabel`/
+    /// `selectedOption`) — pure and testable, unlike those (private
+    /// computed properties on a SwiftUI `View`, this repo's usual
+    /// view-test-harness gap). `SessionComposerPalette.resolutionLine`
+    /// calls this once and renders the result; it does not re-derive any of
+    /// this logic inline.
+    struct ResolutionLineSegments: Equatable {
+        let projectLabel: String
+        let isProjectClickable: Bool
+        /// `nil` when the branch segment shouldn't render at all — a
+        /// non-git project (mirrors the deleted branch chip's own
+        /// "no chip, not a disabled one" rule).
+        let branchLabel: String?
+        /// Whether `branchLabel` should render in the error color — a
+        /// typed branch that doesn't resolve to anything. Always `false`
+        /// when `branchLabel == nil`.
+        let branchIsError: Bool
+        let templateLabel: String
+    }
+
+    /// Computes `ResolutionLineSegments` from the composer's current
+    /// resolved state.
+    ///
+    /// - `projectName`: `currentProject?.name` — `nil` means no project
+    ///   resolved/selected yet.
+    /// - `isProjectLocked`: whether the composer's project binding is
+    ///   `.locked` — the project segment renders non-clickable either way,
+    ///   but the empty-state fallback text differs ("Project unavailable"
+    ///   vs "Select project"), matching the deleted chip's own split.
+    /// - `isBranchSegmentEligible`: `SessionComposerStore.isGitRepo` — governs
+    ///   whether a branch segment renders at all.
+    /// - `templateTitle`: the currently-selected result row's title
+    ///   (`selectedOption?.title`), or `nil` if nothing is selected (an
+    ///   empty results list).
+    static func resolutionLineSegments(
+        projectName: String?,
+        isProjectLocked: Bool,
+        isBranchSegmentEligible: Bool,
+        isCreatingWorktree: Bool,
+        typedBranchResolution: TypedBranchResolution,
+        currentBranchLabel: String?,
+        templateTitle: String?
+    ) -> ResolutionLineSegments {
+        let projectLabel = isProjectLocked
+            ? (projectName ?? "Project unavailable")
+            : (projectName ?? "Select project")
+
+        var branchLabel: String?
+        var branchIsError = false
+        if isBranchSegmentEligible {
+            if isCreatingWorktree {
+                branchLabel = "Creating…"
+            } else if case .unresolved(let token) = typedBranchResolution {
+                branchLabel = "branch \"\(token)\" not found"
+                branchIsError = true
+            } else {
+                branchLabel = currentBranchLabel ?? "Default"
+            }
+        }
+
+        return ResolutionLineSegments(
+            projectLabel: projectLabel,
+            isProjectClickable: !isProjectLocked,
+            branchLabel: branchLabel,
+            branchIsError: branchIsError,
+            templateLabel: templateTitle ?? "No match"
+        )
     }
 }

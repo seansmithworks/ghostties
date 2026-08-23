@@ -175,7 +175,7 @@ final class SessionComposerStore: ObservableObject {
     /// excludes every already-claimed branch — so a repo with exactly one
     /// branch checked out at its own root (the most common first-run state)
     /// satisfied neither, and the branch chip never appeared. This is what
-    /// `SessionComposerPalette.isBranchChipEligible` reads instead.
+    /// `SessionComposerPalette.isBranchSegmentEligible` reads instead.
     @Published private(set) var isGitRepo: Bool = false
 
     /// The project id `worktrees`/`branchesWithoutWorktree`/
@@ -358,13 +358,14 @@ final class SessionComposerStore: ObservableObject {
             // BL-2 fix (Slice B review round 3): a timeout used to leave
             // `.pending` PERMANENT whenever it landed on the composer's very
             // FIRST refresh (`open()`'s own call) — `isGitRepo` stays
-            // `false` from its initial value, so the branch chip itself
-            // never renders (`isBranchChipEligible == isGitRepo`), which
-            // means the picker-open refresh trigger
-            // (`SessionComposerPalette.branchChip()`'s
-            // `.onChange(of: isBranchChipPickerOpen)`) is unreachable —
-            // there is otherwise NOTHING left in the composer that will ever
-            // ask again. `.onChange(of: commandProject?.id)` doesn't help
+            // `false` from its initial value, so the branch segment itself
+            // never renders (`isBranchSegmentEligible == isGitRepo`), which
+            // means the picker-open refresh trigger (the resolution line's
+            // branch segment, `SessionComposerPalette`'s
+            // `.onChange(of: isBranchPickerOpen)`, model A rebuild) is
+            // unreachable — there is otherwise NOTHING left in the composer
+            // that will ever ask again. `.onChange(of: commandProject?.id)`
+            // doesn't help
             // either: the id never changed. Scheduling exactly one retry
             // here — guarded by the SAME `worktreeRefreshToken` every other
             // invalidation already uses, so it's a silent no-op the moment
@@ -757,21 +758,19 @@ final class SessionComposerStore: ObservableObject {
         searchText = ""
     }
 
-    /// Pop the breadcrumb chip back into raw editable text (A5): clear the
-    /// selection and replace `searchText` with the given project name.
-    /// `selectProject(_:)` doesn't fit here — it clears `searchText`, and
-    /// this operation needs to SET it to the popped project's name — so this
-    /// is its own single write path for the same reason `selectProject(_:)`
-    /// is one: `SessionComposerPalette.popChipToText()` used to write
-    /// `selectedProjectId` directly, which is exactly the "fix applied to
-    /// two sites and missed on a third" failure this file's `selectProject(_:)`
-    /// doc comment already warns about.
-    func popChipToText(projectName: String) {
-        selectedProjectId = nil
-        searchText = projectName
-    }
-
     // MARK: - Breadcrumb chip cascade + undo (Slice A)
+    //
+    // Note (model A rebuild): "breadcrumb chip" in the section title below
+    // now names the STATE-layer cascade/undo contract only — the field is no
+    // longer a chip, it's the literal `searchText` (see
+    // `SessionComposerPalette`'s doc comment). `popChipToText(projectName:)`
+    // used to live here, backing the field's "backspace pops the chip back
+    // to raw text" gesture (A5) — that gesture doesn't exist once the field
+    // has no non-editable segment to pop, so it (and its call site,
+    // `SessionComposerPalette.popChipToText()`) were deleted rather than
+    // ported. `changeProjectChip`/`undoProjectChipChange`/`changeBranchChip`
+    // below are unchanged: the resolution line's segments call them exactly
+    // as the deleted chips did.
 
     /// Whether `changeProjectChip(to:currentlyShown:)` actually cascaded or
     /// was a no-op. Exposed so callers (and tests) can assert on the exact
@@ -870,7 +869,7 @@ final class SessionComposerStore: ObservableObject {
     /// `false` when switching TO a project (only when switching to NO
     /// project, `projectId == nil`) — it is held at whatever it last read.
     /// Blocker 3's original fix (round 2) reset it synchronously here,
-    /// which is what made the branch chip (gated on `isBranchChipEligible`
+    /// which is what made the branch chip (gated on `isBranchSegmentEligible`
     /// == `isGitRepo`) disappear — separator and all — for the up-to-2s a
     /// refresh takes, then reappear once it resolved: a visible flicker on
     /// every project-chip change or ⌘Z, permanent if that refresh timed
@@ -1253,7 +1252,7 @@ final class SessionComposerStore: ObservableObject {
     /// (clearing it as part of the cascade this undo exists to restore) —
     /// that write goes through `selectProject(_:)`, NOT this method, so it
     /// can't disarm the very undo it just armed. Only
-    /// `SessionComposerPalette.queryFieldText`'s setter (real keystrokes)
+    /// `SessionComposerPalette.searchTextBinding`'s setter (real keystrokes)
     /// calls this. Without it, ⌘Z after typing past a chip change discarded
     /// those keystrokes with no way back — AppKit's own text-undo never saw
     /// them (this binding writes `searchText` directly, bypassing the field

@@ -11,10 +11,12 @@ import SwiftUI
 /// Differences from the system palette, each tied to a specific defect:
 /// - Sectioned RECENT / TEMPLATES / PROJECTS results instead of one flat
 ///   list — the search field filters both templates and projects.
-/// - An inline project BREADCRUMB CHIP at the head of the query field
-///   (Slice A of the breadcrumb spec) instead of the trailing divided
-///   project control it replaced — the chip removes the second control
-///   competing with the field for width entirely, rather than tuning it.
+/// - TYPE-FIRST entry (model A, replacing Slice A/B's breadcrumb chips —
+///   see the note below). The field holds the literal typed string, always;
+///   a RESOLUTION LINE beneath it (`resolutionLine`) shows what that string
+///   currently resolves to — project, branch, and the template Return would
+///   commit — and is the only mouse entry point into the project/branch
+///   pickers.
 /// - Prefix-first relevance ranking (`SessionComposerRanking`) instead of
 ///   boolean-match + color scoring.
 /// - Focus-loss auto-dismiss removed: the project dropdown and
@@ -30,6 +32,19 @@ import SwiftUI
 /// NO session-name field — an unpinned session's name is its live terminal
 /// title (locked decision). The search field only ever filters templates
 /// and projects.
+///
+/// Model A rebuild (replaces Slice A's project chip and Slice B's branch
+/// chip): three review rounds on the chip-based field kept finding blockers
+/// that all shared one root cause — the field's TEXT and the CHIPS were two
+/// representations of one underlying string, and they could disagree (a
+/// branch segment that became uneditable, a branch consumed with no chip
+/// rendering it, a token displayed twice). This rebuild has exactly ONE
+/// representation: whatever the user typed is what the `TextField` holds,
+/// completely and always — nothing is ever consumed into a hidden,
+/// non-editable prefix. The command grammar underneath
+/// (`SessionComposerCommandParser`) and the store-layer cascade/undo
+/// (`SessionComposerStore`) are UNCHANGED; only the chip rendering and the
+/// field-text transform that fed it are gone.
 struct SessionComposerPalette: View {
     @Binding var isPresented: Bool
     let request: SessionComposerRequest
@@ -40,27 +55,21 @@ struct SessionComposerPalette: View {
 
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
-    /// Whether the inline project-chip picker (A2) is expanded. Replaces
-    /// the old `isProjectDropdownOpen` popover flag — this one drives an
-    /// expansion INSIDE the card, not a second `.popover`.
-    @State private var isProjectChipPickerOpen = false
-    /// Whether the inline branch-chip picker (B3) is expanded. Mutually
-    /// exclusive with `isProjectChipPickerOpen` BY CONSTRUCTION — every
-    /// site that flips one to `true` flips the other to `false` in the
-    /// same statement — never merely "the two happen not to overlap in
-    /// practice". A second live picker with its own capture layer would
-    /// re-create exactly the ambiguity `ComposerQueryField.isPickerOpen`
-    /// exists to remove (see that type's doc comment).
-    @State private var isBranchChipPickerOpen = false
-    /// Keyboard focus on the project chip's `Button`. D5 removed the
-    /// left-arrow-from-the-field route into this (see the doc comment on
-    /// `.move` handling below) without replacing it, so as of F6 (round-2
-    /// review) this is set only by whatever focus route the system already
-    /// provides for a focusable control — Tab under Full Keyboard Access,
-    /// or VoiceOver navigation — never by anything in this file. The chip
-    /// has no Return/Down keyboard handlers of its own; it is mouse- (and
-    /// VoiceOver-activation-) only until a real keyboard route exists.
-    @FocusState private var isChipFocused: Bool
+    /// Whether the inline project picker is expanded — opened from the
+    /// resolution line's project segment (model A rebuild; used to be the
+    /// project chip's own click target, Slice A/A2). Drives an expansion
+    /// INSIDE the card, not a `.popover`.
+    @State private var isProjectPickerOpen = false
+    /// Whether the inline branch picker is expanded — opened from the
+    /// resolution line's branch segment (model A rebuild; used to be the
+    /// branch chip's click target, Slice B/B3). Mutually exclusive with
+    /// `isProjectPickerOpen` BY CONSTRUCTION — every site that flips one to
+    /// `true` flips the other to `false` in the same statement — never
+    /// merely "the two happen not to overlap in practice". A second live
+    /// picker with its own capture layer would re-create exactly the
+    /// ambiguity `ComposerQueryField.isPickerOpen` exists to remove (see
+    /// that type's doc comment).
+    @State private var isBranchPickerOpen = false
     /// Blocker 2 fix (Slice B review round 2): debounced re-refresh when a
     /// typed command resolves a DIFFERENT project than whatever the
     /// composer's worktree cache currently describes — see
@@ -243,22 +252,23 @@ struct SessionComposerPalette: View {
         return store.projects.first(where: { $0.id == stickyId })
     }
 
-    // MARK: - Branch chip (Slice B, B3)
+    // MARK: - Branch segment eligibility (Slice B, B3 — chip deleted)
 
-    /// Whether the project is a git repo at all — the branch chip has no
-    /// entry point unless the project genuinely IS one. Blocker 6 fix
-    /// (Slice B review round 1): this used to be keyed off "did enumeration
-    /// find anything to offer" (`!worktrees.isEmpty || !branchesWithoutWorktree.isEmpty`),
-    /// but BOTH of those lists exclude cases that still mean "yes, this is a
+    /// Whether the project is a git repo at all — the resolution line's
+    /// branch segment (and its picker) has no entry point unless the
+    /// project genuinely IS one. Blocker 6 fix (Slice B review round 1):
+    /// this used to be keyed off "did enumeration find anything to offer"
+    /// (`!worktrees.isEmpty || !branchesWithoutWorktree.isEmpty`), but BOTH
+    /// of those lists exclude cases that still mean "yes, this is a
     /// repo" — `worktrees` excludes the project's own root, and
     /// `branchesWithoutWorktree` excludes every already-claimed branch. A
     /// repo with exactly one branch checked out at its own root (a fresh
     /// project, the single most common first-run state) satisfies neither,
-    /// so the chip never appeared and `+ new branch + worktree` was
+    /// so the segment never appeared and `+ new branch + worktree` was
     /// unreachable exactly where it matters most. `isGitRepo` is derived by
     /// the store from `GitWorktreeEnumerator.list(repoPath:)`'s UNFILTERED
     /// result (non-empty = a repo) — see `SessionComposerStore.refreshWorktrees`.
-    private var isBranchChipEligible: Bool {
+    private var isBranchSegmentEligible: Bool {
         composerStore.isGitRepo
     }
 
@@ -317,76 +327,25 @@ struct SessionComposerPalette: View {
         return composerStore.worktrees.first(where: { $0.path == path })?.branch ?? path
     }
 
-    /// The breadcrumb chip's displayed/editable text (A1). When a typed
-    /// command has resolved a project, this is the remainder ONLY — the
-    /// resolved token renders as the chip instead, and edits reconstruct
-    /// the full stored string by re-prepending the ORIGINAL prefix (the
-    /// matched token plus whatever whitespace separated it, taken verbatim
-    /// from `searchText`). Otherwise it is `composerStore.searchText`
-    /// unchanged, exactly as before chips existed.
-    ///
-    /// B1 fix: this used to `get` `commandParse.remainderText` — a display
-    /// string rebuilt as `remainderTokens.joined(separator: " ")` — and `set`
-    /// by re-prepending the matched token with a single hardcoded space. That
-    /// round trip silently ate trailing whitespace and stripped quote
-    /// characters (SwiftUI writes the `get`'s lossy value straight back into
-    /// the field on the next render), making `ghostties cco -n "test"`
-    /// untypable: the first space after `-n` never survived. Routing through
-    /// `SessionComposerCommandParser.splitOnFirstToken` instead means BOTH
-    /// halves are exact substrings of the real `searchText` — there is no
-    /// reconstruction step left to lose anything in.
-    private var queryFieldText: Binding<String> {
+    /// The query field's binding (model A rebuild — replaces the deleted
+    /// `queryFieldText`/`resolvedFieldSplit` prefix-consuming transform).
+    /// `get` returns `composerStore.searchText` VERBATIM — never a computed
+    /// remainder — and `set` writes whatever the field sends back
+    /// UNCHANGED: this is the property that makes acceptance criterion 1
+    /// ("the field's contents are always exactly `searchText`") true. The
+    /// only thing layered on top of the identity get/set is the same D4 side
+    /// effect the old binding also carried: disarming a pending chip-undo
+    /// the instant the user types by hand (`noteSearchTextEditedByTyping()`)
+    /// — that's engine-layer undo bookkeeping the composer breadcrumb spec
+    /// still requires (⌘Z restoring a cleared segment as one step), not a
+    /// transform of the value itself.
+    private var searchTextBinding: Binding<String> {
         Binding(
-            get: {
-                guard let split = resolvedFieldSplit() else { return composerStore.searchText }
-                return split.remainder
-            },
+            get: { composerStore.searchText },
             set: { newValue in
-                // D4: any real keystroke disarms a pending chip-undo — see
-                // `SessionComposerStore.noteSearchTextEditedByTyping()`.
                 composerStore.noteSearchTextEditedByTyping()
-                guard let split = resolvedFieldSplit() else {
-                    composerStore.searchText = newValue
-                    return
-                }
-                composerStore.searchText = split.prefix + newValue
+                composerStore.searchText = newValue
             }
-        )
-    }
-
-    /// Computes the verbatim `(prefix, remainder)` split consumed by
-    /// however much of the command grammar has resolved right now — project
-    /// only, or project + branch. Chevron-aware, chained exactly the way
-    /// `SessionComposerCommandParser.parse(query:)` itself splits in two
-    /// steps.
-    ///
-    /// Should-fix 15 fix (Slice B review round 1): `queryFieldText`'s `get`/
-    /// `set` used to call `splitOnFirstToken` WITHOUT `separatorsIncludeChevron`,
-    /// and only ONCE — so typing `ghostties > main > cco` resolved chips
-    /// `[ghostties] › [main]` (both via `commandParse`, which always splits
-    /// chevron-aware internally) while the field kept showing `> main > cco`:
-    /// the non-chevron split couldn't find the project boundary at all (`>`
-    /// isn't whitespace), and even a single chevron-aware split only
-    /// consumes the PROJECT segment, leaving the branch segment's own text
-    /// (and its `>`) in the field. This chains a second chevron-aware split
-    /// over the branch segment too, once one has actually resolved
-    /// (`commandParse.branchToken != nil`) — so the field's editable
-    /// remainder always matches exactly what the chips consumed, whether
-    /// that's one segment or two.
-    private func resolvedFieldSplit() -> (prefix: String, remainder: String)? {
-        // Hoisted to `SessionComposerCommandParser.resolvedFieldSplit`
-        // (should-fix 10, Slice B review round 2) so the logic is
-        // unit-testable — see that function's doc comment for the blocker 1
-        // fix this now carries (folding the branch segment into `prefix`
-        // only when a genuine remainder survives it).
-        SessionComposerCommandParser.resolvedFieldSplit(
-            searchText: composerStore.searchText,
-            hasResolvedProject: commandProject != nil,
-            branchToken: commandParse.branchToken,
-            // BL-3 fix (Slice B review round 3): the branch segment must
-            // only fold into the hidden prefix when a chip will actually
-            // render it — see `resolvedFieldSplit`'s doc comment.
-            isBranchChipEligible: isBranchChipEligible
         )
     }
 
@@ -629,12 +588,12 @@ struct SessionComposerPalette: View {
                     composerStore.cancel()
                     isAddingTemplate = false
                     newTemplateName = ""
-                    isProjectChipPickerOpen = false
+                    isProjectPickerOpen = false
                     // Finding 14 fix (Slice B review round 1): this was
-                    // missing here while `isProjectChipPickerOpen` right
+                    // missing here while `isProjectPickerOpen` right
                     // above it was reset — leaving the branch picker
                     // latched open across a dismiss/re-present cycle.
-                    isBranchChipPickerOpen = false
+                    isBranchPickerOpen = false
                     // Blocker 2 fix (Slice B review round 2): a pending
                     // debounced refresh for whatever project was typed must
                     // not land after the composer has already closed.
@@ -775,7 +734,7 @@ struct SessionComposerPalette: View {
                 // keystrokes with NO way to get them back (a second ⌘Z had
                 // nothing left to restore them from either). Fixed by
                 // disarming `pendingChipUndo` the moment the user edits
-                // `searchText` by typing (`queryFieldText`'s setter calls
+                // `searchText` by typing (`searchTextBinding`'s setter calls
                 // `SessionComposerStore.noteSearchTextEditedByTyping()`) —
                 // once that happens this overlay's `Button` simply stops
                 // existing, so a stray ⌘Z falls through to AppKit's own
@@ -860,241 +819,199 @@ struct SessionComposerPalette: View {
         .modifier(ShakeEffect(animatableData: shakeTrigger))
     }
 
-    // MARK: - Query row (breadcrumb chip + search field, A1/A2)
+    // MARK: - Query row (type-first field + resolution line, model A rebuild)
     //
-    // The project no longer competes with the field for width as a
-    // trailing control (the old trailing project label/button and its
-    // `isProjectDropdownOpen` popover flag, both deleted) — it renders as
-    // a chip at the HEAD of the same field, with
-    // the remainder staying live editable text (`queryFieldText`).
-    // Changing the chip expands `inlineProjectPicker` INSIDE the card
-    // (below the field, `isProjectChipPickerOpen`), never a second
-    // `.popover` — the old trailing control's picker was a `.popover`
-    // nested inside the composer's own `.popover`, on the known-fragile
-    // list and never verified; two chips would have doubled that risk.
-    //
-    // B2 fix: the chip is now ALWAYS present, even with no project selected
-    // (`currentProject == nil`) — it renders a "Select project" placeholder
-    // that still opens the picker. The prior version only rendered anything
-    // here `if let project = currentProject`, which had no fallback at all
-    // once the trailing dropdown's old always-present control was deleted:
-    // backspacing a picker-selected chip back to raw text
-    // (`popChipToText`), or a fresh install with zero projects, left NO
-    // project control on screen whatsoever — `+ Add project…` (the only way
-    // to escape zero projects) was unreachable.
-
-    /// D7/round-4 fix: there is no width cap on the chip. Three prior rounds
-    /// each shipped `.frame(maxWidth: chipMaxWidth)` on the chip's `Text`,
-    /// and each time it was wrong for the same reason: `.frame(maxWidth:)`
-    /// on a flexible axis is greedy, not a ceiling — offered more space than
-    /// the view's own ideal size, it returns the *proposed* size clamped to
-    /// the maximum, not its content size. A short name (`atlas-api`) and a
-    /// long one (`ghostties-website-redesign`) both got proposed the same
-    /// width by the parent `HStack`, so both rendered as the same fixed
-    /// 96pt slab — a short name padded with dead tinted background, a long
-    /// one truncated for no reason. Screenshots proved this identically in
-    /// both the `.anchored` and locked/`.centered` cards.
-    ///
-    /// The fix is to have no `.frame(maxWidth:)` at all. `Text` with
-    /// `.lineLimit(1)` + `.truncationMode(.tail)` is NOT greedy on its own:
-    /// offered more space than it needs, it reports its own ideal width;
-    /// offered less, it truncates. F1 (round-2 review, still true) already
-    /// established that neither child in the `HStack` below carries
-    /// `.layoutPriority` — with none set, the chip's `Text` claims only what
-    /// its content needs and the `TextField`, which has no maximum, absorbs
-    /// the rest. That is what makes a short chip hug its text and a long
-    /// chip truncate only when the row genuinely runs out of room, instead
-    /// of both being clamped to one arbitrary number.
-    ///
-    /// No hard ceiling is enforced for the wide `.centered` card. A true cap
-    /// would need `ViewThatFits(in: .horizontal)` (macOS 13-safe), not a
-    /// max-only frame — not added here because it wasn't proven necessary
-    /// against the capture harness; the `HStack`'s own space division was
-    /// sufficient in every observed card width.
+    // Replaces Slice A/B's project/branch chips with plain text entry: the
+    // field holds `composerStore.searchText` verbatim (`searchTextBinding`),
+    // and `resolutionLine` below it shows what that string resolves to,
+    // segment by segment, as the ONLY mouse entry point left into the
+    // project/branch pickers. Changing a segment still expands the SAME
+    // inline pickers this replaced (`inlineProjectPicker`/`inlineBranchPicker`,
+    // both unchanged) — never a `.popover`, for the same nested-popover
+    // reason Slice A originally recorded (a child popover taking key can
+    // dismiss the parent composer).
 
     private var queryRow: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                projectChip(currentProject)
-
-                Text("›")
-                    .font(.system(size: fieldFontSize, weight: .regular))
-                    .foregroundStyle(.tertiary)
-                    // Decorative separator between the chip and the field —
-                    // carries no information VoiceOver needs (nit).
-                    .accessibilityHidden(true)
-
-                // B3: rendered only when the project is eligible (a git
-                // repo enumeration found something to offer) — a
-                // non-git project shows NO branch chip at all, not a
-                // disabled one (Sean's call).
-                if isBranchChipEligible {
-                    branchChip()
-
-                    Text("›")
-                        .font(.system(size: fieldFontSize, weight: .regular))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-
-                ComposerQueryField(
-                    query: queryFieldText,
-                    fontSize: fieldFontSize,
-                    focusTrigger: $composerStore.focusSearchFieldTrigger,
-                    hasSelection: selectedOption != nil,
-                    // D6/B3: while EITHER inline picker is open, the field's
-                    // own ↑/↓/Return handlers must go quiet — see
-                    // `ComposerQueryField.isPickerOpen`'s doc comment. The
-                    // two pickers are mutually exclusive by construction
-                    // (see `isBranchChipPickerOpen`'s doc comment) — the
-                    // field only needs "is ANY picker open", the OR.
-                    // Finding 14 fix: mirrors the same eligibility gate the
-                    // branch picker's OWN render uses just below — an
-                    // ineligible-but-still-flagged-open branch picker must
-                    // not silence the field either, or the field's own
-                    // handlers stay unmounted while nothing else is
-                    // rendered to capture the keys in their place.
-                    isPickerOpen: isProjectChipPickerOpen || (isBranchChipPickerOpen && isBranchChipEligible),
-                    // Nit: the placeholder still said "...and projects" even
-                    // once a chip has already picked the project — the
-                    // field only filters that project's templates at that
-                    // point, never projects.
-                    placeholder: currentProject != nil ? "Search templates…" : "Search templates and projects…"
-                ) { event in
-                    handle(event)
-                }
-                .frame(height: fieldHeight)
+        VStack(alignment: .leading, spacing: 4) {
+            ComposerQueryField(
+                query: searchTextBinding,
+                fontSize: fieldFontSize,
+                focusTrigger: $composerStore.focusSearchFieldTrigger,
+                hasSelection: selectedOption != nil,
+                // D6/B3: while EITHER inline picker is open, the field's own
+                // ↑/↓/Return handlers must go quiet — see
+                // `ComposerQueryField.isPickerOpen`'s doc comment. The two
+                // pickers are mutually exclusive by construction (see
+                // `isBranchPickerOpen`'s doc comment) — the field only needs
+                // "is ANY picker open", the OR.
+                isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
+                placeholder: "Type a project, branch, and command…"
+            ) { event in
+                handle(event)
             }
+            .frame(height: fieldHeight)
             .padding(.horizontal, 10)
 
-            if isProjectChipPickerOpen {
+            resolutionLine
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+
+            if isProjectPickerOpen {
                 Divider()
                 inlineProjectPicker
-            } else if isBranchChipPickerOpen && isBranchChipEligible {
-                // Finding 14 fix (Slice B review round 1): gated on
-                // eligibility too, not just the flag — a project change
-                // cascades `worktrees`/`branchesWithoutWorktree` to empty
-                // (making the branch chip itself stop rendering) without
-                // necessarily flipping `isBranchChipPickerOpen` back to
-                // false in the same instant, which used to leave this
-                // picker expanded with no chip above it while
+            } else if isBranchPickerOpen && isBranchSegmentEligible {
+                // Finding 14 fix (Slice B review round 1, still applies):
+                // gated on eligibility too, not just the flag — a project
+                // change cascades `worktrees`/`branchesWithoutWorktree` to
+                // empty (making the branch segment itself stop rendering)
+                // without necessarily flipping `isBranchPickerOpen` back to
+                // false in the same instant, which used to leave this picker
+                // expanded with no segment above it while
                 // `ComposerQueryField.isPickerOpen` still kept the field's
                 // own ↑/↓/Return handlers unmounted.
                 Divider()
                 inlineBranchPicker
             }
         }
-        // A5: Esc while focus is on the chip or inside the inline picker
-        // (i.e. NOT in the text field, which has its own `onExitCommand`
-        // below that routes through the same `closeChipPickerOrDismiss`)
-        // closes the picker without closing the composer.
+        // A5: Esc while inside the inline picker (i.e. NOT in the text
+        // field, which has its own `onExitCommand` below that routes
+        // through the same `closeChipPickerOrDismiss`) closes the picker
+        // without closing the composer.
         .onExitCommand(perform: closeChipPickerOrDismiss)
-        // Nit fix (Slice B review round 2): `isBranchChipPickerOpen` was
-        // never reset when `isBranchChipEligible` flipped false (e.g. the
-        // project chip changes to a non-git project while the branch
-        // picker happened to be open) — the flag latched `true`, so the
-        // picker silently re-expanded the next time eligibility returned
-        // with no click in between.
-        .onChange(of: isBranchChipEligible) { eligible in
-            if !eligible { isBranchChipPickerOpen = false }
+        // Nit fix (Slice B review round 2, still applies): `isBranchPickerOpen`
+        // was never reset when `isBranchSegmentEligible` flipped false (e.g.
+        // the resolved project changes to a non-git project while the
+        // branch picker happened to be open) — the flag latched `true`, so
+        // the picker silently re-expanded the next time eligibility
+        // returned with no click in between.
+        .onChange(of: isBranchSegmentEligible) { eligible in
+            if !eligible { isBranchPickerOpen = false }
+        }
+        // B3: opening the branch picker is also a refresh trigger (on top
+        // of the project-selection and initial-open triggers) — Sean runs
+        // 2-7 parallel sessions creating worktrees constantly, so this is
+        // the moment accuracy matters most. Used to live on the deleted
+        // branch chip's own `Button`; moved here since the resolution
+        // line's branch segment is a plain click target, not a dedicated
+        // view worth attaching a modifier to.
+        .onChange(of: isBranchPickerOpen) { isOpen in
+            guard isOpen, let project = currentProject else { return }
+            Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
         }
     }
 
-    /// The chip itself. `.locked` renders a static label with no picker
-    /// affordance (A2) — matching the old trailing control's locked branch.
-    /// Sean's call, flagged as a strawman rather than settled: `.locked`
-    /// drops the pill background entirely (plain secondary text + the `›`)
-    /// instead of inheriting the interactive chip's pill — a pill with no
-    /// picker behind it reads as a control that isn't one, same reasoning
-    /// DESIGN.md already records for the control this replaced.
+    /// The resolution line: what the CURRENT field text resolves to, one
+    /// clause per segment — project, branch (only when the project is a git
+    /// repo), and the template Return would currently commit. Answers
+    /// "where will this go?" even with an empty field, which is the whole
+    /// point of the feature (Sean's words: "when hitting Cmd+T I have an
+    /// intent"). This is now the ONLY mouse entry point into the
+    /// project/branch pickers — the project and branch segments are
+    /// clickable (unless `.locked`); the template segment is plain text,
+    /// since template choice is made from the results list below, not a
+    /// third picker.
     ///
-    /// F5 fix (round-2 review): `.locked` is gated on `isProjectLocked`
-    /// ALONE now, never `isProjectLocked, let project` — the old `if let`
-    /// fell through to the INTERACTIVE `else` branch whenever the locked
-    /// project couldn't resolve (e.g. deleted mid-composer), rendering a
-    /// live picker `Button` and key handlers inside what is supposed to be
-    /// an inert, locked composer. `commit(template:)`'s write target was
-    /// never at risk (`precommit` resolves from `currentProjectBinding`,
-    /// never from this view's render), so this was affordance-only, but a
-    /// locked chip that starts opening a picker on click is still wrong.
-    ///
-    /// `project == nil` (B2) renders a "Select project" placeholder in the
-    /// SAME interactive chip shape rather than nothing — this is the only
-    /// project affordance in the composer once the trailing control was
-    /// deleted, so it must survive every reachable state: no project chosen
-    /// yet, a chip popped back to raw text, and zero projects on a fresh
-    /// install (where its only job is making `+ Add project…` reachable via
-    /// the picker it opens).
-    @ViewBuilder
-    private func projectChip(_ project: Project?) -> some View {
-        if isProjectLocked {
-            Text(project?.name ?? "Project unavailable")
-                .font(.system(size: fieldFontSize, weight: .regular))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundStyle(.secondary)
-                // F7/a11y: a bare `Text` reads its content with no context —
-                // VoiceOver announced a naked folder name. Frames it as the
-                // locked project, and degrades to a neutral label rather
-                // than reading nothing at all if `project` can't resolve.
-                .accessibilityLabel(project.map { "Project: \($0.name)" } ?? "Project unavailable")
-        } else {
-            let label = Text(project?.name ?? "Select project")
-                .font(.system(size: fieldFontSize, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(isProjectChipPickerOpen ? WorkspaceLayout.composerChipBackgroundActive : WorkspaceLayout.composerChipBackground)
-                // 5pt matches `ComposerRow`'s existing row highlight in this
-                // same file — not a new arbitrary radius. `.clipShape(...,
-                // style: .continuous)` replaces the deprecated, non-`.continuous`
-                // `.cornerRadius(5)` API per DESIGN.md §7 ("Always pass
-                // `style: .continuous`").
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+    /// Kept quiet by design (Sean's ask: "maybe on hover the chips are
+    /// shown" — this is the resting, always-visible form of that): plain
+    /// secondary text, no pill background, no border — a status line, not a
+    /// control strip. DESIGN.md §4 documents the exact styling.
+    private var resolutionLine: some View {
+        let segments = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: currentProject?.name,
+            isProjectLocked: isProjectLocked,
+            isBranchSegmentEligible: isBranchSegmentEligible,
+            isCreatingWorktree: composerStore.isCreatingWorktree,
+            typedBranchResolution: typedBranchResolution,
+            currentBranchLabel: currentBranchLabel,
+            templateTitle: selectedOption?.title
+        )
 
-            Button {
-                // Mouse click TOGGLES (click-to-open, click-again-to-close —
-                // the ordinary disclosure-control gesture); Return/Down
-                // below only ever OPEN. Deliberately different, not an
-                // oversight flagged and left as-is (review fragility note):
-                // a keyboard route that could CLOSE the picker on Down would
-                // make Down ambiguous with "move to the next row inside an
-                // already-open picker" once D6's picker-level Down handler
-                // exists. The two inputs don't fire in the same turn, so the
-                // differing polarity is not a double-fire risk in practice.
-                // B3: closing the branch picker in the SAME statement is
-                // what makes the two mutually exclusive by construction —
-                // not merely "the two happen not to overlap in practice".
-                isBranchChipPickerOpen = false
-                isProjectChipPickerOpen.toggle()
-            } label: {
-                label
+        return HStack(spacing: 4) {
+            Text("→")
+                .font(.system(size: subtitleFontSize))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+
+            resolutionSegment(
+                segments.projectLabel,
+                isClickable: segments.isProjectClickable,
+                accessibilityLabel: "Project: \(segments.projectLabel)",
+                accessibilityHint: segments.isProjectClickable ? "Opens project picker" : nil
+            ) {
+                isBranchPickerOpen = false
+                isProjectPickerOpen.toggle()
             }
-            .buttonStyle(.plain)
-            .focused($isChipFocused)
-            .accessibilityHint("Opens project picker")
-            // F6 fix (round-2 review): the A5 Return/Down handlers that used
-            // to live here are DELETED, not left guarded. Left-arrow (D5,
-            // see the `.move` doc comment below) was the only thing in this
-            // file that ever wrote `isChipFocused` true, and D5 removed it
-            // without replacing it — so `guard isChipFocused` never passed
-            // via any route this file controls, and the handlers asserted a
-            // keyboard capability (Return/Down opens the picker) that had
-            // already gone unreachable. Left as dead code, they'd silently
-            // reassert that capability to the next reader. The chip stays
-            // reachable by mouse click and by whatever focus route the
-            // system itself provides for a focusable `Button` (Tab under
-            // Full Keyboard Access, VoiceOver) — `isChipFocused` is kept
-            // wired for that, not for a route this file no longer has.
+
+            // B3: rendered only when the project is eligible (a git repo
+            // enumeration found something to offer) — a non-git project
+            // shows no branch segment at all, not a disabled one (Sean's
+            // call, unchanged from the deleted chip's own reasoning).
+            if let branchLabel = segments.branchLabel {
+                resolutionDot
+                resolutionSegment(
+                    branchLabel,
+                    isClickable: true,
+                    isError: segments.branchIsError,
+                    accessibilityLabel: "Branch: \(branchLabel)",
+                    accessibilityHint: "Opens branch picker"
+                ) {
+                    isProjectPickerOpen = false
+                    isBranchPickerOpen.toggle()
+                }
+            }
+
+            resolutionDot
+            Text(segments.templateLabel)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Template: \(segments.templateLabel)")
+        }
+        .font(.system(size: subtitleFontSize))
+    }
+
+    private var resolutionDot: some View {
+        Text("·")
+            .font(.system(size: subtitleFontSize))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
+    }
+
+    /// One resolution-line segment: a plain `Text` when `isClickable` is
+    /// false (the `.locked` project — a locked composer must never expose a
+    /// live picker affordance, same rule the deleted chip's `.locked` state
+    /// enforced), otherwise a plain-styled `Button` opening the segment's
+    /// picker. `isError` renders in `.systemRed` — the legible, on-screen
+    /// form of an unresolved typed branch (previously visible only as a
+    /// `writeError` message after a failed commit attempt).
+    @ViewBuilder
+    private func resolutionSegment(
+        _ label: String,
+        isClickable: Bool,
+        isError: Bool = false,
+        accessibilityLabel: String,
+        accessibilityHint: String?,
+        action: @escaping () -> Void
+    ) -> some View {
+        let text = Text(label)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .foregroundStyle(isError ? AnyShapeStyle(Color(nsColor: .systemRed)) : AnyShapeStyle(.secondary))
+
+        if isClickable {
+            Button(action: action) { text }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityHint(accessibilityHint ?? "")
+        } else {
+            text.accessibilityLabel(accessibilityLabel)
         }
     }
 
-    /// A2: `ProjectDropdownView`'s list content, reused verbatim, but
-    /// presented as an expansion inline inside the composer card instead of
-    /// via `.popover` — see the type's own doc comment for why that was
-    /// fragile. A6: `currentProject?.id`, not the raw
+    /// `ProjectDropdownView`'s list content, reused verbatim, but presented
+    /// as an expansion inline inside the composer card instead of via
+    /// `.popover` — see the type's own doc comment for why that was
+    /// fragile. `currentProject?.id`, not the raw
     /// `composerStore.selectedProjectId`, is the single source of truth
     /// passed in for both cascade ordering and the selected-row highlight —
     /// fixes the checkmark-vs-label disagreement that existed whenever a
@@ -1105,55 +1022,12 @@ struct SessionComposerPalette: View {
             changeProjectChip(to: project)
         } onAddProject: {
             composerStore.addProjectViaPanel(workspaceStore: store)
-            isProjectChipPickerOpen = false
+            isProjectPickerOpen = false
         }
         .environmentObject(store)
     }
 
-    // MARK: - Branch chip (Slice B, B3)
-
-    /// The branch chip. No `.locked` state — the composer never locks the
-    /// BRANCH the way `.locked` binding locks the project, only whether it
-    /// appears at all (`isBranchChipEligible`). Label is "Default" when
-    /// nothing is picked and no command resolved one — the picker's own
-    /// "Default (<branch>)" row uses the SAME word so the chip and the row
-    /// that clears it read as the same concept.
-    private func branchChip() -> some View {
-        // B4: "Creating…" while `createWorktree` is in flight overrides
-        // whatever `currentBranchLabel` would otherwise show — there is no
-        // resolved branch/worktree to display yet.
-        let label = Text(composerStore.isCreatingWorktree ? "Creating…" : (currentBranchLabel ?? "Default"))
-            .font(.system(size: fieldFontSize, weight: .medium))
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(isBranchChipPickerOpen ? WorkspaceLayout.composerChipBackgroundActive : WorkspaceLayout.composerChipBackground)
-            // Same 5pt/`.continuous` shape as `projectChip` — one radius,
-            // one style, no exceptions (DESIGN.md §7).
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-
-        return Button {
-            // B3: closes the project picker in the SAME statement — see
-            // that Button's matching line for why this makes the two
-            // mutually exclusive by construction, not by convention.
-            isProjectChipPickerOpen = false
-            isBranchChipPickerOpen.toggle()
-        } label: {
-            label
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens branch picker")
-        // B3: opening the picker is also the third refresh trigger (on top
-        // of B1's project-selection and initial-open triggers) — Sean runs
-        // 2-7 parallel sessions creating worktrees constantly, so THIS is
-        // the moment accuracy matters most.
-        .onChange(of: isBranchChipPickerOpen) { isOpen in
-            guard isOpen, let project = currentProject else { return }
-            Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
-        }
-    }
+    // MARK: - Branch picker (Slice B, B3 — chip deleted, picker kept)
 
     /// `WorktreeDropdownView`'s list content, presented as an inline
     /// expansion inside the card — NEVER a `.popover`, same reasoning as
@@ -1168,7 +1042,7 @@ struct SessionComposerPalette: View {
             selectedWorktreePath: composerStore.selectedWorktreePath,
             onSelectDefault: {
                 composerStore.clearBranchChip()
-                isBranchChipPickerOpen = false
+                isBranchPickerOpen = false
             },
             onSelectWorktree: { path in
                 changeBranchChip(to: path)
@@ -1180,7 +1054,7 @@ struct SessionComposerPalette: View {
             // (`isCreatingWorktree`) until it resolves.
             onCreateWorktree: { branchName in
                 guard let project = currentProject else { return }
-                isBranchChipPickerOpen = false
+                isBranchPickerOpen = false
                 composerStore.createWorktree(named: branchName, in: project)
             }
         )
@@ -1454,11 +1328,6 @@ struct SessionComposerPalette: View {
         case .submitNoMatch:
             triggerNoMatchFeedback()
 
-        case .backspaceAtStart:
-            // A5: backspace at position 0 pops the chip back to editable
-            // text — chips are not text.
-            popChipToText()
-
         case .move(.up):
             if flattenedOptions.isEmpty { break }
             let current = selectedIndex ?? UInt(flattenedOptions.count)
@@ -1469,30 +1338,22 @@ struct SessionComposerPalette: View {
             let current = selectedIndex ?? UInt.max
             selectedIndex = (current >= UInt(flattenedOptions.count - 1)) ? 0 : current + 1
 
-        // D5: left-arrow-focuses-chip is DEAD. `NSTextView` implements
-        // `moveLeft:` unconditionally and no-ops at caret position 0 rather
-        // than forwarding to `.onMoveCommand` — the prior version of this
-        // handler asserted the opposite ("the field only forwards `.left`
-        // when the caret is at true start") with no runtime evidence behind
-        // it. Genuinely intercepting `moveLeft:` at position 0 needs an
-        // `NSViewRepresentable` wrapper around the field editor (reading
-        // its `selectedRange` directly) — out of scope for this pass, and a
-        // `.leftArrow` `.keyboardShortcut` alternative (this file's usual
-        // fallback for a `.onMoveCommand` gap) is worse than no route at
-        // all: it would fire on EVERY left-arrow press, including mid-word,
-        // and yank focus off the field. Removed rather than left asserted
-        // but unverified. The chip stays reachable by mouse click; `isChipFocused`
-        // (`.focused($isChipFocused)` on the chip's `Button`) is still wired
-        // for whatever focus route the system provides (e.g. VoiceOver/Tab).
-        // This pass adds no NEW keyboard route into it from inside the field.
+        // Model A rebuild: there is no chip to focus with left-arrow (D5's
+        // dead-code note about `NSTextView.moveLeft:` applied to the
+        // now-deleted chip specifically), and no `.backspaceAtStart` event
+        // either — the field has no non-editable segment for backspace to
+        // pop back to text, so ordinary `NSTextField` backspace already
+        // does the right thing on every macOS version with no handler
+        // needed here at all.
         case .move:
             break
         }
     }
 
-    // MARK: - Breadcrumb chip actions (Slice A)
+    // MARK: - Project/branch segment actions (resolution line, model A —
+    // was "Breadcrumb chip actions, Slice A" before the chips were deleted)
 
-    /// A2/A3: change the chip via the inline picker. The cascade rule
+    /// Change the resolved project via the inline picker. The cascade rule
     /// (clear-on-change, no-op-on-repick) and the ⌘Z undo capture both live
     /// on `SessionComposerStore` — testable there without constructing this
     /// view. "Currently shown" (A6's single source of truth) is resolved
@@ -1508,7 +1369,7 @@ struct SessionComposerPalette: View {
     /// have — see `resolveCommitProjectId`'s own doc comment for the same
     /// honest limitation.
     private func changeProjectChip(to project: Project) {
-        isProjectChipPickerOpen = false
+        isProjectPickerOpen = false
         let currentlyShownId = SessionComposerCommandParser.resolveCommitProjectId(
             commandProjectId: commandProject?.id,
             selectedProjectId: composerStore.selectedProjectId
@@ -1516,19 +1377,19 @@ struct SessionComposerPalette: View {
         composerStore.changeProjectChip(to: project.id, currentlyShown: currentlyShownId)
     }
 
-    /// A4: ⌘Z restores the segment(s) the most recent chip change cleared,
-    /// as one step.
+    /// ⌘Z restores the segment(s) the most recent project-segment change
+    /// cleared, as one step.
     private func undoChipCascade() {
         composerStore.undoProjectChipChange()
     }
 
-    /// B3: change the branch chip via the inline picker. Same
+    /// Change the resolved branch via the inline picker. Same
     /// currently-shown resolution idiom as `changeProjectChip(to:)` above
     /// (typed wins over picked), routed through the shared, tested
     /// `resolveCommitWorktreePath` rather than re-deriving the precedence
     /// inline.
     private func changeBranchChip(to worktreePath: String) {
-        isBranchChipPickerOpen = false
+        isBranchPickerOpen = false
         let currentlyShown = SessionComposerCommandParser.resolveCommitWorktreePath(
             typedWorktreePath: typedWorktreePath,
             selectedWorktreePath: composerStore.selectedWorktreePath
@@ -1536,32 +1397,12 @@ struct SessionComposerPalette: View {
         composerStore.changeBranchChip(to: worktreePath, currentlyShown: currentlyShown)
     }
 
-    /// A5: backspace at position 0 (field empty) pops the chip back into
-    /// raw editable text. Guarded on `commandParse.projectId == nil` rather
-    /// than `commandProject == nil` (D3 fix): a genuine ≥2-token command
-    /// always has SOME remainder text, so this event (field already empty)
-    /// can never fire while one is live — but the sticky empty-remainder
-    /// state (`stickyChipProjectId`) DOES leave the field empty with
-    /// `commandProject` non-nil, and that state must stay poppable so
-    /// backspacing all the way through a mid-typed command's project name
-    /// still works, rather than becoming a second dead end next to the one
-    /// this function exists to fix.
-    ///
-    /// B3: the BRANCH chip pops first, if one is showing and it's a
-    /// PICKER pick rather than a typed command (`commandParse.branchToken
-    /// == nil`) — a typed branch is text already, nothing to "pop" back
-    /// to; only a picker-selected `selectedWorktreePath` needs clearing.
-    /// Otherwise backspace-at-start would pop the PROJECT chip while a
-    /// picked branch chip was still showing, silently discarding the
-    /// branch pick along with it and reading as the wrong chip disappearing.
-    private func popChipToText() {
-        if commandParse.branchToken == nil, composerStore.selectedWorktreePath != nil {
-            composerStore.clearBranchChip()
-            return
-        }
-        guard !isProjectLocked, commandParse.projectId == nil, let project = currentProject else { return }
-        composerStore.popChipToText(projectName: project.name)
-    }
+    // `popChipToText()` used to live here — the A5 "backspace at position 0
+    // pops the chip back into raw editable text" gesture. Deleted with the
+    // chips (model A rebuild): the field has no non-editable segment for
+    // backspace to pop back to, so ordinary text editing already does the
+    // right thing. `SessionComposerStore.popChipToText(projectName:)` and
+    // its test were deleted alongside this call site.
 
     /// A5: Esc closes the inline picker without closing the composer when
     /// it's open; otherwise it's an ordinary composer dismiss.
@@ -1574,7 +1415,7 @@ struct SessionComposerPalette: View {
     /// closes the picker and the second, unguarded, would close the whole
     /// composer instead of leaving it open with the picker now dismissed.
     ///
-    /// B3: widened to check BOTH pickers — `isProjectChipPickerOpen` alone
+    /// B3: widened to check BOTH pickers — `isProjectPickerOpen` alone
     /// would let Esc close the whole composer while the BRANCH picker was
     /// open instead of just dismissing that picker.
     private func closeChipPickerOrDismiss() {
@@ -1582,10 +1423,10 @@ struct SessionComposerPalette: View {
         isHandlingExitCommand = true
         DispatchQueue.main.async { isHandlingExitCommand = false }
 
-        if isBranchChipPickerOpen {
-            isBranchChipPickerOpen = false
-        } else if isProjectChipPickerOpen {
-            isProjectChipPickerOpen = false
+        if isBranchPickerOpen {
+            isBranchPickerOpen = false
+        } else if isProjectPickerOpen {
+            isProjectPickerOpen = false
         } else {
             isPresented = false
         }
@@ -1707,12 +1548,14 @@ struct ComposerQueryField: View {
     /// `.handled` unconditionally, swallowing Return against an empty
     /// list).
     var hasSelection: Bool
-    /// D6: whether the breadcrumb chip's inline picker is currently open.
-    /// While `true`, this field's own ↑/↓/Return handlers go quiet — the
-    /// picker (`ProjectDropdownView.keyboardCaptureLayer`) becomes the only
-    /// live ↑/↓/Return handler on screen. Clicking the chip to open the
-    /// picker does NOT move first responder away from this field (deliberate
-    /// — see this type's own doc comment on why focus-loss auto-dismiss was
+    /// D6: whether the resolution line's inline project/branch picker is
+    /// currently open (opened by clicking a resolution-line segment, model A
+    /// rebuild — used to be the breadcrumb chip's own click target). While
+    /// `true`, this field's own ↑/↓/Return handlers go quiet — the picker
+    /// (`ProjectDropdownView.keyboardCaptureLayer`) becomes the only live
+    /// ↑/↓/Return handler on screen. Clicking a segment to open the picker
+    /// does NOT move first responder away from this field (deliberate — see
+    /// this type's own doc comment on why focus-loss auto-dismiss was
     /// removed), so without this gate the field's hidden ↑/↓ `Button`s and
     /// `.onSubmit` kept responding: Return committed whatever TEMPLATE row
     /// was highlighted and dismissed the whole composer instead of choosing
@@ -1730,11 +1573,12 @@ struct ComposerQueryField: View {
         /// shake/border feedback instead of silently swallowing the key.
         case submitNoMatch
         case move(MoveCommandDirection)
-        /// Backspace/delete pressed while the field is already empty — the
-        /// breadcrumb chip's pop-to-text gesture (A5). There is nothing to
-        /// delete in the field itself at that point, so this can't collide
-        /// with ordinary text deletion.
-        case backspaceAtStart
+        // `.backspaceAtStart` used to live here — the breadcrumb chip's
+        // pop-to-text gesture (A5), fired when backspace hit an empty field
+        // with a chip still showing. Deleted with the chips (model A
+        // rebuild): the field has no non-editable segment left to pop, so
+        // backspace against an empty field is now ordinary, no-op text
+        // editing with no event to dispatch.
     }
 
     var body: some View {
@@ -1815,15 +1659,6 @@ struct ComposerQueryField: View {
                         return .handled
                     }
                     onEvent?(.submit)
-                    return .handled
-                }
-                // A5: below macOS 14 this is a documented no-op
-                // (`Backport.onKeyPress`) — the chip-pop gesture degrades
-                // gracefully to "clear the field yourself" there, same as
-                // every other Backport-only convenience in this file.
-                .backport.onKeyPress(.delete) { _ in
-                    guard query.isEmpty else { return .ignored }
-                    onEvent?(.backspaceAtStart)
                     return .handled
                 }
                 .onAppear {
