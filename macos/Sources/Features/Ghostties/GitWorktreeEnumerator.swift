@@ -165,4 +165,117 @@ nonisolated enum GitWorktreeEnumerator {
         let allBranches = output.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
         return allBranches.filter { !claimed.contains($0) }
     }
+
+    // MARK: - Creation (Slice B, B4)
+
+    /// Whether `name` is a real local branch in `repoPath` —
+    /// `git show-ref --verify --quiet refs/heads/<name>`. Explicit rather
+    /// than inferred from `branchesWithoutWorktree`/`list` output, because
+    /// `add(branch:directory:repoPath:)` needs a definitive answer to pick
+    /// between `worktree add <dir> <name>` (existing branch) and
+    /// `worktree add -b <name> <dir>` (new branch) — trusting git's own
+    /// basename DWIM instead would silently do the wrong thing for a slash
+    /// name like `feat/foo`, which is the entire reason this check exists.
+    /// Wraps a plain message so `add(branch:directory:repoPath:)` can return
+    /// `Result<String, GitWorktreeCreationError>` — `String` itself doesn't
+    /// conform to `Error`. `.message` is git's stderr first line, verbatim;
+    /// nothing paraphrases it between here and `SessionComposerStore.writeError`.
+    struct GitWorktreeCreationError: Error, CustomStringConvertible {
+        let message: String
+        var description: String { message }
+    }
+
+    static func branchExists(_ name: String, repoPath: String) -> Bool {
+        dispatchPrecondition(condition: .notOnQueue(.main))
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        task.arguments = ["git", "-C", repoPath, "show-ref", "--verify", "--quiet", "refs/heads/\(name)"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return false
+        }
+        return task.terminationStatus == 0
+    }
+
+    /// Creates a worktree for `branch` at `directory`, resolving from
+    /// `repoPath` (any worktree of the repo, per `list(repoPath:)`'s doc
+    /// comment — a linked worktree works identically to the main one for
+    /// this purpose, and a new branch is created from `-C repoPath`'s HEAD,
+    /// same as any other `git` invocation scoped to that path).
+    ///
+    /// Explicitly branches on `branchExists`, never on git's own basename
+    /// DWIM (`git worktree add <dir>` alone infers a branch name from
+    /// `<dir>`'s basename, which is wrong the moment the caller's path
+    /// slug differs from the branch name — e.g. `feat/foo` slugged to
+    /// `feat-foo`):
+    /// - branch exists  -> `git -C <repoPath> worktree add <directory> <branch>`
+    /// - branch is new   -> `git -C <repoPath> worktree add -b <branch> <directory>`
+    ///
+    /// Never `git checkout` — `worktree add` is the only mutation this
+    /// type is allowed to perform.
+    ///
+    /// On success, returns the created `directory`. On failure, returns
+    /// git's own `fatal: ...` line verbatim (see
+    /// `firstMeaningfulLine(ofStderr:)` for why that is NOT simply "the
+    /// first line of stderr") — this is what surfaces into
+    /// `SessionComposerStore.writeError` unmodified, so whatever git says
+    /// (branch already checked out elsewhere, destination exists and is
+    /// non-empty, invalid ref name, unwritable destination) reaches the
+    /// user without a paraphrase in between.
+    static func add(branch: String, directory: String, repoPath: String) -> Result<String, GitWorktreeCreationError> {
+        dispatchPrecondition(condition: .notOnQueue(.main))
+
+        let exists = branchExists(branch, repoPath: repoPath)
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        task.arguments = exists
+            ? ["git", "-C", repoPath, "worktree", "add", directory, branch]
+            : ["git", "-C", repoPath, "worktree", "add", "-b", branch, directory]
+
+        let stderrPipe = Pipe()
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = stderrPipe
+
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return .failure(GitWorktreeCreationError(message: "Failed to launch git: \(error.localizedDescription)"))
+        }
+
+        guard task.terminationStatus == 0 else {
+            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderrText = String(data: data, encoding: .utf8) ?? ""
+            return .failure(GitWorktreeCreationError(message: Self.firstMeaningfulLine(ofStderr: stderrText)))
+        }
+
+        return .success(directory)
+    }
+
+    /// `git worktree add`'s stderr is NOT "the message on line 1" — every
+    /// failure mode observed against a real throwaway repo (branch already
+    /// checked out elsewhere, non-empty destination, invalid ref name,
+    /// unwritable destination) printed a `Preparing worktree (...)` progress
+    /// line FIRST, with the actual `fatal: ...` line second. Taking the
+    /// literal first line (the brief's original wording) would have
+    /// surfaced "Preparing worktree (new branch 'bad ref name')" as
+    /// `writeError` for every single failure, never the real reason —
+    /// caught only by running the four failure modes against real git
+    /// rather than trusting the spec's phrasing. This picks the first line
+    /// starting with `fatal:` and falls back to the literal first line only
+    /// if git's output ever omits one (a case not observed, but not worth
+    /// returning nothing over).
+    static func firstMeaningfulLine(ofStderr stderrText: String) -> String {
+        let lines = stderrText.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        if let fatalLine = lines.first(where: { $0.hasPrefix("fatal:") }) {
+            return fatalLine
+        }
+        return lines.first ?? "git worktree add failed with no output."
+    }
 }

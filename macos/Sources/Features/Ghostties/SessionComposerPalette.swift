@@ -961,7 +961,10 @@ struct SessionComposerPalette: View {
     /// "Default (<branch>)" row uses the SAME word so the chip and the row
     /// that clears it read as the same concept.
     private func branchChip() -> some View {
-        let label = Text(currentBranchLabel ?? "Default")
+        // B4: "Creating…" while `createWorktree` is in flight overrides
+        // whatever `currentBranchLabel` would otherwise show — there is no
+        // resolved branch/worktree to display yet.
+        let label = Text(composerStore.isCreatingWorktree ? "Creating…" : (currentBranchLabel ?? "Default"))
             .font(.system(size: fieldFontSize, weight: .medium))
             .lineLimit(1)
             .truncationMode(.tail)
@@ -1011,6 +1014,16 @@ struct SessionComposerPalette: View {
             },
             onSelectWorktree: { path in
                 changeBranchChip(to: path)
+            },
+            // B4: selecting a create row does NOT launch a session — it
+            // closes the picker (same statement, mirroring `onSelectDefault`/
+            // `onSelectWorktree` above) and arms creation with the composer
+            // still open. The branch chip shows "Creating…"
+            // (`isCreatingWorktree`) until it resolves.
+            onCreateWorktree: { branchName in
+                guard let project = currentProject else { return }
+                isBranchChipPickerOpen = false
+                composerStore.createWorktree(named: branchName, in: project)
             }
         )
     }
@@ -1993,11 +2006,14 @@ private struct ProjectDropdownView: View {
 ///
 /// Row order, per the spec: `Default (<current branch>)` first (clears the
 /// override); then existing worktrees (path shown secondary); then, under
-/// a divider, branches with no worktree yet — a **create** action routed
-/// to B4's create path, which doesn't exist yet, so those rows render
-/// DISABLED with a visible reason rather than silently inert. Sean's
-/// stated reason for keeping that second group at all: discoverability —
-/// nobody should have to recall a branch name.
+/// a divider, branches with no worktree yet — a **create** action (B4),
+/// labeled "+ worktree for "<branch>"" since the branch already exists;
+/// then a "New branch name…" field whose "+ new branch + worktree "<name>""
+/// row only appears once the typed name is genuinely novel (matches
+/// nothing already offered above) — creation is explicit only, never an
+/// implicit side effect of typing. Sean's stated reason for keeping the
+/// no-worktree-yet group at all: discoverability — nobody should have to
+/// recall a branch name.
 private struct WorktreeDropdownView: View {
     let worktrees: [GitWorktreeEnumerator.Worktree]
     let branchesWithoutWorktree: [String]
@@ -2006,16 +2022,45 @@ private struct WorktreeDropdownView: View {
     let selectedWorktreePath: String?
     var onSelectDefault: () -> Void
     var onSelectWorktree: (String) -> Void
+    /// B4: fired by BOTH the (now-live) "no worktree yet" rows (an
+    /// existing branch) and the "new branch name…" field's create row (a
+    /// branch that doesn't exist yet). `SessionComposerStore.createWorktree`
+    /// checks `GitWorktreeEnumerator.branchExists` itself to pick the right
+    /// `git worktree add` form — this view doesn't need to know which case
+    /// it is, only the name.
+    var onCreateWorktree: (String) -> Void
 
     /// Keyboard-highlighted row, 0-based across ONLY the navigable rows:
-    /// the Default row, then existing worktrees, in that order. The
-    /// disabled "no worktree" rows and the trailing "Refreshing…" row are
-    /// never navigable — same reasoning `ProjectDropdownView` applies to
-    /// its own trailing "+ Add project…" row, just with the disabled group
-    /// excluded entirely rather than included as a navigable target.
+    /// the Default row, then existing worktrees, in that order. The "no
+    /// worktree yet" rows and the new-branch field are mouse/field-only —
+    /// same reasoning `ProjectDropdownView` applies to its own trailing
+    /// "+ Add project…" row, just with that group excluded entirely rather
+    /// than included as a navigable target.
     @State private var highlightedIndex: Int = 0
 
+    /// The typed candidate for a brand-new branch — a dedicated field
+    /// rather than reusing the composer's own search field, which stays
+    /// live (filtering templates) the whole time this picker is open.
+    @State private var newBranchNameField: String = ""
+
     private var rowCount: Int { 1 + worktrees.count }
+
+    private var trimmedNewBranchName: String {
+        newBranchNameField.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Whether the typed name is genuinely new — matches nothing already
+    /// offered above. Gates the create row so typing never implicitly
+    /// creates anything, and so re-typing an already-offered name doesn't
+    /// duplicate a row that already exists above it.
+    private var newBranchNameIsNovel: Bool {
+        let name = trimmedNewBranchName
+        guard !name.isEmpty else { return false }
+        if worktrees.contains(where: { $0.branch == name }) { return false }
+        if branchesWithoutWorktree.contains(name) { return false }
+        if name == currentBranchAtProjectRoot { return false }
+        return true
+    }
 
     var body: some View {
         ScrollView {
@@ -2041,6 +2086,10 @@ private struct WorktreeDropdownView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                 }
+
+                Divider().padding(.horizontal, 8).padding(.vertical, 2)
+                newBranchField
+                newBranchCreateRow
             }
             .padding(6)
         }
@@ -2097,24 +2146,77 @@ private struct WorktreeDropdownView: View {
         .accessibilityAddTraits(index == highlightedIndex ? .isSelected : [])
     }
 
-    /// A branch with no worktree yet — picking it is a CREATE action
-    /// (`git worktree add`), which is B4's job and does not exist in this
-    /// slice. Rendered disabled with a visible reason rather than
-    /// silently inert, per the brief: a dead control with no explanation
-    /// reads as a bug, not a boundary.
+    /// A branch that already exists but has no worktree yet — picking it
+    /// is a CREATE action (`git worktree add <dir> <branch>`, the
+    /// existing-branch form; `SessionComposerStore.createWorktree` decides
+    /// the exact git invocation). Labeled by what it DOES, not by the
+    /// absence it used to describe (B4) — "+ worktree for "<branch>""
+    /// rather than the B3 placeholder "No worktree yet", since a plain
+    /// label reading as a dead-end fact is exactly what a live control
+    /// must not look like.
     private func noWorktreeRow(_ branch: String) -> some View {
+        Button {
+            onCreateWorktree(branch)
+        } label: {
+            HStack(spacing: 6) {
+                Text(branch)
+                    .font(.system(size: 12, weight: .regular))
+                Spacer()
+                Text("+ worktree for \"\(branch)\"")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Create worktree for \(branch)")
+    }
+
+    /// The dedicated "type a brand-new branch name" field — deliberately
+    /// separate from the composer's own search field, which stays live the
+    /// whole time this picker is open (it filters templates, not branches).
+    private var newBranchField: some View {
         HStack(spacing: 6) {
-            Text(branch)
-                .font(.system(size: 12, weight: .regular))
-            Spacer()
-            Text("No worktree yet")
+            Image(systemName: "plus")
                 .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
+                .frame(width: 12)
+            TextField("New branch name…", text: $newBranchNameField)
+                .font(.system(size: 12))
+                .textFieldStyle(.plain)
+                .onSubmit {
+                    guard newBranchNameIsNovel else { return }
+                    onCreateWorktree(trimmedNewBranchName)
+                }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .foregroundStyle(.tertiary)
-        .accessibilityLabel("\(branch), no worktree yet, not available")
+    }
+
+    /// Only rendered once the typed name is genuinely novel
+    /// (`newBranchNameIsNovel`) — creation is explicit only, never an
+    /// implicit side effect of typing a name that happens to match
+    /// nothing (yet).
+    @ViewBuilder
+    private var newBranchCreateRow: some View {
+        if newBranchNameIsNovel {
+            Button {
+                onCreateWorktree(trimmedNewBranchName)
+            } label: {
+                HStack(spacing: 6) {
+                    Text("+ new branch + worktree \"\(trimmedNewBranchName)\"")
+                        .font(.system(size: 12, weight: .regular))
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Create new branch and worktree \(trimmedNewBranchName)")
+        }
     }
 
     /// Same hidden-`Button` + `.keyboardShortcut` pattern

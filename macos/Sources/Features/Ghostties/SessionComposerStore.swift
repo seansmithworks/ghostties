@@ -140,6 +140,23 @@ final class SessionComposerStore: ObservableObject {
     /// picker can show a loading state instead of a silent empty list.
     @Published private(set) var isRefreshingWorktrees: Bool = false
 
+    /// Set for the duration of a `createWorktree` call (B4) — the branch
+    /// chip renders "Creating…" instead of the (still-unset) branch name
+    /// while `git worktree add` runs. The picker is already closed by the
+    /// time this is true (`SessionComposerPalette`'s `onCreateWorktree`
+    /// closure closes it in the same statement it calls `createWorktree`),
+    /// so this is read by the chip label alone.
+    @Published private(set) var isCreatingWorktree: Bool = false
+
+    /// Monotonic counter guarding a `createWorktree` result (success,
+    /// failure, or timeout) that lands after a newer creation call — or a
+    /// `cancel()`/`open()` on a different project — has superseded it.
+    /// Same shape as `worktreeRefreshToken`, for the same reason: this
+    /// store is a process-wide singleton, so a slow `git worktree add`
+    /// finishing after the composer moved on must not write `writeError`
+    /// or `selectedWorktreePath` into whatever context is current by then.
+    private var worktreeCreationToken: Int = 0
+
     /// Monotonic counter guarding against a stale `refreshWorktrees` call
     /// landing after a newer one — this store is a process-wide singleton,
     /// so a slow enumeration for project A must not overwrite project B's
@@ -299,6 +316,11 @@ final class SessionComposerStore: ObservableObject {
         branchesWithoutWorktree = []
         currentBranchAtProjectRoot = nil
         selectedWorktreePath = nil
+        // B4: invalidates any in-flight `createWorktree` so a slow
+        // `git worktree add` that finishes after this open() (a different
+        // project, possibly) can't write its result into the new context.
+        isCreatingWorktree = false
+        worktreeCreationToken += 1
         cachedWorkspaceStore = workspaceStore
 
         switch projectBinding {
@@ -334,6 +356,9 @@ final class SessionComposerStore: ObservableObject {
         branchesWithoutWorktree = []
         currentBranchAtProjectRoot = nil
         selectedWorktreePath = nil
+        // See the matching invalidation in `open(...)`.
+        isCreatingWorktree = false
+        worktreeCreationToken += 1
     }
 
     // MARK: - Commit
@@ -565,6 +590,114 @@ final class SessionComposerStore: ObservableObject {
     /// no undo, same reasoning as `changeBranchChip`.
     func clearBranchChip() {
         selectedWorktreePath = nil
+    }
+
+    // MARK: - Branch chip creation (Slice B, B4)
+
+    /// Outcome of racing `createWorktree`'s `git worktree add` against a
+    /// timeout — see `race(_:timeoutSeconds:)` for why this can't reuse
+    /// `SessionCoordinator.createSession`'s cancel-then-await shape as-is.
+    enum WorktreeCreationOutcome {
+        case completed(Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>)
+        case timedOut
+    }
+
+    /// Creates a worktree for `branchName` in `project`'s repo (the "+
+    /// worktree for ..." / "+ new branch + worktree ..." rows in
+    /// `WorktreeDropdownView`). Runs off the main actor with a 10-second
+    /// timeout — longer than `refreshWorktrees`'s 2s because `worktree add`
+    /// copies a working tree rather than just listing one.
+    ///
+    /// On success: refreshes the worktree cache (the fourth refresh
+    /// trigger, after initial-open/project-change/picker-open), then
+    /// selects the new worktree. On failure OR timeout: `writeError` is set
+    /// — git's own `fatal: ...` line verbatim for a failure (see
+    /// `GitWorktreeEnumerator.firstMeaningfulLine(ofStderr:)`), a fixed message
+    /// for a timeout — the chip reverts to unset, and the composer stays
+    /// open. Never a silent success, never a silent no-op.
+    @MainActor
+    func createWorktree(named branchName: String, in project: Project) {
+        worktreeCreationToken += 1
+        let token = worktreeCreationToken
+        isCreatingWorktree = true
+
+        let repoPath = project.rootPath
+        let slug = branchName.replacingOccurrences(of: "/", with: "-")
+
+        // Unstructured (not a child of any task group) so a hang in the
+        // `git` call it eventually makes never blocks the race below from
+        // returning at the timeout deadline.
+        let gitTask = Task.detached(priority: .userInitiated) { () -> Result<String, GitWorktreeEnumerator.GitWorktreeCreationError> in
+            let rawList = GitWorktreeEnumerator.list(repoPath: repoPath)
+            guard let mainWorktreePath = rawList.first?.path else {
+                return .failure(GitWorktreeEnumerator.GitWorktreeCreationError(message: "Could not determine the repository's main worktree."))
+            }
+            let directory = (mainWorktreePath as NSString).appendingPathComponent(".claude/worktrees/\(slug)")
+            return GitWorktreeEnumerator.add(branch: branchName, directory: directory, repoPath: repoPath)
+        }
+
+        Task {
+            let outcome = await Self.race(gitTask, timeoutSeconds: 10)
+
+            // Discard if superseded — see `worktreeCreationToken`'s doc
+            // comment.
+            guard token == worktreeCreationToken else { return }
+
+            switch outcome {
+            case .timedOut:
+                writeError = "Creating the worktree timed out."
+                selectedWorktreePath = nil
+                isCreatingWorktree = false
+            case .completed(.success(let path)):
+                await refreshWorktrees(for: repoPath)
+                selectedWorktreePath = path
+                isCreatingWorktree = false
+            case .completed(.failure(let error)):
+                writeError = error.message
+                selectedWorktreePath = nil
+                isCreatingWorktree = false
+            }
+        }
+    }
+
+    /// Races `task` against a `timeoutSeconds` sleep WITHOUT waiting for
+    /// whichever one loses. This is deliberately NOT
+    /// `SessionCoordinator.swift:192-217`'s cancel-then-`await value` shape:
+    /// that shape calls `.cancel()` on a timeout and then still `await`s
+    /// the cancelled task's `.value`, which only works because
+    /// `resolveCommand` eventually returns on its own — a blocking
+    /// `Process.waitUntilExit()` never checks `Task.isCancelled`, so the
+    /// same shape here would block on a hung `git worktree add` indefinitely
+    /// regardless of the "timeout". Both branches below are independent,
+    /// unstructured `Task`s (not children of a `TaskGroup`, which would
+    /// implicitly await the loser at scope exit) racing to call `resume`
+    /// once; an `NSLock`-guarded flag makes the second call a no-op.
+    ///
+    /// Not `private` — this is the seam
+    /// `SessionComposerCreateWorktreeTimeoutTests` exercises directly with a
+    /// short `timeoutSeconds` against a task that never completes, since a
+    /// real `createWorktree` timeout would otherwise take an actual 10
+    /// seconds of wall-clock time to prove.
+    static func race(_ task: Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never>, timeoutSeconds: Double) async -> WorktreeCreationOutcome {
+        await withCheckedContinuation { continuation in
+            let lock = NSLock()
+            var didResume = false
+            func resumeOnce(_ outcome: WorktreeCreationOutcome) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !didResume else { return }
+                didResume = true
+                continuation.resume(returning: outcome)
+            }
+            Task {
+                let result = await task.value
+                resumeOnce(.completed(result))
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(timeoutSeconds))
+                resumeOnce(.timedOut)
+            }
+        }
     }
 
     /// D4 fix: disarm the pending chip-undo the moment the user types
