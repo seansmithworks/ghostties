@@ -1354,5 +1354,108 @@ Corrected in discussion: branch and worktree cannot both be segments — git all
 - [ ] **D1** — parser generalizes from two fixed positions to an ordered segment list, each with its own resolver. Slice B's engine (enumeration, cache, creation, launch override) is reused, not rewritten. | app | new
 - [ ] **D2** — Tab-to-complete: typing `gho` shows the completion and Tab accepts it. Needs ghost text inline, which is model B's AppKit text view — model A can only do Tab-accepts-highlighted-row. | app | new
 - [ ] **D3** — **the suggestion list must be scoped to the segment being typed.** Currently typing a project name shows the picker list AND templates AND a PROJECTS section stacked together (screenshot 2026-08-23). Sean: *"this is a lot — I would have expected any list/suggestion below to be replaced."* One list, one segment. | app | new
-- [ ] **D4** — operator segment: ad-hoc command allowed, or known templates only? Slice 1's login-shell wrapper already makes ad-hoc work. **Unanswered — Sean's call.** | app | needs-Sean
+- [x] ~~**D4** — operator segment: ad-hoc command allowed, or known templates only?~~
+  **DECIDED 2026-08-23 (Sean): ad-hoc AND templates.** The operator segment resolves
+  against known templates first; anything unmatched runs as an ad-hoc command through
+  Slice 1's login-shell wrapper (`~/.ghostties/cache/launchers/<uuid>.sh`), which already
+  works. Consequence to design around: the operator segment is unbounded text, so the
+  parser cannot infer where an ad-hoc command ends — a thread name after an ad-hoc
+  operator requires an explicit `>`. | app | done
 - [ ] **D5** — thread-name segment must feed the existing `-n` naming path, never introduce a competing one ([[decision_session-naming-stays-one-way]]). | app | new
+
+## 2026-08-23 — Composer: fewer chevrons; dictation as a tiebreaker (Sean)
+
+Sean, on the path grammar requiring a third `>` for the thread segment: *"I mean really I
+want to be light weight... powerful but crisp and short. I think something that hasn't been
+covered but dictating could be a challenge to solve for too."* Clarified immediately after:
+dictation is **"not a strict one right now but a curiosity"** — NOT a requirement, and not
+grounds for re-planning anything on its own.
+
+So: the driver is **crisp and short**. Dictation is a tiebreaker when two designs are
+otherwise close, nothing more.
+
+- [ ] **D6** — reduce the chevron cost of the common path. Strawman: space separates, `>`
+  becomes an optional override rather than the mechanism. Greedy left-to-right, each segment
+  matching only KNOWN values; the first token matching nothing starts the thread name, which
+  runs to the end — `ghostties main cco refactor the parser` resolves with no punctuation.
+  `>` survives for skipping a level (`ghostties > > cco`) and for ad-hoc commands, where
+  unbounded text genuinely needs a marker. Justified by "crisp and short" on its own;
+  dictation-friendliness is a bonus, not the reason. **Weigh against the delivered plan's
+  chevron-count rule before D1 is built — this is a fork in D1's center, not an addition.**
+  Undecided. | app | new
+- [ ] **D7** — IF the greedy model is chosen, project/branch resolution needs fuzzy matching
+  rather than exact prefix. Also the standing dictation annoyance
+  ([[feedback-dictation-ghostty-ghostties]]): dictation writes "Ghostty" for "Ghostties", so
+  voice cannot reach Sean's own project by name today. Low priority, tracked not scheduled. | app | new
+
+
+## 2026-08-23 — Composer: greedy grammar locked; resolution line out; ghost-text prefill
+
+Sean's calls, live-testing model A.
+
+- [x] ~~**D6 fork** — chevron-count grammar vs greedy.~~ **DECIDED: greedy.** *"Greedy is my
+  personal preference."* Space separates; `>` survives only as an override (skip a level) and
+  for ad-hoc commands, where unbounded text needs a marker. Match by **TYPE, not position** —
+  otherwise `cco refactor the parser` (no project) would read `cco` as a thread name. First
+  token matching no known project/branch/template starts the thread name, which runs to the
+  end. | app | done
+- [ ] **D9** — delete the resolution line. Sean: *"I'm also not sure if I like the line under
+  the text field."* Diagnosis: it conflates two jobs and does neither. With an EMPTY field it
+  renders `→ Career-ops · Default · Linear Sync`, which is persisted last-used project + a
+  literal fallback string (`currentBranchLabel ?? "Default"` — **not** a branch name) + the
+  currently highlighted row (`selectedOption?.title`), joined by `→` as if it were a parse of
+  text that was never typed. Parse feedback moves into the field as hover tint bands; launch
+  preview moves into the highlighted row's subtitle. | app | new
+- [ ] **D10** — drop the `"Type a project, branch, and command…"` placeholder. Replace with the
+  last-used path as **prefilled ghost text**, trivially replaceable — start typing and it goes.
+  Sean: *"maybe that is fastest actually."* Note this is NOT the D2 inline-completion ghost text
+  that needs model B's `NSTextView`; a replaceable prefill is a placeholder string or a
+  pre-selected value, cheap either way. Confirm which before building. | app | new
+- [ ] **D11 — hover reveals segmentation.** Greedy leaves the field text unmarked, so hover is
+  what pays that off. Resting = plain text. Hover field = soft tint band behind each resolved
+  run. Hover one run = that run and its counterpart highlight together. Click = open that
+  segment's picker. No chips; the tint band IS the chip, and only while pointed at. | app | new
+- [ ] **D12 — suggestions: ONE flat list, no sections.** Rows carry a type label
+  (`ghostties  Project` / `cco  Template`) instead of stacked section headers, scoped to the
+  token under the caret and filtered to segment types not already filled. Tab accepts the top
+  row. In the thread-name position there are no candidates, so it collapses to the single
+  commit row — load-bearing, since an empty list makes `hasSelection` false and Return shakes
+  instead of launching. Closes D3. | app | new
+
+- [x] ~~**D13** — what happens to ad-hoc commands under greedy?~~ **DECIDED 2026-08-23
+  (Claude's call, Sean said proceed):** unmatched trailing text is a **thread name only if an
+  operator already resolved**; otherwise it is an **ad-hoc command**. Both readings render as
+  rows in the one flat list, ranked by that rule, so the other is always one arrow-key away.
+  **This is load-bearing: naive greedy would silently REGRESS slice 1** (merged PR #136), which
+  ships `ghostties <command>` as ad-hoc — under a plain "first unmatched token starts the thread
+  name" rule that Run row vanishes. `>` survives as the explicit override to force the operator
+  position (`ghostties main > npm run dev`). | app | done
+
+### Bug — `NSOpenPanel.init()` blocks the main thread ~0.9s (SHIPPED, not Dev-only)
+
+**Sean confirms he has hit the same thing on prod beta builds, occasionally.** Nothing about
+it is Dev-specific — `addProjectViaFolderPicker` is shared, unchanged, and reachable from four
+entry points including the composer's `+ Add project…` (`SessionComposerStore.swift:1278`),
+which is why Sean experienced it as a composer fault.
+
+**Why occasional (hypothesis, fitted to one spindump — NOT reproduced):** the function does
+`NSOpenPanel()` fresh on every call (`WorkspaceStore.swift:984`), and the ~0.9s is spent in
+*construction*, before the panel is shown — AppKit cold-starting the out-of-process
+save/open-panel service plus Finder's browser view. Warm service = fast; it idles out and gets
+torn down, so the first add-project of a session pays and the next few do not.
+
+**Mitigation options, none free:** pre-warm a throwaway `NSOpenPanel` at a quiet moment after
+launch (moves the cost to launch); cache and reuse one panel instance on `WorkspaceStore`
+(helps repeats, not the first); or accept it. Note `runModal()` (`:1000`) is synchronous by
+design and blocks main for the panel's lifetime — that part is intended, not the bug.
+**Recommendation: do not fix during the composer work.** Low frequency, and the fix is a
+tradeoff rather than a clean win.
+
+- [ ] Spindump `/Library/Logs/DiagnosticReports/ghostty_2026-08-23-134321_*.spin`, reason
+  *"Slow response to HID event"*, 1.25s. Main thread: `WorkspaceSidebarView.presentFolderPicker()`
+  (`WorkspaceSidebarView.swift:220`) → `WorkspaceStore.addProjectViaFolderPicker()`
+  (`WorkspaceStore.swift:952`) → `NSOpenPanel.init()`, **91 of 125 samples**. Sean reported this
+  as "tried to open the browser via composer and the app crashed" — it is neither the browser
+  (zero CEF frames; the `BrowserView` frames are Finder's own, inside the open-panel XPC service)
+  nor provably a crash (no crash report exists; Dev pid 57389 has since exited). Beachball on
+  Add-project, from the sidebar titlebar toolbar. | app | new
