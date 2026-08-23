@@ -40,8 +40,7 @@
           <h1 class="h-xl">TOO MANY<br><span class="amber">TERMINALS.</span></h1>
           <p class="lead" style="margin-top: 24px;">
             Ghostties runs every Claude Code session in <strong>one window</strong> —
-            a sidebar of live agents, status you can read at a glance, and
-            <code>gt list</code> to see every task across every project.
+            a sidebar of live agents, with status you can read at a glance.
           </p>
         </div>
 
@@ -185,38 +184,11 @@
       </section>
 
       <!-- ============================================================
-           04 — GT LIST — lifted verbatim from index.html#gt-list,
-           restyled into the Arcade shell. Terminal stdout unchanged.
-           ============================================================ -->
-      <section class="board-gtlist" id="gt-list">
-        <div class="section-label">
-          <span class="num mono-tag">04</span>
-          <span class="micro">GT List</span>
-        </div>
-        <h2 class="h-l">The GT List</h2>
-        <p class="lead">One command answers &ldquo;what is actually going on&rdquo; across every project. The thing nothing else does.</p>
-
-        <p class="gt-example-label">Example output — not a live capture</p>
-        <div class="gt-block"><div class="gt-scroll"><pre class="gt-pre" aria-label="Example output of gt list against a fixture task directory, not a live capture">wire-status-badge  <span class="lane-needsyou">needs-you</span>   Wire status badge to session state  [project: switchboard]
-audit-nightly-job  <span class="lane-running">running</span>     Audit nightly ingestion job  [project: fieldwork]
-migrate-schema  <span class="lane-running">running</span>     Migrate task schema to v2  [project: atlas-api]
-review-lane-copy  <span class="lane-review">review</span>      Review lane copy for clarity  [project: pendulum]
-triage-inbox-dupes  <span class="lane-inbox">inbox</span>       Triage duplicate inbox entries  [project: silo]
-sync-export-format  <span class="lane-backlog">backlog</span>     Sync export format across clients  [project: trove]
-retire-legacy-hook  <span class="lane-done">graveyard</span>   Retire legacy pre-commit hook  [project: wren]</pre></div></div>
-
-        <div class="lane-ramp" aria-label="Lane priority order, highest first">
-          <span class="lane-chip lane-needsyou">needs-you</span><span class="lane-chip lane-running">running</span><span class="lane-chip lane-review">review</span><span class="lane-chip lane-inbox">inbox</span><span class="lane-chip lane-backlog">backlog</span><span class="lane-chip lane-done">graveyard</span>
-        </div>
-        <p class="projects-caption">gt list — sorted by lane priority, then task id</p>
-      </section>
-
-      <!-- ============================================================
-           05 — TASK NOTES (DOM only, no capture)
+           04 — TASK NOTES (DOM only, no capture)
            ============================================================ -->
       <section id="task-notes">
         <div class="section-label">
-          <span class="num mono-tag">05</span>
+          <span class="num mono-tag">04</span>
           <span class="micro">Task notes</span>
         </div>
         <h2 class="h-m">Task Notes</h2>
@@ -235,11 +207,11 @@ instead of the cached snapshot.
       </section>
 
       <!-- ============================================================
-           06 — PROJECTS & ARCHIVE (real captures)
+           05 — PROJECTS & ARCHIVE (real captures)
            ============================================================ -->
       <section id="projects-archive">
         <div class="section-label">
-          <span class="num mono-tag">06</span>
+          <span class="num mono-tag">05</span>
           <span class="micro">Projects &amp; archive</span>
         </div>
         <h2 class="h-m">Projects &amp; Archive</h2>
@@ -259,11 +231,11 @@ instead of the cached snapshot.
       </section>
 
       <!-- ============================================================
-           07 — STILL GHOSTTY
+           06 — STILL GHOSTTY
            ============================================================ -->
       <section id="still-ghostty">
         <div class="section-label">
-          <span class="num mono-tag">07</span>
+          <span class="num mono-tag">06</span>
           <span class="micro">Still Ghostty</span>
         </div>
         <h2 class="h-m">Still Ghostty</h2>
@@ -277,12 +249,12 @@ instead of the cached snapshot.
       </section>
 
       <!-- ============================================================
-           08 — FIRST 60 SECONDS (structure + step sequence only —
+           07 — FIRST 60 SECONDS (structure + step sequence only —
            real prose comes in a later pass)
            ============================================================ -->
       <section id="first-60-seconds">
         <div class="section-label">
-          <span class="num mono-tag">08</span>
+          <span class="num mono-tag">07</span>
           <span class="micro">First 60 seconds</span>
         </div>
         <h2 class="h-m">First 60 Seconds</h2>
@@ -298,11 +270,11 @@ instead of the cached snapshot.
       </section>
 
       <!-- ============================================================
-           09 — INSTALL & CHANNELS
+           08 — INSTALL & CHANNELS
            ============================================================ -->
       <section id="install-channels">
         <div class="section-label">
-          <span class="num mono-tag">09</span>
+          <span class="num mono-tag">08</span>
           <span class="micro">Install &amp; channels</span>
         </div>
         <h2 class="h-m">Install &amp; Channels</h2>
@@ -333,11 +305,11 @@ instead of the cached snapshot.
       </section>
 
       <!-- ============================================================
-           10 — SOURCE & CHANGELOG
+           09 — SOURCE & CHANGELOG
            ============================================================ -->
       <section id="source-changelog">
         <div class="section-label">
-          <span class="num mono-tag">10</span>
+          <span class="num mono-tag">09</span>
           <span class="micro">Source &amp; changelog</span>
         </div>
         <h2 class="h-m">Source &amp; Changelog</h2>
@@ -377,25 +349,6 @@ instead of the cached snapshot.
           setTimeout(() => { copyStatus.textContent = ''; }, 2000);
         });
       });
-    });
-
-    // The gt-list example only actually scrolls above a certain width; below
-    // it, mark it a tab stop and announce it as scrollable — above it, it's
-    // an inert element that shouldn't be in the tab order at all.
-    document.querySelectorAll('.gt-scroll').forEach((el) => {
-      const sync = () => {
-        if (el.scrollWidth > el.clientWidth + 1) {
-          el.setAttribute('tabindex', '0');
-          el.setAttribute('role', 'group');
-          el.setAttribute('aria-label', 'Example gt list output, scrollable horizontally');
-        } else {
-          el.removeAttribute('tabindex');
-          el.removeAttribute('role');
-          el.removeAttribute('aria-label');
-        }
-      };
-      sync();
-      window.addEventListener('resize', sync);
     });
   </script>
   <script src="/assets/snake.js" defer></script>

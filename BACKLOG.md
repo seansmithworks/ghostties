@@ -4,6 +4,46 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-22 — `gt` CLI: product question, not a website problem
+
+Pulled `gt` out of `web/v2.html`/`web/v2.css` on `feat/web-redesign-round4` (hero
+line, the whole `04 — GT LIST` section, its inline scroll script, and the dead
+`.gt-block`/`.gt-scroll`/`.gt-pre`/`.lane-*` CSS; nine sections renumbered
+01–09). That's a symptom fix. The real question is Sean's to decide:
+
+**Decision owed:** is `gt` a kept, user-facing product feature, or contributor
+scaffolding that never should have been marketed? Sean hasn't used it himself —
+that's exactly why this surfaced now.
+
+**Evidence it isn't installed today:** not in the app bundle, not in any Xcode
+copy phase, not installed by the brew cask, the npx installer, or the DMG. The
+only install route is cloning the repo and running `scripts/install-gt.sh`,
+which builds from source and needs a Swift toolchain.
+
+**Live bug, independent of the website:** `OnboardingSheet.swift`'s "Install
+gt" button runs `git -C ~ rev-parse --show-toplevel`, which only resolves if
+`$HOME` is inside the ghostties clone. For any normal install it fails and
+points the user at a repo they don't have. This ships in the app today — not
+touched by this pass.
+
+**Also live today, not touched, separate decision:** `web/index.html:1153`
+still shows the same `gt list` block, plus a `gt list` product video and
+caption around `:1065-1068`. Pulling those is undecided and would be a prod
+deploy on merge — do not do it until Sean calls it.
+
+**Name collision worth checking:** `gt` is also Graphite's CLI, widely used by
+the same audience.
+
+**Options on the table:** bundle `gt` in the app and symlink it on first run;
+ship it as its own brew formula; or cut it as a user-facing feature entirely.
+
+- [ ] Sean: decide `gt`'s product status (kept feature / contributor tool / cut)
+  | product | new
+- [ ] Fix or remove the "Install gt" onboarding button once the product
+  decision lands | build | new
+- [ ] Decide + execute `web/index.html`'s `gt list` section (block, video,
+  caption) once the product decision lands | design | new
+
 ## 2026-08-20 — ghostties.org app section: spec + HTML rebuild built
 
 **Shipped on `feat/web-redesign-round4`:**

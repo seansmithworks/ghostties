@@ -774,7 +774,7 @@ button.cab-btn {
 }
 
 /* ---------------------------------------------------------------------
-   03 — THE SIDEBAR / 04 — GT LIST (lifted markup, restyled)
+   03 — THE SIDEBAR (lifted markup, restyled)
    --------------------------------------------------------------------- */
 
 .status-key {
@@ -842,103 +842,8 @@ button.cab-btn {
   color: var(--ink-dim);
 }
 
-.gt-example-label {
-  margin-top: 32px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-faint);
-}
-.gt-block {
-  position: relative;
-  margin-top: 12px;
-  max-width: 780px;
-  background: rgba(233, 230, 245, 0.03);
-  border: 1px solid var(--line);
-  border-radius: 0;
-}
-/* The scroll container is now a separate, inner element so the edge fade
-   below (painted on .gt-block, which no longer scrolls) stays pinned to
-   the frame instead of traveling with the scrolled content. */
-.gt-scroll {
-  padding: 20px 24px;
-  overflow-x: auto;
-  /* Visible scrollbar hint instead of the default invisible-until-hover
-     overlay scrollbar (macOS/most mobile browsers hide it entirely). */
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
-}
-.gt-scroll::-webkit-scrollbar {
-  height: 6px;
-}
-.gt-scroll::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-}
-/* Edge fade — the affordance that content continues past the visible
-   frame. Harmless when the content already fits (nothing is cropped by
-   it since it sits over the box's own padding), so it doesn't need a
-   scroll-state class to toggle it. Lives on .gt-block, not .gt-scroll, so
-   it never scrolls with the content it's fading. */
-.gt-block::after {
-  content: "";
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  bottom: 1px;
-  width: 28px;
-  background: linear-gradient(to right, transparent, rgba(6, 6, 14, 0.85));
-  pointer-events: none;
-}
-.gt-pre {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--ink-dim);
-  white-space: pre;
-}
-.lane-needsyou {
-  color: #ff5f5f;
-}
-.lane-running {
-  color: #87d787;
-}
-.lane-review {
-  color: #d7af5f;
-}
-.lane-inbox {
-  color: #87afd7;
-}
-.lane-backlog {
-  color: #949494;
-}
-.lane-done {
-  color: #909090;
-}
-
-.lane-ramp {
-  margin-top: 20px;
-  display: flex;
-  flex-wrap: wrap;
-  border: 1px solid var(--line-strong);
-  border-radius: 0;
-  overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.lane-chip {
-  padding: 8px 14px;
-  border-right: 1px solid var(--line-strong);
-}
-.lane-chip:last-child {
-  border-right: none;
-}
-
 /* ---------------------------------------------------------------------
-   05 — TASK NOTES
+   04 — TASK NOTES
    --------------------------------------------------------------------- */
 
 .task-note-example {
@@ -967,7 +872,7 @@ button.cab-btn {
 }
 
 /* ---------------------------------------------------------------------
-   06 — PROJECTS & ARCHIVE
+   05 — PROJECTS & ARCHIVE
    --------------------------------------------------------------------- */
 
 .projects-figure {
@@ -1002,7 +907,7 @@ button.cab-btn {
 }
 
 /* ---------------------------------------------------------------------
-   07 — STILL GHOSTTY
+   06 — STILL GHOSTTY
    --------------------------------------------------------------------- */
 
 .still-ghostty-list {
@@ -1033,7 +938,7 @@ button.cab-btn {
 }
 
 /* ---------------------------------------------------------------------
-   08 — FIRST 60 SECONDS
+   07 — FIRST 60 SECONDS
    --------------------------------------------------------------------- */
 
 .steps {
@@ -1075,7 +980,7 @@ button.cab-btn {
 }
 
 /* ---------------------------------------------------------------------
-   09 — INSTALL & CHANNELS
+   08 — INSTALL & CHANNELS
    --------------------------------------------------------------------- */
 
 .install-grid {
@@ -1116,7 +1021,7 @@ button.cab-btn {
 }
 
 /* ---------------------------------------------------------------------
-   10 — SOURCE & CHANGELOG
+   09 — SOURCE & CHANGELOG
    --------------------------------------------------------------------- */
 
 .source-links {
@@ -1236,18 +1141,5 @@ footer a:hover {
   }
   .cab-btn small {
     white-space: normal;
-  }
-  /* Lane ramp: six chips wrap unevenly (4+2) at narrow widths, leaving a
-     dead cell and reading as a broken L. Stack to one column instead so
-     every chip is full-width with no leftover cell. */
-  .lane-ramp {
-    flex-direction: column;
-  }
-  .lane-chip {
-    border-right: none;
-    border-bottom: 1px solid var(--line-strong);
-  }
-  .lane-chip:last-child {
-    border-bottom: none;
   }
 }
