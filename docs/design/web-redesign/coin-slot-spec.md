@@ -1,5 +1,19 @@
 # Coin slot — build spec
 
+**Round 2 (this pass) matches the user's actual keychain reference photo, not just its
+colour palette.** The first pass (below, superseded in the details but not the
+direction) got the black bezel and red field right but was a *coloured rectangle with
+gold type* — flat fill, no hotspot, no inner lit frame, painted-looking type. The user
+pointed at the reference again and asked for the panel to read as a genuinely lit sign,
+plus an explicit glowing pulse. This pass adds: a top-down lamp hotspot the field falls
+off from (not a flat fill), a lit red inner frame around the panel (the acrylic's own
+edge-lit border, distinct from the bezel), backlit type — near-white cores bleeding to
+red-orange via layered `text-shadow`, because the light comes through the letters, not
+sitting on top of them — and a `25¢` price line over the stacked `INSERT COIN` / `TO
+PLAY` label, matching the reference's actual arrangement (`INSERT COIN` currently wraps
+to two lines at this width, giving three visual lines total — `INSERT` / `COIN` / `TO
+PLAY` — which happens to track the reference's three-line layout closely).
+
 **Supersedes the earlier discreet-ember concept (below the fold).** The user supplied
 two reference photos of real coin plates — a backlit arcade keychain (saturated red
 panel glowing behind stacked `25¢` / `INSERT COIN TO PLAY` type, a tall slot down the
@@ -8,35 +22,40 @@ divider, coin entering edge-on) — and called the keychain "pretty much what I
 envisioned." That overrides the original "dark plate, ember only" direction: a real
 coin plate is a *lit* object, not a hidden one.
 
-A **backlit coin plate**: a black bezel with real thickness, an inset red panel that
-glows and blooms slightly past its own edges, a tall vertical slot occupying roughly
-the left third of the panel, and stacked gold `INSERT` / `COIN` type separated by a
-double rule. Fixed top-right, small, corner-mounted hardware — not a promoted button.
-Pressing it drops a coin into the slot, flashes the backlight, flips `CR 0` to `CR 1`,
-and swaps the label to `ESC` / `EXIT`.
+A **backlit coin plate**: a black bezel with real thickness, corner-screw hardware, and
+a faint stippled texture, an inset red panel lit from a hotspot near the top and
+falling off toward the bottom, a lit inner frame (the panel's own glowing border) just
+inside the bezel, a tall vertical slot occupying roughly the left third of the panel
+with its own edge light, and backlit `25¢` over stacked `INSERT COIN` / `TO PLAY` type.
+Fixed top-right, small, corner-mounted hardware — not a promoted button. Pressing it
+drops a coin into the slot, flashes the backlight, flips `CR 0` to `CR 1`, and swaps
+the label to `ESC` / `EXIT`. The backlight breathes on a slow, luminous cycle at rest —
+the pulse the user asked for explicitly — never blinking the label.
 
 ```
    fixed: top 16, right 16                z-index 90
-   ┌────────────────────────────┐
-   │ ┌──┐                       │
-   │ │▐▐│   I N S E R T         │  78px
-   │ │▐▐│   ─────────           │
-   │ │▐▐│   C O I N             │
-   │ └──┘   CR 0                │
-   └────────────────────────────┘
-      ▲       ▲                    100px
-      │       └ stacked label, double rule, credit readout
-      └ slot, ~24px wide (left third of the panel), lamp/catch-light on its lip
+   ┌──────────────────────────────┐
+   │ ┏━━┓ ┌──────────────────┐    │
+   │ ┃▐▐┃ │      2 5 ¢       │    │  94px
+   │ ┃▐▐┃ │     INSERT       │    │
+   │ ┃▐▐┃ │      COIN        │    │
+   │ ┗━━┛ │     TO PLAY      │    │
+   │      │      CR 0        │    │
+   │      └──────────────────┘    │
+   └──────────────────────────────┘
+      ▲       ▲                      118px
+      │       └ lit inner frame around the panel; backlit type, credit readout
+      └ slot, ~20px wide, own edge light on its lip
 ```
 
 ## States
 
-| | Panel backlight | Label | Credit | Bezel |
+| | Panel backlight | Type | Credit | Bezel |
 |---|---|---|---|---|
-| **Rest** | breathing bloom, 3.2s alternate, shallow | `INSERT` / `COIN` gold | `CR 0` | flat, top catch-light |
-| **Hover / focus-visible** | breathing stops, bloom strengthens + widens (no layout shift) | brighter gold glow | unchanged | unchanged |
+| **Rest** | breathing pulse, 1.7s alternate (~3.4s full swell-fade cycle), clearly perceptible | `25¢` / `INSERT COIN` / `TO PLAY`, backlit white-to-red-orange | `CR 0` gold | flat, top catch-light |
+| **Hover / focus-visible** | breathing stops, bloom strengthens + widens (no layout shift) | brighter backlit glow | unchanged | unchanged |
 | **Press** | flashes brighter (`gx-coin-panel-flash`, ~350ms) while the coin drops; bezel depresses `translateY(1px)` with inverted bevel | unchanged until settle | flips to `1` at t=200ms | inverted bevel |
-| **Armed** | steady bloom, no breathing | `ESC` / `EXIT` gold | `CR 1`, digit brightens to `#ffe9a8` | flat, top catch-light |
+| **Armed** | steady bloom, no breathing | `25¢` stays; label swaps to `ESC` / `EXIT`, same backlit treatment | `CR 1`, digit brightens to `#ffe9a8` | flat, top catch-light |
 
 **State is never signalled by colour alone** — the label line text and the credit digit
 both change, both text at high contrast against the red field. That is also how WCAG
@@ -45,102 +64,140 @@ backlight hue.
 
 ## Exact values
 
-**Footprint.** `position: fixed; top: 16px; right: 16px; width: 100px; height: 78px;`
+**Footprint.** `position: fixed; top: 16px; right: 16px; width: 118px; height: 94px;`
 `z-index: 90` (above `.gx-ghost` at 2–3; below `.skip-link` at 100 and `.gx-label` at
-300). Small screens (`max-width: 480px`): `top/right: 10px`, plate `82x64`.
+300). Grew from the original `100x78` to fit the price line + two-line label + credit
+readout without crowding — still corner hardware, not a panel competing with the page.
+Small screens (`max-width: 480px`): `top/right: 10px`, plate `92x76`.
 
 **Colour — scoped to this component, not the shared token file.** Defined as CSS
 custom properties on `.gx-coin` itself:
 
 ```
 --coin-bezel:   #101012
---coin-red-hi:  #c81b22
---coin-red-lo:  #4a0509
+--coin-red-hi:  #d81f26
+--coin-red-lo:  #38040a
+--coin-frame:   #ff4634
 --coin-gold:    #e8b545
 --coin-glow:    rgba(255, 40, 34, 0.4)
+--coin-type:    #fff6ec
 ```
 
 Never `--amber` (`#ffd54f`) — that stays the page's CTA colour, and reusing it here
-would blur the corner back into "third install button." `--coin-gold` is a deliberately
-more saturated, warmer yellow so the two read as different materials even side by side.
+would blur the corner back into "third install button." `--coin-gold` stays reserved
+for the physical coin (the SVG piece) and the credit digit — a distinctly warmer,
+metallic material from the panel's own light. `--coin-frame` and `--coin-type` are new
+this pass: the lit inner border and the backlit type respectively, both hot red-orange
+rather than gold, because they're light sources, not painted/metal parts.
 
 **Bezel.** `.gx-coin-bezel` — black (`--coin-bezel`), `padding: 6px` (small: `5px`) so
 the black frame reads as real material thickness around the lit panel, `border-radius:
-5px`. Two faint radial-gradient highlights fake the case's dome/texture. Depth comes
-from `box-shadow`: an outer drop shadow (`0 3px 8px rgba(0,0,0,.55)`) plus two inset
-edges (`inset 0 1px 0 rgba(233,230,245,.08)` top highlight, `inset 0 -2px 3px
-rgba(0,0,0,.65)` bottom shadow) — the plate reads as mounted on the page's dark face,
-not floating.
+5px`. Layered `radial-gradient`s fake four corner screws (small dots near each corner)
+plus a faint `repeating-radial-gradient` stipple for case texture, on top of the
+original two dome highlights. Depth comes from `box-shadow`: an outer drop shadow
+(`0 3px 8px rgba(0,0,0,.55)`) plus two inset edges (`inset 0 1px 0
+rgba(233,230,245,.08)` top highlight, `inset 0 -2px 3px rgba(0,0,0,.65)` bottom shadow)
+— the plate reads as mounted on the page's dark face, not floating.
 
-**Panel.** `.gx-coin-panel` fills the bezel's padding box, `border-radius: 2px`, flex
-row (`slot` + `info`). Fill is a radial gradient from `--coin-red-hi` to `--coin-red-lo`
-(`120% 140% at 30% 20%`) for internal glow rather than a flat fill. Bloom is an outer
-`box-shadow` (`0 0 10px var(--coin-glow)`, `0 0 20px rgba(255,20,16,.16)` at rest) that
-extends past the panel's own edge — this is the "light blooms slightly past its edges"
-behaviour from the keychain reference. Panel depth: `inset 0 1px 0 rgba(255,255,255,.1)`
-top highlight, `inset 0 -3px 5px rgba(0,0,0,.55)` bottom shadow.
+**Panel.** `.gx-coin-panel` fills the bezel's padding box, `border-radius: 3px`, flex
+row (`slot` + `info`), with a **`1px solid var(--coin-frame)` border** — the lit inner
+frame the reference's acrylic edge shows, distinct from the black bezel around it. Fill
+is two stacked radial gradients, not one flat one: a top hotspot (`65% 45% at 50% 4%`,
+white fading through orange to transparent) simulating the lamp sitting behind the top
+of the panel, laid over the base red field (`120% 130% at 50% 16%`, `--coin-red-hi` to
+`--coin-red-lo`) — the field is genuinely lit from above and falls off toward the
+bottom, not a flat fill. A second hotspot lives on `.gx-coin-panel::after`
+(`mix-blend-mode: screen`, `pointer-events: none`) so its opacity can pulse
+independently of the frame's `box-shadow` bloom — this is the second half of the
+glowing-pulse effect (see Motion). Bloom is still an outer `box-shadow`
+(`0 0 10px var(--coin-glow)`, `0 0 20px rgba(255,20,16,.16)` at rest) extending past the
+panel's own edge, plus new inset glow (`inset 0 0 0 1px rgba(255,130,100,.35)`,
+`inset 0 0 9px rgba(255,40,30,.5)`) around the frame border itself so it visibly emits
+light rather than just being a stroked line. Panel depth carries over: `inset 0 1px 0
+rgba(255,255,255,.1)` top highlight, `inset 0 -3px 5px rgba(0,0,0,.55)` bottom shadow.
 
-**Slot.** `24px` wide (small: `20px`), `align-self: stretch` with `margin: 7px 0` so it
+**Slot.** `20px` wide (small: `16px`), `align-self: stretch` with `margin: 6px 0` so it
 runs nearly the full panel height — a substantial vertical element occupying the left
 quarter to third of the plate, per both references. Fill a near-black vertical gradient
-(`#150406` → `#060102` → `#150406`) with an inset shadow for aperture depth. A
-`.gx-coin-lamp` child lays a warm rim highlight along the inner edges (`inset 1px 0 0
-rgba(255,205,130,.35)`, `inset -1px 0 0 rgba(255,205,130,.12)`) — a static catch-light
-on the lip, not an animated ember; the backlight (panel bloom) is what breathes now,
-not the slot.
+(`#150406` → `#060102` → `#150406`) with an inset shadow for aperture depth, plus an
+outer `box-shadow` (`0 0 6px rgba(255,40,30,.45)`) so the slot channel reads as
+edge-lit like the frame, not a plain dark cutout. A `.gx-coin-lamp` child lays a warm
+red-orange rim highlight along the inner edges (`inset 1px 0 0 rgba(255,120,80,.55)`,
+`inset -1px 0 0 rgba(255,70,45,.25)`, plus `inset 0 0 6px rgba(255,40,30,.4)`) — a
+static catch-light on the lip, not an animated ember; the backlight (panel bloom) is
+what breathes, not the slot.
 
-**Type.** `.gx-coin-label-line`: `--font-display` (Silkscreen) **700** (chunky weight —
-the reference's outlined block letters), `11px/1` (small: `9px`), `letter-spacing
-.03em`, uppercase, fill `--coin-gold`, `text-shadow: 0 0 3px rgba(232,181,69,.55)` to
-fake the backlit-outline glow at pixel-font sizes (a true stroked outline reads muddy
-below ~14px in a pixel typeface — this is the honest approximation, noted for anyone
-revisiting at larger sizes). `.gx-coin-rule`: a **double rule** (matching the cabinet
-reference, not just the keychain's single divider) — `border-top` + `border-bottom`,
-both `1px solid var(--coin-gold)`, `height: 3px` so a 1px gap shows between them,
-`width: 32px` (small: `26px`), centred. `.gx-coin-credit`: `--font-mono` (DM Mono),
-`7px/1` (small: `6.5px`), `letter-spacing .12em`, uppercase, dim gold; the digit is a
-`<b>` at weight 500 in full `--coin-gold`, brightening to `#ffe9a8` when armed. Copy
-shortened from `CREDIT` to `CR` — the panel is roughly a third of its old width's worth
-of type real estate now that it's carrying two stacked words plus a rule.
+**Type — backlit, not painted.** This is the pass's main correction: flat gold fill
+read as printed type; the reference's type is lit from behind. `.gx-coin-price`
+(`25¢`, new): `--font-display` (Silkscreen) **700**, `19px/1` (small: `15px`),
+`letter-spacing .01em`, colour `var(--coin-type)` (near-white), with a four-layer
+`text-shadow` — a tight white core (`0 0 2px rgba(255,255,255,.95)`) bleeding through
+orange (`0 0 7px rgba(255,150,90,.9)`) to red (`0 0 16px rgba(255,60,30,.7)`, `0 0 30px
+rgba(255,20,10,.4)`) — the "near-white core bleeding to red-orange" look, because the
+light is coming through the letters. `.gx-coin-label-line` (`INSERT COIN` / `TO PLAY`,
+was `INSERT` / `COIN`): same treatment scaled down, `8.5px/1.15` (small: `7.5px`),
+`letter-spacing .01em`, uppercase, same `--coin-type` colour and a proportionally
+smaller four-layer shadow. At this width `INSERT COIN` wraps to two lines inside its
+own span, giving three visual lines total (`INSERT` / `COIN` / `TO PLAY`) — an
+accidental match to the reference's actual three-line layout, kept rather than forced
+onto one line. The double-rule divider from round 1 (a cabinet-reference crossover, not
+present on the keychain) is dropped — the primary reference has no rule between price
+and label, and removing it gave the type room to be legible at this size.
+`.gx-coin-credit`: `--font-mono` (DM Mono), `6.5px/1` (small: `6px`), `letter-spacing
+.12em`, uppercase, dim gold; the digit is a `<b>` at weight 500 in full `--coin-gold`,
+brightening to `#ffe9a8` when armed — kept as the one gold (not backlit-red) element,
+since it's a functional readout, not part of the lit signage.
 
 **Cursor** `pointer`. Hover rules go inside `@media (hover: hover)` so an iOS tap
 doesn't leave the hover backlight stuck on.
 
 **The coin** is the original 6×6 inline SVG pixel-circle, now drawn at `8×8`, `--coin-
-gold` fill, absolutely positioned over the slot mouth (`left: 8px` / small: `6px`,
-`top: -18px`) so it visibly falls in from above the plate.
+gold` fill, absolutely positioned over the slot mouth (`left: 6px` / small: `4px`,
+`top: -18px`, re-centred for the narrower `20px`/`16px` slot) so it visibly falls in
+from above the plate.
 
 ## Motion
 
 | Step | Time | Easing (literal) | What moves |
 |---|---|---|---|
-| Attract breath | 3200ms, `infinite alternate` | `ease-in-out` | panel bloom `box-shadow` alpha only |
-| Rest → hover | 220ms | `cubic-bezier(.25,1,.5,1)` | panel bloom, label text-shadow |
+| Attract pulse | 1700ms, `infinite alternate` (~3.4s full swell-fade cycle) | `ease-in-out` | panel bloom `box-shadow` alpha/radius **and** `.gx-coin-panel::after` hotspot `opacity`, in parallel |
+| Rest → hover | 220ms | `cubic-bezier(.25,1,.5,1)` | panel bloom, frame border glow, price/label text-shadow |
 | Press depress | 60ms | `linear` | bezel `translateY(1px)` + bevel inversion |
 | Coin fall | 200ms | `cubic-bezier(.5,0,.75,0)` | coin `translateY(-18px → 0)`; at 75% `scaleX(.5)` and fade to 0 |
 | Panel flash | 90ms in / 260ms out | in `linear`, out `cubic-bezier(.25,1,.5,1)` | panel bloom to peak, back to armed level |
 | Credit flip | instant at t=200ms | — | `textContent` 0 → 1 |
-| Armed settle | — | — | bloom animation removed (goes steady), rule opacity → 1 |
+| Armed settle | — | — | bloom animation removed (goes steady); `::after` hotspot animation removed, opacity fixed at `.7` |
 | Coin-out (Esc / re-click) | 180ms | `cubic-bezier(.25,1,.5,1)` | everything back to rest |
 
 Press → armed totals ~420ms, unchanged from the original build. `var()` is not
 substituted for `animation-timing-function`/colour values inside `@keyframes` and fails
 silently back to the shorthand curve (`DESIGN.md` §5) — every literal above is written
 out in the CSS, not referenced through a custom property, inside `gx-coin-breathe`,
-`gx-coin-fall`, and `gx-coin-panel-flash`.
+`gx-coin-breathe-glow`, `gx-coin-fall`, and `gx-coin-panel-flash`.
 
-**The attract behaviour is a breath, never a blink.** A ~0.5s blinking `INSERT COIN` is
-the authentic arcade attract cadence, and it is exactly what makes a control read as a
-promoted CTA. The blink lives on the backlight only, slowed to 3.2s and held to a
-shallow bloom-alpha swing. **The label text never blinks, in any version of this
-component.**
+**The pulse is a breath, never a blink — and this pass makes it clearly perceptible.**
+Round 1's attract breath was too shallow to register (`box-shadow` alpha swinging
+`.3→.5` over 3.2s one-way). The user asked for the pulse explicitly, so this pass
+widened the swing substantially (measured: the panel's outer bloom brightness swings
+roughly 4–5× between trough and peak, sampled from screenshots at the same page
+location across the cycle) and shortened the cycle to land in the 2.5–3.5s
+neighbourhood (~3.4s full swell-fade, up from 6.4s). **The one thing protected: the
+label text never blinks, in any version of this component.** Only `box-shadow`
+alpha/radius and the `::after` hotspot's `opacity` animate — no property that would
+make the type appear/disappear is ever touched by `gx-coin-breathe` or
+`gx-coin-breathe-glow`. A ~0.5s blinking `INSERT COIN` is the authentic arcade attract
+cadence, and it is exactly what makes a control read as a promoted CTA — deliberately
+avoided here.
 
 ## Copy
 
-| State | Label (two lines) | Credit | `aria-label` | `title` |
-|---|---|---|---|---|
-| Rest / hover / press | `INSERT` / `COIN` | `CR 0` | `Insert coin` | `Insert coin (C)` |
-| Armed | `ESC` / `EXIT` | `CR 1` | `Return coin and exit the ghost field` | `Return coin (Esc)` |
+| State | Price (fixed) | Label (two lines) | Credit | `aria-label` | `title` |
+|---|---|---|---|---|---|
+| Rest / hover / press | `25¢` | `INSERT COIN` / `TO PLAY` | `CR 0` | `Insert coin` | `Insert coin (C)` |
+| Armed | `25¢` | `ESC` / `EXIT` | `CR 1` | `Return coin and exit the ghost field` | `Return coin (Esc)` |
+
+`25¢` never changes — a real coin machine doesn't reprice itself when armed. Only the
+label lines and the credit digit carry the state change, same as round 1.
 
 Live region `#gx-coin-status` (`role="status" aria-live="polite"`, in `v3.html`):
 
@@ -228,15 +285,25 @@ from a second `coinInserted`-style flag that could drift out of sync. Concretely
 
 ## Build notes
 
-- **Markup shape (updated):** `button > span.gx-coin-bezel[aria-hidden] > span.gx-coin-
-  panel > (span.gx-coin-slot > span.gx-coin-lamp + svg.gx-coin-piece) + (span.gx-coin-
-  info > (span.gx-coin-label > span.gx-coin-label-line × 2 + span.gx-coin-rule) +
-  span.gx-coin-credit)`. All decorative structure sits under one `aria-hidden="true"` on
-  `.gx-coin-bezel`, since the button's own `aria-label` carries the accessible name.
-- **The label is two DOM spans, not one text node**, so `INSERT`/`COIN` and `ESC`/`EXIT`
-  can sit either side of the double rule without relying on line-wrap. The inline script
-  in `v3.html`'s `render(armed)` writes `labelLines[0].textContent` /
-  `labelLines[1].textContent` instead of a single `.textContent` assignment.
+- **Markup shape (updated again):** `button > span.gx-coin-bezel[aria-hidden] >
+  span.gx-coin-panel > (span.gx-coin-slot > span.gx-coin-lamp + svg.gx-coin-piece) +
+  (span.gx-coin-info > span.gx-coin-price + (span.gx-coin-label >
+  span.gx-coin-label-line × 2) + span.gx-coin-credit)`. `.gx-coin-rule` is gone (see
+  Type above); `.gx-coin-price` is new, sits above the label, and is never touched by
+  the arm/disarm script. All decorative structure sits under one `aria-hidden="true"`
+  on `.gx-coin-bezel`, since the button's own `aria-label` carries the accessible name.
+- **The label is still two DOM spans, not one text node**, so `INSERT COIN`/`TO PLAY`
+  and `ESC`/`EXIT` can swap independently. The inline script in `v3.html`'s
+  `render(armed)` writes `labelLines[0].textContent` / `labelLines[1].textContent`
+  instead of a single `.textContent` assignment — unchanged from round 1, only the
+  strings it writes changed (`'INSERT'`/`'COIN'` → `'INSERT COIN'`/`'TO PLAY'`).
+- **The glowing pulse is two animations sharing one duration, not one.**
+  `gx-coin-breathe` (on `.gx-coin-panel`, `box-shadow`) and `gx-coin-breathe-glow` (on
+  the new `.gx-coin-panel::after`, `opacity`) both run `1700ms ease-in-out infinite
+  alternate` so they read as one coherent breath rather than two independent layers
+  drifting out of phase. Both are turned off (`animation: none`) and pinned to a fixed
+  value under `.gx-coin-armed` and the hover/focus-visible rules, matching the existing
+  pattern from `gx-coin-breathe` alone in round 1.
 - The `C` key route stays, and the `title` still advertises it. The
   `docs/design/web-redesign/README.md` says the key is `I`; the code says `c`. Still out
   of scope here.

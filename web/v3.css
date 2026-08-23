@@ -534,34 +534,38 @@ footer a:hover {
   gap: 16px;
   align-items: center;
 }
-
-/* Coin entry plate — a lit arcade coin plate: black bezel with real
-   thickness, a backlit red panel inset into it, a tall slot down the
-   left third, stacked INSERT / COIN type in gold. Direction is the
-   user's own reference photos (a backlit keychain coin plate + a real
-   cabinet coin door), which override the earlier discreet dark-plate
-   concept — see docs/design/web-redesign/coin-slot-spec.md. Colour is
-   scoped locally to this component (--coin-*), never --amber, which
-   stays the page's CTA colour. State is never colour-alone: the label
-   line text and the credit digit both swap on arm/disarm (script in
-   v3.html), which is also how this clears WCAG 1.4.11. */
+/* Coin entry plate — a lit arcade sign, not a coloured rectangle. Black
+   bezel with real thickness and corner-screw hardware, a lit red inner
+   frame, a red field lit from a hotspot at the top falling off toward
+   the bottom, a tall slot down the left with its own edge light, and
+   backlit type — near-white cores bleeding to red-orange, because the
+   light comes through the letters rather than sitting on top of them.
+   Direction is the user's own keychain reference photo (a backlit 25c /
+   INSERT COIN TO PLAY panel) — see docs/design/web-redesign/
+   coin-slot-spec.md. Colour is scoped locally to this component
+   (--coin-*), never --amber, which stays the page's CTA colour. State is
+   never colour-alone: the label line text and the credit digit both
+   swap on arm/disarm (script in v3.html), which is also how this clears
+   WCAG 1.4.11. */
 .gx-coin {
   position: fixed;
   top: 16px;
   right: 16px;
   z-index: 90;
-  width: 100px;
-  height: 78px;
+  width: 118px;
+  height: 94px;
   padding: 0;
   border: 0;
   background: none;
   cursor: pointer;
   text-align: left;
   --coin-bezel: #101012;
-  --coin-red-hi: #c81b22;
-  --coin-red-lo: #4a0509;
+  --coin-red-hi: #d81f26;
+  --coin-red-lo: #38040a;
+  --coin-frame: #ff4634;
   --coin-gold: #e8b545;
   --coin-glow: rgba(255, 40, 34, 0.4);
+  --coin-type: #fff6ec;
 }
 
 .gx-coin-bezel {
@@ -572,6 +576,37 @@ footer a:hover {
   padding: 6px;
   border-radius: 5px;
   background:
+    radial-gradient(
+      circle at 9px 9px,
+      rgba(64, 64, 70, 0.9) 0,
+      rgba(64, 64, 70, 0.9) 1.2px,
+      transparent 1.6px
+    ),
+    radial-gradient(
+      circle at calc(100% - 9px) 9px,
+      rgba(64, 64, 70, 0.9) 0,
+      rgba(64, 64, 70, 0.9) 1.2px,
+      transparent 1.6px
+    ),
+    radial-gradient(
+      circle at 9px calc(100% - 9px),
+      rgba(64, 64, 70, 0.9) 0,
+      rgba(64, 64, 70, 0.9) 1.2px,
+      transparent 1.6px
+    ),
+    radial-gradient(
+      circle at calc(100% - 9px) calc(100% - 9px),
+      rgba(64, 64, 70, 0.9) 0,
+      rgba(64, 64, 70, 0.9) 1.2px,
+      transparent 1.6px
+    ),
+    repeating-radial-gradient(
+      circle at 2px 2px,
+      rgba(255, 255, 255, 0.035) 0,
+      rgba(255, 255, 255, 0.035) 0.5px,
+      transparent 0.5px,
+      transparent 3px
+    ),
     radial-gradient(circle at 18% 15%, rgba(255, 255, 255, 0.05), transparent 40%),
     radial-gradient(circle at 82% 85%, rgba(255, 255, 255, 0.03), transparent 45%),
     var(--coin-bezel);
@@ -590,32 +625,55 @@ footer a:hover {
   width: 100%;
   height: 100%;
   padding: 0 6px 0 5px;
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: visible;
+  border: 1px solid var(--coin-frame);
   background: radial-gradient(
-    120% 140% at 30% 20%,
-    var(--coin-red-hi) 0%,
-    var(--coin-red-lo) 75%
-  );
+      65% 45% at 50% 4%,
+      rgba(255, 255, 255, 0.4),
+      rgba(255, 120, 70, 0.22) 42%,
+      transparent 68%
+    ),
+    radial-gradient(120% 130% at 50% 16%, var(--coin-red-hi) 0%, var(--coin-red-lo) 84%);
   box-shadow:
+    inset 0 0 0 1px rgba(255, 130, 100, 0.35),
+    inset 0 0 9px rgba(255, 40, 30, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
     inset 0 -3px 5px rgba(0, 0, 0, 0.55),
     0 0 10px var(--coin-glow),
     0 0 20px rgba(255, 20, 16, 0.16);
-  animation: gx-coin-breathe 3200ms ease-in-out infinite alternate;
+  animation: gx-coin-breathe 1700ms ease-in-out infinite alternate;
+}
+
+.gx-coin-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background: radial-gradient(
+    60% 42% at 50% 2%,
+    rgba(255, 255, 255, 0.6),
+    rgba(255, 130, 80, 0.08) 55%,
+    transparent 70%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  opacity: 0.3;
+  animation: gx-coin-breathe-glow 1700ms ease-in-out infinite alternate;
 }
 
 .gx-coin-slot {
   position: relative;
   flex: none;
   align-self: stretch;
-  width: 24px;
-  margin: 7px 0;
+  width: 20px;
+  margin: 6px 0;
   border-radius: 1px;
   background: linear-gradient(180deg, #150406, #060102 55%, #150406);
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.7),
-    inset 2px 0 3px rgba(0, 0, 0, 0.8);
+    inset 2px 0 3px rgba(0, 0, 0, 0.8),
+    0 0 6px rgba(255, 40, 30, 0.45);
   overflow: visible;
 }
 
@@ -624,13 +682,14 @@ footer a:hover {
   inset: 0;
   border-radius: 1px;
   box-shadow:
-    inset 1px 0 0 rgba(255, 205, 130, 0.35),
-    inset -1px 0 0 rgba(255, 205, 130, 0.12);
+    inset 1px 0 0 rgba(255, 120, 80, 0.55),
+    inset -1px 0 0 rgba(255, 70, 45, 0.25),
+    inset 0 0 6px rgba(255, 40, 30, 0.4);
 }
 
 .gx-coin-piece {
   position: absolute;
-  left: 8px;
+  left: 6px;
   top: -18px;
   width: 8px;
   height: 8px;
@@ -648,43 +707,52 @@ footer a:hover {
   justify-content: center;
   flex: 1;
   min-width: 0;
-  gap: 4px;
+  gap: 3px;
+}
+
+.gx-coin-price {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 19px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--coin-type);
+  text-shadow:
+    0 0 2px rgba(255, 255, 255, 0.95),
+    0 0 7px rgba(255, 150, 90, 0.9),
+    0 0 16px rgba(255, 60, 30, 0.7),
+    0 0 30px rgba(255, 20, 10, 0.4);
 }
 
 .gx-coin-label {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
 }
 
 .gx-coin-label-line {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 11px;
-  line-height: 1;
-  letter-spacing: 0.03em;
+  font-size: 8.5px;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
   text-transform: uppercase;
-  color: var(--coin-gold);
-  text-shadow: 0 0 3px rgba(232, 181, 69, 0.55);
+  color: var(--coin-type);
+  text-shadow:
+    0 0 1.5px rgba(255, 255, 255, 0.9),
+    0 0 4px rgba(255, 150, 90, 0.85),
+    0 0 9px rgba(255, 60, 30, 0.65),
+    0 0 16px rgba(255, 20, 10, 0.35);
   transition:
     color 220ms cubic-bezier(0.25, 1, 0.5, 1),
     text-shadow 220ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-.gx-coin-rule {
-  width: 32px;
-  height: 3px;
-  border-top: 1px solid var(--coin-gold);
-  border-bottom: 1px solid var(--coin-gold);
-  opacity: 0.85;
-  transition: opacity 220ms cubic-bezier(0.25, 1, 0.5, 1);
-}
-
 .gx-coin-credit {
   font-family: var(--font-mono);
   font-weight: 400;
-  font-size: 7px;
+  font-size: 6.5px;
   line-height: 1;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -699,17 +767,29 @@ footer a:hover {
 @keyframes gx-coin-breathe {
   from {
     box-shadow:
+      inset 0 0 0 1px rgba(255, 130, 100, 0.28),
+      inset 0 0 7px rgba(255, 40, 30, 0.35),
       inset 0 1px 0 rgba(255, 255, 255, 0.1),
       inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 8px rgba(255, 40, 34, 0.3),
-      0 0 16px rgba(255, 20, 16, 0.1);
+      0 0 6px rgba(255, 40, 34, 0.22),
+      0 0 12px rgba(255, 20, 16, 0.07);
   }
   to {
     box-shadow:
+      inset 0 0 0 1px rgba(255, 160, 130, 0.55),
+      inset 0 0 12px rgba(255, 60, 40, 0.7),
       inset 0 1px 0 rgba(255, 255, 255, 0.1),
       inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 13px rgba(255, 40, 34, 0.5),
-      0 0 24px rgba(255, 20, 16, 0.2);
+      0 0 20px rgba(255, 60, 50, 0.75),
+      0 0 38px rgba(255, 20, 16, 0.35);
+  }
+}
+@keyframes gx-coin-breathe-glow {
+  from {
+    opacity: 0.22;
+  }
+  to {
+    opacity: 0.78;
   }
 }
 
@@ -723,25 +803,47 @@ footer a:hover {
   .gx-coin:not(.gx-coin-armed):hover .gx-coin-panel {
     animation: none;
     box-shadow:
+      inset 0 0 0 1px rgba(255, 170, 140, 0.6),
+      inset 0 0 13px rgba(255, 60, 40, 0.75),
       inset 0 1px 0 rgba(255, 255, 255, 0.14),
       inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 16px rgba(255, 40, 34, 0.6),
-      0 0 28px rgba(255, 20, 16, 0.24);
+      0 0 22px rgba(255, 60, 50, 0.8),
+      0 0 40px rgba(255, 20, 16, 0.36);
   }
-  .gx-coin:not(.gx-coin-armed):hover .gx-coin-label-line {
-    text-shadow: 0 0 5px rgba(232, 181, 69, 0.8);
+  .gx-coin:not(.gx-coin-armed):hover .gx-coin-panel::after {
+    animation: none;
+    opacity: 0.85;
+  }
+  .gx-coin:not(.gx-coin-armed):hover .gx-coin-label-line,
+  .gx-coin:not(.gx-coin-armed):hover .gx-coin-price {
+    text-shadow:
+      0 0 2px rgba(255, 255, 255, 1),
+      0 0 6px rgba(255, 160, 100, 1),
+      0 0 13px rgba(255, 70, 35, 0.85),
+      0 0 24px rgba(255, 20, 10, 0.5);
   }
 }
 .gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-panel {
   animation: none;
   box-shadow:
+    inset 0 0 0 1px rgba(255, 170, 140, 0.6),
+    inset 0 0 13px rgba(255, 60, 40, 0.75),
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-    0 0 16px rgba(255, 40, 34, 0.6),
-    0 0 28px rgba(255, 20, 16, 0.24);
+    0 0 22px rgba(255, 60, 50, 0.8),
+    0 0 40px rgba(255, 20, 16, 0.36);
 }
-.gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-label-line {
-  text-shadow: 0 0 5px rgba(232, 181, 69, 0.8);
+.gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-panel::after {
+  animation: none;
+  opacity: 0.85;
+}
+.gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-label-line,
+.gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-price {
+  text-shadow:
+    0 0 2px rgba(255, 255, 255, 1),
+    0 0 6px rgba(255, 160, 100, 1),
+    0 0 13px rgba(255, 70, 35, 0.85),
+    0 0 24px rgba(255, 20, 10, 0.5);
 }
 
 /* Press — depress + bevel inversion. Real hardware feedback on the actual
@@ -782,26 +884,32 @@ footer a:hover {
 @keyframes gx-coin-panel-flash {
   0% {
     box-shadow:
+      inset 0 0 0 1px rgba(255, 160, 130, 0.55),
+      inset 0 0 12px rgba(255, 60, 40, 0.7),
       inset 0 1px 0 rgba(255, 255, 255, 0.1),
       inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 13px rgba(255, 40, 34, 0.5),
-      0 0 24px rgba(255, 20, 16, 0.2);
+      0 0 20px rgba(255, 60, 50, 0.75),
+      0 0 38px rgba(255, 20, 16, 0.35);
     animation-timing-function: linear;
   }
   25.7% {
     box-shadow:
+      inset 0 0 0 1px rgba(255, 190, 170, 0.8),
+      inset 0 0 16px rgba(255, 90, 70, 0.9),
       inset 0 1px 0 rgba(255, 255, 255, 0.18),
       inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 22px rgba(255, 90, 80, 0.85),
-      0 0 40px rgba(255, 30, 20, 0.4);
+      0 0 30px rgba(255, 100, 90, 0.9),
+      0 0 52px rgba(255, 30, 20, 0.5);
     animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
   }
   100% {
     box-shadow:
+      inset 0 0 0 1px rgba(255, 160, 130, 0.55),
+      inset 0 0 12px rgba(255, 60, 40, 0.7),
       inset 0 1px 0 rgba(255, 255, 255, 0.1),
       inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 13px rgba(255, 40, 34, 0.5),
-      0 0 24px rgba(255, 20, 16, 0.2);
+      0 0 20px rgba(255, 60, 50, 0.75),
+      0 0 38px rgba(255, 20, 16, 0.35);
   }
 }
 
@@ -813,13 +921,16 @@ footer a:hover {
 .gx-coin-armed .gx-coin-panel {
   animation: none;
   box-shadow:
+    inset 0 0 0 1px rgba(255, 160, 130, 0.55),
+    inset 0 0 12px rgba(255, 60, 40, 0.65),
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-    0 0 15px rgba(255, 40, 34, 0.55),
-    0 0 26px rgba(255, 20, 16, 0.22);
+    0 0 17px rgba(255, 50, 40, 0.6),
+    0 0 30px rgba(255, 20, 16, 0.26);
 }
-.gx-coin-armed .gx-coin-rule {
-  opacity: 1;
+.gx-coin-armed .gx-coin-panel::after {
+  animation: none;
+  opacity: 0.7;
 }
 .gx-coin-armed .gx-coin-credit b {
   color: #ffe9a8;
@@ -1294,28 +1405,31 @@ footer a:hover {
   .gx-coin {
     top: 10px;
     right: 10px;
-    width: 82px;
-    height: 64px;
+    width: 92px;
+    height: 76px;
   }
   .gx-coin-bezel {
     padding: 5px;
   }
   .gx-coin-slot {
-    width: 20px;
-    margin: 6px 0;
+    width: 16px;
+    margin: 5px 0;
   }
   .gx-coin-piece {
-    left: 6px;
+    left: 4px;
     width: 7px;
     height: 7px;
   }
-  .gx-coin-label-line {
-    font-size: 9px;
+  .gx-coin-info {
+    gap: 2px;
   }
-  .gx-coin-rule {
-    width: 26px;
+  .gx-coin-price {
+    font-size: 15px;
+  }
+  .gx-coin-label-line {
+    font-size: 7.5px;
   }
   .gx-coin-credit {
-    font-size: 6.5px;
+    font-size: 6px;
   }
 }

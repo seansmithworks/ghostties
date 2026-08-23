@@ -167,10 +167,10 @@
           <svg class="gx-coin-piece" viewBox="0 0 6 6"><path d="M1 0h4v1h1v4H5v1H1V5H0V1h1z"/></svg>
         </span>
         <span class="gx-coin-info">
+          <span class="gx-coin-price">25&#162;</span>
           <span class="gx-coin-label">
-            <span class="gx-coin-label-line" data-line="1">INSERT</span>
-            <span class="gx-coin-rule"></span>
-            <span class="gx-coin-label-line" data-line="2">COIN</span>
+            <span class="gx-coin-label-line" data-line="1">INSERT COIN</span>
+            <span class="gx-coin-label-line" data-line="2">TO PLAY</span>
           </span>
           <span class="gx-coin-credit">CR <b>0</b></span>
         </span>
@@ -232,8 +232,8 @@
           btn.setAttribute('aria-label', 'Return coin and exit the ghost field');
           btn.setAttribute('title', 'Return coin (Esc)');
         } else {
-          labelLines[0].textContent = 'INSERT';
-          labelLines[1].textContent = 'COIN';
+          labelLines[0].textContent = 'INSERT COIN';
+          labelLines[1].textContent = 'TO PLAY';
           digit.textContent = '0';
           btn.setAttribute('aria-label', 'Insert coin');
           btn.setAttribute('title', 'Insert coin (C)');
