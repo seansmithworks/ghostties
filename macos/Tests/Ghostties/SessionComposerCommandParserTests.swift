@@ -474,4 +474,98 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(result.remainderTokens, ["main", "cco"])
         XCTAssertEqual(result.remainderText, "main cco")
     }
+
+    // MARK: - resolvedFieldSplit (should-fix 10 / blocker 1, Slice B review round 2)
+    //
+    // Hoisted out of `SessionComposerPalette` specifically so blocker 1 —
+    // a regression in this exact function shipped by the round-1 fix —
+    // has real coverage going forward.
+
+    /// The ordinary case: project resolved, no branch typed. Only the
+    /// project segment is consumed into `prefix`.
+    func testResolvedFieldSplitConsumesOnlyProjectWhenNoBranchTyped() {
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: "ghostties cco -n test",
+            hasResolvedProject: true,
+            branchToken: nil
+        )
+        XCTAssertEqual(split?.prefix, "ghostties ")
+        XCTAssertEqual(split?.remainder, "cco -n test")
+    }
+
+    /// A resolved branch WITH a genuine remainder after it: both segments
+    /// are consumed into `prefix`, and the field shows only the remainder —
+    /// the original finding-15 fix this function preserves.
+    func testResolvedFieldSplitConsumesBothSegmentsWhenBranchHasARemainder() {
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: "ghostties > main > cco",
+            hasResolvedProject: true,
+            branchToken: "main"
+        )
+        XCTAssertEqual(split?.prefix, "ghostties > main > ")
+        XCTAssertEqual(split?.remainder, "cco")
+    }
+
+    /// Blocker 1's exact repro, at the moment the trap used to spring:
+    /// the branch segment's own remainder has just been backspaced to
+    /// nothing (`"ghostties > mian "` — typo intentional, matches the task
+    /// repro). The branch token must NOT be folded into `prefix` here — it
+    /// must still be part of the visible, editable `remainder`, or it
+    /// becomes unreachable (no macOS-13-safe route back into a hidden
+    /// prefix).
+    func testResolvedFieldSplitKeepsBranchTokenLiveWhenItsOwnRemainderIsEmpty() {
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: "ghostties > mian ",
+            hasResolvedProject: true,
+            branchToken: "mian"
+        )
+        XCTAssertEqual(split?.prefix, "ghostties > ")
+        XCTAssertEqual(split?.remainder, "mian ", "the typed branch token must stay in the EDITABLE remainder, not vanish into the hidden prefix")
+    }
+
+    /// Same case with no trailing separator at all — the branch token was
+    /// just typed and nothing follows it yet.
+    func testResolvedFieldSplitKeepsBranchTokenLiveWithNoTrailingSeparator() {
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: "ghostties > main",
+            hasResolvedProject: true,
+            branchToken: "main"
+        )
+        XCTAssertEqual(split?.prefix, "ghostties > ")
+        XCTAssertEqual(split?.remainder, "main")
+    }
+
+    /// Continuing to backspace the now-live branch token must keep working
+    /// via ordinary field editing — each character removed reproduces the
+    /// same "keep it live" split, all the way down to empty.
+    func testResolvedFieldSplitKeepsWorkingAsTheBranchTokenIsBackspacedToNothing() {
+        for partial in ["mia", "mi", "m", ""] {
+            let searchText = "ghostties > \(partial)"
+            let split = SessionComposerCommandParser.resolvedFieldSplit(
+                searchText: searchText,
+                hasResolvedProject: true,
+                branchToken: partial.isEmpty ? nil : partial
+            )
+            if partial.isEmpty {
+                // No branch token left at all once the last character is
+                // gone — only the project segment is consumed.
+                XCTAssertEqual(split?.prefix, "ghostties > ")
+                XCTAssertEqual(split?.remainder, "")
+            } else {
+                XCTAssertEqual(split?.prefix, "ghostties > ", "partial = \(partial)")
+                XCTAssertEqual(split?.remainder, partial, "partial = \(partial)")
+            }
+        }
+    }
+
+    /// No resolved project at all — the whole string is the remainder,
+    /// nothing is consumed.
+    func testResolvedFieldSplitReturnsNilWithNoResolvedProject() {
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: "ghostties cco",
+            hasResolvedProject: false,
+            branchToken: nil
+        )
+        XCTAssertNil(split)
+    }
 }

@@ -292,6 +292,124 @@ struct GitWorktreeCreationTests {
         #expect(elapsed < 2.0)
     }
 
+    // MARK: - canonicalPath / mainWorktreePath / isInsideWorkTree (should-fix 10)
+    //
+    // Neither had any coverage before this pass — both are called from
+    // `SessionComposerStore.refreshWorktrees`'s detached task and
+    // `createWorktree`'s, but nothing in this file (which otherwise covers
+    // every OTHER `GitWorktreeEnumerator` entry point against a real repo)
+    // exercised them.
+
+    @Test func canonicalPathResolvesASymlinkedDirectoryToItsRealPath() {
+        let repo = Self.makeThrowawayRepo()
+        defer { Self.cleanup(repo) }
+
+        let symlinkPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-b4-symlink-\(UUID().uuidString)")
+        try? FileManager.default.createSymbolicLink(atPath: symlinkPath, withDestinationPath: repo)
+        defer { try? FileManager.default.removeItem(atPath: symlinkPath) }
+
+        #expect(GitWorktreeEnumerator.canonicalPath(symlinkPath) == repo)
+    }
+
+    @Test func canonicalPathReturnsInputUnchangedForANonexistentPath() {
+        let missing = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-does-not-exist-\(UUID().uuidString)")
+        #expect(GitWorktreeEnumerator.canonicalPath(missing) == missing)
+    }
+
+    @Test func mainWorktreePathResolvesToTheRepoRootFromTheMainCheckoutItself() {
+        let repo = Self.makeThrowawayRepo()
+        defer { Self.cleanup(repo) }
+
+        #expect(GitWorktreeEnumerator.mainWorktreePath(repoPath: repo) == repo)
+    }
+
+    /// Should-fix 13's core claim: resolving the main worktree from a
+    /// LINKED worktree (not the main checkout) must still return the MAIN
+    /// worktree's path, not the linked one — this is the entire reason
+    /// `createWorktree` calls this instead of assuming `list(repoPath:)`'s
+    /// first element (blocker 17).
+    @Test func mainWorktreePathResolvesToTheRepoRootFromALinkedWorktreeToo() {
+        let repo = Self.makeThrowawayRepo()
+        defer { Self.cleanup(repo) }
+
+        let branchTask = Process()
+        branchTask.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        branchTask.arguments = ["git", "-C", repo, "branch", "linked-branch"]
+        branchTask.standardOutput = FileHandle.nullDevice
+        branchTask.standardError = FileHandle.nullDevice
+        try? branchTask.run()
+        branchTask.waitUntilExit()
+
+        let linkedDir = (repo as NSString).appendingPathComponent(".claude/worktrees/linked-branch")
+        let addResult = GitWorktreeEnumerator.add(branch: "linked-branch", directory: linkedDir, repoPath: repo)
+        guard case .success = addResult else {
+            Issue.record("setup failed: could not create the linked worktree")
+            return
+        }
+
+        // Resolved FROM the linked worktree's own path — must still report
+        // the MAIN repo root, not `linkedDir` itself.
+        #expect(GitWorktreeEnumerator.mainWorktreePath(repoPath: linkedDir) == repo)
+    }
+
+    @Test func mainWorktreePathReturnsNilForANonRepoPath() {
+        let result = GitWorktreeEnumerator.mainWorktreePath(repoPath: "/tmp/definitely-not-a-git-repo-\(UUID().uuidString)")
+        #expect(result == nil)
+    }
+
+    @Test func isInsideWorkTreeIsTrueForAnOrdinaryRepo() {
+        let repo = Self.makeThrowawayRepo()
+        defer { Self.cleanup(repo) }
+
+        #expect(GitWorktreeEnumerator.isInsideWorkTree(repoPath: repo) == true)
+    }
+
+    /// The should-fix 7 case this function exists to fix: `list(repoPath:)`
+    /// (via `parsePorcelain`) drops the `detached` stanza entirely, so a
+    /// repo whose only worktree is at DETACHED HEAD reports an EMPTY
+    /// `list(repoPath:)` result — a perfectly real repo that the old
+    /// `!rawList.isEmpty` derivation would have misread as "not a repo".
+    /// `isInsideWorkTree` must say `true` regardless.
+    @Test func isInsideWorkTreeIsTrueEvenAtDetachedHead() {
+        let repo = Self.makeThrowawayRepo()
+        defer { Self.cleanup(repo) }
+
+        // Detaches HEAD WITHOUT `git checkout` (hard constraint: never run
+        // `git checkout`, ever) — `rev-parse HEAD` reads the current
+        // commit's sha, then `update-ref --no-deref HEAD <sha>` rewrites
+        // `HEAD` as a direct sha reference instead of a symbolic ref to a
+        // branch, which is exactly what a detached HEAD state IS.
+        let shaTask = Process()
+        shaTask.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        shaTask.arguments = ["git", "-C", repo, "rev-parse", "HEAD"]
+        let shaPipe = Pipe()
+        shaTask.standardOutput = shaPipe
+        shaTask.standardError = FileHandle.nullDevice
+        try? shaTask.run()
+        let shaData = shaPipe.fileHandleForReading.readDataToEndOfFile()
+        shaTask.waitUntilExit()
+        let sha = String(data: shaData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        let detachTask = Process()
+        detachTask.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        detachTask.arguments = ["git", "-C", repo, "update-ref", "--no-deref", "HEAD", sha]
+        detachTask.standardOutput = FileHandle.nullDevice
+        detachTask.standardError = FileHandle.nullDevice
+        try? detachTask.run()
+        detachTask.waitUntilExit()
+
+        // Confirms the premise: `list(repoPath:)` really does report empty
+        // at detached HEAD in a single-worktree repo — this is the bug,
+        // not an assumption.
+        #expect(GitWorktreeEnumerator.list(repoPath: repo).isEmpty)
+        #expect(GitWorktreeEnumerator.isInsideWorkTree(repoPath: repo) == true)
+    }
+
+    @Test func isInsideWorkTreeIsFalseForANonRepoPath() {
+        let result = GitWorktreeEnumerator.isInsideWorkTree(repoPath: "/tmp/definitely-not-a-git-repo-\(UUID().uuidString)")
+        #expect(result == false)
+    }
+
     @Test func raceReturnsCompletedWhenTheUnderlyingTaskFinishesBeforeTheDeadline() async {
         let fastTask: Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never> = Task {
             .success("/fast/path")

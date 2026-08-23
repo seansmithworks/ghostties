@@ -180,4 +180,126 @@ struct SessionComposerBranchLaunchTests {
         }
         #expect(error.message.contains("nonexistent-branch"))
     }
+
+    // MARK: - .pending (blocker 2, Slice B review round 2)
+
+    /// The exact bug blocker 2 closes: a typed branch must not resolve
+    /// against a cache that describes a DIFFERENT project — even if the
+    /// token happens to match one of that OTHER project's worktree
+    /// branches. Without the project-id guard this would incorrectly
+    /// return `.resolved`, and the caller would launch into the wrong
+    /// project's worktree with no error.
+    @Test func typedBranchAgainstAMismatchedCacheIsPendingNotResolved() {
+        let projectA = UUID()
+        let projectB = UUID()
+        let worktrees = [makeWorktree(path: "/tmp/A-worktrees/feat-x", branch: "feat-x")]
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: "feat-x",
+            worktrees: worktrees,
+            currentBranchAtProjectRoot: nil,
+            cachedProjectId: projectA,
+            resolvingForProjectId: projectB
+        )
+        #expect(resolution == .pending)
+
+        let result = SessionComposerCommandParser.resolveCommitWorktreePathForCommit(
+            typedBranch: resolution,
+            selectedWorktreePath: "/tmp/A-worktrees/feat-x"
+        )
+        guard case .failure(let error) = result else {
+            Issue.record("expected failure — must not inherit project A's worktree while resolving for project B")
+            return
+        }
+        #expect(!error.message.contains("No worktree found"), "must read as 'not checked yet', not 'genuinely no such branch' (should-fix 4)")
+    }
+
+    /// The initial-refresh-window sub-case of should-fix 4: before
+    /// `worktreesProjectId` has been populated at all (`nil`), a typed
+    /// branch against the CURRENTLY OPEN project (also effectively "no
+    /// cached project yet") must still read as pending, not resolved —
+    /// there is nothing to distinguish "not fetched yet" from "fetched and
+    /// empty" other than the id itself, and `nil != someProjectId`.
+    @Test func typedBranchBeforeAnyRefreshHasLandedIsPending() {
+        let currentProject = UUID()
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: "main",
+            worktrees: [],
+            currentBranchAtProjectRoot: nil,
+            cachedProjectId: nil,
+            resolvingForProjectId: currentProject
+        )
+        #expect(resolution == .pending)
+    }
+
+    /// A matching cache (the ordinary case) must still resolve normally —
+    /// the project-id guard must not turn EVERY typed branch into
+    /// `.pending`, only a genuine mismatch or an unpopulated cache.
+    @Test func typedBranchAgainstAMatchingCacheStillResolvesNormally() {
+        let projectId = UUID()
+        let worktrees = [makeWorktree(path: "/tmp/feat-x", branch: "feat/x")]
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: "feat/x",
+            worktrees: worktrees,
+            currentBranchAtProjectRoot: "main",
+            cachedProjectId: projectId,
+            resolvingForProjectId: projectId
+        )
+        #expect(resolution == .resolved(path: "/tmp/feat-x"))
+    }
+
+    /// Every EXISTING call site (before blocker 2) never passed either
+    /// project-id argument at all — both default to `nil`, and `nil ==
+    /// nil` is `true`, so omitting them must behave exactly as before this
+    /// fix. This is what keeps the five pre-existing tests above this mark
+    /// green unmodified.
+    @Test func typedBranchResolutionDefaultsPreserveThePreExistingUnscopedBehavior() {
+        let worktrees = [makeWorktree(path: "/tmp/feat-x", branch: "feat/x")]
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: "feat/x",
+            worktrees: worktrees,
+            currentBranchAtProjectRoot: "main"
+        )
+        #expect(resolution == .resolved(path: "/tmp/feat-x"))
+    }
+
+    // MARK: - Finding 9: proving `precommit` actually CALLS `resolveLaunchTemplate`
+
+    /// THE mutant-catching test finding 9 asks for: `resolveLaunchTemplate`
+    /// itself was already proven correct above, but nothing proved
+    /// `precommit` actually CALLS it — replacing
+    /// `SessionComposerStore.swift`'s `resolveLaunchTemplate` switch inside
+    /// `precommit` with `launchTemplate = template` left the suite green.
+    /// Routes through `dispatchOverrideForTesting` (finding 9 fix) rather
+    /// than `coordinator.createQuickSession`, which mutates
+    /// `WorkspaceStore.shared` unconditionally even from the `#if DEBUG`
+    /// testing-stub coordinator — see that property's doc comment.
+    @MainActor
+    @Test func precommitAppliesTheWorktreeOverrideBeforeDispatching() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let project = Project(name: "test-project", rootPath: NSTemporaryDirectory())
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let coordinator = SessionCoordinator()
+
+        store.open(projectBinding: .locked(project), workspaceStore: workspaceStore)
+        // `NSTemporaryDirectory()` genuinely exists on disk — satisfies
+        // `resolveLaunchTemplate`'s `fileExists` check without a throwaway
+        // git repo (this test only needs a real PATH, not a real worktree).
+        store.selectedWorktreePath = NSTemporaryDirectory()
+
+        var capturedProject: Project?
+        var capturedTemplate: AgentTemplate?
+        store.dispatchOverrideForTesting = { project, template in
+            capturedProject = project
+            capturedTemplate = template
+        }
+
+        let success = store.precommit(template: makeTemplate(), coordinator: coordinator, workspaceStore: workspaceStore)
+
+        #expect(success)
+        #expect(capturedProject?.id == project.id)
+        #expect(capturedTemplate?.workingDirectory == NSTemporaryDirectory())
+    }
 }

@@ -61,6 +61,14 @@ struct SessionComposerPalette: View {
     /// has no Return/Down keyboard handlers of its own; it is mouse- (and
     /// VoiceOver-activation-) only until a real keyboard route exists.
     @FocusState private var isChipFocused: Bool
+    /// Blocker 2 fix (Slice B review round 2): debounced re-refresh when a
+    /// typed command resolves a DIFFERENT project than whatever the
+    /// composer's worktree cache currently describes — see
+    /// `SessionComposerStore.worktreesProjectId`'s doc comment. Cancelled
+    /// and replaced on every `commandProject` change so a fast typist who
+    /// flips through several project names before settling only ever fires
+    /// the LAST one, never one refresh per keystroke.
+    @State private var commandProjectRefreshTask: Task<Void, Never>?
     @State private var isAddingTemplate = false
     @State private var newTemplateName = ""
     @State private var newTemplateToEdit: AgentTemplate?
@@ -269,7 +277,13 @@ struct SessionComposerPalette: View {
     /// only `commit(template:)` may, and it never reads this property.
     private var typedWorktreePath: String? {
         switch typedBranchResolution {
-        case .notTyped, .unresolved: return nil
+        // Blocker 2 fix (Slice B review round 2): `.pending` (the cache
+        // doesn't describe the project being resolved for yet) collapses
+        // to "no override" here for the same reason `.unresolved` already
+        // does — this property never launches a session; only
+        // `commit(template:)`'s STRICT resolver below does, and it reads
+        // `typedBranchResolution` directly rather than through here.
+        case .notTyped, .unresolved, .pending: return nil
         case .resolved(let path): return path
         case .isDefaultBranch: return nil
         }
@@ -283,7 +297,14 @@ struct SessionComposerPalette: View {
         SessionComposerCommandParser.resolveTypedBranch(
             branchToken: commandParse.branchToken,
             worktrees: composerStore.worktrees,
-            currentBranchAtProjectRoot: composerStore.currentBranchAtProjectRoot
+            currentBranchAtProjectRoot: composerStore.currentBranchAtProjectRoot,
+            // Blocker 2 fix (Slice B review round 2): only trust
+            // `composerStore.worktrees` when it actually describes the
+            // project the branch was typed against — see
+            // `worktreesProjectId`'s doc comment and
+            // `TypedBranchResolution.pending`'s.
+            cachedProjectId: composerStore.worktreesProjectId,
+            resolvingForProjectId: commandProject?.id
         )
     }
 
@@ -353,16 +374,16 @@ struct SessionComposerPalette: View {
     /// remainder always matches exactly what the chips consumed, whether
     /// that's one segment or two.
     private func resolvedFieldSplit() -> (prefix: String, remainder: String)? {
-        guard commandProject != nil,
-              let projectSplit = SessionComposerCommandParser.splitOnFirstToken(composerStore.searchText, separatorsIncludeChevron: true)
-        else { return nil }
-
-        guard commandParse.branchToken != nil,
-              let branchSplit = SessionComposerCommandParser.splitOnFirstToken(projectSplit.remainder, separatorsIncludeChevron: true)
-        else {
-            return projectSplit
-        }
-        return (prefix: projectSplit.prefix + branchSplit.prefix, remainder: branchSplit.remainder)
+        // Hoisted to `SessionComposerCommandParser.resolvedFieldSplit`
+        // (should-fix 10, Slice B review round 2) so the logic is
+        // unit-testable — see that function's doc comment for the blocker 1
+        // fix this now carries (folding the branch segment into `prefix`
+        // only when a genuine remainder survives it).
+        SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: composerStore.searchText,
+            hasResolvedProject: commandProject != nil,
+            branchToken: commandParse.branchToken
+        )
     }
 
     /// The text template/recent options are ranked against. A resolved
@@ -610,6 +631,10 @@ struct SessionComposerPalette: View {
                     // above it was reset — leaving the branch picker
                     // latched open across a dismiss/re-present cycle.
                     isBranchChipPickerOpen = false
+                    // Blocker 2 fix (Slice B review round 2): a pending
+                    // debounced refresh for whatever project was typed must
+                    // not land after the composer has already closed.
+                    commandProjectRefreshTask?.cancel()
                 }
             }
             .onDisappear {
@@ -620,6 +645,7 @@ struct SessionComposerPalette: View {
                 // `onChange(of: isPresented)` ever firing, which otherwise
                 // latches `SessionComposerStore.isOpen` true forever (B3).
                 composerStore.cancel()
+                commandProjectRefreshTask?.cancel()
             }
             .onChange(of: query) { _ in reselectBestMatch() }
             .onChange(of: composerStore.selectedProjectId) { _ in
@@ -645,6 +671,26 @@ struct SessionComposerPalette: View {
                 // wrong row. Same fix as N5, triggered off the thing that
                 // actually changes the list at that moment.
                 clampSelectedIndex()
+
+                // Blocker 2 fix (Slice B review round 2): the worktree cache
+                // only ever refreshed on project-DROPDOWN changes, initial
+                // open, and the branch picker opening — never when a TYPED
+                // `<project> > <branch>` command resolved a DIFFERENT
+                // project than whatever the composer opened on, so a typed
+                // branch could match a STALE cache entry under the wrong
+                // project (see `SessionComposerStore.worktreesProjectId`'s
+                // doc comment for the exact bug). Debounced 300ms, not fired
+                // per keystroke — `commandProject` only flips when the
+                // project TOKEN match itself changes, but a fast typist can
+                // still flip it more than once before settling.
+                commandProjectRefreshTask?.cancel()
+                if let project = commandProject {
+                    commandProjectRefreshTask = Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard !Task.isCancelled else { return }
+                        await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id)
+                    }
+                }
             }
             .onChange(of: composerStore.focusSearchFieldTrigger) { triggered in
                 // R8 (Phase 3 review round 2): mirrors the S5 seed in
@@ -918,6 +964,15 @@ struct SessionComposerPalette: View {
         // below that routes through the same `closeChipPickerOrDismiss`)
         // closes the picker without closing the composer.
         .onExitCommand(perform: closeChipPickerOrDismiss)
+        // Nit fix (Slice B review round 2): `isBranchChipPickerOpen` was
+        // never reset when `isBranchChipEligible` flipped false (e.g. the
+        // project chip changes to a non-git project while the branch
+        // picker happened to be open) — the flag latched `true`, so the
+        // picker silently re-expanded the next time eligibility returned
+        // with no click in between.
+        .onChange(of: isBranchChipEligible) { eligible in
+            if !eligible { isBranchChipPickerOpen = false }
+        }
     }
 
     /// The chip itself. `.locked` renders a static label with no picker
@@ -1071,7 +1126,7 @@ struct SessionComposerPalette: View {
         // the moment accuracy matters most.
         .onChange(of: isBranchChipPickerOpen) { isOpen in
             guard isOpen, let project = currentProject else { return }
-            Task { await composerStore.refreshWorktrees(for: project.rootPath) }
+            Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
         }
     }
 
@@ -2162,6 +2217,14 @@ private struct WorktreeDropdownView: View {
     /// picker never accounted for is itself, against its own child field.
     @FocusState private var isNewBranchFieldFocused: Bool
 
+    /// Should-fix 12 fix (Slice B review round 2): drives a shake on the
+    /// "New branch name…" field when Return fires against a name that isn't
+    /// novel (empty, or matches an existing row) — that used to be a
+    /// silent no-op with no feedback at all, since this picker's own
+    /// `keyboardCaptureLayer` is unmounted while this field has focus
+    /// (blocker 5) and the field's own `.onSubmit` guard just returned.
+    @State private var newBranchFieldShakeTrigger: CGFloat = 0
+
     private var rowCount: Int { 1 + worktrees.count }
 
     private var trimmedNewBranchName: String {
@@ -2326,12 +2389,31 @@ private struct WorktreeDropdownView: View {
                 .textFieldStyle(.plain)
                 .focused($isNewBranchFieldFocused)
                 .onSubmit {
-                    guard newBranchNameIsNovel else { return }
+                    // Should-fix 12 fix (Slice B review round 2): Return
+                    // against a name that isn't novel (empty, or already
+                    // offered above) used to be a silent no-op — nothing
+                    // else is listening either, since `keyboardCaptureLayer`
+                    // below unmounts its own Return/↑/↓ handlers while this
+                    // field has focus (blocker 5). Shake for feedback on a
+                    // genuine (non-empty) attempt that didn't create
+                    // anything, and drop focus so Return/↑/↓ go back to
+                    // navigating the rows above instead of doing nothing a
+                    // second time.
+                    guard newBranchNameIsNovel else {
+                        if !trimmedNewBranchName.isEmpty {
+                            withAnimation(.linear(duration: 0.25)) {
+                                newBranchFieldShakeTrigger += 1
+                            }
+                        }
+                        isNewBranchFieldFocused = false
+                        return
+                    }
                     onCreateWorktree(trimmedNewBranchName)
                 }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
+        .modifier(ShakeEffect(animatableData: newBranchFieldShakeTrigger))
     }
 
     /// Only rendered once the typed name is genuinely novel

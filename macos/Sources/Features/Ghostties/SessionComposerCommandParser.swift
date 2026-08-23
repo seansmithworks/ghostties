@@ -370,6 +370,55 @@ enum SessionComposerCommandParser {
         commandProjectId ?? selectedProjectId
     }
 
+    /// Computes the verbatim `(prefix, remainder)` split consumed by however
+    /// much of the command grammar has resolved right now — project only,
+    /// or project + branch. Chevron-aware, chained exactly the way
+    /// `parse(query:)` itself splits in two steps. Hoisted out of
+    /// `SessionComposerPalette` (should-fix 10, Slice B review round 2) so
+    /// it is unit-testable — it used to be `private` to a SwiftUI `View`,
+    /// this repo has no view-test harness, and blocker 1 (a regression in
+    /// this exact function) shipped with zero coverage as a direct result.
+    ///
+    /// Blocker 1 fix (round 2): the branch segment is folded into `prefix`
+    /// ONLY when doing so still leaves genuine remainder text behind it
+    /// (`!branchSplit.remainder.isEmpty`) — otherwise the branch token
+    /// itself disappears into the hidden prefix the moment its own
+    /// remainder empties out (e.g. backspacing a typed remainder down to
+    /// nothing), with no macOS-13-safe route back into it:
+    /// `SessionComposerPalette`'s backspace-at-start gesture is
+    /// `Backport.onKeyPress`-only, a documented no-op below macOS 14 — on
+    /// that OS the field would go permanently empty with no way to reach
+    /// the swallowed text again short of Esc, which cancels the whole
+    /// composer. Falling back to `projectSplit` here means the branch token
+    /// stays live, ordinary, editable TEXT via the field's normal
+    /// `NSTextField` editing on EVERY macOS version — no keyboard route
+    /// required at all.
+    ///
+    /// Trade-off, stated plainly: a freshly-typed branch with nothing after
+    /// it yet (`ghostties > main`, nothing typed past "main") now shows
+    /// "main" in both the chip and the field for that one transient state,
+    /// rather than only the chip (the finding-15 fix's original goal).
+    /// Accepted because the alternative is an unrecoverable trap, not
+    /// merely a cosmetic wart — and it only occurs in the narrow window
+    /// where the branch segment has no remainder after it yet.
+    static func resolvedFieldSplit(
+        searchText: String,
+        hasResolvedProject: Bool,
+        branchToken: String?
+    ) -> (prefix: String, remainder: String)? {
+        guard hasResolvedProject,
+              let projectSplit = splitOnFirstToken(searchText, separatorsIncludeChevron: true)
+        else { return nil }
+
+        guard branchToken != nil,
+              let branchSplit = splitOnFirstToken(projectSplit.remainder, separatorsIncludeChevron: true),
+              !branchSplit.remainder.isEmpty
+        else {
+            return projectSplit
+        }
+        return (prefix: projectSplit.prefix + branchSplit.prefix, remainder: branchSplit.remainder)
+    }
+
     /// Resolves which worktree path a commit should launch into: mirrors
     /// `resolveCommitProjectId`'s precedence idiom exactly — a resolved
     /// TYPED branch (`> main > cco`) wins over whatever the branch chip's
@@ -419,18 +468,46 @@ enum SessionComposerCommandParser {
         /// "session launches under project B's worktree with no error"
         /// class of bug this type exists to close.
         case unresolved(token: String)
+        /// The worktree cache backing this resolution doesn't (yet) describe
+        /// the project being resolved for — blocker 2 fix (Slice B review
+        /// round 2). Either the initial `refreshWorktrees` hasn't landed yet
+        /// (a fast typist can reach `commit(template:)` inside that ~2s
+        /// window), or a typed `<project>` segment resolved a DIFFERENT
+        /// project than whatever the composer's cache currently holds — the
+        /// bug this closes: composer opens on project A (cache holds A's
+        /// worktrees), typing `<project B> > <A's branch name> <remainder>`
+        /// matched A's stale cache under B's name and launched a session in
+        /// B with cwd silently pointed at one of A's worktrees. Distinct
+        /// from `.unresolved` (should-fix 4): a typed branch that genuinely
+        /// doesn't exist must fail with "no worktree found"; a typed branch
+        /// this store simply hasn't checked FOR THIS PROJECT yet must fail
+        /// with a message that says so, not a confident-sounding wrong
+        /// answer.
+        case pending
     }
 
     /// Resolves a typed branch token (if any) against the cached worktree
     /// list and the project's own root branch. Pure — no disk access; the
     /// caller passes in the already-fetched `worktrees`/
     /// `currentBranchAtProjectRoot` from `SessionComposerStore`.
+    ///
+    /// `cachedProjectId`/`resolvingForProjectId` (blocker 2 fix, Slice B
+    /// review round 2): default to `nil` so every pre-existing call/test
+    /// site (which never scoped this at all) stays byte-identical — `nil ==
+    /// nil` is `true`, so passing neither argument behaves exactly as
+    /// before. A caller that DOES pass both must have them agree, or this
+    /// returns `.pending` rather than trusting `worktrees`/
+    /// `currentBranchAtProjectRoot` against a project they were never
+    /// fetched for.
     static func resolveTypedBranch(
         branchToken: String?,
         worktrees: [GitWorktreeEnumerator.Worktree],
-        currentBranchAtProjectRoot: String?
+        currentBranchAtProjectRoot: String?,
+        cachedProjectId: UUID? = nil,
+        resolvingForProjectId: UUID? = nil
     ) -> TypedBranchResolution {
         guard let token = branchToken else { return .notTyped }
+        guard cachedProjectId == resolvingForProjectId else { return .pending }
         if let path = worktrees.first(where: { $0.branch == token })?.path {
             return .resolved(path: path)
         }
@@ -460,6 +537,8 @@ enum SessionComposerCommandParser {
             return .success(nil)
         case .unresolved(let token):
             return .failure(SessionComposerCommitError(message: "No worktree found for branch \"\(token)\". Pick one from the branch picker or clear the typed branch."))
+        case .pending:
+            return .failure(SessionComposerCommitError(message: "Still checking branches for this project — try again in a moment."))
         }
     }
 }

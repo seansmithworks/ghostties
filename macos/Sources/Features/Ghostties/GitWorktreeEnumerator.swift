@@ -108,7 +108,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// Git resolves worktree enumeration from ANY worktree of a repo to the
     /// full set, so `repoPath` does not need to be the repo's primary
     /// checkout — a linked worktree works identically.
-    static func list(repoPath: String) -> [Worktree] {
+    static func list(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> [Worktree] {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let task = Process()
@@ -119,6 +119,15 @@ nonisolated enum GitWorktreeEnumerator {
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
+            // Should-fix 5 fix (Slice B review round 2): hands the running
+            // process back to the caller (`SessionComposerStore.refreshWorktrees`'s
+            // shared `ProcessHandle`) BEFORE waiting on it — same pattern
+            // `add(branch:directory:repoPath:onProcessStarted:)` already
+            // uses — so a timeout on the main actor can actually terminate
+            // a hung `git worktree list` instead of abandoning it. Default
+            // `nil` keeps every existing caller (including every test in
+            // `GitWorktreeEnumeratorTests`) byte-identical.
+            onProcessStarted?(task)
         } catch {
             return []
         }
@@ -134,6 +143,38 @@ nonisolated enum GitWorktreeEnumerator {
         guard task.terminationStatus == 0 else { return [] }
         guard let output = String(data: data, encoding: .utf8) else { return [] }
         return parsePorcelain(output)
+    }
+
+    /// Whether `repoPath` is inside a git repository AT ALL —
+    /// `git rev-parse --is-inside-work-tree`'s exit status, deliberately
+    /// NOT its stdout ("true"/"false"). Should-fix 7 fix (Slice B review
+    /// round 2): `SessionComposerStore.isGitRepo` used to be derived from
+    /// `list(repoPath:)`'s emptiness, but `list` runs through
+    /// `parsePorcelain`, which DROPS `bare`/`detached`/`prunable` stanzas —
+    /// so a repo whose only worktree is at DETACHED HEAD produced an empty
+    /// list in a perfectly real repo, and the branch chip never appeared.
+    /// `rev-parse --is-inside-work-tree` exits 0 for both a normal
+    /// (attached) checkout and a detached-HEAD one — the boolean it prints
+    /// only distinguishes a bare repo from a real worktree, which isn't a
+    /// distinction this caller needs (a bare repo isn't offering a branch
+    /// chip either way, same as before); exit 128 ("fatal: not a git
+    /// repository") is the only case that should read as "not a repo".
+    static func isInsideWorkTree(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> Bool {
+        dispatchPrecondition(condition: .notOnQueue(.main))
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        task.arguments = ["git", "-C", repoPath, "rev-parse", "--is-inside-work-tree"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            onProcessStarted?(task)
+        } catch {
+            return false
+        }
+        task.waitUntilExit()
+        return task.terminationStatus == 0
     }
 
     /// Canonicalizes `path` via POSIX `realpath(3)` — NOT
@@ -153,43 +194,58 @@ nonisolated enum GitWorktreeEnumerator {
         return String(cString: cPath)
     }
 
-    /// Resolves the repo's MAIN worktree path directly via
-    /// `git rev-parse --path-format=absolute --git-common-dir`, never by
-    /// assuming `list(repoPath:)`'s first element is main (blocker 17) —
-    /// that list drops `bare`/`detached`/`prunable` entries, so a bare main
-    /// repo or a detached-HEAD main worktree makes `.first` a LINKED
-    /// worktree instead, silently creating a new worktree as a sibling
-    /// under the WRONG directory's `.claude/worktrees/`.
+    /// Resolves the repo's MAIN worktree path, never by assuming
+    /// `list(repoPath:)`'s first element is main (blocker 17) — that list
+    /// drops `bare`/`detached`/`prunable` entries, so a bare main repo or a
+    /// detached-HEAD main worktree makes `.first` a LINKED worktree instead,
+    /// silently creating a new worktree as a sibling under the WRONG
+    /// directory's `.claude/worktrees/`.
     ///
-    /// A non-bare repo's common dir is `<mainWorktreeRoot>/.git`; the main
-    /// worktree root is its parent. A bare repo's common dir IS the repo
-    /// path itself — not specially handled further here, since `git
-    /// worktree add` from a bare repo already requires `-C` at that same
-    /// path.
-    static func mainWorktreePath(repoPath: String) -> String? {
+    /// Should-fix 13 fix (Slice B review round 2): reads the RAW
+    /// `git worktree list --porcelain` output directly and takes the first
+    /// `worktree <path>` line — per git's own documented porcelain
+    /// contract, the main worktree is ALWAYS listed first, regardless of
+    /// what stanza follows (bare, detached, or an ordinary checkout).
+    /// Replaces the round-1 fix's `rev-parse --path-format=absolute
+    /// --git-common-dir` + "strip a trailing `.git`" approach, which had two
+    /// real gaps: `--path-format=absolute` requires git >= 2.31 (an older
+    /// git exits non-zero, so the caller got `nil` — "Could not determine
+    /// the repository's main worktree" — for a branch that plainly exists);
+    /// and for `git init --separate-git-dir=<elsewhere>` or a bare repo, the
+    /// common dir's last path component isn't literally `.git`, so the old
+    /// code fell through to returning the GIT DIR ITSELF as "the main
+    /// worktree" — new worktrees would have landed at
+    /// `<gitdir>/.claude/worktrees/<slug>` instead of beside the real
+    /// checkout. Reading the porcelain output directly needs no version
+    /// check and has no such fallthrough — the first `worktree` line IS the
+    /// main worktree path, unconditionally.
+    static func mainWorktreePath(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> String? {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["git", "-C", repoPath, "rev-parse", "--path-format=absolute", "--git-common-dir"]
+        task.arguments = ["git", "-C", repoPath, "worktree", "list", "--porcelain"]
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
+            onProcessStarted?(task)
         } catch {
             return nil
         }
+        // Read before waiting — see `list(repoPath:)`'s matching comment.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
-        guard task.terminationStatus == 0 else { return nil }
-        guard let raw = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty else { return nil }
+        guard task.terminationStatus == 0,
+              let output = String(data: data, encoding: .utf8) else { return nil }
 
-        if (raw as NSString).lastPathComponent == ".git" {
-            return (raw as NSString).deletingLastPathComponent
+        for rawLine in output.split(separator: "\n", omittingEmptySubsequences: false) {
+            if rawLine.hasPrefix("worktree ") {
+                return String(rawLine.dropFirst("worktree ".count))
+            }
         }
-        return raw
+        return nil
     }
 
     /// Local branches that have NO worktree checked out anywhere (including
@@ -204,10 +260,22 @@ nonisolated enum GitWorktreeEnumerator {
     /// Same `Process` shape and `dispatchPrecondition` as `list(repoPath:)`;
     /// a non-repo path, a deleted path, or any other git failure (exit 128)
     /// returns `[]`, never throws.
-    static func branchesWithoutWorktree(repoPath: String) -> [String] {
+    ///
+    /// `claimedBranches` (nit fix, Slice B review round 2): lets a caller
+    /// that's already fetched `list(repoPath:)` pass the claimed-branch set
+    /// straight in, instead of this function calling `list(repoPath:)` a
+    /// SECOND time internally — `SessionComposerStore.refreshWorktrees`
+    /// already has this precomputed by the time it calls here. `nil`
+    /// (default) preserves the original self-contained behavior for any
+    /// other caller.
+    static func branchesWithoutWorktree(
+        repoPath: String,
+        claimedBranches: Set<String>? = nil,
+        onProcessStarted: ((Process) -> Void)? = nil
+    ) -> [String] {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
-        let claimed = Set(list(repoPath: repoPath).compactMap(\.branch))
+        let claimed = claimedBranches ?? Set(list(repoPath: repoPath).compactMap(\.branch))
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -225,6 +293,7 @@ nonisolated enum GitWorktreeEnumerator {
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
+            onProcessStarted?(task)
         } catch {
             return []
         }
