@@ -107,7 +107,43 @@ final class SessionComposerStore: ObservableObject {
 
     // MARK: - Field state
 
-    @Published var selectedProjectId: UUID?
+    /// BL-1 fix (Slice B review round 3): `selectProject(_:)`'s doc comment
+    /// claimed to be "the single write path for changing `selectedProjectId`
+    /// from any of the composer's project-selection controls", but three
+    /// reachable routes bypassed the cascade it (and `changeProjectChip`)
+    /// used to implement by hand: `makeOption(for project:)`'s Return-on-row
+    /// action, `addProjectViaPanel`, and — the one that actually broke, with
+    /// no timing window required — `SessionComposerPalette.commit(template:)`
+    /// writing `selectedProjectId` DIRECTLY when a typed `<project>
+    /// <remainder>` command resolved a project the picker never selected.
+    /// That last route left `selectedWorktreePath` (and the whole worktree
+    /// cache) pointed at whatever the PREVIOUS project's branch chip had
+    /// picked — a session for the new project silently launched with cwd
+    /// inside the old project's worktree, no error, no timing window.
+    ///
+    /// The fix moves the cascade to the STATE layer via `didSet` rather than
+    /// re-auditing every call site again: every write to this property —
+    /// present or future — now cascades automatically, so a fourth route
+    /// added later can't reopen this same class of bug. `open(...)` is the
+    /// one caller that legitimately wants to skip it (it already performs
+    /// its own full reset before assigning, and immediately kicks its own
+    /// single refresh — see `suppressProjectChangeCascade`).
+    @Published var selectedProjectId: UUID? {
+        didSet {
+            guard !suppressProjectChangeCascade else { return }
+            guard selectedProjectId != oldValue else { return }
+            cascadeProjectChange(to: selectedProjectId)
+        }
+    }
+
+    /// Set for the duration of `open(...)`'s own `selectedProjectId`
+    /// assignment — that method already performs the full reset
+    /// `cascadeProjectChange(to:)` would otherwise repeat, and kicks its own
+    /// single refresh `Task` right after. Without this, every `open()` fired
+    /// TWO racing refreshes for the same project (harmless — both are
+    /// `worktreeRefreshToken`-guarded — but wasteful on every popover open).
+    private var suppressProjectChangeCascade = false
+
     @Published var searchText: String = ""
 
     // MARK: - Worktree cache (Slice B, B1)
@@ -269,9 +305,22 @@ final class SessionComposerStore: ObservableObject {
             let isRepo = GitWorktreeEnumerator.isInsideWorkTree(repoPath: repoPath) { process in
                 processHandle.set(process)
             }
+            // SF-3 fix (Slice B review round 3): checked between EVERY
+            // shell-out, not just once at the top — three sequential git
+            // invocations share ONE `ProcessHandle` (should-fix 5's design),
+            // so a timeout's single `processHandle.terminate()` call only
+            // ever reaches whichever ONE of the three happens to be running
+            // at that instant. Without this guard, once that one process
+            // died the still-unstructured, still-running `listTask` simply
+            // proceeded to launch the NEXT one — which nothing was left to
+            // terminate, since the caller had already returned. `listTask`
+            // is now explicitly `.cancel()`ed on timeout (below) so this
+            // check actually trips.
+            guard !Task.isCancelled else { return (false, canonicalRepoPath, [], []) }
             let rawList = GitWorktreeEnumerator.list(repoPath: repoPath) { process in
                 processHandle.set(process)
             }
+            guard !Task.isCancelled else { return (isRepo, canonicalRepoPath, rawList, []) }
             // Nit fix (Slice B review round 2): pass the already-fetched
             // claimed-branch set in rather than letting
             // `branchesWithoutWorktree` call `list(repoPath:)` a SECOND
@@ -290,6 +339,13 @@ final class SessionComposerStore: ObservableObject {
             // still running, rather than abandoning it — every reopen
             // against a hung repo used to spawn another on top.
             processHandle.terminate()
+            // SF-3 fix (Slice B review round 3): cancels the still-running
+            // detached task itself, not just the process it's currently
+            // blocked on — see the `Task.isCancelled` guards threaded
+            // through `listTask` above. Without this, killing ONE hung
+            // process just let the task move on to the NEXT of the three
+            // git invocations, which nothing was left to terminate.
+            listTask.cancel()
             // Timed out — discard if superseded, same as the ordinary path.
             guard token == worktreeRefreshToken else { return }
             // Should-fix 8 fix: a slow `git` must not blank the chip —
@@ -298,6 +354,31 @@ final class SessionComposerStore: ObservableObject {
             // rationale a few lines above already applies to the ordinary
             // in-flight case. Only stop showing "Refreshing…".
             isRefreshingWorktrees = false
+
+            // BL-2 fix (Slice B review round 3): a timeout used to leave
+            // `.pending` PERMANENT whenever it landed on the composer's very
+            // FIRST refresh (`open()`'s own call) — `isGitRepo` stays
+            // `false` from its initial value, so the branch chip itself
+            // never renders (`isBranchChipEligible == isGitRepo`), which
+            // means the picker-open refresh trigger
+            // (`SessionComposerPalette.branchChip()`'s
+            // `.onChange(of: isBranchChipPickerOpen)`) is unreachable —
+            // there is otherwise NOTHING left in the composer that will ever
+            // ask again. `.onChange(of: commandProject?.id)` doesn't help
+            // either: the id never changed. Scheduling exactly one retry
+            // here — guarded by the SAME `worktreeRefreshToken` every other
+            // invalidation already uses, so it's a silent no-op the moment
+            // `open()`/`cancel()`/another `changeProjectChip` supersedes it —
+            // gives `.pending` an actual escape route: the composer keeps
+            // retrying on its own every ~4s while it stays open on this
+            // project, with no new UI surface and no synthetic input
+            // required, until the machine's load clears and a refresh
+            // finally lands.
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                guard token == worktreeRefreshToken else { return }
+                await self.refreshWorktrees(for: repoPath, projectId: projectId)
+            }
             return
         }
 
@@ -433,12 +514,18 @@ final class SessionComposerStore: ObservableObject {
         worktreeRefreshToken += 1
         cachedWorkspaceStore = workspaceStore
 
+        // See `suppressProjectChangeCascade`'s doc comment: this method
+        // already did its own full reset above and kicks its own single
+        // refresh below — the `didSet` cascade would otherwise duplicate
+        // both.
+        suppressProjectChangeCascade = true
         switch projectBinding {
         case .locked(let project), .prefilled(let project):
             selectedProjectId = project.id
         case .open:
             selectedProjectId = resolveDefaultProject(workspaceStore: workspaceStore)
         }
+        suppressProjectChangeCascade = false
 
         if wasOpen {
             focusSearchFieldTrigger = true
@@ -657,6 +744,14 @@ final class SessionComposerStore: ObservableObject {
     /// (fixed in PR #132 review, round 2 — F2). Hoisted here rather than
     /// duplicated at each call site so the fix can't be applied to two
     /// sites and missed on a third again.
+    ///
+    /// BL-1 fix (Slice B review round 3): the cascade (branch chip +
+    /// worktree cache reset + refresh) is no longer performed here by hand —
+    /// it lives on `selectedProjectId`'s `didSet` now, so every write to
+    /// that property inherits it, including the one write path that used to
+    /// bypass this function entirely (`SessionComposerPalette.commit(template:)`
+    /// setting `selectedProjectId` directly for a typed command). See that
+    /// property's doc comment for the full enumeration of writers.
     func selectProject(_ id: UUID) {
         selectedProjectId = id
         searchText = ""
@@ -722,44 +817,16 @@ final class SessionComposerStore: ObservableObject {
     @discardableResult
     func changeProjectChip(to projectId: UUID, currentlyShown: UUID?) -> ProjectChipChangeResult {
         guard projectId != currentlyShown else { return .noOp }
-        // Should-fix 8 fix (Slice B review round 1): bumped synchronously
-        // BEFORE anything is scheduled, same reasoning as `open()`/
-        // `cancel()`'s matching bumps — a still-in-flight refresh for
-        // whatever project was current a moment ago must not survive to
-        // overwrite this cascade's own refresh below.
-        worktreeRefreshToken += 1
         pendingChipUndo = (
             previousProjectId: selectedProjectId,
             previousSearchText: searchText,
             previousWorktreePath: selectedWorktreePath
         )
+        // BL-1 fix (Slice B review round 3): the cache clear/refresh this
+        // used to perform by hand now lives on `selectedProjectId`'s
+        // `didSet` (`cascadeProjectChange(to:)`) — `selectProject(_:)`
+        // triggers it exactly the same way every other write path does.
         selectProject(projectId)
-        // B3: a different project invalidates the branch chip too — a
-        // branch name is meaningless in another repo (spec's cascade
-        // rule) — so it cascades alongside `searchText`, captured in the
-        // same undo tuple above.
-        selectedWorktreePath = nil
-        // Blocker 3 fix (Slice B review round 2): clear the CACHE
-        // synchronously here too, not just bump the token — the async
-        // refresh kicked off below can take up to 2s
-        // (`refreshWorktrees`'s own timeout), and until it resolves the
-        // branch picker was still showing the OLD project's
-        // worktrees/branches/`isGitRepo` under the NEW chip. Clicking a row
-        // during that window launched project B's template into project
-        // A's worktree, silently. `refreshWorktrees`'s own "deliberately not
-        // blanked" rationale is about a same-project REFRESH (avoid the
-        // list jumping under the cursor); it does not apply to a PROJECT
-        // SWITCH, which must never show stale data even briefly.
-        worktrees = []
-        branchesWithoutWorktree = []
-        currentBranchAtProjectRoot = nil
-        isGitRepo = false
-        worktreesProjectId = nil
-
-        if let project = cachedWorkspaceStore?.projects.first(where: { $0.id == projectId }) {
-            Task { await self.refreshWorktrees(for: project.rootPath, projectId: project.id) }
-        }
-
         return .changed
     }
 
@@ -778,31 +845,57 @@ final class SessionComposerStore: ObservableObject {
     /// A's template with B's worktree as cwd.
     func undoProjectChipChange() {
         guard let pending = pendingChipUndo else { return }
-        worktreeRefreshToken += 1
+        // BL-1 fix (Slice B review round 3): `selectedProjectId`'s `didSet`
+        // now performs the same cache-clear-and-refresh
+        // `changeProjectChip`'s cascade used to duplicate by hand (see
+        // `cascadeProjectChange(to:)`) — ⌘Z is itself a project switch (back
+        // to whatever was current before the cascade), so it needs the
+        // identical guarantee, and now gets it for free via the same write
+        // path. `selectedWorktreePath` is restored to the PRE-cascade value
+        // on the line after, overwriting whatever the cascade just cleared
+        // it to.
         selectedProjectId = pending.previousProjectId
         searchText = pending.previousSearchText
         selectedWorktreePath = pending.previousWorktreePath
         pendingChipUndo = nil
-        // Blocker 3 fix (Slice B review round 2): same synchronous cache
-        // clear as `changeProjectChip` — see that function's comment. ⌘Z is
-        // itself a project switch (back to whatever was current before the
-        // cascade), so it needs the identical guarantee: no stale data
-        // visible even for the ~2s the fresh refresh below takes.
+    }
+
+    /// The single cascade every `selectedProjectId` write now goes through
+    /// (BL-1, Slice B review round 3) — see that property's `didSet`. A
+    /// different project (or no project) invalidates the branch chip's pick
+    /// and the worktree cache entirely: a branch name/worktree path is
+    /// meaningless in another repo.
+    ///
+    /// SF-4 fix (same round): `isGitRepo` is deliberately NOT reset to
+    /// `false` when switching TO a project (only when switching to NO
+    /// project, `projectId == nil`) — it is held at whatever it last read.
+    /// Blocker 3's original fix (round 2) reset it synchronously here,
+    /// which is what made the branch chip (gated on `isBranchChipEligible`
+    /// == `isGitRepo`) disappear — separator and all — for the up-to-2s a
+    /// refresh takes, then reappear once it resolved: a visible flicker on
+    /// every project-chip change or ⌘Z, permanent if that refresh timed
+    /// out. Holding the stale value is safe because the DATA that could
+    /// actually be launched into (`worktrees`, `selectedWorktreePath`,
+    /// `worktreesProjectId`) is still cleared synchronously below — nothing
+    /// stale is ever offered to click, only the chip's bare presence is held
+    /// stale for a moment. `worktreesProjectId = nil` also makes
+    /// `resolveTypedBranch` return `.pending` rather than trusting a typed
+    /// branch against the wrong project's cache in that same window.
+    private func cascadeProjectChange(to projectId: UUID?) {
+        worktreeRefreshToken += 1
+        selectedWorktreePath = nil
         worktrees = []
         branchesWithoutWorktree = []
         currentBranchAtProjectRoot = nil
-        isGitRepo = false
         worktreesProjectId = nil
-
-        if let restoredProjectId = pending.previousProjectId,
-           let project = cachedWorkspaceStore?.projects.first(where: { $0.id == restoredProjectId }) {
-            Task { await self.refreshWorktrees(for: project.rootPath, projectId: project.id) }
-        } else {
-            // No project was selected before the cascade — clear back to
-            // the same empty state `open()`/`cancel()` establish, rather
-            // than leaving whatever project B's cascade had populated.
-            Task { await self.refreshWorktrees(for: nil, projectId: nil) }
+        if projectId == nil {
+            isGitRepo = false
         }
+
+        guard let projectId,
+              let project = cachedWorkspaceStore?.projects.first(where: { $0.id == projectId })
+        else { return }
+        Task { await self.refreshWorktrees(for: project.rootPath, projectId: project.id) }
     }
 
     // MARK: - Branch chip (Slice B, B3)
@@ -1069,14 +1162,32 @@ final class SessionComposerStore: ObservableObject {
                 waiterTask?.cancel()
                 timeoutTask?.cancel()
             }
-            waiterTask = Task {
+            // Nit fix (Slice B review round 3): the assignments below used
+            // to write `waiterTask`/`timeoutTask` with no synchronization at
+            // all, while `resumeOnce` above reads them under `lock` — a
+            // genuine data race on the references themselves, independent
+            // of the (much narrower, effectively unobservable in practice
+            // given the real work — a detached `git worktree add`, or a
+            // multi-second `Task.sleep` — each side does before it can call
+            // `resumeOnce`) ordering window where a task could finish and
+            // call `resumeOnce` before its OWN reference is even stored.
+            // Locking every write closes the data race the reviewer flagged;
+            // the latter, narrower window is unchanged from before this fix.
+            let waiter = Task<Void, Never> {
                 let result = await task.value
                 resumeOnce(.completed(result))
             }
-            timeoutTask = Task {
+            lock.lock()
+            waiterTask = waiter
+            lock.unlock()
+
+            let timeout = Task<Void, Never> {
                 try? await Task.sleep(for: .seconds(timeoutSeconds))
                 resumeOnce(.timedOut)
             }
+            lock.lock()
+            timeoutTask = timeout
+            lock.unlock()
         }
     }
 
@@ -1116,14 +1227,24 @@ final class SessionComposerStore: ObservableObject {
                 waiterTask?.cancel()
                 timeoutTask?.cancel()
             }
-            waiterTask = Task {
+            // Nit fix (Slice B review round 3): same synchronization fix as
+            // `race(_:timeoutSeconds:)` above — see that function's matching
+            // comment.
+            let waiter = Task<Void, Never> {
                 let result = await task.value
                 resumeOnce(result)
             }
-            timeoutTask = Task {
+            lock.lock()
+            waiterTask = waiter
+            lock.unlock()
+
+            let timeout = Task<Void, Never> {
                 try? await Task.sleep(for: .seconds(timeoutSeconds))
                 resumeOnce(nil)
             }
+            lock.lock()
+            timeoutTask = timeout
+            lock.unlock()
         }
     }
 

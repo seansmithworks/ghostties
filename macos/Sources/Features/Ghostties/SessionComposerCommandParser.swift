@@ -401,16 +401,37 @@ enum SessionComposerCommandParser {
     /// Accepted because the alternative is an unrecoverable trap, not
     /// merely a cosmetic wart — and it only occurs in the narrow window
     /// where the branch segment has no remainder after it yet.
+    /// `isBranchChipEligible` (BL-3 fix, Slice B review round 3): whether a
+    /// branch chip will actually RENDER to carry the folded-away segment.
+    /// Defaults to `true` so every pre-existing call/test site (none of
+    /// which passed this) stays byte-identical.
+    ///
+    /// The branch segment used to fold into the hidden `prefix` whenever
+    /// `branchToken != nil` and a remainder survived it — an UNRELATED
+    /// condition to whether `SessionComposerPalette.queryRow` actually
+    /// renders a branch chip (`isBranchChipEligible`, gated on
+    /// `composerStore.isGitRepo`). For a non-git project, `> foo` still
+    /// parses a branch token (this parser never consults disk — see
+    /// `parse(query:)`'s disambiguation rule), but no chip exists to show
+    /// it: the token silently disappeared from the field with nothing on
+    /// screen naming it, and `Return` failed with "No worktree found for
+    /// branch 'foo'" — a token the user could not see anywhere. Folding the
+    /// branch segment away is only safe when something visible (the chip)
+    /// is what's carrying it — the same principle the round-2 fix already
+    /// applied to the remainder-empty case, now applied consistently to the
+    /// chip-not-rendered case too.
     static func resolvedFieldSplit(
         searchText: String,
         hasResolvedProject: Bool,
-        branchToken: String?
+        branchToken: String?,
+        isBranchChipEligible: Bool = true
     ) -> (prefix: String, remainder: String)? {
         guard hasResolvedProject,
               let projectSplit = splitOnFirstToken(searchText, separatorsIncludeChevron: true)
         else { return nil }
 
-        guard branchToken != nil,
+        guard isBranchChipEligible,
+              branchToken != nil,
               let branchSplit = splitOnFirstToken(projectSplit.remainder, separatorsIncludeChevron: true),
               !branchSplit.remainder.isEmpty
         else {

@@ -568,4 +568,89 @@ final class SessionComposerCommandParserTests: XCTestCase {
         )
         XCTAssertNil(split)
     }
+
+    // MARK: - resolvedFieldSplit round-trips through parse (SF-5, Slice B
+    // review round 3)
+    //
+    // Every test above hand-supplies `branchToken:` as a literal the test
+    // author computed by hand — in production, `branchToken` comes ONLY
+    // from `parse(query:)`'s real output
+    // (`SessionComposerPalette.commandParse.branchToken`). Nothing above
+    // asserted the two agree, which is the whole contract: round 2's
+    // blocker 1 was exactly this divergence (a regression in
+    // `resolvedFieldSplit` that shipped with zero coverage catching it).
+    // These feed `parse`'s actual `ParseResult` straight into
+    // `resolvedFieldSplit` instead of a hand-picked `branchToken`.
+
+    func testResolvedFieldSplitRoundTripsThroughParseWithNoBranchTyped() {
+        let project = makeProject(name: "ghostties")
+        let searchText = "ghostties cco -n test"
+        let parsed = SessionComposerCommandParser.parse(query: searchText, projects: [project], isLocked: false)
+
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: searchText,
+            hasResolvedProject: parsed.projectId != nil,
+            branchToken: parsed.branchToken
+        )
+
+        XCTAssertEqual(split?.prefix, "ghostties ")
+        XCTAssertEqual(split?.remainder, "cco -n test")
+    }
+
+    func testResolvedFieldSplitRoundTripsThroughParseWithATypedBranchAndRemainder() {
+        let project = makeProject(name: "ghostties")
+        let searchText = "ghostties > main > cco"
+        let parsed = SessionComposerCommandParser.parse(query: searchText, projects: [project], isLocked: false)
+        XCTAssertEqual(parsed.branchToken, "main", "sanity check: parse must actually resolve a branch token here for this test to prove anything")
+
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: searchText,
+            hasResolvedProject: parsed.projectId != nil,
+            branchToken: parsed.branchToken,
+            isBranchChipEligible: true
+        )
+
+        XCTAssertEqual(split?.prefix, "ghostties > main > ")
+        XCTAssertEqual(split?.remainder, "cco")
+    }
+
+    /// Round-trips blocker 1's exact repro (empty branch remainder) through
+    /// real `parse` output, rather than the hand-picked `branchToken: "mian"`
+    /// the original blocker-1 test above uses.
+    func testResolvedFieldSplitRoundTripsThroughParseWhenBranchRemainderIsEmpty() {
+        let project = makeProject(name: "ghostties")
+        let searchText = "ghostties > mian "
+        let parsed = SessionComposerCommandParser.parse(query: searchText, projects: [project], isLocked: false)
+
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: searchText,
+            hasResolvedProject: parsed.projectId != nil,
+            branchToken: parsed.branchToken
+        )
+
+        XCTAssertEqual(split?.prefix, "ghostties > ")
+        XCTAssertEqual(split?.remainder, "mian ")
+    }
+
+    /// BL-3 (Slice B review round 3): a project that isn't a git repo has no
+    /// branch chip to carry the segment (`isBranchChipEligible: false`), so
+    /// even though `parse` still resolves a `branchToken` (it never consults
+    /// disk), the split must NOT fold it away — the field must keep showing
+    /// it, since nothing on screen renders a chip for it.
+    func testResolvedFieldSplitRoundTripsThroughParseAndKeepsBranchVisibleWhenNoChipIsEligible() {
+        let project = makeProject(name: "notes")
+        let searchText = "notes > foo bar"
+        let parsed = SessionComposerCommandParser.parse(query: searchText, projects: [project], isLocked: false)
+        XCTAssertEqual(parsed.branchToken, "foo", "sanity check: parse resolves a branch token even for a non-git project — it never consults disk")
+
+        let split = SessionComposerCommandParser.resolvedFieldSplit(
+            searchText: searchText,
+            hasResolvedProject: parsed.projectId != nil,
+            branchToken: parsed.branchToken,
+            isBranchChipEligible: false
+        )
+
+        XCTAssertEqual(split?.prefix, "notes > ")
+        XCTAssertEqual(split?.remainder, "foo bar", "the branch token must stay visible in the field — no chip exists to carry it")
+    }
 }

@@ -382,7 +382,11 @@ struct SessionComposerPalette: View {
         SessionComposerCommandParser.resolvedFieldSplit(
             searchText: composerStore.searchText,
             hasResolvedProject: commandProject != nil,
-            branchToken: commandParse.branchToken
+            branchToken: commandParse.branchToken,
+            // BL-3 fix (Slice B review round 3): the branch segment must
+            // only fold into the hidden prefix when a chip will actually
+            // render it — see `resolvedFieldSplit`'s doc comment.
+            isBranchChipEligible: isBranchChipEligible
         )
     }
 
@@ -689,6 +693,27 @@ struct SessionComposerPalette: View {
                         try? await Task.sleep(for: .milliseconds(300))
                         guard !Task.isCancelled else { return }
                         await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id)
+                    }
+                } else {
+                    // SF-2 fix (Slice B review round 3): this `else` was
+                    // missing entirely — a typed project name resolving,
+                    // then being erased (one backspace past the match) left
+                    // the cache STRANDED on whatever `commandProject` the
+                    // debounce above had just refreshed it to.
+                    // `currentProject` falls back to `selectedProjectId`'s
+                    // project the instant `commandProject` goes `nil`, but
+                    // nothing re-synced `worktrees`/`isGitRepo`/
+                    // `worktreesProjectId` to match — the chip fell back to
+                    // the dropdown's project while the branch picker kept
+                    // showing the just-typed project's worktrees underneath
+                    // it (BL-1's outcome again, reached without ever typing
+                    // a branch). Immediate, not debounced: there's no
+                    // fast-typing burst to coalesce here — this is the one
+                    // moment the resolved project just disappeared.
+                    if let project = currentProject {
+                        Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
+                    } else {
+                        Task { await composerStore.refreshWorktrees(for: nil, projectId: nil) }
                     }
                 }
             }
@@ -1292,9 +1317,25 @@ struct SessionComposerPalette: View {
         // below) — the row that triggered this was never actually about to
         // commit into the wrong project or session; only the branch
         // segment is broken, and the user is still mid-typing it.
-        if case .unresolved(let token) = typedBranchResolution {
+        // SF-1 fix (Slice B review round 3): `.pending` used to fall
+        // through this guard entirely — it wasn't in the switch — so
+        // `selectedIndex = nil` and the `selectedProjectId` write below both
+        // ran before the LATER switch (line ~1349) finally rejected it,
+        // silently repointing the dropdown at a project the user never
+        // selected before the commit failed. `.pending` gets the exact same
+        // treatment as `.unresolved` here: rejected first, before touching
+        // ANY of this function's other state — matching this guard's own
+        // doc comment below, which already promised that for every
+        // unresolvable typed-branch case.
+        switch typedBranchResolution {
+        case .unresolved(let token):
             composerStore.rejectUnresolvedBranch(token: token)
             return
+        case .pending:
+            composerStore.rejectUnresolvedBranch(message: "Still checking branches for this project — try again in a moment.")
+            return
+        case .notTyped, .resolved, .isDefaultBranch:
+            break
         }
 
         // S1: reset the stale index up front. `recordRecent` (inside the
@@ -1342,7 +1383,8 @@ struct SessionComposerPalette: View {
         //
         // Blocker 2: routed through the STRICT commit-time resolver, not
         // the plain-optional `resolveCommitWorktreePath` the picker's
-        // "already shown" comparisons still use — `.unresolved` was already
+        // "already shown" comparisons still use — `.unresolved` AND
+        // `.pending` (SF-1 fix, Slice B review round 3) are both already
         // handled by the early-return guard above, so `.success` is the
         // only case this switch can reach; the `.failure` arm exists only
         // so this stays exhaustive and safe if that invariant ever breaks.

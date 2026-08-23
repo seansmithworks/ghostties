@@ -154,18 +154,28 @@ nonisolated enum GitWorktreeEnumerator {
     /// so a repo whose only worktree is at DETACHED HEAD produced an empty
     /// list in a perfectly real repo, and the branch chip never appeared.
     /// `rev-parse --is-inside-work-tree` exits 0 for both a normal
-    /// (attached) checkout and a detached-HEAD one — the boolean it prints
-    /// only distinguishes a bare repo from a real worktree, which isn't a
-    /// distinction this caller needs (a bare repo isn't offering a branch
-    /// chip either way, same as before); exit 128 ("fatal: not a git
-    /// repository") is the only case that should read as "not a repo".
+    /// (attached) checkout and a detached-HEAD one, but ALSO exits 0 for a
+    /// bare repo — printing `false` to stdout rather than failing. Nit fix
+    /// (Slice B review round 3): the prior version of this doc comment
+    /// claimed "a bare repo isn't offering a branch chip either way, same as
+    /// before" on the strength of exit-code alone; verified empirically
+    /// against a throwaway `git init --bare` repo in the scratchpad
+    /// (`git -C <bare> rev-parse --is-inside-work-tree` prints `false`,
+    /// exits `0`) and that claim was FALSE — trusting only the exit code
+    /// read a bare repo as `isGitRepo == true`, a real behavior change from
+    /// the old `list(repoPath:)`-emptiness derivation (which gave `false` for
+    /// a bare repo, since `list` has nothing to enumerate there). Now checks
+    /// BOTH: exit 0 (repo exists at all — exit 128 means "fatal: not a git
+    /// repository") AND stdout trims to exactly `"true"` (a real, non-bare
+    /// worktree).
     static func isInsideWorkTree(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> Bool {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         task.arguments = ["git", "-C", repoPath, "rev-parse", "--is-inside-work-tree"]
-        task.standardOutput = FileHandle.nullDevice
+        let pipe = Pipe()
+        task.standardOutput = pipe
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
@@ -173,8 +183,12 @@ nonisolated enum GitWorktreeEnumerator {
         } catch {
             return false
         }
+        // Read before waiting — see `list(repoPath:)`'s matching comment.
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
-        return task.terminationStatus == 0
+        guard task.terminationStatus == 0,
+              let output = String(data: data, encoding: .utf8) else { return false }
+        return output.trimmingCharacters(in: .whitespacesAndNewlines) == "true"
     }
 
     /// Canonicalizes `path` via POSIX `realpath(3)` — NOT
@@ -189,6 +203,12 @@ nonisolated enum GitWorktreeEnumerator {
     /// "resolution requires the path to exist" behavior; a nonexistent path
     /// can't be a git repo anyway).
     static func canonicalPath(_ path: String) -> String {
+        // Nit fix (Slice B review round 3): should-fix 11 (round 1) moved
+        // this call off the main actor specifically to keep the blocking
+        // `realpath(3)` syscall away from it — this assertion is what makes
+        // a future call site that forgets that fail loudly in DEBUG instead
+        // of silently reintroducing the main-thread stall.
+        dispatchPrecondition(condition: .notOnQueue(.main))
         guard let cPath = realpath(path, nil) else { return path }
         defer { free(cPath) }
         return String(cString: cPath)
@@ -327,7 +347,7 @@ nonisolated enum GitWorktreeEnumerator {
         var description: String { message }
     }
 
-    static func branchExists(_ name: String, repoPath: String) -> Bool {
+    static func branchExists(_ name: String, repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> Bool {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let task = Process()
@@ -337,6 +357,17 @@ nonisolated enum GitWorktreeEnumerator {
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
+            // Nit fix (Slice B review round 3): hands the running process
+            // back to the caller BEFORE waiting, same pattern every other
+            // shell-out in this file already uses (`list`, `add`,
+            // `isInsideWorkTree`, `mainWorktreePath`) — this was the one
+            // shell-out `add(branch:directory:repoPath:)` calls
+            // (`branchExists`, to decide `worktree add` vs `worktree add -b`)
+            // with no way for `createWorktree`'s timeout to terminate a hung
+            // `git show-ref`. Default `nil` keeps every existing caller
+            // (including every test in `GitWorktreeCreationTests`)
+            // byte-identical.
+            onProcessStarted?(task)
             task.waitUntilExit()
         } catch {
             return false
@@ -377,7 +408,7 @@ nonisolated enum GitWorktreeEnumerator {
     ) -> Result<String, GitWorktreeCreationError> {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
-        let exists = branchExists(branch, repoPath: repoPath)
+        let exists = branchExists(branch, repoPath: repoPath, onProcessStarted: onProcessStarted)
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")

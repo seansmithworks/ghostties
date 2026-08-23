@@ -321,4 +321,46 @@ struct SessionComposerBreadcrumbChipTests {
 
         #expect(store.selectedWorktreePath == nil)
     }
+
+    // MARK: - BL-1 (Slice B review round 3): the cascade lives on the
+    // property, not the call site
+
+    /// `SessionComposerPalette.commit(template:)` writes `selectedProjectId`
+    /// DIRECTLY (never through `selectProject(_:)`) when a typed
+    /// `<project> <remainder>` command resolves a different project than the
+    /// dropdown — this is the exact bypass that shipped the bug (no timing
+    /// window required: composer on A, worktree `feat-x` picked via the
+    /// picker, type `web cco`, Return — B's session used to launch with cwd
+    /// inside A's worktree). Proves the fix at the STATE layer: even a raw,
+    /// direct write to `selectedProjectId` — bypassing `selectProject`,
+    /// `changeProjectChip`, and every other named write path — still clears
+    /// the stale branch pick.
+    @Test func directWriteToSelectedProjectIdStillClearsSelectedWorktreePath() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        let projectB = makeProject(name: "B")
+        store.selectedProjectId = projectA.id
+        store.selectedWorktreePath = "/tmp/A-worktrees/feat-x"
+
+        // The exact write `commit(template:)` performs — NOT `selectProject`,
+        // NOT `changeProjectChip`.
+        store.selectedProjectId = projectB.id
+
+        #expect(store.selectedWorktreePath == nil, "a raw write to selectedProjectId must cascade, or a session for B can launch with cwd still pointed at A's worktree")
+        #expect(store.selectedProjectId == projectB.id)
+    }
+
+    /// The cascade must be a genuine no-op when the value doesn't actually
+    /// change — re-assigning the SAME project id must not clear a
+    /// legitimately-still-current worktree pick.
+    @Test func reassigningTheSameProjectIdDoesNotClearSelectedWorktreePath() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        store.selectedProjectId = projectA.id
+        store.selectedWorktreePath = "/tmp/A-worktrees/feat-x"
+
+        store.selectedProjectId = projectA.id
+
+        #expect(store.selectedWorktreePath == "/tmp/A-worktrees/feat-x")
+    }
 }
