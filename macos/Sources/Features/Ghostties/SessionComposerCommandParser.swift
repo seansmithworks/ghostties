@@ -347,4 +347,20 @@ enum SessionComposerCommandParser {
     static func resolveCommitProjectId(commandProjectId: UUID?, selectedProjectId: UUID?) -> UUID? {
         commandProjectId ?? selectedProjectId
     }
+
+    /// Resolves which worktree path a commit should launch into: mirrors
+    /// `resolveCommitProjectId`'s precedence idiom exactly — a resolved
+    /// TYPED branch (`> main > cco`) wins over whatever the branch chip's
+    /// PICKER currently has selected. `nil` means "no override" — the
+    /// caller falls through to `template.workingDirectory ?? project.rootPath`
+    /// unchanged.
+    ///
+    /// Pure — this type never touches disk. The caller (the view) is
+    /// responsible for resolving `typedWorktreePath` by looking up
+    /// `ParseResult.branchToken` against the cached worktree list; this
+    /// function only expresses the precedence, the same seam
+    /// `resolveCommitProjectId` provides for the project segment.
+    static func resolveCommitWorktreePath(typedWorktreePath: String?, selectedWorktreePath: String?) -> String? {
+        typedWorktreePath ?? selectedWorktreePath
+    }
 }

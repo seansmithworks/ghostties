@@ -128,4 +128,41 @@ nonisolated enum GitWorktreeEnumerator {
         guard let output = String(data: data, encoding: .utf8) else { return [] }
         return parsePorcelain(output)
     }
+
+    /// Local branches that have NO worktree checked out anywhere (including
+    /// `repoPath`'s own primary checkout) — the branch chip picker's second
+    /// group (composer breadcrumb spec, Slice B). Runs
+    /// `git -C <repoPath> branch --format='%(refname:short)'`, then removes
+    /// every branch already claimed by `list(repoPath:)`'s UNFILTERED
+    /// result (the caller-side "minus the project's own root" filtering
+    /// that `SessionComposerStore.worktrees` applies does NOT apply here —
+    /// a branch checked out at the project's own root is still claimed).
+    ///
+    /// Same `Process` shape and `dispatchPrecondition` as `list(repoPath:)`;
+    /// a non-repo path, a deleted path, or any other git failure (exit 128)
+    /// returns `[]`, never throws.
+    static func branchesWithoutWorktree(repoPath: String) -> [String] {
+        dispatchPrecondition(condition: .notOnQueue(.main))
+
+        let claimed = Set(list(repoPath: repoPath).compactMap(\.branch))
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        task.arguments = ["git", "-C", repoPath, "branch", "--format=%(refname:short)"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return []
+        }
+        guard task.terminationStatus == 0 else { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else { return [] }
+
+        let allBranches = output.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        return allBranches.filter { !claimed.contains($0) }
+    }
 }

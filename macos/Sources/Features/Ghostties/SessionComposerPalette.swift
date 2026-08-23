@@ -44,6 +44,14 @@ struct SessionComposerPalette: View {
     /// the old `isProjectDropdownOpen` popover flag — this one drives an
     /// expansion INSIDE the card, not a second `.popover`.
     @State private var isProjectChipPickerOpen = false
+    /// Whether the inline branch-chip picker (B3) is expanded. Mutually
+    /// exclusive with `isProjectChipPickerOpen` BY CONSTRUCTION — every
+    /// site that flips one to `true` flips the other to `false` in the
+    /// same statement — never merely "the two happen not to overlap in
+    /// practice". A second live picker with its own capture layer would
+    /// re-create exactly the ambiguity `ComposerQueryField.isPickerOpen`
+    /// exists to remove (see that type's doc comment).
+    @State private var isBranchChipPickerOpen = false
     /// Keyboard focus on the project chip's `Button`. D5 removed the
     /// left-arrow-from-the-field route into this (see the doc comment on
     /// `.move` handling below) without replacing it, so as of F6 (round-2
@@ -225,6 +233,37 @@ struct SessionComposerPalette: View {
             isLocked: isProjectLocked
         ) else { return nil }
         return store.projects.first(where: { $0.id == stickyId })
+    }
+
+    // MARK: - Branch chip (Slice B, B3)
+
+    /// Whether the project is a git repo at all — the branch chip has no
+    /// entry point unless the composer store's cache found SOMETHING to
+    /// offer. A non-git project (or one where enumeration failed) shows NO
+    /// chip, not a disabled one (Sean's call) — a dead control is worse
+    /// than no control. This is deliberately keyed off "did enumeration
+    /// find anything", not a dedicated repo-detection call, matching how
+    /// `GitWorktreeEnumerator` already reports "not a repo" (exit 128 →
+    /// `[]`, indistinguishable from "a repo with nothing else to offer").
+    private var isBranchChipEligible: Bool {
+        !composerStore.worktrees.isEmpty || !composerStore.branchesWithoutWorktree.isEmpty
+    }
+
+    /// A resolved TYPED branch (`> main > cco`) takes precedence over the
+    /// picker's current pick, mirroring `currentProject`'s
+    /// `commandProject`-before-`selectedProjectId` precedence exactly.
+    private var typedWorktreePath: String? {
+        guard let token = commandParse.branchToken else { return nil }
+        return composerStore.worktrees.first(where: { $0.branch == token })?.path
+    }
+
+    /// What the branch chip displays: the typed branch token if a command
+    /// resolved one, else the picker's current pick's branch name, else
+    /// `nil` (no chip rendered — see `queryRow`).
+    private var currentBranchLabel: String? {
+        if let token = commandParse.branchToken { return token }
+        guard let path = composerStore.selectedWorktreePath else { return nil }
+        return composerStore.worktrees.first(where: { $0.path == path })?.branch ?? path
     }
 
     /// The breadcrumb chip's displayed/editable text (A1). When a typed
@@ -751,15 +790,31 @@ struct SessionComposerPalette: View {
                     // carries no information VoiceOver needs (nit).
                     .accessibilityHidden(true)
 
+                // B3: rendered only when the project is eligible (a git
+                // repo enumeration found something to offer) — a
+                // non-git project shows NO branch chip at all, not a
+                // disabled one (Sean's call).
+                if isBranchChipEligible {
+                    branchChip()
+
+                    Text("›")
+                        .font(.system(size: fieldFontSize, weight: .regular))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+
                 ComposerQueryField(
                     query: queryFieldText,
                     fontSize: fieldFontSize,
                     focusTrigger: $composerStore.focusSearchFieldTrigger,
                     hasSelection: selectedOption != nil,
-                    // D6: while the inline picker is open, the field's own
-                    // ↑/↓/Return handlers must go quiet — see
-                    // `ComposerQueryField.isPickerOpen`'s doc comment.
-                    isPickerOpen: isProjectChipPickerOpen,
+                    // D6/B3: while EITHER inline picker is open, the field's
+                    // own ↑/↓/Return handlers must go quiet — see
+                    // `ComposerQueryField.isPickerOpen`'s doc comment. The
+                    // two pickers are mutually exclusive by construction
+                    // (see `isBranchChipPickerOpen`'s doc comment) — the
+                    // field only needs "is ANY picker open", the OR.
+                    isPickerOpen: isProjectChipPickerOpen || isBranchChipPickerOpen,
                     // Nit: the placeholder still said "...and projects" even
                     // once a chip has already picked the project — the
                     // field only filters that project's templates at that
@@ -775,6 +830,9 @@ struct SessionComposerPalette: View {
             if isProjectChipPickerOpen {
                 Divider()
                 inlineProjectPicker
+            } else if isBranchChipPickerOpen {
+                Divider()
+                inlineBranchPicker
             }
         }
         // A5: Esc while focus is on the chip or inside the inline picker
@@ -848,6 +906,10 @@ struct SessionComposerPalette: View {
                 // already-open picker" once D6's picker-level Down handler
                 // exists. The two inputs don't fire in the same turn, so the
                 // differing polarity is not a double-fire risk in practice.
+                // B3: closing the branch picker in the SAME statement is
+                // what makes the two mutually exclusive by construction —
+                // not merely "the two happen not to overlap in practice".
+                isBranchChipPickerOpen = false
                 isProjectChipPickerOpen.toggle()
             } label: {
                 label
@@ -888,6 +950,69 @@ struct SessionComposerPalette: View {
             isProjectChipPickerOpen = false
         }
         .environmentObject(store)
+    }
+
+    // MARK: - Branch chip (Slice B, B3)
+
+    /// The branch chip. No `.locked` state — the composer never locks the
+    /// BRANCH the way `.locked` binding locks the project, only whether it
+    /// appears at all (`isBranchChipEligible`). Label is "Default" when
+    /// nothing is picked and no command resolved one — the picker's own
+    /// "Default (<branch>)" row uses the SAME word so the chip and the row
+    /// that clears it read as the same concept.
+    private func branchChip() -> some View {
+        let label = Text(currentBranchLabel ?? "Default")
+            .font(.system(size: fieldFontSize, weight: .medium))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isBranchChipPickerOpen ? WorkspaceLayout.composerChipBackgroundActive : WorkspaceLayout.composerChipBackground)
+            // Same 5pt/`.continuous` shape as `projectChip` — one radius,
+            // one style, no exceptions (DESIGN.md §7).
+            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+
+        return Button {
+            // B3: closes the project picker in the SAME statement — see
+            // that Button's matching line for why this makes the two
+            // mutually exclusive by construction, not by convention.
+            isProjectChipPickerOpen = false
+            isBranchChipPickerOpen.toggle()
+        } label: {
+            label
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens branch picker")
+        // B3: opening the picker is also the third refresh trigger (on top
+        // of B1's project-selection and initial-open triggers) — Sean runs
+        // 2-7 parallel sessions creating worktrees constantly, so THIS is
+        // the moment accuracy matters most.
+        .onChange(of: isBranchChipPickerOpen) { isOpen in
+            guard isOpen, let project = currentProject else { return }
+            Task { await composerStore.refreshWorktrees(for: project.rootPath) }
+        }
+    }
+
+    /// `WorktreeDropdownView`'s list content, presented as an inline
+    /// expansion inside the card — NEVER a `.popover`, same reasoning as
+    /// `inlineProjectPicker` (a nested popover is exactly what Slice A
+    /// deleted: a child taking key can dismiss the parent composer).
+    private var inlineBranchPicker: some View {
+        WorktreeDropdownView(
+            worktrees: composerStore.worktrees,
+            branchesWithoutWorktree: composerStore.branchesWithoutWorktree,
+            currentBranchAtProjectRoot: composerStore.currentBranchAtProjectRoot,
+            isRefreshing: composerStore.isRefreshingWorktrees,
+            selectedWorktreePath: composerStore.selectedWorktreePath,
+            onSelectDefault: {
+                composerStore.clearBranchChip()
+                isBranchChipPickerOpen = false
+            },
+            onSelectWorktree: { path in
+                changeBranchChip(to: path)
+            }
+        )
     }
 
     // MARK: - Footer: + New template…
@@ -1047,6 +1172,18 @@ struct SessionComposerPalette: View {
             selectedProjectId: composerStore.selectedProjectId
         )
 
+        // B3: same precedence for the branch segment — a typed branch
+        // (`> main > cco`) wins over whatever the branch chip's picker
+        // currently has selected, for every row that reaches this
+        // function. `precommit` reads `selectedWorktreePath` directly (it
+        // has no view-layer access to resolve `typedWorktreePath` itself —
+        // that lookup needs `composerStore.worktrees`, which this view
+        // already has via `@ObservedObject`).
+        composerStore.selectedWorktreePath = SessionComposerCommandParser.resolveCommitWorktreePath(
+            typedWorktreePath: typedWorktreePath,
+            selectedWorktreePath: composerStore.selectedWorktreePath
+        )
+
         // F1 (Phase 3 review): capture the target project BEFORE precommit
         // runs — `.locked`'s enforced project can differ from whatever
         // `selectedProjectId` reads after `precommit` records the recent
@@ -1169,6 +1306,20 @@ struct SessionComposerPalette: View {
         composerStore.undoProjectChipChange()
     }
 
+    /// B3: change the branch chip via the inline picker. Same
+    /// currently-shown resolution idiom as `changeProjectChip(to:)` above
+    /// (typed wins over picked), routed through the shared, tested
+    /// `resolveCommitWorktreePath` rather than re-deriving the precedence
+    /// inline.
+    private func changeBranchChip(to worktreePath: String) {
+        isBranchChipPickerOpen = false
+        let currentlyShown = SessionComposerCommandParser.resolveCommitWorktreePath(
+            typedWorktreePath: typedWorktreePath,
+            selectedWorktreePath: composerStore.selectedWorktreePath
+        )
+        composerStore.changeBranchChip(to: worktreePath, currentlyShown: currentlyShown)
+    }
+
     /// A5: backspace at position 0 (field empty) pops the chip back into
     /// raw editable text. Guarded on `commandParse.projectId == nil` rather
     /// than `commandProject == nil` (D3 fix): a genuine ≥2-token command
@@ -1179,7 +1330,19 @@ struct SessionComposerPalette: View {
     /// backspacing all the way through a mid-typed command's project name
     /// still works, rather than becoming a second dead end next to the one
     /// this function exists to fix.
+    ///
+    /// B3: the BRANCH chip pops first, if one is showing and it's a
+    /// PICKER pick rather than a typed command (`commandParse.branchToken
+    /// == nil`) — a typed branch is text already, nothing to "pop" back
+    /// to; only a picker-selected `selectedWorktreePath` needs clearing.
+    /// Otherwise backspace-at-start would pop the PROJECT chip while a
+    /// picked branch chip was still showing, silently discarding the
+    /// branch pick along with it and reading as the wrong chip disappearing.
     private func popChipToText() {
+        if commandParse.branchToken == nil, composerStore.selectedWorktreePath != nil {
+            composerStore.clearBranchChip()
+            return
+        }
         guard !isProjectLocked, commandParse.projectId == nil, let project = currentProject else { return }
         composerStore.popChipToText(projectName: project.name)
     }
@@ -1194,12 +1357,18 @@ struct SessionComposerPalette: View {
     /// own `.exit` event) — if both fired in the same turn, the first call
     /// closes the picker and the second, unguarded, would close the whole
     /// composer instead of leaving it open with the picker now dismissed.
+    ///
+    /// B3: widened to check BOTH pickers — `isProjectChipPickerOpen` alone
+    /// would let Esc close the whole composer while the BRANCH picker was
+    /// open instead of just dismissing that picker.
     private func closeChipPickerOrDismiss() {
         guard !isHandlingExitCommand else { return }
         isHandlingExitCommand = true
         DispatchQueue.main.async { isHandlingExitCommand = false }
 
-        if isProjectChipPickerOpen {
+        if isBranchChipPickerOpen {
+            isBranchChipPickerOpen = false
+        } else if isProjectChipPickerOpen {
             isProjectChipPickerOpen = false
         } else {
             isPresented = false
@@ -1811,6 +1980,178 @@ private struct ProjectDropdownView: View {
             onSelect(orderedProjects[highlightedIndex])
         } else {
             onAddProject()
+        }
+    }
+}
+
+// MARK: - Branch chip picker (Slice B, B3)
+
+/// The branch chip's inline picker, modeled on `ProjectDropdownView` —
+/// presented as an expansion INSIDE the card, never a `.popover` (see that
+/// type's doc comment for why a nested popover is exactly what Slice A
+/// deleted).
+///
+/// Row order, per the spec: `Default (<current branch>)` first (clears the
+/// override); then existing worktrees (path shown secondary); then, under
+/// a divider, branches with no worktree yet — a **create** action routed
+/// to B4's create path, which doesn't exist yet, so those rows render
+/// DISABLED with a visible reason rather than silently inert. Sean's
+/// stated reason for keeping that second group at all: discoverability —
+/// nobody should have to recall a branch name.
+private struct WorktreeDropdownView: View {
+    let worktrees: [GitWorktreeEnumerator.Worktree]
+    let branchesWithoutWorktree: [String]
+    let currentBranchAtProjectRoot: String?
+    let isRefreshing: Bool
+    let selectedWorktreePath: String?
+    var onSelectDefault: () -> Void
+    var onSelectWorktree: (String) -> Void
+
+    /// Keyboard-highlighted row, 0-based across ONLY the navigable rows:
+    /// the Default row, then existing worktrees, in that order. The
+    /// disabled "no worktree" rows and the trailing "Refreshing…" row are
+    /// never navigable — same reasoning `ProjectDropdownView` applies to
+    /// its own trailing "+ Add project…" row, just with the disabled group
+    /// excluded entirely rather than included as a navigable target.
+    @State private var highlightedIndex: Int = 0
+
+    private var rowCount: Int { 1 + worktrees.count }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                defaultRow
+
+                ForEach(Array(worktrees.enumerated()), id: \.element.path) { index, worktree in
+                    worktreeRow(worktree, index: index + 1)
+                }
+
+                if !branchesWithoutWorktree.isEmpty {
+                    Divider().padding(.horizontal, 8).padding(.vertical, 2)
+
+                    ForEach(branchesWithoutWorktree, id: \.self) { branch in
+                        noWorktreeRow(branch)
+                    }
+                }
+
+                if isRefreshing {
+                    Text("Refreshing…")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                }
+            }
+            .padding(6)
+        }
+        // Same pre-existing 240pt cap `ProjectDropdownView` uses — not
+        // retuned as part of this pass.
+        .frame(maxHeight: 240)
+        .overlay(keyboardCaptureLayer)
+        .onAppear {
+            highlightedIndex = worktrees.firstIndex(where: { $0.path == selectedWorktreePath }).map { $0 + 1 } ?? 0
+        }
+    }
+
+    private var defaultRow: some View {
+        let isSelected = selectedWorktreePath == nil
+        let label = currentBranchAtProjectRoot.map { "Default (\($0))" } ?? "Default"
+        return Button(action: onSelectDefault) {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+            .background(highlightedIndex == 0 ? WorkspaceLayout.composerChipBackground : Color.clear)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(highlightedIndex == 0 ? .isSelected : [])
+    }
+
+    private func worktreeRow(_ worktree: GitWorktreeEnumerator.Worktree, index: Int) -> some View {
+        let isSelected = worktree.path == selectedWorktreePath
+        return Button {
+            onSelectWorktree(worktree.path)
+        } label: {
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(worktree.branch ?? (worktree.path as NSString).lastPathComponent)
+                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    Text(worktree.path)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+            .background(index == highlightedIndex ? WorkspaceLayout.composerChipBackground : Color.clear)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(index == highlightedIndex ? .isSelected : [])
+    }
+
+    /// A branch with no worktree yet — picking it is a CREATE action
+    /// (`git worktree add`), which is B4's job and does not exist in this
+    /// slice. Rendered disabled with a visible reason rather than
+    /// silently inert, per the brief: a dead control with no explanation
+    /// reads as a bug, not a boundary.
+    private func noWorktreeRow(_ branch: String) -> some View {
+        HStack(spacing: 6) {
+            Text(branch)
+                .font(.system(size: 12, weight: .regular))
+            Spacer()
+            Text("No worktree yet")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .foregroundStyle(.tertiary)
+        .accessibilityLabel("\(branch), no worktree yet, not available")
+    }
+
+    /// Same hidden-`Button` + `.keyboardShortcut` pattern
+    /// `ProjectDropdownView.keyboardCaptureLayer` uses — works down to
+    /// macOS 13, unlike `Backport.onKeyPress`. `ComposerQueryField.isPickerOpen`
+    /// (the OR of both pickers) is what removes the field's own equivalent
+    /// handlers while this one is on screen, so these are the only live
+    /// ↑/↓/Return handlers while THIS picker is open, by construction.
+    private var keyboardCaptureLayer: some View {
+        Group {
+            Button {
+                highlightedIndex = (highlightedIndex - 1 + rowCount) % rowCount
+            } label: { Color.clear }
+                .buttonStyle(PlainButtonStyle())
+                .keyboardShortcut(.upArrow, modifiers: [])
+
+            Button {
+                highlightedIndex = (highlightedIndex + 1) % rowCount
+            } label: { Color.clear }
+                .buttonStyle(PlainButtonStyle())
+                .keyboardShortcut(.downArrow, modifiers: [])
+
+            Button {
+                commitHighlighted()
+            } label: { Color.clear }
+                .buttonStyle(PlainButtonStyle())
+                .keyboardShortcut(.return, modifiers: [])
+        }
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
+    private func commitHighlighted() {
+        if highlightedIndex == 0 {
+            onSelectDefault()
+        } else {
+            onSelectWorktree(worktrees[highlightedIndex - 1].path)
         }
     }
 }

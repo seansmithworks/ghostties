@@ -1321,8 +1321,8 @@ Branch `feat/composer-branch-segment` off `main` @ `5e6636022`. Spec: `docs/plan
 
 - [x] ~~**B-plan** — build brief returned; five decisions recommended, build order revised (separator moves ahead of the chip).~~ | app | done
 - [x] **B1** — worktree enumeration (`git worktree list --porcelain`) behind a cache; never per-keystroke. | app | done
-- [ ] **B2** — typable `>` separator (was B4; promoted — the branch segment exists only when an explicit `>` introduced it, so the chip cannot precede it). | app | new
-- [ ] **B3** — branch chip: third segment, lists existing worktrees, cascade rule (branch change clears nothing). | app | new
+- [x] **B2** — typable `>` separator (was B4; promoted — the branch segment exists only when an explicit `>` introduced it, so the chip cannot precede it). | app | done
+- [x] **B3** — branch chip: third segment; picker lists existing worktrees **and** branches without a worktree, second group disabled pending B4; cascade rule (branch change clears nothing, project change clears branch + arms ⌘Z). Interactive acceptance criteria (screenshots/recording) NOT captured — driving the composer UI via synthetic input is a hard rule violation; needs Sean's manual pass. | app | done, needs visual verification
 - [ ] **B4** — `+ new worktree` row — explicit only, never implicit; all four failure modes surface in `writeError`. | app | new
 - [ ] **B5** — review rounds (never one; rule is twelve-for-twelve here) + unfiltered suite vs. 789/0/1 baseline. | app | new
 

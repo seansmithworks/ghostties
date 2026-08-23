@@ -115,6 +115,27 @@ final class SessionComposerStore: ObservableObject {
     /// yet — the branch chip's picker is a later step.
     @Published private(set) var worktrees: [GitWorktreeEnumerator.Worktree] = []
 
+    /// Local branches with no worktree anywhere yet — the branch chip
+    /// picker's second, disabled-for-now group (B3; B4 wires up creation).
+    /// Populated on the SAME refresh as `worktrees`, never by a second
+    /// racing task — see `refreshWorktrees(for:)`.
+    @Published private(set) var branchesWithoutWorktree: [String] = []
+
+    /// The branch checked out at the project's own root — i.e. what "no
+    /// override" resolves to. Backs the picker's "Default (<branch>)" row.
+    /// Populated on the same refresh as `worktrees`/`branchesWithoutWorktree`.
+    @Published private(set) var currentBranchAtProjectRoot: String?
+
+    /// The branch chip's current pick: a worktree path to launch the
+    /// session in, overriding `project.rootPath` at commit time (`precommit`).
+    /// `nil` means "no override" — the picker's "Default" row, and the
+    /// state after `open(...)`/`cancel()` reset it. Reset in BOTH of those
+    /// (not just one) is load-bearing: this store is a process-wide
+    /// singleton, so leaving a stale path set across a `cancel()` +
+    /// reopen-on-a-different-project would launch a session into a
+    /// DIFFERENT project's worktree — silently, with no error, wrong cwd.
+    @Published var selectedWorktreePath: String?
+
     /// Set for the duration of a `refreshWorktrees` call so a later step's
     /// picker can show a loading state instead of a silent empty list.
     @Published private(set) var isRefreshingWorktrees: Bool = false
@@ -138,20 +159,32 @@ final class SessionComposerStore: ObservableObject {
 
         guard let repoPath else {
             worktrees = []
+            branchesWithoutWorktree = []
+            currentBranchAtProjectRoot = nil
             isRefreshingWorktrees = false
             return
         }
 
+        // Deliberately NOT blanked here — a refresh in flight must keep
+        // rendering whatever the previous result was (the branch picker
+        // shows a trailing "Refreshing…" row via `isRefreshingWorktrees`
+        // instead), or the list collapses and jumps under the cursor on
+        // every reopen.
         isRefreshingWorktrees = true
 
-        let listTask = Task.detached(priority: .userInitiated) { () -> [GitWorktreeEnumerator.Worktree] in
-            GitWorktreeEnumerator.list(repoPath: repoPath)
+        // One detached task computing BOTH results off a single token
+        // check — never two racing tasks each racing the other's
+        // `worktreeRefreshToken` write.
+        let listTask = Task.detached(priority: .userInitiated) { () -> ([GitWorktreeEnumerator.Worktree], [String]) in
+            let rawList = GitWorktreeEnumerator.list(repoPath: repoPath)
+            let branches = GitWorktreeEnumerator.branchesWithoutWorktree(repoPath: repoPath)
+            return (rawList, branches)
         }
         let timeoutTask = Task {
             try await Task.sleep(for: .seconds(2))
             listTask.cancel()
         }
-        let result = await listTask.value
+        let (rawList, branches) = await listTask.value
         timeoutTask.cancel()
 
         // Discard if a newer refresh has since been kicked off. Already back
@@ -159,7 +192,9 @@ final class SessionComposerStore: ObservableObject {
         // `MainActor.run` needed.
         guard token == worktreeRefreshToken else { return }
 
-        worktrees = result.filter { $0.path != repoPath }
+        worktrees = rawList.filter { $0.path != repoPath }
+        currentBranchAtProjectRoot = rawList.first(where: { $0.path == repoPath })?.branch
+        branchesWithoutWorktree = branches
         isRefreshingWorktrees = false
     }
 
@@ -256,6 +291,14 @@ final class SessionComposerStore: ObservableObject {
         currentProjectBinding = projectBinding
         pendingChipUndo = nil
         worktrees = []
+        // B3: reset on EVERY open(), not just when a project actually
+        // changes — this store is a process-wide singleton, so a stale
+        // `selectedWorktreePath` left over from a PRIOR project would
+        // otherwise launch the next session into a DIFFERENT project's
+        // worktree path (silent, wrong cwd, no error).
+        branchesWithoutWorktree = []
+        currentBranchAtProjectRoot = nil
+        selectedWorktreePath = nil
         cachedWorkspaceStore = workspaceStore
 
         switch projectBinding {
@@ -285,6 +328,12 @@ final class SessionComposerStore: ObservableObject {
         writeError = nil
         pendingChipUndo = nil
         worktrees = []
+        // See the matching reset in `open(...)` — this store is a
+        // process-wide singleton and must never carry a worktree pick
+        // across into whatever project opens next.
+        branchesWithoutWorktree = []
+        currentBranchAtProjectRoot = nil
+        selectedWorktreePath = nil
     }
 
     // MARK: - Commit
@@ -349,6 +398,23 @@ final class SessionComposerStore: ObservableObject {
             return false
         }
 
+        // B3: the branch chip's pick, if any, overrides the LOCAL copy of
+        // the template's `workingDirectory` — `SessionCoordinator` itself
+        // is never touched (it already reads
+        // `template.workingDirectory ?? project.rootPath`). Checked here,
+        // synchronously, so a worktree that vanished between pick and
+        // commit (pruned by another session, branch deleted) surfaces a
+        // `writeError` instead of silently launching into a stale/missing
+        // path.
+        var launchTemplate = template
+        if let worktreePath = selectedWorktreePath {
+            guard FileManager.default.fileExists(atPath: worktreePath) else {
+                writeError = "Worktree no longer exists at \(worktreePath)."
+                return false
+            }
+            launchTemplate.workingDirectory = worktreePath
+        }
+
         writeError = nil
         recordRecent(projectId: projectId, templateId: template.id)
         recordRecentProject(projectId)
@@ -361,8 +427,8 @@ final class SessionComposerStore: ObservableObject {
         // no composer left to surface it into. This is exactly the
         // existing Option-click instant-create path's behaviour today —
         // the composer is at parity, not newly regressed.
-        Task.detached { [coordinator] in
-            _ = await coordinator.createQuickSession(for: project, template: template)
+        Task.detached { [coordinator, launchTemplate] in
+            _ = await coordinator.createQuickSession(for: project, template: launchTemplate)
         }
 
         return true
@@ -420,7 +486,13 @@ final class SessionComposerStore: ObservableObject {
     /// incidentally forced a re-render. Nothing guaranteed that ordering;
     /// publishing this directly is what actually makes the ⌘Z affordance's
     /// appearance/disappearance a real, provable contract.
-    @Published private(set) var pendingChipUndo: (previousProjectId: UUID?, previousSearchText: String)?
+    /// B3: extended with `previousWorktreePath` so ⌘Z restores project +
+    /// branch + command as ONE step — the cascade rule clears the branch
+    /// chip alongside the project (a branch name is meaningless in another
+    /// repo), so its undo has to travel with the same tuple or restoring
+    /// project/search text without the branch would silently leave the
+    /// wrong worktree armed.
+    @Published private(set) var pendingChipUndo: (previousProjectId: UUID?, previousSearchText: String, previousWorktreePath: String?)?
 
     /// Change the project chip to `projectId`, cascading per the breadcrumb
     /// spec's decision #2: the typed remainder is branch-agnostic today, but
@@ -439,8 +511,17 @@ final class SessionComposerStore: ObservableObject {
     @discardableResult
     func changeProjectChip(to projectId: UUID, currentlyShown: UUID?) -> ProjectChipChangeResult {
         guard projectId != currentlyShown else { return .noOp }
-        pendingChipUndo = (previousProjectId: selectedProjectId, previousSearchText: searchText)
+        pendingChipUndo = (
+            previousProjectId: selectedProjectId,
+            previousSearchText: searchText,
+            previousWorktreePath: selectedWorktreePath
+        )
         selectProject(projectId)
+        // B3: a different project invalidates the branch chip too — a
+        // branch name is meaningless in another repo (spec's cascade
+        // rule) — so it cascades alongside `searchText`, captured in the
+        // same undo tuple above.
+        selectedWorktreePath = nil
 
         if let project = cachedWorkspaceStore?.projects.first(where: { $0.id == projectId }) {
             Task { await self.refreshWorktrees(for: project.rootPath) }
@@ -456,7 +537,34 @@ final class SessionComposerStore: ObservableObject {
         guard let pending = pendingChipUndo else { return }
         selectedProjectId = pending.previousProjectId
         searchText = pending.previousSearchText
+        selectedWorktreePath = pending.previousWorktreePath
         pendingChipUndo = nil
+    }
+
+    // MARK: - Branch chip (Slice B, B3)
+
+    /// Mirrors `ProjectChipChangeResult` — reused rather than duplicated
+    /// with a different name, since the two enums would be structurally
+    /// identical.
+    typealias BranchChipChangeResult = ProjectChipChangeResult
+
+    /// Pick a worktree for the branch chip. Per the spec's cascade rule,
+    /// changing the BRANCH clears nothing else (a command is branch-agnostic
+    /// — `cco -n "xyz"` means the same thing on any branch) and arms no
+    /// ⌘Z undo — only a PROJECT change does that. Re-picking the value
+    /// already shown is a no-op, matching `changeProjectChip`'s same rule.
+    @discardableResult
+    func changeBranchChip(to worktreePath: String, currentlyShown: String?) -> BranchChipChangeResult {
+        guard worktreePath != currentlyShown else { return .noOp }
+        selectedWorktreePath = worktreePath
+        return .changed
+    }
+
+    /// The picker's "Default (<branch>)" row — clears the override back to
+    /// "wherever the project points right now" (`project.rootPath`). Arms
+    /// no undo, same reasoning as `changeBranchChip`.
+    func clearBranchChip() {
+        selectedWorktreePath = nil
     }
 
     /// D4 fix: disarm the pending chip-undo the moment the user types
