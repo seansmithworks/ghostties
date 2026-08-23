@@ -116,83 +116,377 @@ enum SessionComposerCommandParser {
         return tokens
     }
 
-    /// Parse `query` for the `<project> [> <branch>] <remainder...>` command
-    /// grammar (Slice B, composer breadcrumb spec adds the optional branch
-    /// segment on top of slice 1's `<project> <remainder...>`).
+    // MARK: - Path grammar (greedy, terminated-token walk)
+    //
+    // Replaces the old two-fixed-position `<project> [> <branch>]
+    // <remainder...>` grammar above. See
+    // `docs/plans` composer path-grammar plan (2026-08-23) for the full
+    // derivation; the load-bearing rules, restated here since they're easy
+    // to get backwards:
+    //
+    // 1. Only a TERMINATED token (followed by whitespace or `>`) can ever
+    //    resolve to a segment. The trailing, still-being-typed token is a
+    //    search term — it filters, it never resolves. This is what keeps
+    //    a single bare word (`"ghostties"`, `"bru"`) from ever claiming a
+    //    project: there is no terminator yet, so nothing has finished.
+    // 2. Matching walks terminated tokens left to right, trying each
+    //    against the first STILL-UNFILLED type among project → branch →
+    //    operator (template names), in that fixed order. First exact,
+    //    case-insensitive match claims the token and removes that type — a
+    //    filled type is never retried.
+    // 3. The first terminated token that matches nothing ends matching for
+    //    good. Everything from there on is free text: a thread name if an
+    //    operator already resolved, otherwise an ad-hoc command (D13) —
+    //    this is what keeps `ghostties npm run dev` producing ad-hoc
+    //    `["npm","run","dev"]`, unchanged from slice 1 (PR #136).
+    // 4. `>` closes whatever free-text run is currently open and advances
+    //    to the next free-text position (operator → thread). Hit while
+    //    still matching (no run open yet), it forces matching to stop and
+    //    opens a run at the next position instead. Hit while a thread run
+    //    is already open, it's swallowed as a literal character — thread
+    //    is the last position, there's nothing further to advance to.
+
+    /// The four segment positions the grammar can fill, in walk order.
+    /// `operation` because `operator` is a Swift keyword — the grammar's
+    /// word for it is still "operator" everywhere it's user-facing.
+    enum SegmentKind: Int, Comparable, CaseIterable {
+        case project = 0, branch = 1, operation = 2, thread = 3
+        static func < (l: Self, r: Self) -> Bool { l.rawValue < r.rawValue }
+    }
+
+    /// A single resolved (settled) segment of a `PathParse`.
+    struct Segment: Equatable {
+        let kind: SegmentKind
+        /// UTF-16 offsets into `PathParse.source` — never a `Range<String.Index>`:
+        /// an index from a different string is undefined behavior, whereas a
+        /// stale `NSRange` is merely out of bounds and guardable.
+        let range: NSRange
+        let resolved: Resolution
+
+        enum Resolution: Equatable {
+            case project(UUID)
+            case branch(String)      // token only; worktree lookup stays in the view
+            case template(UUID)      // operator matched a known template
+            case adHoc                // operator is unmatched free text, closed by `>`
+            case thread
+            case unresolved
+        }
+
+        /// The ONLY way a caller obtains this segment's display string.
+        func text(in source: String) -> String {
+            guard let r = Range(range, in: source) else { return "" }
+            return String(source[r])
+        }
+    }
+
+    /// The result of `parsePath` — a greedy walk of `rawQuery` against the
+    /// four-segment grammar above. Every settled segment (project, branch,
+    /// a template match, or an ad-hoc run explicitly closed by `>`) lands
+    /// in `segments`. The trailing run that is STILL OPEN when the walk
+    /// ends — still absorbing keystrokes, not yet closed by a `>` — is
+    /// exposed separately via `remainderRange`/`activeKind` rather than
+    /// added to `segments`, since it isn't a settled fact yet.
+    struct PathParse: Equatable {
+        /// The exact RAW string every `Segment.range` indexes — never trimmed.
+        let source: String
+        let segments: [Segment]
+        /// The still-being-typed tail: not terminated, never resolved. `nil`
+        /// once a free-text run has been opened (its content, terminated or
+        /// not, belongs to the run instead — see rule 1) or when the query
+        /// ends in a terminator or is empty.
+        let trailingTermRange: NSRange?
+        /// The type the trailing term (or the next keystroke) would be
+        /// tried against — the first unfilled type, or `.operation`/
+        /// `.thread` once matching has stopped.
+        let activeKind: SegmentKind?
+        /// The currently-open, not-yet-closed free-text run, if any.
+        let remainderRange: NSRange?
+        let projectId: UUID?
+
+        static let none = PathParse(source: "", segments: [], trailingTermRange: nil,
+                                    activeKind: nil, remainderRange: nil, projectId: nil)
+    }
+
+    /// One raw token from a quote-aware, `>`-aware scan of `rawQuery`: a
+    /// word (quote-aware, whitespace/`>`-delimited) or an explicit `>`
+    /// control character. `matchText` is the dequoted comparison value
+    /// (mirrors what `tokenize` would produce); `range` is the VERBATIM
+    /// span into `rawQuery`, quotes and all — what every `Segment.range`
+    /// and `remainderRange`/`trailingTermRange` are built from.
+    private enum RawToken {
+        case word(range: NSRange, matchText: String, terminated: Bool)
+        case chevron(range: NSRange)
+    }
+
+    /// Scans `rawQuery` into a sequence of words and `>` controls. A word is
+    /// `terminated` when it is followed immediately by whitespace or `>`;
+    /// the LAST word in the scan is unterminated when it instead runs to the
+    /// end of the string with nothing following it — the "still being
+    /// typed" signal rule 1 depends on. Mirrors `tokenize`'s quote-handling
+    /// exactly (straight and curly quotes, `>` literal inside quotes) so the
+    /// two scans always agree on where a boundary is.
+    private static func scanRawTokens(_ rawQuery: String) -> [RawToken] {
+        var tokens: [RawToken] = []
+        var index = rawQuery.startIndex
+        let end = rawQuery.endIndex
+
+        while index < end {
+            while index < end, rawQuery[index].isWhitespace {
+                index = rawQuery.index(after: index)
+            }
+            guard index < end else { break }
+
+            if rawQuery[index] == ">" {
+                let start = index
+                index = rawQuery.index(after: index)
+                tokens.append(.chevron(range: NSRange(start..<index, in: rawQuery)))
+                continue
+            }
+
+            let start = index
+            var matchText = ""
+            var inQuotes = false
+            while index < end {
+                let char = rawQuery[index]
+                if quoteCharacters.contains(char) {
+                    inQuotes.toggle()
+                    index = rawQuery.index(after: index)
+                    continue
+                }
+                if !inQuotes, char.isWhitespace || char == ">" { break }
+                matchText.append(char)
+                index = rawQuery.index(after: index)
+            }
+            // `index < end` means the scan stopped because it hit a
+            // terminator character (whitespace or `>`), not because it ran
+            // out of string — that's exactly "terminated".
+            let terminated = index < end
+            tokens.append(.word(range: NSRange(start..<index, in: rawQuery), matchText: matchText, terminated: terminated))
+        }
+        return tokens
+    }
+
+    private static func matchesTemplate(_ template: AgentTemplate, token: String) -> Bool {
+        template.name.caseInsensitiveCompare(token) == .orderedSame
+    }
+
+    /// Parses `rawQuery` for the four-segment path grammar (project ›
+    /// branch › operator › thread), greedy and type-matched, per the rules
+    /// at the top of this section. `rawQuery` must be the RAW, untrimmed
+    /// search text — trimming erases the trailing-whitespace signal
+    /// termination depends on (mirrors why `stickyChipProjectId` below also
+    /// takes a raw query).
     ///
-    /// Tokenizes ONLY when ALL of: there is a project segment AND something
-    /// after it, that first segment exactly matches a project `name` or
-    /// folder basename (case-insensitive), and `isLocked` is false. Any
-    /// other case returns `.none` — the caller must treat that as "no
-    /// command", not as an error, and keep filtering the raw query exactly
-    /// as it did before this parser existed.
+    /// `templates`/`knownBranchNames` are caller-supplied so this stays
+    /// pure and disk-free — the parser never looks anything up itself.
+    static func parsePath(
+        rawQuery: String,
+        projects: [Project],
+        templates: [AgentTemplate],
+        knownBranchNames: [String] = [],
+        isLocked: Bool
+    ) -> PathParse {
+        guard !isLocked, !rawQuery.isEmpty else { return .none }
+
+        let rawTokens = scanRawTokens(rawQuery)
+        guard !rawTokens.isEmpty else { return .none }
+
+        var filled = Set<SegmentKind>()
+        var segments: [Segment] = []
+        var projectId: UUID?
+        var trailingTermRange: NSRange?
+
+        // The currently-open free-text run, if any. `openRunKind == nil`
+        // means matching is still "live" — every terminated token so far
+        // has claimed a type. Once a run opens it never reverts to `nil`;
+        // only `>` (case: operation run open) closes and re-opens it as a
+        // thread run.
+        var openRunKind: SegmentKind?
+        var openRunStart: Int?
+        var openRunEnd: Int?
+        // Whether any token (word or `>`) has been processed yet. Rule 1's
+        // "never resolves" carve-out for an unterminated tail applies ONLY
+        // to the very first token in the scan — before anything has
+        // resolved, there is nothing to fall back to except pure search
+        // filtering (this is what protects a bare single word like `bru`
+        // or `ghostties`). Once matching has moved past that (a project has
+        // resolved, say), an unterminated LATER token can never claim a
+        // KNOWN value (project/branch/template — that's still off limits),
+        // but it legitimately IS free text in progress — the whole point of
+        // D4's ad-hoc operator / thread name — so it falls straight through
+        // to rule 3 (open/extend a run) instead of being withheld. Every
+        // unterminated token is by construction the LAST token in the scan
+        // (nothing can follow it), so this only ever matters once, here.
+        var hasProcessedAnyToken = false
+
+        func nextFreeTextKind() -> SegmentKind {
+            filled.contains(.operation) ? .thread : .operation
+        }
+
+        for token in rawTokens {
+            let isFirstToken = !hasProcessedAnyToken
+            hasProcessedAnyToken = true
+            switch token {
+            case .word(let range, let matchText, let terminated):
+                if openRunKind == nil {
+                    if !terminated {
+                        if isFirstToken {
+                            trailingTermRange = range
+                            continue
+                        }
+                        // Not the first token, and not terminated: skip
+                        // straight to rule 3 below (no type-matching
+                        // attempted — an in-progress token can't claim a
+                        // known value either way).
+                        openRunKind = nextFreeTextKind()
+                        openRunStart = range.location
+                        openRunEnd = range.location + range.length
+                        continue
+                    }
+                    if !filled.contains(.project),
+                       let project = projects.first(where: { matches($0, token: matchText) }) {
+                        segments.append(Segment(kind: .project, range: range, resolved: .project(project.id)))
+                        filled.insert(.project)
+                        projectId = project.id
+                        continue
+                    }
+                    if !filled.contains(.branch),
+                       knownBranchNames.contains(where: { $0.caseInsensitiveCompare(matchText) == .orderedSame }) {
+                        segments.append(Segment(kind: .branch, range: range, resolved: .branch(matchText)))
+                        filled.insert(.branch)
+                        continue
+                    }
+                    if !filled.contains(.operation),
+                       let template = templates.first(where: { matchesTemplate($0, token: matchText) }) {
+                        segments.append(Segment(kind: .operation, range: range, resolved: .template(template.id)))
+                        filled.insert(.operation)
+                        continue
+                    }
+                    // Rule 3: nothing matched — matching stops here for
+                    // good. Open a free-text run starting at this token.
+                    openRunKind = nextFreeTextKind()
+                    openRunStart = range.location
+                    openRunEnd = range.location + range.length
+                } else {
+                    // Rule 1 (second half): inside an open run, even an
+                    // unterminated trailing token is legitimate content —
+                    // it's free text being typed, not a segment lookup.
+                    // `openRunStart` is set lazily (nil until the run's
+                    // first real character arrives) so a run opened by `>`
+                    // doesn't swallow the separating whitespace that
+                    // preceded this word — see the chevron case below.
+                    if openRunStart == nil { openRunStart = range.location }
+                    openRunEnd = range.location + range.length
+                }
+
+            case .chevron(let range):
+                if let kind = openRunKind {
+                    if kind == .operation {
+                        // Rule 4, case 2: close the ad-hoc run, advance to thread.
+                        if let start = openRunStart, let stop = openRunEnd, stop > start {
+                            segments.append(Segment(
+                                kind: .operation,
+                                range: NSRange(location: start, length: stop - start),
+                                resolved: .adHoc
+                            ))
+                        }
+                        filled.insert(.operation)
+                        openRunKind = .thread
+                        openRunStart = nil
+                        openRunEnd = nil
+                    } else {
+                        // Rule 4, case 3: inside a thread run, `>` is
+                        // literal — extend the run through it (including
+                        // the `>` character itself) rather than closing
+                        // anything. If the thread run has no content yet
+                        // (e.g. `ghostties cco > > name`), this `>` becomes
+                        // its first character.
+                        if openRunStart == nil { openRunStart = range.location }
+                        openRunEnd = range.location + range.length
+                    }
+                } else {
+                    // Rule 4, case 1: matching was still live — stop it for
+                    // good and open a run at the next free-text position.
+                    // No content yet (lazy start, as above).
+                    openRunKind = nextFreeTextKind()
+                    openRunStart = nil
+                    openRunEnd = nil
+                }
+            }
+        }
+
+        var remainderRange: NSRange?
+        if let kind = openRunKind, let start = openRunStart, let stop = openRunEnd, stop > start {
+            remainderRange = NSRange(location: start, length: stop - start)
+            _ = kind // kind is exposed via `activeKind` below
+        }
+
+        let activeKind: SegmentKind = openRunKind
+            ?? [.project, .branch, .operation].first(where: { !filled.contains($0) })
+            ?? .thread
+
+        return PathParse(
+            source: rawQuery,
+            segments: segments,
+            trailingTermRange: trailingTermRange,
+            activeKind: activeKind,
+            remainderRange: remainderRange,
+            projectId: projectId
+        )
+    }
+
+    /// Splices `value` over `parse.trailingTermRange` in `parse.source` and
+    /// appends a single trailing space. The space is deliberate, not
+    /// cosmetic: it's the terminator, so accepting a completion is what
+    /// resolves the segment — completion and termination are the same act.
+    /// Splicing (rather than rejoining tokens) preserves everything after
+    /// the term verbatim; a token-rejoin version would silently normalize
+    /// the tail. Returns `parse.source` unchanged if there is no trailing
+    /// term to complete.
+    static func completing(parse: PathParse, with value: String) -> String {
+        guard let range = parse.trailingTermRange, let bounds = Range(range, in: parse.source) else {
+            return parse.source
+        }
+        var result = parse.source
+        result.replaceSubrange(bounds, with: value + " ")
+        return result
+    }
+
+    /// Parse `query` for the `<project> <remainder...>` shape — a thin
+    /// adapter over `parsePath` (path grammar, above). `branchToken` can
+    /// only ever be non-nil here if a caller starts passing
+    /// `knownBranchNames`, which this adapter deliberately never does (no
+    /// existing caller of `parse` has a branch list to offer) — kept as a
+    /// real (not dead) code path for that reason, not vestigial.
     ///
-    /// Disambiguation rule (load-bearing): token 2 is a branch ONLY when an
-    /// explicit `>` introduced it. A branch name and a template name are
-    /// both bare words, and this parser never consults disk — so
-    /// `ghostties cco` stays a template (unchanged from slice 1),
-    /// `ghostties > main > cco` resolves branch `main` with remainder
-    /// `cco`, and `ghostties main cco` is remainder `main cco`, not a
-    /// branch, because no `>` ever appeared.
+    /// Behavior note: as of the path-grammar rewrite, `>` no longer
+    /// introduces a branch segment through this adapter — it closes
+    /// whatever free-text run is open and advances (rule 4). A bare
+    /// `ghostties > main` now resolves project `ghostties` with ad-hoc
+    /// remainder `main`, not a branch.
     static func parse(query: String, projects: [Project], isLocked: Bool) -> ParseResult {
-        guard !isLocked else { return .none }
+        let path = parsePath(rawQuery: query, projects: projects, templates: [], isLocked: isLocked)
+        guard let projectId = path.projectId else { return .none }
 
-        // Segment-aware split for the project: `>` counts as a separator
-        // here so `ghostties>main` and `ghostties > main` both find the
-        // project boundary correctly.
-        guard let projectSplit = splitOnFirstToken(query, separatorsIncludeChevron: true) else {
-            return .none
-        }
-        guard !projectSplit.remainder.isEmpty else { return .none }
+        let branchToken: String? = path.segments.lazy.compactMap { segment -> String? in
+            guard case .branch(let token) = segment.resolved else { return nil }
+            return token
+        }.first
 
-        guard let projectToken = tokenize(projectSplit.prefix, separatorsIncludeChevron: true).first else {
-            return .none
-        }
-        guard let project = projects.first(where: { matches($0, token: projectToken) }) else {
-            return .none
-        }
+        // The remainder this adapter reports is "the command": whichever ad-hoc
+        // operator run exists — closed via an explicit `>` (rare, requires a
+        // second remainder past it, which this flat `ParseResult` can't express
+        // and so is dropped, matching pre-rewrite behavior of only ever
+        // reporting one remainder), or still open at end of string (the
+        // ordinary case, `ghostties cco -n test`).
+        let remainderRange: NSRange? = path.segments.first(where: { $0.kind == .operation && $0.resolved == .adHoc })?.range
+            ?? path.remainderRange
 
-        // A `>` was consumed as part of the separator between the project
-        // token and the remainder if and only if the prefix (token +
-        // separator run) contains one. NOTE (nit fix, Slice B review round
-        // 1): this is NOT "the token itself can never contain a bare `>`" —
-        // a QUOTED token can (`"a>b"` survives `tokenize` with the `>`
-        // intact, since `>` inside quotes is never treated as a separator).
-        // `projectToken` itself is never re-inspected for a literal `>`
-        // here, so a quoted project name containing one doesn't change this
-        // check's correctness — it only means the claim in the old wording
-        // was wrong, not that the code was.
-        let branchIntroducedByChevron = projectSplit.prefix.contains(">")
-
-        guard branchIntroducedByChevron else {
-            // No explicit `>` after the project: the whole remainder is
-            // the command, tokenized on whitespace ONLY — so a `>` further
-            // inside (a shell redirect argument) stays a literal argv word
-            // instead of being treated as a segment separator.
-            let remainderTokens = tokenize(projectSplit.remainder, separatorsIncludeChevron: false)
-            return ParseResult(projectId: project.id, remainderTokens: remainderTokens)
+        guard let range = remainderRange, let bounds = Range(range, in: query) else {
+            return ParseResult(projectId: projectId, remainderTokens: [], branchToken: branchToken)
         }
-
-        // Segment-aware split again for the branch. Defensive only (nit fix,
-        // Slice B review round 1): the guard above already returned `.none`
-        // if `projectSplit.remainder` were empty, and `splitOnFirstToken`
-        // always leaves `remainder` either empty or starting on a
-        // non-separator character — so a non-empty `projectSplit.remainder`
-        // can never fail to yield a first token here. This branch is
-        // believed unreachable in practice; kept rather than force-unwrapped
-        // so a future change to `splitOnFirstToken`'s invariant fails safe
-        // instead of crashing.
-        guard let branchSplit = splitOnFirstToken(projectSplit.remainder, separatorsIncludeChevron: true) else {
-            return ParseResult(projectId: project.id, remainderTokens: [])
-        }
-        guard let branchToken = tokenize(branchSplit.prefix, separatorsIncludeChevron: true).first else {
-            return ParseResult(projectId: project.id, remainderTokens: [])
-        }
-
-        // Final remainder: whitespace-only tokenize, so any further `>`
-        // (e.g. a shell redirect) survives as a literal argv word.
-        let remainderTokens = tokenize(branchSplit.remainder, separatorsIncludeChevron: false)
-        return ParseResult(projectId: project.id, remainderTokens: remainderTokens, branchToken: branchToken)
+        let remainderTokens = tokenize(String(query[bounds]), separatorsIncludeChevron: false)
+        return ParseResult(projectId: projectId, remainderTokens: remainderTokens, branchToken: branchToken)
     }
 
     /// Splits `rawQuery` into `(prefix, remainder)` on the boundary token 1
