@@ -278,18 +278,6 @@ section {
   border-bottom: 1px solid var(--line-soft);
 }
 
-.section-label {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  margin-bottom: 24px;
-}
-.section-label .num {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--cyan);
-}
-
 .mark {
   display: inline-block;
   width: 8px;
@@ -373,28 +361,33 @@ button.cab-btn {
   font-size: 12px;
 }
 
-/* Hero product frame — 16:9 placeholder for the not-yet-recorded hero film.
-   The <video> src/poster are set from one JS constant (HERO_VIDEO in
-   v3.html) so swapping in hero-dark.mp4 / hero-light.mp4 later is a
-   one-path change. */
+/* Hero product frame — a real capture (app-sessions-dark@2x), not a
+   placeholder. HERO_VIDEO in v3.html is the dormant swap point for the
+   hero film; when it lands, this img becomes the video's poster.
+
+   The asset already carries real macOS window chrome and its own baked-in
+   corner rounding (~13px at 1x, sampled from the capture) — border-radius
+   here is tuned to match that at the frame's typical rendered width rather
+   than inventing a second, differently-curved corner on top of it. Depth
+   comes from a layered shadow (contact shadow + ambient falloff) plus an
+   inset hairline that catches light along the top edge. */
 .product-frame {
   margin-top: 56px;
-  max-width: 780px;
-  border: 1px solid var(--line);
-  background: #0b0b16;
+  max-width: 960px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 20px rgba(0, 0, 0, 0.45),
+    0 30px 60px -12px rgba(0, 0, 0, 0.6);
 }
-.product-frame video {
+.product-frame img {
   width: 100%;
-  aspect-ratio: 16 / 9;
   display: block;
-  background: #0b0b16;
-  cursor: pointer;
 }
 .product-frame-caption {
   margin-top: 12px;
-  max-width: 780px;
+  max-width: 960px;
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--ink-faint);
@@ -421,16 +414,17 @@ button.cab-btn {
   color: var(--ink-faint);
 }
 
-.theme-dark-only {
+/* Pinned to dark regardless of system theme: the page chrome is dark-only
+   right now (light mode is parked), so a light system theme must not put a
+   light app screenshot on a dark page. Restore the prefers-color-scheme
+   swap below when the light-mode pass lands — the light assets and the
+   <picture> split stay in place so that's a one-line revert, not a
+   rewrite. */
+.theme-light-only {
   display: none;
 }
-@media (prefers-color-scheme: dark) {
-  .theme-light-only {
-    display: none;
-  }
-  .theme-dark-only {
-    display: block;
-  }
+.theme-dark-only {
+  display: block;
 }
 
 /* ---------------------------------------------------------------------
@@ -952,12 +946,20 @@ body.gx-coin-in .gx-coin {
   }
   .product-frame {
     margin-top: 40px;
+    /* Displayed width shrinks a lot below this breakpoint, and the
+       asset's baked-in corner radius scales down with it — match that
+       here instead of holding the desktop value, or the corner reads as
+       two different curves. */
+    border-radius: 6px;
   }
 }
 
 @media (max-width: 480px) {
   section {
     padding: 64px 20px;
+  }
+  .product-frame {
+    border-radius: 5px;
   }
   .install-row {
     flex-direction: column;

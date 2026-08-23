@@ -27,10 +27,6 @@
            01 — HERO
            ============================================================ -->
       <section id="hero" class="hero">
-        <div class="section-label">
-          <span class="num mono-cmd">01</span>
-          <span class="micro">Hero</span>
-        </div>
         <div class="head">
           <h1 class="h-xl">TOO MANY<br><span class="amber">TERMINALS.</span></h1>
           <p class="lead" style="margin-top: 24px;">
@@ -51,15 +47,15 @@
         <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
         <p class="body-text" style="margin-top: 8px;">macOS 13+, Apple Silicon. Currently in beta.</p>
 
-        <!-- Product frame — 16:9 placeholder for the hero film (not yet
-             recorded). Source is set from HERO_VIDEO below, one JS constant,
-             so swapping in the real hero-dark.mp4 / hero-light.mp4 later is
-             a one-path change. Plays once on load, rests, replays on
-             hover/click, never loops — the ghost field owns continuous
-             motion. Respects prefers-reduced-motion (poster only, click to
-             play). -->
+        <!-- Hero product asset — a real, verified capture (not a video yet).
+             The 14s hero film is still being recorded; when hero-dark.mp4 /
+             hero-light.mp4 land, this still becomes the poster and the
+             video takes over. See HERO_VIDEO in the script below. -->
         <figure class="product-frame">
-          <video id="hero-video" muted playsinline preload="none" poster="/assets/product-sessions-poster.jpg" aria-label="Ghostties product preview — click or hover to play"></video>
+          <picture>
+            <source srcset="/assets/app-sessions-dark@2x.webp" type="image/webp">
+            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing live Claude Code sessions in one window, each labeled by project and status" width="1280" height="705">
+          </picture>
         </figure>
         <p class="product-frame-caption">a first look — the real hero film is still being cut</p>
       </section>
@@ -68,10 +64,6 @@
            02 — SIDEBAR (real captures, theme-aware)
            ============================================================ -->
       <section id="sidebar" class="board-sidebar">
-        <div class="section-label">
-          <span class="num mono-cmd">02</span>
-          <span class="micro">The sidebar</span>
-        </div>
         <h2 class="h-l">The Sidebar</h2>
         <p class="lead">Every session in one window. The single strongest thing the app does.</p>
         <div class="projects-figure">
@@ -91,10 +83,6 @@
            03 — STILL GHOSTTY (adapted from v2, trimmed to one paragraph)
            ============================================================ -->
       <section id="still-ghostty">
-        <div class="section-label">
-          <span class="num mono-cmd">03</span>
-          <span class="micro">Still Ghostty</span>
-        </div>
         <h2 class="h-m">Still Ghostty</h2>
         <p class="lead measure" style="max-width: 64ch;">
           Ghostties is a fork of
@@ -109,10 +97,6 @@
            04 — GET STARTED (adapted from v2's install section, trimmed)
            ============================================================ -->
       <section id="get-started">
-        <div class="section-label">
-          <span class="num mono-cmd">04</span>
-          <span class="micro">Get started</span>
-        </div>
         <h2 class="h-m">Get Started</h2>
         <p class="lead">brew, npx, or a direct download. Requirements and how updates arrive.</p>
         <div class="install-grid">
@@ -175,42 +159,19 @@
       });
     });
 
-    // Hero video — one obvious place to swap in the real hero film later.
-    // Today: assets/product-sessions.mp4. When the 14s hero film ships,
-    // point this at hero-dark.mp4 / hero-light.mp4 (wire a
-    // matchMedia('(prefers-color-scheme: dark)') check here at that point).
+    // Hero product asset — dormant video swap point. The hero currently
+    // shows a still (app-sessions-dark@2x.webp/png, wired directly into
+    // the <picture> markup above). When the 14s hero film is cut, wire a
+    // <video id="hero-video"> back into .product-frame, point it at
+    // HERO_VIDEO.src with HERO_VIDEO.poster set to today's still, and
+    // reintroduce play-once-on-load / replay-on-hover-or-click behaviour
+    // (respecting prefers-reduced-motion — poster only, click to play).
+    // Kept as a constant, not deleted, so the swap is one path, not a
+    // rewrite.
     var HERO_VIDEO = {
-      src: '/assets/product-sessions.mp4',
-      poster: '/assets/product-sessions-poster.jpg'
+      src: '/assets/hero-dark.mp4', // not recorded yet
+      poster: '/assets/app-sessions-dark@2x.webp'
     };
-
-    (function () {
-      var video = document.getElementById('hero-video');
-      video.src = HERO_VIDEO.src;
-      video.poster = HERO_VIDEO.poster;
-      video.loop = false;
-
-      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-      function playOnce() {
-        video.currentTime = 0;
-        video.play().catch(function () {});
-      }
-
-      video.addEventListener('ended', function () {
-        video.currentTime = 0;
-      });
-      video.addEventListener('click', playOnce);
-      video.addEventListener('mouseenter', playOnce);
-
-      if (!prefersReduced) {
-        // Autoplay once on load, then rest — muted + playsinline satisfy
-        // browser autoplay policy without a user gesture.
-        window.addEventListener('load', playOnce, { once: true });
-      }
-      // If prefersReduced: poster only, click/hover above still plays it
-      // on demand — that's the explicit user gesture the setting allows.
-    })();
 
     // Insert-coin — footer button + secret "c" key route.
     (function () {
