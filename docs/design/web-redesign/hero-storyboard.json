@@ -1,0 +1,140 @@
+{
+  "$comment": "v2 recut 2026-08-23 — hero retargeted from the transcript to the sidebar + composer. The transcript is texture, never the subject.",
+  "version": 2,
+  "project": {
+    "id": "ghostties-v3-hero",
+    "objective": "In 14 silent seconds: press a key, a new agent thread is born, and you watch it take its place in the sidebar.",
+    "audience": "Developers already running multiple coding agents who are tired of switching windows.",
+    "placement": "ghostties.org v3 hero. Plays once on load, then rests on frame 01. Replay on hover or click. Never loops — the ambient ghost field owns continuous motion.",
+    "targetDuration": 14.0,
+    "aspectRatio": "16:9",
+    "themes": ["dark", "light"],
+    "subjectRules": [
+      "The SIDEBAR is the subject. It opens the film and it closes it.",
+      "The COMPOSER is the verb — the thing being done, keyboard-first.",
+      "The TRANSCRIPT is texture. It must be alive and never ask to be read. No beat centres on it, no zoom targets it."
+    ],
+    "source": {
+      "application": "Ghostties.app",
+      "instance": "dedicated build launched by the capture rig — never the daily driver",
+      "windowLogical": [1680, 945],
+      "captureScale": 2,
+      "capturePixels": [3360, 1890],
+      "fps": 30
+    },
+    "display": {
+      "heroWidthCss": 1140,
+      "maxSharpZoom": 1.47,
+      "zoomCeilingUsed": 1.35,
+      "note": "maxSharpZoom = capturePixels.width / (heroWidthCss * 2). The recut's ceiling dropped from 1.45 to 1.35 — the composer is a large centred panel and does not need as much push as a 232pt sidebar did."
+    },
+    "visualConstraints": [
+      "Fabricated sessions only. No real project names, paths, branches, or transcript content.",
+      "Window-scoped capture. The desktop must never appear in frame.",
+      "The take must be FULLY keyboard-doable — Cmd-T, type, arrow, Return. If any step needs the mouse, it is not filmed and it is not claimed.",
+      "Light and dark are two takes of an identical script — same timings, same keystrokes."
+    ]
+  },
+  "camera": {
+    "units": "zoom is a scale factor on the capture frame; pan is the top-left offset in capture pixels at that zoom",
+    "easing": "cubic-bezier(0.33, 0, 0.15, 1)",
+    "attentionTreatment": "Outside the focus region, luminance drops 18% over 400ms. Never a hard vignette edge."
+  },
+  "scenes": [
+    {
+      "id": "01-establish",
+      "purpose": "Many agents, one window. The sidebar is introduced as the thing to watch.",
+      "start": 0.0,
+      "end": 2.5,
+      "appPrecondition": "Sessions tab. ACTIVE 5. Transcript mid-stream on the right as texture.",
+      "action": "none",
+      "expectedUiState": "Five rows, five ghost glyphs, mixed status colours.",
+      "focusTarget": "whole window",
+      "cameraStart": { "zoom": 1.0, "pan": [0, 0] },
+      "cameraEnd": { "zoom": 1.0, "pan": [0, 0] },
+      "cursor": "parked, still",
+      "transition": "cut in from black over 200ms",
+      "hold": 2.5,
+      "verification": "Five rows legible at 1140px. No pointer visible.",
+      "captureStatus": "framing confirmed from app-sessions-dark@2x.png"
+    },
+    {
+      "id": "02-compose-open",
+      "purpose": "The verb. One keystroke opens the way to a new agent thread.",
+      "start": 2.5,
+      "end": 5.0,
+      "appPrecondition": "carried from 01",
+      "action": "Press Cmd-T. The composer overlay opens.",
+      "expectedUiState": "Composer panel centred over the window. Query field focused, empty.",
+      "focusTarget": "composer panel",
+      "cameraStart": { "zoom": 1.0, "pan": [0, 0] },
+      "cameraEnd": { "zoom": 1.35, "pan": [435, 245] },
+      "cameraDuration": 0.8,
+      "cursor": "never enters frame — this beat is keyboard only",
+      "transition": "push in, timed so the camera settles as the panel finishes opening",
+      "hold": 1.7,
+      "verification": "The panel's open animation and the camera push resolve within 100ms of each other.",
+      "captureStatus": "NEEDS CAPTURE — no committed still shows the composer"
+    },
+    {
+      "id": "03-compose-type",
+      "purpose": "Keyboard-first, made visible. This is the part people will try to copy.",
+      "start": 5.0,
+      "end": 8.5,
+      "appPrecondition": "carried from 02",
+      "action": "Type a few characters. Breadcrumb chips resolve project and template. Arrow to a result.",
+      "expectedUiState": "Chips populate as the query narrows. Result list reorders. No mouse touches a chip.",
+      "focusTarget": "composer panel",
+      "cameraStart": { "zoom": 1.35, "pan": [435, 245] },
+      "cameraEnd": { "zoom": 1.35, "pan": [435, 245] },
+      "cursor": "absent",
+      "transition": "camera holds — the motion in this beat is the typing, not the lens",
+      "hold": 3.5,
+      "verification": "Every keystroke in the take is reproducible by keyboard alone. If a chip needed a click, the beat is reshot."
+    },
+    {
+      "id": "04-birth",
+      "purpose": "The payoff: a new ghost takes its place in the sidebar because you put it there.",
+      "start": 8.5,
+      "end": 11.5,
+      "appPrecondition": "carried from 03",
+      "action": "Press Return. The composer dismisses and a new session row animates into the sidebar.",
+      "expectedUiState": "Panel dismisses. A sixth row appears in ACTIVE with its own ghost.",
+      "focusTarget": "sidebar, held at frame left",
+      "cameraStart": { "zoom": 1.35, "pan": [435, 245] },
+      "cameraEnd": { "zoom": 1.25, "pan": [0, 150] },
+      "cameraDuration": 0.9,
+      "cursor": "absent",
+      "transition": "pull back and left — the camera arrives on the sidebar as the row lands",
+      "hold": 2.1,
+      "verification": "The new row is fully in frame before its entrance animation starts, never during the camera move.",
+      "captureStatus": "framing confirmed — sidebar-biased crop rendered"
+    },
+    {
+      "id": "05-settle",
+      "purpose": "Rest position. The new ghost picks up its colour and the page hands the motion back to the drifting field.",
+      "start": 11.5,
+      "end": 14.0,
+      "appPrecondition": "carried from 04",
+      "action": "The new session's glyph turns from idle to working.",
+      "expectedUiState": "Identical framing to scene 01, now with six rows.",
+      "focusTarget": "whole window",
+      "cameraStart": { "zoom": 1.25, "pan": [0, 150] },
+      "cameraEnd": { "zoom": 1.0, "pan": [0, 0] },
+      "cameraDuration": 1.1,
+      "cursor": "absent",
+      "transition": "settle, then stop",
+      "hold": 1.4,
+      "verification": "Final framing matches scene 01 exactly, so the rest state is seamless.",
+      "captureStatus": "framing confirmed from app-sessions-dark@2x.png"
+    }
+  ],
+  "openQuestions": [
+    "Beat 05's idle->working flip may happen naturally when a session starts. If it does not, it is the only beat still needing fixture help — everything else in this recut is user-driven.",
+    "The composer's Cmd-T binding was not located in SessionComposerOverlay.swift; confirm the actual trigger before the take."
+  ],
+  "derivedOutputs": {
+    "demoVideo": "hero-{theme}.mp4 — H.265 plus AV1, poster frame from scene 01, preload none",
+    "scrollSequence": "not built yet."
+  }
+}

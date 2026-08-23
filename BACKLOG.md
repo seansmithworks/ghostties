@@ -4,6 +4,75 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-23 — v3 hero: storyboard spec + Matte recording path
+
+Four-stage plan Sean approved. Tooling decided: **Matte** (already installed,
+`com.jose.Matte` 1.6.1) for window recording + manually placed zooms. Rejected
+Screen Studio (now $29/mo subscription, and auto-zoom is wrong for a storyboarded
+sequence), DemoTape and Kanopi screencast-skills (both drive the GUI with
+synthetic input — violates the standing hard rule). Supercut membership kept for
+narrated walkthroughs, not this. Display confirmed 5120×2880 physical
+(2560×1440 pt), so zoom headroom is not a constraint.
+
+- [x] 1. Storyboard spec as JSON — `docs/design/web-redesign/hero-storyboard.json`,
+  5 scenes / 14s, per-scene camera + verification | design
+- [ ] 2. Stage the app for recording under `GHOSTTIES_CAPTURE_FIXTURE=1` | build
+  — **BLOCKED:** fixture is static. Needs a scripted timeline (see below).
+- [ ] 3. Camera pass — Matte manual zooms per the JSON; ffmpeg fallback | design
+- [ ] 4. Judge on revisability: can pacing/focus change without a re-record? | quality
+
+**Blocker found 2026-08-23 — the fixture cannot perform 3 of the 5 beats.**
+`CaptureFixture.swift` seeds indicator states **once** via `updateIndicatorState`
+at build time and never changes them, and `transcriptScript` is a bare `printf`
+dump with **no sleeps**, so it renders instantly instead of streaming. Result:
+
+- Beat 02 (two ghost glyphs change colour) — impossible, states are static
+- Beat 03 (transcript streams at natural speed) — impossible, prints instantly
+- Beat 04 (a row flips to attention) — impossible, same reason as 02
+- Beats 01 and 05 (static framing) work as-is
+
+Fix is contained and DEBUG-only, both in `CaptureFixture.swift`: add sleeps
+between transcript blocks so it streams, and add a scripted indicator-state
+timeline firing at fixed offsets. No production code path changes.
+
+- [ ] Extend `CaptureFixture` with a scripted timeline (streaming transcript +
+  timed indicator-state changes) | build | new
+
+## 2026-08-23 — ghostties.org v3: direction reset (Sean)
+
+v2 (`web/v2.html`, nine sections) is **not being swapped in as-is**. Sean's call: start
+clean-ish as **v3 = some of v1 + some of v2**, still a simple site. "Improving what we
+have, not a revolutionary thing." Highly crafted, simple, a little unique, delightful —
+a good few minutes, not a long scroll.
+
+**Locked by Sean:**
+
+- **The arcade is a full-screen ambient background, not a contained box.** Ghosts float
+  free across the whole viewport as atmosphere behind the page — the v2 hero canvas is
+  the wrong container.
+- **The game is opt-in and manually played.** A keystroke or the "insert coin" action
+  initiates it; before that it is only drift. **No automated/autopilot run sequence.**
+  Reference feel: Chrome's dinosaur — a secret item you find, not a feature you're sold.
+- **Don't blow up the features.** Minimal scroll. Fewer sections than v2's nine.
+
+**Open, Sean's to decide:** how the page shows *the product* up front instead of a list
+of debatable features. Assets already verified and on disk: `assets/app-{sessions,projects}-{light,dark}@2x.{png,webp}`
+(capture rig, reproducible) and `assets/product-{flow,sessions}.mp4`.
+
+**Reusable prior art — not in this repo:** the ghost physics playground lives at
+`SeanSmithDesign/2026-web-playground`, branch `research/character-animation-vercel-ship`,
+`experiments/003-ghostties-physics/index.html` (~1300 lines, vanilla, no build step) with
+a `HANDOFF.md` beside it. 9 characters on real 12×12 grids from `GhostCharacter.swift`,
+drift + elastic collisions, drag-throw, click-to-high-five. Porting it needs CSS
+namespacing (`.ghost` collides with existing markup). Pacing rule still stands: drift
+under ~0.6 px/frame, autonomous behaviour rare and gentle; user-initiated interaction
+can be punchy.
+
+- [ ] Sean: pick what carries the hero (product still / product video / ghost field)
+  | design | new
+- [ ] Build v3 shell — full-bleed ghost field + short page | design | new
+- [ ] Port + namespace the physics prototype from the playground repo | build | new
+
 ## 2026-08-22 — `gt` CLI: product question, not a website problem
 
 Pulled `gt` out of `web/v2.html`/`web/v2.css` on `feat/web-redesign-round4` (hero
@@ -1329,3 +1398,36 @@ starting at "03") — they are not separate defects, they are this one.
 **Closed today:** rig verification (idempotency + clean build, both proven); the real-session leak
 at the branch tip; the false "ordered so whoever is blocked on you is on top" claim — Sean chose to
 fix the copy, not the app's sort, so the lead is now his sentence minus the false clause.
+
+## 2026-08-23 — v3 hero: carried at context reset
+
+Carried from the storyboarding session. Ordered by what unblocks what.
+
+**Blocks the recording:**
+- [ ] Fixture cast rename + Codex mix — 9 sessions in `CaptureFixture.swift`;
+  strawman table proposed, Sean has not ruled | build | carried
+- [ ] Beat-array port from `choreograph.sh` — **may be unnecessary.** The recut is
+  user-driven; only beat 05's idle→working flip might still need scripted state.
+  Check whether starting a session produces it naturally BEFORE building | build | carried
+- [ ] Confirm the ⌘T binding — not found in `SessionComposerOverlay.swift` | build | carried
+- [ ] Verify the take is fully keyboard-doable — breadcrumb chip has no keyboard
+  route; if the flow needs a mouse we do not film it and do not claim it | quality | carried
+
+**Blocks the storyboard being complete:**
+- [ ] Two composer captures — panel open empty, panel with query typed. Beats 02/03
+  are marked gaps, deliberately not mocked | design | carried
+- [ ] Regenerate the four stills via `scripts/capture-marketing.sh` after the rename
+  (they all still read "Claude Code 1–4"); storyboard frames re-render after | build | carried
+
+**The recording itself:**
+- [ ] Record after beta.24 ships — two takes, light + dark, identical keystrokes | design | carried
+- [ ] Camera pass in Matte per the JSON + `CAPTURE.md` environment checklist
+  (window 1680×945pt, solid wallpaper, desktop icons hidden, dock autohidden) | design | carried
+- [ ] Revisability test — change one beat's pacing, see whether it costs a re-render
+  or a re-record. This is the success criterion, not "did it make a video" | quality | carried
+
+**Sean's calls:**
+- [ ] Session names / Codex mix — approve or redline the strawman table | design | carried
+- [ ] Should the sidebar row show agent type at all? `RecentsRowView` renders name +
+  project + timestamp only, so Codex vs Claude Code is invisible. Product change,
+  flagged not proposed | product | carried
