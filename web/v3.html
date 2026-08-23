@@ -216,9 +216,12 @@
       var digit = btn.querySelector('.gx-coin-credit b');
       var clearTimer = null;
 
-      // The plate's text/aria/title are read straight from GXField.isArmed()
-      // at every call site below (click, the "c" key, and Escape) — never a
-      // separate flag that can drift out of sync with real arming state.
+      // render() just writes the plate's label/credit/aria for the given
+      // `armed` boolean — it does not read GXField.isArmed() itself. The
+      // single source of truth is GXField's own `armed` flag; render() is
+      // only ever called (via armedVisuals()/disarmedVisuals() below) in
+      // response to the "gx-armchange" event GXField fires on every real
+      // transition, so what it draws always matches what GXField reports.
       // The label is two stacked lines (INSERT/COIN, ESC/EXIT) either side
       // of the double rule, so render() writes both lines, not one string.
       function render(armed) {
@@ -260,21 +263,46 @@
       // how it was reached (drag-drop onto the slot, the plate, or the key
       // route). That keeps the coin's physical position, the plate's
       // label/credit, and the field's interactivity from ever disagreeing.
+      //
+      // armTimer/firingOffTimer are the pending 200ms settle / 420ms
+      // firing-off handles. A disarm landing inside that 200ms window
+      // (double-click, "c" then Escape fast, a drop then Escape fast) must
+      // cancel them — otherwise the orphaned timer fires later and
+      // re-applies the armed label/credit/class on top of an already
+      // disarmed plate, latching it into a permanently wrong armed look.
+      var armTimer = null;
+      var firingOffTimer = null;
+
+      function clearArmTimers() {
+        if (armTimer) {
+          clearTimeout(armTimer);
+          armTimer = null;
+        }
+        if (firingOffTimer) {
+          clearTimeout(firingOffTimer);
+          firingOffTimer = null;
+        }
+      }
+
       function armedVisuals() {
+        clearArmTimers();
         btn.classList.add('gx-coin-firing');
         // Lamp flash plays immediately; the credit flip and the armed
         // border/label settle land together at t=200ms (coin-slot-spec.md).
-        setTimeout(function () {
+        armTimer = setTimeout(function () {
+          armTimer = null;
           btn.classList.add('gx-coin-armed');
           render(true);
           announce(true);
         }, 200);
-        setTimeout(function () {
+        firingOffTimer = setTimeout(function () {
+          firingOffTimer = null;
           btn.classList.remove('gx-coin-firing');
         }, 420);
       }
 
       function disarmedVisuals() {
+        clearArmTimers();
         btn.classList.remove('gx-coin-firing');
         btn.classList.remove('gx-coin-armed');
         render(false);
