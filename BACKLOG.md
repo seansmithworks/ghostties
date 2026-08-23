@@ -1323,7 +1323,9 @@ Branch `feat/composer-branch-segment` off `main` @ `5e6636022`. Spec: `docs/plan
 - [x] **B1** — worktree enumeration (`git worktree list --porcelain`) behind a cache; never per-keystroke. | app | done
 - [x] **B2** — typable `>` separator (was B4; promoted — the branch segment exists only when an explicit `>` introduced it, so the chip cannot precede it). | app | done
 - [x] **B3** — branch chip: third segment; picker lists existing worktrees **and** branches without a worktree, second group disabled pending B4; cascade rule (branch change clears nothing, project change clears branch + arms ⌘Z). Interactive acceptance criteria (screenshots/recording) NOT captured — driving the composer UI via synthetic input is a hard rule violation; needs Sean's manual pass. | app | done, needs visual verification
-- [ ] **B4** — `+ new worktree` row — explicit only, never implicit; all four failure modes surface in `writeError`. | app | new
-- [ ] **B5** — review rounds (never one; rule is twelve-for-twelve here) + unfiltered suite vs. 789/0/1 baseline. | app | new
+- [x] **B4** — `+ new worktree` row — explicit only; all four failure modes surface in `writeError`. `bd4705372`. | app | done
+- [ ] **B5** — review rounds. Round 1: 6 blockers + 13 should-fix, all fixed in `d1c414e03` (suite 827/0/1). Round 2 in flight. | app | in-flight
+- [ ] **B-visual** — criteria 2/3/4 unmet: two-chip layout at `.anchored` AND `.centered`, non-git project shows no chip, picker mutual exclusion. Needs pixels, not source argument — `.frame(maxWidth:)` shipped wrong 3× in Slice A on reading alone. Blocked: capture requires either Sean's manual pass or a fixed XCUITest harness. | app | blocked
+- [ ] **B-keyboard** — the `+ new worktree` / no-worktree creation rows are mouse-only; the hidden-Button arrow-key capture layer was not extended to cover them. | app | new
 
 Parked, not in Slice B: the breadcrumb chip has **no keyboard route** (left-arrow focus was deleted as unverifiable, stranding the Return/Down handlers). Slice A polish, non-blocking. | app | parked
