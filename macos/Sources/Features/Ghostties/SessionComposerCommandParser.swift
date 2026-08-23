@@ -1,5 +1,15 @@
 import Foundation
 
+/// A plain string-message error — `Result`'s `Failure` must conform to
+/// `Error`, and a bare `String` doesn't. Shared by
+/// `SessionComposerCommandParser.resolveCommitWorktreePathForCommit` and
+/// `SessionComposerStore.resolveLaunchTemplate`, so both commit-time
+/// validation seams return the same shape instead of each inventing one.
+struct SessionComposerCommitError: Error, CustomStringConvertible, Equatable {
+    let message: String
+    var description: String { message }
+}
+
 /// Pure, testable command-grammar parsing for the session composer's
 /// text-forward command entry (command grammar slice 1). Neither type here
 /// touches SwiftUI or `@MainActor` state — see `SessionComposerRanking.swift`
@@ -144,9 +154,14 @@ enum SessionComposerCommandParser {
 
         // A `>` was consumed as part of the separator between the project
         // token and the remainder if and only if the prefix (token +
-        // separator run) contains one — the token itself can never contain
-        // a bare `>`, since a `>` there would have been consumed as a
-        // separator instead.
+        // separator run) contains one. NOTE (nit fix, Slice B review round
+        // 1): this is NOT "the token itself can never contain a bare `>`" —
+        // a QUOTED token can (`"a>b"` survives `tokenize` with the `>`
+        // intact, since `>` inside quotes is never treated as a separator).
+        // `projectToken` itself is never re-inspected for a literal `>`
+        // here, so a quoted project name containing one doesn't change this
+        // check's correctness — it only means the claim in the old wording
+        // was wrong, not that the code was.
         let branchIntroducedByChevron = projectSplit.prefix.contains(">")
 
         guard branchIntroducedByChevron else {
@@ -158,9 +173,16 @@ enum SessionComposerCommandParser {
             return ParseResult(projectId: project.id, remainderTokens: remainderTokens)
         }
 
-        // Segment-aware split again for the branch.
+        // Segment-aware split again for the branch. Defensive only (nit fix,
+        // Slice B review round 1): the guard above already returned `.none`
+        // if `projectSplit.remainder` were empty, and `splitOnFirstToken`
+        // always leaves `remainder` either empty or starting on a
+        // non-separator character — so a non-empty `projectSplit.remainder`
+        // can never fail to yield a first token here. This branch is
+        // believed unreachable in practice; kept rather than force-unwrapped
+        // so a future change to `splitOnFirstToken`'s invariant fails safe
+        // instead of crashing.
         guard let branchSplit = splitOnFirstToken(projectSplit.remainder, separatorsIncludeChevron: true) else {
-            // `ghostties > ` with nothing after: branch not typed yet.
             return ParseResult(projectId: project.id, remainderTokens: [])
         }
         guard let branchToken = tokenize(branchSplit.prefix, separatorsIncludeChevron: true).first else {
@@ -362,5 +384,82 @@ enum SessionComposerCommandParser {
     /// `resolveCommitProjectId` provides for the project segment.
     static func resolveCommitWorktreePath(typedWorktreePath: String?, selectedWorktreePath: String?) -> String? {
         typedWorktreePath ?? selectedWorktreePath
+    }
+
+    // MARK: - Typed branch resolution (Slice B review round 1, blocker 2)
+
+    /// What a typed branch TOKEN (`commandParse.branchToken`) resolves to
+    /// against the cached worktree list. `typedWorktreePath`'s old shape
+    /// collapsed "nothing typed" and "typed but unresolvable" to the same
+    /// `nil`, which let `resolveCommitWorktreePath` silently fall through to
+    /// whatever the PICKER had selected before the user started typing — a
+    /// typed branch that resolves to nothing must fail loudly instead
+    /// (blocker 2). This type is what makes the three real cases
+    /// distinguishable at the call site.
+    enum TypedBranchResolution: Equatable {
+        /// No branch segment was typed (`commandParse.branchToken == nil`) —
+        /// defers entirely to the picker's own pick.
+        case notTyped
+        /// The token matched a cached worktree's branch.
+        case resolved(path: String)
+        /// The token matched the branch already checked out at the
+        /// project's own root. `worktrees` never contains the project root
+        /// (the store filters it out — see
+        /// `SessionComposerStore.refreshWorktrees`'s doc comment), so this
+        /// case can NEVER be reached via `.resolved` above — typing the
+        /// default branch's own name is exactly the sub-case blocker 2
+        /// calls out as otherwise unresolvable. Resolves to "no override",
+        /// the same as the picker's own "Default" row.
+        case isDefaultBranch
+        /// The token matches neither a cached worktree nor the project's
+        /// default branch. Decision (blocker 2, documented here since this
+        /// is the one place that decision is made): an unresolvable typed
+        /// branch must fail the commit with a visible error, never silently
+        /// inherit the picker's last pick — inheriting is exactly the
+        /// "session launches under project B's worktree with no error"
+        /// class of bug this type exists to close.
+        case unresolved(token: String)
+    }
+
+    /// Resolves a typed branch token (if any) against the cached worktree
+    /// list and the project's own root branch. Pure — no disk access; the
+    /// caller passes in the already-fetched `worktrees`/
+    /// `currentBranchAtProjectRoot` from `SessionComposerStore`.
+    static func resolveTypedBranch(
+        branchToken: String?,
+        worktrees: [GitWorktreeEnumerator.Worktree],
+        currentBranchAtProjectRoot: String?
+    ) -> TypedBranchResolution {
+        guard let token = branchToken else { return .notTyped }
+        if let path = worktrees.first(where: { $0.branch == token })?.path {
+            return .resolved(path: path)
+        }
+        if let rootBranch = currentBranchAtProjectRoot, rootBranch == token {
+            return .isDefaultBranch
+        }
+        return .unresolved(token: token)
+    }
+
+    /// The COMMIT-time counterpart to `resolveCommitWorktreePath` above —
+    /// used ONLY at the write path (`SessionComposerPalette.commit(template:)`),
+    /// never for the "is this chip value already shown" comparison
+    /// `resolveCommitWorktreePath` still serves unchanged. `.unresolved`
+    /// returns `.failure` with a message meant for `writeError` directly;
+    /// every other case resolves the same way `resolveCommitWorktreePath`
+    /// already did.
+    static func resolveCommitWorktreePathForCommit(
+        typedBranch: TypedBranchResolution,
+        selectedWorktreePath: String?
+    ) -> Result<String?, SessionComposerCommitError> {
+        switch typedBranch {
+        case .notTyped:
+            return .success(selectedWorktreePath)
+        case .resolved(let path):
+            return .success(path)
+        case .isDefaultBranch:
+            return .success(nil)
+        case .unresolved(let token):
+            return .failure(SessionComposerCommitError(message: "No worktree found for branch \"\(token)\". Pick one from the branch picker or clear the typed branch."))
+        }
     }
 }

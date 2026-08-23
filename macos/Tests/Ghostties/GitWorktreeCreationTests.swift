@@ -73,6 +73,8 @@ struct GitWorktreeCreationTests {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         task.arguments = ["git", "-C", repo, "branch", "feat/foo"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
         try? task.run()
         task.waitUntilExit()
 
@@ -99,6 +101,8 @@ struct GitWorktreeCreationTests {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         task.arguments = ["git", "-C", repo, "branch", "feat/foo"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
         try? task.run()
         task.waitUntilExit()
 
@@ -148,6 +152,8 @@ struct GitWorktreeCreationTests {
         let branchTask = Process()
         branchTask.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         branchTask.arguments = ["git", "-C", repo, "branch", "already-checked-out"]
+        branchTask.standardOutput = FileHandle.nullDevice
+        branchTask.standardError = FileHandle.nullDevice
         try? branchTask.run()
         branchTask.waitUntilExit()
 
@@ -177,6 +183,8 @@ struct GitWorktreeCreationTests {
         let branchTask = Process()
         branchTask.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         branchTask.arguments = ["git", "-C", repo, "branch", "mode2branch"]
+        branchTask.standardOutput = FileHandle.nullDevice
+        branchTask.standardError = FileHandle.nullDevice
         try? branchTask.run()
         branchTask.waitUntilExit()
 
@@ -218,6 +226,8 @@ struct GitWorktreeCreationTests {
         let branchTask = Process()
         branchTask.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         branchTask.arguments = ["git", "-C", repo, "branch", "mode4branch"]
+        branchTask.standardOutput = FileHandle.nullDevice
+        branchTask.standardError = FileHandle.nullDevice
         try? branchTask.run()
         branchTask.waitUntilExit()
 

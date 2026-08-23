@@ -126,6 +126,18 @@ final class SessionComposerStore: ObservableObject {
     /// Populated on the same refresh as `worktrees`/`branchesWithoutWorktree`.
     @Published private(set) var currentBranchAtProjectRoot: String?
 
+    /// Whether the current project is a git repo AT ALL — derived from
+    /// `GitWorktreeEnumerator.list(repoPath:)`'s UNFILTERED result (non-empty
+    /// means yes), never from whether `worktrees`/`branchesWithoutWorktree`
+    /// found anything to OFFER (blocker 6, Slice B review round 1). Those
+    /// two lists both exclude cases that still mean "yes, a repo" —
+    /// `worktrees` excludes the project's own root, `branchesWithoutWorktree`
+    /// excludes every already-claimed branch — so a repo with exactly one
+    /// branch checked out at its own root (the most common first-run state)
+    /// satisfied neither, and the branch chip never appeared. This is what
+    /// `SessionComposerPalette.isBranchChipEligible` reads instead.
+    @Published private(set) var isGitRepo: Bool = false
+
     /// The branch chip's current pick: a worktree path to launch the
     /// session in, overriding `project.rootPath` at commit time (`precommit`).
     /// `nil` means "no override" — the picker's "Default" row, and the
@@ -165,10 +177,21 @@ final class SessionComposerStore: ObservableObject {
     private var worktreeRefreshToken: Int = 0
 
     /// Re-enumerates worktrees for `repoPath` off the main actor, discarding
-    /// the result if a newer call has since been made. 2-second timeout —
-    /// matches `SessionCoordinator.createSession`'s detached-task-plus-timeout
-    /// shape — so a hung or missing `git` never hangs the composer; it just
-    /// yields an empty list.
+    /// the result if a newer call has since been made. 2-second timeout via
+    /// `race(_:timeoutSeconds:)` — should-fix 7 (Slice B review round 1)
+    /// FIXED a false claim this doc comment used to make: the previous
+    /// shape called `listTask.cancel()` on a timeout and then still
+    /// `await`ed `listTask.value`, which does not return early against a
+    /// blocking `Process.waitUntilExit()` (cancellation is cooperative —
+    /// nothing inside `GitWorktreeEnumerator.list`/`branchesWithoutWorktree`
+    /// checks `Task.isCancelled`). A hung `git` left `isRefreshingWorktrees`
+    /// stuck true forever, showing "Refreshing…" permanently, with every
+    /// reopen spawning another hung process on top. `race(_:timeoutSeconds:)`
+    /// is the same unstructured, never-await-the-loser shape
+    /// `createWorktree` already uses for exactly this reason — reused here
+    /// via `raceAny`, its `T`-generic sibling (this call's result shape
+    /// isn't `Result<String, GitWorktreeCreationError>`, `race` itself is
+    /// unchanged for `GitWorktreeCreationTests`' sake).
     @MainActor
     func refreshWorktrees(for repoPath: String?) async {
         worktreeRefreshToken += 1
@@ -178,6 +201,7 @@ final class SessionComposerStore: ObservableObject {
             worktrees = []
             branchesWithoutWorktree = []
             currentBranchAtProjectRoot = nil
+            isGitRepo = false
             isRefreshingWorktrees = false
             return
         }
@@ -189,29 +213,47 @@ final class SessionComposerStore: ObservableObject {
         // every reopen.
         isRefreshingWorktrees = true
 
-        // One detached task computing BOTH results off a single token
-        // check — never two racing tasks each racing the other's
-        // `worktreeRefreshToken` write.
-        let listTask = Task.detached(priority: .userInitiated) { () -> ([GitWorktreeEnumerator.Worktree], [String]) in
+        // Should-fix 9 fix: canonicalize BEFORE comparing against `git`'s
+        // own output — `git worktree list --porcelain` always reports
+        // resolved (symlink-free) paths, but `Project.rootPath` is only
+        // `standardizedFileURL.path` (does NOT resolve symlinks). Sean has
+        // real symlinked projects (`~/Code/Jefe`, `~/Code/SecondBrain`)
+        // where the raw comparison below would never match the root
+        // worktree's path, leaving it un-filtered from `worktrees` and
+        // `currentBranchAtProjectRoot` permanently `nil`.
+        let canonicalRepoPath = GitWorktreeEnumerator.canonicalPath(repoPath)
+
+        // One detached task computing ALL results off a single token check
+        // — never two racing tasks each racing the other's
+        // `worktreeRefreshToken` write. `isGitRepo` (blocker 6) is derived
+        // from `rawList`'s UNFILTERED emptiness — before this task's own
+        // root-path filtering below.
+        let listTask = Task.detached(priority: .userInitiated) { () -> (isRepo: Bool, rawList: [GitWorktreeEnumerator.Worktree], branches: [String]) in
             let rawList = GitWorktreeEnumerator.list(repoPath: repoPath)
             let branches = GitWorktreeEnumerator.branchesWithoutWorktree(repoPath: repoPath)
-            return (rawList, branches)
+            return (!rawList.isEmpty, rawList, branches)
         }
-        let timeoutTask = Task {
-            try await Task.sleep(for: .seconds(2))
-            listTask.cancel()
+
+        guard let result = await Self.raceAny(listTask, timeoutSeconds: 2) else {
+            // Timed out — discard if superseded, same as the ordinary path.
+            guard token == worktreeRefreshToken else { return }
+            worktrees = []
+            branchesWithoutWorktree = []
+            currentBranchAtProjectRoot = nil
+            isGitRepo = false
+            isRefreshingWorktrees = false
+            return
         }
-        let (rawList, branches) = await listTask.value
-        timeoutTask.cancel()
 
         // Discard if a newer refresh has since been kicked off. Already back
         // on the main actor here (this method is `@MainActor`) — no
         // `MainActor.run` needed.
         guard token == worktreeRefreshToken else { return }
 
-        worktrees = rawList.filter { $0.path != repoPath }
-        currentBranchAtProjectRoot = rawList.first(where: { $0.path == repoPath })?.branch
-        branchesWithoutWorktree = branches
+        isGitRepo = result.isRepo
+        worktrees = result.rawList.filter { $0.path != canonicalRepoPath }
+        currentBranchAtProjectRoot = result.rawList.first(where: { $0.path == canonicalRepoPath })?.branch
+        branchesWithoutWorktree = result.branches
         isRefreshingWorktrees = false
     }
 
@@ -315,12 +357,22 @@ final class SessionComposerStore: ObservableObject {
         // worktree path (silent, wrong cwd, no error).
         branchesWithoutWorktree = []
         currentBranchAtProjectRoot = nil
+        isGitRepo = false
         selectedWorktreePath = nil
         // B4: invalidates any in-flight `createWorktree` so a slow
         // `git worktree add` that finishes after this open() (a different
         // project, possibly) can't write its result into the new context.
         isCreatingWorktree = false
         worktreeCreationToken += 1
+        // Should-fix 8 fix (Slice B review round 1): bumped SYNCHRONOUSLY
+        // here, before anything is scheduled — `refreshWorktrees` itself
+        // also bumps this, but only once IT starts running, which is too
+        // late to invalidate a refresh from a PRIOR `open()`/`changeProjectChip`
+        // call that is still in flight (a slow `git worktree list` for
+        // project A finishing after this `open()` for project B would
+        // otherwise still pass A's stale `token == worktreeRefreshToken`
+        // check and overwrite B's freshly-reset empty state).
+        worktreeRefreshToken += 1
         cachedWorkspaceStore = workspaceStore
 
         switch projectBinding {
@@ -355,10 +407,18 @@ final class SessionComposerStore: ObservableObject {
         // across into whatever project opens next.
         branchesWithoutWorktree = []
         currentBranchAtProjectRoot = nil
+        isGitRepo = false
         selectedWorktreePath = nil
         // See the matching invalidation in `open(...)`.
         isCreatingWorktree = false
         worktreeCreationToken += 1
+        // Should-fix 8 fix (Slice B review round 1): `cancel()` used to
+        // never bump this at all — an in-flight `refreshWorktrees` call
+        // (kicked off by an `open()` or `changeProjectChip` that has since
+        // been cancelled) kept its still-valid token and applied its
+        // result into the now-closed, reset state on arrival. See the
+        // matching bump + comment in `open(...)`.
+        worktreeRefreshToken += 1
     }
 
     // MARK: - Commit
@@ -405,6 +465,19 @@ final class SessionComposerStore: ObservableObject {
         // guard rejects the second one for free.
         guard isOpen else { return false }
 
+        // Should-fix 16 fix (Slice B review round 1): a commit while
+        // `createWorktree` is still in flight used to launch at whatever
+        // cwd `selectedWorktreePath` currently read (the old worktree, or
+        // none) — the "Creating…" chip stayed clickable and Return still
+        // committed normally — and the eventual `cancel()`-on-close
+        // invalidates the creation's token, so the worktree it was making
+        // still lands on disk with nothing left to announce it. Gate the
+        // commit instead of racing it.
+        guard !isCreatingWorktree else {
+            writeError = "Still creating the worktree — wait for it to finish."
+            return false
+        }
+
         // `.locked` enforces at the write path — resolved from the bound
         // project, never from `selectedProjectId` — so the enum case isn't
         // decorative once Phase 3 starts relying on it. `.prefilled`/`.open`
@@ -426,18 +499,25 @@ final class SessionComposerStore: ObservableObject {
         // B3: the branch chip's pick, if any, overrides the LOCAL copy of
         // the template's `workingDirectory` — `SessionCoordinator` itself
         // is never touched (it already reads
-        // `template.workingDirectory ?? project.rootPath`). Checked here,
-        // synchronously, so a worktree that vanished between pick and
-        // commit (pruned by another session, branch deleted) surfaces a
-        // `writeError` instead of silently launching into a stale/missing
-        // path.
-        var launchTemplate = template
-        if let worktreePath = selectedWorktreePath {
-            guard FileManager.default.fileExists(atPath: worktreePath) else {
-                writeError = "Worktree no longer exists at \(worktreePath)."
-                return false
-            }
-            launchTemplate.workingDirectory = worktreePath
+        // `template.workingDirectory ?? project.rootPath`). Resolved via
+        // `resolveLaunchTemplate` (finding 18, Slice B review round 1): a
+        // pure static function, not inlined here, specifically so a test
+        // can exercise the one line that makes a branch change the launch
+        // directory WITHOUT constructing a `SessionCoordinator` — going
+        // through `precommit` end-to-end would call
+        // `coordinator.createQuickSession`, which touches
+        // `WorkspaceStore.shared` (the real, persisted singleton) even in
+        // the `#if DEBUG` testing-stub coordinator. See
+        // `SessionComposerBranchLaunchTests` for the test this seam exists
+        // for, and its mutant-proof (delete the `workingDirectory` write
+        // below and watch that test go red).
+        let launchTemplate: AgentTemplate
+        switch Self.resolveLaunchTemplate(template: template, selectedWorktreePath: selectedWorktreePath) {
+        case .success(let resolved):
+            launchTemplate = resolved
+        case .failure(let error):
+            writeError = error.message
+            return false
         }
 
         writeError = nil
@@ -457,6 +537,29 @@ final class SessionComposerStore: ObservableObject {
         }
 
         return true
+    }
+
+    /// Pure: resolves the LOCAL launch template `precommit` actually spawns
+    /// — the branch chip's pick, if any and if still present on disk,
+    /// overrides `template.workingDirectory`. Extracted from `precommit`
+    /// itself (finding 18, Slice B review round 1) as a real test seam:
+    /// `precommit`'s only other caller-visible effect is dispatching
+    /// `coordinator.createQuickSession`, which is not something a unit test
+    /// should invoke (see the call site's comment) — so nothing exercised
+    /// the `workingDirectory` override at all, and deleting the line that
+    /// applies it left the suite green.
+    static func resolveLaunchTemplate(
+        template: AgentTemplate,
+        selectedWorktreePath: String?,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> Result<AgentTemplate, SessionComposerCommitError> {
+        guard let worktreePath = selectedWorktreePath else { return .success(template) }
+        guard fileExists(worktreePath) else {
+            return .failure(SessionComposerCommitError(message: "Worktree no longer exists at \(worktreePath)."))
+        }
+        var launchTemplate = template
+        launchTemplate.workingDirectory = worktreePath
+        return .success(launchTemplate)
     }
 
     // MARK: - Project selection
@@ -536,6 +639,12 @@ final class SessionComposerStore: ObservableObject {
     @discardableResult
     func changeProjectChip(to projectId: UUID, currentlyShown: UUID?) -> ProjectChipChangeResult {
         guard projectId != currentlyShown else { return .noOp }
+        // Should-fix 8 fix (Slice B review round 1): bumped synchronously
+        // BEFORE anything is scheduled, same reasoning as `open()`/
+        // `cancel()`'s matching bumps — a still-in-flight refresh for
+        // whatever project was current a moment ago must not survive to
+        // overwrite this cascade's own refresh below.
+        worktreeRefreshToken += 1
         pendingChipUndo = (
             previousProjectId: selectedProjectId,
             previousSearchText: searchText,
@@ -558,12 +667,33 @@ final class SessionComposerStore: ObservableObject {
     /// Restore the segment(s) cleared by the most recent `changeProjectChip`
     /// cascade, as one step (⌘Z). A no-op if nothing is pending — e.g. a
     /// second ⌘Z in a row, or no chip change has happened yet this session.
+    ///
+    /// Blocker 1 fix (Slice B review round 1): fires a worktree refresh for
+    /// the RESTORED project, same as `changeProjectChip` does on the way
+    /// out. Without this, ⌘Z put `selectedProjectId`/`searchText`/
+    /// `selectedWorktreePath` back to project A's values while
+    /// `worktrees`/`currentBranchAtProjectRoot` stayed whatever
+    /// `changeProjectChip`'s own refresh had already overwritten them with
+    /// for project B — no race required: open the branch picker after ⌘Z
+    /// and it shows B's worktrees under A's chip, and picking one launches
+    /// A's template with B's worktree as cwd.
     func undoProjectChipChange() {
         guard let pending = pendingChipUndo else { return }
+        worktreeRefreshToken += 1
         selectedProjectId = pending.previousProjectId
         searchText = pending.previousSearchText
         selectedWorktreePath = pending.previousWorktreePath
         pendingChipUndo = nil
+
+        if let restoredProjectId = pending.previousProjectId,
+           let project = cachedWorkspaceStore?.projects.first(where: { $0.id == restoredProjectId }) {
+            Task { await self.refreshWorktrees(for: project.rootPath) }
+        } else {
+            // No project was selected before the cascade — clear back to
+            // the same empty state `open()`/`cancel()` establish, rather
+            // than leaving whatever project B's cascade had populated.
+            Task { await self.refreshWorktrees(for: nil) }
+        }
     }
 
     // MARK: - Branch chip (Slice B, B3)
@@ -590,6 +720,23 @@ final class SessionComposerStore: ObservableObject {
     /// no undo, same reasoning as `changeBranchChip`.
     func clearBranchChip() {
         selectedWorktreePath = nil
+    }
+
+    /// Blocker 2 (Slice B review round 1): sets `writeError` for an
+    /// unresolvable typed branch — the ONLY caller is
+    /// `SessionComposerPalette.commit(template:)`'s early-return guard, so
+    /// `precommit` never runs and nothing else about the composer's state
+    /// changes.
+    func rejectUnresolvedBranch(token: String) {
+        writeError = "No worktree found for branch \"\(token)\". Pick one from the branch picker or clear the typed branch."
+    }
+
+    /// Same write, pre-formatted message variant — used by the defensive
+    /// `.failure` arm in `SessionComposerPalette.commit(template:)`'s
+    /// `resolveCommitWorktreePathForCommit` switch, where the message has
+    /// already been built by `SessionComposerCommitError`.
+    func rejectUnresolvedBranch(message: String) {
+        writeError = message
     }
 
     // MARK: - Branch chip creation (Slice B, B4)
@@ -621,19 +768,47 @@ final class SessionComposerStore: ObservableObject {
         let token = worktreeCreationToken
         isCreatingWorktree = true
 
+        // Blocker 13 fix (Slice B review round 1): captured BEFORE this
+        // creation touches anything, so the failure/timeout branches below
+        // can tell "nothing changed while this was in flight" apart from
+        // "the user picked something else via the picker while it was
+        // running" (the chip stays clickable during `isCreatingWorktree` —
+        // that's intentional, discoverability). Only reset
+        // `selectedWorktreePath` back to `nil` if it still equals what it
+        // was at the start; otherwise a legitimate pick made mid-creation
+        // would be silently clobbered by this creation's own failure.
+        let selectionAtStart = selectedWorktreePath
+
         let repoPath = project.rootPath
         let slug = branchName.replacingOccurrences(of: "/", with: "-")
+
+        // Blocker 12 fix: a thread-safe handle to the `Process`
+        // `GitWorktreeEnumerator.add` launches, so a timeout below can
+        // actually terminate it instead of abandoning it — the prior shape
+        // had no handle at all, so a timed-out creation kept running in the
+        // background with nothing left to report it, occasionally leaving
+        // a worktree on disk the composer never mentioned (and the next
+        // attempt then failed with "already exists").
+        let processHandle = ProcessHandle()
 
         // Unstructured (not a child of any task group) so a hang in the
         // `git` call it eventually makes never blocks the race below from
         // returning at the timeout deadline.
         let gitTask = Task.detached(priority: .userInitiated) { () -> Result<String, GitWorktreeEnumerator.GitWorktreeCreationError> in
-            let rawList = GitWorktreeEnumerator.list(repoPath: repoPath)
-            guard let mainWorktreePath = rawList.first?.path else {
+            // Blocker 17 fix: resolves the repo's MAIN worktree explicitly
+            // via `git rev-parse --git-common-dir`, never by assuming
+            // `list(repoPath:)`'s first element is main — that list drops
+            // `bare`/`detached`/`prunable` entries, so a bare main repo or a
+            // detached-HEAD main worktree made `.first` a LINKED worktree
+            // instead, silently creating the new worktree as a sibling
+            // under the wrong directory's `.claude/worktrees/`.
+            guard let mainWorktreePath = GitWorktreeEnumerator.mainWorktreePath(repoPath: repoPath) else {
                 return .failure(GitWorktreeEnumerator.GitWorktreeCreationError(message: "Could not determine the repository's main worktree."))
             }
             let directory = (mainWorktreePath as NSString).appendingPathComponent(".claude/worktrees/\(slug)")
-            return GitWorktreeEnumerator.add(branch: branchName, directory: directory, repoPath: repoPath)
+            return GitWorktreeEnumerator.add(branch: branchName, directory: directory, repoPath: repoPath) { process in
+                processHandle.set(process)
+            }
         }
 
         Task {
@@ -645,18 +820,55 @@ final class SessionComposerStore: ObservableObject {
 
             switch outcome {
             case .timedOut:
+                processHandle.terminate()
                 writeError = "Creating the worktree timed out."
-                selectedWorktreePath = nil
+                if selectedWorktreePath == selectionAtStart {
+                    selectedWorktreePath = nil
+                }
                 isCreatingWorktree = false
             case .completed(.success(let path)):
                 await refreshWorktrees(for: repoPath)
+                // Blocker 4 fix: re-checked AFTER the `await` above, not
+                // just before it — the prior shape's only check was before
+                // `refreshWorktrees` suspended, so `cancel()`/`open()`
+                // bumping the token during that suspension (create in
+                // project A, close, reopen on B before the refresh
+                // returned) still landed A's new worktree path into B's
+                // now-current composer.
+                guard token == worktreeCreationToken else { return }
                 selectedWorktreePath = path
                 isCreatingWorktree = false
             case .completed(.failure(let error)):
                 writeError = error.message
-                selectedWorktreePath = nil
+                if selectedWorktreePath == selectionAtStart {
+                    selectedWorktreePath = nil
+                }
                 isCreatingWorktree = false
             }
+        }
+    }
+
+    /// Thread-safe holder for the `Process` a background `git worktree add`
+    /// launches (blocker 12) — `GitWorktreeEnumerator.add`'s
+    /// `onProcessStarted` callback runs on the detached task's background
+    /// thread; `.terminate()` is called from the `@MainActor` timeout
+    /// branch above. `NSLock`-guarded rather than left to chance, same
+    /// discipline `race(_:timeoutSeconds:)` already applies to its own
+    /// resume-once flag.
+    private final class ProcessHandle: @unchecked Sendable {
+        private let lock = NSLock()
+        private var process: Process?
+
+        func set(_ process: Process) {
+            lock.lock()
+            defer { lock.unlock() }
+            self.process = process
+        }
+
+        func terminate() {
+            lock.lock()
+            defer { lock.unlock() }
+            process?.terminate()
         }
     }
 
@@ -696,6 +908,39 @@ final class SessionComposerStore: ObservableObject {
             Task {
                 try? await Task.sleep(for: .seconds(timeoutSeconds))
                 resumeOnce(.timedOut)
+            }
+        }
+    }
+
+    /// Generic sibling of `race(_:timeoutSeconds:)` — same unstructured,
+    /// never-await-the-loser shape, returning `nil` on timeout instead of a
+    /// dedicated outcome enum. Added for should-fix 7 (Slice B review round
+    /// 1): `refreshWorktrees`'s own 2-second timeout never actually worked
+    /// (it cancelled the list task and then still `await`ed its `.value`,
+    /// which doesn't return early against a blocking
+    /// `Process.waitUntilExit()`) — `race` itself is intentionally left
+    /// untouched rather than generified in place, since
+    /// `GitWorktreeCreationTests` depends on its concrete
+    /// `Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>`
+    /// element type directly.
+    static func raceAny<T>(_ task: Task<T, Never>, timeoutSeconds: Double) async -> T? {
+        await withCheckedContinuation { continuation in
+            let lock = NSLock()
+            var didResume = false
+            func resumeOnce(_ outcome: T?) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !didResume else { return }
+                didResume = true
+                continuation.resume(returning: outcome)
+            }
+            Task {
+                let result = await task.value
+                resumeOnce(result)
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(timeoutSeconds))
+                resumeOnce(nil)
             }
         }
     }

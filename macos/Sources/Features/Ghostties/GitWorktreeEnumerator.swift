@@ -119,14 +119,77 @@ nonisolated enum GitWorktreeEnumerator {
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
-            task.waitUntilExit()
         } catch {
             return []
         }
-        guard task.terminationStatus == 0 else { return [] }
+        // Should-fix 11 fix (Slice B review round 1): read BEFORE waiting.
+        // `waitUntilExit()` before draining the pipe deadlocks once output
+        // exceeds the pipe's ~64KB buffer (reproduced at 3000 branches /
+        // 177KB) — the child blocks writing to a full pipe with nothing
+        // reading it, while the parent blocks in `waitUntilExit()` waiting
+        // for a child that's blocked on write. Latent at this repo's actual
+        // branch count (29), but unrecoverable the moment it's hit.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else { return [] }
         guard let output = String(data: data, encoding: .utf8) else { return [] }
         return parsePorcelain(output)
+    }
+
+    /// Canonicalizes `path` via POSIX `realpath(3)` — NOT
+    /// `URL.resolvingSymlinksInPath()`, which doesn't reliably resolve
+    /// `/var` -> `/private/var` (and other symlinked prefixes) inside every
+    /// host process (see `GitWorktreeCreationTests.realPath(_:)`, which
+    /// discovered this the same way). `git worktree list --porcelain`
+    /// always reports resolved paths; comparing against a caller's raw,
+    /// possibly-symlinked path silently fails for symlinked project roots
+    /// (`~/Code/Jefe`, `~/Code/SecondBrain`) — should-fix 9. Returns `path`
+    /// unchanged if it doesn't exist (matches `realpath(3)`'s own
+    /// "resolution requires the path to exist" behavior; a nonexistent path
+    /// can't be a git repo anyway).
+    static func canonicalPath(_ path: String) -> String {
+        guard let cPath = realpath(path, nil) else { return path }
+        defer { free(cPath) }
+        return String(cString: cPath)
+    }
+
+    /// Resolves the repo's MAIN worktree path directly via
+    /// `git rev-parse --path-format=absolute --git-common-dir`, never by
+    /// assuming `list(repoPath:)`'s first element is main (blocker 17) —
+    /// that list drops `bare`/`detached`/`prunable` entries, so a bare main
+    /// repo or a detached-HEAD main worktree makes `.first` a LINKED
+    /// worktree instead, silently creating a new worktree as a sibling
+    /// under the WRONG directory's `.claude/worktrees/`.
+    ///
+    /// A non-bare repo's common dir is `<mainWorktreeRoot>/.git`; the main
+    /// worktree root is its parent. A bare repo's common dir IS the repo
+    /// path itself — not specially handled further here, since `git
+    /// worktree add` from a bare repo already requires `-C` at that same
+    /// path.
+    static func mainWorktreePath(repoPath: String) -> String? {
+        dispatchPrecondition(condition: .notOnQueue(.main))
+
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        task.arguments = ["git", "-C", repoPath, "rev-parse", "--path-format=absolute", "--git-common-dir"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+        } catch {
+            return nil
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else { return nil }
+        guard let raw = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else { return nil }
+
+        if (raw as NSString).lastPathComponent == ".git" {
+            return (raw as NSString).deletingLastPathComponent
+        }
+        return raw
     }
 
     /// Local branches that have NO worktree checked out anywhere (including
@@ -148,18 +211,28 @@ nonisolated enum GitWorktreeEnumerator {
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        task.arguments = ["git", "-C", repoPath, "branch", "--format=%(refname:short)"]
+        // Blocker 10 fix (Slice B review round 1): `for-each-ref
+        // refs/heads/` instead of `branch --format=` — `git branch` emits a
+        // `(HEAD detached at <sha>)` PSEUDO-entry whenever HEAD is detached,
+        // which survives the `claimed` filter (it's not a real branch name,
+        // so it never matches anything in `claimed`), renders in the picker
+        // as if it were a creatable branch, and fails the moment it's
+        // clicked. `for-each-ref` only ever lists real refs under
+        // `refs/heads/`, so the pseudo-entry can't appear at all.
+        task.arguments = ["git", "-C", repoPath, "for-each-ref", "--format=%(refname:short)", "refs/heads/"]
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
-            task.waitUntilExit()
         } catch {
             return []
         }
-        guard task.terminationStatus == 0 else { return [] }
+        // Should-fix 11 fix — read before wait, see `list(repoPath:)`'s
+        // matching comment for why.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else { return [] }
         guard let output = String(data: data, encoding: .utf8) else { return [] }
 
         let allBranches = output.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
@@ -227,7 +300,12 @@ nonisolated enum GitWorktreeEnumerator {
     /// (branch already checked out elsewhere, destination exists and is
     /// non-empty, invalid ref name, unwritable destination) reaches the
     /// user without a paraphrase in between.
-    static func add(branch: String, directory: String, repoPath: String) -> Result<String, GitWorktreeCreationError> {
+    static func add(
+        branch: String,
+        directory: String,
+        repoPath: String,
+        onProcessStarted: ((Process) -> Void)? = nil
+    ) -> Result<String, GitWorktreeCreationError> {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let exists = branchExists(branch, repoPath: repoPath)
@@ -244,13 +322,27 @@ nonisolated enum GitWorktreeEnumerator {
 
         do {
             try task.run()
-            task.waitUntilExit()
+            // Blocker 12: hands the running process back to the caller
+            // (`SessionComposerStore.createWorktree`'s `ProcessHandle`)
+            // BEFORE waiting on it, so a timeout on the main actor can call
+            // `.terminate()` on this exact process — the default `nil`
+            // keeps every existing caller (including every test in
+            // `GitWorktreeCreationTests`) byte-identical.
+            onProcessStarted?(task)
         } catch {
             return .failure(GitWorktreeCreationError(message: "Failed to launch git: \(error.localizedDescription)"))
         }
 
+        // Should-fix 11 fix — read stderr BEFORE waiting; see
+        // `list(repoPath:)`'s matching comment. `git worktree add`'s
+        // "Preparing worktree (...)" progress line plus a `fatal:`/`hint:`
+        // block on failure is exactly the kind of output that can exceed
+        // the pipe buffer on a pathological ref name or a very chatty git
+        // hook.
+        let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+
         guard task.terminationStatus == 0 else {
-            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
             let stderrText = String(data: data, encoding: .utf8) ?? ""
             return .failure(GitWorktreeCreationError(message: Self.firstMeaningfulLine(ofStderr: stderrText)))
         }

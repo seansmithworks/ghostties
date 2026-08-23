@@ -238,23 +238,53 @@ struct SessionComposerPalette: View {
     // MARK: - Branch chip (Slice B, B3)
 
     /// Whether the project is a git repo at all — the branch chip has no
-    /// entry point unless the composer store's cache found SOMETHING to
-    /// offer. A non-git project (or one where enumeration failed) shows NO
-    /// chip, not a disabled one (Sean's call) — a dead control is worse
-    /// than no control. This is deliberately keyed off "did enumeration
-    /// find anything", not a dedicated repo-detection call, matching how
-    /// `GitWorktreeEnumerator` already reports "not a repo" (exit 128 →
-    /// `[]`, indistinguishable from "a repo with nothing else to offer").
+    /// entry point unless the project genuinely IS one. Blocker 6 fix
+    /// (Slice B review round 1): this used to be keyed off "did enumeration
+    /// find anything to offer" (`!worktrees.isEmpty || !branchesWithoutWorktree.isEmpty`),
+    /// but BOTH of those lists exclude cases that still mean "yes, this is a
+    /// repo" — `worktrees` excludes the project's own root, and
+    /// `branchesWithoutWorktree` excludes every already-claimed branch. A
+    /// repo with exactly one branch checked out at its own root (a fresh
+    /// project, the single most common first-run state) satisfies neither,
+    /// so the chip never appeared and `+ new branch + worktree` was
+    /// unreachable exactly where it matters most. `isGitRepo` is derived by
+    /// the store from `GitWorktreeEnumerator.list(repoPath:)`'s UNFILTERED
+    /// result (non-empty = a repo) — see `SessionComposerStore.refreshWorktrees`.
     private var isBranchChipEligible: Bool {
-        !composerStore.worktrees.isEmpty || !composerStore.branchesWithoutWorktree.isEmpty
+        composerStore.isGitRepo
     }
 
     /// A resolved TYPED branch (`> main > cco`) takes precedence over the
     /// picker's current pick, mirroring `currentProject`'s
     /// `commandProject`-before-`selectedProjectId` precedence exactly.
+    ///
+    /// Blocker 2 fix (Slice B review round 1): this collapses
+    /// `typedBranchResolution`'s three non-"not typed" cases down to a
+    /// plain optional for every call site EXCEPT `commit(template:)`, which
+    /// needs to tell "nothing typed" apart from "typed but unresolvable" —
+    /// see that function and `typedBranchResolution` below. Everywhere else
+    /// (the picker's own "already shown" comparisons), both `.isDefaultBranch`
+    /// and `.unresolved` collapse to "no override, defer to the picker" —
+    /// which is safe there because those call sites never launch a session;
+    /// only `commit(template:)` may, and it never reads this property.
     private var typedWorktreePath: String? {
-        guard let token = commandParse.branchToken else { return nil }
-        return composerStore.worktrees.first(where: { $0.branch == token })?.path
+        switch typedBranchResolution {
+        case .notTyped, .unresolved: return nil
+        case .resolved(let path): return path
+        case .isDefaultBranch: return nil
+        }
+    }
+
+    /// Full three-state resolution of the typed branch token, if any —
+    /// backs `commit(template:)`'s loud-failure path (blocker 2). See
+    /// `SessionComposerCommandParser.TypedBranchResolution`'s doc comment
+    /// for what each case means.
+    private var typedBranchResolution: SessionComposerCommandParser.TypedBranchResolution {
+        SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: commandParse.branchToken,
+            worktrees: composerStore.worktrees,
+            currentBranchAtProjectRoot: composerStore.currentBranchAtProjectRoot
+        )
     }
 
     /// What the branch chip displays: the typed branch token if a command
@@ -287,24 +317,52 @@ struct SessionComposerPalette: View {
     private var queryFieldText: Binding<String> {
         Binding(
             get: {
-                guard commandProject != nil,
-                      let split = SessionComposerCommandParser.splitOnFirstToken(composerStore.searchText)
-                else { return composerStore.searchText }
+                guard let split = resolvedFieldSplit() else { return composerStore.searchText }
                 return split.remainder
             },
             set: { newValue in
                 // D4: any real keystroke disarms a pending chip-undo — see
                 // `SessionComposerStore.noteSearchTextEditedByTyping()`.
                 composerStore.noteSearchTextEditedByTyping()
-                guard commandProject != nil,
-                      let split = SessionComposerCommandParser.splitOnFirstToken(composerStore.searchText)
-                else {
+                guard let split = resolvedFieldSplit() else {
                     composerStore.searchText = newValue
                     return
                 }
                 composerStore.searchText = split.prefix + newValue
             }
         )
+    }
+
+    /// Computes the verbatim `(prefix, remainder)` split consumed by
+    /// however much of the command grammar has resolved right now — project
+    /// only, or project + branch. Chevron-aware, chained exactly the way
+    /// `SessionComposerCommandParser.parse(query:)` itself splits in two
+    /// steps.
+    ///
+    /// Should-fix 15 fix (Slice B review round 1): `queryFieldText`'s `get`/
+    /// `set` used to call `splitOnFirstToken` WITHOUT `separatorsIncludeChevron`,
+    /// and only ONCE — so typing `ghostties > main > cco` resolved chips
+    /// `[ghostties] › [main]` (both via `commandParse`, which always splits
+    /// chevron-aware internally) while the field kept showing `> main > cco`:
+    /// the non-chevron split couldn't find the project boundary at all (`>`
+    /// isn't whitespace), and even a single chevron-aware split only
+    /// consumes the PROJECT segment, leaving the branch segment's own text
+    /// (and its `>`) in the field. This chains a second chevron-aware split
+    /// over the branch segment too, once one has actually resolved
+    /// (`commandParse.branchToken != nil`) — so the field's editable
+    /// remainder always matches exactly what the chips consumed, whether
+    /// that's one segment or two.
+    private func resolvedFieldSplit() -> (prefix: String, remainder: String)? {
+        guard commandProject != nil,
+              let projectSplit = SessionComposerCommandParser.splitOnFirstToken(composerStore.searchText, separatorsIncludeChevron: true)
+        else { return nil }
+
+        guard commandParse.branchToken != nil,
+              let branchSplit = SessionComposerCommandParser.splitOnFirstToken(projectSplit.remainder, separatorsIncludeChevron: true)
+        else {
+            return projectSplit
+        }
+        return (prefix: projectSplit.prefix + branchSplit.prefix, remainder: branchSplit.remainder)
     }
 
     /// The text template/recent options are ranked against. A resolved
@@ -547,6 +605,11 @@ struct SessionComposerPalette: View {
                     isAddingTemplate = false
                     newTemplateName = ""
                     isProjectChipPickerOpen = false
+                    // Finding 14 fix (Slice B review round 1): this was
+                    // missing here while `isProjectChipPickerOpen` right
+                    // above it was reset — leaving the branch picker
+                    // latched open across a dismiss/re-present cycle.
+                    isBranchChipPickerOpen = false
                 }
             }
             .onDisappear {
@@ -814,7 +877,13 @@ struct SessionComposerPalette: View {
                     // two pickers are mutually exclusive by construction
                     // (see `isBranchChipPickerOpen`'s doc comment) — the
                     // field only needs "is ANY picker open", the OR.
-                    isPickerOpen: isProjectChipPickerOpen || isBranchChipPickerOpen,
+                    // Finding 14 fix: mirrors the same eligibility gate the
+                    // branch picker's OWN render uses just below — an
+                    // ineligible-but-still-flagged-open branch picker must
+                    // not silence the field either, or the field's own
+                    // handlers stay unmounted while nothing else is
+                    // rendered to capture the keys in their place.
+                    isPickerOpen: isProjectChipPickerOpen || (isBranchChipPickerOpen && isBranchChipEligible),
                     // Nit: the placeholder still said "...and projects" even
                     // once a chip has already picked the project — the
                     // field only filters that project's templates at that
@@ -830,7 +899,16 @@ struct SessionComposerPalette: View {
             if isProjectChipPickerOpen {
                 Divider()
                 inlineProjectPicker
-            } else if isBranchChipPickerOpen {
+            } else if isBranchChipPickerOpen && isBranchChipEligible {
+                // Finding 14 fix (Slice B review round 1): gated on
+                // eligibility too, not just the flag — a project change
+                // cascades `worktrees`/`branchesWithoutWorktree` to empty
+                // (making the branch chip itself stop rendering) without
+                // necessarily flipping `isBranchChipPickerOpen` back to
+                // false in the same instant, which used to leave this
+                // picker expanded with no chip above it while
+                // `ComposerQueryField.isPickerOpen` still kept the field's
+                // own ↑/↓/Return handlers unmounted.
                 Divider()
                 inlineBranchPicker
             }
@@ -1150,6 +1228,20 @@ struct SessionComposerPalette: View {
     }
 
     private func commit(template: AgentTemplate) {
+        // Blocker 2 fix (Slice B review round 1): reject an unresolvable
+        // typed branch loudly, checked FIRST and before touching ANY of
+        // this function's other state — see `typedBranchResolution`'s doc
+        // comment for why silently falling through to the picker's last
+        // pick is exactly the bug this closes. `selectedIndex` is
+        // deliberately left alone here (unlike the N4 failed-precommit path
+        // below) — the row that triggered this was never actually about to
+        // commit into the wrong project or session; only the branch
+        // segment is broken, and the user is still mid-typing it.
+        if case .unresolved(let token) = typedBranchResolution {
+            composerStore.rejectUnresolvedBranch(token: token)
+            return
+        }
+
         // S1: reset the stale index up front. `recordRecent` (inside the
         // store's precommit) reorders RECENT, which would otherwise leave
         // `selectedIndex` pointing at the wrong row if the composer stays
@@ -1192,10 +1284,24 @@ struct SessionComposerPalette: View {
         // has no view-layer access to resolve `typedWorktreePath` itself —
         // that lookup needs `composerStore.worktrees`, which this view
         // already has via `@ObservedObject`).
-        composerStore.selectedWorktreePath = SessionComposerCommandParser.resolveCommitWorktreePath(
-            typedWorktreePath: typedWorktreePath,
+        //
+        // Blocker 2: routed through the STRICT commit-time resolver, not
+        // the plain-optional `resolveCommitWorktreePath` the picker's
+        // "already shown" comparisons still use — `.unresolved` was already
+        // handled by the early-return guard above, so `.success` is the
+        // only case this switch can reach; the `.failure` arm exists only
+        // so this stays exhaustive and safe if that invariant ever breaks.
+        switch SessionComposerCommandParser.resolveCommitWorktreePathForCommit(
+            typedBranch: typedBranchResolution,
             selectedWorktreePath: composerStore.selectedWorktreePath
-        )
+        ) {
+        case .success(let path):
+            composerStore.selectedWorktreePath = path
+        case .failure(let error):
+            composerStore.rejectUnresolvedBranch(message: error.message)
+            selectedIndex = bestSelectionIndex(in: flattenedOptions)
+            return
+        }
 
         // F1 (Phase 3 review): capture the target project BEFORE precommit
         // runs — `.locked`'s enforced project can differ from whatever
@@ -2043,6 +2149,19 @@ private struct WorktreeDropdownView: View {
     /// live (filtering templates) the whole time this picker is open.
     @State private var newBranchNameField: String = ""
 
+    /// Blocker 5 fix (Slice B review round 1): whether the "New branch
+    /// name…" field currently has first responder. `keyboardCaptureLayer`
+    /// installs a hidden `Button().keyboardShortcut(.return, modifiers: [])`
+    /// in the SAME window as this field's own `.onSubmit` — AppKit
+    /// dispatches key equivalents via `performKeyEquivalent` BEFORE
+    /// `keyDown` reaches the first responder, so Return in the field fired
+    /// `commitHighlighted()` (discarding the typed name with no feedback)
+    /// and ↑/↓ moved the row highlight instead of the caret. This mirrors
+    /// exactly how `ComposerQueryField` already stands its OWN equivalent
+    /// handlers down while `isPickerOpen` — the third capture layer this
+    /// picker never accounted for is itself, against its own child field.
+    @FocusState private var isNewBranchFieldFocused: Bool
+
     private var rowCount: Int { 1 + worktrees.count }
 
     private var trimmedNewBranchName: String {
@@ -2100,6 +2219,18 @@ private struct WorktreeDropdownView: View {
         .onAppear {
             highlightedIndex = worktrees.firstIndex(where: { $0.path == selectedWorktreePath }).map { $0 + 1 } ?? 0
         }
+        // Blocker 3 fix (Slice B review round 1): clamp `highlightedIndex`
+        // whenever `worktrees` itself changes, not only in `.onAppear` — a
+        // sibling session pruning a worktree (or this store's own refresh
+        // landing) while the picker is open and highlighted at the LAST row
+        // used to leave `highlightedIndex` pointing past the shrunk array,
+        // and `commitHighlighted()` indexed it unguarded. `min` is
+        // sufficient here — `rowCount` is `1 + worktrees.count`, so a
+        // shrink can only ever move the valid upper bound down, never
+        // invalidate an index that was already in range.
+        .onChange(of: worktrees) { newWorktrees in
+            highlightedIndex = min(highlightedIndex, newWorktrees.count)
+        }
     }
 
     private var defaultRow: some View {
@@ -2129,7 +2260,14 @@ private struct WorktreeDropdownView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(worktree.branch ?? (worktree.path as NSString).lastPathComponent)
                         .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    Text(worktree.path)
+                    // Nit fix (Slice B review round 1): `isLocked` was
+                    // parsed and tested but never surfaced anywhere — a
+                    // worktree Sean has pinned against `git worktree prune`
+                    // read identically to an unlocked one. Appended to the
+                    // existing path subtitle rather than a new row/icon, to
+                    // stay inside this picker's existing two-line-per-row
+                    // shape.
+                    Text(worktree.isLocked ? "\(worktree.path) · locked" : worktree.path)
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -2186,6 +2324,7 @@ private struct WorktreeDropdownView: View {
             TextField("New branch name…", text: $newBranchNameField)
                 .font(.system(size: 12))
                 .textFieldStyle(.plain)
+                .focused($isNewBranchFieldFocused)
                 .onSubmit {
                     guard newBranchNameIsNovel else { return }
                     onCreateWorktree(trimmedNewBranchName)
@@ -2225,35 +2364,68 @@ private struct WorktreeDropdownView: View {
     /// (the OR of both pickers) is what removes the field's own equivalent
     /// handlers while this one is on screen, so these are the only live
     /// ↑/↓/Return handlers while THIS picker is open, by construction.
+    ///
+    /// Blocker 5 fix (Slice B review round 1): this is ALSO removed from
+    /// the hierarchy entirely (not merely no-op'd) while
+    /// `isNewBranchFieldFocused` — the same `FA` pattern
+    /// `ComposerQueryField` already uses against `isPickerOpen`, applied
+    /// here against this picker's OWN child field. AppKit resolves a key
+    /// equivalent (`performKeyEquivalent`, which is how `.keyboardShortcut`
+    /// is implemented) before ordinary `keyDown` reaches the first
+    /// responder, so leaving this `Button` mounted while the "New branch
+    /// name…" field has focus meant Return there always committed the
+    /// HIGHLIGHTED ROW instead of the typed name, and ↑/↓ always moved the
+    /// row highlight instead of the caret — the field's own `.onSubmit`
+    /// (just above) never got a chance to fire. Verification note: I could
+    /// not exercise this with real keystrokes (no synthesized keyboard
+    /// input, per this task's hard constraint) — this fix is the same
+    /// architecture as the already-shipped, unmount-not-guard fix for
+    /// `ComposerQueryField`'s equivalent problem, applied symmetrically;
+    /// it is NOT independently runtime-verified here, and is flagged as
+    /// such rather than claimed proven.
     private var keyboardCaptureLayer: some View {
         Group {
-            Button {
-                highlightedIndex = (highlightedIndex - 1 + rowCount) % rowCount
-            } label: { Color.clear }
-                .buttonStyle(PlainButtonStyle())
-                .keyboardShortcut(.upArrow, modifiers: [])
+            if !isNewBranchFieldFocused {
+                Button {
+                    highlightedIndex = (highlightedIndex - 1 + rowCount) % rowCount
+                } label: { Color.clear }
+                    .buttonStyle(PlainButtonStyle())
+                    .keyboardShortcut(.upArrow, modifiers: [])
 
-            Button {
-                highlightedIndex = (highlightedIndex + 1) % rowCount
-            } label: { Color.clear }
-                .buttonStyle(PlainButtonStyle())
-                .keyboardShortcut(.downArrow, modifiers: [])
+                Button {
+                    highlightedIndex = (highlightedIndex + 1) % rowCount
+                } label: { Color.clear }
+                    .buttonStyle(PlainButtonStyle())
+                    .keyboardShortcut(.downArrow, modifiers: [])
 
-            Button {
-                commitHighlighted()
-            } label: { Color.clear }
-                .buttonStyle(PlainButtonStyle())
-                .keyboardShortcut(.return, modifiers: [])
+                Button {
+                    commitHighlighted()
+                } label: { Color.clear }
+                    .buttonStyle(PlainButtonStyle())
+                    .keyboardShortcut(.return, modifiers: [])
+            }
         }
         .frame(width: 0, height: 0)
         .accessibilityHidden(true)
     }
 
+    /// Blocker 3 fix (Slice B review round 1): bounds-safe, mirroring
+    /// `ProjectDropdownView.commitHighlighted`'s guard exactly — the view
+    /// this was copied from. `worktrees[highlightedIndex - 1]` unguarded
+    /// crashed whenever a refresh (opening the picker IS a refresh trigger)
+    /// landed a SHORTER list than what `highlightedIndex` was still keyed
+    /// against: open with 3 cached, arrow down to the last row, a sibling
+    /// session prunes one mid-picker, the refresh lands with 2, Return —
+    /// hard crash. The `.onChange(of: worktrees)` clamp above closes the
+    /// window further, but this guard is what actually prevents the crash
+    /// if anything ever slips past it.
     private func commitHighlighted() {
         if highlightedIndex == 0 {
             onSelectDefault()
         } else {
-            onSelectWorktree(worktrees[highlightedIndex - 1].path)
+            let index = highlightedIndex - 1
+            guard index >= 0, index < worktrees.count else { return }
+            onSelectWorktree(worktrees[index].path)
         }
     }
 }
