@@ -1459,3 +1459,43 @@ tradeoff rather than a clean win.
   (zero CEF frames; the `BrowserView` frames are Finder's own, inside the open-panel XPC service)
   nor provably a crash (no crash report exists; Dev pid 57389 has since exited). Beachball on
   Add-project, from the sidebar titlebar toolbar. | app | new
+
+## 2026-08-23 — Carried at context reset (parser built, round 2 NOT run)
+
+Branch `feat/composer-branch-segment` @ `948ad5fa8`, pushed, suite 871/0/1, tree clean.
+
+- [ ] **Re-run review round 2 on `948ad5fa8` from scratch.** *Carried.* It was dispatched and
+  **killed mid-run by the wrap — it produced no findings.** Do not treat the parser as cleared:
+  second rounds here are **fourteen-for-fourteen** on finding what the first missed, and two fix
+  commits have regressed paths a prior round explicitly cleared. Attack first: the
+  `activeKind != .thread` adapter guard (`SessionComposerCommandParser.swift:582-584`) and the
+  hand-argued invariant at `:572-581` — it is the builder's own addition, not instructed, and it
+  rests on a proof written in a comment. | quality | carried
+- [ ] **DECIDE OR KILL: what does `ghostties main claude > refactor the parser` do?** `claude` and
+  `codex` have no `-n` flag, so a thread name paired with a KNOWN template has nowhere to go.
+  Strawman (build this unless redlined): render the thread segment in the error color with
+  `"<thread>" needs a typed command`. Rejected alternative: `renameSession`, which is a second
+  naming route and violates D5 + [[decision_session-naming-stays-one-way]]. The planner argues
+  template+thread is now common rather than an edge case, which is a fair point against the
+  strawman but does not outweigh re-opening one-way naming. | app | carried
+- [ ] **Mutation-proof as standing policy.** Write into `agent-quality.md`: every test a builder
+  adds or changes must be shown red-then-green against a named mutation. Round 1 found **four
+  inert tests** among those not mutation-proved; two more shipped historically
+  ([[feedback_vacuous-tests-pass-green]]). Free to adopt, and it is the only thing that makes a
+  green suite evidence. *Offered to Sean, unanswered.* | quality | new
+- [ ] **Structural guard against the `Backport.onKeyPress` class.** A test asserting every
+  keyboard route has a non-`Backport` companion. Catches the bug that shipped dead in #130
+  without needing a macOS 13 machine (target is 13.0, this Mac is 27). ~1hr.
+  *Offered to Sean, unanswered.* | quality | new
+- [ ] **Rebuild the capture harness BEFORE D12.** The plan concedes D12's type-label width
+  contention "cannot be settled by reading the source." Recipe is already in this file from the
+  reverted attempt: stub `templates`/`sidebarMode`/`lastSelectedProjectId` for hermetic captures,
+  mark `GhosttyUITests` `skipped = "YES"` in the shared scheme, THEN fix `TEST_TARGET_NAME`. All
+  three together — the name fix alone arms 8 GUI-driving classes. | quality | new
+- [ ] **`feat/web-redesign-round4` carries the `TEST_TARGET_NAME` hazard.** Verified 2026-08-23:
+  at `2165c2f86` the tree has `TEST_TARGET_NAME = Ghostties` (fixed) with `GhosttyUITests` still
+  `skipped = "NO"`. Not on `origin/main`. Needs the scheme half before it merges. | quality | new
+
+**Accepted risks, stated rather than solved:** no macOS 13 coverage (a VM is disproportionate);
+keyboard behavior gated on Sean's manual pass — subagents may screen-capture but must NEVER drive
+synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
