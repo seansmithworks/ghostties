@@ -197,9 +197,10 @@ since it's a functional readout, not part of the lit signage.
 doesn't leave the hover backlight stuck on.
 
 **The coin** is the original 6×6 inline SVG pixel-circle, now drawn at `8×8`, `--coin-
-gold` fill, absolutely positioned over the slot mouth (`left: 6px` / small: `4px`,
-`top: -18px`, re-centred for the narrower `20px`/`16px` slot) so it visibly falls in
-from above the plate.
+gold` fill, absolutely positioned over the slot mouth (`left: 50%`, `margin-left: -4px`,
+`top: 0`) — the fall itself is the `gx-coin-fall` keyframe animating `translateY(-18px →
+0)`, not a static offset, so it visibly drops in from above the plate on firing and
+otherwise sits flush with the slot mouth at rest.
 
 ## Motion
 
@@ -264,26 +265,39 @@ not a side effect of pressing a button.
 - **Drift pacing matches the ghosts', kept under ~0.6px/frame** — ambient, not urgent.
   Same wall-bounce clamp as every ghost.
 - **Grabbable before coin-in, when no ghost is.** Every `.gx-ghost` is `pointer-events:
-  none` until `.gx-armed`; the coin is `pointer-events: auto` unconditionally, because
-  it's the one thing that has to be interactive precomputed-armed in order to arm
-  anything. Cursor is `grab` at rest, `grabbing` while dragged.
+  none` until `.gx-armed`; the coin's own box is `pointer-events: auto` by default (it's
+  the one thing that has to be interactive before the field is armed, in order to arm
+  it), except where it currently overlaps a real page control — see the yielding note
+  below. Cursor is `grab` at rest, `grabbing` while dragged.
 - **Lives in its own stacking context, not inside `#gx-field`.** The field paints under
-  page content (`z-index: 0`, vs. `main`'s `1`) by design, so ghosts drift behind text —
-  correct for ambient background sprites, but it would leave the coin permanently
-  ungrabbable wherever it happened to drift under a heading or button. The coin element
-  is appended to `<body>` instead, `z-index: 50` — above page content, still under the
-  plate (`90`) and skip-link (`100`) — so it's reachable anywhere on the page.
-- **Ghosts stay behind page content even when armed — `pointer-events`, not `z-index`,
-  is what makes them reachable.** `.gx-armed .gx-ghost` sets `pointer-events: auto`, but
-  ghosts are still painted at `z-index: 0` under `main`'s `1`, same as before arming —
-  reordering that would make ghosts paint over the page's text and images, which is
-  exactly what "the field looks like it's behind the page" rules out. Instead, arming
-  adds `body.gx-coin-in` (the same class this section's coin-token behaviour keys off),
-  and `.cabinet` (the wrapper around `main`/`footer`) drops `pointer-events` to `none`
-  under that class, with every real control (`a`, `button`) inside it opting back in to
-  `auto`. That makes `main`/`footer`'s otherwise-transparent boxes stop intercepting the
-  hit test while armed, so it falls through to the ghost underneath instead — reachable,
-  without ever painting above the page.
+  page content while ambient (`z-index: 0`, vs. `main`'s `1`), so ghosts drift behind
+  text — correct for ambient background sprites. The coin element is appended to
+  `<body>` instead, `z-index: 50` — always above page content regardless of arm state,
+  still under the plate (`90`) and skip-link (`100`) — so it's reachable anywhere on the
+  page, before or after arming.
+- **The coin yields to whatever page control it's currently over, decided ahead of the
+  gesture, never mid-gesture.** A drifting coin can park directly over the install
+  buttons or a footer link (the full-bleed field has no reserved gutter). Flipping the
+  coin's `pointer-events` *during* `pointerdown` was tried and rejected: by the time a
+  pointerdown fires the browser has already resolved its hit-test target, so toggling
+  then just breaks both the coin's own click and the control's (the control's `click`
+  fires on the nearest common ancestor of the mismatched down/up targets instead of
+  either element). Instead, `ghost-field.js` keeps the coin's `pointer-events`
+  continuously correct: every animation frame, `updateCoinHitTest()` tests the coin's
+  current box against a cache of the page's real interactive controls' rects (`.install-
+  row a`, `.install-row button`, `#still-ghostty a`, `.install-grid a`, `.footer-links
+  a`, `.footer-icons a`) and sets `pointer-events: none` on the coin when it overlaps
+  one, `""` (the CSS default `auto`) otherwise. The rect cache is rebuilt on `resize` and
+  `scroll`, since those controls sit in normal document flow while the coin is fixed.
+- **Ghosts move above page content once armed — `z-index`, not just `pointer-events`,
+  changes.** `#gx-field` jumps from `z-index: 0` to `20` when `.gx-armed` is added (still
+  under the coin token's `50` and the plate's `90`, so both stay reachable), and
+  `.gx-armed .gx-ghost` sets `pointer-events: auto` on the ghosts inside it. `#gx-field`
+  itself stays `pointer-events: none` in both states — only the ghosts opt in — so empty
+  field area and any page control not actually covered by a ghost's own box remain
+  reachable and selectable. Ghosts covering page text/controls while armed is correct:
+  the user is playing a game at that point, and every ghost is grabbable with no dead
+  zones, since nothing is intercepting the hit test above them anymore.
 - **Pointer Events, not separate mouse/touch handlers** (`pointerdown`/`pointermove`/
   `pointerup` with `setPointerCapture`), so one code path drives both mouse and touch
   drag with no duplication. `touch-action: none` on the token stops the browser

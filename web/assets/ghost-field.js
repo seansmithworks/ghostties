@@ -1001,41 +1001,58 @@
     }
 
     // A drifting coin can park directly over the install buttons (the
-    // full-bleed field has no reserved gutter). Before starting a drag,
-    // check what's actually under the pointer — hide the coin for one
-    // elementFromPoint call, then restore it — and if that's an
-    // interactive control, don't intercept: drop this element's own
-    // pointer-events until release so the click passes through to the
-    // control beneath instead of getting eaten by the coin.
-    function controlUnderPoint(clientX, clientY) {
-      var prevDisplay = coinEl.style.display;
-      coinEl.style.display = "none";
-      var under = document.elementFromPoint(clientX, clientY);
-      coinEl.style.display = prevDisplay;
-      return (
-        under &&
-        under.closest &&
-        under.closest("a, button, input, textarea, select, [role='button']")
+    // full-bleed field has no reserved gutter). Deciding whether the coin
+    // or the control beneath it should get the click can only be done
+    // *before* a gesture starts — by the time a pointerdown fires the
+    // browser has already resolved its hit-test target, so flipping
+    // pointer-events mid-gesture just breaks both the coin and the
+    // control's click event (it fires on their nearest common ancestor
+    // instead of either one). Instead, keep the coin's own
+    // pointer-events continuously correct for wherever it currently is:
+    // every frame (see updateCoinHitTest(), called from tick()), test the
+    // coin's box against a cache of the page's real interactive controls'
+    // rects and set pointer-events: none when it overlaps one, "" (auto,
+    // the CSS default) otherwise. The cache is rebuilt on resize/scroll
+    // since those controls live in normal flow, not fixed position.
+    var CONTROL_SELECTOR =
+      ".install-row a, .install-row button, #still-ghostty a, " +
+      ".install-grid a, .footer-links a, .footer-icons a";
+    var controlRects = [];
+    function refreshControlRects() {
+      controlRects = Array.prototype.map.call(
+        document.querySelectorAll(CONTROL_SELECTOR),
+        function (el) {
+          return el.getBoundingClientRect();
+        },
       );
     }
+    refreshControlRects();
+    window.addEventListener("resize", refreshControlRects);
+    window.addEventListener("scroll", refreshControlRects, { passive: true });
 
-    function yieldToControlBeneath() {
-      coinEl.style.pointerEvents = "none";
-      function restore() {
-        coinEl.style.pointerEvents = "";
-        document.removeEventListener("pointerup", restore);
-        document.removeEventListener("pointercancel", restore);
+    var coinYielding = false;
+    function updateCoinHitTest() {
+      var cx1 = coin.x,
+        cy1 = coin.y,
+        cx2 = coin.x + coin.w,
+        cy2 = coin.y + coin.h;
+      var overlap = false;
+      for (var i = 0; i < controlRects.length; i++) {
+        var r = controlRects[i];
+        if (cx1 < r.right && cx2 > r.left && cy1 < r.bottom && cy2 > r.top) {
+          overlap = true;
+          break;
+        }
       }
-      document.addEventListener("pointerup", restore);
-      document.addEventListener("pointercancel", restore);
+      if (overlap !== coinYielding) {
+        coinYielding = overlap;
+        coinEl.style.pointerEvents = overlap ? "none" : "";
+      }
     }
 
     coinEl.addEventListener("pointerdown", function (e) {
       if (coin.state !== "drifting") return;
-      if (controlUnderPoint(e.clientX, e.clientY)) {
-        yieldToControlBeneath();
-        return;
-      }
+      if (coinYielding) return;
       coin.state = "dragging";
       coinDrag.active = true;
       coinDrag.offX = coin.x - e.clientX;
@@ -1299,6 +1316,7 @@
         coin.el.style.transform =
           "translate(" + coin.x + "px," + (coin.y + coinBobD) + "px)";
       }
+      updateCoinHitTest();
 
       ghosts.forEach(function (g) {
         g.t++;

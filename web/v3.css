@@ -936,6 +936,19 @@ footer a:hover {
   pointer-events: none;
   overflow: hidden;
 }
+/* Armed — the field moves above page content instead of hiding behind it.
+   main/footer sit at z-index: 1; while armed, #gx-field jumps to 20 (still
+   under the coin token at 50 and the plate at 90, so both remain
+   reachable/clickable) and every ghost inside it is pointer-events: auto
+   (rule below), so ghosts are grabbable everywhere with no dead zones and
+   their hover cards (.gx-label, z-index: 300 but scoped to this stacking
+   context) paint above the page instead of underneath it. #gx-field itself
+   stays pointer-events: none in both states — only the ghosts opt in — so
+   empty field area, page text and page controls remain reachable/selectable
+   wherever no ghost is actually sitting on top of them. */
+#gx-field.gx-armed {
+  z-index: 20;
+}
 
 .gx-fx {
   position: fixed;
@@ -958,28 +971,6 @@ footer a:hover {
   cursor: grab;
 }
 
-/* Armed reachability — the gate above (pointer-events: auto on ghosts once
-   armed) only matters if something isn't sitting on top of the ghosts
-   soaking up the click first. main/footer live at z-index: 1 above
-   #gx-field's z-index: 0, so their (transparent) boxes normally win every
-   hit-test even though there's nothing painted there. Rather than
-   reordering z-index (which would make ghosts paint over page content,
-   breaking the "field looks behind the page" requirement and text
-   legibility), drop pointer-events on the whole .cabinet subtree while
-   armed so those transparent boxes stop intercepting clicks and the hit
-   test falls through to whatever's actually there — a ghost, or empty
-   page. Every real control inside .cabinet (install buttons, the two
-   external links, the four footer links) opts back in explicitly so nothing
-   the tab-order/click checklist relies on goes dead. body.gx-coin-in is the
-   same class ghost-field.js's coinIn()/coinOut() already toggle for the
-   coin-token CSS below, so this can't drift out of sync with `armed`. */
-body.gx-coin-in .cabinet {
-  pointer-events: none;
-}
-body.gx-coin-in .cabinet a,
-body.gx-coin-in .cabinet button {
-  pointer-events: auto;
-}
 .gx-ghost.gx-dragging {
   cursor: grabbing;
   z-index: 200;
