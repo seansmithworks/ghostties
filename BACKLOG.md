@@ -4,6 +4,56 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-24 — beta.24 is gated on ONE branch: land type-first composer first
+
+**The composer on `main` is the chip design Sean rejected.** `377ae4b2c` (Sean's own
+commit, 2026-08-23) deletes the breadcrumb chips and rebuilds the field type-first —
+and it is **not on `main`**. It lives only on `feat/composer-branch-segment`. `main`
+still carries the chips (7 refs in `SessionComposerPalette.swift`). Cutting beta.24
+from `main` today ships a UX that was already tested and reversed.
+
+- [ ] **carried — the ONLY thing gating beta.24.** Land `feat/composer-branch-segment`
+  on `main`. 22 commits, +5,288/−378 across 11 files, carrying the type-first rebuild
+  **plus** Slice B (branch→worktree). They cannot be separated — `377ae4b2c` sits on
+  top of the B1–B4 commits. `main` has not moved since the fork point (`07abc440a`
+  both sides), so it merges clean, no rebase. This branch also closes a gap that is
+  open on `main`: the typable `>` separator (`6b76559c0`, spec decision #3).
+  Sequence, in order: (1) round-3 pass on the 3 blockers + chevron-literal defect;
+  (2) discriminating tests for all 5 round-2 fix items — currently zero; (3) a review
+  round on those fixes (eight-for-eight rule); (4) **Sean runs the build** and accepts
+  the type-first feel; (5) merge — **Claude decides timing, Sean authorized this
+  2026-08-24**; (6) release mechanics. Perf defect (50-100 parses/keystroke) is
+  explicitly deferred, not a gate.
+
+- [ ] **carried — release mechanics for beta.24**, all manual, all pre-tag except the
+  last three. `CHANGELOG.md` is topped at **beta.22** — beta.23 shipped without an
+  entry, so beta.24 needs write-ups covering **both**. Then copy the changelog section
+  into `web/appcast-beta.xml`'s `<description><![CDATA[…]]></description>`. Then smoke
+  test a local build (focus the composer — `BACKLOG` claims #132/#133 merged without
+  Sean's runtime pass; they ARE merged, that text is stale). Tag → CI ~20 min → fill
+  the GitHub release body (CI leaves it blank) → verify `ghostties.org/appcast-beta.xml`
+  is live (assets are `max-age=3600`, check the deployed file not a warm browser) →
+  Sparkle smoke test from the DMG. **The tag is a public release trigger — it stays
+  Sean's explicit nod, never delegated.** Full checklist: `docs/release-checklist.md`.
+  Homebrew auto-bump is unset and skips cleanly; if ever set, `HOMEBREW_TAP_TOKEN`
+  (secret) must go in BEFORE `HOMEBREW_TAP_REPO` (variable) or the job reddens after
+  the release is already public.
+
+- [ ] **parked — QA / release-readiness agent** (Sean floated 2026-08-24, own thread).
+  Evidence that motivates it, from this session's infra inventory: **CI never executes
+  the macOS suite** — `test-ghostties.yml` runs `build-for-testing` only, because the
+  app-hosted test host hangs ~6 min on headless runners; the 871/0/1 run this session
+  was by hand. **10 UI test files have never executed** — `TEST_TARGET_NAME = Ghostty`
+  (should be `Ghostties`) in all three build configs; arming it is a known hazard, it
+  wakes nine GUI-driving tests that type shell text and Cmd+W at whatever holds focus.
+  **Web has zero test coverage** and Vercel auto-deploys `main` to prod. Empirically:
+  review rounds catch ~8 defects per phase, the test suite has caught **0** real
+  defects. The chip design passed four review rounds and a green suite, then died in
+  minutes of real use — **no gate puts the running app in front of Sean before
+  "done"**. That is the gap worth closing, not more tests. Hard constraint on the
+  design: prod deploys are never delegated, so this is a readiness agent producing a
+  go/no-go with evidence, never a deploy button.
+
 ## 2026-08-24 — composer round-2 review: fix wave dispatched, one decision deferred
 
 Round 2 adversarial review of `948ad5fa8` (two independent parallel reviewers) found 2
