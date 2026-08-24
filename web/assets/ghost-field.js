@@ -30,7 +30,7 @@
   // ── Ghost data (real Ghostties characters, 12×12 grids) ──────────────────
   var GHOSTS_DATA = [
     {
-      name: "blinky",
+      name: "flicker",
       role: "Orchestrator",
       boss: true,
       color: "#ff3b3b",
@@ -62,7 +62,7 @@
       hrt: 90,
     },
     {
-      name: "pinky",
+      name: "shade",
       role: "Design",
       color: "#ff8ec8",
       rgb: "255,142,200",
@@ -93,7 +93,7 @@
       hrt: 87,
     },
     {
-      name: "inky",
+      name: "murk",
       role: "Engineering",
       color: "#3ee8ff",
       rgb: "62,232,255",
@@ -124,7 +124,7 @@
       hrt: 84,
     },
     {
-      name: "clyde",
+      name: "haze",
       role: "Data",
       color: "#ff9f3b",
       rgb: "255,159,59",
