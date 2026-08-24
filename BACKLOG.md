@@ -1702,3 +1702,35 @@ Carried out of the 2026-08-23 build. `63774fdeb` on `feat/web-redesign-round4`, 
   the coin-plate work. carried 2× since 2026-08-23 | quality | carried
 - [ ] **`coin-slot-spec.md` still stale in both directions** against the shipped behaviour.
   carried 2× since 2026-08-23 | design | carried
+
+## 2026-08-24 (later) — Pac-Man IP + robot-ghost direction
+
+Thread pivoted at Sean's direction after the coin-plate objective closed. `main` untouched;
+all work on `feat/web-redesign-round4`.
+
+- [x] **Trademarked ghost NAMES removed, `92a3bb297`.** `blinky`/`pinky`/`inky`/`clyde` were
+  in `GHOSTS_DATA` AND rendered into a visible `<span class="gx-name">` on the hover card
+  (`ghost-field.js:~832`) — displayed on the site, not internal. Now `flicker`, `shade`,
+  `murk`, `haze`, matching the five already-safe names. Coupling check clean. | quality | done
+- [ ] **DECIDE OR KILL: ghost silhouette.** The sprite is the Pac-Man ghost shape almost
+  pixel-for-pixel (dome, twin eye blocks, scalloped tail) — the real residual exposure, and
+  the names fix does not touch it. Nine-robot strawman built and shown; Sean said "let's do
+  the tonal". Needs: accept / redline / kill the robot direction. | design | **Sean** | new
+- [ ] **DECIDE OR KILL: tonal shading mapping.** Sean's call — shading is a continuous
+  1.0-4.0 range, rest at ~2.4, ends are events. Strawman on screen: 4.0 = deepen, 1.0 =
+  flat "blown out" flash. My proposal to apply or redline: **4.0 is a state you HOLD**
+  (hover / agent-active, ~3.2), **1.0 is a spike you FIRE** (status change / arming).
+  Unresolved, not blocked — apply the strawman if no redline. | design | **Sean** | new
+- [ ] **Wire the chosen direction into `ghost-field.js`.** Exploration only so far. The live
+  renderer supports ONE flat colour per ghost; multi-tone needs the glyph set widened — the
+  COIN renderer in the same file already does this (`o`/`#`/`+`), so precedent exists. The
+  vapour tail-wave animation (bottom 2 rows, `~1439`) is meaningless on a robot and needs
+  replacing with the per-sprite accent animations. | build | new
+- [ ] **Coin grid 16x16 (80px) vs ghosts 12x12 (60px)** — same 5px cell, but the coin is a
+  33% bigger object. Dropping the coin to 12x12 would make it a true sibling. Real fork,
+  unopened. | design | new
+- [ ] **Coin hover shine/ripple** requested, unbuilt. Note: ghosts already have a hover
+  behaviour (3D tilt tracking cursor, `scale(1.8)`, `~1196`) that only fires when armed — a
+  coin ripple should probably match that gate. | build | new
+- [ ] **`MEMORY.md` is 22.4k against a 20k cap** (read in full every boot) — needs
+  `/orchestrator-route` alongside `ORCHESTRATOR.md`. | build | new
