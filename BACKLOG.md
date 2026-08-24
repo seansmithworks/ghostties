@@ -13,38 +13,80 @@ analysis) before any fix was dispatched — one of them crashed a real session
 launcher log: `command not found: main`). Full finding detail is in this thread's
 transcript, not restated here.
 
-- [ ] **carried** — Fix wave dispatched to an implementer subagent on
-  `feat/composer-branch-segment` (base `948ad5fa8`), not yet returned as of this
-  checkpoint. Scope: (1) wire real branch/template lists into `parse()`'s adapter call
-  to `parsePath` (`SessionComposerCommandParser.swift:547`) — was hardcoded to empty
-  lists, permanently disabling branch resolution; (2) replace the false `activeKind`
-  invariant the round-1 B3 guard rests on (`:572-584`) with a real, directly-set signal
-  for "is the open run a thread run"; (3) fix the locked-composer path
-  (`isLocked` guard at `:304`) which currently disables parsing entirely regardless of
-  input; (4) `SessionComposerPalette.swift` — `templateFilterQuery`/`commandOptions`
-  (`:357`, `:369`) ignore the already-selected project (`currentProject`'s sticky
-  fallback) when no project name is typed, so a bare ad-hoc command like `cco` shows
-  "No matches" even though the breadcrumb already shows a resolved project; (5) chevron
-  ahead of the operator position currently skips template matching entirely, contradicting
-  already-decided D4 ("templates first") — masked in the live UI today because the
-  option list ranks by fuzzy text match independent of segment classification, but real
-  once other consumers of `ParseResult` exist. Plus test-suite fixes/additions per the
-  round-2 findings.
+- [ ] **carried, round 3 needed** — Fix wave scope: (1) wire real branch/template lists
+  into `parse()`'s adapter call to `parsePath` (`SessionComposerCommandParser.swift:547`)
+  — was hardcoded to empty lists, permanently disabling branch resolution; (2) replace
+  the false `activeKind` invariant the round-1 B3 guard rested on with a real,
+  directly-set signal (`PathParse.openRunIsThreadRun`) for "is the open run a thread
+  run"; (3) fix the locked-composer path (`isLocked` guard) which disabled parsing
+  entirely regardless of input; (4) `SessionComposerPalette.swift` —
+  `templateFilterQuery`/`commandOptions` ignored the already-selected project
+  (`currentProject`'s sticky fallback) when no project name is typed, so a bare ad-hoc
+  command like `cco` showed "No matches" even though the breadcrumb already showed a
+  resolved project; (5) chevron ahead of the operator position was skipping template
+  matching entirely, contradicting already-decided D4 ("templates first").
 
-  **UPDATE — interrupted, NOT verified.** The implementer was stopped mid-work (Sean
-  needed to exit) before it ran the build or test suite. Its in-progress edits were
-  committed as-is at `c15b92a5e` ("WIP(composer): round-2 fix wave interrupted
-  mid-verification") — **do not trust this commit as complete or building.** Editor
-  SourceKit diagnostics showed transient "Cannot find type 'Project'/'AgentTemplate' in
-  scope" errors on both touched files at stop time; unknown whether that's a real break
-  or a mid-edit transient. **Next action: build
-  (`xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration
-  ReleaseLocal -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES`), and if it
-  fails, diagnose/fix before anything else — do not re-dispatch a fresh implementer on
-  top of this without knowing whether it's broken first.** If it builds, run the full
-  unfiltered `GhosttyTests` suite (see `feedback-unfiltered-test-runs.md`, real totals via
-  `xcresulttool`, baseline was 871/0/1), then dispatch a separate reviewer against the
-  full diff (builder ≠ reviewer) before calling any of this done.
+  **Build + test VERIFIED GREEN** at `364c1d98c` (2026-08-24): `xcodebuild build`
+  ReleaseLocal succeeded; `xcodebuild test` Debug config (per `TESTING.md` — NOT
+  ReleaseLocal, `ENABLE_TESTABILITY` is Debug-only project-wide) ran the full unfiltered
+  suite via `xcresulttool`: **871 passed / 0 failed / 1 skipped**, matches baseline
+  exactly. One real break was found and fixed en route: `c15b92a5e` added
+  `PathParse.openRunIsThreadRun` but missed one direct-construction call site in
+  `SessionComposerCommandParserTests.swift:1224` — fixed at `364c1d98c` (`openRunIsThreadRun: false`, matching `.none`'s convention since that test passes
+  `remainderRange: nil`).
+
+  **A SEPARATE reviewer (builder ≠ reviewer) then reviewed the full `948ad5fa8..HEAD`
+  diff and returned: NOT COMPLETE, needs another pass.** 3 blockers, 1 defect, 1 perf
+  defect, and a test-coverage gap across all 5 items (871/0/1 unchanged from baseline —
+  none of the 5 behavior changes have discriminating test coverage). Full review
+  transcript is in this thread; summary:
+  - **Blocker 1** — `ParseResult` doesn't carry the resolved-template segment Fix 5
+    produces, so the palette can't see it; a resolved operator template (e.g.
+    `ghostties orchestrator > my thread`) empties the remainder, which unranks the
+    template list and can launch the wrong (most-recent) template on Return instead of
+    the one just typed. Fix 1 + Fix 5 are net-negative in the shipped UI until
+    `ParseResult` carries this.
+  - **Blocker 2** — `fallbackCommandParse` (Fix 4) passes the *trimmed* search text into
+    `parse()`, but `parsePath`'s termination signal is trailing whitespace. This breaks
+    the D3 sticky-chip state: typing `"ghostties "` (project + space, no chevron) now
+    opens an operation run on the project name itself, filters out every template, and
+    offers `Run "ghostties"` — regressing the exact case D3 exists for. `ghostties>`
+    (chevron, no space) still works, which is the tell.
+  - **Blocker 3** — Fix 4 reads `fallbackCommandParse` for `templateFilterQuery`/
+    `commandOptions` but `typedBranchResolution`/`currentBranchLabel`/commit still read
+    the original `commandParse`. A typed branch in the implied-project shape (e.g.
+    project selected via picker, then typing `main cco -n test`) gets consumed into the
+    Run-row remainder by the fallback parse but never reaches branch resolution —
+    silently launches in the picker's worktree instead of `main`. This is the exact
+    silent-inheritance failure `TypedBranchResolution` was built to eliminate,
+    reintroduced by having two parses of record.
+  - **Defect** — Fix 5 hard-sets `openRunKind = .thread` after a template match instead
+    of returning to matching-live (mirroring the ordinary match path), so the *next*
+    `>` after a chevron-resolved operator becomes a literal instead of a separator:
+    `ghostties > orchestrator > mythread` yields thread name `"> mythread"`, while
+    `ghostties orchestrator > mythread` (no leading chevron) correctly yields
+    `"mythread"`. Currently masked at the `parse()` adapter (Blocker 1 nils the
+    remainder either way) but is wrong data in `PathParse` itself.
+  - **Defect (perf)** — the `commandParse`/`fallbackCommandParse`/`currentProject`
+    cluster in `SessionComposerPalette.swift` is uncached SwiftUI computed vars calling
+    each other; ballpark 50-100 `parse()` calls + 30-60 template-list rebuilds per
+    keystroke. No hang, but this is a hot path in a project with an existing documented
+    render-cost problem ([[project_perf-contextmenu-render-cost]]).
+  - **Also flagged, secondary:** branch lists fed to the parser in `SessionComposerPalette.swift` aren't gated against `worktreesProjectId`, so a stale cross-project branch name can be consumed by the parser before the downstream `.pending` guard catches it (surfaces as a loud "still checking branches" error, not a wrong launch — lower severity than the 3 blockers).
+  - **What's confirmed solid:** Fix 1's wiring is correct and does fix the original
+    round-2 crash (`ghostties main > refactor the parser` execing a binary named
+    `main`) when traced by hand. Fix 2's field is constructed correctly at all 3 sites
+    and is a strict widening with no regression case found. B3 and D6 semantics are
+    preserved. Fix 4's "no project selected at all" case is byte-identical to
+    pre-fix-wave. Fix 5's core intent (templates-first at the operator position) is
+    achieved — the defects are in what happens after the match, not the match itself.
+
+  **Next action:** needs a round-3 fix pass targeting the 3 blockers + defect above,
+  ideally with real test coverage added this time (Fix 4's logic lives in a SwiftUI
+  `View` with no seam — extracting an `effectiveParse(...)` free function would let it
+  be tested and would likely have caught blockers 2 and 3 directly). Not dispatched yet
+  — this is new scope beyond the round-2 fix-wave-plus-verify that was authorized;
+  checkpointing here for Sean's review rather than pushing another autonomous pass.
 
 - [ ] **carried, DECIDE OR KILL** — `>` chevron-counting semantics (BACKLOG D6) for a
   shape like `ghostties > > orchestrator`: does the first `>` skip over the branch
