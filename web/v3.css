@@ -486,38 +486,39 @@ footer a:hover {
   gap: 16px;
   align-items: center;
 }
-/* Coin entry plate — a lit arcade sign, not a coloured rectangle. Black
-   bezel with real thickness and corner-screw hardware, a lit red inner
-   frame, a red field lit from a hotspot at the top falling off toward
-   the bottom, a tall slot down the left with its own edge light, and
-   backlit type — near-white cores bleeding to red-orange, because the
-   light comes through the letters rather than sitting on top of them.
-   Direction is the user's own keychain reference photo (a backlit 25c /
-   INSERT COIN TO PLAY panel) — see docs/design/web-redesign/
-   coin-slot-spec.md. Colour is scoped locally to this component
-   (--coin-*), never --amber, which stays the page's CTA colour. State is
-   never colour-alone: the label line text and the credit digit both
-   swap on arm/disarm (script in v3.html), which is also how this clears
-   WCAG 1.4.11. */
+/* Coin entry plate — a lit arcade sign, not a coloured rectangle. Thick
+   black bezel with a wide margin, coarse crinkle-plastic texture and
+   corner-screw hardware; a tall PORTRAIT red panel lit from a strip lamp
+   across the top that falls off to near-black by the bottom third; a
+   tall slot down the left with its own red-lit edge; and glowing RED
+   type (not white/orange) — hotter than the field behind it, still
+   unmistakably red. Direction is the user's own close-up reference photo
+   (a backlit 25c / INSERT COIN TO PLAY panel) — see docs/design/
+   web-redesign/coin-slot-spec.md. Colour is scoped locally to this
+   component (--coin-*), never --amber, which stays the page's CTA
+   colour. State is never colour-alone: the label line text and the
+   credit digit both swap on arm/disarm (script in v3.html), which is
+   also how this clears WCAG 1.4.11. */
 .gx-coin {
   position: fixed;
   top: 16px;
   right: 16px;
   z-index: 90;
-  width: 118px;
-  height: 94px;
+  width: 92px;
+  height: 144px;
   padding: 0;
   border: 0;
   background: none;
   cursor: pointer;
   text-align: left;
-  --coin-bezel: #101012;
-  --coin-red-hi: #d81f26;
-  --coin-red-lo: #38040a;
+  --coin-bezel: #0c0c0d;
+  --coin-red-hi: #8a1a10;
+  --coin-red-lo: #2a0806;
   --coin-frame: #ff4634;
   --coin-gold: #e8b545;
   --coin-glow: rgba(255, 40, 34, 0.4);
-  --coin-type: #fff6ec;
+  --coin-type: #ff2a18;
+  --coin-type-lo: #e01810;
 }
 
 .gx-coin-bezel {
@@ -525,101 +526,136 @@ footer a:hover {
   display: block;
   width: 100%;
   height: 100%;
-  padding: 6px;
-  border-radius: 5px;
+  padding: 12px 10px;
+  border-radius: 6px;
   background:
     radial-gradient(
-      circle at 9px 9px,
-      rgba(64, 64, 70, 0.9) 0,
-      rgba(64, 64, 70, 0.9) 1.2px,
-      transparent 1.6px
+      circle at 10px 10px,
+      rgba(70, 70, 76, 0.9) 0,
+      rgba(70, 70, 76, 0.9) 1.3px,
+      transparent 1.7px
     ),
     radial-gradient(
-      circle at calc(100% - 9px) 9px,
-      rgba(64, 64, 70, 0.9) 0,
-      rgba(64, 64, 70, 0.9) 1.2px,
-      transparent 1.6px
+      circle at calc(100% - 10px) 10px,
+      rgba(70, 70, 76, 0.9) 0,
+      rgba(70, 70, 76, 0.9) 1.3px,
+      transparent 1.7px
     ),
     radial-gradient(
-      circle at 9px calc(100% - 9px),
-      rgba(64, 64, 70, 0.9) 0,
-      rgba(64, 64, 70, 0.9) 1.2px,
-      transparent 1.6px
+      circle at 10px calc(100% - 10px),
+      rgba(70, 70, 76, 0.9) 0,
+      rgba(70, 70, 76, 0.9) 1.3px,
+      transparent 1.7px
     ),
     radial-gradient(
-      circle at calc(100% - 9px) calc(100% - 9px),
-      rgba(64, 64, 70, 0.9) 0,
-      rgba(64, 64, 70, 0.9) 1.2px,
-      transparent 1.6px
+      circle at calc(100% - 10px) calc(100% - 10px),
+      rgba(70, 70, 76, 0.9) 0,
+      rgba(70, 70, 76, 0.9) 1.3px,
+      transparent 1.7px
     ),
     repeating-radial-gradient(
-      circle at 2px 2px,
-      rgba(255, 255, 255, 0.035) 0,
-      rgba(255, 255, 255, 0.035) 0.5px,
-      transparent 0.5px,
-      transparent 3px
+      circle at 3px 3px,
+      rgba(255, 255, 255, 0.06) 0,
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px,
+      transparent 6px
     ),
-    radial-gradient(circle at 18% 15%, rgba(255, 255, 255, 0.05), transparent 40%),
-    radial-gradient(circle at 82% 85%, rgba(255, 255, 255, 0.03), transparent 45%),
+    repeating-linear-gradient(
+      118deg,
+      rgba(0, 0, 0, 0.4) 0,
+      rgba(0, 0, 0, 0.4) 2px,
+      transparent 2px,
+      transparent 5px
+    ),
+    repeating-linear-gradient(
+      26deg,
+      rgba(0, 0, 0, 0.28) 0,
+      rgba(0, 0, 0, 0.28) 1.5px,
+      transparent 1.5px,
+      transparent 6px
+    ),
+    radial-gradient(
+      circle at 18% 15%,
+      rgba(255, 255, 255, 0.07),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 82% 88%,
+      rgba(255, 255, 255, 0.04),
+      transparent 45%
+    ),
     var(--coin-bezel);
   box-shadow:
-    0 3px 8px rgba(0, 0, 0, 0.55),
+    0 3px 9px rgba(0, 0, 0, 0.6),
     inset 0 1px 0 rgba(233, 230, 245, 0.08),
-    inset 0 -2px 3px rgba(0, 0, 0, 0.65);
+    inset 0 -2px 3px rgba(0, 0, 0, 0.7);
   transition: box-shadow 220ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .gx-coin-panel {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 6px;
   width: 100%;
   height: 100%;
-  padding: 0 6px 0 5px;
+  padding: 7px 8px 7px 6px;
   border-radius: 3px;
   overflow: visible;
   border: 1px solid var(--coin-frame);
-  background: radial-gradient(
-      65% 45% at 50% 4%,
-      rgba(255, 255, 255, 0.4),
-      rgba(255, 120, 70, 0.22) 42%,
-      transparent 68%
-    ),
-    radial-gradient(120% 130% at 50% 16%, var(--coin-red-hi) 0%, var(--coin-red-lo) 84%);
+  /* Base falloff — a fixed top-to-bottom gradient (never animated) so the
+     "bottom third nearly black-red" reading holds regardless of the
+     pulse below. The pulsing hot lamp bar lives on ::after. */
+  background: linear-gradient(
+    180deg,
+    var(--coin-red-hi) 0%,
+    #5c120c 38%,
+    var(--coin-red-lo) 100%
+  );
   box-shadow:
-    inset 0 0 0 1px rgba(255, 130, 100, 0.35),
-    inset 0 0 9px rgba(255, 40, 30, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 -3px 5px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 100, 70, 0.3),
+    inset 0 0 10px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.65),
     0 0 10px var(--coin-glow),
     0 0 20px rgba(255, 20, 16, 0.16);
-  animation: gx-coin-breathe 1700ms ease-in-out infinite alternate;
 }
 
+/* Strip lamp — a bright bar just under the top edge with a visible hot
+   point, on a screen-blend layer so it reads as light falling onto the
+   plastic rather than a flat colour. This is also the ONLY piece that
+   pulses (gx-coin-breathe-glow, unchanged 1700ms alternate) — the base
+   panel gradient above stays fixed, so the pulse is a change in the
+   lamp's intensity, never a flicker of the label. */
 .gx-coin-panel::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: 3px;
-  background: radial-gradient(
-    60% 42% at 50% 2%,
-    rgba(255, 255, 255, 0.6),
-    rgba(255, 130, 80, 0.08) 55%,
-    transparent 70%
-  );
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 205, 170, 0.85) 0%,
+      rgba(255, 110, 60, 0.4) 14%,
+      transparent 40%
+    ),
+    radial-gradient(
+      34% 90% at 46% 0%,
+      rgba(255, 255, 255, 0.85),
+      transparent 55%
+    );
   mix-blend-mode: screen;
   pointer-events: none;
-  opacity: 0.3;
+  opacity: 0.34;
   animation: gx-coin-breathe-glow 1700ms ease-in-out infinite alternate;
 }
 
 .gx-coin-slot {
   position: relative;
   flex: none;
-  align-self: stretch;
-  width: 20px;
-  margin: 6px 0;
+  align-self: center;
+  width: 17%;
+  height: 73%;
   border-radius: 1px;
   background: linear-gradient(180deg, #150406, #060102 55%, #150406);
   box-shadow:
@@ -634,17 +670,18 @@ footer a:hover {
   inset: 0;
   border-radius: 1px;
   box-shadow:
-    inset 1px 0 0 rgba(255, 120, 80, 0.55),
-    inset -1px 0 0 rgba(255, 70, 45, 0.25),
+    inset 1px 0 0 rgba(255, 90, 60, 0.55),
+    inset -1px 0 0 rgba(255, 50, 35, 0.25),
     inset 0 0 6px rgba(255, 40, 30, 0.4);
 }
 
 .gx-coin-piece {
   position: absolute;
-  left: 6px;
+  left: 50%;
   top: 0;
   width: 8px;
   height: 8px;
+  margin-left: -4px;
   fill: var(--coin-gold);
   opacity: 0;
 }
@@ -652,53 +689,61 @@ footer a:hover {
 .gx-coin-info {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   flex: 1;
   min-width: 0;
+  height: 100%;
   gap: 3px;
 }
 
 .gx-coin-price {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 19px;
+  font-size: 17px;
   line-height: 1;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   color: var(--coin-type);
   text-shadow:
-    0 0 2px rgba(255, 255, 255, 0.95),
-    0 0 7px rgba(255, 150, 90, 0.9),
-    0 0 16px rgba(255, 60, 30, 0.7),
-    0 0 30px rgba(255, 20, 10, 0.4);
+    0 0 2px rgba(255, 90, 60, 0.9),
+    0 0 7px rgba(255, 42, 24, 0.85),
+    0 0 16px rgba(224, 24, 16, 0.6),
+    0 0 30px rgba(160, 14, 10, 0.35);
 }
 
 .gx-coin-label {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 1px;
 }
 
 .gx-coin-label-line {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 8.5px;
+  font-size: 7.5px;
   line-height: 1.15;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   text-transform: uppercase;
-  color: var(--coin-type);
+  color: var(--coin-type-lo);
   text-shadow:
-    0 0 1.5px rgba(255, 255, 255, 0.9),
-    0 0 4px rgba(255, 150, 90, 0.85),
-    0 0 9px rgba(255, 60, 30, 0.65),
-    0 0 16px rgba(255, 20, 10, 0.35);
+    0 0 1.5px rgba(255, 60, 40, 0.85),
+    0 0 4px rgba(255, 40, 24, 0.75),
+    0 0 9px rgba(224, 24, 16, 0.55),
+    0 0 16px rgba(160, 14, 10, 0.3);
   transition:
     color 220ms cubic-bezier(0.25, 1, 0.5, 1),
     text-shadow 220ms cubic-bezier(0.25, 1, 0.5, 1);
 }
+/* PLAY (or, armed, EXIT) — set largest of the label lines, matching the
+   reference's type hierarchy. */
+.gx-coin-label-line-big {
+  font-size: 12px;
+  color: var(--coin-type);
+}
 
 .gx-coin-credit {
+  margin-top: auto;
   font-family: var(--font-mono);
   font-weight: 400;
   font-size: 6.5px;
@@ -713,86 +758,63 @@ footer a:hover {
   transition: color 160ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-@keyframes gx-coin-breathe {
-  from {
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 130, 100, 0.28),
-      inset 0 0 7px rgba(255, 40, 30, 0.35),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 6px rgba(255, 40, 34, 0.22),
-      0 0 12px rgba(255, 20, 16, 0.07);
-  }
-  to {
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 160, 130, 0.55),
-      inset 0 0 12px rgba(255, 60, 40, 0.7),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 20px rgba(255, 60, 50, 0.75),
-      0 0 38px rgba(255, 20, 16, 0.35);
-  }
-}
 @keyframes gx-coin-breathe-glow {
   from {
-    opacity: 0.22;
+    opacity: 0.24;
   }
   to {
-    opacity: 0.78;
+    opacity: 0.82;
   }
 }
 
-/* Hover / focus-visible — the machine noticing you: backlight strengthens
-   and the bloom widens, with no layout shift. Scoped off the armed state,
-   which already carries a stronger steady glow. `:focus-visible` inherits
-   the site's global focus ring (v3.css `:focus-visible` above); this only
-   adds the backlight response so a keyboard user gets the same "noticed"
-   feedback as a mouse hover. */
+/* Hover / focus-visible — the machine noticing you: the lamp bar
+   strengthens and widens, with no layout shift. Scoped off the armed
+   state, which already carries a stronger steady glow. `:focus-visible`
+   inherits the site's global focus ring (v3.css `:focus-visible` above);
+   this only adds the backlight response so a keyboard user gets the same
+   "noticed" feedback as a mouse hover. */
 @media (hover: hover) {
   .gx-coin:not(.gx-coin-armed):hover .gx-coin-panel {
-    animation: none;
     box-shadow:
-      inset 0 0 0 1px rgba(255, 170, 140, 0.6),
-      inset 0 0 13px rgba(255, 60, 40, 0.75),
-      inset 0 1px 0 rgba(255, 255, 255, 0.14),
-      inset 0 -3px 5px rgba(0, 0, 0, 0.55),
+      inset 0 0 0 1px rgba(255, 130, 100, 0.5),
+      inset 0 0 13px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -4px 7px rgba(0, 0, 0, 0.65),
       0 0 22px rgba(255, 60, 50, 0.8),
       0 0 40px rgba(255, 20, 16, 0.36);
   }
   .gx-coin:not(.gx-coin-armed):hover .gx-coin-panel::after {
-    animation: none;
-    opacity: 0.85;
+    animation-play-state: running;
+    opacity: 0.9;
   }
   .gx-coin:not(.gx-coin-armed):hover .gx-coin-label-line,
   .gx-coin:not(.gx-coin-armed):hover .gx-coin-price {
     text-shadow:
-      0 0 2px rgba(255, 255, 255, 1),
-      0 0 6px rgba(255, 160, 100, 1),
-      0 0 13px rgba(255, 70, 35, 0.85),
-      0 0 24px rgba(255, 20, 10, 0.5);
+      0 0 2px rgba(255, 110, 80, 1),
+      0 0 6px rgba(255, 60, 35, 1),
+      0 0 13px rgba(224, 30, 20, 0.85),
+      0 0 24px rgba(160, 14, 10, 0.5);
   }
 }
 .gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-panel {
-  animation: none;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 170, 140, 0.6),
-    inset 0 0 13px rgba(255, 60, 40, 0.75),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -3px 5px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 130, 100, 0.5),
+    inset 0 0 13px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.65),
     0 0 22px rgba(255, 60, 50, 0.8),
     0 0 40px rgba(255, 20, 16, 0.36);
 }
 .gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-panel::after {
-  animation: none;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 .gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-label-line,
 .gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-price {
   text-shadow:
-    0 0 2px rgba(255, 255, 255, 1),
-    0 0 6px rgba(255, 160, 100, 1),
-    0 0 13px rgba(255, 70, 35, 0.85),
-    0 0 24px rgba(255, 20, 10, 0.5);
+    0 0 2px rgba(255, 110, 80, 1),
+    0 0 6px rgba(255, 60, 35, 1),
+    0 0 13px rgba(224, 30, 20, 0.85),
+    0 0 24px rgba(160, 14, 10, 0.5);
 }
 
 /* Press — depress + bevel inversion. Real hardware feedback on the actual
@@ -833,53 +855,52 @@ footer a:hover {
 @keyframes gx-coin-panel-flash {
   0% {
     box-shadow:
-      inset 0 0 0 1px rgba(255, 160, 130, 0.55),
-      inset 0 0 12px rgba(255, 60, 40, 0.7),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 20px rgba(255, 60, 50, 0.75),
-      0 0 38px rgba(255, 20, 16, 0.35);
+      inset 0 0 0 1px rgba(255, 130, 100, 0.5),
+      inset 0 0 13px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+      0 0 22px rgba(255, 60, 50, 0.8),
+      0 0 40px rgba(255, 20, 16, 0.36);
     animation-timing-function: linear;
   }
   25.7% {
     box-shadow:
-      inset 0 0 0 1px rgba(255, 190, 170, 0.8),
-      inset 0 0 16px rgba(255, 90, 70, 0.9),
-      inset 0 1px 0 rgba(255, 255, 255, 0.18),
-      inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 30px rgba(255, 100, 90, 0.9),
-      0 0 52px rgba(255, 30, 20, 0.5);
+      inset 0 0 0 1px rgba(255, 160, 130, 0.75),
+      inset 0 0 17px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+      0 0 32px rgba(255, 100, 90, 0.9),
+      0 0 54px rgba(255, 30, 20, 0.5);
     animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
   }
   100% {
     box-shadow:
-      inset 0 0 0 1px rgba(255, 160, 130, 0.55),
-      inset 0 0 12px rgba(255, 60, 40, 0.7),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -3px 5px rgba(0, 0, 0, 0.55),
-      0 0 20px rgba(255, 60, 50, 0.75),
-      0 0 38px rgba(255, 20, 16, 0.35);
+      inset 0 0 0 1px rgba(255, 130, 100, 0.5),
+      inset 0 0 13px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+      0 0 22px rgba(255, 60, 50, 0.8),
+      0 0 40px rgba(255, 20, 16, 0.36);
   }
 }
 
 /* Armed — steady state once a coin is in. Set by the script alongside the
    body.gx-coin-in class ghost-field.js itself toggles in coinIn()/
    coinOut(), so this never carries a state ghost-field.js doesn't agree
-   with. Backlight goes steady (no breathing) rather than switching hue —
-   the label lines and credit digit are what carry the state change. */
+   with. Backlight goes steady-strong (the lamp keeps its own pulse; it
+   never blinks) — the label lines and credit digit are what carry the
+   state change. */
 .gx-coin-armed .gx-coin-panel {
-  animation: none;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 160, 130, 0.55),
-    inset 0 0 12px rgba(255, 60, 40, 0.65),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -3px 5px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 150, 120, 0.55),
+    inset 0 0 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.65),
     0 0 17px rgba(255, 50, 40, 0.6),
     0 0 30px rgba(255, 20, 16, 0.26);
 }
 .gx-coin-armed .gx-coin-panel::after {
-  animation: none;
-  opacity: 0.7;
+  opacity: 0.62;
 }
 .gx-coin-armed .gx-coin-credit b {
   color: #ffe9a8;
@@ -1333,16 +1354,17 @@ body.gx-coin-in .cabinet button {
   }
 }
 
-/* The coin plate is fixed top:16/right:16 at 118x94 down to 481px — its
-   box (16 to 110) sits above where .hero's content starts (96px base
-   section padding-top) anywhere the hero column reaches far enough right
-   to sit under it, which starts well above the 640px breakpoint (.head's
-   own 720px cap plus the plate's width means overlap runs from roughly
-   641px down to 481px). Push the section down to clear the plate across
-   that whole range instead of relying on short copy missing it. */
+/* The coin plate is now a PORTRAIT 92x144 box (fixed top:16/right:16,
+   bottom edge at 160px) from 481px up to 899px — measured by sweeping
+   320-1200px in a real browser, not spot-checked. Below 900px the h1's
+   bounding box runs the section's full width, so it collides with the
+   plate vertically at every width down to 320px; the collision only
+   clears above 900px, where .head's own max-width keeps its right edge
+   short of the plate's now-wider left edge. Push the section well past
+   the plate's bottom edge (160 + a real gap) across the whole span. */
 @media (max-width: 900px) {
   .hero {
-    padding-top: 132px;
+    padding-top: 188px;
   }
 }
 
@@ -1364,11 +1386,12 @@ body.gx-coin-in .cabinet button {
   section {
     padding: 64px 20px;
   }
-  /* Plate shrinks to 92x76 (box 16 to 92) below this breakpoint but
-     section padding-top also drops to 64px — still not enough clearance;
-     same reasoning as the 640px block above. */
+  /* Plate shrinks to 78x122 (top:10, bottom edge at 132px) below this
+     breakpoint but section padding-top also drops to 64px — still not
+     enough clearance; same reasoning as the 640px block above, measured
+     across the full 320-480 span, not just the top of it. */
   .hero {
-    padding-top: 108px;
+    padding-top: 154px;
   }
   .hero h1 {
     font-size: 36px !important;
@@ -1399,31 +1422,33 @@ body.gx-coin-in .cabinet button {
   .gx-coin {
     top: 10px;
     right: 10px;
-    width: 92px;
-    height: 76px;
+    width: 78px;
+    height: 122px;
   }
   .gx-coin-bezel {
-    padding: 5px;
+    padding: 10px 8px;
   }
-  .gx-coin-slot {
-    width: 16px;
-    margin: 5px 0;
+  .gx-coin-panel {
+    padding: 6px 6px 6px 5px;
   }
   .gx-coin-piece {
-    left: 4px;
     width: 7px;
     height: 7px;
+    margin-left: -3.5px;
   }
   .gx-coin-info {
     gap: 2px;
   }
   .gx-coin-price {
-    font-size: 15px;
+    font-size: 14px;
   }
   .gx-coin-label-line {
-    font-size: 7.5px;
+    font-size: 6.5px;
+  }
+  .gx-coin-label-line-big {
+    font-size: 10px;
   }
   .gx-coin-credit {
-    font-size: 6px;
+    font-size: 5.5px;
   }
 }

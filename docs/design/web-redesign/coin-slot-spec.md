@@ -1,6 +1,51 @@
 # Coin slot — build spec
 
-**Round 2 (this pass) matches the user's actual keychain reference photo, not just its
+**Round 3 (current, supersedes Round 2 below on six points) matches a close-up
+reference photo of a real arcade coin plate, not the keychain shot Round 2 was built
+from.** The keychain reference read as landscape and near-white type; the close-up
+photo makes clear the real object is **portrait** (`≈0.64` w/h, not landscape),
+**type is glowing red** (`≈#ff2a18` fading to `≈#e01810`), not white/orange, the
+lamp is a **bright bar across the top** with a visible hot point (not a centred
+radial hotspot), the plastic reads **deep translucent red** (`≈#8a1a10` near the
+lamp to `≈#2a0806` at the bottom, not the brighter `--coin-red-hi`/`--coin-red-lo`
+below), the bezel texture is **coarser** (pebble/crinkle, not a fine 3px stipple),
+and the slot is a **long vertical channel, ~17% width × ~73% height**, not a
+`20px`-wide flex-stretch column. Layout also changes: the label is three stacked
+lines — `INSERT` / `COIN TO` / `PLAY`, with `PLAY` set largest — rather than two.
+
+- **Footprint:** `92×144` (small ≤480px: `78×122`), not `118×94`/`92×76`. Aspect
+  `~0.639`, portrait.
+- **Colour vars:** `--coin-red-hi: #8a1a10`, `--coin-red-lo: #2a0806`,
+  `--coin-type: #ff2a18` with a `--coin-type-lo: #e01810` for the smaller lines —
+  `--coin-gold`/`--coin-frame`/`--coin-glow`/`--coin-bezel` unchanged.
+- **Panel fill** is now a fixed (non-animated) top-to-bottom `linear-gradient`
+  (`--coin-red-hi → #5c120c → --coin-red-lo`) carrying the falloff, with the lamp's
+  hot bar living entirely on `.gx-coin-panel::after` (a top-aligned `linear-gradient`
+  + off-centre radial hot point, `mix-blend-mode: screen`) so it can pulse without
+  the base colour ever flattening out. The `gx-coin-breathe` `box-shadow` keyframe
+  from Round 2 is retired; the pulse is carried by `::after` opacity alone
+  (`gx-coin-breathe-glow`, unchanged 1700ms swing, now `.24 → .82`).
+- **Slot:** `width: 17%; height: 73%; align-self: center;` on `.gx-coin-slot`,
+  replacing the `20px`/`16px` fixed-width, full-stretch column.
+- **Type:** `.gx-coin-price` `17px` (small: `14px`), `.gx-coin-label-line` `7.5px`
+  (small: `6.5px`) in `--coin-type-lo`, and a new `.gx-coin-label-line-big` modifier
+  (`12px`/small `10px`, `--coin-type`) on the `PLAY`/`EXIT` line — hierarchy matches
+  the reference's largest-line-on-bottom reading. Text-shadow layers are now red-only
+  (no white core) — hot red bleeding to a duller red, never white/orange.
+- **Bezel texture:** the `repeating-radial-gradient` pitch widened `3px → 6px` and two
+  `repeating-linear-gradient` diagonal streak layers (118°/26°) added on top, for a
+  coarser, less uniform crinkle than the fine stipple alone gave.
+- **Hero overlap re-swept** for the taller plate: `.hero { padding-top }` is now
+  `188px` at `≤900px` (was `132px`) and `154px` at `≤480px` (was `108px`), based on a
+  320–1200px sweep of real `getBoundingClientRect()` overlap against `h1`/`.head`,
+  not a spot-check.
+
+Everything below this point describes Round 2 and is superseded on the six points
+above; the shared parts (states table, motion timing outside the retired
+`gx-coin-breathe` keyframe, copy/ARIA grammar except the label going from two lines
+to three, the physical coin object) still apply.
+
+**Round 2 matches the user's actual keychain reference photo, not just its
 colour palette.** The first pass (below, superseded in the details but not the
 direction) got the black bezel and red field right but was a *coloured rectangle with
 gold type* — flat fill, no hotspot, no inner lit frame, painted-looking type. The user

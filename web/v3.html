@@ -169,8 +169,9 @@
         <span class="gx-coin-info">
           <span class="gx-coin-price">25&#162;</span>
           <span class="gx-coin-label">
-            <span class="gx-coin-label-line" data-line="1">INSERT COIN</span>
-            <span class="gx-coin-label-line" data-line="2">TO PLAY</span>
+            <span class="gx-coin-label-line" data-line="1">INSERT</span>
+            <span class="gx-coin-label-line" data-line="2">COIN TO</span>
+            <span class="gx-coin-label-line gx-coin-label-line-big" data-line="3">PLAY</span>
           </span>
           <span class="gx-coin-credit">CR <b>0</b></span>
         </span>
@@ -226,14 +227,16 @@
       // render() writes both lines, not one string.
       function render(armed) {
         if (armed) {
-          labelLines[0].textContent = 'ESC';
-          labelLines[1].textContent = 'EXIT';
+          labelLines[0].textContent = '';
+          labelLines[1].textContent = 'ESC';
+          labelLines[2].textContent = 'EXIT';
           digit.textContent = '1';
           btn.setAttribute('aria-label', 'Return coin and exit the ghost field');
           btn.setAttribute('title', 'Return coin (Esc)');
         } else {
-          labelLines[0].textContent = 'INSERT COIN';
-          labelLines[1].textContent = 'TO PLAY';
+          labelLines[0].textContent = 'INSERT';
+          labelLines[1].textContent = 'COIN TO';
+          labelLines[2].textContent = 'PLAY';
           digit.textContent = '0';
           btn.setAttribute('aria-label', 'Insert coin');
           btn.setAttribute('title', 'Insert coin (C)');
