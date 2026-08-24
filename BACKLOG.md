@@ -1686,15 +1686,14 @@ on these four:
 
 Carried out of the 2026-08-23 build. `63774fdeb` on `feat/web-redesign-round4`, pushed.
 
-- [x] **Bust array redone and shipped, `b649137da`.** First redo pass (`3b3e5aeeb`) still
-  read as a smooth blob when render-verified — the zigzag amplitude between features was
-  too shallow. Iterated by rendering candidate arrays directly in a browser at 5/8/16/24px
-  until the silhouette clearly read as a right-facing profile (dome crown, brow/glasses
-  ridge, protruding nose + lens glint, receded mouth, jutting chin/jaw) and held up even at
-  the live 80px size. Applied to both `Quarter.dc.html` and `ghost-field.js:328`. Sean was
-  offline for this pass ("going to bed... Lfg") — built and shipped under standing
-  autonomous-work authorization rather than held for accept/redline; flag for his review
-  next session rather than treating it as pre-approved taste. | design | done
+- [x] **Bust array redone twice, both redos rejected — reverted to the original.** Two
+  redo passes shipped overnight under standing autonomous-work authorization: `3b3e5aeeb`
+  (first pass, read as a smooth blob when render-verified) and `b649137da` (second pass,
+  iterated at 5/8/16/24px until the silhouette read as a right-facing profile). Sean
+  reviewed all three candidates side by side against the original `63774fdeb` array and
+  picked the original: "Clearly the original coin is clearest." Both redos reverted in
+  `ghost-field.js:328` and both copies in `Quarter.dc.html` (drop-in `<pre>` block +
+  `grids().g16`); byte-verified against `63774fdeb`. | design | done
 - [ ] **Coin default size (`COIN_PX` now 5, ~92px) is a first-pass number, not locked.**
   Tune by eye once Sean sees it live. | design | new
 - [ ] **`ORCHESTRATOR.md` is 18.9k against a 10-15k target** (hard max 20k) — needs
