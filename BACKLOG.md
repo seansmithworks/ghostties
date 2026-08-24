@@ -1671,10 +1671,31 @@ sources at `docs/design/web-redesign/coin-plate/`. Sean: "much better, just gett
 right details on there" — expect redlines, not a restart. Building into `v3.css` blocks
 on these four:
 
-- [ ] **Typeface — Archivo 900 vs Silkscreen** for the plate's centred label type | design | new
-- [ ] **Which effect layers ship** — recommended stack is A (gradients, floor) + D (chained
-  `drop-shadow`, follows glyph alpha where `box-shadow` structurally can't) + C + E.
-  Effects stack, they are not a menu — confirm the set | design | new
-- [ ] **Bust grid — 16×16 vs 12×12** for the coin's pixel portrait. 16×16 keeps the same
-  32px footprint at `COIN_PX 2`, array swap only at `ghost-field.js:324` | design | new
-- [ ] **Does the coin get a reverse side** (flip state / second face) or front-only | design | new
+- [x] **Typeface — Silkscreen** picked; turned out already the case (`var(--font-display)`),
+  no change needed | design | done
+- [x] **Effect layers — A+D+C+E** picked and built, `63774fdeb` | design | done
+- [x] **Bust grid — 16×16** picked and built, `63774fdeb` — but the array itself (pulled
+  verbatim from `Quarter.dc.html`) reads as a blob, not a face, at actual size. See new
+  item below | design | done
+- [x] **Reverse side — approved**, built as an unspec'd flip strawman, then killed same
+  session (Sean: clashed with the plate's existing press/drop-through choreography) |
+  design | done
+
+
+## 2026-08-24 — coin plate: bust redo + open maintenance
+
+Carried out of the 2026-08-23 build. `63774fdeb` on `feat/web-redesign-round4`, pushed.
+
+- [ ] **Bust array doesn't clear its own likeness bar.** The canvas's "finished" 16×16
+  `COIN_GRID` (`Quarter.dc.html`) renders as a smooth blob at actual size, not the
+  rim-ring + deep-zigzag profile this project's own notes called for (brow 11, glasses 12,
+  eye 10, nose 12, lip 9, beard 11 columns). Redo dispatched as a strawman same night —
+  Sean accepts or redlines, not left open. carried 1× since 2026-08-23 | design | carried
+- [ ] **Coin default size (`COIN_PX` now 5, ~92px) is a first-pass number, not locked.**
+  Tune by eye once Sean sees it live. | design | new
+- [ ] **`ORCHESTRATOR.md` is 18.9k against a 10-15k target** (hard max 20k) — needs
+  `/orchestrator-route`. carried 2× since 2026-08-23 | build | carried
+- [ ] **Review round 3 on `ef474700f` + `3edfa724b` still unrun**, displaced twice now by
+  the coin-plate work. carried 2× since 2026-08-23 | quality | carried
+- [ ] **`coin-slot-spec.md` still stale in both directions** against the shipped behaviour.
+  carried 2× since 2026-08-23 | design | carried
