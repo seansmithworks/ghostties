@@ -214,9 +214,25 @@ enum SessionComposerCommandParser {
         /// The currently-open, not-yet-closed free-text run, if any.
         let remainderRange: NSRange?
         let projectId: UUID?
+        /// Whether the currently-open run (`remainderRange`, if non-nil) is
+        /// genuinely a THREAD run — set directly from `openRunKind` at the
+        /// point the walk ends, never derived from `activeKind`. `activeKind`
+        /// is a different, deliberately decoupled concept (what the
+        /// completion/suggestion UI should offer while a token is still
+        /// being typed — see `openedByFinalUnterminatedToken` in
+        /// `parsePath`) and can report `.branch`/`.project` even while the
+        /// open run underneath it is truly a thread run (e.g.
+        /// `"ghostties orchestrator te"` with a real `orchestrator`
+        /// template: the operator resolves via the template match, leaving
+        /// `.branch` as the first unfilled type `activeKind` reports, while
+        /// the run opened by the trailing `"te"` is genuinely `.thread`).
+        /// Fix 2 (round-2 review): this field is what callers needing "is
+        /// the open run a thread run" must read instead.
+        let openRunIsThreadRun: Bool
 
         static let none = PathParse(source: "", segments: [], trailingTermRange: nil,
-                                    activeKind: nil, remainderRange: nil, projectId: nil)
+                                    activeKind: nil, remainderRange: nil, projectId: nil,
+                                    openRunIsThreadRun: false)
     }
 
     /// One raw token from a quote-aware, `>`-aware scan of `rawQuery`: a
@@ -294,22 +310,43 @@ enum SessionComposerCommandParser {
     ///
     /// `templates`/`knownBranchNames` are caller-supplied so this stays
     /// pure and disk-free — the parser never looks anything up itself.
+    /// - `preResolvedProject` (Fix 3/Fix 4, round-2 review): a project whose
+    ///   identity is supplied from OUTSIDE the typed text rather than
+    ///   matched from it — the locked-composer case (the binding already
+    ///   fixes the project; there's nothing to match) and the Palette's
+    ///   no-project-typed fallback (a sticky/selected project is already
+    ///   showing; the whole query should resolve branch/operator/thread
+    ///   against ITS context) share this exact shape. When set (or when
+    ///   `isLocked` is true with no project genuinely typeable), the walk
+    ///   skips project-name matching entirely and starts with `.project`
+    ///   already filled — AND treats the very first raw token as if it
+    ///   followed an already-terminated project token (see
+    ///   `hasProcessedAnyToken` below), so a single still-being-typed token
+    ///   (`"cco"`, no trailing space) can still open a run immediately
+    ///   instead of being withheld by rule 1's bare-first-token exception,
+    ///   which exists only to protect an as-yet-unresolved PROJECT name.
     static func parsePath(
         rawQuery: String,
         projects: [Project],
         templates: [AgentTemplate],
         knownBranchNames: [String] = [],
-        isLocked: Bool
+        isLocked: Bool,
+        preResolvedProject: Project? = nil
     ) -> PathParse {
-        guard !isLocked, !rawQuery.isEmpty else { return .none }
+        guard !rawQuery.isEmpty else { return .none }
 
         let rawTokens = scanRawTokens(rawQuery)
         guard !rawTokens.isEmpty else { return .none }
 
+        let projectPositionIsFixed = isLocked || preResolvedProject != nil
+
         var filled = Set<SegmentKind>()
         var segments: [Segment] = []
-        var projectId: UUID?
+        var projectId: UUID? = preResolvedProject?.id
         var trailingTermRange: NSRange?
+        if projectPositionIsFixed {
+            filled.insert(.project)
+        }
 
         // The currently-open free-text run, if any. `openRunKind == nil`
         // means matching is still "live" — every terminated token so far
@@ -332,7 +369,14 @@ enum SessionComposerCommandParser {
         // to rule 3 (open/extend a run) instead of being withheld. Every
         // unterminated token is by construction the LAST token in the scan
         // (nothing can follow it), so this only ever matters once, here.
-        var hasProcessedAnyToken = false
+        // Fix 3/Fix 4 (round-2 review): when the project position is
+        // externally fixed, the walk proceeds "as if that project's name
+        // had already been typed and terminated" (Fix 3's own wording) —
+        // i.e. as if a prior token had already been processed — so the
+        // bare-first-token exception below never withholds the very first
+        // REAL token from opening a run just because it happens to be first
+        // in this particular scan.
+        var hasProcessedAnyToken = projectPositionIsFixed
         // B1 (round-1 review): set true only when THIS unterminated word is
         // what opened the run below — i.e. the token the user is still
         // typing is itself the reason matching gave up. In that one case,
@@ -404,6 +448,29 @@ enum SessionComposerCommandParser {
                     openRunKind = nextFreeTextKind()
                     openRunStart = range.location
                     openRunEnd = range.location + range.length
+                } else if openRunKind == .operation, !filled.contains(.operation),
+                          openRunStart == nil, terminated,
+                          let template = templates.first(where: { matchesTemplate($0, token: matchText) }) {
+                    // Fix 5 (round-2 review): the FIRST content token of an
+                    // operator-position run still gets one shot against the
+                    // known template list before becoming ad-hoc content —
+                    // however that run opened. The ordinary matching-live
+                    // path above already tries this for a run that opens
+                    // because "nothing matched"; this covers the run opened
+                    // by an explicit `>` (rule 4, case 1), which otherwise
+                    // bypassed the template check entirely and let
+                    // `ghostties > orchestrator` report an ad-hoc/thread
+                    // segment instead of resolving the Orchestrator
+                    // template (D4). A match resolves the operator exactly
+                    // like the ordinary path does and reopens the run as a
+                    // thread run, mirroring the chevron-close-then-open-
+                    // thread transition above; a non-match falls through to
+                    // the ordinary ad-hoc extension below, unchanged.
+                    segments.append(Segment(kind: .operation, range: range, resolved: .template(template.id)))
+                    filled.insert(.operation)
+                    openRunKind = .thread
+                    openRunStart = nil
+                    openRunEnd = nil
                 } else {
                     // Rule 1 (second half): inside an open run, even an
                     // unterminated trailing token is legitimate content —
@@ -487,7 +554,8 @@ enum SessionComposerCommandParser {
             trailingTermRange: trailingTermRange,
             activeKind: activeKind,
             remainderRange: remainderRange,
-            projectId: projectId
+            projectId: projectId,
+            openRunIsThreadRun: openRunKind == .thread
         )
     }
 
@@ -509,11 +577,14 @@ enum SessionComposerCommandParser {
     }
 
     /// Parse `query` for the `<project> <remainder...>` shape — a thin
-    /// adapter over `parsePath` (path grammar, above). `branchToken` can
-    /// only ever be non-nil here if a caller starts passing
-    /// `knownBranchNames`, which this adapter deliberately never does (no
-    /// existing caller of `parse` has a branch list to offer) — kept as a
-    /// real (not dead) code path for that reason, not vestigial.
+    /// adapter over `parsePath` (path grammar, above). `branchToken` is
+    /// non-nil whenever a caller passes a `knownBranchNames` list that a
+    /// typed token actually matches — Fix 1 (round-2 review) wired the
+    /// production caller (`SessionComposerPalette.commandParse`) to pass
+    /// the real per-project branch and template lists; a caller with no
+    /// project context yet (none currently exist) is expected to pass `[]`
+    /// for both explicitly, with a comment saying why, rather than silently
+    /// defaulting.
     ///
     /// `query` is the caller's already-TRIMMED search text (its existing
     /// contract, unchanged by this rewrite) — NOT the raw `rawQuery`
@@ -543,8 +614,22 @@ enum SessionComposerCommandParser {
     /// covers the quoted form; `testFlatFormRedirectTruncatesAtChevron`
     /// pins the unquoted truncation itself so a later "fix" can't silently
     /// walk it back).
-    static func parse(query: String, projects: [Project], isLocked: Bool) -> ParseResult {
-        let path = parsePath(rawQuery: query, projects: projects, templates: [], isLocked: isLocked)
+    static func parse(
+        query: String,
+        projects: [Project],
+        knownBranchNames: [String] = [],
+        templates: [AgentTemplate] = [],
+        isLocked: Bool,
+        preResolvedProject: Project? = nil
+    ) -> ParseResult {
+        let path = parsePath(
+            rawQuery: query,
+            projects: projects,
+            templates: templates,
+            knownBranchNames: knownBranchNames,
+            isLocked: isLocked,
+            preResolvedProject: preResolvedProject
+        )
         guard let projectId = path.projectId else { return .none }
 
         let branchToken: String? = path.segments.lazy.compactMap { segment -> String? in
@@ -571,17 +656,23 @@ enum SessionComposerCommandParser {
         //    a thread run with no operator ever having resolved — fell
         //    through to `path.remainderRange`, which by then holds the
         //    THREAD text, and reported "refactor the parser" as the ad-hoc
-        //    command. `path.activeKind` is the reliable signal here: it can
-        //    diverge from the run's own classification while a token is
-        //    still being typed (see `openedByFinalUnterminatedToken` in
-        //    `parsePath`), but ONLY in the direction of reporting
-        //    `.project`/`.branch` instead of `.operation` — it never
-        //    reports anything OTHER than `.thread` when the run truly is a
-        //    thread run, so gating on it here can't misclassify a
-        //    genuine in-progress ad-hoc command as a thread.
+        //    command. Fix 2 (round-2 review): this used to gate on
+        //    `path.activeKind == .thread`, on the false premise that
+        //    `activeKind` never reports anything other than `.thread` when
+        //    the run truly is a thread run. It can: `activeKind` is a
+        //    DIFFERENT signal (what the completion/suggestion UI should
+        //    offer for a still-being-typed token — see
+        //    `openedByFinalUnterminatedToken` in `parsePath`), and reports
+        //    the first unfilled type among project/branch/operation even
+        //    while the actually-open run underneath is genuinely a thread
+        //    run (`"ghostties orchestrator te"` with a real `orchestrator`
+        //    template: the operator resolves via the template match, branch
+        //    is still unfilled, so `activeKind` reports `.branch` — but the
+        //    run opened by "te" is genuinely `.thread`). `path.openRunIsThreadRun`
+        //    is set directly from the run's own classification and is the
+        //    correct signal here.
         let closedAdHocRange = path.segments.first(where: { $0.kind == .operation && $0.resolved == .adHoc })?.range
-        let openRunIsThread = path.activeKind == .thread
-        let remainderRange: NSRange? = closedAdHocRange ?? (openRunIsThread ? nil : path.remainderRange)
+        let remainderRange: NSRange? = closedAdHocRange ?? (path.openRunIsThreadRun ? nil : path.remainderRange)
 
         guard let range = remainderRange, let bounds = Range(range, in: query) else {
             return ParseResult(projectId: projectId, remainderTokens: [], branchToken: branchToken)

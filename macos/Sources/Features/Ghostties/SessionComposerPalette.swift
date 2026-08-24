@@ -225,12 +225,110 @@ struct SessionComposerPalette: View {
 
     // MARK: - Command grammar (slice 1)
 
-    /// Tokenizes `query` against the known project list. `.none` (the
-    /// common case) means "no command recognized" — every downstream
-    /// filter below falls through to the ordinary whole-string query,
-    /// byte-identical to before this parser existed.
+    /// The project a locked composer's binding already fixes — Fix 3
+    /// (round-2 review). `nil` unless `request.projectBinding` is
+    /// `.locked`, in which case it's that exact project; fed to `parsePath`
+    /// as `preResolvedProject` so branch/operator/thread matching can run
+    /// against a locked composer's typed text (previously dead — see
+    /// `isProjectLocked`'s call sites before this fix).
+    private var lockedProject: Project? {
+        if case .locked(let project) = request.projectBinding { return project }
+        return nil
+    }
+
+    /// Project-only resolution pass — Fix 1 (round-2 review). `parsePath`'s
+    /// project match never depends on `templates`/`knownBranchNames` (it's
+    /// tried first, unconditionally), so this lightweight pass safely
+    /// determines WHICH project's branch/template lists `commandParse`
+    /// below should be scoped to, without `commandParse` ever feeding back
+    /// into its own inputs (that would be a genuine circular reference:
+    /// `commandParse` → `commandProject`/`currentProject` →
+    /// `availableTemplates`/worktrees → `commandParse`).
+    private var commandProjectIdHint: UUID? {
+        SessionComposerCommandParser.parse(
+            query: query, projects: store.projects, isLocked: isProjectLocked,
+            preResolvedProject: lockedProject
+        ).projectId
+    }
+
+    private var commandProjectHint: Project? {
+        guard let id = commandProjectIdHint else { return nil }
+        return store.projects.first(where: { $0.id == id })
+    }
+
+    /// Real branch names for whichever project `commandProjectIdHint`
+    /// resolves — Fix 1. Sourced from the same worktree cache
+    /// `typedBranchResolution` already reads; that cache is refreshed
+    /// (debounced) whenever `commandProject` changes, so it can trail the
+    /// hint by a keystroke on a fast typist, same tolerance already
+    /// accepted for `typedBranchResolution` itself (see
+    /// `TypedBranchResolution.pending`).
+    private var commandKnownBranchNames: [String] {
+        guard commandProjectHint != nil else { return [] }
+        var names = composerStore.worktrees.compactMap { $0.branch }
+        if let rootBranch = composerStore.currentBranchAtProjectRoot {
+            names.append(rootBranch)
+        }
+        return names
+    }
+
+    /// Real per-project template list for whichever project
+    /// `commandProjectIdHint` resolves — Fix 1.
+    private var commandTemplates: [AgentTemplate] {
+        guard let project = commandProjectHint else { return [] }
+        return SessionTemplateResolver.templates(for: project, store: store)
+    }
+
+    /// Tokenizes `query` against the known project list, real per-project
+    /// branch names, and real per-project templates. `.none` (the common
+    /// case) means "no command recognized" — every downstream filter below
+    /// falls through to the ordinary whole-string query, byte-identical to
+    /// before this parser existed.
     private var commandParse: SessionComposerCommandParser.ParseResult {
-        SessionComposerCommandParser.parse(query: query, projects: store.projects, isLocked: isProjectLocked)
+        SessionComposerCommandParser.parse(
+            query: query,
+            projects: store.projects,
+            knownBranchNames: commandKnownBranchNames,
+            templates: commandTemplates,
+            isLocked: isProjectLocked,
+            preResolvedProject: lockedProject
+        )
+    }
+
+    /// Fix 4 (round-2 review): when no project token was typed at all
+    /// (`commandParse.projectId == nil`) but `currentProject` already
+    /// resolves (the sticky/selected default the resolution line is
+    /// already showing), branch/operator/thread typing still needs to
+    /// resolve against THAT project's context — `commandParse` itself came
+    /// back `.none` in this shape, so its remainder fields are empty/
+    /// invalid and can't just be reused. Re-runs the parse against the
+    /// whole raw `query`, treating `currentProject` as externally resolved
+    /// — the same shape of problem `lockedProject` solves for the locked
+    /// composer, and the same mechanism (`preResolvedProject`).
+    private var fallbackCommandParse: SessionComposerCommandParser.ParseResult? {
+        guard commandParse.projectId == nil, let project = currentProject else { return nil }
+        let branchNames: [String] = {
+            var names = composerStore.worktrees.compactMap { $0.branch }
+            if let rootBranch = composerStore.currentBranchAtProjectRoot {
+                names.append(rootBranch)
+            }
+            return names
+        }()
+        return SessionComposerCommandParser.parse(
+            query: query,
+            projects: store.projects,
+            knownBranchNames: branchNames,
+            templates: SessionTemplateResolver.templates(for: project, store: store),
+            isLocked: isProjectLocked,
+            preResolvedProject: project
+        )
+    }
+
+    /// `commandParse`, or `fallbackCommandParse` when no project was typed
+    /// but one is already implied — the parse `templateFilterQuery` and
+    /// `commandOptions` should actually read (Fix 4).
+    private var effectiveCommandParse: SessionComposerCommandParser.ParseResult {
+        fallbackCommandParse ?? commandParse
     }
 
     private var commandProject: Project? {
@@ -353,9 +451,13 @@ struct SessionComposerPalette: View {
     /// command scopes filtering to the remainder (`cco -n test`, not the
     /// whole `ghostties cco -n test` query) — otherwise nothing in the
     /// project's own template list would ever match the project name that
-    /// prefixes it.
+    /// prefixes it. Fix 4 (round-2 review): gates on `currentProject`, not
+    /// `commandProject` — a project can already be implied (sticky/
+    /// selected default) with none typed at all, in which case
+    /// `effectiveCommandParse` is `fallbackCommandParse`, scoped to that
+    /// implied project.
     private var templateFilterQuery: String {
-        commandProject != nil ? commandParse.remainderText : query
+        currentProject != nil ? effectiveCommandParse.remainderText : query
     }
 
     /// The `Run "<remainder>"` row appended in a new COMMAND section once a
@@ -364,17 +466,21 @@ struct SessionComposerPalette: View {
     /// the grammar — `filteredTemplateOptions` above still ranks any
     /// matching template first, so `ghostties orchestrator` keeps reaching
     /// the Orchestrator template instead of trying to exec a nonexistent
-    /// `orchestrator` binary.
+    /// `orchestrator` binary. Fix 4 (round-2 review): gates on
+    /// `currentProject`/`effectiveCommandParse` for the same reason
+    /// `templateFilterQuery` above does — a bare `cco` typed with no
+    /// project prefix, against an already-implied `currentProject`, still
+    /// gets a Run row.
     private var commandOptions: [ComposerOption] {
-        guard let commandProject,
-              let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: commandParse.remainderTokens)
+        guard let currentProject,
+              let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: effectiveCommandParse.remainderTokens)
         else { return [] }
 
         return [
             ComposerOption(
                 id: SessionComposerCommandParser.runRowId,
-                title: "Run \"\(commandParse.remainderText)\"",
-                subtitle: commandProject.name,
+                title: "Run \"\(effectiveCommandParse.remainderText)\"",
+                subtitle: currentProject.name,
                 leadingIcon: "terminal",
                 action: { commit(template: template) }
             )
