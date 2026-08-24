@@ -4,6 +4,46 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-24 — composer round-2 review: fix wave dispatched, one decision deferred
+
+Round 2 adversarial review of `948ad5fa8` (two independent parallel reviewers) found 2
+blockers + 5 defects, all confirmed against the real running app (not just static
+analysis) before any fix was dispatched — one of them crashed a real session
+(`ghostties main > refactor the parser` tried to exec a binary literally named `main`,
+launcher log: `command not found: main`). Full finding detail is in this thread's
+transcript, not restated here.
+
+- [ ] **carried** — Fix wave dispatched to an implementer subagent on
+  `feat/composer-branch-segment` (base `948ad5fa8`), not yet returned as of this
+  checkpoint. Scope: (1) wire real branch/template lists into `parse()`'s adapter call
+  to `parsePath` (`SessionComposerCommandParser.swift:547`) — was hardcoded to empty
+  lists, permanently disabling branch resolution; (2) replace the false `activeKind`
+  invariant the round-1 B3 guard rests on (`:572-584`) with a real, directly-set signal
+  for "is the open run a thread run"; (3) fix the locked-composer path
+  (`isLocked` guard at `:304`) which currently disables parsing entirely regardless of
+  input; (4) `SessionComposerPalette.swift` — `templateFilterQuery`/`commandOptions`
+  (`:357`, `:369`) ignore the already-selected project (`currentProject`'s sticky
+  fallback) when no project name is typed, so a bare ad-hoc command like `cco` shows
+  "No matches" even though the breadcrumb already shows a resolved project; (5) chevron
+  ahead of the operator position currently skips template matching entirely, contradicting
+  already-decided D4 ("templates first") — masked in the live UI today because the
+  option list ranks by fuzzy text match independent of segment classification, but real
+  once other consumers of `ParseResult` exist. Plus test-suite fixes/additions per the
+  round-2 findings. **Check `git log --oneline -5` on this branch — if a new commit past
+  `948ad5fa8` exists, the wave landed; read its message for what shipped, then dispatch a
+  separate reviewer against the diff before calling it done (builder ≠ reviewer).**
+
+- [ ] **carried, DECIDE OR KILL** — `>` chevron-counting semantics (BACKLOG D6) for a
+  shape like `ghostties > > orchestrator`: does the first `>` skip over the branch
+  position (landing `orchestrator` in the operator slot), or does `>` only count among
+  free-text positions (operator→thread), landing it in thread as currently shipped and
+  tested? **Strawman: keep current shipped behavior** (`> >` = thread) — it has a
+  legitimate positional reading (3 skippable positions after project: branch, operator,
+  thread) and an already-merged test pinning it; changing it risks regressing that test
+  on a guess. Explicitly excluded from the round-2 fix wave above to avoid touching this
+  without your sign-off. Kill this item by confirming the strawman, or give the
+  alternate reading if you want it changed.
+
 ## 2026-08-23 — linear-sync preset has no installed MCP binary
 
 Surfaced while running a Linear→Ghostties sync from an ordinary `~/Code` session. Full
