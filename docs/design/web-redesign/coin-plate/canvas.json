@@ -1,0 +1,136 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Plate"
+    },
+    {
+      "id": "page-2",
+      "name": "Effects"
+    },
+    {
+      "id": "page-3",
+      "name": "Coin"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "page": "page-1",
+      "x": 0,
+      "y": 0,
+      "w": 1010,
+      "h": 1160
+    },
+    {
+      "file": "TypeStack.dc.html",
+      "page": "page-1",
+      "x": 1110,
+      "y": 0,
+      "w": 1000,
+      "h": 900
+    },
+    {
+      "file": "States.dc.html",
+      "page": "page-1",
+      "x": 0,
+      "y": 1330,
+      "w": 920,
+      "h": 720
+    },
+    {
+      "file": "EffectGradient.dc.html",
+      "page": "page-2",
+      "x": 0,
+      "y": 0,
+      "w": 420,
+      "h": 740
+    },
+    {
+      "file": "EffectSpecular.dc.html",
+      "page": "page-2",
+      "x": 500,
+      "y": 0,
+      "w": 420,
+      "h": 740
+    },
+    {
+      "file": "EffectTurbulence.dc.html",
+      "page": "page-2",
+      "x": 1000,
+      "y": 0,
+      "w": 420,
+      "h": 740
+    },
+    {
+      "file": "EffectBloom.dc.html",
+      "page": "page-2",
+      "x": 1500,
+      "y": 0,
+      "w": 420,
+      "h": 740
+    },
+    {
+      "file": "EffectBlend.dc.html",
+      "page": "page-2",
+      "x": 0,
+      "y": 900,
+      "w": 420,
+      "h": 740
+    },
+    {
+      "file": "EffectGlass.dc.html",
+      "page": "page-2",
+      "x": 500,
+      "y": 900,
+      "w": 420,
+      "h": 740
+    },
+    {
+      "file": "EffectShader.dc.html",
+      "page": "page-2",
+      "x": 1000,
+      "y": 900,
+      "w": 420,
+      "h": 800
+    },
+    {
+      "file": "Quarter.dc.html",
+      "page": "page-3",
+      "x": 0,
+      "y": 0,
+      "w": 1140,
+      "h": 920
+    }
+  ],
+  "annotations": [
+    {
+      "id": "plate-brief",
+      "page": "page-1",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "text": "Recreation of Sean's reference photo as the build spec for the v3 coin plate.\n\nThis canvas respecs the LOOK only. Behaviour \u2014 drag, arm, coin return, keyboard route, reduced motion \u2014 stays owned by docs/design/web-redesign/coin-slot-spec.md, which is currently stale against the shipped CSS and needs reconciling either way."
+    },
+    {
+      "id": "effects-stack",
+      "page": "page-2",
+      "x": 0,
+      "y": -170,
+      "w": 700,
+      "text": "These are not seven candidates to choose one of. A is the floor and the others stack on top of it.\n\nRecommended build: A + D + C + E \u2014 gradients for the body, drop-shadow bloom so light comes off the glyphs, turbulence so it stops reading as generated, blend passes so the hot spots warm toward white. Add B if the rib and bosses still look drawn. F and G are the two with real costs; neither is needed at 104\u00d7144."
+    },
+    {
+      "id": "coin-note",
+      "page": "page-3",
+      "x": 0,
+      "y": -130,
+      "w": 560,
+      "text": "Right-facing profile, as a real quarter carries one. Low-res on purpose \u2014 a mark, not a likeness.\n\nOpen question for Sean: the reverse. A real quarter has one, and the coin visibly tumbles as it drifts. Leaving it blank is fine; a ghost glyph on the back is the obvious other answer."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}

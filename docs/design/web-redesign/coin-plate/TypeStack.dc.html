@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=DM+Mono:wght@300;400;500&family=Silkscreen:wght@400;700&display=swap">
+  <style>
+    body { margin:0; font-family:"DM Mono",monospace; background:#08070a; color:#e9e6f5; }
+    a { color:#ffd54f; } a:hover { color:#fff; }
+    .tag { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:rgba(233,230,245,.5); }
+    .h { font-family:Archivo,sans-serif; font-weight:600; font-size:19px; margin-top:5px; }
+    .card { background:linear-gradient(180deg,#1a0405,#0b0102); border-radius:4px;
+      box-shadow: inset 0 0 0 1px rgba(255,96,64,.28), inset 0 6px 14px rgba(0,0,0,.9);
+      padding:22px 20px; display:flex; align-items:center; justify-content:center; }
+    .spec { font-size:10.5px; line-height:1.62; color:rgba(233,230,245,.58); }
+    .spec b { color:#e9e6f5; font-weight:500; }
+    .glow-price {
+      font-family:Archivo,sans-serif; font-weight:900; letter-spacing:-.03em; line-height:.84;
+      color:#fff2bd;
+      text-shadow: 0 0 2px #fffaea, 0 0 9px rgba(255,216,124,.95), 0 0 22px rgba(255,140,40,.85),
+        0 0 44px rgba(255,58,18,.60), 0 0 78px rgba(216,22,12,.38);
+    }
+    .glow-lbl {
+      font-family:Archivo,sans-serif; font-weight:800; color:#ff2f16; line-height:1;
+      text-shadow: -1px 0 0 rgba(255,196,92,.5), 0 0 2px rgba(255,124,80,.9),
+        0 0 11px rgba(255,50,26,.85), 0 0 28px rgba(212,20,12,.55);
+    }
+    /* background-clip variant — a real hot core inside the glyph, not just a halo around it */
+    .clip-price {
+      font-family:Archivo,sans-serif; font-weight:900; font-size:74px; letter-spacing:-.03em; line-height:.84;
+      background:radial-gradient(58% 74% at 50% 34%, #fffdf2 0%, #ffe9a8 26%, #ff9c30 58%, #f2380f 82%, #b8120a 100%);
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+      filter: drop-shadow(0 0 6px rgba(255,206,110,.9)) drop-shadow(0 0 20px rgba(255,120,32,.72))
+              drop-shadow(0 0 48px rgba(214,22,10,.45));
+    }
+    .swatch { display:flex; gap:14px; align-items:baseline; }
+    .rule { height:1px; background:rgba(233,230,245,.12); }
+  </style>
+</helmet>
+
+<div style="padding:40px 44px; display:flex; flex-direction:column; gap:34px; box-sizing:border-box">
+
+  <div>
+    <div class="tag">Type</div>
+    <div class="h">Four roles, one light source</div>
+    <div class="spec" style="margin-top:9px; max-width:640px">Nothing here is painted type with a glow bolted on. Every line is <b>lit from behind</b>, so its colour is a function of how much light gets through it &mdash; 25&#162; is thin enough to blow out to white-yellow, the label lines hold their red. Sizes shown at 4&times; delivery scale.</div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:18px">
+    <div style="display:flex; flex-direction:column; gap:11px">
+      <div class="card" style="height:118px"><span class="glow-price" style="font-size:70px">25&#162;</span></div>
+      <div class="spec"><b>25&#162; &mdash; the blowout</b><br/>Archivo 900 &middot; 70px / 17.5px<br/>#fff2bd core<br/>5-stop shadow, white &rarr; red<br/>outer stop 78px</div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:11px">
+      <div class="card" style="height:118px"><span class="glow-lbl" style="font-size:31px">INSERT</span></div>
+      <div class="spec"><b>INSERT &mdash; line one</b><br/>Archivo 800 &middot; 31px / 7.75px<br/>#ff2f16<br/>4-stop, no white core<br/>&minus;1px amber rim left</div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:11px">
+      <div class="card" style="height:118px"><span class="glow-lbl" style="font-size:27px">COIN TO</span></div>
+      <div class="spec"><b>COIN TO &mdash; line two</b><br/>Archivo 800 &middot; 27px / 6.75px<br/>#ff2f16<br/>same stack, one step down<br/>steps the eye toward PLAY</div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:11px">
+      <div class="card" style="height:118px"><span class="glow-lbl" style="font-size:45px; font-weight:900; letter-spacing:-.01em">PLAY</span></div>
+      <div class="spec"><b>PLAY &mdash; the payoff</b><br/>Archivo 900 &middot; 45px / 11.25px<br/>#ff2f16, heaviest weight<br/>largest of the three lines<br/>amber rim most visible here</div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:38px">
+    <div style="display:flex; flex-direction:column; gap:13px">
+      <div class="tag">Blowout, two ways</div>
+      <div style="display:flex; gap:16px">
+        <div style="flex:1; display:flex; flex-direction:column; gap:9px">
+          <div class="card" style="height:112px"><span class="glow-price" style="font-size:66px">25&#162;</span></div>
+          <div class="spec"><b>text-shadow stack</b> &mdash; halo only. The glyph itself stays one flat colour; all the drama is outside it. Cheap, and what ships today.</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; gap:9px">
+          <div class="card" style="height:112px"><span class="clip-price">25&#162;</span></div>
+          <div class="spec"><b>background-clip: text</b> &mdash; the gradient runs <i>through</i> the glyph, so the centre of the 2 is white-hot and its outer edge is red, then drop-shadow adds the bleed. This is what the reference actually does.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:13px">
+      <div class="tag">Open fork &mdash; Sean's call</div>
+      <div style="display:flex; gap:16px">
+        <div style="flex:1; display:flex; flex-direction:column; gap:9px">
+          <div class="card" style="height:112px; flex-direction:column; gap:5px">
+            <span class="glow-price" style="font-size:38px">25&#162;</span>
+            <span class="glow-lbl" style="font-size:22px; font-weight:900">PLAY</span>
+          </div>
+          <div class="spec"><b>Archivo 900</b> &mdash; matches the real object. Arcade plates were moulded in a grotesque, never a pixel face. Already self-hosted for the site.</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; gap:9px">
+          <div class="card" style="height:112px; flex-direction:column; gap:7px">
+            <span class="glow-price" style="font-family:Silkscreen,monospace; font-weight:700; font-size:29px; letter-spacing:0">25&#162;</span>
+            <span class="glow-lbl" style="font-family:Silkscreen,monospace; font-weight:700; font-size:18px; letter-spacing:0">PLAY</span>
+          </div>
+          <div class="spec"><b>Silkscreen 700</b> &mdash; matches the site. It is <code style="color:#ffd54f">--font-display</code>, and it is what ships on the plate today. Reads as arcade, not as arcade <i>hardware</i>.</div>
+        </div>
+      </div>
+      <div class="spec" style="border-left:2px solid rgba(255,70,52,.45); padding-left:11px">Archivo is the recommendation: the plate is the one place on the page that is a photographed <i>object</i> rather than an interface, and pixel type breaks that read. The pixel face still owns every heading on the page, so the arcade voice does not go anywhere.</div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

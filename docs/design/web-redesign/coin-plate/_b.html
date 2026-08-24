@@ -1,0 +1,20 @@
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+        <filter id="specLight" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+          <feSpecularLighting in="b" surfaceScale="6" specularConstant="1.15"
+            specularExponent="18" lighting-color="#ffd2a6" result="s">
+            <fePointLight x="104" y="-56" z="120"/>
+          </feSpecularLighting>
+          <feComposite in="s" in2="SourceAlpha" operator="in"/>
+        </filter>
+        <filter id="specEdge" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="1.6" result="b"/>
+          <feSpecularLighting in="b" surfaceScale="9" specularConstant="1.5"
+            specularExponent="34" lighting-color="#ffbf95" result="s">
+            <fePointLight x="60" y="-24" z="46"/>
+          </feSpecularLighting>
+          <feComposite in="s" in2="SourceAlpha" operator="in"/>
+        </filter>
+      </defs></svg>
+      <div class="fxSpec"></div>
+      <div class="fxSpecEdge"></div>

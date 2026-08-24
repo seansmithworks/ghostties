@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin:0; font-family:"DM Mono",monospace; background:#08070a; color:#e9e6f5; }
+    a { color:#ffd54f; } a:hover { color:#fff; }
+    .wrap { display:flex; flex-direction:column; height:100%; box-sizing:border-box; padding:30px 32px 26px; gap:22px; }
+    .hd { display:flex; flex-direction:column; gap:5px; }
+    .tag { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:#ff8a6a; }
+    .nm { font-family:Archivo,sans-serif; font-weight:600; font-size:17px; }
+    .stagebox { flex:1; display:flex; align-items:center; justify-content:center; }
+    .meta { display:flex; flex-direction:column; gap:7px; border-top:1px solid rgba(233,230,245,.12); padding-top:14px; }
+    .row { display:flex; gap:10px; font-size:11px; line-height:1.5; }
+    .k { flex:none; width:52px; color:rgba(233,230,245,.42); letter-spacing:.06em; }
+    .v { color:rgba(233,230,245,.72); }
+    .v b { color:#e9e6f5; font-weight:500; }
+
+    .plate { position:relative; width:208px; height:289px; flex:none; }
+    .plate::before { content:""; position:absolute; inset:-40px; pointer-events:none;
+      background:radial-gradient(closest-side, rgba(255,64,38,.36), rgba(255,40,24,.10) 55%, transparent 78%); }
+    .housing { position:absolute; inset:0; border-radius:9px; overflow:hidden;
+      background:
+        radial-gradient(48% 24% at 50% 0%, rgba(255,222,190,.95), rgba(255,126,62,.55) 42%, transparent 74%),
+        radial-gradient(26% 15% at 97% 60%, rgba(255,186,140,.70), transparent 72%),
+        radial-gradient(24% 13% at 2% 33%, rgba(255,150,104,.48), transparent 72%),
+        linear-gradient(180deg,#ff3a1e 0%,#e0140f 15%,#a70b0a 50%,#5c0605 87%,#3a0303 100%);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,158,128,.55), inset 0 0 15px rgba(255,70,40,.55),
+        inset 0 -9px 18px rgba(52,2,2,.78),
+        0 0 24px rgba(255,42,26,.42), 0 0 58px rgba(255,26,16,.22), 0 9px 20px rgba(0,0,0,.72); }
+    .seams { position:absolute; inset:0; pointer-events:none; opacity:.5;
+      background:
+        linear-gradient(90deg, transparent 0 30.5%, rgba(255,180,150,.22) 30.5% 31%, transparent 31%),
+        linear-gradient(180deg, transparent 0 91%, rgba(255,180,150,.18) 91% 91.4%, transparent 91.4%); }
+    .rib { position:absolute; inset:7px; border-radius:6px; pointer-events:none;
+      box-shadow: inset 0 0 0 1px rgba(255,170,135,.42), inset 0 0 0 2px rgba(126,10,8,.45), inset 0 0 0 3px rgba(255,140,105,.16); }
+    .boss { position:absolute; width:11px; height:11px; border-radius:50%;
+      background:radial-gradient(circle at 36% 30%, rgba(255,196,166,.6), rgba(160,20,14,.55) 52%, rgba(70,4,4,.75));
+      box-shadow: inset 0 0 0 1px rgba(255,170,140,.42), inset 0 1px 2px rgba(0,0,0,.55); }
+    .boss.tl{left:11px;top:10px} .boss.tr{right:11px;top:10px}
+    .boss.bl{left:11px;bottom:10px} .boss.br{right:11px;bottom:10px}
+    .collar { position:absolute; left:7.5%; top:6.5%; width:22.5%; height:85%; border-radius:4px;
+      box-shadow: inset 0 0 0 1px rgba(255,160,120,.42), inset 0 0 12px rgba(255,60,30,.34); }
+    .slot { position:absolute; left:13.2%; top:10%; width:11.4%; height:78%; border-radius:2px;
+      background:linear-gradient(90deg,#2c0508,#0a0102 32%,#050001 70%,#210407);
+      box-shadow: inset 1.5px 0 0 rgba(255,156,116,.58), inset -1.5px 0 0 rgba(255,86,54,.32),
+        inset 0 0 9px rgba(0,0,0,.92), 0 0 10px rgba(255,60,34,.55); }
+    .panel { position:absolute; left:31.5%; top:12%; right:7.5%; bottom:9.5%; border-radius:2px; overflow:hidden;
+      background:linear-gradient(180deg,#1d0406 0%,#120203 42%,#090102 100%);
+      box-shadow: inset 0 0 0 1px rgba(255,96,64,.40), inset 0 5px 12px rgba(0,0,0,.92), inset 0 -3px 8px rgba(0,0,0,.7); }
+    .lampbar { position:absolute; left:0; right:0; top:0; height:24%; pointer-events:none; mix-blend-mode:screen;
+      background:
+        radial-gradient(62% 140% at 50% -14%, rgba(255,243,222,.95), rgba(255,152,72,.58) 44%, transparent 78%),
+        linear-gradient(180deg, rgba(255,172,92,.72), transparent 86%); }
+    .type { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+      justify-content:flex-start; padding:9% 6% 6%; font-family:Archivo, sans-serif; }
+    .price { font-weight:900; font-size:49px; line-height:.84; letter-spacing:-.03em; color:#fff2bd;
+      text-shadow: 0 0 2px #fffaea, 0 0 7px rgba(255,216,124,.95), 0 0 16px rgba(255,140,40,.85),
+        0 0 32px rgba(255,58,18,.60), 0 0 56px rgba(216,22,12,.38); }
+    .lbl { display:flex; flex-direction:column; align-items:center; margin-top:auto; gap:1px; }
+    .l { font-weight:800; color:#ff2f16; line-height:1;
+      text-shadow: -1px 0 0 rgba(255,196,92,.5), 0 0 2px rgba(255,124,80,.9),
+        0 0 8px rgba(255,50,26,.85), 0 0 20px rgba(212,20,12,.55); }
+    .l1{font-size:22px} .l2{font-size:19px} .l3{font-size:32px; font-weight:900; letter-spacing:-.01em}
+    .fxGrain { position:absolute; inset:0; border-radius:9px; pointer-events:none;
+      filter:url(#moulded); opacity:.22; mix-blend-mode:overlay; }
+    .fxGrainCoarse { position:absolute; inset:0; border-radius:9px; pointer-events:none;
+      filter:url(#mouldedCoarse); opacity:.13; mix-blend-mode:soft-light; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hd"><div class="tag">Effect C</div><div class="nm">feTurbulence surface noise</div></div>
+  <div class="stagebox"><div class="plate">
+      <div class="housing"><div class="seams"></div></div>
+      <div class="rib"></div>
+      <span class="boss tl"></span><span class="boss tr"></span>
+      <span class="boss bl"></span><span class="boss br"></span>
+      <div class="collar"></div>
+      <div class="slot"></div>
+      <div class="panel">
+        <div class="lampbar"></div>
+        <div class="type">
+          <div class="price">25&#162;</div>
+          <div class="lbl">
+            <div class="l l1">INSERT</div>
+            <div class="l l2">COIN TO</div>
+            <div class="l l3">PLAY</div>
+          </div>
+        </div>
+      </div>
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+        <filter id="moulded" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="4" seed="7" result="n"/>
+          <feColorMatrix in="n" type="saturate" values="0"/>
+        </filter>
+        <filter id="mouldedCoarse" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.055 0.11" numOctaves="2" seed="3" result="n"/>
+          <feColorMatrix in="n" type="saturate" values="0"/>
+        </filter>
+      </defs></svg>
+      <div class="fxGrainCoarse"></div>
+      <div class="fxGrain"></div>
+  </div></div>
+  <div class="meta">
+    <div class="row"><span class="k">HOW</span><span class="v">Two noise fields: a fine fractalNoise at 0.85 in overlay for moulding grain, and a stretched coarse field at 0.055/0.11 in soft-light for the flow lines left by the tooling.</span></div>
+    <div class="row"><span class="k">COST</span><span class="v">Moderate-high. Turbulence is the expensive SVG primitive; at this size it is fine, but never animate baseFrequency.</span></div>
+    <div class="row"><span class="k">RISK</span><span class="v">Deterministic per seed, so it is stable across browsers. Renders at device resolution, so it can look coarser on 1&times; displays than on Sean's 2&times;.</span></div>
+    <div class="row"><span class="k">VERDICT</span><span class="v"><b>The anti-AI-slop layer.</b> Every flat CSS rectangle reads as generated; grain is what makes it read as photographed. Highest ratio of realism to effort on this canvas.</span></div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

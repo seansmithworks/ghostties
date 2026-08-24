@@ -1,0 +1,4 @@
+    .fxSpec { position:absolute; inset:0; border-radius:9px; background:#000;
+      filter:url(#specLight); mix-blend-mode:screen; opacity:.85; pointer-events:none; }
+    .fxSpecEdge { position:absolute; inset:7px; border-radius:6px; background:#000;
+      filter:url(#specEdge); mix-blend-mode:screen; opacity:.7; pointer-events:none; }

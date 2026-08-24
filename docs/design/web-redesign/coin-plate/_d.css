@@ -1,0 +1,10 @@
+    .plate .panel {
+      filter:
+        drop-shadow(0 0 4px rgba(255,120,60,.85))
+        drop-shadow(0 0 14px rgba(255,54,26,.62))
+        drop-shadow(0 0 34px rgba(214,20,10,.45));
+    }
+    .plate .price {
+      filter: drop-shadow(0 0 5px rgba(255,214,120,.9)) drop-shadow(0 0 16px rgba(255,132,36,.7));
+    }
+    .plate .l { filter: drop-shadow(0 0 3px rgba(255,60,30,.8)); }

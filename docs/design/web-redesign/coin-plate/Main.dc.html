@@ -1,0 +1,243 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=DM+Mono:wght@300;400;500&family=Silkscreen:wght@400;700&display=swap">
+  <style>
+    body { margin:0; font-family:"DM Mono",monospace; background:#08070a; color:#e9e6f5; }
+    a { color:#ffd54f; } a:hover { color:#fff; }
+
+    /* ============ THE PLATE — faithful recreation, 4x delivery scale ============ */
+    .plate { position:relative; width:296px; height:412px; flex:none; }
+
+    /* light spill onto the page behind it */
+    .plate::before {
+      content:""; position:absolute; inset:-52px; pointer-events:none;
+      background:radial-gradient(closest-side, rgba(255,64,38,.40), rgba(255,40,24,.12) 55%, transparent 78%);
+    }
+
+    /* 1 — translucent red housing, edge-lit from within */
+    .housing {
+      position:absolute; inset:0; border-radius:12px; overflow:hidden;
+      background:
+        radial-gradient(48% 24% at 50% 0%, rgba(255,222,190,.95), rgba(255,126,62,.55) 42%, transparent 74%),
+        radial-gradient(26% 15% at 97% 60%, rgba(255,186,140,.70), transparent 72%),
+        radial-gradient(24% 13% at 2% 33%, rgba(255,150,104,.48), transparent 72%),
+        linear-gradient(180deg,#ff3a1e 0%,#e0140f 15%,#a70b0a 50%,#5c0605 87%,#3a0303 100%);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,158,128,.55),
+        inset 0 0 20px rgba(255,70,40,.55),
+        inset 0 -12px 24px rgba(52,2,2,.78),
+        0 0 32px rgba(255,42,26,.45),
+        0 0 76px rgba(255,26,16,.24),
+        0 12px 28px rgba(0,0,0,.72);
+    }
+    /* mould seams — you see through the plastic to the tooling */
+    .seams {
+      position:absolute; inset:0; pointer-events:none; opacity:.5;
+      background:
+        linear-gradient(90deg, transparent 0 30.5%, rgba(255,180,150,.22) 30.5% 31%, transparent 31%),
+        linear-gradient(180deg, transparent 0 91%, rgba(255,180,150,.18) 91% 91.4%, transparent 91.4%);
+    }
+    /* 2 — raised inner rib */
+    .rib {
+      position:absolute; inset:9px; border-radius:8px; pointer-events:none;
+      box-shadow:
+        inset 0 0 0 1px rgba(255,170,135,.42),
+        inset 0 0 0 3px rgba(126,10,8,.45),
+        inset 0 0 0 4px rgba(255,140,105,.16);
+    }
+    /* 3 — screw bosses, moulded into the plastic at four corners */
+    .boss {
+      position:absolute; width:15px; height:15px; border-radius:50%;
+      background:radial-gradient(circle at 36% 30%, rgba(255,196,166,.6), rgba(160,20,14,.55) 52%, rgba(70,4,4,.75));
+      box-shadow: inset 0 0 0 1px rgba(255,170,140,.42), inset 0 2px 3px rgba(0,0,0,.55);
+    }
+    .boss.tl { left:15px;  top:14px; }
+    .boss.tr { right:15px; top:14px; }
+    .boss.bl { left:15px;  bottom:14px; }
+    .boss.br { right:15px; bottom:14px; }
+
+    /* 4 — the slot channel, clear plastic, left quarter */
+    .collar {
+      position:absolute; left:7.5%; top:6.5%; width:22.5%; height:85%; border-radius:5px;
+      box-shadow: inset 0 0 0 1px rgba(255,160,120,.42), inset 0 0 16px rgba(255,60,30,.34);
+    }
+    .slot {
+      position:absolute; left:13.2%; top:10%; width:11.4%; height:78%; border-radius:2px;
+      background:linear-gradient(90deg,#2c0508,#0a0102 32%,#050001 70%,#210407);
+      box-shadow:
+        inset 2px 0 0 rgba(255,156,116,.58),
+        inset -2px 0 0 rgba(255,86,54,.32),
+        inset 0 0 12px rgba(0,0,0,.92),
+        0 0 14px rgba(255,60,34,.55);
+    }
+
+    /* 5 — recessed near-black panel */
+    .panel {
+      position:absolute; left:31.5%; top:12%; right:7.5%; bottom:9.5%;
+      border-radius:3px; overflow:hidden;
+      background:linear-gradient(180deg,#1d0406 0%,#120203 42%,#090102 100%);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,96,64,.40),
+        inset 0 7px 16px rgba(0,0,0,.92),
+        inset 0 -4px 10px rgba(0,0,0,.7);
+    }
+    /* 6 — hot lamp bar bleeding down into the top of the panel */
+    .lampbar {
+      position:absolute; left:0; right:0; top:0; height:24%; pointer-events:none;
+      mix-blend-mode:screen;
+      background:
+        radial-gradient(62% 140% at 50% -14%, rgba(255,243,222,.95), rgba(255,152,72,.58) 44%, transparent 78%),
+        linear-gradient(180deg, rgba(255,172,92,.72), transparent 86%);
+    }
+
+    /* 7 — the type stack, CENTRED (the current build left-aligns it) */
+    .type {
+      position:absolute; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:flex-start; gap:0;
+      padding:9% 6% 6%; font-family:Archivo, sans-serif;
+    }
+    .price {
+      font-weight:900; font-size:70px; line-height:.84; letter-spacing:-.03em;
+      color:#fff2bd;
+      text-shadow:
+        0 0 2px #fffaea,
+        0 0 9px rgba(255,216,124,.95),
+        0 0 22px rgba(255,140,40,.85),
+        0 0 44px rgba(255,58,18,.60),
+        0 0 78px rgba(216,22,12,.38);
+    }
+    .lbl { display:flex; flex-direction:column; align-items:center; margin-top:auto; gap:2px; }
+    .l {
+      font-weight:800; color:#ff2f16; letter-spacing:.005em; line-height:1;
+      text-shadow:
+        -1px 0 0 rgba(255,196,92,.5),
+        0 0 2px rgba(255,124,80,.9),
+        0 0 11px rgba(255,50,26,.85),
+        0 0 28px rgba(212,20,12,.55);
+    }
+    .l1 { font-size:31px; }
+    .l2 { font-size:27px; }
+    .l3 { font-size:45px; font-weight:900; letter-spacing:-.01em; }
+
+    /* ============ callouts ============ */
+    .dot {
+      position:absolute; width:21px; height:21px; border-radius:50%;
+      background:#0c0b10; border:1.5px solid #ffd54f; color:#ffd54f;
+      font-family:"DM Mono",monospace; font-size:11px; font-weight:500;
+      display:flex; align-items:center; justify-content:center; z-index:5;
+      box-shadow:0 0 0 3px rgba(8,7,10,.85);
+    }
+  </style>
+</helmet>
+
+<div style="display:flex; gap:64px; align-items:flex-start; padding:44px 48px 40px; min-height:100%; box-sizing:border-box">
+
+  <div style="display:flex; flex-direction:column; gap:26px; flex:none">
+    <div>
+      <div style="font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:rgba(233,230,245,.5)">Anatomy</div>
+      <div style="font-family:Archivo,sans-serif; font-weight:600; font-size:19px; margin-top:5px">Backlit coin plate, 4&times; delivery scale</div>
+    </div>
+
+    <div class="plate">
+      <div class="housing">
+        <div class="seams"></div>
+      </div>
+      <div class="rib"></div>
+      <span class="boss tl"></span><span class="boss tr"></span>
+      <span class="boss bl"></span><span class="boss br"></span>
+      <div class="collar"></div>
+      <div class="slot"></div>
+      <div class="panel">
+        <div class="lampbar"></div>
+        <div class="type">
+          <div class="price">25&#162;</div>
+          <div class="lbl">
+            <div class="l l1">INSERT</div>
+            <div class="l l2">COIN TO</div>
+            <div class="l l3">PLAY</div>
+          </div>
+        </div>
+      </div>
+
+      <span class="dot" style="left:-13px; top:150px">1</span>
+      <span class="dot" style="left:6px; top:-13px">2</span>
+      <span class="dot" style="left:26px; top:26px">3</span>
+      <span class="dot" style="left:38px; top:224px">4</span>
+      <span class="dot" style="right:-13px; top:250px">5</span>
+      <span class="dot" style="right:26px; top:38px">6</span>
+      <span class="dot" style="right:-13px; top:150px">7</span>
+    </div>
+
+    <div style="display:flex; gap:18px; font-size:10.5px; color:rgba(233,230,245,.5); letter-spacing:.02em">
+      <span>296 &times; 412 shown</span><span>&middot;</span><span>ships at 74 &times; 103</span><span>&middot;</span><span>ratio 0.72</span>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:0; max-width:392px; padding-top:56px">
+    <div style="font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:rgba(233,230,245,.5); margin-bottom:18px">Parts</div>
+
+    <div style="display:flex; flex-direction:column; gap:15px">
+      <div style="display:flex; gap:13px">
+        <span style="flex:none; width:19px; height:19px; border-radius:50%; border:1.5px solid #ffd54f; color:#ffd54f; font-size:10.5px; display:flex; align-items:center; justify-content:center">1</span>
+        <div><b style="font-family:Archivo,sans-serif; font-weight:600; font-size:13.5px">Translucent housing</b>
+        <div style="font-size:12px; line-height:1.55; color:rgba(233,230,245,.62); margin-top:3px">Red acrylic lit from inside, not a painted frame. Brightest at the edges and at three hot spots &mdash; top centre, right flank, left flank. Falls to near-black at the base.</div></div>
+      </div>
+
+      <div style="display:flex; gap:13px">
+        <span style="flex:none; width:19px; height:19px; border-radius:50%; border:1.5px solid #ffd54f; color:#ffd54f; font-size:10.5px; display:flex; align-items:center; justify-content:center">2</span>
+        <div><b style="font-family:Archivo,sans-serif; font-weight:600; font-size:13.5px">Mould seams</b>
+        <div style="font-size:12px; line-height:1.55; color:rgba(233,230,245,.62); margin-top:3px">A vertical seam left of the panel and a horizontal one near the base. Nearly invisible, and the single strongest cue that this is a moulded part rather than a rectangle.</div></div>
+      </div>
+
+      <div style="display:flex; gap:13px">
+        <span style="flex:none; width:19px; height:19px; border-radius:50%; border:1.5px solid #ffd54f; color:#ffd54f; font-size:10.5px; display:flex; align-items:center; justify-content:center">3</span>
+        <div><b style="font-family:Archivo,sans-serif; font-weight:600; font-size:13.5px">Screw bosses &times;4</b>
+        <div style="font-size:12px; line-height:1.55; color:rgba(233,230,245,.62); margin-top:3px">Moulded circular bosses at the corners, lit top-left, shadowed bottom-right. Sunk into the plastic, so they read darker than the housing around them.</div></div>
+      </div>
+
+      <div style="display:flex; gap:13px">
+        <span style="flex:none; width:19px; height:19px; border-radius:50%; border:1.5px solid #ffd54f; color:#ffd54f; font-size:10.5px; display:flex; align-items:center; justify-content:center">4</span>
+        <div><b style="font-family:Archivo,sans-serif; font-weight:600; font-size:13.5px">Slot channel</b>
+        <div style="font-size:12px; line-height:1.55; color:rgba(233,230,245,.62); margin-top:3px">Left quarter of the plate, running 78% of its height inside a lit collar. Core is near-black; both lips carry a hard catch-light, the left brighter than the right.</div></div>
+      </div>
+
+      <div style="display:flex; gap:13px">
+        <span style="flex:none; width:19px; height:19px; border-radius:50%; border:1.5px solid #ffd54f; color:#ffd54f; font-size:10.5px; display:flex; align-items:center; justify-content:center">5</span>
+        <div><b style="font-family:Archivo,sans-serif; font-weight:600; font-size:13.5px">Recessed panel</b>
+        <div style="font-size:12px; line-height:1.55; color:rgba(233,230,245,.62); margin-top:3px">Near-black, set behind the housing face. A thin lit line around its edge is the acrylic catching light &mdash; a border, but an emitted one.</div></div>
+      </div>
+
+      <div style="display:flex; gap:13px">
+        <span style="flex:none; width:19px; height:19px; border-radius:50%; border:1.5px solid #ffd54f; color:#ffd54f; font-size:10.5px; display:flex; align-items:center; justify-content:center">6</span>
+        <div><b style="font-family:Archivo,sans-serif; font-weight:600; font-size:13.5px">Lamp bar</b>
+        <div style="font-size:12px; line-height:1.55; color:rgba(233,230,245,.62); margin-top:3px">A bulb sits above the panel, out of frame. Its bleed occupies the top quarter and is what makes 25&#162; blow out. This is the only part that breathes.</div></div>
+      </div>
+
+      <div style="display:flex; gap:13px">
+        <span style="flex:none; width:19px; height:19px; border-radius:50%; border:1.5px solid #ffd54f; color:#ffd54f; font-size:10.5px; display:flex; align-items:center; justify-content:center">7</span>
+        <div><b style="font-family:Archivo,sans-serif; font-weight:600; font-size:13.5px">Type stack, centred</b>
+        <div style="font-size:12px; line-height:1.55; color:rgba(233,230,245,.62); margin-top:3px">25&#162; hard against the top, the three label lines pushed to the base, dead air between them. Centred, not left-aligned &mdash; the shipped build left-aligns beside the slot, which is the main deviation this canvas corrects.</div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:28px; padding:15px 17px; border:1px solid rgba(255,70,52,.32); border-radius:4px; background:rgba(255,42,24,.05)">
+      <div style="font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:#ff8a6a; margin-bottom:8px">Three deltas from what ships today</div>
+      <div style="font-size:12px; line-height:1.65; color:rgba(233,230,245,.72)">
+        Aspect is <b style="color:#e9e6f5">0.72</b>, not 0.64 &mdash; 92&times;144 becomes <b style="color:#e9e6f5">104&times;144</b> or 74&times;103.<br>
+        Type is <b style="color:#e9e6f5">centred in the panel</b>, not a left-aligned column beside the slot.<br>
+        The slot gets a <b style="color:#e9e6f5">lit collar</b>; today it is a bare cutout.
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

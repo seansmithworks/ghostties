@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=DM+Mono:wght@300;400;500&display=swap">
+  <style>
+    body { margin:0; font-family:"DM Mono",monospace; background:#08070a; color:#e9e6f5; }
+    a { color:#ffd54f; } a:hover { color:#fff; }
+    .tag { font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:rgba(233,230,245,.5); }
+    .h { font-family:Archivo,sans-serif; font-weight:600; font-size:19px; margin-top:5px; }
+    .spec { font-size:10.5px; line-height:1.6; color:rgba(233,230,245,.58); }
+    .spec b { color:#e9e6f5; font-weight:500; }
+    .stname { font-family:Archivo,sans-serif; font-weight:600; font-size:13px; }
+
+    .p { position:relative; width:156px; height:217px; flex:none; }
+    .p::before { content:""; position:absolute; inset:-30px; pointer-events:none;
+      background:radial-gradient(closest-side, rgba(255,64,38,.30), transparent 76%); }
+    .p.hover::before { background:radial-gradient(closest-side, rgba(255,86,52,.52), rgba(255,40,24,.14) 58%, transparent 80%); }
+    .p.armed::before { background:radial-gradient(closest-side, rgba(255,96,58,.58), rgba(255,44,26,.18) 58%, transparent 82%); }
+    .p.press::before { background:radial-gradient(closest-side, rgba(255,214,170,.62), rgba(255,60,30,.2) 56%, transparent 80%); }
+    .hs { position:absolute; inset:0; border-radius:7px; overflow:hidden;
+      background:
+        radial-gradient(48% 24% at 50% 0%, rgba(255,222,190,.95), rgba(255,126,62,.55) 42%, transparent 74%),
+        linear-gradient(180deg,#ff3a1e 0%,#e0140f 15%,#a70b0a 50%,#5c0605 87%,#3a0303 100%);
+      box-shadow: inset 0 0 0 1px rgba(255,158,128,.55), inset 0 0 11px rgba(255,70,40,.5),
+        inset 0 -7px 14px rgba(52,2,2,.78), 0 0 18px rgba(255,42,26,.4), 0 7px 16px rgba(0,0,0,.7); }
+    .p.press .hs { transform:translateY(1px);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,.7), inset 0 -1px 0 rgba(255,158,128,.4),
+        0 0 26px rgba(255,120,60,.6), 0 3px 8px rgba(0,0,0,.7); }
+    .sl { position:absolute; left:13.2%; top:10%; width:11.4%; height:78%; border-radius:2px;
+      background:linear-gradient(90deg,#2c0508,#0a0102 32%,#050001 70%,#210407);
+      box-shadow: inset 1.2px 0 0 rgba(255,156,116,.58), inset -1.2px 0 0 rgba(255,86,54,.32),
+        inset 0 0 7px rgba(0,0,0,.92), 0 0 8px rgba(255,60,34,.5); }
+    .pn { position:absolute; left:31.5%; top:12%; right:7.5%; bottom:9.5%; border-radius:2px; overflow:hidden;
+      background:linear-gradient(180deg,#1d0406 0%,#120203 42%,#090102 100%);
+      box-shadow: inset 0 0 0 1px rgba(255,96,64,.40), inset 0 4px 10px rgba(0,0,0,.92); }
+    .lb { position:absolute; left:0; right:0; top:0; height:24%; mix-blend-mode:screen;
+      background:radial-gradient(62% 140% at 50% -14%, rgba(255,243,222,.9), rgba(255,152,72,.55) 44%, transparent 78%);
+      opacity:.42; }
+    .p.rest .lb { animation:breathe 1700ms ease-in-out infinite alternate; }
+    .p.hover .lb { opacity:.88; }
+    .p.press .lb { opacity:1; }
+    .p.armed .lb { opacity:.8; }
+    @keyframes breathe { from { opacity:.26 } to { opacity:.84 } }
+    .ty { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+      padding:9% 6% 5%; font-family:Archivo,sans-serif; }
+    .pr { font-weight:900; font-size:37px; line-height:.84; letter-spacing:-.03em; color:#fff2bd;
+      text-shadow: 0 0 2px #fffaea, 0 0 6px rgba(255,216,124,.95), 0 0 14px rgba(255,140,40,.85), 0 0 30px rgba(216,22,12,.4); }
+    .lines { display:flex; flex-direction:column; align-items:center; margin-top:auto; gap:1px; }
+    .ln { font-weight:800; color:#ff2f16; line-height:1;
+      text-shadow: -1px 0 0 rgba(255,196,92,.5), 0 0 2px rgba(255,124,80,.9), 0 0 7px rgba(255,50,26,.85), 0 0 16px rgba(212,20,12,.5); }
+    .n1{font-size:16px} .n2{font-size:14px} .n3{font-size:24px; font-weight:900; letter-spacing:-.01em}
+    .cr { margin-top:5px; font-family:"DM Mono",monospace; font-weight:400; font-size:7px;
+      letter-spacing:.14em; color:rgba(232,181,69,.55); }
+    .cr b { font-weight:500; color:#e8b545; }
+    .p.armed .cr b { color:#ffe9a8; }
+    .coin { position:absolute; left:18.9%; width:11px; height:11px; margin-left:-5.5px; }
+    .coin rect { fill:#e8b545; }
+    .p.rest .coin, .p.hover .coin { top:2%; }
+    .p.press .coin { top:14%; }
+    .p.armed .coin { display:none; }
+    .col { display:flex; flex-direction:column; gap:16px; align-items:flex-start; }
+  </style>
+</helmet>
+
+<div style="padding:40px 44px; display:flex; flex-direction:column; gap:32px; box-sizing:border-box">
+
+  <div>
+    <div class="tag">States</div>
+    <div class="h">Four states, and none of them is a colour change</div>
+    <div class="spec" style="margin-top:9px; max-width:660px">The backlight carries the mood; the <b>words</b> carry the meaning. Rest and armed differ in three ways a screenshot in greyscale would still show &mdash; the label text, the credit digit, and whether the coin is in the slot. That is the WCAG 1.4.11 argument, and it is also just better signage.</div>
+  </div>
+
+  <div style="display:flex; gap:46px; align-items:flex-start">
+
+    <div class="col">
+      <div class="p rest">
+        <div class="hs"></div><div class="sl"></div>
+        <svg class="coin" viewBox="0 0 6 6"><rect x="1" y="0" width="4" height="1"/><rect x="0" y="1" width="6" height="4"/><rect x="1" y="5" width="4" height="1"/></svg>
+        <div class="pn"><div class="lb"></div>
+          <div class="ty"><div class="pr">25&#162;</div>
+            <div class="lines"><div class="ln n1">INSERT</div><div class="ln n2">COIN TO</div><div class="ln n3">PLAY</div>
+              <div class="cr">CR <b>0</b></div></div></div></div>
+      </div>
+      <div><div class="stname">Rest</div>
+        <div class="spec" style="max-width:156px; margin-top:4px">Lamp breathes, 1700ms alternate. Coin sits above the slot mouth. <b>CR 0</b>.</div></div>
+    </div>
+
+    <div class="col">
+      <div class="p hover">
+        <div class="hs"></div><div class="sl"></div>
+        <svg class="coin" viewBox="0 0 6 6"><rect x="1" y="0" width="4" height="1"/><rect x="0" y="1" width="6" height="4"/><rect x="1" y="5" width="4" height="1"/></svg>
+        <div class="pn"><div class="lb"></div>
+          <div class="ty"><div class="pr">25&#162;</div>
+            <div class="lines"><div class="ln n1">INSERT</div><div class="ln n2">COIN TO</div><div class="ln n3">PLAY</div>
+              <div class="cr">CR <b>0</b></div></div></div></div>
+      </div>
+      <div><div class="stname">Hover / focus</div>
+        <div class="spec" style="max-width:156px; margin-top:4px">Breathing <b>stops</b> and the lamp holds bright &mdash; the machine noticing you. No layout shift. Copy unchanged.</div></div>
+    </div>
+
+    <div class="col">
+      <div class="p press">
+        <div class="hs"></div><div class="sl"></div>
+        <svg class="coin" viewBox="0 0 6 6"><rect x="1" y="0" width="4" height="1"/><rect x="0" y="1" width="6" height="4"/><rect x="1" y="5" width="4" height="1"/></svg>
+        <div class="pn"><div class="lb"></div>
+          <div class="ty"><div class="pr">25&#162;</div>
+            <div class="lines"><div class="ln n1">INSERT</div><div class="ln n2">COIN TO</div><div class="ln n3">PLAY</div>
+              <div class="cr">CR <b>1</b></div></div></div></div>
+      </div>
+      <div><div class="stname">Press &mdash; coin dropping</div>
+        <div class="spec" style="max-width:156px; margin-top:4px">Housing depresses 1px with the bevel inverted, lamp flashes, coin falls through the channel. <b>CR flips to 1</b> at 200ms.</div></div>
+    </div>
+
+    <div class="col">
+      <div class="p armed">
+        <div class="hs"></div><div class="sl"></div>
+        <div class="pn"><div class="lb"></div>
+          <div class="ty"><div class="pr">25&#162;</div>
+            <div class="lines"><div class="ln n1">PRESS</div><div class="ln n2">ESC TO</div><div class="ln n3">EXIT</div>
+              <div class="cr">CR <b>1</b></div></div></div></div>
+      </div>
+      <div><div class="stname">Armed</div>
+        <div class="spec" style="max-width:156px; margin-top:4px">Steady bloom, no breathing. Label swaps to <b>PRESS / ESC TO / EXIT</b> &mdash; same three-line block, so nothing moves. Coin is gone: it is in the slot. <b>CR 1</b>, digit brightens.</div></div>
+    </div>
+
+  </div>
+
+  <div style="display:flex; gap:22px; padding:15px 18px; border:1px solid rgba(255,70,52,.3); border-radius:4px; background:rgba(255,42,24,.05)">
+    <div class="spec" style="flex:1"><b style="color:#ff8a6a">Why PRESS / ESC TO / EXIT and not just EXIT.</b> Keeping three lines of the same lengths means the armed swap costs zero reflow and the eye lands in the same place. It also mirrors the rest copy, so the plate reads as one sign with two messages rather than two different signs.</div>
+    <div class="spec" style="flex:1"><b style="color:#ff8a6a">The credit line is not in the reference.</b> It is the build's own addition and the only gold element on the plate &mdash; a functional readout, not signage. Keep it dim; it should be findable, never a third thing competing with 25&#162; and PLAY.</div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

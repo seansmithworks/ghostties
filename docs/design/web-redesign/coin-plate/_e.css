@@ -1,0 +1,9 @@
+    .fxPass { position:absolute; inset:0; border-radius:9px; pointer-events:none; }
+    .fxPass.screen { mix-blend-mode:screen;
+      background:radial-gradient(58% 30% at 50% -4%, rgba(255,236,206,.9), rgba(255,128,52,.42) 46%, transparent 76%); }
+    .fxPass.dodge { mix-blend-mode:color-dodge;
+      background:radial-gradient(38% 52% at 8% 40%, rgba(120,26,10,.85), transparent 72%); }
+    .fxPass.overlay { mix-blend-mode:overlay;
+      background:linear-gradient(168deg, rgba(255,206,170,.30) 0%, transparent 34%, transparent 66%, rgba(0,0,0,.5) 100%); }
+    .fxPass.plus { mix-blend-mode:plus-lighter; opacity:.5;
+      background:radial-gradient(24% 14% at 97% 60%, rgba(255,150,96,.8), transparent 70%); }

@@ -4,6 +4,57 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-23 — v3 coin plate: design canvas as the build spec
+
+Sean redirected off review round 3 to respec the coin plate from a reference photo of a
+real backlit `25¢ / INSERT COIN TO PLAY` arcade plate. Canvas built and published:
+**https://claude.ai/code/artifact/49fbd183-8ed3-427f-bb33-28774ec1a641** — sources in
+`docs/design/web-redesign/coin-plate/`, 11 `.dc.html` artboards + `canvas.json` across
+three pages (Plate / Effects / Coin). Re-seed with `seed-canvas.mjs`; the 2.2M seeded
+output is gitignored, not tracked.
+
+**The canvas is the LOOK spec only.** Behaviour — drag, arm, coin return, keyboard route,
+reduced motion — stays owned by `coin-slot-spec.md`, which is now stale in two directions
+(it still describes the pre-round-4 landscape plate with near-white type, and it does not
+know about any of this).
+
+Three deltas the canvas asserts against the shipped CSS:
+- Type is **centred in the panel**, not a left-aligned column beside the slot.
+- Aspect **0.72**, not 0.64 — `92x144` becomes `104x144`.
+- The slot gets a **lit collar**; today it is a bare cutout.
+
+**Effects stack, they do not compete.** A (layered gradients) is the floor; recommended
+build is **A + D + C + E**. D (chained `drop-shadow`) is the one that matters — it follows
+glyph alpha, so light comes off the letterforms instead of their bounding box, which
+`box-shadow` structurally cannot do. B (feSpecularLighting) is the only one producing real
+curvature on the rib and bosses. F (backdrop-filter) samples the drifting ghost field and
+costs per frame; G (WebGL) holds a GL context open forever. Neither F nor G is needed at
+104x144.
+
+- [ ] 1. DECIDE: Archivo 900 or Silkscreen for the plate type | design | **Sean**
+- [ ] 2. DECIDE: which effect layers to build (recommend A+D+C+E) | design | **Sean**
+- [ ] 3. DECIDE: 16x16 or 12x12 for the pixel bust | design | **Sean**
+- [ ] 4. DECIDE: does the coin get a reverse face (it tumbles while drifting) | design | **Sean**
+- [ ] 5. Build the plate in `v3.css` from the canvas | build | carried
+- [ ] 6. Reconcile `coin-slot-spec.md` against the canvas + shipped CSS | build | carried
+- [ ] 7. Review round 3 on `ef474700f` + `3edfa724b` | quality | **carried — displaced by this work, still unreviewed**
+
+**The coin is a quarter with Sean's profile bust** (his call, 2026-08-23), right-facing,
+"low pixel still so very abstract of me." Non-obvious: `ghost-field.js:324` already draws
+the coin from an ASCII `COIN_GRID` — today 8x8 at `COIN_PX 4` = 32px. The 16x16 grid at
+`COIN_PX 2` keeps the identical 32px footprint, so this is an array swap, not a rewrite.
+Three glyphs instead of one: `o` face, `#` relief, `+` the single lens glint.
+
+**Pixel-portrait gotcha, cost two rounds.** At 16px the *outline* carries the whole
+likeness — a solid silhouette reads as a blob. It needs (a) a rim ring so it reads as a
+struck coin, (b) coin field visible around the bust, and (c) a deep front-edge zigzag:
+brow 11 -> glasses 12 -> eye recess 10 -> nose 12 -> lip recess 9 -> beard 11. Shallow
+1px steps do not read as a face. Verify by rendering, never by reading the array.
+
+**`/design` canvas gotcha:** artboards sit blank for **~25s** before painting. A blank
+artboard is almost never a parse error — wait before debugging. (One real cause found and
+ruled out: `<br>` unclosed is harmless, the parser accepts it.)
+
 ## 2026-08-23 — v3 build wave (dispatched): page shell + ambient ghost field
 
 Sean's call: "we may need to re-record later but right now we are going larger for
