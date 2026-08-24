@@ -1686,11 +1686,15 @@ on these four:
 
 Carried out of the 2026-08-23 build. `63774fdeb` on `feat/web-redesign-round4`, pushed.
 
-- [ ] **Bust array doesn't clear its own likeness bar.** The canvas's "finished" 16×16
-  `COIN_GRID` (`Quarter.dc.html`) renders as a smooth blob at actual size, not the
-  rim-ring + deep-zigzag profile this project's own notes called for (brow 11, glasses 12,
-  eye 10, nose 12, lip 9, beard 11 columns). Redo dispatched as a strawman same night —
-  Sean accepts or redlines, not left open. carried 1× since 2026-08-23 | design | carried
+- [x] **Bust array redone and shipped, `b649137da`.** First redo pass (`3b3e5aeeb`) still
+  read as a smooth blob when render-verified — the zigzag amplitude between features was
+  too shallow. Iterated by rendering candidate arrays directly in a browser at 5/8/16/24px
+  until the silhouette clearly read as a right-facing profile (dome crown, brow/glasses
+  ridge, protruding nose + lens glint, receded mouth, jutting chin/jaw) and held up even at
+  the live 80px size. Applied to both `Quarter.dc.html` and `ghost-field.js:328`. Sean was
+  offline for this pass ("going to bed... Lfg") — built and shipped under standing
+  autonomous-work authorization rather than held for accept/redline; flag for his review
+  next session rather than treating it as pre-approved taste. | design | done
 - [ ] **Coin default size (`COIN_PX` now 5, ~92px) is a first-pass number, not locked.**
   Tune by eye once Sean sees it live. | design | new
 - [ ] **`ORCHESTRATOR.md` is 18.9k against a 10-15k target** (hard max 20k) — needs
