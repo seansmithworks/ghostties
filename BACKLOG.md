@@ -29,9 +29,22 @@ transcript, not restated here.
   already-decided D4 ("templates first") — masked in the live UI today because the
   option list ranks by fuzzy text match independent of segment classification, but real
   once other consumers of `ParseResult` exist. Plus test-suite fixes/additions per the
-  round-2 findings. **Check `git log --oneline -5` on this branch — if a new commit past
-  `948ad5fa8` exists, the wave landed; read its message for what shipped, then dispatch a
-  separate reviewer against the diff before calling it done (builder ≠ reviewer).**
+  round-2 findings.
+
+  **UPDATE — interrupted, NOT verified.** The implementer was stopped mid-work (Sean
+  needed to exit) before it ran the build or test suite. Its in-progress edits were
+  committed as-is at `c15b92a5e` ("WIP(composer): round-2 fix wave interrupted
+  mid-verification") — **do not trust this commit as complete or building.** Editor
+  SourceKit diagnostics showed transient "Cannot find type 'Project'/'AgentTemplate' in
+  scope" errors on both touched files at stop time; unknown whether that's a real break
+  or a mid-edit transient. **Next action: build
+  (`xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration
+  ReleaseLocal -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES`), and if it
+  fails, diagnose/fix before anything else — do not re-dispatch a fresh implementer on
+  top of this without knowing whether it's broken first.** If it builds, run the full
+  unfiltered `GhosttyTests` suite (see `feedback-unfiltered-test-runs.md`, real totals via
+  `xcresulttool`, baseline was 871/0/1), then dispatch a separate reviewer against the
+  full diff (builder ≠ reviewer) before calling any of this done.
 
 - [ ] **carried, DECIDE OR KILL** — `>` chevron-counting semantics (BACKLOG D6) for a
   shape like `ghostties > > orchestrator`: does the first `>` skip over the branch
