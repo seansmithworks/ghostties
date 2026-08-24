@@ -4,6 +4,187 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-23 — v3 build wave (dispatched): page shell + ambient ghost field
+
+Sean's call: "we may need to re-record later but right now we are going larger for
+proof and success." The 14s hero film is **decoupled from the page build** — v3 ships
+now with a hero slot the film drops into later as a one-path swap.
+
+Built as `web/v3.html` + `web/v3.css` + `web/assets/ghost-field.js`. **`web/index.html`
+is NOT touched** — it is live prod and merging deploys. The swap to `index.html` is a
+separate Sean-gated step after he sees v3 on screen.
+
+Strawman spine (5 sections, short scroll — down from v2's nine):
+hero (headline + CTA + 16:9 product slot) · the sidebar (theme-aware app still) ·
+still ghostty · get started · footer. Ambient ghost field is fixed/full-bleed behind
+all of it, `pointer-events: none` until coin-in.
+
+**Interpretation flagged for Sean:** "before that it is only drift" read as — insert-coin
+arms the *field itself* (drag, throw, high-five, hover cards), not a separate snake game.
+`web/assets/snake.js` is left unused by v3. Say if the coin should launch snake instead.
+
+- [x] 1. v3 shell + sections + hero slot + theme handling | design
+- [x] 2. Port + namespace (`gx-`) the physics field from the playground repo | build
+- [x] 3. Coin-in arming for the field | design
+**Defects caught so far, both by pixel/behaviour checks rather than code reading:**
+1. Hero still rendered at 42.9% horizontal squash — `.product-frame img` missing
+   `height: auto`, so the presentational `height="705"` attribute won. Sean spotted it.
+   Fixed; re-measured at ratio 1.8156 vs natural 1.8156.
+2. Coin plate latched into the armed look permanently if armed and disarmed within
+   200ms — `armedVisuals()` deferred its render behind a timer that `disarmedVisuals()`
+   never cancelled. Found by orchestrator, fixed at `9fc190dd0`, independently
+   re-verified (both race directions + clean rest).
+
+**Not yet done: the two adversarial review rounds on the full diff.** Verification so far
+has been orchestrator spot-checks, not a dedicated reviewer against the whole change.
+This repo is six-for-six on second-round defects — do not call v3 done without them.
+
+- [x] 4. Review round 1 (separate agent, full diff) | quality — **16 confirmed findings**
+
+**Round 1 headline: the coin unlocked nothing.** `#gx-field` at `z-index: 0` sits under
+`main` at `z-index: 1`, so `pointer-events: auto` on armed ghosts was inert — 9000 probe
+points across the viewport hit a ghost 0 times; a real 150px drag moved a ghost 0px. Drag,
+throw, high-five, trading cards and tilt were all unreachable dead code. It *looked* alive
+only because the click-ripple listener is on `document` and survived. The orchestrator had
+run the same hit test earlier, got "ghost is not on top", and logged it as correct — it is
+correct for ambient and fatal for armed. **Lesson: a pass on the ambient state is not a
+pass on the armed state; probe every mode a feature has.**
+
+Also confirmed: the drifting coin swallowed clicks on the BREW INSTALL button (handler
+fired 0 times); drag + `c` stranded the coin off-page with no way back; 320px horizontal
+overflow clipping the headline; the falling coin rendered black off-screen so the
+coin-drop beat was invisible; arming exposed 431 chars of invisible trading-card text to
+screen readers; and the sidebar caption claimed "follows your system appearance" while the
+CSS pins it to dark.
+
+Cleared clean by round 1: reduced-motion path, both image aspect ratios (1.8156 vs 1.8156,
+0.00% delta), all seven `@keyframes` literal-only, CSP with zero non-localhost requests,
+no agent/ghost counts in copy, heading hierarchy, plate focus-visible, and the 200ms
+arm/disarm race across six timing variants.
+
+- [ ] 4b. Fix round-1 findings | build | dispatched
+
+- [x] 5. Review round 2 | quality — **pattern holds, SEVENTH time**
+
+**C1 CRITICAL — the round-1 fix for "coin swallows clicks" was a NET REGRESSION.**
+`yieldToControlBeneath()` flips the coin's `pointer-events` *during* `pointerdown`, but
+Chrome has already resolved the mousedown target as the coin; mouseup lands on the button
+and `click` fires at their nearest common ancestor, `<body>`. Measured: button click
+handler 0 calls before AND after; coin drag delta +280px before, **0px after**. The button
+was dead and stayed dead; the coin was draggable and now is not. **The commit message
+asserted a verification that does not reproduce.**
+**Lesson: never decide pointer routing mid-gesture — decide before it starts.**
+
+**C2 HIGH** — the `.cabinet` pointer-events hammer punches holes: 195 of 1294 ghost-box
+points (15% of ghost area) unreachable because restored `a`/`button` paint above the field.
+Worse, clicking a ghost sitting on BREW INSTALL silently copies the install command to the
+clipboard.
+
+**C3 MEDIUM** — hit test falls through the opaque product screenshot; invisible ghosts
+behind it are grabbable.
+
+**C4 MEDIUM** — right-click loses its real target on all non-control content while armed
+(Save Image As gone on both product stills).
+
+**C5 MEDIUM** — ghost hover cards paint BEHIND the page. `.gx-label` z-index 300 cannot
+escape `#gx-field`'s z-index-0 stacking context. Combined with the a11y fix removing
+`aria-hidden="false"`, the trading card is now dead in BOTH the visual and a11y channels.
+
+C6 LOW interrupted press costs one grab + leaks a listener pair · C7 LOW spec stale in the
+file the commit claimed to update.
+
+**Root cause of C1/C2/C3/C5 is one decision:** `#gx-field` at z-index 0 sits under `main`
+at z-index 1, and round 1's fix worked around that with a pointer-events hammer instead of
+correcting the layer order. Raising the field above `main` (ghosts staying
+`pointer-events: none` until armed) fixes all four at once.
+
+Round 2 re-verified clean: text selection, scrolling, hover rules, non-a/button
+interactives (none exist), all 9 controls clickable in both states, tab order (11 stops),
+responsive sweep 320-1400 at 10px steps (zero overlaps, zero overflow), footer seam, coin
+gold at all 12 sampled fall frames, arm/disarm race across 7 variants, reduced motion,
+aspect ratios, keyframes, CSP, copy counts.
+
+**C8 — `web/index.html` is +414 lines vs `origin/main` on this branch** from four
+pre-session commits (`afc3b6d38`, `fa0b92631`, `932a5e625`, `8b5a4c31b`) adding the
+sidebar status-key and `gt-list` sections. Vercel auto-deploys `main`. **Merging this
+branch deploys those to prod**, including `gt` marketing while `gt`'s keep-or-cut is
+undecided. Orchestrator had told Sean "index.html untouched, nothing deployed" — true of
+this session's commits, false of the branch. Decide before any merge.
+
+- [ ] 5b. Fix round-2 findings — layer order, not a pointer-events hammer | build
+- [ ] 6. Review round 3 — **DISPATCHED, result lost to thread reset. Re-run it.**
+
+Targets `ef474700f` (portrait plate rebuild) + `3edfa724b` (layering fix) as unreviewed code:
+1. Stacking arithmetic across field 0/20, `.gx-fx` 1, `.gx-label` 300, coin 50, plate 90,
+   skip-link 100, main/footer 1 — especially mid-insertion, and anything painting over the
+   plate that would block disarming.
+2. Perf: `updateCoinHitTest()` runs every frame — confirm it does NOT `getBoundingClientRect()`
+   controls per frame (forced reflow); measure fps armed vs disarmed; check the `scroll`
+   handler isn't rebuilding rects unthrottled.
+3. Stale cached rects — rects rebuild only on resize/scroll. What else moves layout?
+   lazy images settling, font swap, responsive padding changes.
+4. Inverse of round 2's C2: ghosts now sit ABOVE controls while armed. Can a user get stuck
+   with a ghost parked over something they need?
+5. Coin goes `pointer-events: none` over controls, so it's ungrabbable in those patches.
+   Quantify the area; can it come to rest somewhere permanently ungrabbable?
+6. Plate rebuild: armed label swap with `.gx-coin-label-line-big`, text clipping at every
+   breakpoint, credit `margin-top: auto` anchoring, gaps from the new 188/154px hero padding.
+
+Plus re-verify everything round 2 cleared (listed under item 5 above).
+**Settle one discrepancy:** round 2 measured both image aspect ratios at exactly 1.8156;
+the round-4-b report gives hero 1.8138 / sidebar 1.8172 and calls it pre-existing sub-pixel
+rounding. Measure at several widths — real regression or genuine rounding?
+
+Reviewer must prove a visible browser context (rAF fps + real `setTimeout(200)` firing time)
+— a backgrounded tab stops `updateCoinHitTest()` running at all and confounds every result.
+- [x] Sean saw v3 on screen 2026-08-23 — ghost field approved ("liking the ghosts floating"),
+  density is fine as-is.
+
+**Sean's round-1 feedback (2026-08-23):**
+
+- [x] a. Drop the section labels (`01 HERO`, `02 THE SIDEBAR`) | design
+- [x] b. Product asset bigger — "focus on the project" | design
+- [x] c. Dress the product asset as a real window — crop well, round corners | design
+- [x] d. Coin-in modelled on an old arcade game: small, top-right, lights up,
+  interactive on hover and press. Needs an inspiration + design pass first. | design
+- [x] e. App UI must be dark while the site is dark | design
+
+**Asset finding that redirects (b)/(c)/(e):** both product videos are LIGHT-themed and
+~55% dead space — `product-sessions.mp4` (1520x922, 3s) and `product-flow.mp4`
+(1520x950, 11s). `product-flow` also demos `gt`, which is an open keep-or-cut product
+question. Neither can carry a bigger, dark, focused hero. `app-sessions-dark@2x`
+(2560x1410) is dark, dense, has no dead space, and already carries real window chrome
+(traffic lights + radius). **Hero product asset switches to that still**; the video slot
+stays wired for the 14s film.
+
+- [ ] Sean: v3 round 2 on screen, then decide the `index.html` swap | design
+
+**Coin is a draggable ghost-field object (Sean, 2026-08-23).** "Maybe it is floating
+around like a ghost and you can grab it and drop it into the coin slot." The coin drifts
+in the ambient field like the ghosts; you grab it and drop it into the slot to start the
+game. Supersedes the press-fires-a-coin-animation design.
+
+Non-obvious constraints this creates:
+
+- **Pointer-events chicken-and-egg.** The field is `pointer-events: none` until armed, and
+  the coin is what arms it. The coin must be `auto` while every ghost stays `none`.
+- **Drag cannot be the only route.** Keyboard users cannot drag. The plate stays
+  activatable by Enter/Space and the `c` route; the coin-drag is the delightful primary
+  path, not the sole one.
+- **Coin return closes the loop.** On Escape/disarm the coin should pop back out of the
+  slot and resume drifting — matches real hardware, and means the state is reversible
+  visually as well as functionally.
+- Reduced motion: field is stubbed and the plate is hidden, so the coin hides too.
+
+- [x] Coin as a draggable drifting object + slot drop target + coin return | design | new
+
+**Parked by Sean 2026-08-23 - light mode.** He wants it "100%", punting for now.
+v3 chrome is dark-only. When it lands, the app stills must follow the page theme
+(dark page -> dark app UI), which the `<picture>` already does - the pin to dark is
+only correct while the page is dark-only.
+
+- [ ] Light-mode pass for v3 | design | parked
+
 ## 2026-08-23 — v3 hero: storyboard spec + Matte recording path
 
 Four-stage plan Sean approved. Tooling decided: **Matte** (already installed,
