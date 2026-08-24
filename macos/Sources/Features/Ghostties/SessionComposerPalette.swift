@@ -295,18 +295,26 @@ struct SessionComposerPalette: View {
         )
     }
 
-    /// Fix 4 (round-2 review): when no project token was typed at all
+    /// Fix 4 (round-2 review), re-routed through `effectiveParse` (round-3
+    /// review, Blockers 2/3): when no project token was typed at all
     /// (`commandParse.projectId == nil`) but `currentProject` already
     /// resolves (the sticky/selected default the resolution line is
     /// already showing), branch/operator/thread typing still needs to
     /// resolve against THAT project's context — `commandParse` itself came
     /// back `.none` in this shape, so its remainder fields are empty/
-    /// invalid and can't just be reused. Re-runs the parse against the
-    /// whole raw `query`, treating `currentProject` as externally resolved
-    /// — the same shape of problem `lockedProject` solves for the locked
-    /// composer, and the same mechanism (`preResolvedProject`).
-    private var fallbackCommandParse: SessionComposerCommandParser.ParseResult? {
-        guard commandParse.projectId == nil, let project = currentProject else { return nil }
+    /// invalid and can't just be reused. This is now the ONE parse of
+    /// record every caller needing branch/operator/thread resolution reads
+    /// — `templateFilterQuery`/`commandOptions` below AND
+    /// `typedBranchResolution`/`currentBranchLabel` further down — so they
+    /// can never diverge by construction (Blocker 3: they used to read two
+    /// different parses, and a typed branch consumed by this one was
+    /// invisible to the other, silently inheriting the picker's stale
+    /// worktree pick instead of the typed branch). `rawQuery:
+    /// composerStore.searchText` — NOT the trimmed `query` — is what fixes
+    /// Blocker 2 (the trimmed text erased the trailing-whitespace signal
+    /// `effectiveParse` needs to tell "project typed, nothing after it yet"
+    /// apart from "project typed, content following it").
+    private var effectiveCommandParse: SessionComposerCommandParser.ParseResult {
         let branchNames: [String] = {
             var names = composerStore.worktrees.compactMap { $0.branch }
             if let rootBranch = composerStore.currentBranchAtProjectRoot {
@@ -314,21 +322,15 @@ struct SessionComposerPalette: View {
             }
             return names
         }()
-        return SessionComposerCommandParser.parse(
-            query: query,
+        return SessionComposerCommandParser.effectiveParse(
+            rawQuery: composerStore.searchText,
+            directParse: commandParse,
+            impliedProject: currentProject,
             projects: store.projects,
             knownBranchNames: branchNames,
-            templates: SessionTemplateResolver.templates(for: project, store: store),
-            isLocked: isProjectLocked,
-            preResolvedProject: project
+            templates: currentProject.map { SessionTemplateResolver.templates(for: $0, store: store) } ?? [],
+            isLocked: isProjectLocked
         )
-    }
-
-    /// `commandParse`, or `fallbackCommandParse` when no project was typed
-    /// but one is already implied — the parse `templateFilterQuery` and
-    /// `commandOptions` should actually read (Fix 4).
-    private var effectiveCommandParse: SessionComposerCommandParser.ParseResult {
-        fallbackCommandParse ?? commandParse
     }
 
     private var commandProject: Project? {
@@ -403,16 +405,34 @@ struct SessionComposerPalette: View {
     /// for what each case means.
     private var typedBranchResolution: SessionComposerCommandParser.TypedBranchResolution {
         SessionComposerCommandParser.resolveTypedBranch(
-            branchToken: commandParse.branchToken,
+            // Round-3 review, Blocker 3: reads `effectiveCommandParse`, the
+            // SAME parse `templateFilterQuery`/`commandOptions` read, not
+            // the un-implied `commandParse` — see `effectiveCommandParse`'s
+            // doc comment. `commandParse.branchToken` alone never saw a
+            // branch typed against an already-selected-but-not-literally-
+            // typed project (`"main cco -n test"` with the project picked
+            // via the dropdown): `commandParse` has no project context to
+            // resolve "main" as a branch against in that shape, so it always
+            // reported `.notTyped`, and this function silently deferred to
+            // whatever worktree the picker had last selected instead of
+            // "main".
+            branchToken: effectiveCommandParse.branchToken,
             worktrees: composerStore.worktrees,
             currentBranchAtProjectRoot: composerStore.currentBranchAtProjectRoot,
             // Blocker 2 fix (Slice B review round 2): only trust
             // `composerStore.worktrees` when it actually describes the
             // project the branch was typed against — see
             // `worktreesProjectId`'s doc comment and
-            // `TypedBranchResolution.pending`'s.
-            cachedProjectId: composerStore.worktreesProjectId,
-            resolvingForProjectId: commandProject?.id
+            // `TypedBranchResolution.pending`'s. Round-3 review, Blocker 3:
+            // `currentProject`, not `commandProject` — the branch above now
+            // resolves against `currentProject`'s context (via
+            // `effectiveCommandParse`'s `impliedProject`) even when nothing
+            // was literally typed, so the project this resolution is FOR
+            // must agree; `commandProject` stays `nil` in that exact shape
+            // and would falsely read as a cache mismatch (`.pending`
+            // forever) against a `worktreesProjectId` that already, and
+            // correctly, points at `currentProject`.
+            resolvingForProjectId: currentProject?.id
         )
     }
 
@@ -420,7 +440,9 @@ struct SessionComposerPalette: View {
     /// resolved one, else the picker's current pick's branch name, else
     /// `nil` (no chip rendered — see `queryRow`).
     private var currentBranchLabel: String? {
-        if let token = commandParse.branchToken { return token }
+        // Round-3 review, Blocker 3: same single-parse-of-record read as
+        // `typedBranchResolution` above.
+        if let token = effectiveCommandParse.branchToken { return token }
         guard let path = composerStore.selectedWorktreePath else { return nil }
         return composerStore.worktrees.first(where: { $0.path == path })?.branch ?? path
     }
@@ -454,7 +476,7 @@ struct SessionComposerPalette: View {
     /// prefixes it. Fix 4 (round-2 review): gates on `currentProject`, not
     /// `commandProject` — a project can already be implied (sticky/
     /// selected default) with none typed at all, in which case
-    /// `effectiveCommandParse` is `fallbackCommandParse`, scoped to that
+    /// `effectiveCommandParse` re-parses (via `effectiveParse`) against that
     /// implied project.
     private var templateFilterQuery: String {
         currentProject != nil ? effectiveCommandParse.remainderText : query
@@ -640,7 +662,18 @@ struct SessionComposerPalette: View {
     /// untiered — keep index 0, i.e. current section order, so unambiguous
     /// queries and the empty-query default are unchanged.
     private func bestSelectionIndex(in options: [ComposerOption]) -> UInt {
-        UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
+        // Blocker 1 (round-3 review): a resolved operator template
+        // (`effectiveCommandParse.resolvedTemplateId`) wins outright over
+        // text ranking — the moment an operator resolves, its remainder is
+        // EMPTY (see `ParseResult.resolvedTemplateId`'s doc comment), which
+        // otherwise leaves every option tied and Return launching whatever
+        // section order/most-recent-first happens to put at index 0, not
+        // the template the user just named.
+        if let resolvedTemplateId = effectiveCommandParse.resolvedTemplateId,
+           let index = options.firstIndex(where: { $0.id == resolvedTemplateId }) {
+            return UInt(index)
+        }
+        return UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
     }
 
     // MARK: - Body

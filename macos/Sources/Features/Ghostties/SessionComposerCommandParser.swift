@@ -44,11 +44,27 @@ enum SessionComposerCommandParser {
         /// slice-1 shape — explicit default keeps every existing
         /// construction site (including `.none` below) byte-identical.
         let branchToken: String?
+        /// Round-3 review, Blocker 1: the template a chevron/space-terminated
+        /// operator token resolved to (`Segment.Resolution.template`),
+        /// carried through so callers can rank/launch it directly instead of
+        /// re-deriving it from `remainderText` — which is EMPTY once an
+        /// operator resolves to a template (the open run past it becomes a
+        /// thread run, and `parse`'s own remainder-selection logic never
+        /// reports thread text as the remainder; see the comment above
+        /// `remainderRange` in `parse(query:...)`). Without this, a resolved
+        /// operator's empty remainder unranks the template list entirely,
+        /// letting Return launch whatever the ranking's tie-break (section
+        /// order) happens to put first — not the template the user just
+        /// named. `nil` for every slice-1/Slice-B shape and whenever no
+        /// operator segment resolved to a real template — explicit default
+        /// keeps every existing construction site byte-identical.
+        let resolvedTemplateId: UUID?
 
-        init(projectId: UUID?, remainderTokens: [String], branchToken: String? = nil) {
+        init(projectId: UUID?, remainderTokens: [String], branchToken: String? = nil, resolvedTemplateId: UUID? = nil) {
             self.projectId = projectId
             self.remainderTokens = remainderTokens
             self.branchToken = branchToken
+            self.resolvedTemplateId = resolvedTemplateId
         }
 
         /// The remainder tokens rejoined with single spaces, for display
@@ -350,8 +366,17 @@ enum SessionComposerCommandParser {
 
         // The currently-open free-text run, if any. `openRunKind == nil`
         // means matching is still "live" — every terminated token so far
-        // has claimed a type. Once a run opens it never reverts to `nil`;
-        // only `>` (case: operation run open) closes and re-opens it as a
+        // has claimed a type. Once a run opens it (almost) never reverts to
+        // `nil`; the one exception is the Fix 5 branch below (a chevron-
+        // opened operator run whose first token resolves against the known
+        // template list) — round-3 review defect fix: THAT case reverts to
+        // `nil` deliberately, mirroring the ordinary matching-live template
+        // match exactly, so the next `>` is treated as the separator that
+        // advances operator → thread (rule 4's live-matching branch) rather
+        // than being swallowed as a literal character inside an
+        // already-open thread run (rule 4's inside-a-thread-run branch).
+        // Every OTHER path that opens a run still never reverts it; only
+        // `>` (case: operation run open) closes and re-opens it as a
         // thread run.
         var openRunKind: SegmentKind?
         var openRunStart: Int?
@@ -462,13 +487,26 @@ enum SessionComposerCommandParser {
                     // `ghostties > orchestrator` report an ad-hoc/thread
                     // segment instead of resolving the Orchestrator
                     // template (D4). A match resolves the operator exactly
-                    // like the ordinary path does and reopens the run as a
-                    // thread run, mirroring the chevron-close-then-open-
-                    // thread transition above; a non-match falls through to
-                    // the ordinary ad-hoc extension below, unchanged.
+                    // like the ordinary path does — round-3 review defect
+                    // fix: that means returning matching to LIVE (`nil`),
+                    // mirroring the ordinary path exactly, NOT jumping
+                    // straight to an open thread run. Hard-setting
+                    // `openRunKind = .thread` here used to make the run's
+                    // own start lazy again but left `openRunKind` non-nil,
+                    // so the very NEXT `>` (rule 4's `else` branch, "inside a
+                    // thread run `>` is literal") swallowed it as a literal
+                    // character into the thread name instead of treating it
+                    // as the separator that advances from operator to
+                    // thread (rule 4's `nil` branch) — `ghostties >
+                    // orchestrator > mythread` yielded thread name
+                    // "> mythread" instead of "mythread". Reverting to live
+                    // matching here means that next `>` goes through the
+                    // SAME rule-4-case-1 path the no-leading-chevron shape
+                    // (`ghostties orchestrator > mythread`) already used
+                    // correctly, so both shapes now resolve identically.
                     segments.append(Segment(kind: .operation, range: range, resolved: .template(template.id)))
                     filled.insert(.operation)
-                    openRunKind = .thread
+                    openRunKind = nil
                     openRunStart = nil
                     openRunEnd = nil
                 } else {
@@ -674,11 +712,83 @@ enum SessionComposerCommandParser {
         let closedAdHocRange = path.segments.first(where: { $0.kind == .operation && $0.resolved == .adHoc })?.range
         let remainderRange: NSRange? = closedAdHocRange ?? (path.openRunIsThreadRun ? nil : path.remainderRange)
 
+        // Blocker 1 (round-3 review): surface a resolved operator template
+        // regardless of what's left in the remainder — see
+        // `ParseResult.resolvedTemplateId`'s doc comment for why the
+        // remainder alone can't stand in for this (it's empty the moment an
+        // operator resolves to a template).
+        let resolvedTemplateId: UUID? = path.segments.lazy.compactMap { segment -> UUID? in
+            guard segment.kind == .operation, case .template(let id) = segment.resolved else { return nil }
+            return id
+        }.first
+
         guard let range = remainderRange, let bounds = Range(range, in: query) else {
-            return ParseResult(projectId: projectId, remainderTokens: [], branchToken: branchToken)
+            return ParseResult(projectId: projectId, remainderTokens: [], branchToken: branchToken, resolvedTemplateId: resolvedTemplateId)
         }
         let remainderTokens = tokenize(String(query[bounds]), separatorsIncludeChevron: false)
-        return ParseResult(projectId: projectId, remainderTokens: remainderTokens, branchToken: branchToken)
+        return ParseResult(projectId: projectId, remainderTokens: remainderTokens, branchToken: branchToken, resolvedTemplateId: resolvedTemplateId)
+    }
+
+    /// The single parse of record for every caller that needs to resolve
+    /// branch/operator/thread segments when no project token was typed at
+    /// all but one is already implied (the sticky chip, or an
+    /// already-selected project from the dropdown) — round-3 review,
+    /// Blockers 2 and 3.
+    ///
+    /// `directParse` is whatever `parse(query:...)` already returned for the
+    /// raw, as-typed query (trimmed or not — this function never re-derives
+    /// it). When `directParse` resolved a project on its own, it's returned
+    /// UNCHANGED: a project token was genuinely typed, so there is nothing
+    /// to imply. Otherwise, if `impliedProject` is set, this re-parses
+    /// against that project's context — this is the ONE seam every caller
+    /// needing branch/operator/thread resolution against an implied project
+    /// must go through, so two different callers (one reading `remainderText`
+    /// for filtering, another reading `branchToken` for commit-time
+    /// resolution) can never diverge by construction — a divergence that
+    /// shipped as Blocker 3 (a typed branch consumed into the filter/options
+    /// parse but never seen by `typedBranchResolution`, which still read the
+    /// un-implied `directParse`, silently inheriting the picker's last pick).
+    ///
+    /// Blocker 2: `rawQuery` must be passed RAW (untrimmed) — trailing
+    /// whitespace is `parsePath`'s only termination signal, and trimming it
+    /// away before this re-parse is exactly what broke the sticky-chip
+    /// case (`"ghostties "`, project typed + space, no remainder yet): with
+    /// the project's own name still present in the text and no trailing
+    /// terminator to distinguish it from content, the re-parse (which skips
+    /// project MATCHING but not project TEXT — see `preResolvedProject`'s
+    /// doc comment) swallowed "ghostties" itself as ad-hoc operator content,
+    /// filtering out every real template and offering a bogus `Run
+    /// "ghostties"` row. Detected via `stickyChipProjectId` (the same
+    /// function that resolved `impliedProject` via the sticky chip in the
+    /// first place): when it names the SAME project, the project's own text
+    /// has already been fully accounted for by that resolution and
+    /// contributes nothing further — the re-parse runs against an EMPTY
+    /// remainder instead of the raw text verbatim. When it doesn't (no
+    /// project token was typed at all — `impliedProject` came from the
+    /// already-selected project, not from typed text, e.g. a typed branch
+    /// like `"main cco -n test"` with a project already chosen via the
+    /// picker), the raw text is used as-is: there is no project-name text to
+    /// strip out of it.
+    static func effectiveParse(
+        rawQuery: String,
+        directParse: ParseResult,
+        impliedProject: Project?,
+        projects: [Project],
+        knownBranchNames: [String],
+        templates: [AgentTemplate],
+        isLocked: Bool
+    ) -> ParseResult {
+        guard directParse.projectId == nil, let project = impliedProject else { return directParse }
+        let stickyProjectId = stickyChipProjectId(rawQuery: rawQuery, projects: projects, isLocked: isLocked)
+        let remainderRawQuery = (stickyProjectId == project.id) ? "" : rawQuery
+        return parse(
+            query: remainderRawQuery,
+            projects: projects,
+            knownBranchNames: knownBranchNames,
+            templates: templates,
+            isLocked: isLocked,
+            preResolvedProject: project
+        )
     }
 
     /// Splits `rawQuery` into `(prefix, remainder)` on the boundary token 1

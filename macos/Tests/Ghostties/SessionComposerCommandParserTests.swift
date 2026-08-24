@@ -1234,4 +1234,244 @@ final class SessionComposerCommandParserTests: XCTestCase {
         )
         XCTAssertEqual(reparsed.projectId, project.id, "the completed segment must now actually resolve")
     }
+
+    // MARK: - Round-3 review: 4 blockers/defects + round-2 fix coverage
+
+    /// Blocker 1: a resolved operator template must reach `ParseResult` even
+    /// though its remainder is empty (`ParseResult.resolvedTemplateId`'s doc
+    /// comment explains why the remainder alone can't carry this). Mutation:
+    /// drop `resolvedTemplateId` from `ParseResult`/`parse(query:)` (or leave
+    /// it always `nil`) — this test cannot even compile against that
+    /// reverted shape, and once it does compile, would read `nil` instead of
+    /// `template.id`. Verified red before the fix: `ParseResult` had no such
+    /// field at all.
+    func testParseThreadsResolvedTemplateIdThroughParseResult() {
+        let project = makeProject(name: "ghostties")
+        let template = makeTemplate(name: "orchestrator")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties orchestrator > my thread",
+            projects: [project],
+            templates: [template],
+            isLocked: false
+        )
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertEqual(result.resolvedTemplateId, template.id)
+        XCTAssertTrue(result.remainderTokens.isEmpty, "the thread name is not reported through remainderTokens")
+    }
+
+    /// Defect: a template resolved from a run the user opened with a leading
+    /// `>` (`ghostties > orchestrator > mythread`) must yield the exact same
+    /// thread name as the no-leading-chevron shape
+    /// (`ghostties orchestrator > mythread`) — both should be "mythread",
+    /// not "> mythread". Mutation: revert the post-match state in the Fix 5
+    /// branch back to `openRunKind = .thread` — the leading-chevron
+    /// assertion goes red (`"> mythread"` instead of `"mythread"`) while the
+    /// no-leading-chevron assertion stays green, which is exactly the
+    /// asymmetry the defect describes. Verified red against that reversion.
+    func testChevronResolvedOperatorReturnsToLiveMatchingSoTheNextChevronIsASeparatorNotALiteral() {
+        let project = makeProject(name: "ghostties")
+        let template = makeTemplate(name: "orchestrator")
+
+        let leadingChevron = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties > orchestrator > mythread",
+            projects: [project], templates: [template], isLocked: false
+        )
+        let noLeadingChevron = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties orchestrator > mythread",
+            projects: [project], templates: [template], isLocked: false
+        )
+
+        XCTAssertEqual(text(leadingChevron.remainderRange, in: leadingChevron.source), "mythread")
+        XCTAssertEqual(text(noLeadingChevron.remainderRange, in: noLeadingChevron.source), "mythread")
+    }
+
+    /// Blocker 2: `effectiveParse` must preserve the sticky project chip
+    /// through an empty remainder after a trailing space/chevron — the raw,
+    /// untrimmed query is what carries that termination signal. Mutation:
+    /// pass `rawQuery.trimmingCharacters(in: .whitespaces)` instead of the
+    /// raw `rawQuery` into the re-parse inside `effectiveParse` — this test
+    /// goes red (`remainderTokens` becomes `["ghostties"]`, the project's
+    /// own name swallowed as ad-hoc operator content, instead of empty).
+    /// Verified red against that mutation.
+    func testEffectiveParsePreservesStickyProjectChipWithEmptyRemainderAfterTrailingSpace() {
+        let project = makeProject(name: "ghostties")
+        // The direct, trimmed-text parse never resolves a project from a
+        // single bare token — sanity check that this test genuinely
+        // exercises the fallback path, not the direct one.
+        let directParse = SessionComposerCommandParser.parse(
+            query: "ghostties", projects: [project], isLocked: false
+        )
+        XCTAssertNil(directParse.projectId)
+
+        let result = SessionComposerCommandParser.effectiveParse(
+            rawQuery: "ghostties ",
+            directParse: directParse,
+            impliedProject: project,
+            projects: [project],
+            knownBranchNames: [],
+            templates: [],
+            isLocked: false
+        )
+        XCTAssertTrue(result.remainderTokens.isEmpty, "the sticky-typed project name must not become ad-hoc remainder content")
+    }
+
+    /// Blocker 3: `effectiveParse` is the single parse of record — a branch
+    /// typed with NO project token at all (project already implied by the
+    /// picker) must resolve `branchToken`, matching what
+    /// `templateFilterQuery`/`commandOptions` already saw via the same
+    /// function. Mutation: have `effectiveParse` just return `directParse`
+    /// unconditionally (i.e. never re-parse against `impliedProject`) — this
+    /// test goes red (`branchToken` stays `nil`, exactly the silent
+    /// worktree-inheritance bug Blocker 3 describes). Verified red against
+    /// that mutation.
+    func testEffectiveParseResolvesBranchTokenAgainstImpliedProjectWhenNoProjectTokenWasTyped() {
+        let project = makeProject(name: "ghostties")
+        // Mirrors production's `commandParse`: with no real project matching
+        // "main", the direct parse (no branch/template lists, no implied
+        // project) never sees a branch either.
+        let directParse = SessionComposerCommandParser.parse(
+            query: "main cco -n test", projects: [project], isLocked: false
+        )
+        XCTAssertNil(directParse.branchToken)
+
+        let result = SessionComposerCommandParser.effectiveParse(
+            rawQuery: "main cco -n test",
+            directParse: directParse,
+            impliedProject: project,
+            projects: [project],
+            knownBranchNames: ["main"],
+            templates: [],
+            isLocked: false
+        )
+        XCTAssertEqual(result.branchToken, "main")
+        XCTAssertEqual(result.remainderTokens, ["cco", "-n", "test"])
+    }
+
+    /// `effectiveParse` must return `directParse` UNCHANGED when a project
+    /// token really was typed — an implied project must never override an
+    /// explicitly typed one. Mutation: drop the `directParse.projectId ==
+    /// nil` guard — this test goes red because the re-parse (against
+    /// `otherProject`) would silently win instead.
+    func testEffectiveParseLeavesADirectlyResolvedParseUntouched() {
+        let project = makeProject(name: "ghostties")
+        let otherProject = makeProject(name: "other")
+        let directParse = SessionComposerCommandParser.parse(
+            query: "ghostties cco -n test", projects: [project, otherProject], isLocked: false
+        )
+        XCTAssertEqual(directParse.projectId, project.id)
+
+        let result = SessionComposerCommandParser.effectiveParse(
+            rawQuery: "ghostties cco -n test",
+            directParse: directParse,
+            impliedProject: otherProject,
+            projects: [project, otherProject],
+            knownBranchNames: [],
+            templates: [],
+            isLocked: false
+        )
+        XCTAssertEqual(result.projectId, project.id, "a typed project must never be overridden by an implied one")
+    }
+
+    // MARK: - Round-2 fix coverage (previously zero test coverage)
+
+    /// Fix 1: `parse(query:...)` must actually forward `knownBranchNames`/
+    /// `templates` through to `parsePath` — the production bug this fixed
+    /// was the caller (`SessionComposerPalette.commandParse`) not passing
+    /// real per-project lists, but the contract this locks down is the
+    /// adapter's own: given real lists, both a branch and a template
+    /// segment must resolve through `parse()`, not just `parsePath()`
+    /// directly. Mutation: stop forwarding `knownBranchNames`/`templates`
+    /// inside `parse(query:...)` (e.g. always pass `[]` to `parsePath`) —
+    /// this test goes red (`branchToken` nil, `resolvedTemplateId` nil).
+    func testParseForwardsKnownBranchNamesAndTemplatesToParsePath() {
+        let project = makeProject(name: "ghostties")
+        let template = makeTemplate(name: "cco")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties main cco ",
+            projects: [project],
+            knownBranchNames: ["main"],
+            templates: [template],
+            isLocked: false
+        )
+        XCTAssertEqual(result.branchToken, "main")
+        XCTAssertEqual(result.resolvedTemplateId, template.id)
+    }
+
+    /// Fix 2: `openRunIsThreadRun` is derived from the run's own
+    /// classification, NOT from `activeKind` — the two can disagree
+    /// (`activeKind` still reports the first unfilled type for
+    /// still-being-typed-token completion purposes even once the run
+    /// underneath is genuinely a thread run). Mutation: derive
+    /// `openRunIsThreadRun` as `activeKind == .thread` instead of
+    /// `openRunKind == .thread` — this test goes red (`false` instead of
+    /// `true`) since `activeKind` reports `.branch` here.
+    func testOpenRunIsThreadRunReflectsGenuineThreadRunEvenWhileActiveKindStillReportsBranch() {
+        let project = makeProject(name: "ghostties")
+        let template = makeTemplate(name: "orchestrator")
+        let result = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties orchestrator te",
+            projects: [project], templates: [template], isLocked: false
+        )
+        XCTAssertEqual(result.activeKind, .branch)
+        XCTAssertTrue(result.openRunIsThreadRun, "the open run is genuinely a thread run even though activeKind still reports .branch")
+    }
+
+    /// Fix 3/4: `preResolvedProject` must skip project-name MATCHING
+    /// entirely — a token that would otherwise match a real project must
+    /// NOT be allowed to override the externally-fixed project. Mutation:
+    /// don't pre-fill `.project` into `filled` when the project position is
+    /// fixed — this test goes red (`projectId` becomes `other.id`, and a
+    /// `.project` segment appears in `segments`).
+    func testParsePathPreResolvedProjectSkipsProjectNameMatchingInText() {
+        let project = makeProject(name: "ghostties")
+        let other = makeProject(name: "other")
+        let result = SessionComposerCommandParser.parsePath(
+            rawQuery: "other cco ",
+            projects: [project, other],
+            templates: [],
+            isLocked: false,
+            preResolvedProject: project
+        )
+        XCTAssertEqual(result.projectId, project.id, "preResolvedProject wins even though \"other\" would otherwise match a real project")
+        XCTAssertFalse(result.segments.contains { $0.kind == .project })
+    }
+
+    /// Fix 3/4: with the project position externally fixed, even a single
+    /// BARE (unterminated) first token must open a run immediately — the
+    /// bare-first-token withholding exists only to protect an
+    /// as-yet-unresolved PROJECT name, which doesn't apply here. Mutation:
+    /// don't set `hasProcessedAnyToken = projectPositionIsFixed` up front —
+    /// this test goes red (`remainderRange` becomes `nil`, matching the
+    /// ordinary bare-single-word withholding this fix exists to bypass).
+    func testParsePathPreResolvedProjectOpensRunImmediatelyForABareFirstToken() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parsePath(
+            rawQuery: "cco",
+            projects: [project],
+            templates: [],
+            isLocked: false,
+            preResolvedProject: project
+        )
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertEqual(text(result.remainderRange, in: result.source), "cco")
+    }
+
+    /// Fix 5: the first content token of a run opened by an EXPLICIT `>`
+    /// (rule 4, case 1) still gets one shot against the known template list
+    /// before becoming ad-hoc content — `ghostties > orchestrator` must
+    /// resolve the Orchestrator template, not report ad-hoc/thread text.
+    /// Mutation: skip the template-match branch for a chevron-opened run
+    /// (only try it for the ordinary "nothing matched" run-open path) — this
+    /// test goes red (no `.operation` segment at all; the text stays an
+    /// open, unresolved run).
+    func testChevronOpenedOperatorRunStillResolvesAgainstKnownTemplates() {
+        let project = makeProject(name: "ghostties")
+        let template = makeTemplate(name: "orchestrator")
+        let result = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties > orchestrator ",
+            projects: [project], templates: [template], isLocked: false
+        )
+        let operatorSegment = result.segments.first { $0.kind == .operation }
+        XCTAssertEqual(operatorSegment?.resolved, .template(template.id))
+    }
 }
