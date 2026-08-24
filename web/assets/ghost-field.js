@@ -1000,8 +1000,42 @@
       );
     }
 
+    // A drifting coin can park directly over the install buttons (the
+    // full-bleed field has no reserved gutter). Before starting a drag,
+    // check what's actually under the pointer — hide the coin for one
+    // elementFromPoint call, then restore it — and if that's an
+    // interactive control, don't intercept: drop this element's own
+    // pointer-events until release so the click passes through to the
+    // control beneath instead of getting eaten by the coin.
+    function controlUnderPoint(clientX, clientY) {
+      var prevDisplay = coinEl.style.display;
+      coinEl.style.display = "none";
+      var under = document.elementFromPoint(clientX, clientY);
+      coinEl.style.display = prevDisplay;
+      return (
+        under &&
+        under.closest &&
+        under.closest("a, button, input, textarea, select, [role='button']")
+      );
+    }
+
+    function yieldToControlBeneath() {
+      coinEl.style.pointerEvents = "none";
+      function restore() {
+        coinEl.style.pointerEvents = "";
+        document.removeEventListener("pointerup", restore);
+        document.removeEventListener("pointercancel", restore);
+      }
+      document.addEventListener("pointerup", restore);
+      document.addEventListener("pointercancel", restore);
+    }
+
     coinEl.addEventListener("pointerdown", function (e) {
       if (coin.state !== "drifting") return;
+      if (controlUnderPoint(e.clientX, e.clientY)) {
+        yieldToControlBeneath();
+        return;
+      }
       coin.state = "dragging";
       coinDrag.active = true;
       coinDrag.offX = coin.x - e.clientX;
@@ -1033,6 +1067,13 @@
       try {
         coinEl.releasePointerCapture(e.pointerId);
       } catch (err) {}
+      // A "c" press or plate click mid-drag can already have moved the
+      // coin to "inserting"/"inSlot" (armed) via coinIn() by the time this
+      // release fires. Only a drag still in progress gets to decide the
+      // coin's post-release state here — otherwise this stomps the armed
+      // state and coinEject() (which bails out on "drifting") can never
+      // bring the coin back.
+      if (coin.state !== "dragging") return;
       if (coinSlotHitTest(e.clientX, e.clientY)) {
         coinIn();
         return;
@@ -1052,6 +1093,7 @@
       if (!coinDrag.active) return;
       coinDrag.active = false;
       coinEl.classList.remove("gx-coin-dragging");
+      if (coin.state !== "dragging") return;
       coin.state = "drifting";
     });
 
@@ -1433,7 +1475,6 @@
       armed = true;
       coinInsert();
       field.classList.add("gx-armed");
-      field.setAttribute("aria-hidden", "false");
       document.body.classList.add("gx-coin-in");
       document.dispatchEvent(
         new CustomEvent("gx-armchange", { detail: { armed: true } }),
@@ -1448,7 +1489,6 @@
         dragging = null;
       }
       field.classList.remove("gx-armed");
-      field.setAttribute("aria-hidden", "true");
       document.body.classList.remove("gx-coin-in");
       coinEject();
       document.dispatchEvent(

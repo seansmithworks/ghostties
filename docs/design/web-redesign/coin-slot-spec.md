@@ -167,7 +167,7 @@ from above the plate.
 | Panel flash | 90ms in / 260ms out | in `linear`, out `cubic-bezier(.25,1,.5,1)` | panel bloom to peak, back to armed level |
 | Credit flip | instant at t=200ms | — | `textContent` 0 → 1 |
 | Armed settle | — | — | bloom animation removed (goes steady); `::after` hotspot animation removed, opacity fixed at `.7` |
-| Coin-out (Esc / re-click) | 180ms | `cubic-bezier(.25,1,.5,1)` | everything back to rest |
+| Coin-out (Esc / re-click) | 260ms (16ms delay, then the transition) | `cubic-bezier(.25,1,.5,1)` | everything back to rest |
 
 Press → armed totals ~420ms, unchanged from the original build. `var()` is not
 substituted for `animation-timing-function`/colour values inside `@keyframes` and fails
@@ -228,6 +228,17 @@ not a side effect of pressing a button.
   ungrabbable wherever it happened to drift under a heading or button. The coin element
   is appended to `<body>` instead, `z-index: 50` — above page content, still under the
   plate (`90`) and skip-link (`100`) — so it's reachable anywhere on the page.
+- **Ghosts stay behind page content even when armed — `pointer-events`, not `z-index`,
+  is what makes them reachable.** `.gx-armed .gx-ghost` sets `pointer-events: auto`, but
+  ghosts are still painted at `z-index: 0` under `main`'s `1`, same as before arming —
+  reordering that would make ghosts paint over the page's text and images, which is
+  exactly what "the field looks like it's behind the page" rules out. Instead, arming
+  adds `body.gx-coin-in` (the same class this section's coin-token behaviour keys off),
+  and `.cabinet` (the wrapper around `main`/`footer`) drops `pointer-events` to `none`
+  under that class, with every real control (`a`, `button`) inside it opting back in to
+  `auto`. That makes `main`/`footer`'s otherwise-transparent boxes stop intercepting the
+  hit test while armed, so it falls through to the ghost underneath instead — reachable,
+  without ever painting above the page.
 - **Pointer Events, not separate mouse/touch handlers** (`pointerdown`/`pointermove`/
   `pointerup` with `setPointerCapture`), so one code path drives both mouse and touch
   drag with no duplication. `touch-action: none` on the token stops the browser

@@ -63,7 +63,7 @@
       <!-- ============================================================
            02 — SIDEBAR (real captures, theme-aware)
            ============================================================ -->
-      <section id="sidebar" class="board-sidebar">
+      <section id="sidebar">
         <h2 class="h-l">The Sidebar</h2>
         <p class="lead">Every session in one window. The single strongest thing the app does.</p>
         <div class="projects-figure">
@@ -76,7 +76,7 @@
             <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to, dark mode" width="1280" height="705" loading="lazy">
           </picture>
         </div>
-        <p class="projects-caption">every session, one window, live status — follows your system appearance</p>
+        <p class="projects-caption">every session, one window, live status</p>
       </section>
 
       <!-- ============================================================
@@ -84,7 +84,7 @@
            ============================================================ -->
       <section id="still-ghostty">
         <h2 class="h-m">Still Ghostty</h2>
-        <p class="lead measure" style="max-width: 64ch;">
+        <p class="lead" style="max-width: 64ch;">
           Ghostties is a fork of
           <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>,
           not a rewrite — your config, themes and keybinds load unchanged, the terminal
@@ -206,8 +206,8 @@
     };
 
     // Coin plate — lit backlit plate fixed top-right, stacked
-    // INSERT/COIN (ESC/EXIT armed) label lines either side of the double
-    // rule, plus the secret "c" key route (kept; see coin-slot-spec.md).
+    // INSERT/COIN (ESC/EXIT armed) label lines, plus the secret "c" key
+    // route (kept; see coin-slot-spec.md).
     (function () {
       var btn = document.getElementById('gx-coin-btn');
       if (!btn) return;
@@ -222,8 +222,8 @@
       // only ever called (via armedVisuals()/disarmedVisuals() below) in
       // response to the "gx-armchange" event GXField fires on every real
       // transition, so what it draws always matches what GXField reports.
-      // The label is two stacked lines (INSERT/COIN, ESC/EXIT) either side
-      // of the double rule, so render() writes both lines, not one string.
+      // The label is two stacked lines (INSERT/COIN, ESC/EXIT), so
+      // render() writes both lines, not one string.
       function render(armed) {
         if (armed) {
           labelLines[0].textContent = 'ESC';

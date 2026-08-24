@@ -73,9 +73,7 @@
   --ink: #e9e6f5;
   --ink-dim: rgba(233, 230, 245, 0.66);
   --ink-faint: rgba(233, 230, 245, 0.5);
-  --ink-quiet: rgba(233, 230, 245, 0.52);
   --amber: #ffd54f;
-  --cyan: #00e5ff;
   --line: rgba(233, 230, 245, 0.16);
   --line-soft: rgba(233, 230, 245, 0.09);
   --line-strong: rgba(233, 230, 245, 0.24);
@@ -113,8 +111,7 @@ a:hover {
 }
 
 img,
-picture,
-video {
+picture {
   max-width: 100%;
   display: block;
 }
@@ -158,8 +155,7 @@ video {
 
 .h-xl,
 .h-l,
-.h-m,
-.h-s {
+.h-m {
   font-family: var(--font-display);
   font-weight: 700;
   margin: 0;
@@ -194,16 +190,6 @@ video {
   color: var(--ink-faint);
   margin: 0;
 }
-.micro {
-  font-family: var(--font-prose);
-  font-weight: 600;
-  font-size: 8.5px;
-  line-height: 1.4;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: rgba(233, 230, 245, 0.5);
-}
-
 code {
   font-family: var(--font-mono);
   font-size: 0.85em;
@@ -276,14 +262,6 @@ section {
   margin: 0 auto;
   padding: 96px 32px;
   border-bottom: 1px solid var(--line-soft);
-}
-
-.mark {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  flex: none;
-  background: var(--amber);
 }
 
 /* ---------------------------------------------------------------------
@@ -432,31 +410,6 @@ button.cab-btn {
    03 — STILL GHOSTTY
    --------------------------------------------------------------------- */
 
-.still-ghostty-list {
-  margin-top: 24px;
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: 0;
-  border: 1px solid var(--line);
-  border-radius: 0;
-}
-.still-ghostty-list li {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--line-soft);
-  font-size: 13px;
-  color: var(--ink-dim);
-}
-.still-ghostty-list .measure {
-  max-width: 64ch;
-}
-.still-ghostty-list li:last-child {
-  border-bottom: none;
-}
-
 /* ---------------------------------------------------------------------
    04 — GET STARTED
    --------------------------------------------------------------------- */
@@ -511,7 +464,6 @@ footer {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-faint);
-  border-top: 1px solid var(--line);
 }
 footer a {
   color: var(--ink-faint);
@@ -690,14 +642,11 @@ footer a:hover {
 .gx-coin-piece {
   position: absolute;
   left: 6px;
-  top: -18px;
+  top: 0;
   width: 8px;
   height: 8px;
   fill: var(--coin-gold);
   opacity: 0;
-}
-.gx-coin-piece path {
-  fill: currentColor;
 }
 
 .gx-coin-info {
@@ -986,6 +935,29 @@ footer a:hover {
 #gx-field.gx-armed .gx-ghost {
   pointer-events: auto;
   cursor: grab;
+}
+
+/* Armed reachability — the gate above (pointer-events: auto on ghosts once
+   armed) only matters if something isn't sitting on top of the ghosts
+   soaking up the click first. main/footer live at z-index: 1 above
+   #gx-field's z-index: 0, so their (transparent) boxes normally win every
+   hit-test even though there's nothing painted there. Rather than
+   reordering z-index (which would make ghosts paint over page content,
+   breaking the "field looks behind the page" requirement and text
+   legibility), drop pointer-events on the whole .cabinet subtree while
+   armed so those transparent boxes stop intercepting clicks and the hit
+   test falls through to whatever's actually there — a ghost, or empty
+   page. Every real control inside .cabinet (install buttons, the two
+   external links, the four footer links) opts back in explicitly so nothing
+   the tab-order/click checklist relies on goes dead. body.gx-coin-in is the
+   same class ghost-field.js's coinIn()/coinOut() already toggle for the
+   coin-token CSS below, so this can't drift out of sync with `armed`. */
+body.gx-coin-in .cabinet {
+  pointer-events: none;
+}
+body.gx-coin-in .cabinet a,
+body.gx-coin-in .cabinet button {
+  pointer-events: auto;
 }
 .gx-ghost.gx-dragging {
   cursor: grabbing;
@@ -1361,6 +1333,19 @@ footer a:hover {
   }
 }
 
+/* The coin plate is fixed top:16/right:16 at 118x94 down to 481px — its
+   box (16 to 110) sits above where .hero's content starts (96px base
+   section padding-top) anywhere the hero column reaches far enough right
+   to sit under it, which starts well above the 640px breakpoint (.head's
+   own 720px cap plus the plate's width means overlap runs from roughly
+   641px down to 481px). Push the section down to clear the plate across
+   that whole range instead of relying on short copy missing it. */
+@media (max-width: 900px) {
+  .hero {
+    padding-top: 132px;
+  }
+}
+
 @media (max-width: 640px) {
   .hero h1 {
     font-size: 40px !important;
@@ -1378,6 +1363,15 @@ footer a:hover {
 @media (max-width: 480px) {
   section {
     padding: 64px 20px;
+  }
+  /* Plate shrinks to 92x76 (box 16 to 92) below this breakpoint but
+     section padding-top also drops to 64px — still not enough clearance;
+     same reasoning as the 640px block above. */
+  .hero {
+    padding-top: 108px;
+  }
+  .hero h1 {
+    font-size: 36px !important;
   }
   .product-frame {
     border-radius: 5px;
