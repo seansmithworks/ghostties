@@ -906,6 +906,99 @@ footer a:hover {
   color: #ffe9a8;
 }
 
+/* Effect D — chained drop-shadow bloom. box-shadow can't follow a glyph's
+   alpha shape; drop-shadow does. Additive to the existing panel/price/
+   label glow above (text-shadow/box-shadow), never a replacement. */
+.gx-coin-panel {
+  filter:
+    drop-shadow(0 0 2px rgba(255, 120, 60, 0.85))
+    drop-shadow(0 0 7px rgba(255, 54, 26, 0.62))
+    drop-shadow(0 0 16px rgba(214, 20, 10, 0.45));
+}
+.gx-coin-price {
+  filter:
+    drop-shadow(0 0 2.5px rgba(255, 214, 120, 0.9))
+    drop-shadow(0 0 8px rgba(255, 132, 36, 0.7));
+}
+.gx-coin-label-line {
+  filter: drop-shadow(0 0 1.5px rgba(255, 60, 30, 0.8));
+}
+
+/* Effect C — feTurbulence moulded-plastic surface noise. Two SVG noise
+   fields (fine grain + coarse tooling lines), rendered as low-opacity
+   overlay layers inside the panel. Filter defs are the inline <svg><defs>
+   in the button markup, v3.html, just above these overlay elements. */
+.gx-coin-fx-grain-coarse {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+  filter: url(#gx-coin-moulded-coarse);
+  opacity: 0.1;
+  mix-blend-mode: soft-light;
+}
+.gx-coin-fx-grain {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+  filter: url(#gx-coin-moulded);
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+}
+
+/* Effect E — mix-blend-mode light passes. Four overlay layers add to the
+   existing lamp bar (.gx-coin-panel::after) rather than replace it, kept
+   subtle so they read as light falling across the plastic, not a second
+   lamp. */
+.gx-coin-fx-pass {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.gx-coin-fx-pass-dodge {
+  mix-blend-mode: color-dodge;
+  opacity: 0.35;
+  background: radial-gradient(
+    38% 52% at 8% 40%,
+    rgba(120, 26, 10, 0.85),
+    transparent 72%
+  );
+}
+.gx-coin-fx-pass-overlay {
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+  background: linear-gradient(
+    168deg,
+    rgba(255, 206, 170, 0.3) 0%,
+    transparent 34%,
+    transparent 66%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+}
+.gx-coin-fx-pass-screen {
+  mix-blend-mode: screen;
+  opacity: 0.4;
+  background: radial-gradient(
+    58% 30% at 50% -4%,
+    rgba(255, 236, 206, 0.9),
+    rgba(255, 128, 52, 0.42) 46%,
+    transparent 76%
+  );
+}
+.gx-coin-fx-pass-plus {
+  mix-blend-mode: plus-lighter;
+  opacity: 0.3;
+  background: radial-gradient(
+    24% 14% at 97% 60%,
+    rgba(255, 150, 96, 0.8),
+    transparent 70%
+  );
+}
+
+
+
 
 @media (prefers-reduced-motion: reduce) {
   .scanlines {

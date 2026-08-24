@@ -1663,3 +1663,18 @@ Carried from the storyboarding session. Ordered by what unblocks what.
 - [ ] Should the sidebar row show agent type at all? `RecentsRowView` renders name +
   project + timestamp only, so Codex vs Claude Code is invisible. Product change,
   flagged not proposed | product | carried
+
+## 2026-08-23 — coin plate: four decisions before build
+
+Canvas published (https://claude.ai/code/artifact/49fbd183-8ed3-427f-bb33-28774ec1a641),
+sources at `docs/design/web-redesign/coin-plate/`. Sean: "much better, just getting the
+right details on there" — expect redlines, not a restart. Building into `v3.css` blocks
+on these four:
+
+- [ ] **Typeface — Archivo 900 vs Silkscreen** for the plate's centred label type | design | new
+- [ ] **Which effect layers ship** — recommended stack is A (gradients, floor) + D (chained
+  `drop-shadow`, follows glyph alpha where `box-shadow` structurally can't) + C + E.
+  Effects stack, they are not a menu — confirm the set | design | new
+- [ ] **Bust grid — 16×16 vs 12×12** for the coin's pixel portrait. 16×16 keeps the same
+  32px footprint at `COIN_PX 2`, array swap only at `ghost-field.js:324` | design | new
+- [ ] **Does the coin get a reverse side** (flip state / second face) or front-only | design | new

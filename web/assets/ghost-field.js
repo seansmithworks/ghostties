@@ -320,17 +320,32 @@
 
   // ── Coin (single physical object, drifts with the field, grabbable
   //    before arming) ──────────────────────────────────────────────────
-  var COIN_PX = 4;
+  var COIN_PX = 5;
+  // 16x16 right-facing pixel bust (Sean's likeness, low-fi). Three glyphs:
+  // "o" coin face (gold), "#" relief/shading (a shade darker, reads as
+  // depth against the gold), "+" the single lens glint. COIN_PX 5 renders
+  // the 16x16 grid at 80px — see docs/design/web-redesign/coin-plate/Quarter.dc.html.
   var COIN_GRID = [
-    "..XXXX..",
-    ".XXXXXX.",
-    "XXXXXXXX",
-    "XXXXXXXX",
-    "XXXXXXXX",
-    "XXXXXXXX",
-    ".XXXXXX.",
-    "..XXXX..",
+    "......oooo......",
+    "....oooooooo....",
+    "...oooooooooo...",
+    "..oooo####oooo..",
+    ".oooo######oooo.",
+    ".ooo#######oooo.",
+    "oooo########oooo",
+    "oooo######+##ooo",
+    "oooo#######ooooo",
+    "oooo#########ooo",
+    ".ooo######ooooo.",
+    ".ooo########ooo.",
+    "..oo#######ooo..",
+    "...ooo####ooo...",
+    "....o######o....",
+    "......oooo......",
   ];
+  var COIN_FACE_FILL = "#e8b545";
+  var COIN_RELIEF_FILL = "#c9932e";
+  var COIN_GLINT_FILL = "#fff6d8";
 
   function buildCoinSVG() {
     var rows = COIN_GRID.length,
@@ -338,14 +353,16 @@
     var W = cols * COIN_PX,
       H = rows * COIN_PX;
     var gid = "gxc" + _uid++;
-    var body = "",
+    var face = "",
+      relief = "",
+      glint = "",
       shine = "";
     COIN_GRID.forEach(function (row, r) {
       row.split("").forEach(function (cell, c) {
-        if (cell !== "X") return;
+        if (cell === ".") return;
         var x = c * COIN_PX,
           y = r * COIN_PX;
-        body +=
+        var rect =
           '<rect x="' +
           x +
           '" y="' +
@@ -355,17 +372,13 @@
           '" height="' +
           COIN_PX +
           '"/>';
-        if (r < 3)
-          shine +=
-            '<rect x="' +
-            x +
-            '" y="' +
-            y +
-            '" width="' +
-            COIN_PX +
-            '" height="' +
-            COIN_PX +
-            '"/>';
+        if (cell === "o") face += rect;
+        else if (cell === "#") relief += rect;
+        else if (cell === "+") glint += rect;
+        // Lens shine only over the top rows, and only on face pixels — the
+        // grid keeps rows 0-2 as plain rim ("o" only), so this never lands
+        // on the relief shading or the glint pixel.
+        if (r < 3 && cell === "o") shine += rect;
       });
     });
     return (
@@ -385,8 +398,20 @@
       '<stop offset="55%" stop-color="#fff6d8" stop-opacity="0.1"/>' +
       '<stop offset="100%" stop-color="#fff6d8" stop-opacity="0"/>' +
       "</linearGradient></defs>" +
-      '<g fill="#e8b545">' +
-      body +
+      '<g fill="' +
+      COIN_FACE_FILL +
+      '">' +
+      face +
+      "</g>" +
+      '<g fill="' +
+      COIN_RELIEF_FILL +
+      '">' +
+      relief +
+      "</g>" +
+      '<g fill="' +
+      COIN_GLINT_FILL +
+      '">' +
+      glint +
       "</g>" +
       '<g fill="url(#' +
       gid +
@@ -914,31 +939,61 @@
       };
     }
 
+    // How much the token grows as it arrives at the slot — a coin being
+    // picked up and dropped in, not shrunk away. Scale is computed per
+    // insert/eject against the slot's actual rendered size (it can change
+    // with viewport width), clamped so a narrow/tall slot rect can't
+    // produce an absurd scale.
+    var COIN_FILL_SCALE_MIN = 1.5;
+    var COIN_FILL_SCALE_MAX = 3;
+    function coinFillScale() {
+      var slotEl = document.querySelector(".gx-coin-slot");
+      if (!slotEl) return COIN_FILL_SCALE_MIN;
+      var r = slotEl.getBoundingClientRect();
+      if (!r.width || !r.height) return COIN_FILL_SCALE_MIN;
+      var scale = Math.min(r.width / coin.w, r.height / coin.h);
+      return Math.max(
+        COIN_FILL_SCALE_MIN,
+        Math.min(COIN_FILL_SCALE_MAX, scale),
+      );
+    }
+
     function coinInsert() {
       if (coin.state === "inserting" || coin.state === "inSlot") return;
       coin.state = "inserting";
       coin.el.classList.remove("gx-coin-dragging");
       var target = slotTargetPoint();
+      var fillScale = coinFillScale();
       if (coin.animTimer) clearTimeout(coin.animTimer);
-      coin.el.style.transition =
-        "transform 220ms cubic-bezier(.5,0,.75,0), opacity 220ms cubic-bezier(.5,0,.75,0)";
+      // Grow into the slot first (coin arriving, picked up and brought
+      // closer), then fade only right at the end so the handoff to the
+      // plate's own internal .gx-coin-piece fall animation reads as one
+      // continuous move instead of two disconnected events.
+      coin.el.style.transition = "transform 220ms cubic-bezier(.25,1,.5,1)";
       coin.el.style.transform =
         "translate(" +
         target.x +
         "px," +
         target.y +
-        "px) scale(0.35) rotate(180deg)";
-      coin.el.style.opacity = "0";
+        "px) scale(" +
+        fillScale +
+        ")";
       coin.animTimer = setTimeout(function () {
-        coin.el.style.display = "none";
-        coin.el.style.transition = "";
-        coin.state = "inSlot";
-      }, 230);
+        coin.el.style.transition = "opacity 90ms linear";
+        coin.el.style.opacity = "0";
+        coin.animTimer = setTimeout(function () {
+          coin.el.style.display = "none";
+          coin.el.style.transition = "";
+          coin.el.style.opacity = "1";
+          coin.state = "inSlot";
+        }, 90);
+      }, 220);
     }
 
     function coinEject() {
       if (coin.state === "ejecting" || coin.state === "drifting") return;
       var target = slotTargetPoint();
+      var fillScale = coinFillScale();
       coin.x = target.x;
       coin.y = target.y;
       coin.state = "ejecting";
@@ -950,7 +1005,9 @@
         target.x +
         "px," +
         target.y +
-        "px) scale(0.35) rotate(180deg)";
+        "px) scale(" +
+        fillScale +
+        ")";
       coin.el.style.opacity = "0";
       // Force reflow so the animate-in transition below actually starts
       // from the state just set, instead of the browser coalescing it.
@@ -959,11 +1016,7 @@
         coin.el.style.transition =
           "transform 260ms cubic-bezier(.25,1,.5,1), opacity 260ms cubic-bezier(.25,1,.5,1)";
         coin.el.style.transform =
-          "translate(" +
-          target.x +
-          "px," +
-          target.y +
-          "px) scale(1) rotate(0deg)";
+          "translate(" + target.x + "px," + target.y + "px) scale(1)";
         coin.el.style.opacity = "1";
         coin.animTimer = setTimeout(function () {
           coin.el.style.transition = "";

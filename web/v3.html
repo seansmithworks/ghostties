@@ -160,23 +160,41 @@
        own choreography (this script, below) reacts to the "gx-armchange"
        event GXField fires so the two paths never disagree. -->
   <button type="button" class="gx-coin" id="gx-coin-btn" aria-label="Insert coin" title="Insert coin (C)">
-    <span class="gx-coin-bezel" aria-hidden="true">
-      <span class="gx-coin-panel">
-        <span class="gx-coin-slot">
-          <span class="gx-coin-lamp"></span>
-          <svg class="gx-coin-piece" viewBox="0 0 6 6"><path d="M1 0h4v1h1v4H5v1H1V5H0V1h1z"/></svg>
-        </span>
-        <span class="gx-coin-info">
-          <span class="gx-coin-price">25&#162;</span>
-          <span class="gx-coin-label">
-            <span class="gx-coin-label-line" data-line="1">INSERT</span>
-            <span class="gx-coin-label-line" data-line="2">COIN TO</span>
-            <span class="gx-coin-label-line gx-coin-label-line-big" data-line="3">PLAY</span>
+    <span class="gx-coin-bezel">
+        <span class="gx-coin-panel">
+          <span class="gx-coin-slot">
+            <span class="gx-coin-lamp"></span>
+            <svg class="gx-coin-piece" viewBox="0 0 6 6"><path d="M1 0h4v1h1v4H5v1H1V5H0V1h1z"/></svg>
           </span>
-          <span class="gx-coin-credit">CR <b>0</b></span>
+          <span class="gx-coin-info">
+            <span class="gx-coin-price">25&#162;</span>
+            <span class="gx-coin-label">
+              <span class="gx-coin-label-line" data-line="1">INSERT</span>
+              <span class="gx-coin-label-line" data-line="2">COIN TO</span>
+              <span class="gx-coin-label-line gx-coin-label-line-big" data-line="3">PLAY</span>
+            </span>
+            <span class="gx-coin-credit">CR <b>0</b></span>
+          </span>
+          <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+            <defs>
+              <filter id="gx-coin-moulded" x="0" y="0" width="100%" height="100%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="4" seed="7" result="n"/>
+                <feColorMatrix in="n" type="saturate" values="0"/>
+              </filter>
+              <filter id="gx-coin-moulded-coarse" x="0" y="0" width="100%" height="100%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.055 0.11" numOctaves="2" seed="3" result="n"/>
+                <feColorMatrix in="n" type="saturate" values="0"/>
+              </filter>
+            </defs>
+          </svg>
+          <span class="gx-coin-fx-grain-coarse"></span>
+          <span class="gx-coin-fx-grain"></span>
+          <span class="gx-coin-fx-pass gx-coin-fx-pass-dodge"></span>
+          <span class="gx-coin-fx-pass gx-coin-fx-pass-overlay"></span>
+          <span class="gx-coin-fx-pass gx-coin-fx-pass-screen"></span>
+          <span class="gx-coin-fx-pass gx-coin-fx-pass-plus"></span>
         </span>
       </span>
-    </span>
   </button>
 
   <script>
