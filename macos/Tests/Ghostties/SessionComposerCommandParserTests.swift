@@ -1223,7 +1223,8 @@ final class SessionComposerCommandParserTests: XCTestCase {
         let termRange = NSRange(location: 0, length: 3)
         let parse = SessionComposerCommandParser.PathParse(
             source: source, segments: [], trailingTermRange: termRange,
-            activeKind: .project, remainderRange: nil, projectId: nil
+            activeKind: .project, remainderRange: nil, projectId: nil,
+            openRunIsThreadRun: false
         )
         let result = SessionComposerCommandParser.completing(parse: parse, with: "ghostties")
         XCTAssertTrue(result.hasSuffix(" "), "the completed text must end in the terminator")
