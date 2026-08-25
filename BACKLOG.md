@@ -4,6 +4,53 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-25 — composer UI redesign: 11.1 / 11.2 are the build directions
+
+Design canvas: https://claude.ai/code/artifact/0ea41226-7a92-40c8-9f8c-a68f9775edf2
+Sources committed at `docs/design/composer/` (`783e90537`). Seeded 2.2MB output is
+gitignored — regenerate with the `design` skill's `seed-canvas.mjs`.
+
+- [ ] **carried — build 11.1 and 11.2** (Sean's direction, in-canvas comment 2026-08-25:
+  "11.1 and 11.2 are directions to build tonight"). They are `V02Quieted22.dc.html`
+  (titled **11.1**) and `V02Quieted222.dc.html` (titled **11.2**).
+  - **11.1 — ghosted full-path prefill at rest.** Field shows the whole path
+    `Ghostties > Default > Orchestrator` ghosted at `#1A1A1A7E`, predicted from last
+    selection. Sean's note on the board: *"ghosted prefill based on last selection.
+    We don't need the sub title."* The separate breadcrumb line is DELETED — the path
+    lives in the field.
+  - **11.2 — inline completion while typing.** `Gho` solid `#1A1A1A` + `stties` ghosted,
+    plus a list carrying **pinned / recent / template** without section headers. Rows in
+    his sketch: `cco` (marked "Pinned Icon"), `Stand Up Agent` (selected), `Task Sync`
+    (recent), then Codex / Review / Debug, then `New template` as a ghosted row rather
+    than a footer. Sean's note: *"trying to show the ghosted prefilled text, predicting
+    what may be typed."*
+  - Claude's build-out of this direction is on disk as `G1Rest` / `G2Typing` /
+    `G3Diverge` / `G4Inferred` / `G5Pinned` — four states plus a pinned treatment. **They
+    are NOT in the live canvas**: a save collision (Sean saved from a view loaded before
+    a republish) dropped them. Re-seed from the working files, don't rebuild.
+
+- [ ] **DECIDE OR KILL — two open design questions** blocking a clean 11.1/11.2 build:
+  1. **Can an item be pinned AND recent?** 11.2 merges pinned + recent above one hairline.
+     If both can be true, sort order needs a rule. **Strawman: pinned sorts first and
+     keeps the pin glyph; recency shows as a right-aligned timestamp on any row, pinned
+     or not.** Kill by confirming.
+  2. **Does the ghost predict the whole path, or only the template?** 11.1 predicts all
+     three segments. `G4Inferred` argues a picker-locked project is not a prediction at
+     all and should read as settled (`#636363`), not predicted (`#1A1A1A7E`). **Strawman:
+     two greys — settled vs predicted — because one grey makes an inferred project and a
+     guessed template look identical, so you cannot tell what Return will do.** Kill by
+     confirming or by choosing one grey.
+
+- [ ] **parked — `Run "<text>"` auto-selects when it is the only option.** Found by Sean
+  in live use 2026-08-24: typing `main` then backspacing to `mai` leaves `Run "mai"` as
+  the sole row, auto-selected; Return shell-execs it (`command not found: mai`) and
+  leaves a dead session in ACTIVE. Working as specified — the Run row for unmatched
+  remainder is settled grammar design — but a half-typed branch name is one Return from
+  a shell exec. **Strawman: when the Run row is the ONLY option and the text is a single
+  token, do not auto-select it** (Return does nothing; arrow-down still reaches it);
+  keep current behavior at ≥2 tokens where intent to run a command is unambiguous.
+  Off-objective for beta.24 — parked, not carried.
+
 ## 2026-08-24 — beta.24 is gated on ONE branch: land type-first composer first
 
 **The composer on `main` is the chip design Sean rejected.** `377ae4b2c` (Sean's own
