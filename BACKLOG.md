@@ -25,6 +25,50 @@ from `main` today ships a UX that was already tested and reversed.
   2026-08-24**; (6) release mechanics. Perf defect (50-100 parses/keystroke) is
   explicitly deferred, not a gate.
 
+  **Rounds 3–7 COMPLETE, 2026-08-24. Branch @ `0513a0450`, build green, suite
+  885/0/1. Steps 1–3 are DONE; the branch now sits on step (4), Sean's hands-on
+  accept-the-feel pass — nothing else gates the merge.**
+
+  - `4560d9b5c` (r3) — fixed r2's 3 blockers + chevron-literal defect; +10 tests.
+  - `ada35ef0b` (r4) — fixed a blocker r3 introduced: `.onChange(of: query)` couldn't
+    see a trailing space (`query` is trimmed `searchText`), so selection never
+    re-seeded; trigger swapped to `searchText`, and `commandParse`/
+    `commandProjectIdHint` switched to raw text. +3 tests.
+  - `0513a0450` (r6) — fixed the worst find of the arc: **`cachedProjectId:` was
+    silently dropped from the only production call site at `4560d9b5c`**, defaulting
+    to `nil` against a non-nil `resolvingForProjectId`, so every typed branch returned
+    `.pending` forever. **Slice B's branch→worktree feature was entirely dead** and
+    884 green tests never noticed. Argument restored and the assembly hoisted into
+    `SessionComposerPalette.resolveTypedBranch` (a seam that reads `cachedProjectId`
+    off the store internally, so no caller can omit it). Also added the missing
+    `.onChange(of: composerStore.worktrees)` — an async refresh reshaped the options
+    list with no keystroke, leaving a stale `selectedIndex` that fell through to
+    `options.last` (the `Run` row) and would blanket-run `main cco` as a shell command.
+  - r5 and r7 were review rounds (r7 narrowed to two questions and returned COMPLETE
+    with the strongest tracing of the arc; it confirmed the new wiring test is a true
+    discriminator, mutation-red, and kills the obvious counter-mutant).
+
+  **Known residual, accepted:** the wiring test covers the seam's body but not
+  `typedBranchResolution`'s choice of `resolvingForProjectId: currentProject?.id`.
+  That argument is non-defaulted, so it can only be changed deliberately, never
+  silently dropped — silent-drop being the class that actually bit us.
+
+- [ ] **new — the real lesson of rounds 3–7, worth acting on before the next feature.**
+  Rounds 3, 4, and 6 were each triggered by the *previous round's fix*, not by original
+  code, and every defect lived in **wiring** (call sites, triggers, argument passing),
+  never in pure-function logic. The 885-test suite exercises pure functions well and
+  production wiring almost not at all — that gap generated the entire arc. Two concrete
+  contributors: (a) **silently-defaulted required arguments** — `cachedProjectId: UUID?
+  = nil` turned a deleted argument into a permanently-broken runtime state instead of a
+  compile error; (b) **tests that pin the broken state as desired** —
+  `typedBranchAtBeforeAnyRefreshHasLandedIsPending` hardcodes both args and asserts
+  `.pending`, so the suite actively certified the dead feature. Also: overstated
+  coverage claims misled three separate rounds (an implementer claimed a test
+  discriminated the palette fix when it never touched the palette). Candidate fix is
+  not "more tests" — it's a small number that actually instantiate the palette and
+  drive it, plus dropping `= nil` defaults on required wiring args. Feeds the parked
+  QA/release-readiness agent item below.
+
 - [ ] **carried — release mechanics for beta.24**, all manual, all pre-tag except the
   last three. `CHANGELOG.md` is topped at **beta.22** — beta.23 shipped without an
   entry, so beta.24 needs write-ups covering **both**. Then copy the changelog section
