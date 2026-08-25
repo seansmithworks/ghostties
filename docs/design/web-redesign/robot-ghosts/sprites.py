@@ -293,12 +293,13 @@ def cell(rows: list[str], x: int, y: int) -> str:
     return "."
 
 
-def render_sprite(rows: list[str], base_hex: str, level: float) -> Image.Image:
+def render_sprite(rows: list[str], base_hex: str, level: float, ease: float = 1.0) -> Image.Image:
     level = clamp(level, 1.0, 4.0)
     i = (level - 1.0) / 3.0
-    shadow_mult = lerp(1.0, 0.58, i)
-    highlight_mult = lerp(1.0, 1.34, i)
-    inner_weight = clamp((i - 0.55) / 0.45, 0.0, 1.0)
+    i_eased = i**ease
+    shadow_mult = lerp(1.0, 0.58, i_eased)
+    highlight_mult = lerp(1.0, 1.34, i_eased)
+    inner_weight = clamp((i_eased - 0.55) / 0.45, 0.0, 1.0)
 
     base_rgb = hex_to_rgb(base_hex)
     shadow_rgb = scale_color(base_rgb, shadow_mult)
@@ -404,7 +405,7 @@ def render_roster(level: float = 2.4) -> Image.Image:
     return sheet
 
 
-def render_ramp(name: str = "ember", levels: list[float] | None = None) -> Image.Image:
+def render_ramp(name: str = "ember", levels: list[float] | None = None, ease: float = 1.0) -> Image.Image:
     if levels is None:
         levels = [1.0, 2.0, 2.4, 3.0, 4.0]
     rows_grid, color = SPRITES[name]
@@ -419,7 +420,7 @@ def render_ramp(name: str = "ember", levels: list[float] | None = None) -> Image
     font = get_font()
 
     for idx, level in enumerate(levels):
-        sprite_img = upscale(render_sprite(rows_grid, color, level))
+        sprite_img = upscale(render_sprite(rows_grid, color, level, ease=ease))
         x = PAD // 2 + idx * cell_w
         y = PAD // 2
         strip.paste(sprite_img, (x, y))

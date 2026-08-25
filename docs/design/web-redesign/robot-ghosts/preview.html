@@ -1,0 +1,808 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>robot-ghost preview</title>
+    <style>
+      body {
+        background: #08070a;
+        color: #e8e6f0;
+        font-family: -apple-system, Menlo, monospace;
+        padding: 24px;
+      }
+      h1 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 4px;
+      }
+      .sub {
+        color: #8a8797;
+        font-size: 12px;
+        margin-bottom: 20px;
+      }
+      .controls {
+        display: flex;
+        gap: 24px;
+        align-items: center;
+        flex-wrap: wrap;
+        background: #121016;
+        border: 1px solid #26232d;
+        border-radius: 8px;
+        padding: 14px 18px;
+        margin-bottom: 24px;
+      }
+      .ctrl-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .ctrl-group label {
+        font-size: 12px;
+        color: #b7b3c2;
+      }
+      button.jump {
+        background: #1c1a22;
+        border: 1px solid #35323d;
+        color: #e8e6f0;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        user-select: none;
+      }
+      button.jump:hover {
+        background: #26232d;
+      }
+      button.jump.active {
+        border-color: #7ee787;
+        color: #7ee787;
+      }
+      button.jump.pressing {
+        background: #2c3a2c;
+        border-color: #7ee787;
+      }
+      input[type="range"] {
+        width: 160px;
+      }
+      #levelVal {
+        font-variant-numeric: tabular-nums;
+        min-width: 34px;
+        display: inline-block;
+      }
+      .roster-cap {
+        font-size: 11px;
+        color: #8a8797;
+        margin-bottom: 10px;
+      }
+      .roster {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        max-width: 640px;
+      }
+      .cell {
+        background: #0d0c11;
+        border: 1px solid #1e1c24;
+        border-radius: 8px;
+        padding: 10px;
+        text-align: center;
+      }
+      .cell canvas {
+        image-rendering: pixelated;
+        display: block;
+        margin: 0 auto 6px;
+      }
+      .cell .name {
+        font-size: 11px;
+        color: #b7b3c2;
+      }
+      .roster .cell {
+        cursor: pointer;
+        transition:
+          border-color 120ms,
+          background 120ms;
+      }
+      .roster .cell:hover {
+        border-color: #7ee787;
+        background: #101710;
+      }
+      .roster .cell.firing {
+        border-color: #ffd54f;
+      }
+      .ramp-section {
+        margin-top: 32px;
+      }
+      .ramp {
+        display: flex;
+        gap: 10px;
+        overflow-x: auto;
+        padding-bottom: 8px;
+      }
+      .ramp .cell {
+        flex: 0 0 auto;
+      }
+      select {
+        background: #1c1a22;
+        color: #e8e6f0;
+        border: 1px solid #35323d;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+      .timeline-wrap {
+        background: #0d0c11;
+        border: 1px solid #1e1c24;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 24px;
+      }
+      .timeline-wrap .cap {
+        font-size: 11px;
+        color: #8a8797;
+        margin-bottom: 6px;
+      }
+      #timeline {
+        display: block;
+        width: 100%;
+        height: 90px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>robot-ghost silhouette + tonal curve — live preview</h1>
+    <div class="sub">
+      Decision 1: does the roster clear the Pac-Man silhouette? &nbsp;|&nbsp;
+      Decision 2: does the eased tonal curve read right transitioning between
+      idle / hold / fire?
+    </div>
+
+    <div class="controls">
+      <div class="ctrl-group">
+        <label>shading curve</label>
+        <button class="jump" id="easeLinear">linear (1.0)</button>
+        <button class="jump active" id="easeEased">eased (0.55)</button>
+      </div>
+      <div class="ctrl-group">
+        <label>global level</label>
+        <input
+          type="range"
+          id="levelSlider"
+          min="1.0"
+          max="4.0"
+          step="0.05"
+          value="2.4"
+        />
+        <span id="levelVal">2.40</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="ctrl-group">
+        <button class="jump" id="jumpIdle">all → idle rest (2.4)</button>
+      </div>
+      <div class="ctrl-group">
+        <button class="jump" id="holdBtn">
+          press &amp; hold → all hover/agent-active (4.0)
+        </button>
+      </div>
+      <div class="ctrl-group">
+        <button class="jump" id="fireBtn">click → all fire spike (1.0)</button>
+      </div>
+    </div>
+
+    <div class="timeline-wrap">
+      <div class="cap" id="timelineCap">
+        level over time (last 4s) — 1.0 fire · 2.4 idle · 4.0 hold, reference
+        lines dashed. Tracking: global
+      </div>
+      <canvas id="timeline"></canvas>
+    </div>
+
+    <div class="roster-cap">
+      Hover a sprite below to preview its hover/hold state · click one to fire
+      it
+    </div>
+    <div class="roster" id="roster"></div>
+
+    <div class="ramp-section">
+      <div class="controls" style="margin-bottom: 12px">
+        <div class="ctrl-group">
+          <label>ramp sprite</label>
+          <select id="rampPick"></select>
+        </div>
+      </div>
+      <div class="ramp" id="ramp"></div>
+    </div>
+
+    <script>
+      const GRID_SIZE = 12;
+      const BG_COLOR = [8, 7, 10];
+      const EYE_COLOR = [13, 11, 18];
+      const LIT_COLOR = [255, 251, 232];
+      const SCALE = 12;
+
+      const SPRITES = {
+        flicker: [
+          [
+            "....X..X....",
+            ".....XX.....",
+            "..XXXXXXXX..",
+            ".XXXXXXXXXX.",
+            "XXXXXXXXXXXX",
+            "XX.ee..ee.XX",
+            "XX.ee..ee.XX",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            "X.XXXXXXXX.X",
+            "XX.XX..XX.XX",
+          ],
+          "#ff6b5b",
+        ],
+        shade: [
+          [
+            "..XXXXXXXX..",
+            ".XXXXXXXXXX.",
+            "XXXXXXXXXXXX",
+            "X.eeeeeeee.X",
+            "X.eeeeeeee.X",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            "X.XXXXXXXX.X",
+            "XXXXXXXXXXXX",
+            "XX.XX..XX.XX",
+            "XX.XX..XX.XX",
+          ],
+          "#ff9de0",
+        ],
+        murk: [
+          [
+            ".XXXXXXXXXX.",
+            "XXXXXXXXXXXX",
+            "X.XXXXXXXX.X",
+            "X.eXXXXXXe.X",
+            "X.eeXXXXee.X",
+            "X.XXXXXXXX.X",
+            "XXXXXXXXXXXX",
+            "X..........X",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            ".X.X.XX.X.X.",
+            ".X.X.XX.X.X.",
+          ],
+          "#7cc4ff",
+        ],
+        haze: [
+          [
+            "...XXXXXX...",
+            "..XlXXXXlX..",
+            ".XXXXXXXXXX.",
+            "XXXXXXXXXXXX",
+            "XX.ee..ee.XX",
+            "XXXXXXXXXXXX",
+            "XlXXXXXXXXlX",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            "XlXXXXXXXXlX",
+            "XX.XX..XX.XX",
+            "XX.XX..XX.XX",
+          ],
+          "#ffa64d",
+        ],
+        specter: [
+          [
+            ".....l......",
+            ".....X......",
+            ".....X......",
+            "..XXXXXXXX..",
+            ".XXXXXXXXXX.",
+            "XXXXXXXXXXXX",
+            "XX.eeeeee.XX",
+            "XX.eeeeee.XX",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            "X.XXXXXXXX.X",
+            "XX.XX..XX.XX",
+          ],
+          "#c58bff",
+        ],
+        wisp: [
+          [
+            "....XXXX....",
+            "...XXXXXX...",
+            "X.XXXXXXXX.X",
+            "XX.X.ee.ee.X",
+            "XXXXXXXXXXXX",
+            "X.XXXXXXXX.X",
+            "...XXXXXX...",
+            "...XXXXXX...",
+            "..XXXXXXXX..",
+            ".XX.XXXX.XX.",
+            "....l..l....",
+            ".....ll.....",
+          ],
+          "#ffd54f",
+        ],
+        phantom: [
+          [
+            ".XXXXXXXXXX.",
+            "XXXXXXXXXXXX",
+            "XXXXXXXXXXXX",
+            "X.ee....ee.X",
+            "X.ee....ee.X",
+            "XXXXXXXXXXXX",
+            "X..XXXXXX..X",
+            "XXXXXXXXXXXX",
+            "X..X....X..X",
+            "XXXXXXXXXXXX",
+            "XX.XX..XX.XX",
+            "XX.XX..XX.XX",
+          ],
+          "#6b8cff",
+        ],
+        ember: [
+          [
+            "..XXXXXXXX..",
+            ".XXXXXXXXXX.",
+            "XXXXXXXXXXXX",
+            "XX.ee..ee.XX",
+            "XXXXXXXXXXXX",
+            "X.XXXXXXXX.X",
+            "X.XllllllX.X",
+            "X.XllllllX.X",
+            "X.XXXXXXXX.X",
+            "XXXXXXXXXXXX",
+            "XX.XX..XX.XX",
+            "X..X....X..X",
+          ],
+          "#7ee787",
+        ],
+        chill: [
+          [
+            "...XXXXXX...",
+            "..XXXXXXXX..",
+            "X.XXXXXXXX.X",
+            "XX.X.ee.ee.X",
+            "X.XXXXXXXX.X",
+            "XXXXXXXXXXXX",
+            "X.X.X..X.X.X",
+            "XXXXXXXXXXXX",
+            "X.X.X..X.X.X",
+            "XXXXXXXXXXXX",
+            "XX.XX..XX.XX",
+            ".X.X.XX.X.X.",
+          ],
+          "#5be0c8",
+        ],
+      };
+
+      function lerp(a, b, t) {
+        return a + (b - a) * t;
+      }
+      function clamp(v, lo = 0, hi = 1) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+      function hexToRgb(h) {
+        h = h.replace("#", "");
+        return [
+          parseInt(h.slice(0, 2), 16),
+          parseInt(h.slice(2, 4), 16),
+          parseInt(h.slice(4, 6), 16),
+        ];
+      }
+      function scaleColor(rgb, mult) {
+        return rgb.map((c) => c * mult);
+      }
+      function blendColor(base, target, t) {
+        return base.map((c, i) => lerp(c, target[i], t));
+      }
+      function cellAt(rows, x, y) {
+        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE)
+          return rows[y][x];
+        return ".";
+      }
+
+      function floodOutside(rows) {
+        const size = GRID_SIZE + 2;
+        const visited = new Set();
+        const key = (x, y) => x + "," + y;
+        const isEmpty = (px, py) => {
+          const gx = px - 1,
+            gy = py - 1;
+          if (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE)
+            return rows[gy][gx] === ".";
+          return true;
+        };
+        const queue = [[0, 0]];
+        visited.add(key(0, 0));
+        while (queue.length) {
+          const [px, py] = queue.shift();
+          for (const [dx, dy] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ]) {
+            const nx = px + dx,
+              ny = py + dy;
+            if (
+              nx >= 0 &&
+              nx < size &&
+              ny >= 0 &&
+              ny < size &&
+              !visited.has(key(nx, ny)) &&
+              isEmpty(nx, ny)
+            ) {
+              visited.add(key(nx, ny));
+              queue.push([nx, ny]);
+            }
+          }
+        }
+        return visited;
+      }
+
+      function renderSpriteRGB(rows, baseHex, level, ease) {
+        level = clamp(level, 1.0, 4.0);
+        const i = (level - 1.0) / 3.0;
+        const iEased = Math.pow(i, ease);
+        const shadowMult = lerp(1.0, 0.58, iEased);
+        const highlightMult = lerp(1.0, 1.34, iEased);
+        const innerWeight = clamp((iEased - 0.55) / 0.45, 0, 1);
+
+        const baseRgb = hexToRgb(baseHex);
+        const shadowRgb = scaleColor(baseRgb, shadowMult);
+        const highlightRgb = scaleColor(baseRgb, highlightMult);
+        const outside = floodOutside(rows);
+        const isOuterGap = (gx, gy) => outside.has(gx + 1 + "," + (gy + 1));
+
+        const out = [];
+        for (let y = 0; y < GRID_SIZE; y++) {
+          const row = [];
+          for (let x = 0; x < GRID_SIZE; x++) {
+            const g = rows[y][x];
+            if (g === ".") {
+              row.push(BG_COLOR);
+              continue;
+            }
+            if (g === "e") {
+              row.push(EYE_COLOR);
+              continue;
+            }
+            if (g === "l") {
+              row.push(LIT_COLOR);
+              continue;
+            }
+
+            const up = cellAt(rows, x, y - 1),
+              left = cellAt(rows, x - 1, y);
+            const down = cellAt(rows, x, y + 1),
+              right = cellAt(rows, x + 1, y);
+            const highlightDirs = [
+              [x, y - 1, up],
+              [x - 1, y, left],
+            ];
+            const shadowDirs = [
+              [x, y + 1, down],
+              [x + 1, y, right],
+            ];
+
+            const classify = (dirs) => {
+              const gaps = dirs.filter(([, , gv]) => gv === ".");
+              if (!gaps.length) return null;
+              if (gaps.some(([gx, gy]) => isOuterGap(gx, gy))) return "outer";
+              return "inner";
+            };
+
+            const hKind = classify(highlightDirs);
+            const sKind = classify(shadowDirs);
+
+            let rgb = baseRgb;
+            if (hKind === "outer") rgb = highlightRgb;
+            else if (sKind === "outer") rgb = shadowRgb;
+            else if (hKind === "inner")
+              rgb = blendColor(baseRgb, highlightRgb, innerWeight);
+            else if (sKind === "inner")
+              rgb = blendColor(baseRgb, shadowRgb, innerWeight);
+
+            row.push(rgb);
+          }
+          out.push(row);
+        }
+        return out;
+      }
+
+      function drawSprite(canvas, rows, baseHex, level, ease, scale = SCALE) {
+        canvas.width = GRID_SIZE * scale;
+        canvas.height = GRID_SIZE * scale;
+        const ctx = canvas.getContext("2d");
+        const pixels = renderSpriteRGB(rows, baseHex, level, ease);
+        for (let y = 0; y < GRID_SIZE; y++) {
+          for (let x = 0; x < GRID_SIZE; x++) {
+            const [r, g, b] = pixels[y][x];
+            ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
+            ctx.fillRect(x * scale, y * scale, scale, scale);
+          }
+        }
+      }
+
+      // --- animation easing ---
+      function easeInOutQuad(t) {
+        return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      }
+      function easeOutQuad(t) {
+        return 1 - (1 - t) * (1 - t);
+      }
+      function easeInQuad(t) {
+        return t * t;
+      }
+
+      // --- animation channels ---
+      // A channel is an independently-animatable level value. There is one
+      // global channel (driven by the top control buttons + slider) and one
+      // per sprite (driven by hovering/clicking that sprite's tile). A sprite
+      // draws from its own channel while `active`, otherwise it tracks global.
+      function makeChannel(initial) {
+        return { level: initial, anim: null };
+      }
+
+      function startAnimOn(channel, to, dur, fn, then) {
+        channel.anim = {
+          start: performance.now(),
+          from: channel.level,
+          to,
+          dur,
+          fn,
+          then: then || null,
+        };
+      }
+
+      function tickChannel(channel, now) {
+        if (!channel.anim) return;
+        const t = clamp((now - channel.anim.start) / channel.anim.dur, 0, 1);
+        channel.level = lerp(
+          channel.anim.from,
+          channel.anim.to,
+          channel.anim.fn(t),
+        );
+        if (t >= 1) {
+          channel.level = channel.anim.to;
+          const then = channel.anim.then;
+          channel.anim = null;
+          if (then) then();
+        }
+      }
+
+      let ease = 0.55;
+      const globalChannel = makeChannel(2.4);
+      const spriteChannels = {};
+      for (const name of Object.keys(SPRITES)) {
+        spriteChannels[name] = Object.assign(makeChannel(2.4), {
+          active: false,
+        });
+      }
+      let focusName = null; // which channel the timeline is currently tracking
+      const history = [];
+      const HISTORY_WINDOW_MS = 4000;
+
+      const rosterEl = document.getElementById("roster");
+      const rosterCanvases = {};
+      const rosterCells = {};
+      for (const name of Object.keys(SPRITES)) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        const canvas = document.createElement("canvas");
+        const label = document.createElement("div");
+        label.className = "name";
+        label.textContent = name;
+        cell.appendChild(canvas);
+        cell.appendChild(label);
+        rosterEl.appendChild(cell);
+        rosterCanvases[name] = canvas;
+        rosterCells[name] = cell;
+
+        cell.addEventListener("mouseenter", () => {
+          focusName = name;
+          document.getElementById("timelineCap").textContent =
+            `level over time (last 4s) — 1.0 fire · 2.4 idle · 4.0 hold, reference lines dashed. Tracking: ${name}`;
+          spriteChannels[name].active = true;
+          startAnimOn(spriteChannels[name], 4.0, 300, easeOutQuad);
+        });
+        cell.addEventListener("mouseleave", () => {
+          startAnimOn(spriteChannels[name], 2.4, 300, easeInQuad, () => {
+            spriteChannels[name].active = false;
+          });
+        });
+        cell.addEventListener("click", () => {
+          focusName = name;
+          cell.classList.add("firing");
+          spriteChannels[name].active = true;
+          startAnimOn(spriteChannels[name], 1.0, 90, easeOutQuad, () => {
+            startAnimOn(spriteChannels[name], 2.4, 260, easeInQuad, () => {
+              cell.classList.remove("firing");
+              // if the mouse is still hovering, settle back into hover instead of idle
+              if (cell.matches(":hover")) {
+                startAnimOn(spriteChannels[name], 4.0, 250, easeOutQuad);
+              } else {
+                spriteChannels[name].active = false;
+              }
+            });
+          });
+        });
+      }
+
+      const rampPick = document.getElementById("rampPick");
+      for (const name of Object.keys(SPRITES)) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        if (name === "ember") opt.selected = true;
+        rampPick.appendChild(opt);
+      }
+      const rampEl = document.getElementById("ramp");
+      const RAMP_LEVELS = [1.0, 1.5, 2.0, 2.4, 3.0, 3.6, 4.0];
+      const rampCanvases = [];
+      for (const lvl of RAMP_LEVELS) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        const canvas = document.createElement("canvas");
+        const label = document.createElement("div");
+        label.className = "name";
+        label.textContent = "L" + lvl.toFixed(2);
+        cell.appendChild(canvas);
+        cell.appendChild(label);
+        rampEl.appendChild(cell);
+        rampCanvases.push({ canvas, level: lvl });
+      }
+
+      const timeline = document.getElementById("timeline");
+      function drawTimeline(now) {
+        const dpr = window.devicePixelRatio || 1;
+        const w = timeline.clientWidth,
+          h = timeline.clientHeight;
+        if (timeline.width !== w * dpr || timeline.height !== h * dpr) {
+          timeline.width = w * dpr;
+          timeline.height = h * dpr;
+        }
+        const ctx = timeline.getContext("2d");
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+
+        const yFor = (lvl) => h - ((lvl - 1.0) / 3.0) * h;
+        const xFor = (t) => w - ((now - t) / HISTORY_WINDOW_MS) * w;
+
+        ctx.strokeStyle = "#2a2732";
+        ctx.setLineDash([3, 3]);
+        ctx.lineWidth = 1;
+        for (const [lvl, label] of [
+          [1.0, "fire 1.0"],
+          [2.4, "idle 2.4"],
+          [4.0, "hold 4.0"],
+        ]) {
+          const y = yFor(lvl);
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+          ctx.fillStyle = "#5a5665";
+          ctx.font = "10px Menlo, monospace";
+          ctx.fillText(label, 4, y - 3);
+        }
+        ctx.setLineDash([]);
+
+        while (history.length && now - history[0].t > HISTORY_WINDOW_MS)
+          history.shift();
+
+        ctx.strokeStyle = "#7ee787";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        history.forEach((p, idx) => {
+          const x = xFor(p.t),
+            y = yFor(p.level);
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        if (history.length) {
+          const last = history[history.length - 1];
+          ctx.fillStyle = "#7ee787";
+          ctx.beginPath();
+          ctx.arc(xFor(last.t), yFor(last.level), 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function redraw() {
+        for (const [name, [rows, hex]] of Object.entries(SPRITES)) {
+          const ch = spriteChannels[name];
+          const lvl = ch.active ? ch.level : globalChannel.level;
+          drawSprite(rosterCanvases[name], rows, hex, lvl, ease);
+        }
+        const [rows, hex] = SPRITES[rampPick.value];
+        for (const { canvas, level } of rampCanvases) {
+          drawSprite(canvas, rows, hex, level, ease, 10);
+        }
+        document.getElementById("levelVal").textContent =
+          globalChannel.level.toFixed(2);
+      }
+
+      function loop(now) {
+        tickChannel(globalChannel, now);
+        for (const name of Object.keys(SPRITES))
+          tickChannel(spriteChannels[name], now);
+
+        const trackedLevel = focusName
+          ? spriteChannels[focusName].level
+          : globalChannel.level;
+        history.push({ t: now, level: trackedLevel });
+
+        redraw();
+        drawTimeline(now);
+        requestAnimationFrame(loop);
+      }
+
+      document.getElementById("easeLinear").onclick = () => {
+        ease = 1.0;
+        document.getElementById("easeLinear").classList.add("active");
+        document.getElementById("easeEased").classList.remove("active");
+      };
+      document.getElementById("easeEased").onclick = () => {
+        ease = 0.55;
+        document.getElementById("easeEased").classList.add("active");
+        document.getElementById("easeLinear").classList.remove("active");
+      };
+      document.getElementById("levelSlider").oninput = (e) => {
+        globalChannel.anim = null;
+        globalChannel.level = parseFloat(e.target.value);
+        focusName = null;
+        document.getElementById("timelineCap").textContent =
+          "level over time (last 4s) — 1.0 fire · 2.4 idle · 4.0 hold, reference lines dashed. Tracking: global";
+      };
+
+      document.getElementById("jumpIdle").onclick = () => {
+        focusName = null;
+        document.getElementById("timelineCap").textContent =
+          "level over time (last 4s) — 1.0 fire · 2.4 idle · 4.0 hold, reference lines dashed. Tracking: global";
+        startAnimOn(globalChannel, 2.4, 350, easeInOutQuad);
+      };
+
+      const holdBtn = document.getElementById("holdBtn");
+      const pressHold = () => {
+        focusName = null;
+        document.getElementById("timelineCap").textContent =
+          "level over time (last 4s) — 1.0 fire · 2.4 idle · 4.0 hold, reference lines dashed. Tracking: global";
+        holdBtn.classList.add("pressing");
+        startAnimOn(globalChannel, 4.0, 300, easeOutQuad);
+      };
+      const releaseHold = () => {
+        holdBtn.classList.remove("pressing");
+        startAnimOn(globalChannel, 2.4, 300, easeInQuad);
+      };
+      holdBtn.addEventListener("mousedown", pressHold);
+      holdBtn.addEventListener("mouseup", releaseHold);
+      holdBtn.addEventListener("mouseleave", () => {
+        if (holdBtn.classList.contains("pressing")) releaseHold();
+      });
+      holdBtn.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        pressHold();
+      });
+      holdBtn.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        releaseHold();
+      });
+
+      document.getElementById("fireBtn").onclick = () => {
+        focusName = null;
+        document.getElementById("timelineCap").textContent =
+          "level over time (last 4s) — 1.0 fire · 2.4 idle · 4.0 hold, reference lines dashed. Tracking: global";
+        startAnimOn(globalChannel, 1.0, 90, easeOutQuad, () =>
+          startAnimOn(globalChannel, 2.4, 260, easeInQuad),
+        );
+      };
+
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+</html>
