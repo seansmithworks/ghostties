@@ -1931,13 +1931,23 @@ struct ComposerQueryField: View {
     /// a project from the now-open picker.
     var isPickerOpen: Bool
     /// Step 3 (Composer UI 11 plan §3): the 11.1 ghost path when it renders
-    /// (`.centered`, rest state), else the generic hint. Fed through
-    /// `TextField`'s `prompt:` initializer, not the plain title-key form, so
-    /// the 49% grey (`DESIGN.md` §4, `#1A1A1A7E`) can be applied — the plain
-    /// form always renders at system placeholder grey with no styling hook.
+    /// (`.centered`, rest state), else the generic hint. Rendered as a
+    /// layered `Text` in this view's `ZStack`, shown only while `query` is
+    /// empty, rather than through `TextField`'s `prompt:` initializer:
+    /// SwiftUI on macOS does not honour `.foregroundColor`/`.opacity` on a
+    /// prompt `Text` (measured — the prompt route rendered at ~83% opacity
+    /// against a 49% target, `#1A1A1A7E`, `DESIGN.md` §4). The overlay is
+    /// safe here specifically because the field is empty in this state, so
+    /// there's no horizontal scroll offset to desync against — do not reuse
+    /// this pattern for non-empty text (`reference_composer-field-cannot-tint-subranges.md`).
     var placeholder: String
     var onEvent: ((KeyboardEvent) -> Void)?
     @FocusState private var isTextFieldFocused: Bool
+
+    /// `DESIGN.md` §4's ghost placeholder grey, `#1A1A1A7E` (0x7E/0xFF ≈
+    /// 0.49). A production symbol, not a re-declared literal, so a test can
+    /// pin it without drifting from the value actually rendered.
+    static let ghostPlaceholderOpacity: Double = 0.49
 
     enum KeyboardEvent {
         case exit
@@ -1990,11 +2000,23 @@ struct ComposerQueryField: View {
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
 
+            // Ghost placeholder overlay — see `placeholder`'s doc comment
+            // for why this replaces `TextField`'s `prompt:` route. Same
+            // font/weight and vertical padding as the `TextField` below so
+            // the metrics line up; only shown while the field is empty.
+            if query.isEmpty {
+                Text(placeholder)
+                    .font(.system(size: fontSize, weight: .regular))
+                    .foregroundColor(Color(nsColor: .labelColor).opacity(Self.ghostPlaceholderOpacity))
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+
             TextField(
                 "",
-                text: $query,
-                prompt: Text(placeholder)
-                    .foregroundColor(Color(nsColor: .labelColor).opacity(0.49))
+                text: $query
             )
                 .padding(.vertical, 6)
                 // R6 (Phase 3 review round 2): `.light` isn't an allowed

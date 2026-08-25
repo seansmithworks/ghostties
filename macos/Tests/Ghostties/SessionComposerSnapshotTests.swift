@@ -175,6 +175,15 @@ struct SessionComposerSnapshotTests {
     /// template, so the ghost placeholder renders the FULL path (rule 1),
     /// comparable side-by-side with `V02Quieted22.dc.html`'s rest state
     /// (one grey, full path, no sub-ranges).
+    ///
+    /// LIMITATION: this repo's HEAD already has Step 5 (resolution-line
+    /// deletion) landed, so this capture necessarily shows the
+    /// post-Step-5 layout — there is no pre-deletion build left to render
+    /// against. It still evidences Step 3's actual subject, the ghost
+    /// path's rendering/opacity, which Step 5 doesn't touch; it just isn't
+    /// a capture of "Step 3 layout in isolation" as the original plan
+    /// framed it. Do not read the resolution line's absence here as new
+    /// information about Step 3.
     @Test func step3RestStateGhostPathRendersLightAndDark() {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
@@ -221,6 +230,18 @@ struct SessionComposerSnapshotTests {
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step5-line-deleted-dark.png")
         #expect(dark != nil)
+    }
+
+    // MARK: - Step 3: ghost placeholder opacity
+
+    /// Pins `ComposerQueryField.ghostPlaceholderOpacity` — the production
+    /// symbol the overlay `Text` actually renders with — to the `DESIGN.md`
+    /// §4 target (`#1A1A1A7E`, 0x7E/0xFF ≈ 0.49). Guards against a
+    /// regression back to the `prompt:` route's un-honoured
+    /// `.foregroundColor`, which measured at ~0.83 (`step3-rest-ghost-path-
+    /// light.png`'s darkest pixel, `rgb(64,64,64)` against a white ground).
+    @Test func ghostPlaceholderOpacityMatchesDesignSpec() {
+        #expect(ComposerQueryField.ghostPlaceholderOpacity == 0.49)
     }
 
     // MARK: - Step 4: zero-project empty state
