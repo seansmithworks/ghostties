@@ -278,6 +278,29 @@ struct SessionComposerSnapshotTests {
         return maxY - minY
     }
 
+    /// DEFECT 6 fix (review round 2): round 1 added `assertEvidenceMatchesDisk`
+    /// (below `writeEvidence` originally) claiming to guard against the
+    /// stale-PNG class (`fb09ce9c9`'s PNGs were committed without being
+    /// re-rendered from the build that fixed them — two full review rounds
+    /// burned catching it by eye). It was tautological: it ran immediately
+    /// after `writeEvidence` wrote that exact `Data` to that exact path, so
+    /// it could only fail on a filesystem write error — it never touched
+    /// the actual root cause (a human committing an OLD png alongside NEW
+    /// code) and was applied to only 2 of 16 artifacts in this file.
+    /// Removed rather than left as a pretense of coverage.
+    ///
+    /// PROCESS NOTE, not a test (this genuinely cannot be verified at test
+    /// RUN time — a test has no visibility into what gets `git add`ed
+    /// after it passes, and no in-process check can distinguish "freshly
+    /// rendered" from "rendered in a prior run, never re-generated"): every
+    /// commit that changes rendering-affecting production code in
+    /// `ComposerGhostTextField.swift` or `SessionComposerPalette.swift`
+    /// MUST re-run this file's tests and stage the resulting PNGs under
+    /// `docs/plans/composer-ui-11/evidence/` in the SAME commit as the code
+    /// change — never carry a PNG forward from a prior commit. Verify with
+    /// `git status --short docs/plans/composer-ui-11/evidence/` before
+    /// committing: every PNG touched by the code change must show as
+    /// modified, not absent from the diff.
     private func writeEvidence(_ data: Data?, filename: String) {
         guard let data else {
             Issue.record("Failed to render PNG for \(filename)")
@@ -291,29 +314,6 @@ struct SessionComposerSnapshotTests {
         } catch {
             Issue.record("Failed to write \(filename): \(error)")
         }
-    }
-
-    /// Fix 8 (review): the stale-PNG class (`fb09ce9c9`'s PNGs were
-    /// committed without being re-rendered from the build that fixed
-    /// them — two full review rounds burned catching it by eye) is not a
-    /// "the file is old" problem this test can detect at RUN time (a test
-    /// can't know what a human will commit after it passes). What it CAN
-    /// guarantee: this suite's own PASS/FAIL never depends on trusting the
-    /// on-disk PNG's content — every pixel assertion above (`ghostGrayBandPixelCount`,
-    /// `selectionHighlightPixelCount`, `darkestGhostPixel`) reads the
-    /// FRESH in-memory render, never the file. This asserts the converse
-    /// half explicitly: immediately after a write, the bytes on disk
-    /// byte-for-byte match what was just rendered — catching a write-side
-    /// failure (a stale file left in place by a failed/partial write) fail
-    /// loudly instead of silently leaving a mismatched artifact for the
-    /// next reviewer to eyeball.
-    private func assertEvidenceMatchesDisk(_ data: Data, filename: String) {
-        let url = evidenceDirectory().appendingPathComponent(filename)
-        guard let onDisk = try? Data(contentsOf: url) else {
-            Issue.record("Evidence file \(filename) missing on disk immediately after write")
-            return
-        }
-        #expect(onDisk == data, "\(filename) on disk does not match the freshly rendered image — stale/partial write")
     }
 
     /// Builds an isolated composer, pre-seeded with one pin and one recent
@@ -431,7 +431,6 @@ struct SessionComposerSnapshotTests {
         let light = renderPNG(view, appearance: .aqua, size: size)
         writeEvidence(light, filename: "step3-rest-ghost-path-light.png")
         #expect(light != nil)
-        if let light { assertEvidenceMatchesDisk(light, filename: "step3-rest-ghost-path-light.png") }
         // Fix 7 (review): asserts the ghost actually renders IN the correct
         // gray band (`rgb(149,149,149)`, measured — see
         // `ghostGrayBandPixelCount`'s doc comment), not just that some PNG
@@ -651,7 +650,6 @@ struct SessionComposerSnapshotTests {
         let lightData = renderPNGWithExtraLayoutPass(view, appearance: .aqua, size: size)
         writeEvidence(lightData, filename: "step7-modelb-light.png")
         #expect(lightData != nil)
-        if let lightData { assertEvidenceMatchesDisk(lightData, filename: "step7-modelb-light.png") }
 
         let darkData = renderPNGWithExtraLayoutPass(view, appearance: .darkAqua, size: size)
         writeEvidence(darkData, filename: "step7-modelb-dark.png")
