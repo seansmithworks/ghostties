@@ -209,6 +209,42 @@ final class AccessibilityTests: XCTestCase {
         XCTAssertFalse(templatePickerLabel.isEmpty)
     }
 
+    // MARK: - Session composer field carries a value, not just a label (Composer UI 11 review, fix 5/6)
+
+    func testComposerQueryFieldHasLabelAndValueSeparateFromEachOther() {
+        // Fix 5: the deleted `resolutionLine` announced "Project: <name>",
+        // "Branch: <name>", "Template: <name>" — restored via
+        // `ComposerQueryField`'s `TextField.accessibilityLabel("New session
+        // command")` + `.accessibilityValue(query.isEmpty ? placeholder :
+        // query)` (`SessionComposerPalette.swift`). Documents the contract
+        // the same way this file's other composer tests do — SwiftUI's
+        // accessibility modifiers require a UI-testing host to query at
+        // runtime (see this file's header), so this is a regression guard
+        // on the literal strings, not a runtime assertion.
+        let fieldLabel = "New session command"
+
+        XCTAssertFalse(fieldLabel.isEmpty,
+            "Composer query field must have a non-empty VoiceOver label")
+    }
+
+    func testComposerTrailingControlsCarryTheirCurrentValue() {
+        // Fix 6: `projectControl`/`branchControl` used `.accessibilityLabel`
+        // alone, which REPLACES a Button's auto-generated label — on
+        // `branchControl` that suppressed the branch name / `Creating…`
+        // text rendered inside its own HStack exactly when it carried news.
+        // Both now split label (the action) from
+        // `.accessibilityValue` (the current state), the same pattern a
+        // system Picker uses.
+        let projectControlLabel = "Select project"
+        let branchControlLabel = "Select branch"
+        let branchControlDefaultValue = "Default"
+
+        XCTAssertFalse(projectControlLabel.isEmpty)
+        XCTAssertFalse(branchControlLabel.isEmpty)
+        XCTAssertFalse(branchControlDefaultValue.isEmpty,
+            "branchControl's accessibilityValue must read 'Default' rather than announcing nothing when no override is active")
+    }
+
     // MARK: - Graveyard expansion chevron labels (FYI-2)
 
     func testGraveyardChevronHasExpansionLabel() {

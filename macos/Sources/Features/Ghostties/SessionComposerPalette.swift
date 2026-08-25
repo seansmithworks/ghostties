@@ -1372,7 +1372,15 @@ struct SessionComposerPalette: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Fix 6 (review): `.accessibilityLabel` REPLACES the Button's
+        // auto-generated label (which would otherwise combine the glyph
+        // with nothing, since there's no text child) — naming only the
+        // action leaves VoiceOver with no way to learn WHICH project is
+        // current without opening the picker. `accessibilityValue` carries
+        // that alongside the action, the same label/value split a system
+        // Picker uses.
         .accessibilityLabel("Select project")
+        .accessibilityValue(currentProject?.name ?? "No project selected")
         .accessibilityHint("Opens project picker")
     }
 
@@ -1415,7 +1423,15 @@ struct SessionComposerPalette: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Fix 6 (review): `.accessibilityLabel` on a Button REPLACES its
+        // auto-generated combined label — the branch name / `Creating…`
+        // text inside this Button's own HStack was suppressed for
+        // VoiceOver exactly when it carried news. `accessibilityValue`
+        // restores it (mirroring `projectControl`'s split); `nil` reads as
+        // "Default", matching what the absence of the on-screen label
+        // already means.
         .accessibilityLabel("Select branch")
+        .accessibilityValue(label ?? "Default")
         .accessibilityHint("Opens branch picker")
     }
 
@@ -2134,6 +2150,23 @@ struct ComposerQueryField: View {
                 // now treating U+201C/U+201D as quote characters alongside
                 // `"`, which holds regardless of whether substitution fires.
                 .autocorrectionDisabled(true)
+                // Fix 5 (review): the deleted `resolutionLine` announced
+                // "Project: <name>", "Branch: <name>", "Template: <name>" —
+                // with the composer hiding the sidebar/terminal from
+                // VoiceOver while open, this field is essentially the only
+                // accessible content, so losing that with no replacement
+                // meant a screen-reader user learned the destination only
+                // AFTER pressing Return. `accessibilityValue` reuses the
+                // exact same source the ghost `Text` renders (`placeholder`)
+                // while the field is empty — the resolved destination Return
+                // would currently commit — and falls back to the literal
+                // typed text once there's something typed, matching
+                // `TextField`'s own default announcement (which this
+                // override replaces). The ghost `Text` itself stays
+                // `.accessibilityHidden(true)` — decorative once its value
+                // is carried here.
+                .accessibilityLabel("New session command")
+                .accessibilityValue(query.isEmpty ? placeholder : query)
                 .focused($isTextFieldFocused)
                 .onExitCommand { onEvent?(.exit) }
                 .onMoveCommand { guard !isPickerOpen else { return }; onEvent?(.move($0)) }
