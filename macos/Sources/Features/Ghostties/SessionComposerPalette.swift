@@ -108,6 +108,24 @@ struct SessionComposerPalette: View {
     @State private var templateToDelete: AgentTemplate?
     @FocusState private var newTemplateNameFocused: Bool
 
+    /// Step 7 (Composer UI 11 plan §5/§7): the model B field's ONLY switch
+    /// point. Default OFF — `queryRow` builds `ComposerQueryField` unless
+    /// Sean flips this himself (`defaults write … ghostties.composerModelBField -bool YES`).
+    /// `ComposerQueryField` itself is unmodified; this flag lives here, not
+    /// there.
+    @AppStorage(ComposerGhostTextField.modelBFieldStorageKey) private var isModelBFieldEnabled = false
+
+    /// Testing seam: exposes the exact predicate `queryRow` branches on,
+    /// without walking its opaque SwiftUI view tree via reflection (a
+    /// `_ConditionalContent<A, B>`'s TYPE always names both branches
+    /// regardless of which is active, so a type-name test would be
+    /// vacuous). `.centered`-only per G-F28 — `.anchored` never builds
+    /// model B even with the flag on, since the popover is too narrow for
+    /// the predicted path.
+    var usesModelBFieldForTesting: Bool {
+        isModelBFieldEnabled && request.presentation == .centered
+    }
+
     // MARK: - No-match Enter feedback (command grammar slice 1)
 
     /// Drives `ShakeEffect` — 3 cycles / 6pt, animated over 0.25s. Bumped by
@@ -1233,21 +1251,41 @@ struct SessionComposerPalette: View {
     private var queryRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                ComposerQueryField(
-                    query: searchTextBinding,
-                    fontSize: fieldFontSize,
-                    focusTrigger: $composerStore.focusSearchFieldTrigger,
-                    hasSelection: selectedOption != nil,
-                    // D6/B3: while EITHER inline picker is open, the field's
-                    // own ↑/↓/Return handlers must go quiet — see
-                    // `ComposerQueryField.isPickerOpen`'s doc comment. The
-                    // two pickers are mutually exclusive by construction
-                    // (see `isBranchPickerOpen`'s doc comment) — the field
-                    // only needs "is ANY picker open", the OR.
-                    isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
-                    placeholder: ghostPlaceholder
-                ) { event in
-                    handle(event)
+                // Step 7: the model B swap point (plan §5 — "one `if` in
+                // `queryRow`"). `ComposerQueryField` itself is untouched;
+                // everything it needs from this view still flows through
+                // identically either way.
+                Group {
+                    if usesModelBFieldForTesting {
+                        ComposerGhostTextField(
+                            query: searchTextBinding,
+                            fontSize: fieldFontSize,
+                            rowHeight: fieldHeight,
+                            focusTrigger: $composerStore.focusSearchFieldTrigger,
+                            hasSelection: selectedOption != nil,
+                            isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
+                            ghostFullPath: ghostPlaceholder
+                        ) { event in
+                            handle(event)
+                        }
+                    } else {
+                        ComposerQueryField(
+                            query: searchTextBinding,
+                            fontSize: fieldFontSize,
+                            focusTrigger: $composerStore.focusSearchFieldTrigger,
+                            hasSelection: selectedOption != nil,
+                            // D6/B3: while EITHER inline picker is open, the field's
+                            // own ↑/↓/Return handlers must go quiet — see
+                            // `ComposerQueryField.isPickerOpen`'s doc comment. The
+                            // two pickers are mutually exclusive by construction
+                            // (see `isBranchPickerOpen`'s doc comment) — the field
+                            // only needs "is ANY picker open", the OR.
+                            isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
+                            placeholder: ghostPlaceholder
+                        ) { event in
+                            handle(event)
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
