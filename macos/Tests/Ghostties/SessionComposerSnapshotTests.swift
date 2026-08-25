@@ -577,10 +577,14 @@ struct SessionComposerSnapshotTests {
     /// The typed text (`"Gho"`, `#1A1A1A` at full opacity) is DARKER than
     /// the ghost (49% alpha), so a plain "darkest pixel in the whole image"
     /// scan always finds the typed text, not the ghost — verified against
-    /// this exact PNG (measured column extents: `"Gho"`'s solid fill spans
-    /// roughly x:2–54, the ghost's spans roughly x:52–132, at 2x backing
-    /// scale; LIGHT mode only — this per-channel "near-black" heuristic
-    /// does not hold in dark mode, where typed text is near-WHITE, not
+    /// this exact PNG (measured column extents, post review-fix set:
+    /// `"Gho"`'s solid fill spans roughly x:1–43, the ghost's spans
+    /// roughly x:49–101, at 2x backing scale — a small but real gap
+    /// between them, NOT the overlap an earlier revision of this comment
+    /// claimed; see `ComposerGhostTextField.applyStyles()`'s fix-5 doc
+    /// comment for the honest measurement and why it isn't fully closed.
+    /// LIGHT mode only — this per-channel "near-black" heuristic does not
+    /// hold in dark mode, where typed text is near-WHITE, not
     /// near-black). This isolates the ghost's region instead: finds the
     /// last column containing a per-channel near-black pixel (each
     /// component `< 60`) — the typed text's own solid fill — then scans

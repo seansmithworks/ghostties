@@ -1269,16 +1269,56 @@ struct SessionComposerPalette: View {
                 // identically either way.
                 Group {
                     if usesModelBFieldForTesting {
-                        ComposerGhostTextField(
-                            query: searchTextBinding,
-                            fontSize: fieldFontSize,
-                            rowHeight: fieldHeight,
-                            focusTrigger: $composerStore.focusSearchFieldTrigger,
-                            hasSelection: selectedOption != nil,
-                            isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
-                            ghostFullPath: ghostPlaceholder
-                        ) { event in
-                            handle(event)
+                        ZStack {
+                            // Fix 1 (review, plan §5 A-F11): the four hidden
+                            // ↑/↓/⌃P/⌃N `.keyboardShortcut` Buttons and the
+                            // `isPickerOpen` mounting logic, RETAINED from
+                            // `ComposerQueryField` — restoring a construction
+                            // item the plan explicitly required kept, which
+                            // had been dropped and undocumented.
+                            // `ComposerGhostTextField`'s own arrow handling
+                            // lives only in `doCommandBySelector`, which is
+                            // FIRST-RESPONDER scoped; without these, an
+                            // `NSOpenPanel` round trip or any click landing
+                            // on a non-text subview leaves ↑/↓/⌃P/⌃N dead
+                            // with no visible cause, and ⌃P/⌃N are not key
+                            // equivalents at all so they have no
+                            // window-level fallback. Same `!isPickerOpen`
+                            // conditional MOUNTING (not action no-op) as
+                            // `ComposerQueryField.body`'s round-2 fix, so the
+                            // picker's own handlers are the only ones
+                            // registered while it's open.
+                            Group {
+                                if !(isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible)) {
+                                    Button { handle(.move(.up)) } label: { Color.clear }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .keyboardShortcut(.upArrow, modifiers: [])
+                                    Button { handle(.move(.down)) } label: { Color.clear }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .keyboardShortcut(.downArrow, modifiers: [])
+
+                                    Button { handle(.move(.up)) } label: { Color.clear }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .keyboardShortcut(.init("p"), modifiers: [.control])
+                                    Button { handle(.move(.down)) } label: { Color.clear }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .keyboardShortcut(.init("n"), modifiers: [.control])
+                                }
+                            }
+                            .frame(width: 0, height: 0)
+                            .accessibilityHidden(true)
+
+                            ComposerGhostTextField(
+                                query: searchTextBinding,
+                                fontSize: fieldFontSize,
+                                rowHeight: fieldHeight,
+                                focusTrigger: $composerStore.focusSearchFieldTrigger,
+                                hasSelection: selectedOption != nil,
+                                isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
+                                ghostFullPath: ghostPlaceholder
+                            ) { event in
+                                handle(event)
+                            }
                         }
                     } else {
                         ComposerQueryField(

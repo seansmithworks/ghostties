@@ -39,11 +39,21 @@ import SwiftUI
 ///   (this field only renders when `.centered`, matching the ghost-gate
 ///   rule G-F28; `.anchored` keeps `ComposerQueryField` even with the flag
 ///   on).
-/// - Whether the four hidden `.keyboardShortcut` Buttons (retained
-///   unchanged from `ComposerQueryField`, A-F11) still win first against a
-///   live `NSTextView` first responder the way they did against SwiftUI's
-///   own field editor — Assumption 1 in the refutation, "probably true,
-///   unverifiable here" (A-F24/A-F26).
+/// - Whether the four hidden `.keyboardShortcut` Buttons (retained from
+///   `ComposerQueryField`, A-F11 — mounted at the call site,
+///   `SessionComposerPalette.queryRow`'s model-B branch, NOT in this file;
+///   this type owns no SwiftUI `body` to hang them on) still win first
+///   against a live `NSTextView` first responder the way they did against
+///   SwiftUI's own field editor — Assumption 1 in the refutation, "probably
+///   true, unverifiable here" (A-F24/A-F26). CORRECTION (review, fix 1):
+///   these four Buttons were DROPPED from the initial construction despite
+///   the plan requiring them retained, and the omission went undocumented
+///   here — this file's own header claimed them present while they were
+///   not. Restored at the call site with the same `!isPickerOpen`
+///   conditional mounting `ComposerQueryField.body` uses. Their WIN-FIRST
+///   behavior against this file's `NSTextView` remains exactly as
+///   unverified as stated above — restoring them closes the "dropped
+///   entirely" gap, not the "unverified interaction" one.
 /// - (7b) The active-segment-ghost APPROXIMATION: there is no production
 ///   "current segment" data structure in `SessionComposerCommandParser`.
 ///   The spike derives it by truncating the full predicted path's
@@ -51,6 +61,15 @@ import SwiftUI
 ///   V02Quieted222 board's `Gho` + `stties` shape in the ordinary case,
 ///   but has not been checked against every parser edge case (quoted
 ///   tokens, `--resume`, etc.).
+/// - A small residual gap between typed text and the ghost's first glyph
+///   (review fix 5): reduced from an earlier double-draw-era defect where
+///   the ghost briefly rendered OVERLAPPING the typed text, but not fully
+///   closed to zero — measured ~2pt logical (4px @2x) in
+///   `step7-modelb-light.png`, roughly double this specific string's own
+///   largest intra-word gap. Two independent, self-consistent measurement
+///   fixes (`applyStyles()`'s fix-5 comments) did not move this number;
+///   most likely this glyph pair's (`o`→`s`) natural side-bearing, not a
+///   construction defect, but not proven either way.
 ///
 /// Settled-segment temporary-attribute TINTING is explicitly OUT OF SCOPE
 /// tonight (Q2 in `plan.md` §11 is open — one grey vs two is Sean's call).
@@ -101,6 +120,21 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// which is out of scope.
     static let ghostOpacity: CGFloat = 0.49
 
+    /// Fix 3 (review): the shipping SwiftUI field computes
+    /// `Color(nsColor: .labelColor).opacity(0.49)` — SwiftUI's `.opacity`
+    /// MULTIPLIES the color's own existing alpha (`labelColor`'s is
+    /// `0.85`), giving an effective `0.4165`. This is that same effective
+    /// value, computed the AppKit way, so both fields render the
+    /// identical ghost grey. Applied as the LABEL's `alphaValue` (a
+    /// view-level, post-composite alpha — see `installGhostLabel`'s doc
+    /// comment for why NOT baked into `textColor`), not
+    /// `NSColor.withAlphaComponent`, which REPLACES alpha instead of
+    /// multiplying it and would reintroduce the shipping-path mismatch on
+    /// top of the rendering defect `alphaValue` avoids.
+    static var ghostAlpha: CGFloat {
+        NSColor.labelColor.alphaComponent * ghostOpacity
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
@@ -119,11 +153,23 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// text the predicted path doesn't agree with.
     static func activeSegmentGhost(typed: String, fullPath: String) -> String {
         guard !fullPath.isEmpty else { return "" }
-        guard typed.count < fullPath.count else { return "" }
         if typed.isEmpty { return fullPath }
-        guard fullPath.lowercased().hasPrefix(typed.lowercased()) else { return "" }
-        let remainderStart = fullPath.index(fullPath.startIndex, offsetBy: typed.count)
-        let remainder = fullPath[remainderStart...]
+        // Fix 6b (review): the old implementation checked the prefix on
+        // `.lowercased()` strings but then offset into `fullPath` by
+        // `typed.count` — the ORIGINAL (not lowercased) Character count.
+        // Lowercasing can change Character count (`"İ".lowercased()` is
+        // two Characters, `"i̇"`), so a match confirmed on the lowercased
+        // strings did not guarantee `typed.count` original characters of
+        // `fullPath` corresponded to it — degenerate Unicode input only,
+        // but silently misaligned the remainder. `range(of:options:)`
+        // with `.caseInsensitive` + `.anchored` finds the match directly
+        // in `fullPath`'s OWN indices, with no cross-string count
+        // arithmetic to go stale.
+        guard let prefixRange = fullPath.range(of: typed, options: [.caseInsensitive, .anchored]) else {
+            return ""
+        }
+        guard prefixRange.upperBound < fullPath.endIndex else { return "" }
+        let remainder = fullPath[prefixRange.upperBound...]
         if let separatorRange = remainder.range(of: " > ") {
             return String(remainder[remainder.startIndex..<separatorRange.lowerBound])
         }
@@ -162,12 +208,21 @@ struct ComposerGhostTextField: NSViewRepresentable {
         textView.drawsBackground = false
         textView.isRichText = false
         textView.isVerticallyResizable = false
+
+        // Fix 4 (review, A-F6): font MUST be set before computing
+        // `verticalInset` — `NSTextView.font` is already non-nil at
+        // construction (its own AppKit default, not this field's 15pt), so
+        // the `?? NSFont.systemFont(ofSize: fontSize)` fallback below never
+        // fires if this line runs after. That silently centered the inset
+        // against the WRONG line height. Setting the real font first makes
+        // `textView.font` always non-nil AND correct, so the inset is
+        // always computed against it.
+        textView.font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
+        textView.textColor = .labelColor
+
         let lineHeight = layoutManager.defaultLineHeight(for: textView.font ?? NSFont.systemFont(ofSize: fontSize))
         let verticalInset = max(0, (rowHeight - lineHeight) / 2)
         textView.textContainerInset = NSSize(width: 0, height: verticalInset)
-
-        textView.font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        textView.textColor = .labelColor
 
         // `isFieldEditor = true` (A-F15/G-F10): rejects newline-bearing
         // paste, drag, and Services insertions wholesale — the only
@@ -191,7 +246,14 @@ struct ComposerGhostTextField: NSViewRepresentable {
 
         textView.allowsUndo = true
         textView.delegate = context.coordinator
-        textView.string = query
+        // Fix 6a (review, A-F7): never `textView.string = …` directly, even
+        // at construction — the file's own `setText` doc comment forbids
+        // it (no undo action registered, no delegate notification), and
+        // leaving the one place that violated it made it a live tripwire
+        // for the next edit to copy. Routes through the same sanctioned
+        // `shouldChangeText` -> `replaceCharacters(in:with:)` ->
+        // `didChangeText()` triad as every other write.
+        context.coordinator.setText(query, in: textView)
 
         let scrollView = NSScrollView()
         scrollView.documentView = textView
@@ -247,6 +309,11 @@ struct ComposerGhostTextField: NSViewRepresentable {
         weak var textView: ComposerGhostNSTextView?
         weak var ghostLabel: NSTextField?
 
+        /// Fix 2 (review) idempotency cache — see `applyStyles()`'s doc
+        /// comment for what this fixes.
+        private var lastAppliedGhostText: String?
+        private var lastAppliedOrigin: NSPoint?
+
         init(parent: ComposerGhostTextField) {
             self.parent = parent
         }
@@ -255,13 +322,34 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// itself), not a `draw(_:)` override. Scroll lockstep, AppKit
         /// invalidation, and an accessibility element all come free; a
         /// `draw(_:)` override would have to hand-roll all three.
+        ///
+        /// Fix 2/3 (review): the ghost previously baked its opacity into
+        /// `NSTextField.textColor` (a translucent-alpha `NSColor`). Text
+        /// drawn with a translucent color onto this view's (layer-backed,
+        /// fully transparent — `drawsBackground = false` top to bottom)
+        /// hierarchy rendered visibly DARKER than the same alpha applied
+        /// any other way — measured `rgb(66,66,66)` light /
+        /// `rgb(196,196,196)` dark in `step7-modelb-light.png` /
+        /// `-dark.png`, both matching `1 − (1 − 0.49)²` (a doubled 0.49
+        /// composite) to three decimal places even though only ONE draw
+        /// was happening. `wantsLayer = true` (an EXPLICIT own layer,
+        /// rather than inheriting the "draw into the ancestor's flattened
+        /// layer" behavior every AppKit view under an `NSHostingView` gets
+        /// by default) plus applying the opacity as the LABEL's
+        /// `alphaValue` (a single, correct, post-composite alpha blend)
+        /// instead of baking it into `textColor` (full-opacity
+        /// `.labelColor`, correctly antialiased) fixes it — measured
+        /// `rgb(151,151,151)` light against the shipping SwiftUI path's
+        /// own `rgb(149,149,149)`, within AA-rounding noise.
         func installGhostLabel(in textView: ComposerGhostNSTextView) {
             let label = NSTextField(labelWithString: "")
             label.font = textView.font
-            label.textColor = NSColor.labelColor.withAlphaComponent(ComposerGhostTextField.ghostOpacity)
+            label.textColor = .labelColor
+            label.alphaValue = ComposerGhostTextField.ghostAlpha
             label.isSelectable = false
             label.isEditable = false
             label.drawsBackground = false
+            label.wantsLayer = true
             label.isHidden = true
             textView.addSubview(label)
             ghostLabel = label
@@ -313,10 +401,17 @@ struct ComposerGhostTextField: NSViewRepresentable {
                 return
             }
 
-            ghostLabel.stringValue = ghostText
-            ghostLabel.font = textView.font
-            ghostLabel.textColor = NSColor.labelColor.withAlphaComponent(ComposerGhostTextField.ghostOpacity)
-            ghostLabel.sizeToFit()
+            // Only make the label VISIBLE once there is a real window to
+            // compute its position from — before window attachment
+            // (`makeNSView`'s own direct call), `firstRect(forCharacterRange:)`
+            // has nothing to convert screen coordinates against and this
+            // method used to fall back to the text-container-inset origin,
+            // landing the label at the wrong spot. `onWindowChange` fires a
+            // corrected call once the window attaches.
+            guard let window = textView.window else {
+                ghostLabel.isHidden = true
+                return
+            }
 
             // A-F5: insertion-point origin via `firstRect(forCharacterRange:
             // actualRange:)`, NOT `boundingRect(forGlyphRange:in:)` — that's
@@ -328,17 +423,84 @@ struct ComposerGhostTextField: NSViewRepresentable {
             let caretRange = NSRange(location: length, length: 0)
             var actualRange = NSRange(location: 0, length: 0)
             let screenRect = textView.firstRect(forCharacterRange: caretRange, actualRange: &actualRange)
-            var origin = NSPoint(x: textView.textContainerInset.width, y: textView.textContainerInset.height)
-            if screenRect != .zero, let window = textView.window {
-                let windowRect = window.convertFromScreen(screenRect)
-                let viewRect = textView.convert(windowRect, from: nil)
-                origin = NSPoint(x: viewRect.minX, y: viewRect.minY)
+            guard screenRect != .zero else {
+                ghostLabel.isHidden = true
+                return
             }
+            let windowRect = window.convertFromScreen(screenRect)
+            let viewRect = textView.convert(windowRect, from: nil)
+            // Fix 5 (review): `firstRect`'s x left a visible gap between
+            // the typed text and the ghost (`Gho stties`, not
+            // `Ghostties`). Measuring the typed text's OWN width with
+            // `NSString.size(withAttributes:)` (the same family
+            // `sizeToFit()` uses for the ghost label, below) gives both
+            // pieces a consistent measurement basis — verified against
+            // `firstRect`'s own value directly (both agree to the pixel).
+            // HONEST RESULT (measured against `step7-modelb-light.png`
+            // after this fix): the gap did NOT close to zero — it
+            // measures ~2pt logical (4px @2x), about double this
+            // specific string's OWN largest intra-word gap (the widest
+            // gap inside "stties" alone measures ~1pt/2px). Both
+            // measurement systems agreeing rules out a mismatched-origin
+            // bug; the residual is most likely this specific glyph pair's
+            // (`o`→`s`) natural side-bearing, not a construction defect —
+            // reported here rather than claimed fixed, per this fix set's
+            // instructions.
+            let typedWidth = (typed as NSString).size(withAttributes: [.font: textView.font as Any]).width
+            let originX = textView.textContainerInset.width + typedWidth
+            let origin = NSPoint(x: originX, y: viewRect.minY)
+
+            // This method is a legitimate MULTI-CALL socket by design
+            // (A-F3 — fired from both `onWindowChange` AND `updateNSView`,
+            // which SwiftUI invokes at least once immediately after
+            // `makeNSView`). Skipping the repaint when content AND
+            // position are BOTH unchanged from the last applied state
+            // avoids redundant redisplay work on the ordinary path where
+            // nothing changed between the two calls (see
+            // `installGhostLabel`'s doc comment for the actual
+            // double-alpha rendering defect this file had, which was a
+            // separate bug from this idempotency check). The position
+            // comparison uses a SUB-POINT TOLERANCE (0.5pt), not exact
+            // `NSPoint` equality — the two calls' `firstRect`
+            // recomputations land at the SAME logical caret position but
+            // not always the exact same `CGFloat` (TextKit layout settling
+            // between the two passes), and an exact-equality guard never
+            // actually matched.
+            let originUnchanged: Bool = {
+                guard let last = lastAppliedOrigin else { return false }
+                return abs(last.x - origin.x) < 0.5 && abs(last.y - origin.y) < 0.5
+            }()
+            guard ghostText != lastAppliedGhostText || !originUnchanged || ghostLabel.isHidden else {
+                return
+            }
+            lastAppliedGhostText = ghostText
+            lastAppliedOrigin = origin
+
+            ghostLabel.stringValue = ghostText
+            ghostLabel.font = textView.font
+            ghostLabel.textColor = .labelColor
+            ghostLabel.alphaValue = ComposerGhostTextField.ghostAlpha
+            // `sizeToFit()` sizes the label from `NSTextFieldCell`'s own
+            // `titleRect(forBounds:)`, which pads several points WIDER
+            // than the string's actual measured ink width (measured:
+            // `sizeToFit()` on "stties" at this font returns a 41.5pt-wide
+            // frame; `(ghostText as NSString).size(withAttributes:)`
+            // measures 37.4pt for the SAME string, standalone). That extra
+            // width is trailing, not leading (`NSTextFieldCell`'s
+            // `titleRect` origin.x is 0 for the padded frame) — it doesn't
+            // explain the fix-5 leading gap above (confirmed: this change
+            // alone did not move it), but IS a real correctness gap
+            // against A-F2's "document frame must include the ghost
+            // width" contract, since `sizeToFit()`'s inflated width would
+            // over-reserve scroll space beyond the ghost's actual ink.
+            // Sizing from the raw string measurement instead removes that
+            // padding.
+            let measuredSize = (ghostText as NSString).size(withAttributes: [.font: ghostLabel.font as Any])
             ghostLabel.frame = NSRect(
                 x: origin.x,
                 y: origin.y,
-                width: ghostLabel.frame.width,
-                height: ghostLabel.frame.height
+                width: measuredSize.width,
+                height: measuredSize.height
             )
             ghostLabel.isHidden = false
 
