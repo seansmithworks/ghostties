@@ -4,6 +4,55 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-25 — composer UI 11.1/11.2 BUILT overnight, on `feat/composer-ui-11`
+
+Branch `feat/composer-ui-11` @ `d4bd0afde`, 24 commits off `a1daa6608`, +4,290/-268 across
+35 files, pushed to origin. Parent `feat/composer-branch-segment` UNTOUCHED and still frozen at
+`a1daa6608` (it remains the sole gate on beta.24). Suite 949 passed / 1 flake / 1 skipped;
+the single failure is `GitWorktreeCreationTests/raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes`,
+proven flaky (20/20 in isolation, and a full run earlier on this same branch was 0 failures).
+
+Plan + unedited adversarial-gate evidence at `docs/plans/composer-ui-11/`. Artifact:
+https://claude.ai/code/artifact/8a9cfc9e-7629-4bff-b7c3-631e4f5e4491
+
+**Shipped on the default path:** 11.1 rest-state ghost path (model A computed placeholder,
+`.centered` only), board-exact headerless list restyle, template pinning with load-gated
+pruning, resolution line DELETED with all six labels rehomed, trailing project/branch picker
+controls, zero-project empty state, DESIGN.md §4 rewritten.
+
+**Built but flag-OFF (model B):** `ComposerGhostTextField` NSTextView field with real two-tone
+typing. Drive it with
+`defaults write com.seansmithdesign.ghostties.dev ghostties.composerModelBField -bool YES`.
+UNVERIFIED by construction: every acceptance gate is a manual key matrix agents are forbidden
+to drive, and this machine is macOS 27 so macOS 13 Return cannot be tested here either.
+
+- [ ] **DECIDE — long paths truncate away the destination.** The ghost tail-truncates, so a long
+  project name eats the `> Branch > Template` half, which is the part that says where Return
+  goes. **Strawman: head-truncate the project segment** (`…-long-project-name > Default >
+  Orchestrator`) so the destination always survives; drop the project segment entirely when even
+  that will not fit.
+- [ ] **DECIDE — VoiceOver announces the ghost as the field's VALUE on an empty field.** A
+  screen-reader user is told the field contains `ghostties > Default > Orchestrator` when it is
+  empty, and Delete does nothing to it. Deliberate trade for A-F17 (otherwise it announces
+  "empty" over a visible path). Alternative is announcing it as a hint: honest, less
+  discoverable.
+- [ ] **DECIDE — ghost contrast.** The board's own `#1A1A1A7E` measures ~2.5:1 on the card, under
+  WCAG AA's 4.5:1, and it is content (it states where Return goes), not decoration. Reviewer
+  strawman was 0.62 alpha (`#1A1A1A9E`) as the point where it clears AA while staying clearly
+  quieter than typed ink.
+- [ ] **DECIDE — four smaller design calls left untouched:** the board-hex alpha conversion
+  (`labelColor.opacity(x)` multiplies by 0.85, so every board grey lands ~15% light), system
+  `Color.accentColor` vs brand `#5B8DEF` for row selection, the fixed 220pt results well (card
+  does not hug content), and whether `.anchored` should have inherited the headerless/single-line
+  list and the two new controls at all (the boards never addressed it).
+- [ ] **Known, not blocking:** model B's typed-to-ghost gap is ~1.5-2pt wider than intra-word
+  spacing. Diagnosed wrongly TWICE (side-bearing, then `firstRect` rounding — the latter is
+  structurally impossible since `firstRect`'s x is never used). `titleRect` was tested and returns
+  `origin.x == 0`, which does not explain it. Left labelled UNTESTED in the file.
+- [ ] **Known, not blocking:** the a11y tests guard the constant STRINGS, not the WIRING —
+  deleting `.accessibilityLabel(...)` from a call site still passes. Third instance of this shape
+  in the wave; documented rather than papered over.
+
 ## 2026-08-25 — composer UI redesign: 11.1 / 11.2 are the build directions
 
 Design canvas: https://claude.ai/code/artifact/0ea41226-7a92-40c8-9f8c-a68f9775edf2
