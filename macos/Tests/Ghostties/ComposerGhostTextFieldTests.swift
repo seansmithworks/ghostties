@@ -183,9 +183,12 @@ struct ComposerGhostTextFieldTests {
         #expect(events.value.isEmpty)
     }
 
-    /// 7b: Tab accepts the active-segment ghost, preserving typed casing
-    /// (G-F12 strawman) — `Gho` + accepted `stties` yields `Ghostties`.
-    @Test func tabAcceptsTheActiveSegmentGhost() {
+    /// 7b (Spotlight/Raycast rewrite): Tab accepts exactly ONE segment,
+    /// preserving typed casing (G-F12 strawman) — `Gho` + accepted
+    /// `stties > ` yields `Ghostties > `, not the whole remaining ghost
+    /// (`currentGhostText` holds the FULL remainder now, per
+    /// `remainderGhost`, not just the current segment).
+    @Test func tabAcceptsExactlyOneSegmentLeavingTheRestGhosted() {
         let events = Box<[String]>([])
         let queryBox = Box("")
         let focusBox = Box(false)
@@ -204,39 +207,97 @@ struct ComposerGhostTextFieldTests {
         coordinator.installGhostLabel(in: textView)
         textView.string = "Gho"
         coordinator.applyStyles()
-        #expect(textView.currentGhostText == "stties")
+        // The ghost previews the FULL destination Return would commit, not
+        // just the current segment's tail — this is what closes defect 1
+        // (a truncated ghost that could disagree with what Return does).
+        #expect(textView.currentGhostText == "stties > Default > Orchestrator")
 
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
         #expect(handled == true)
-        #expect(textView.string == "Ghostties")
-        #expect(queryBox.value == "Ghostties")
+        #expect(textView.string == "Ghostties > ")
+        #expect(queryBox.value == "Ghostties > ")
+
+        // Second Tab: the ghost survived past the first accepted segment
+        // (defect 2/3 — the old implementation dead-ended here, because
+        // truncating the GHOST itself at the next separator meant a
+        // post-accept remainder starting with " > " truncated to "").
+        coordinator.applyStyles()
+        #expect(textView.currentGhostText == "Default > Orchestrator")
+        let secondHandled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(secondHandled == true)
+        #expect(textView.string == "Ghostties > Default > ")
+
+        // Third Tab accepts the final segment — no trailing separator left
+        // to stop at, so the whole remainder is "one segment".
+        coordinator.applyStyles()
+        #expect(textView.currentGhostText == "Orchestrator")
+        let thirdHandled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(thirdHandled == true)
+        #expect(textView.string == "Ghostties > Default > Orchestrator")
+
+        // Ghost is gone once typed text equals the full path — nothing
+        // left for Tab or Return to add.
+        coordinator.applyStyles()
+        #expect(textView.currentGhostText == "")
     }
 
-    // MARK: - Active-segment ghost (pure function)
+    // MARK: - Remainder ghost (pure function, previously `activeSegmentGhost`)
 
-    @Test func activeSegmentGhostReturnsWholePathWhenTypedIsEmpty() {
-        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "", fullPath: "Ghostties > Default > Orchestrator")
+    @Test func remainderGhostReturnsWholePathWhenTypedIsEmpty() {
+        let ghost = ComposerGhostTextField.remainderGhost(typed: "", fullPath: "Ghostties > Default > Orchestrator")
         #expect(ghost == "Ghostties > Default > Orchestrator")
     }
 
-    @Test func activeSegmentGhostTruncatesAtNextSeparator() {
-        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "Gho", fullPath: "Ghostties > Default > Orchestrator")
-        #expect(ghost == "stties")
+    /// Defect 1/2 regression guard: the ghost must preview the FULL
+    /// destination Return would commit, never truncated at the next
+    /// segment separator — the old `activeSegmentGhostTruncatesAtNextSeparator`
+    /// behavior this replaces is exactly the bug the brief calls out.
+    @Test func remainderGhostReturnsTheWholeRemainderNotJustTheCurrentSegment() {
+        let ghost = ComposerGhostTextField.remainderGhost(typed: "Gho", fullPath: "Ghostties > Default > Orchestrator")
+        #expect(ghost == "stties > Default > Orchestrator")
     }
 
-    @Test func activeSegmentGhostIsEmptyWhenTypedDivergesFromPrediction() {
-        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "xyz", fullPath: "Ghostties > Default > Orchestrator")
+    /// Defect 3 regression guard, direct: once a whole segment has been
+    /// typed/accepted, the remainder STARTS with `" > "` — the old
+    /// `activeSegmentGhost` truncated there and returned `""`, dead-ending
+    /// Tab. This is the exact case named in the brief. Proven to fail
+    /// against the pre-fix implementation (mutant check, see commit body).
+    @Test func remainderGhostSurvivesWhenTypedEndsExactlyOnASegmentBoundary() {
+        let ghost = ComposerGhostTextField.remainderGhost(typed: "Ghostties > ", fullPath: "Ghostties > Default > Orchestrator")
+        #expect(ghost == "Default > Orchestrator")
+    }
+
+    @Test func remainderGhostIsEmptyWhenTypedDivergesFromPrediction() {
+        let ghost = ComposerGhostTextField.remainderGhost(typed: "xyz", fullPath: "Ghostties > Default > Orchestrator")
         #expect(ghost == "")
     }
 
-    @Test func activeSegmentGhostIsEmptyWhenTypedIsTheWholePath() {
-        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "Ghostties > Default > Orchestrator", fullPath: "Ghostties > Default > Orchestrator")
+    @Test func remainderGhostIsEmptyWhenTypedIsTheWholePath() {
+        let ghost = ComposerGhostTextField.remainderGhost(typed: "Ghostties > Default > Orchestrator", fullPath: "Ghostties > Default > Orchestrator")
         #expect(ghost == "")
     }
 
-    @Test func activeSegmentGhostIsCaseInsensitive() {
-        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "gHO", fullPath: "Ghostties > Default > Orchestrator")
-        #expect(ghost == "stties")
+    @Test func remainderGhostIsCaseInsensitive() {
+        let ghost = ComposerGhostTextField.remainderGhost(typed: "gHO", fullPath: "Ghostties > Default > Orchestrator")
+        #expect(ghost == "stties > Default > Orchestrator")
+    }
+
+    // MARK: - Next segment (pure function, Tab's one-segment-at-a-time accept)
+
+    @Test func nextSegmentStopsAtAndIncludesTheNextSeparator() {
+        #expect(ComposerGhostTextField.nextSegment(remainder: "as > main > Shell") == "as > ")
+    }
+
+    @Test func nextSegmentIsTheWholeRemainderWhenNoSeparatorFollows() {
+        #expect(ComposerGhostTextField.nextSegment(remainder: "Shell") == "Shell")
+    }
+
+    @Test func nextSegmentOfARemainderStartingOnABoundaryTakesTheSeparatorAndNextSegment() {
+        #expect(ComposerGhostTextField.nextSegment(remainder: " > main > Shell") == " > main > ")
+    }
+
+    @Test func nextSegmentIsEmptyForAnEmptyRemainder() {
+        #expect(ComposerGhostTextField.nextSegment(remainder: "") == "")
     }
 
     @Test func insertBacktabIsConsumedNoOp() {

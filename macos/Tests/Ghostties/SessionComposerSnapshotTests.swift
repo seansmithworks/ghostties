@@ -627,8 +627,11 @@ struct SessionComposerSnapshotTests {
     /// evidence targets the field's OWN rendering, not the swap point,
     /// which `ComposerGhostTextFieldTests.flagDefaultsToOff…` already
     /// covers). `query` is `Gho`, `ghostFullPath` is the same shape D-B's
-    /// model A source produces — the active-segment ghost should render
-    /// `stties` in grey per `activeSegmentGhostTruncatesAtNextSeparator`.
+    /// model A source produces — the ghost should render the FULL
+    /// remainder `stties > Default > Orchestrator` in grey per
+    /// `remainderGhostReturnsTheWholeRemainderNotJustTheCurrentSegment`
+    /// (the corrected, Spotlight-inline-completion semantics — not
+    /// truncated at the next segment separator).
     ///
     /// UNVERIFIED-INTERACTION: this proves the ghost RENDERS off-screen at
     /// construction time, in an app-hosted, non-key window — nothing about
@@ -676,6 +679,76 @@ struct SessionComposerSnapshotTests {
                 )
             }
         }
+    }
+
+    /// Acceptance criterion 1: the worked example. Field is scoped to
+    /// project `ghostties`; the user types `bruk`, and the row `Brukas` —
+    /// a DIFFERENT project — highlights. The field must read `Bruk`
+    /// (typed, solid) + `as > Default > Shell` (ghosted): `Brukas`'s OWN
+    /// destination, not `ghostties`'s. `ghostFullPath` here is the literal
+    /// string `SessionComposerPalette.destination(for:store:
+    /// recentSelections:)` produces for a fixture `Brukas` project with no
+    /// `defaultTemplateId`/recent selection
+    /// (`SessionComposerModelBGhostSourceTests
+    /// .projectWithNoDefaultOrRecentLandsOnTheFirstAvailableTemplate`
+    /// proves that function call directly) — this test proves the
+    /// RENDERING half, matching this file's existing precedent of
+    /// constructing `ComposerGhostTextField` directly rather than
+    /// threading the whole `SessionComposerPalette`/`selectedOption`
+    /// machinery through an offscreen window.
+    ///
+    /// Deviation from the brief's literal example, stated plainly: the
+    /// branch segment renders `Default`, not `main`. Real git branch data
+    /// for a project OTHER than the composer's `currentProject` doesn't
+    /// exist anywhere in this store — `SessionComposerStore` caches
+    /// `currentBranchAtProjectRoot` for the single scoped project only,
+    /// refreshed by an async git call this task does not add (out of
+    /// scope: `SessionComposerStore` git/persistence plumbing). `Default`
+    /// is the same "no override" fallback `resolutionLineSegments` already
+    /// uses elsewhere in this composer, not a new placeholder invented for
+    /// this task.
+    @Test func workedExampleGhostsADifferentProjectsFullPath() {
+        let field = ComposerGhostTextField(
+            query: .constant("Bruk"),
+            fontSize: 15,
+            rowHeight: 38,
+            focusTrigger: .constant(false),
+            hasSelection: true,
+            isPickerOpen: false,
+            ghostFullPath: "Brukas > Default > Shell"
+        ) { _ in }
+        let view = field.background(Color(nsColor: .windowBackgroundColor))
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth, height: 38)
+
+        let lightData = renderPNGWithExtraLayoutPass(view, appearance: .aqua, size: size)
+        writeEvidence(lightData, filename: "step7-worked-example-bruk-light.png")
+        #expect(lightData != nil)
+
+        let darkData = renderPNGWithExtraLayoutPass(view, appearance: .darkAqua, size: size)
+        writeEvidence(darkData, filename: "step7-worked-example-bruk-dark.png")
+        #expect(darkData != nil)
+
+        if let lightData {
+            let pixel = darkestGhostPixel(in: lightData)
+            #expect(pixel != nil, "step7-worked-example-bruk-light.png: no ghost pixel found — the field disagreed with the highlighted row, defect 1 regressed")
+        }
+
+        // The ghost-computation proof itself (acceptance criterion 1's
+        // "field must read" claim, not just "a grey pixel exists
+        // somewhere"): construct the same coordinator this rendering used
+        // and assert its `currentGhostText` directly.
+        let coordinator = field.makeCoordinator()
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(containerSize: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
+        layoutManager.addTextContainer(container)
+        let textView = ComposerGhostNSTextView(frame: .zero, textContainer: container)
+        coordinator.textView = textView
+        coordinator.installGhostLabel(in: textView)
+        textView.string = "Bruk"
+        coordinator.applyStyles()
+        #expect(textView.currentGhostText == "as > Default > Shell")
     }
 
 }

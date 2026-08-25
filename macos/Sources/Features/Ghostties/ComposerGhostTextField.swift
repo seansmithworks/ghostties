@@ -54,13 +54,17 @@ import SwiftUI
 ///   behavior against this file's `NSTextView` remains exactly as
 ///   unverified as stated above — restoring them closes the "dropped
 ///   entirely" gap, not the "unverified interaction" one.
-/// - (7b) The active-segment-ghost APPROXIMATION: there is no production
-///   "current segment" data structure in `SessionComposerCommandParser`.
-///   The spike derives it by truncating the full predicted path's
-///   remainder at the next `" > "` separator — matches the
-///   V02Quieted222 board's `Gho` + `stties` shape in the ordinary case,
+/// - (Spotlight/Raycast rewrite) The `nextSegment(remainder:)`
+///   APPROXIMATION: there is no production "current segment" data
+///   structure in `SessionComposerCommandParser`. `Tab`'s one-segment
+///   accept is derived by string-splitting the full predicted path's
+///   remainder at the next `" > "` separator — matches the worked
+///   example's `Bruk` + `as > main > Shell` shape in the ordinary case,
 ///   but has not been checked against every parser edge case (quoted
-///   tokens, `--resume`, etc.).
+///   tokens, `--resume`, etc.). The GHOST ITSELF (`remainderGhost`) is no
+///   longer an approximation of "current segment" — it is the literal
+///   remainder of `ghostFullPath`, the same full destination Return
+///   commits.
 /// - A small residual gap between typed text and the ghost's first glyph
 ///   (review fix 5): round 1's diagnosis ("`o`→`s` glyph-pair side
 ///   bearing") was WRONG, found in round 2 — the header and
@@ -116,11 +120,20 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// ladder in `ComposerQueryField.body`'s `.onSubmit`/`.onMoveCommand`
     /// exactly, selector-for-selector.
     var isPickerOpen: Bool
-    /// D-B: the SAME full predicted path `ComposerQueryField`'s rest-state
-    /// ghost placeholder renders (`SessionComposerPalette.ghostPlaceholder`,
-    /// sourced from `resolutionLineSegments(...)` + `selectedOption`) — NOT
-    /// a second prediction engine. (7b) once typing starts, `applyStyles()`
-    /// derives the active-segment remainder from it.
+    /// The full destination Return would commit right now — NOT
+    /// `SessionComposerPalette.ghostPlaceholder` (model A's rest-state-only
+    /// placeholder, welded to `currentProject`). Sourced instead from
+    /// `SessionComposerPalette.ghostFullPathForModelB`, which reads the
+    /// CURRENTLY HIGHLIGHTED option's own resolved destination — a
+    /// highlighted project row ghosts THAT project's path even though
+    /// `currentProject` never changed, which is what lets typing `bruk`
+    /// against a highlighted `Brukas` project row ghost `Brukas > ...`
+    /// instead of `<currentProject> > ...` not matching the typed prefix
+    /// at all. Still not a second prediction engine — no value here is
+    /// computed independently of what a Return commit would read. Once
+    /// typing starts, `applyStyles()` derives the full remainder
+    /// (`remainderGhost`) from it; `Tab` advances one segment at a time
+    /// (`nextSegment(remainder:)`).
     var ghostFullPath: String
     var onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)?
 
@@ -178,19 +191,27 @@ struct ComposerGhostTextField: NSViewRepresentable {
         Coordinator(parent: self)
     }
 
-    // MARK: - Active-segment ghost (7b)
+    // MARK: - Ghost semantics (Spotlight-inline-completion + Raycast-Tab-drill)
 
-    /// Derives the ACTIVE-SEGMENT-REMAINDER ghost from the same full-path
-    /// source model A's rest-state placeholder uses (D-B) — see this type's
-    /// UNVERIFIED note for what this approximates and does not. Empty
-    /// `typed` returns the whole path (matches the 11.1 rest state, one
-    /// grey); non-empty `typed` truncates the remainder at the next
-    /// `" > "` so only the CURRENT segment's tail ghosts, per
-    /// `V02Quieted222.dc.html` (`Gho` typed + `stties` ghosted, not the
-    /// rest of the path). Returns `""` when `typed` isn't a
-    /// case-insensitive prefix of `fullPath` — no ghost renders against
-    /// text the predicted path doesn't agree with.
-    static func activeSegmentGhost(typed: String, fullPath: String) -> String {
+    /// The `" > "` segment separator every full destination path
+    /// (`ghostFullPath`) is built from (`SessionComposerCommandParser`'s
+    /// `resolutionLineSegments`/`ghostPlaceholder`, and the model-B-only
+    /// `ghostFullPathForModelB` at the `SessionComposerPalette` call site).
+    static let segmentSeparator = " > "
+
+    /// Derives the ghost from the same full-path source model A's
+    /// rest-state placeholder uses (D-B) — see this type's UNVERIFIED note
+    /// for what this approximates and does not. Renders the FULL remainder
+    /// of `fullPath` beyond whatever has been typed/accepted so far — NOT
+    /// truncated at the next `" > "` — per the corrected spec: Return
+    /// always launches the whole visible path, so the ghost must always
+    /// preview the whole thing, not just the current segment. (`Tab`
+    /// advances exactly one segment into typed text; see `nextSegment(
+    /// remainder:)` below for that half.) Empty `typed` returns the whole
+    /// path (also matches the 11.1 rest state, one grey). Returns `""`
+    /// when `typed` isn't a case-insensitive prefix of `fullPath` — no
+    /// ghost renders against text the predicted path doesn't agree with.
+    static func remainderGhost(typed: String, fullPath: String) -> String {
         guard !fullPath.isEmpty else { return "" }
         if typed.isEmpty { return fullPath }
         // Fix 6b (review): the old implementation checked the prefix on
@@ -208,11 +229,41 @@ struct ComposerGhostTextField: NSViewRepresentable {
             return ""
         }
         guard prefixRange.upperBound < fullPath.endIndex else { return "" }
-        let remainder = fullPath[prefixRange.upperBound...]
-        if let separatorRange = remainder.range(of: " > ") {
-            return String(remainder[remainder.startIndex..<separatorRange.lowerBound])
+        return String(fullPath[prefixRange.upperBound...])
+    }
+
+    /// The ONE segment `Tab` accepts out of the full ghost `remainder`
+    /// (Raycast-style drill-down): the rest of the segment currently being
+    /// typed, PLUS its trailing `" > "` when another segment follows — so
+    /// one Tab from `typed == "Bruk"` against a `"Brukas > main > Shell"`
+    /// remainder of `"as > main > Shell"` lands on `"Brukas > "` (not just
+    /// `"Brukas"`), immediately re-scoping the list to the next segment's
+    /// candidates, matching the worked example in the composer spec. The
+    /// FINAL segment (no `" > "` ahead in the remainder) has nothing to
+    /// stop at, so the whole remainder is the "one segment" left to
+    /// accept. This is the ONLY place a whole-remainder ghost and a
+    /// one-segment-at-a-time Tab coexist without dead-ending: the old
+    /// implementation cut the GHOST itself at the first separator, so once
+    /// a whole segment was accepted the remainder started with `" > "`
+    /// and truncating there returned `""` — Tab then had nothing left to
+    /// accept even though more of the path remained. Cutting only the
+    /// ACCEPT unit, never the ghost itself, removes that dead end.
+    static func nextSegment(remainder: String) -> String {
+        guard !remainder.isEmpty else { return "" }
+        // A remainder that STARTS with the separator (typed already ended
+        // exactly on a prior segment boundary) must search for the NEXT
+        // one past that leading separator — searching from the start
+        // would just find the leading separator itself and stop there,
+        // returning only `" > "` with the following segment's name left
+        // behind.
+        var searchStart = remainder.startIndex
+        if remainder.hasPrefix(segmentSeparator) {
+            searchStart = remainder.index(remainder.startIndex, offsetBy: segmentSeparator.count)
         }
-        return String(remainder)
+        guard let separatorRange = remainder.range(of: segmentSeparator, range: searchStart..<remainder.endIndex) else {
+            return remainder
+        }
+        return String(remainder[remainder.startIndex..<separatorRange.upperBound])
     }
 
     /// FINAL REVIEW correction: this was previously a throwaway TextKit 1
@@ -487,7 +538,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             }
 
             let typed = textView.string
-            let ghostText = ComposerGhostTextField.activeSegmentGhost(
+            let ghostText = ComposerGhostTextField.remainderGhost(
                 typed: typed,
                 fullPath: parent.ghostFullPath
             )
@@ -747,14 +798,19 @@ struct ComposerGhostTextField: NSViewRepresentable {
             }
         }
 
-        /// 7b: Tab accepts the active-segment ghost. G-F12 strawman
-        /// (flagged, plan §11.5): typed casing is PRESERVED, resolution is
-        /// case-insensitive — `Gho` + accepted `stties` yields exactly
-        /// `Ghostties`, never a canonical rewrite of what was already
+        /// 7b: Tab accepts exactly ONE segment of the full ghost
+        /// (`nextSegment(remainder:)`), leaving the rest ghosted — NOT the
+        /// whole remaining ghost text, which `currentGhostText` now holds
+        /// in full per `remainderGhost`. G-F12 strawman (flagged, plan
+        /// §11.5): typed casing is PRESERVED, resolution is
+        /// case-insensitive — `Gho` + accepted `stties > ` yields exactly
+        /// `Ghostties > `, never a canonical rewrite of what was already
         /// typed.
         func acceptGhost(in textView: NSTextView) {
             guard let ghostText = self.textView?.currentGhostText, !ghostText.isEmpty else { return }
-            let newText = textView.string + ghostText
+            let segment = ComposerGhostTextField.nextSegment(remainder: ghostText)
+            guard !segment.isEmpty else { return }
+            let newText = textView.string + segment
             setText(newText, in: textView)
             parent.query = newText
             applyStyles()

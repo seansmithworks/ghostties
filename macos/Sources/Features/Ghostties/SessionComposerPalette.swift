@@ -589,6 +589,84 @@ struct SessionComposerPalette: View {
         )
     }
 
+    /// Model B's ghost source — deliberately NOT `ghostPlaceholder` above.
+    /// `ghostPlaceholder` is welded to `currentProject` (it always renders
+    /// `"<currentProject.name> > ..."`), which is correct for model A
+    /// (only ever shown while the field is EMPTY, before any option could
+    /// diverge from the current project) but wrong once text is present:
+    /// typing `bruk` against a highlighted `Brukas` PROJECT row — a
+    /// different project than `currentProject` — produced a ghost that
+    /// still started with `currentProject`'s name, so `bruk` was never a
+    /// prefix of it and no ghost rendered at all, even though the list
+    /// agreed on `Brukas`. This reads the CURRENTLY HIGHLIGHTED option's
+    /// own resolved destination instead — the field and the list can no
+    /// longer disagree about what Return would launch.
+    ///
+    /// No selection: falls back to the same four-rule empty-state text
+    /// `ghostPlaceholder` computes (status text, not a destination — model
+    /// A's own rules already cover "nothing resolved" correctly, so
+    /// there's no reason to re-derive that half).
+    ///
+    /// Selection is a TEMPLATE (or the ad-hoc `Run "…"` row) in
+    /// `currentProject`: identical to what `ghostPlaceholder` already
+    /// computes — `selectedOption?.title` was always the right segment 3,
+    /// the bug was only ever the project segment.
+    ///
+    /// Selection is a PROJECT-switch row (a different project than
+    /// `currentProject`): resolves THAT project's own destination via
+    /// `destination(for:)` — not `currentProject`'s.
+    private var ghostFullPathForModelB: String {
+        guard let selectedOption else { return ghostPlaceholder }
+        if selectedOption.template == nil,
+           let targetProject = store.projects.first(where: { $0.id == selectedOption.id }),
+           targetProject.id != currentProject?.id {
+            return SessionComposerPalette.destination(
+                for: targetProject,
+                store: store,
+                recentSelections: composerStore.recentSelections
+            )
+        }
+        return ghostPlaceholder
+    }
+
+    /// The destination a Return commit would resolve to for `project` if
+    /// the user switched to it right now — used only by
+    /// `ghostFullPathForModelB` above, for a project OTHER than
+    /// `currentProject`. A `static` pure function (not a `self`-scoped
+    /// computed property) deliberately, so it's directly unit-testable
+    /// without constructing a `SessionComposerPalette` view — this repo's
+    /// usual private-computed-property-on-a-View test gap doesn't apply
+    /// here. Branch is always `"Default"`: this repo caches git branch
+    /// data (`SessionComposerStore.currentBranchAtProjectRoot`) for
+    /// `currentProject` alone (refreshed async on `open()`/project
+    /// switch), so a highlighted-but-not-yet-switched-to project's real
+    /// current branch is genuinely unknown without a new async git query —
+    /// out of scope here (`SessionComposerStore` persistence/git plumbing
+    /// is explicitly untouched by this task). `"Default"` mirrors
+    /// `resolutionLineSegments`'s own "no override" fallback rather than
+    /// inventing a second, differently-worded placeholder for the same
+    /// idea.
+    static func destination(
+        for project: Project,
+        store: WorkspaceStore,
+        recentSelections: [RecentComposerSelection]
+    ) -> String {
+        let templates = SessionTemplateResolver.templates(for: project, store: store)
+        let templateTitle: String
+        if let defaultId = project.defaultTemplateId,
+           let match = templates.first(where: { $0.id == defaultId }) {
+            templateTitle = match.name
+        } else if let recent = recentSelections.first(where: { $0.projectId == project.id }),
+                  let match = templates.first(where: { $0.id == recent.templateId }) {
+            templateTitle = match.name
+        } else if let first = templates.first {
+            templateTitle = first.name
+        } else {
+            templateTitle = "Shell"
+        }
+        return "\(project.name) > Default > \(templateTitle)"
+    }
+
     /// Step 4 (Composer UI 11 plan §3): the status strip's single occupant —
     /// generalized from the old `writeError`-only strip. Additive: the
     /// resolution line is still present after this step, so its deletion
@@ -1324,7 +1402,7 @@ struct SessionComposerPalette: View {
                                 focusTrigger: $composerStore.focusSearchFieldTrigger,
                                 hasSelection: selectedOption != nil,
                                 isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
-                                ghostFullPath: ghostPlaceholder
+                                ghostFullPath: ghostFullPathForModelB
                             ) { event in
                                 handle(event)
                             }
