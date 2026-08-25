@@ -265,6 +265,107 @@ struct SessionComposerBranchLaunchTests {
         #expect(resolution == .resolved(path: "/tmp/feat-x"))
     }
 
+    // MARK: - Round-6 review, Blocker: proving the PRODUCTION CALL SITE wiring, not just `resolveTypedBranch`
+
+    /// Creates a fresh throwaway repo with one commit on branch "main" under
+    /// `NSTemporaryDirectory()`, cleaned up by the caller — same pattern as
+    /// `GitWorktreeCreationTests.makeThrowawayRepo()`.
+    private static func makeThrowawayRepo() -> String {
+        let unresolvedPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-branch-wiring-test-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(atPath: unresolvedPath, withIntermediateDirectories: true)
+        let path = realPath(unresolvedPath)
+
+        func run(_ args: [String]) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = args
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+            task.waitUntilExit()
+        }
+
+        run(["git", "-C", path, "init", "-q", "-b", "main"])
+        run(["git", "-C", path, "-c", "user.email=test@ghostties.test", "-c", "user.name=Ghostties Test",
+             "commit", "-q", "--allow-empty", "-m", "init"])
+        return path
+    }
+
+    private static func realPath(_ path: String) -> String {
+        guard let cPath = realpath(path, nil) else { return path }
+        defer { free(cPath) }
+        return String(cString: cPath)
+    }
+
+    private static func cleanup(_ path: String) {
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
+    /// THE mutant-catching test for the round-6 blocker (`cachedProjectId:`
+    /// silently dropped from `SessionComposerPalette.typedBranchResolution`'s
+    /// real call). Every OTHER test in this file calls
+    /// `SessionComposerCommandParser.resolveTypedBranch` directly with both
+    /// `cachedProjectId`/`resolvingForProjectId` hand-passed — none of them
+    /// exercises which STORED PROPERTY the palette actually wires into
+    /// `cachedProjectId`, which is exactly what broke: the argument had a
+    /// `= nil` default, so omitting it compiled clean and silently made
+    /// every typed branch permanently `.pending`.
+    ///
+    /// This test instead drives `SessionComposerPalette.resolveTypedBranch(
+    /// branchToken:composerStore:resolvingForProjectId:)` — the `internal
+    /// static` seam the palette's real `typedBranchResolution` property
+    /// calls verbatim — against a `SessionComposerStore` whose
+    /// `worktreesProjectId` is populated the ONLY way production populates
+    /// it: a real `refreshWorktrees(for:projectId:)` call against a real
+    /// throwaway git repo. `cachedProjectId` is read OFF THE STORE inside
+    /// the seam, never passed in by this test, so a future edit that drops
+    /// the argument again (or wires the wrong store property) fails this
+    /// test rather than just a hand-constructed call.
+    ///
+    /// Mutation: drop `cachedProjectId: composerStore.worktreesProjectId,`
+    /// from `SessionComposerPalette.resolveTypedBranch` (restoring the exact
+    /// round-6 bug) — the matching-project assertion below goes red
+    /// (`.pending` instead of `.isDefaultBranch`), because the callee's
+    /// `cachedProjectId` default (`nil`) no longer equals the non-nil
+    /// `resolvingForProjectId` even though the cache genuinely does
+    /// describe that project.
+    @MainActor
+    @Test func typedBranchResolutionWiresComposerStoreWorktreesProjectIdAsCachedProjectId() async {
+        let repo = Self.makeThrowawayRepo()
+        defer { Self.cleanup(repo) }
+
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectId = UUID()
+        await store.refreshWorktrees(for: repo, projectId: projectId)
+
+        // Sanity: production really did populate the cache for this project
+        // — if this fails, the test below isn't exercising what it claims to.
+        #expect(store.worktreesProjectId == projectId)
+
+        // Matching project: the cache genuinely describes the project being
+        // resolved for, so a typed branch matching the repo's default branch
+        // must resolve to "no override", not `.pending`.
+        let matching = SessionComposerPalette.resolveTypedBranch(
+            branchToken: "main",
+            composerStore: store,
+            resolvingForProjectId: projectId
+        )
+        #expect(matching == .isDefaultBranch)
+
+        // Mismatched project: same store, same cached branch data, but
+        // resolving for a DIFFERENT project's id — must read `.pending`,
+        // never silently resolve against the wrong project's cache. Proves
+        // `cachedProjectId` is actually wired to `composerStore
+        // .worktreesProjectId` rather than some other value that would
+        // happen to equal `projectId` by coincidence.
+        let mismatched = SessionComposerPalette.resolveTypedBranch(
+            branchToken: "main",
+            composerStore: store,
+            resolvingForProjectId: UUID()
+        )
+        #expect(mismatched == .pending)
+    }
+
     // MARK: - Finding 9: proving `precommit` actually CALLS `resolveLaunchTemplate`
 
     /// THE mutant-catching test finding 9 asks for: `resolveLaunchTemplate`

@@ -769,6 +769,18 @@ enum SessionComposerCommandParser {
     /// like `"main cco -n test"` with a project already chosen via the
     /// picker), the raw text is used as-is: there is no project-name text to
     /// strip out of it.
+    ///
+    /// Round-6 review, Minor 1: the sticky-empty-remainder branch below
+    /// (`remainderRawQuery.isEmpty`) is currently UNREACHABLE from
+    /// production. Production always passes the SAME raw string to both
+    /// `directParse` (via `SessionComposerPalette.commandParse`) and this
+    /// function's `rawQuery:` (both read `composerStore.searchText`), so any
+    /// shape `stickyChipProjectId` accepts — a terminated project token like
+    /// `"ghostties "` — is already resolved by `directParse` itself, and the
+    /// `directParse.projectId == nil` guard above short-circuits first.
+    /// Left in place deliberately: correct behavior if the raw/trimmed
+    /// contract at that call site ever changes back, not dead code to
+    /// delete.
     static func effectiveParse(
         rawQuery: String,
         directParse: ParseResult,

@@ -415,8 +415,23 @@ struct SessionComposerPalette: View {
     /// backs `commit(template:)`'s loud-failure path (blocker 2). See
     /// `SessionComposerCommandParser.TypedBranchResolution`'s doc comment
     /// for what each case means.
+    ///
+    /// Round-6 review, Blocker: the argument assembly is hoisted into
+    /// `Self.resolveTypedBranch(branchToken:composerStore:resolvingForProjectId:)`
+    /// below — an `internal static` seam, not `private` — specifically so a
+    /// test can exercise the real production wiring (which STORED PROPERTY
+    /// feeds `cachedProjectId`) instead of only `resolveTypedBranch`'s own
+    /// pure logic. `cachedProjectId: composerStore.worktreesProjectId,` was
+    /// silently dropped from this call in `4560d9b5c` (the same edit that
+    /// swapped `resolvingForProjectId` from `commandProject?.id` to
+    /// `currentProject?.id`), leaving the callee's `cachedProjectId == nil`
+    /// default compared against a non-nil `resolvingForProjectId` forever —
+    /// every typed branch read `.pending` permanently, and every EXISTING
+    /// test called `resolveTypedBranch` directly with both arguments
+    /// hand-passed, so none of them exercised this call site and all stayed
+    /// green. See `SessionComposerBranchLaunchTests.typedBranchResolutionWiresComposerStoreWorktreesProjectIdAsCachedProjectId`.
     private var typedBranchResolution: SessionComposerCommandParser.TypedBranchResolution {
-        SessionComposerCommandParser.resolveTypedBranch(
+        Self.resolveTypedBranch(
             // Round-3 review, Blocker 3: reads `effectiveCommandParse`, the
             // SAME parse `templateFilterQuery`/`commandOptions` read, not
             // the un-implied `commandParse` — see `effectiveCommandParse`'s
@@ -429,8 +444,7 @@ struct SessionComposerPalette: View {
             // whatever worktree the picker had last selected instead of
             // "main".
             branchToken: effectiveCommandParse.branchToken,
-            worktrees: composerStore.worktrees,
-            currentBranchAtProjectRoot: composerStore.currentBranchAtProjectRoot,
+            composerStore: composerStore,
             // Blocker 2 fix (Slice B review round 2): only trust
             // `composerStore.worktrees` when it actually describes the
             // project the branch was typed against — see
@@ -445,6 +459,28 @@ struct SessionComposerPalette: View {
             // forever) against a `worktreesProjectId` that already, and
             // correctly, points at `currentProject`.
             resolvingForProjectId: currentProject?.id
+        )
+    }
+
+    /// Round-6 review, Blocker: the call-site wiring extracted out of
+    /// `typedBranchResolution` above — reads `composerStore.worktrees`,
+    /// `composerStore.currentBranchAtProjectRoot`, AND
+    /// `composerStore.worktreesProjectId` (as `cachedProjectId`) directly
+    /// off the passed-in store, so a test that constructs a real
+    /// `SessionComposerStore` and calls this exercises the exact same
+    /// property wiring production does — not a hand-passed
+    /// `cachedProjectId:` a caller could silently omit.
+    static func resolveTypedBranch(
+        branchToken: String?,
+        composerStore: SessionComposerStore,
+        resolvingForProjectId: UUID?
+    ) -> SessionComposerCommandParser.TypedBranchResolution {
+        SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: branchToken,
+            worktrees: composerStore.worktrees,
+            currentBranchAtProjectRoot: composerStore.currentBranchAtProjectRoot,
+            cachedProjectId: composerStore.worktreesProjectId,
+            resolvingForProjectId: resolvingForProjectId
         )
     }
 
@@ -568,8 +604,9 @@ struct SessionComposerPalette: View {
             // `.backport.onKeyPress`, macOS 14+) can't resolve
             // `selectedOption` against a list this action just swapped out
             // from under it (F1, PR #132 review round 2). `.onChange(of:
-            // query)` -> `reselectBestMatch()` re-seeds it in the same
-            // update pass, so nothing is lost.
+            // composerStore.searchText)` -> `reselectBestMatch()` (round-4
+            // review swapped this trigger from `query`) re-seeds it in the
+            // same update pass, so nothing is lost.
             action: {
                 selectedIndex = nil
                 composerStore.selectProject(project.id)
@@ -786,7 +823,12 @@ struct SessionComposerPalette: View {
                 // F3 fix (round-2 review): `query` is the TRIMMED search
                 // text, so the keystroke that arms the sticky chip (typing
                 // the space after a project name) leaves `query` byte-
-                // identical — the `onChange(of: query)` above never fires.
+                // identical, which is why this block exists as its own
+                // trigger rather than relying on a `query`-keyed one (round-4
+                // review later added `.onChange(of: composerStore.searchText)`
+                // above, which now also fires on that keystroke, but the
+                // `commandProjectRefreshTask` debounce below still needs its
+                // own trigger keyed off `commandProject?.id` specifically).
                 // `selectedProjectId` doesn't change on that keystroke
                 // either, so N5's clamp above didn't fire. But
                 // `commandProject` flips `nil` -> resolved on exactly that
@@ -838,6 +880,22 @@ struct SessionComposerPalette: View {
                         Task { await composerStore.refreshWorktrees(for: nil, projectId: nil) }
                     }
                 }
+            }
+            .onChange(of: composerStore.worktrees) { _ in
+                // Round-6 review, Defect: `commandKnownBranchNames` reads
+                // `composerStore.worktrees`, which lands async (300ms
+                // debounce + git shell-out above) with `searchText`,
+                // `selectedProjectId`, and `commandProject?.id` all
+                // unchanged — none of the other triggers on this modifier
+                // chain fire. When it lands, `effectiveCommandParse`
+                // genuinely re-parses against a different branch list (a
+                // token that WAS a resolved branch under the stale cache
+                // can stop being one), so `flattenedOptions` can reshape
+                // out from under a stale `selectedIndex` the same way a
+                // keystroke does. `reselectBestMatch()`, not a bare clamp:
+                // this is a real re-parse of record, same as the
+                // `searchText` trigger above, not just a shorter list.
+                reselectBestMatch()
             }
             .onChange(of: composerStore.focusSearchFieldTrigger) { triggered in
                 // R8 (Phase 3 review round 2): mirrors the S5 seed in

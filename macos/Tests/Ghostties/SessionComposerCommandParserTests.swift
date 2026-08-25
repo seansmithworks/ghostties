@@ -1384,11 +1384,16 @@ final class SessionComposerCommandParserTests: XCTestCase {
     /// never got the raw-text path — this pins the exact asymmetry at the
     /// `parse()` boundary both properties read: trimming away the trailing
     /// space that terminates "orchestrator" as an operator token is what
-    /// silences `resolvedTemplateId`. Mutation: trim `query` before passing
-    /// it to `parse()` (i.e. restore the pre-fix `commandParse` input) —
-    /// this test goes red because the "trimmed" assertion would then match
-    /// the "raw" one instead of diverging from it. Verified red against that
-    /// mutation.
+    /// silences `resolvedTemplateId`. This test calls `parse()` directly with
+    /// both a hand-trimmed and a hand-raw string — it never touches
+    /// `SessionComposerPalette.commandParse`, so it is NOT a discriminator of
+    /// the palette-level fix; reverting `commandParse` back to trimmed
+    /// `query` leaves this test green. It pins the raw-vs-trimmed asymmetry
+    /// at the `parse()` boundary itself (round-6 review, Minor 2 — a prior
+    /// round's mutation claim here was wrong). Mutation: make `parse()`
+    /// trim its own `query` argument internally — this test goes red because
+    /// the "trimmed" and "raw" assertions would then agree instead of
+    /// diverging.
     func testParseRequiresRawUntrimmedTextForTypedProjectOperatorToResolveAfterTrailingSpace() {
         let project = makeProject(name: "ghostties")
         let template = makeTemplate(name: "orchestrator")
@@ -1465,6 +1470,19 @@ final class SessionComposerCommandParserTests: XCTestCase {
     /// `parse(query: remainderRawQuery, ...)` call (drop the empty-remainder
     /// short-circuit) — this test goes red (`projectId` reads `nil` instead
     /// of `project.id`). Verified red against that mutation.
+    ///
+    /// Currently UNREACHABLE from production (round-6 review, Minor 1): the
+    /// guard this branch sits behind requires `directParse.projectId ==
+    /// nil`, but production always calls both `parse()` (via `commandParse`)
+    /// and `effectiveParse(rawQuery:)` with the SAME raw
+    /// `composerStore.searchText` — so any shape `stickyChipProjectId`
+    /// accepts (a terminated project token like `"ghostties "`) is already
+    /// resolved by the raw `directParse` itself, and the guard's `else`
+    /// short-circuits before this branch runs. This test constructs the
+    /// otherwise-unreachable state directly (a trimmed `directParse` paired
+    /// with an untrimmed `rawQuery`) rather than through production wiring —
+    /// left in place as correct defensive behavior for if the raw/trimmed
+    /// contract ever changes back, not as coverage of a live path.
     func testEffectiveParseReturnsResolvedProjectIdInStickyEmptyRemainderBranch() {
         let project = makeProject(name: "ghostties")
         let directParse = SessionComposerCommandParser.parse(
