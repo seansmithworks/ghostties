@@ -67,6 +67,17 @@ final class SessionComposerStore: ObservableObject {
         self.defaults = UserDefaults(suiteName: "ghostties.sessionComposerStore.test.\(UUID().uuidString)") ?? .standard
     }
 
+    /// Same isolation as `init(isolatedForTesting:)`, but pinned to a
+    /// CALLER-CHOSEN suite name rather than a fresh random one each call —
+    /// the one thing that initializer can't do is let a test construct a
+    /// SECOND `SessionComposerStore` instance reading the SAME persisted
+    /// UserDefaults suite the first one wrote to, which is what proves pin
+    /// persistence is actually durable state and not an in-memory cache
+    /// (`SessionComposerPinningTests`).
+    init(isolatedForTesting suiteName: String) {
+        self.defaults = UserDefaults(suiteName: suiteName) ?? .standard
+    }
+
     /// Test-only override for `precommit`'s session-dispatch call — see the
     /// finding 9 fix at that call site for why this exists.
     var dispatchOverrideForTesting: ((Project, AgentTemplate) -> Void)?
@@ -470,6 +481,59 @@ final class SessionComposerStore: ObservableObject {
         recentProjectIdsData = (try? JSONEncoder().encode(current.map(\.uuidString))) ?? Data()
     }
 
+    // MARK: - Pinned templates (Composer UI 11, Step 1)
+
+    /// Pinned template ids, most-recently-pinned-first. Mirrors
+    /// `recentProjectIds`'s UserDefaults JSON `[String]` pattern
+    /// (`recentProjectIdsData` above) exactly, including the
+    /// `isolatedForTesting` domain handling via `defaults` — a plain
+    /// computed property over persisted state, not `@Published` storage, so
+    /// `togglePin(templateId:)`/`prunePins(validIds:)` call
+    /// `objectWillChange.send()` themselves to drive the pin glyph / lane
+    /// membership update. Global across projects (11.10 in the plan,
+    /// flagged to Sean, deliberate — not scoped per project).
+    private static let pinnedTemplateIdsKey = "ghostties.sessionComposerPinnedTemplateIds"
+
+    private var pinnedTemplateIdsData: Data {
+        get { defaults.data(forKey: Self.pinnedTemplateIdsKey) ?? Data() }
+        set { defaults.set(newValue, forKey: Self.pinnedTemplateIdsKey) }
+    }
+
+    var pinnedTemplateIds: [UUID] {
+        guard let strings = try? JSONDecoder().decode([String].self, from: pinnedTemplateIdsData) else { return [] }
+        return strings.compactMap { UUID(uuidString: $0) }
+    }
+
+    private func setPinnedTemplateIds(_ ids: [UUID]) {
+        pinnedTemplateIdsData = (try? JSONEncoder().encode(ids.map(\.uuidString))) ?? Data()
+    }
+
+    /// Toggle whether `templateId` is pinned. Pinning inserts at the front
+    /// (most-recently-pinned-first); unpinning removes it wherever it sits.
+    func togglePin(templateId: UUID) {
+        objectWillChange.send()
+        var current = pinnedTemplateIds
+        if let index = current.firstIndex(of: templateId) {
+            current.remove(at: index)
+        } else {
+            current.insert(templateId, at: 0)
+        }
+        setPinnedTemplateIds(current)
+    }
+
+    /// Drops any pinned id no longer present in `validIds` (G-F14) — called
+    /// from `open()` with the full set of template ids currently known to
+    /// `WorkspaceStore.templates` (user templates + presets + built-ins, all
+    /// already merged there). Never runs on a background write. A no-op
+    /// (including no `objectWillChange`) when nothing was orphaned.
+    func prunePins(validIds: Set<UUID>) {
+        let current = pinnedTemplateIds
+        let pruned = current.filter { validIds.contains($0) }
+        guard pruned != current else { return }
+        objectWillChange.send()
+        setPinnedTemplateIds(pruned)
+    }
+
     // MARK: - Open / focus / cancel
 
     /// Open the composer for `projectBinding`. If already open, the reset
@@ -514,6 +578,15 @@ final class SessionComposerStore: ObservableObject {
         // check and overwrite B's freshly-reset empty state).
         worktreeRefreshToken += 1
         cachedWorkspaceStore = workspaceStore
+
+        // G-F14: pins are never pruned or reconciled anywhere else — this is
+        // the one call site, per `prunePins(validIds:)`'s doc comment.
+        // `workspaceStore.templates` already merges user templates, presets,
+        // and built-ins (`WorkspaceStore.swift`'s `self.templates = presets +
+        // AgentTemplate.defaults + customTemplates`), so its id set alone is
+        // the full valid-id universe with no separate preset/built-in lookup
+        // needed.
+        prunePins(validIds: Set(workspaceStore.templates.map(\.id)))
 
         // See `suppressProjectChangeCascade`'s doc comment: this method
         // already did its own full reset above and kicks its own single
