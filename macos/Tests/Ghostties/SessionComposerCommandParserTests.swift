@@ -1372,6 +1372,120 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(result.projectId, project.id, "a typed project must never be overridden by an implied one")
     }
 
+    // MARK: - Round-4 review: trailing-space blocker, typed-project defect, sticky-empty-remainder minor
+
+    /// Defect: `SessionComposerPalette.commandParse` used to feed `parse()`
+    /// the TRIMMED `query` for the typed-project shape (`"ghostties
+    /// orchestrator "` — a project literally typed, not implied), while
+    /// `effectiveCommandParse` fed the same function raw
+    /// `composerStore.searchText` for the implied-project shape. Since
+    /// `effectiveParse` returns `directParse` (i.e. `commandParse`)
+    /// UNCHANGED whenever a project token was typed, the typed-project shape
+    /// never got the raw-text path — this pins the exact asymmetry at the
+    /// `parse()` boundary both properties read: trimming away the trailing
+    /// space that terminates "orchestrator" as an operator token is what
+    /// silences `resolvedTemplateId`. Mutation: trim `query` before passing
+    /// it to `parse()` (i.e. restore the pre-fix `commandParse` input) —
+    /// this test goes red because the "trimmed" assertion would then match
+    /// the "raw" one instead of diverging from it. Verified red against that
+    /// mutation.
+    func testParseRequiresRawUntrimmedTextForTypedProjectOperatorToResolveAfterTrailingSpace() {
+        let project = makeProject(name: "ghostties")
+        let template = makeTemplate(name: "orchestrator")
+
+        let trimmed = SessionComposerCommandParser.parse(
+            query: "ghostties orchestrator", // what `query` (trimmed) would read
+            projects: [project], templates: [template], isLocked: false
+        )
+        let raw = SessionComposerCommandParser.parse(
+            query: "ghostties orchestrator ", // what `composerStore.searchText` (raw) would read
+            projects: [project], templates: [template], isLocked: false
+        )
+
+        XCTAssertNil(trimmed.resolvedTemplateId, "an untrimmed trailing space is the only signal that terminates the operator token")
+        XCTAssertEqual(raw.resolvedTemplateId, template.id)
+    }
+
+    /// Blocker (closest testable proxy — the actual fix is a SwiftUI
+    /// `.onChange(of:)` trigger, which has no test seam in this suite; see
+    /// the PR description for why). Pins the underlying invariant that makes
+    /// keying the reselect trigger off the TRIMMED `query` wrong: for an
+    /// IMPLIED project (already selected via the picker, not typed —
+    /// `effectiveParse`'s re-parse path), `resolvedTemplateId` differs
+    /// between the trimmed and raw forms of the exact same edit
+    /// (`"orchestrator"` -> `"orchestrator "`), even though
+    /// `.trimmingCharacters` collapses both to the same `String` and would
+    /// never fire a `.onChange(of: query)` observer. This is the shape that
+    /// requires `.onChange(of: composerStore.searchText)` instead: only the
+    /// raw string changes on the keystroke that flips this test's assertion.
+    func testEffectiveParseResolvedTemplateIdDiffersBetweenTrimmedAndRawImpliedProjectQueryAfterTrailingSpace() {
+        let project = makeProject(name: "ghostties")
+        let template = makeTemplate(name: "orchestrator")
+
+        // Neither "orchestrator" nor "orchestrator " resolves a project on
+        // its own — single bare token, matching production's `commandParse`
+        // for an implied (not typed) project.
+        let directParseNoSpace = SessionComposerCommandParser.parse(
+            query: "orchestrator", projects: [project], isLocked: false
+        )
+        let directParseWithSpace = SessionComposerCommandParser.parse(
+            query: "orchestrator ".trimmingCharacters(in: .whitespaces), projects: [project], isLocked: false
+        )
+        XCTAssertEqual(directParseNoSpace, directParseWithSpace, "sanity check: trimming collapses both edits to an identical direct parse — `query` cannot see this transition at all")
+
+        let beforeSpace = SessionComposerCommandParser.effectiveParse(
+            rawQuery: "orchestrator",
+            directParse: directParseNoSpace,
+            impliedProject: project,
+            projects: [project],
+            knownBranchNames: [],
+            templates: [template],
+            isLocked: false
+        )
+        let afterSpace = SessionComposerCommandParser.effectiveParse(
+            rawQuery: "orchestrator ",
+            directParse: directParseWithSpace,
+            impliedProject: project,
+            projects: [project],
+            knownBranchNames: [],
+            templates: [template],
+            isLocked: false
+        )
+
+        XCTAssertNil(beforeSpace.resolvedTemplateId)
+        XCTAssertEqual(afterSpace.resolvedTemplateId, template.id, "the keystroke that types the trailing space must resolve the operator — a trigger keyed off trimmed `query` would never observe this edit and `selectedIndex` would stay stale")
+    }
+
+    /// Minor: `effectiveParse`'s sticky-empty-remainder branch (project
+    /// typed/implied, nothing after it yet) routed an empty string through
+    /// `parse()`, which hits `parsePath`'s `guard !rawQuery.isEmpty else {
+    /// return .none }` and reports `projectId: nil` — wrong for the seam
+    /// documented as "the single parse of record" even though no current
+    /// caller reads `.projectId` off it. Mutation: restore the unconditional
+    /// `parse(query: remainderRawQuery, ...)` call (drop the empty-remainder
+    /// short-circuit) — this test goes red (`projectId` reads `nil` instead
+    /// of `project.id`). Verified red against that mutation.
+    func testEffectiveParseReturnsResolvedProjectIdInStickyEmptyRemainderBranch() {
+        let project = makeProject(name: "ghostties")
+        let directParse = SessionComposerCommandParser.parse(
+            query: "ghostties", projects: [project], isLocked: false
+        )
+        XCTAssertNil(directParse.projectId, "sanity check: a single bare token never resolves a project directly")
+
+        let result = SessionComposerCommandParser.effectiveParse(
+            rawQuery: "ghostties ",
+            directParse: directParse,
+            impliedProject: project,
+            projects: [project],
+            knownBranchNames: [],
+            templates: [],
+            isLocked: false
+        )
+
+        XCTAssertEqual(result.projectId, project.id, "a definitively resolved project must not read back as nil from the parse of record")
+        XCTAssertTrue(result.remainderTokens.isEmpty)
+    }
+
     // MARK: - Round-2 fix coverage (previously zero test coverage)
 
     /// Fix 1: `parse(query:...)` must actually forward `knownBranchNames`/

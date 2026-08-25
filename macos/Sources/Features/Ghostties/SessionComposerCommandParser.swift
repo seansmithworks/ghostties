@@ -781,6 +781,17 @@ enum SessionComposerCommandParser {
         guard directParse.projectId == nil, let project = impliedProject else { return directParse }
         let stickyProjectId = stickyChipProjectId(rawQuery: rawQuery, projects: projects, isLocked: isLocked)
         let remainderRawQuery = (stickyProjectId == project.id) ? "" : rawQuery
+        // Round-4 review, minor: an empty `remainderRawQuery` sends `parse()`
+        // through `parsePath`'s `guard !rawQuery.isEmpty else { return .none }`
+        // — `.none` has `projectId: nil`, even though a project IS
+        // definitively resolved here (that's the whole point of the sticky
+        // branch above). No current caller reads `effectiveCommandParse
+        // .projectId`, so this was inert, but the doc comment above calls
+        // this "the ONE parse of record" — return the resolved project
+        // directly instead of routing an empty string through `parse()`.
+        guard !remainderRawQuery.isEmpty else {
+            return ParseResult(projectId: project.id, remainderTokens: [])
+        }
         return parse(
             query: remainderRawQuery,
             projects: projects,

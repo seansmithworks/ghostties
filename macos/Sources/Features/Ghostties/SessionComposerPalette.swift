@@ -245,8 +245,13 @@ struct SessionComposerPalette: View {
     /// `commandParse` → `commandProject`/`currentProject` →
     /// `availableTemplates`/worktrees → `commandParse`).
     private var commandProjectIdHint: UUID? {
+        // Round-4 review, defect: was `query` (trimmed). `parse()` builds
+        // its ranges against whatever string it's handed, so passing raw
+        // is range-safe — see `commandParse`'s doc comment for why the
+        // trimmed contract diverges from `effectiveCommandParse` on the
+        // exact keystroke that resolves a typed project.
         SessionComposerCommandParser.parse(
-            query: query, projects: store.projects, isLocked: isProjectLocked,
+            query: composerStore.searchText, projects: store.projects, isLocked: isProjectLocked,
             preResolvedProject: lockedProject
         ).projectId
     }
@@ -285,8 +290,15 @@ struct SessionComposerPalette: View {
     /// falls through to the ordinary whole-string query, byte-identical to
     /// before this parser existed.
     private var commandParse: SessionComposerCommandParser.ParseResult {
+        // Round-4 review, defect: was `query` (trimmed). Since
+        // `effectiveParse` returns `directParse` unchanged whenever a
+        // project token was typed (the common "typed-project" shape), a
+        // trimmed `commandParse` meant that shape never saw the raw-text
+        // path `effectiveCommandParse` otherwise gets everywhere else —
+        // `"ghostties orchestrator "` failed to resolve the operator while
+        // the implied-project equivalent `"orchestrator "` did.
         SessionComposerCommandParser.parse(
-            query: query,
+            query: composerStore.searchText,
             projects: store.projects,
             knownBranchNames: commandKnownBranchNames,
             templates: commandTemplates,
@@ -749,7 +761,19 @@ struct SessionComposerPalette: View {
                 composerStore.cancel()
                 commandProjectRefreshTask?.cancel()
             }
-            .onChange(of: query) { _ in reselectBestMatch() }
+            // Round-4 review, Blocker: was `.onChange(of: query)`. `query`
+            // is the TRIMMED search text, so a typed trailing space (the
+            // exact keystroke that resolves an implied project — see
+            // `effectiveCommandParse`'s doc comment on Blocker 2) leaves
+            // `query` byte-identical while `flattenedOptions` swaps to a
+            // wholly different list underneath the still-stale
+            // `selectedIndex`. Neither the N5 clamp (`selectedProjectId`
+            // doesn't change on that keystroke) nor the F3 clamp
+            // (`commandProject?.id` doesn't change when the typed token is a
+            // branch, not a project name) fires either — this is the only
+            // trigger that subsumes every case, since `searchText` changes
+            // on every keystroke `query` does plus every one it drops.
+            .onChange(of: composerStore.searchText) { _ in reselectBestMatch() }
             .onChange(of: composerStore.selectedProjectId) { _ in
                 // N5: changing the project via the dropdown or a project row
                 // changes `flattenedOptions.count` with `query` unchanged, so
