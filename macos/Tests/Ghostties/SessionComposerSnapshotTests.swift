@@ -74,6 +74,52 @@ struct SessionComposerSnapshotTests {
         return rep.representation(using: .png, properties: [:])
     }
 
+    /// Step 7 only: `ComposerGhostTextField`'s ghost-origin math
+    /// (`firstRect(forCharacterRange:)`, A-F5) needs a window to convert
+    /// screen coordinates, and its `NSTextView` subclass re-runs
+    /// `applyStyles()` the moment `viewDidMoveToWindow()` fires (see that
+    /// override's doc comment). Found empirically: in THIS offscreen,
+    /// single-shot capture harness, that first `viewDidMoveToWindow` call
+    /// lands one layout pass before the text container has generated
+    /// glyphs for the just-set `query` text, so the very first ghost
+    /// position comes out wrong (measured: pinned to the field's left
+    /// edge, overlapping the typed text, in a dedicated debug test written
+    /// to chase this down). A second `layoutSubtreeIfNeeded()` pass closes
+    /// the gap — confirmed against the same debug test. Every OTHER
+    /// snapshot in this file renders pure SwiftUI content with no
+    /// `NSViewRepresentable` in it, so this dependency is specific to
+    /// Step 7 and this helper is kept separate from `renderPNG` rather
+    /// than adding a second layout pass there for content that doesn't
+    /// need it.
+    private func renderPNGWithExtraLayoutPass<Content: View>(
+        _ content: Content,
+        appearance: NSAppearance.Name,
+        size: NSSize
+    ) -> Data? {
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: appearance)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+
+        let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        defer { window.orderOut(nil) }
+
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return nil }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        return rep.representation(using: .png, properties: [:])
+    }
+
     private func writeEvidence(_ data: Data?, filename: String) {
         guard let data else {
             Issue.record("Failed to render PNG for \(filename)")
@@ -271,5 +317,104 @@ struct SessionComposerSnapshotTests {
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step4-zero-project-dark.png")
         #expect(dark != nil)
+    }
+
+    // MARK: - Step 7: model B ghost field (UNVERIFIED-INTERACTION)
+
+    /// Scans a PNG for its darkest non-black pixel (excludes true black,
+    /// which this card never intentionally paints, to avoid a stray
+    /// 1px seam/border pixel winning over the actual ghost glyph fill).
+    /// Same technique this repo used to catch the `prompt:` route's
+    /// un-honoured opacity (`ghostPlaceholderOpacityMatchesDesignSpec`'s
+    /// doc comment, `rgb(64,64,64)` measured that way).
+    /// The typed text (`"Gho"`, `#1A1A1A` at full opacity) is DARKER than
+    /// the ghost (49% alpha), so a plain "darkest pixel in the whole image"
+    /// scan always finds the typed text, not the ghost — verified against
+    /// this exact PNG (measured column extents: `"Gho"`'s solid fill spans
+    /// roughly x:2–54, the ghost's spans roughly x:52–132, at 2x backing
+    /// scale; LIGHT mode only — this per-channel "near-black" heuristic
+    /// does not hold in dark mode, where typed text is near-WHITE, not
+    /// near-black). This isolates the ghost's region instead: finds the
+    /// last column containing a per-channel near-black pixel (each
+    /// component `< 60`) — the typed text's own solid fill — then scans
+    /// strictly to the right of it for the darkest non-white pixel, which
+    /// is the ghost's own solid fill.
+    private func darkestGhostPixel(in data: Data) -> (r: Int, g: Int, b: Int)? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        var lastTypedTextColumn = 0
+        for x in 0..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                guard let color = rep.colorAt(x: x, y: y) else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if r < 60, g < 60, b < 60 { lastTypedTextColumn = x }
+            }
+        }
+
+        var darkest: (r: Int, g: Int, b: Int)?
+        var darkestSum = Int.max
+        for x in (lastTypedTextColumn + 3)..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                guard let color = rep.colorAt(x: x, y: y) else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                guard !(r == 255 && g == 255 && b == 255) else { continue }
+                let sum = r + g + b
+                if sum < darkestSum {
+                    darkestSum = sum
+                    darkest = (r, g, b)
+                }
+            }
+        }
+        return darkest
+    }
+
+    /// Step 7 (Composer UI 11 plan §5/§7, evidence contract §6): flag ON,
+    /// `ComposerGhostTextField` rendered directly (not through
+    /// `SessionComposerPalette` — the flag is default OFF there, and this
+    /// evidence targets the field's OWN rendering, not the swap point,
+    /// which `ComposerGhostTextFieldTests.flagDefaultsToOff…` already
+    /// covers). `query` is `Gho`, `ghostFullPath` is the same shape D-B's
+    /// model A source produces — the active-segment ghost should render
+    /// `stties` in grey per `activeSegmentGhostTruncatesAtNextSeparator`.
+    ///
+    /// UNVERIFIED-INTERACTION: this proves the ghost RENDERS off-screen at
+    /// construction time, in an app-hosted, non-key window — nothing about
+    /// typing, scrolling, or focus (plan §7's manual key matrix, still
+    /// entirely undriven).
+    @Test func step7ModelBGhostFieldRendersLightAndDark() {
+        let field = ComposerGhostTextField(
+            query: .constant("Gho"),
+            fontSize: 15,
+            rowHeight: 38,
+            focusTrigger: .constant(false),
+            hasSelection: false,
+            isPickerOpen: false,
+            ghostFullPath: "Ghostties > Default > Orchestrator"
+        ) { _ in }
+        let view = field.background(Color(nsColor: .windowBackgroundColor))
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth, height: 38)
+
+        let lightData = renderPNGWithExtraLayoutPass(view, appearance: .aqua, size: size)
+        writeEvidence(lightData, filename: "step7-modelb-light.png")
+        #expect(lightData != nil)
+
+        let darkData = renderPNGWithExtraLayoutPass(view, appearance: .darkAqua, size: size)
+        writeEvidence(darkData, filename: "step7-modelb-dark.png")
+        #expect(darkData != nil)
+
+        // Ghost pixel measurement (acceptance criterion 5): report, don't
+        // hard-assert an exact RGB triple — AppKit font rendering/hinting
+        // makes the exact darkest antialiased pixel environment-dependent,
+        // and per the task brief, a MISSING ghost (A-F2 reproducing) must
+        // be reported plainly, not hidden behind an assertion that only
+        // checks "rendered something".
+        if let lightData, let pixel = darkestGhostPixel(in: lightData) {
+            print("step7-modelb-light.png darkest ghost-region pixel: rgb(\(pixel.r),\(pixel.g),\(pixel.b))")
+        } else {
+            print("step7-modelb-light.png: NO ghost pixel found (all-white to the right of the typed text) — possible A-F2 reproduction, see plan §7 acceptance criterion 5")
+        }
     }
 }

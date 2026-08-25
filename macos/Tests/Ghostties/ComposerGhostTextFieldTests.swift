@@ -171,16 +171,72 @@ struct ComposerGhostTextFieldTests {
         #expect(events.value.isEmpty)
     }
 
-    /// 7a: no ghost exists yet, so Tab is a consumed no-op (returns `true`
-    /// either way — letting it fall through would move focus off the
-    /// field, worse than doing nothing). 7b's own tests cover the
-    /// accept-the-ghost behavior once it exists.
-    @Test func insertTabIsConsumedNoOpBeforeGhostExists() {
+    /// No ghost label installed in this harness (`makeCoordinator` skips
+    /// `installGhostLabel`) — Tab is a consumed no-op with nothing to
+    /// accept. `tabAcceptsTheActiveSegmentGhost` below covers the actual
+    /// accept path with a ghost label present.
+    @Test func insertTabIsConsumedNoOpWithNoGhostLabel() {
         let events = Box<[String]>([])
         let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
         #expect(handled == true)
         #expect(events.value.isEmpty)
+    }
+
+    /// 7b: Tab accepts the active-segment ghost, preserving typed casing
+    /// (G-F12 strawman) — `Gho` + accepted `stties` yields `Ghostties`.
+    @Test func tabAcceptsTheActiveSegmentGhost() {
+        let events = Box<[String]>([])
+        let queryBox = Box("")
+        let focusBox = Box(false)
+        let field = ComposerGhostTextField(
+            query: Binding(get: { queryBox.value }, set: { queryBox.value = $0 }),
+            fontSize: 15,
+            rowHeight: 38,
+            focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
+            hasSelection: true,
+            isPickerOpen: false,
+            ghostFullPath: "Ghostties > Default > Orchestrator"
+        ) { _ in }
+        let coordinator = field.makeCoordinator()
+        let textView = makeTextView()
+        coordinator.textView = textView
+        coordinator.installGhostLabel(in: textView)
+        textView.string = "Gho"
+        coordinator.applyStyles()
+        #expect(textView.currentGhostText == "stties")
+
+        let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(handled == true)
+        #expect(textView.string == "Ghostties")
+        #expect(queryBox.value == "Ghostties")
+    }
+
+    // MARK: - Active-segment ghost (pure function)
+
+    @Test func activeSegmentGhostReturnsWholePathWhenTypedIsEmpty() {
+        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "", fullPath: "Ghostties > Default > Orchestrator")
+        #expect(ghost == "Ghostties > Default > Orchestrator")
+    }
+
+    @Test func activeSegmentGhostTruncatesAtNextSeparator() {
+        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "Gho", fullPath: "Ghostties > Default > Orchestrator")
+        #expect(ghost == "stties")
+    }
+
+    @Test func activeSegmentGhostIsEmptyWhenTypedDivergesFromPrediction() {
+        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "xyz", fullPath: "Ghostties > Default > Orchestrator")
+        #expect(ghost == "")
+    }
+
+    @Test func activeSegmentGhostIsEmptyWhenTypedIsTheWholePath() {
+        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "Ghostties > Default > Orchestrator", fullPath: "Ghostties > Default > Orchestrator")
+        #expect(ghost == "")
+    }
+
+    @Test func activeSegmentGhostIsCaseInsensitive() {
+        let ghost = ComposerGhostTextField.activeSegmentGhost(typed: "gHO", fullPath: "Ghostties > Default > Orchestrator")
+        #expect(ghost == "stties")
     }
 
     @Test func insertBacktabIsConsumedNoOp() {

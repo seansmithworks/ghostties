@@ -4,8 +4,9 @@ import SwiftUI
 // MARK: - UNVERIFIED — read before touching this file
 
 /// Composer UI 11 plan §5/§7, Step 7 (two commits, 7a construction + 7b
-/// ghost subview/Tab-accept — this file is 7a; 7b's additions are marked
-/// inline where they land). This is the repo's FIRST standalone
+/// ghost subview/Tab-accept — both commits are in this file; 7b's
+/// additions are marked inline where they land). This is the repo's FIRST
+/// standalone
 /// `NSTextView` (G-F25/A-F9 — `TabTitleEditor` is `NSTextFieldDelegate` on a
 /// field editor, a different protocol on a different class; nothing here
 /// copies it). It is built to the AppKit semantics documented in
@@ -55,9 +56,11 @@ import SwiftUI
 /// tonight (Q2 in `plan.md` §11 is open — one grey vs two is Sean's call).
 /// `applyStyles()` below is the single re-apply socket A-F3 requires
 /// (fired from `textDidChange` AND — transitively, via `didChangeText()` —
-/// after every programmatic write); this commit (7a) leaves it EMPTY
-/// (documented, not implemented) because the thing it would apply, the
-/// ghost label, doesn't exist until 7b.
+/// after every programmatic write). 7b (this commit) fills it in: it
+/// positions/paints the ACTIVE-SEGMENT-REMAINDER ghost label (a subview,
+/// A-F22) and extends the document view's frame to include it (A-F2). It
+/// applies NO temporary attributes — there is nothing to tint yet, Q2 is
+/// still open.
 struct ComposerGhostTextField: NSViewRepresentable {
     /// `@AppStorage` key gating model B. Default OFF — read at the call
     /// site (`SessionComposerPalette.queryRow`), not here; this type has no
@@ -100,6 +103,31 @@ struct ComposerGhostTextField: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
+    }
+
+    // MARK: - Active-segment ghost (7b)
+
+    /// Derives the ACTIVE-SEGMENT-REMAINDER ghost from the same full-path
+    /// source model A's rest-state placeholder uses (D-B) — see this type's
+    /// UNVERIFIED note for what this approximates and does not. Empty
+    /// `typed` returns the whole path (matches the 11.1 rest state, one
+    /// grey); non-empty `typed` truncates the remainder at the next
+    /// `" > "` so only the CURRENT segment's tail ghosts, per
+    /// `V02Quieted222.dc.html` (`Gho` typed + `stties` ghosted, not the
+    /// rest of the path). Returns `""` when `typed` isn't a
+    /// case-insensitive prefix of `fullPath` — no ghost renders against
+    /// text the predicted path doesn't agree with.
+    static func activeSegmentGhost(typed: String, fullPath: String) -> String {
+        guard !fullPath.isEmpty else { return "" }
+        guard typed.count < fullPath.count else { return "" }
+        if typed.isEmpty { return fullPath }
+        guard fullPath.lowercased().hasPrefix(typed.lowercased()) else { return "" }
+        let remainderStart = fullPath.index(fullPath.startIndex, offsetBy: typed.count)
+        let remainder = fullPath[remainderStart...]
+        if let separatorRange = remainder.range(of: " > ") {
+            return String(remainder[remainder.startIndex..<separatorRange.lowerBound])
+        }
+        return String(remainder)
     }
 
     // MARK: - Construction (7a)
@@ -175,6 +203,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         scrollView.borderType = .noBorder
 
         context.coordinator.textView = textView
+        context.coordinator.installGhostLabel(in: textView)
         context.coordinator.applyStyles()
 
         return scrollView
@@ -216,9 +245,27 @@ struct ComposerGhostTextField: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ComposerGhostTextField
         weak var textView: ComposerGhostNSTextView?
+        weak var ghostLabel: NSTextField?
 
         init(parent: ComposerGhostTextField) {
             self.parent = parent
+        }
+
+        /// 7b: A-F22 — a SUBVIEW of the document view (the text view
+        /// itself), not a `draw(_:)` override. Scroll lockstep, AppKit
+        /// invalidation, and an accessibility element all come free; a
+        /// `draw(_:)` override would have to hand-roll all three.
+        func installGhostLabel(in textView: ComposerGhostNSTextView) {
+            let label = NSTextField(labelWithString: "")
+            label.font = textView.font
+            label.textColor = NSColor.labelColor.withAlphaComponent(ComposerGhostTextField.ghostOpacity)
+            label.isSelectable = false
+            label.isEditable = false
+            label.drawsBackground = false
+            label.isHidden = true
+            textView.addSubview(label)
+            ghostLabel = label
+            textView.onWindowChange = { [weak self] in self?.applyStyles() }
         }
 
         /// Write-back path (A-F7): NEVER `textView.string = …` — that
@@ -242,22 +289,80 @@ struct ComposerGhostTextField: NSViewRepresentable {
 
         /// A-F3's single re-apply socket. Fired from `textDidChange` and
         /// (transitively, via `didChangeText()`) after every programmatic
-        /// write. **Empty in 7a** — documented, not implemented; 7b fills
-        /// it in with ghost-label positioning/painting. No temporary
-        /// attributes are applied here or planned tonight (Q2 open, see
-        /// this file's header).
+        /// write. 7b: positions/paints the active-segment ghost label. NO
+        /// temporary attributes are applied — there is nothing to tint yet
+        /// (Q2 open, see this file's header).
         func applyStyles() {
-            // Intentionally empty — see doc comment above.
+            guard let textView, let ghostLabel else { return }
+
+            guard !textView.hasMarkedText() else {
+                ghostLabel.isHidden = true
+                textView.currentGhostText = ""
+                return
+            }
+
+            let typed = textView.string
+            let ghostText = ComposerGhostTextField.activeSegmentGhost(
+                typed: typed,
+                fullPath: parent.ghostFullPath
+            )
+            textView.currentGhostText = ghostText
+
+            guard !ghostText.isEmpty else {
+                ghostLabel.isHidden = true
+                return
+            }
+
+            ghostLabel.stringValue = ghostText
+            ghostLabel.font = textView.font
+            ghostLabel.textColor = NSColor.labelColor.withAlphaComponent(ComposerGhostTextField.ghostOpacity)
+            ghostLabel.sizeToFit()
+
+            // A-F5: insertion-point origin via `firstRect(forCharacterRange:
+            // actualRange:)`, NOT `boundingRect(forGlyphRange:in:)` — that's
+            // in text-container coordinates (needs `textContainerOrigin`
+            // added back) AND excludes trailing whitespace, which would
+            // land the ghost on top of the " > " separator in exactly the
+            // shapes this field exists to render.
+            let length = (typed as NSString).length
+            let caretRange = NSRange(location: length, length: 0)
+            var actualRange = NSRange(location: 0, length: 0)
+            let screenRect = textView.firstRect(forCharacterRange: caretRange, actualRange: &actualRange)
+            var origin = NSPoint(x: textView.textContainerInset.width, y: textView.textContainerInset.height)
+            if screenRect != .zero, let window = textView.window {
+                let windowRect = window.convertFromScreen(screenRect)
+                let viewRect = textView.convert(windowRect, from: nil)
+                origin = NSPoint(x: viewRect.minX, y: viewRect.minY)
+            }
+            ghostLabel.frame = NSRect(
+                x: origin.x,
+                y: origin.y,
+                width: ghostLabel.frame.width,
+                height: ghostLabel.frame.height
+            )
+            ghostLabel.isHidden = false
+
+            // A-F2: the document view's frame must include the ghost width
+            // or a long-path ghost is clipped to zero — the text view
+            // otherwise sizes itself to the used rect of the real glyphs
+            // only, and the scroll view has nothing beyond that to reveal.
+            let requiredWidth = ghostLabel.frame.maxX + textView.textContainerInset.width
+            if textView.frame.width < requiredWidth {
+                textView.setFrameSize(NSSize(width: requiredWidth, height: textView.frame.height))
+            }
         }
 
         // MARK: NSTextViewDelegate
 
         func textDidChange(_ notification: Notification) {
             guard let textView else { return }
-            // A-F14: IME composition in flight — skip the binding write
-            // until the composition commits (the next `textDidChange`
-            // after that, with `hasMarkedText()` false).
-            guard !textView.hasMarkedText() else { return }
+            // A-F14: IME composition in flight — skip the binding write AND
+            // the ghost recompute until the composition commits (the next
+            // `textDidChange` after that, with `hasMarkedText()` false).
+            guard !textView.hasMarkedText() else {
+                ghostLabel?.isHidden = true
+                return
+            }
             parent.query = textView.string
             applyStyles()
         }
@@ -294,11 +399,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
                 return true
 
             case #selector(NSResponder.insertTab(_:)):
-                // 7a: consumed no-op — nothing to accept yet, no ghost
-                // exists in this commit. 7b replaces this with the actual
-                // accept-the-ghost behavior. Returning true either way:
-                // letting Tab fall through moves focus off the field, which
-                // is worse than a no-op.
+                // 7b: Tab accepts the active-segment ghost. No-ops (still
+                // returns true — letting Tab fall through would move focus
+                // off the field) when there's nothing to accept.
+                acceptGhost(in: textView)
                 return true
 
             case #selector(NSResponder.insertBacktab(_:)):
@@ -312,6 +416,19 @@ struct ComposerGhostTextField: NSViewRepresentable {
             }
         }
 
+        /// 7b: Tab accepts the active-segment ghost. G-F12 strawman
+        /// (flagged, plan §11.5): typed casing is PRESERVED, resolution is
+        /// case-insensitive — `Gho` + accepted `stties` yields exactly
+        /// `Ghostties`, never a canonical rewrite of what was already
+        /// typed.
+        func acceptGhost(in textView: NSTextView) {
+            guard let ghostText = self.textView?.currentGhostText, !ghostText.isEmpty else { return }
+            let newText = textView.string + ghostText
+            setText(newText, in: textView)
+            parent.query = newText
+            applyStyles()
+        }
+
         func teardown() {
             guard let textView, let window = textView.window else { return }
             if window.firstResponder === textView {
@@ -322,7 +439,36 @@ struct ComposerGhostTextField: NSViewRepresentable {
 }
 
 /// The repo's first standalone (non-field-editor) `NSTextView` subclass.
-/// 7a: no overrides yet beyond identity — 7b adds `currentGhostText` and an
-/// `accessibilityValue()` override (A-F17) so the field doesn't announce
-/// empty while the screen shows a predicted path.
-final class ComposerGhostNSTextView: NSTextView {}
+/// Carries the ghost's current suggestion text so `accessibilityValue()`
+/// (A-F17) can state it — without this override the field's accessibility
+/// value is just `string`, which announces EMPTY at rest while the screen
+/// shows a full predicted path (the same lie the deleted resolution line's
+/// removal would otherwise leave VoiceOver with, since the composer hides
+/// the rest of the sidebar/terminal while open).
+final class ComposerGhostNSTextView: NSTextView {
+    var currentGhostText: String = ""
+
+    /// 7b fix (found via the snapshot evidence, not source-reading — see
+    /// this file's UNVERIFIED note): `applyStyles()`'s ghost-origin math
+    /// (A-F5) reads `firstRect(forCharacterRange:actualRange:)`, which
+    /// needs `window` to convert screen coordinates. `makeNSView` calls
+    /// `applyStyles()` before SwiftUI has attached the returned
+    /// `NSScrollView` to a window, so that FIRST call always falls back to
+    /// the text-container-inset origin — landing the ghost label at the
+    /// START of the field, overlapping already-typed text, instead of
+    /// after it. `updateNSView`'s later `applyStyles()` call can arrive too
+    /// late for an immediate offscreen capture (no further SwiftUI update
+    /// cycle fires without a state change). This hook re-runs styling the
+    /// moment a window actually arrives, closing that gap.
+    var onWindowChange: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onWindowChange?()
+    }
+
+    override func accessibilityValue() -> String? {
+        guard !currentGhostText.isEmpty else { return string }
+        return "\(string), suggestion: \(currentGhostText)"
+    }
+}
