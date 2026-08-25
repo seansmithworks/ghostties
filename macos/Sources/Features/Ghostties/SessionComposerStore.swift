@@ -527,19 +527,30 @@ final class SessionComposerStore: ObservableObject {
     /// already merged there). Never runs on a background write. A no-op
     /// (including no `objectWillChange`) when nothing was orphaned.
     ///
-    /// Fix 3 (review): a plausibility floor on `validIds` before pruning at
-    /// all. `PresetLoader.loadPresets()` returns `[]` on several soft-failure
-    /// paths with no error surfaced (missing directory, a symlinked
-    /// directory, an enumeration failure — `PresetLoader.swift:171-176`), so
-    /// a caller can legitimately hand this an id universe that's empty, or
-    /// smaller than the persisted pin set, purely because ITS load failed —
-    /// not because the pins are genuinely orphaned. Wiping every preset pin
-    /// on a transient load hiccup is worse than leaving a stale id behind
-    /// until the next successful `open()` prunes it correctly.
-    func prunePins(validIds: Set<UUID>) {
+    /// DEFECT 5 fix (review round 2): round 1's "plausibility floor"
+    /// (`validIds.count >= current.count`) was wrong on both ends —
+    /// - It compared pin count against the WHOLE template universe. A user
+    ///   with 5 pins who genuinely deletes down to 4 templates blocked
+    ///   pruning FOREVER, because `validIds.count` could never reach 5
+    ///   again without adding templates back — guaranteeing plan risk #7
+    ///   ("keeps orphans") instead of guarding against it.
+    /// - The `!validIds.isEmpty` half guards a case that cannot occur at
+    ///   this function's only call site (`open()`, below):
+    ///   `WorkspaceStore.templates` is `presets + AgentTemplate.defaults +
+    ///   customTemplates`, and the built-in defaults are always present, so
+    ///   a failed `PresetLoader.loadPresetsResult()` never empties it.
+    ///
+    /// Gates on LOAD SUCCESS instead — `presetsLoadSucceeded` reflects
+    /// whether `PresetLoader.loadPresetsResult()` genuinely failed (missing
+    /// directory, a symlinked directory, an enumeration failure —
+    /// `PresetLoader.swift`) as opposed to a real, empty presets directory.
+    /// Skips pruning entirely on a soft failure (nothing was lost, so
+    /// nothing should be pruned); prunes normally otherwise, regardless of
+    /// how the resulting id-universe SIZE compares to the pin count.
+    func prunePins(validIds: Set<UUID>, presetsLoadSucceeded: Bool = true) {
         let current = pinnedTemplateIds
         guard !current.isEmpty else { return }
-        guard !validIds.isEmpty, validIds.count >= current.count else { return }
+        guard presetsLoadSucceeded else { return }
         let pruned = current.filter { validIds.contains($0) }
         guard pruned != current else { return }
         objectWillChange.send()
@@ -598,7 +609,10 @@ final class SessionComposerStore: ObservableObject {
         // AgentTemplate.defaults + customTemplates`), so its id set alone is
         // the full valid-id universe with no separate preset/built-in lookup
         // needed.
-        prunePins(validIds: Set(workspaceStore.templates.map(\.id)))
+        prunePins(
+            validIds: Set(workspaceStore.templates.map(\.id)),
+            presetsLoadSucceeded: workspaceStore.presetsLoadSucceeded
+        )
 
         // See `suppressProjectChangeCascade`'s doc comment: this method
         // already did its own full reset above and kicks its own single

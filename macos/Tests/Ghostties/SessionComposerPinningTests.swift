@@ -62,37 +62,51 @@ struct SessionComposerPinningTests {
         store.togglePin(templateId: orphanId)
         #expect(store.pinnedTemplateIds == [orphanId, validId])
 
-        // `validIds` count (2) meets the plausibility floor (>= the 2
-        // persisted pins) — a genuinely orphaned id still gets dropped.
-        store.prunePins(validIds: [validId, UUID()])
+        // Defect 5 fix (review round 2): restored to its original,
+        // pre-plausibility-floor form — a `validIds` universe SMALLER than
+        // the persisted pin count (1 valid id against 2 pins) must still
+        // drop the genuine orphan. The count-comparison floor this test was
+        // weakened to accommodate (`[validId, UUID()]`, count 2) is gone —
+        // see `prunePins`'s doc comment for why it blocked pruning forever
+        // for a user who genuinely deletes down to fewer templates than
+        // they have pins.
+        store.prunePins(validIds: [validId])
 
         #expect(store.pinnedTemplateIds == [validId])
     }
 
-    // MARK: - Plausibility floor (fix 3): soft-failed loads must not wipe pins
+    // MARK: - Load-success gate (defect 5 fix): soft-failed loads must not wipe pins
 
-    /// `PresetLoader.loadPresets()`'s soft-fail paths return `[]` with no
-    /// error — this proves `prunePins` does not treat that as "every pin is
-    /// now orphaned" and wipe the persisted set. Names the real production
-    /// symbol (`prunePins`), fails under a mutation that removes the floor
-    /// (see report).
-    @Test func prunePinsSkipsAnEmptyValidIdUniverse() {
+    /// `PresetLoader.loadPresetsResult()`'s soft-fail paths report
+    /// `loadSucceeded: false` — this proves `prunePins` skips pruning
+    /// entirely on that signal, rather than treating an incidentally empty
+    /// `validIds` as "every pin is now orphaned" and wiping the persisted
+    /// set. Names the real production symbol (`prunePins`'s
+    /// `presetsLoadSucceeded` parameter) — fails under a mutation that
+    /// removes the gate (see report).
+    @Test func prunePinsSkipsOnPresetsLoadFailure() {
         let store = SessionComposerStore(isolatedForTesting: ())
         let first = UUID()
         let second = UUID()
         store.togglePin(templateId: first)
         store.togglePin(templateId: second)
 
-        store.prunePins(validIds: [])
+        // Even an empty `validIds` (which now, absent the load-failure
+        // signal, WOULD prune everything — see the sibling test below) must
+        // not prune when the load itself is known to have failed.
+        store.prunePins(validIds: [], presetsLoadSucceeded: false)
 
         #expect(store.pinnedTemplateIds == [second, first])
     }
 
-    /// A `validIds` universe smaller than the persisted pin set is the same
-    /// soft-failure shape (a caller's partial load, not genuine orphaning) —
-    /// the floor skips pruning rather than dropping pins down to whatever
-    /// fraction happens to overlap.
-    @Test func prunePinsSkipsAnImplausiblySmallValidIdUniverse() {
+    /// Defect 5's actual failure mode, proven fixed: a `validIds` universe
+    /// SMALLER than the persisted pin count — the exact shape a user
+    /// genuinely deleting templates down below their pin count produces —
+    /// still prunes correctly once the load is known to have succeeded.
+    /// The old count-comparison floor blocked this scenario FOREVER (the
+    /// id universe could never grow back to the pin count without adding
+    /// templates); this proves it no longer does.
+    @Test func prunePinsDropsOrphansEvenWhenValidIdsIsSmallerThanPinCount() {
         let store = SessionComposerStore(isolatedForTesting: ())
         let first = UUID()
         let second = UUID()
@@ -101,10 +115,10 @@ struct SessionComposerPinningTests {
         store.togglePin(templateId: second)
         store.togglePin(templateId: third)
 
-        // Only one valid id against three persisted pins — implausibly small.
-        store.prunePins(validIds: [first])
+        // Only one valid id against three persisted pins, load succeeded.
+        store.prunePins(validIds: [first], presetsLoadSucceeded: true)
 
-        #expect(store.pinnedTemplateIds == [third, second, first])
+        #expect(store.pinnedTemplateIds == [first])
     }
 
     /// `prunePins` runs from `open()` — proves the real call site actually
