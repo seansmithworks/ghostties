@@ -751,4 +751,164 @@ struct SessionComposerSnapshotTests {
         #expect(textView.currentGhostText == "as > Default > Shell")
     }
 
+    // MARK: - Defect 1 class: mounted model B ghost tracks the highlighted
+    // row, not `currentProject` (findings ledger F3/F6)
+
+    /// F3's kill, verified directly: `selectedOption` derives from `@State
+    /// private var selectedIndex` (`SessionComposerPalette.swift:87`),
+    /// written ONLY from `.onAppear` and
+    /// `.onChange(of: composerStore.searchText)`. A windowless construction
+    /// of `ComposerGhostTextField` — like `workedExampleGhostsADifferentProjectsFullPath`
+    /// above, or every test in `ComposerGhostTextFieldTests.swift` — hands
+    /// it a literal `ghostFullPath` string and never exercises that binding
+    /// chain at all, so it stays green even if `ghostFullPathForModelB`
+    /// regressed to ignore `selectedOption` entirely (F6). This mounts the
+    /// real `SessionComposerPalette`, flag ON, and drives a real keystroke
+    /// through `composerStore.searchText` — the same property
+    /// `searchTextBinding`'s setter writes — so the render can only pass if
+    /// the whole `.onChange` → `reselectBestMatch()` → `selectedOption` →
+    /// `ghostFullPathForModelB` chain is actually wired end to end.
+    ///
+    /// Deviation from a literal "set `searchText` before mounting": verified
+    /// against `SessionComposerStore.open(projectBinding:workspaceStore:)`
+    /// — it unconditionally resets `searchText = ""` on EVERY call,
+    /// including the one `.onAppear` makes on first mount, so pre-seeding
+    /// before the first layout pass is silently wiped the instant
+    /// `.onAppear` fires. The chain this defect actually lives in is
+    /// `.onAppear` (mount, empty query) THEN
+    /// `.onChange(of: composerStore.searchText)` (typing) — this renders
+    /// once to let `.onAppear` settle, mutates `searchText` exactly as
+    /// `searchTextBinding`'s setter would, spins the run loop briefly so
+    /// SwiftUI's Combine-driven update has a turn to reconcile (same
+    /// technique as `TaskFileWatcherTests.swift:53`), then renders again.
+    private func renderMountedPaletteAfterTyping(
+        project: Project,
+        workspaceStore: WorkspaceStore,
+        composerStore: SessionComposerStore,
+        typed: String,
+        appearance: NSAppearance.Name,
+        size: NSSize
+    ) -> Data? {
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: appearance)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+
+        // NOT `paletteView(...)` — that shared helper hardcodes
+        // `.locked(project)`, and a locked composer's `filteredProjectOptions`
+        // is unconditionally empty, which would hide `otherProject` from the
+        // list this test needs it to appear in. Must match the
+        // `.prefilled(currentProject)` binding `composerStore.open(...)`
+        // above was called with.
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(project)),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        // Settles `.onAppear` — `open()` + the empty-query default
+        // selection.
+        hosting.layoutSubtreeIfNeeded()
+
+        // The production write path (`searchTextBinding`'s setter) also
+        // calls this to disarm a pending chip-undo — matched here so this
+        // is the same state transition a real keystroke produces, not a
+        // shortcut that skips it.
+        composerStore.noteSearchTextEditedByTyping()
+        composerStore.searchText = typed
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        // Extra pass, same reason `renderPNGWithExtraLayoutPass` needs one:
+        // `ComposerGhostTextField` is an `NSViewRepresentable`, and its
+        // `viewDidMoveToWindow`-triggered `applyStyles()` lands one layout
+        // pass ahead of the just-changed ghost text having generated glyphs.
+        hosting.layoutSubtreeIfNeeded()
+
+        defer { window.orderOut(nil) }
+
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return nil }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    /// Table-driven over four (scoped project, typed prefix, other project)
+    /// rows. The invariant under test, stated once: for any typed text that
+    /// matches the highlighted row, the ghost is non-empty and previews
+    /// THAT row's destination — never silently empty because the ghost
+    /// stayed welded to `currentProject` (defect 1's class). Each row's
+    /// "other" project name is chosen to share no substring with any
+    /// built-in template title (`Shell`, `Claude Code`, `Orchestrator`,
+    /// `Browser`, `Codex`) so `filteredProjectOptions`/`reselectBestMatch()`
+    /// ranks it unambiguously above the current project's own template
+    /// rows.
+    @Test(
+        "mounted model B ghost tracks the row a typed prefix highlights, not currentProject",
+        arguments: [
+            (current: "Ghostties", other: "Brukas", typed: "bruk"),
+            (current: "Atlas", other: "Nautilus", typed: "naut"),
+            (current: "Zephyr", other: "Cascade", typed: "casc"),
+            (current: "Forge", other: "Meridian", typed: "MERID"),
+        ]
+    )
+    @MainActor
+    func mountedModelBGhostTracksHighlightedRowAcrossProjects(row: (current: String, other: String, typed: String)) {
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(true, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let currentProject = Project(
+            name: row.current,
+            rootPath: "/tmp/composer-ui-11-defect1-\(row.current)-\(UUID().uuidString)"
+        )
+        let otherProject = Project(
+            name: row.other,
+            rootPath: "/tmp/composer-ui-11-defect1-\(row.other)-\(UUID().uuidString)"
+        )
+        let workspaceStore = WorkspaceStore(testingProjects: [currentProject, otherProject], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        // `.prefilled`, not `.locked` — a locked composer's
+        // `filteredProjectOptions` is unconditionally empty
+        // (`!isProjectLocked` guard), so `otherProject` could never appear
+        // in the list to highlight at all.
+        composerStore.open(projectBinding: .prefilled(currentProject), workspaceStore: workspaceStore)
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+        let light = renderMountedPaletteAfterTyping(
+            project: currentProject,
+            workspaceStore: workspaceStore,
+            composerStore: composerStore,
+            typed: row.typed,
+            appearance: .aqua,
+            size: size
+        )
+        writeEvidence(light, filename: "defect1-mounted-\(row.other.lowercased())-light.png")
+        #expect(light != nil)
+        if let light {
+            let bandCount = ghostGrayBandPixelCount(in: light)
+            #expect(
+                bandCount > 50,
+                "typed \"\(row.typed)\" against \(row.other) (scoped to \(row.current)): expected a non-empty ghost in the field's gray band, found \(bandCount) matching pixels — the ghost stayed welded to currentProject instead of following the highlighted row"
+            )
+        }
+    }
+
 }

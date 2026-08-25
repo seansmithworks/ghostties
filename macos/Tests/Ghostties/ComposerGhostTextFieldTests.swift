@@ -314,4 +314,65 @@ struct ComposerGhostTextFieldTests {
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.deleteForward(_:)))
         #expect(handled == false)
     }
+
+    // MARK: - Defect 2 class: Tab-drill termination is a fixpoint property,
+    // not a fixed-depth script (findings ledger F8)
+
+    /// F8's kill: defect 2 was a NON-TERMINATION bug (Tab accepted one
+    /// segment then the ghost died instead of advancing), and
+    /// `tabAcceptsExactlyOneSegmentLeavingTheRestGhosted` above already
+    /// proves it for a fixed 3-Tab, 3-segment path — bounded at whatever
+    /// depth that test's author happened to type. This drives the two pure
+    /// functions (`remainderGhost`/`nextSegment`, no mounting, no
+    /// `Coordinator`) to a FIXPOINT for each of several path shapes: repeat
+    /// "accept one segment" until the ghost goes empty, and assert it
+    /// actually terminates within the path's own segment count and lands
+    /// exactly on `fullPath`. A regression that dead-ends after N segments —
+    /// for ANY N, not just whatever a hand-written script checked — fails
+    /// this by simply never reaching `fullPath`.
+    @Test(
+        "repeated Tab-drill (remainderGhost + nextSegment) reaches a fixpoint at fullPath within its segment count",
+        arguments: [
+            "Ghostties",
+            "Ghostties > Default > Orchestrator",
+            "A > B > C > D > E",
+            "Solo",
+        ]
+    )
+    func tabDrillReachesFixpointAtFullPathWithinSegmentCount(fullPath: String) {
+        let segmentCount = fullPath.components(separatedBy: ComposerGhostTextField.segmentSeparator).count
+
+        var typed = ""
+        var iterations = 0
+        // Guard the loop itself against the exact failure mode this test
+        // exists to catch — a dead ghost that never reaches `fullPath` would
+        // otherwise spin here forever instead of failing.
+        let maxIterations = segmentCount + 1
+
+        while true {
+            let ghost = ComposerGhostTextField.remainderGhost(typed: typed, fullPath: fullPath)
+            guard !ghost.isEmpty else { break }
+
+            iterations += 1
+            #expect(
+                iterations <= maxIterations,
+                "Tab-drill on \"\(fullPath)\" did not reach a fixpoint within \(maxIterations) segments (stuck at typed=\"\(typed)\", ghost=\"\(ghost)\") — defect 2's non-termination class regressed"
+            )
+            guard iterations <= maxIterations else { break }
+
+            let segment = ComposerGhostTextField.nextSegment(remainder: ghost)
+            // `nextSegment` returning empty against a non-empty remainder is
+            // itself the dead end defect 2 shipped — the old
+            // `activeSegmentGhost` implementation produced exactly this
+            // shape (remainder `" > B"`, next segment `""`) once a whole
+            // segment had just been accepted.
+            #expect(!segment.isEmpty, "nextSegment returned empty against a non-empty remainder \"\(ghost)\" — Tab has nothing left to accept even though \(fullPath) is not fully typed")
+            guard !segment.isEmpty else { break }
+
+            typed += segment
+        }
+
+        #expect(typed == fullPath, "Tab-drill on \"\(fullPath)\" settled at \"\(typed)\", not the full path")
+        #expect(iterations <= segmentCount, "Tab-drill on \"\(fullPath)\" took \(iterations) Tabs for \(segmentCount) segments — expected at most one Tab per segment")
+    }
 }
