@@ -1328,6 +1328,7 @@ struct SessionComposerPalette: View {
                             ) { event in
                                 handle(event)
                             }
+                            .accessibilityLabel(ComposerQueryField.accessibilityFieldLabel)
                         }
                     } else {
                         ComposerQueryField(

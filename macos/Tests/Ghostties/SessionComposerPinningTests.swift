@@ -70,7 +70,7 @@ struct SessionComposerPinningTests {
         // see `prunePins`'s doc comment for why it blocked pruning forever
         // for a user who genuinely deletes down to fewer templates than
         // they have pins.
-        store.prunePins(validIds: [validId])
+        store.prunePins(validIds: [validId], presetsLoadSucceeded: true)
 
         #expect(store.pinnedTemplateIds == [validId])
     }

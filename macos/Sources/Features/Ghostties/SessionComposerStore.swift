@@ -547,7 +547,7 @@ final class SessionComposerStore: ObservableObject {
     /// Skips pruning entirely on a soft failure (nothing was lost, so
     /// nothing should be pruned); prunes normally otherwise, regardless of
     /// how the resulting id-universe SIZE compares to the pin count.
-    func prunePins(validIds: Set<UUID>, presetsLoadSucceeded: Bool = true) {
+    func prunePins(validIds: Set<UUID>, presetsLoadSucceeded: Bool) {
         let current = pinnedTemplateIds
         guard !current.isEmpty else { return }
         guard presetsLoadSucceeded else { return }

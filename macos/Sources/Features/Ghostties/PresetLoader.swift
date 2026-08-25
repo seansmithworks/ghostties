@@ -173,11 +173,16 @@ struct PresetLoader {
     /// `SessionComposerStore.prunePins` needs that distinction to gate
     /// pruning on LOAD SUCCESS rather than inferring it from a count
     /// comparison against the id universe (see that function's doc
-    /// comment). `loadSucceeded` is `false` only for the two soft-failure
-    /// paths below (not a real directory / a symlinked directory /
-    /// `contentsOfDirectory` throwing) — an empty-but-real presets
-    /// directory reports `true` with zero templates, which is the correct
-    /// "nothing to prune against was lost" signal.
+    /// comment). `loadSucceeded` is `false` for the directory-level
+    /// soft-failure paths below (not a real directory / a symlinked
+    /// directory / `contentsOfDirectory` throwing) AND when any individual
+    /// `.md` or folder entry fails to parse (I/O failure, malformed
+    /// frontmatter, missing `name`, rejected `command`) — those per-entry
+    /// nils are exactly the "the preset did not genuinely go away" case
+    /// this gate exists to catch (FIX 1, final review round). An
+    /// empty-but-real presets directory with every entry parsing cleanly
+    /// reports `true` with zero templates, which is the correct "nothing
+    /// to prune against was lost" signal.
     static func loadPresetsResult() -> (templates: [AgentTemplate], loadSucceeded: Bool) {
         let signpostState = Perf.signposter.beginInterval("presets.load")
         defer { Perf.signposter.endInterval("presets.load", signpostState) }
@@ -196,6 +201,7 @@ struct PresetLoader {
         do {
             let entries = try fm.contentsOfDirectory(atPath: dirPath)
             var templates: [AgentTemplate] = []
+            var anyEntryFailedToParse = false
 
             // Flat .md presets (legacy format).
             let mdFiles = entries.filter { $0.hasSuffix(".md") }.sorted()
@@ -204,6 +210,8 @@ struct PresetLoader {
                 let url = URL(fileURLWithPath: filePath)
                 if let template = parsePreset(at: url, filename: filename) {
                     templates.append(template)
+                } else {
+                    anyEntryFailedToParse = true
                 }
             }
 
@@ -221,10 +229,12 @@ struct PresetLoader {
                 let folderURL = URL(fileURLWithPath: (dirPath as NSString).appendingPathComponent(subdir))
                 if let template = parseFolderPreset(at: folderURL) {
                     templates.append(template)
+                } else {
+                    anyEntryFailedToParse = true
                 }
             }
 
-            return (templates, true)
+            return (templates, !anyEntryFailedToParse)
         } catch {
             logger.error("Failed to read presets directory: \(error.localizedDescription)")
             return ([], false)

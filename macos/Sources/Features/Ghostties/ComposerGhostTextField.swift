@@ -133,12 +133,16 @@ struct ComposerGhostTextField: NSViewRepresentable {
     static let ghostOpacity: CGFloat = 0.49
 
     /// DEFECT 3 fix (review round 2): a small fixed trailing pad added to
-    /// `ghostInkSize`'s measured width — see `applyStyles()`'s doc comment
-    /// for why a pure ink-bounds measurement alone did not close the last
-    /// glyph's clip (CoreText anti-aliasing bleed beyond its own reported
-    /// ink bounds). Deliberately far short of `sizeToFit()`'s ~4pt
-    /// chrome-padded frame (A-F2 rejected that for over-reserving scroll
-    /// space); this only needs to cover a rasterizer's sub-pixel bleed.
+    /// `ghostInkSize`'s measured (advance-width) size — see
+    /// `applyStyles()`'s doc comment for why the plain advance-width
+    /// measurement alone did not close the last glyph's clip (CoreText
+    /// anti-aliasing bleed beyond even the reported advance width).
+    /// Deliberately far short of `sizeToFit()`'s ~4pt chrome-padded frame
+    /// (A-F2 rejected that for over-reserving scroll space); this only
+    /// needs to cover a rasterizer's sub-pixel bleed. This margin is the
+    /// thing that actually closes the clip (final review round) — see
+    /// `ghostInkSize`'s doc comment for why an earlier TextKit-based
+    /// "ink bounds" measurement was reverted.
     static let glyphAntialiasMargin: CGFloat = 3
 
     /// Fix 3 (review, round 1) computed this as `labelColor.alphaComponent
@@ -211,29 +215,29 @@ struct ComposerGhostTextField: NSViewRepresentable {
         return String(remainder)
     }
 
-    /// DEFECT 3 fix (review round 2): the ghost label's actual glyph ink
-    /// bounding box, via a throwaway TextKit 1 stack — same explicit
-    /// storage/layout-manager/container chain `makeNSView` builds for the
-    /// field itself (A-F26), sized to measure only. `boundingRect(forGlyphRange:in:)`
-    /// returns the drawn glyphs' true extent (bearing-aware — includes any
-    /// overshoot beyond a glyph's own advance width), unlike
-    /// `NSString.size(withAttributes:)` (pure advance-width sum, which
-    /// clipped this font's terminal `s`, see `applyStyles()`'s doc comment)
-    /// and unlike `NSTextField.sizeToFit()` (`NSTextFieldCell`'s own
-    /// chrome-padded frame, several points wider than the ink itself —
-    /// the over-reservation A-F2 rejected it for in the first place).
+    /// FINAL REVIEW correction: this was previously a throwaway TextKit 1
+    /// stack (`NSTextStorage`/`NSLayoutManager`/`NSTextContainer`), on the
+    /// claim that `boundingRect(forGlyphRange:in:)` is "bearing-aware / the
+    /// glyphs' true painted extent" unlike `NSString.size(withAttributes:)`.
+    /// That claim was WRONG: `boundingRect(forGlyphRange:in:)` returns the
+    /// union of line-fragment USED rects, which is advance-based, not ink-
+    /// based — two proofs. First, the DEFECT 3 fix commit's own body says
+    /// swapping to `ghostInkSize` alone reproduced an IDENTICAL hard cutoff
+    /// at the same column (if it were genuinely ink-based this fix would
+    /// have moved the clip). Second, its returned HEIGHT is used verbatim
+    /// as the label height below, and in `step7-modelb-light.png` the
+    /// ghost's ink spans the same rows (27-50) as the typed run — that is
+    /// LINE HEIGHT, not a tight ink bounding box. The thing that actually
+    /// fixed the clipping is `glyphAntialiasMargin` (a fixed 3pt trailing
+    /// pad, below applyStyles), which this TextKit stack cost a full
+    /// allocation per call to sit alongside, on EVERY `applyStyles()` call
+    /// — which fires on every keystroke. Reverted to the plain
+    /// advance-width string measurement `sizeToFit()` also uses, with
+    /// `glyphAntialiasMargin` doing the actual clip-avoidance work (see
+    /// `applyStyles()`'s doc comment for the re-measured taper proof).
     static func ghostInkSize(for text: String, font: NSFont) -> NSSize {
         guard !text.isEmpty else { return .zero }
-        let storage = NSTextStorage(string: text, attributes: [.font: font])
-        let layoutManager = NSLayoutManager()
-        storage.addLayoutManager(layoutManager)
-        let container = NSTextContainer(size: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
-        container.lineFragmentPadding = 0
-        layoutManager.addTextContainer(container)
-        layoutManager.ensureLayout(for: container)
-        let glyphRange = layoutManager.glyphRange(for: container)
-        guard glyphRange.length > 0 else { return .zero }
-        return layoutManager.boundingRect(forGlyphRange: glyphRange, in: container).size
+        return (text as NSString).size(withAttributes: [.font: font])
     }
 
     // MARK: - Construction (7a)
@@ -544,9 +548,39 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // not directly comparable to round 1's ~2pt/4px figure, since
             // that number was measuring a mismatched-font comparison, not
             // a smaller version of this same gap. Not fully closed to
-            // zero; most likely ordinary rounding between `firstRect`'s
-            // insertion-point rect and this independently computed advance
-            // width, not a specific glyph pair's bearing.
+            // zero.
+            //
+            // FINAL REVIEW correction: round 2's "ordinary rounding
+            // between `firstRect`'s insertion-point rect and this
+            // independently computed advance width" diagnosis is WRONG —
+            // `firstRect`'s x is never used past this point; six lines
+            // below, `originX` is built purely from
+            // `textView.textContainerInset.width + typedWidth`, and
+            // `viewRect` (the only thing `firstRect` feeds) contributes
+            // `minY` only. There is no horizontal `firstRect` comparison
+            // for rounding to occur between. (This is the SECOND wrong
+            // diagnosis of this same gap — round 1's "`o`→`s` side
+            // bearing" was also wrong, above.)
+            //
+            // Measured facts instead: a column scan of the typed-vs-ghost
+            // boundary in `step7-modelb-light.png` shows 2 blank columns
+            // between glyphs INSIDE the typed run, 1-2 blank columns
+            // INSIDE the ghost run, but 5 blank columns AT the
+            // typed-to-ghost boundary — a systematic ~1.5-2pt excess, not
+            // sub-pixel rounding slop. Prime suspect: `NSTextFieldCell`'s
+            // own leading title inset (the ghost label sits at
+            // `originX`, immediately after the typed run, so any
+            // consistent leading inset baked into the label's own
+            // drawing would land exactly here). Tested directly:
+            // `label.cell?.titleRect(forBounds: label.bounds)` on this
+            // font/string reports `origin.x == 0.0`, both at a
+            // `sizeToFit()`-natural frame AND at a frame padded well
+            // beyond the natural title size — `titleRect` itself shows no
+            // leading inset, so it does not confirm this hypothesis.
+            // Whether `NSTextFieldCell`'s draw-time rendering applies a
+            // leading offset that `titleRect(forBounds:)` doesn't expose
+            // remains UNTESTED; that piece is still a hypothesis, not a
+            // measured cause.
             let typedWidth = (typed as NSString).size(withAttributes: [.font: textView.font as Any]).width
             let originX = textView.textContainerInset.width + typedWidth
             let origin = NSPoint(x: originX, y: viewRect.minY)
@@ -589,8 +623,13 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // `sizeToFit()` on "stties" at this font returns a 41.5pt-wide
             // frame; `(ghostText as NSString).size(withAttributes:)`
             // measures 37.4pt for the SAME string, standalone). That extra
-            // width is trailing, not leading (`NSTextFieldCell`'s
-            // `titleRect` origin.x is 0 for the padded frame) — it doesn't
+            // width is trailing, not leading — round 1 asserted
+            // `NSTextFieldCell`'s `titleRect` origin.x is 0 for the padded
+            // frame with no evidence; FINAL REVIEW round tested it
+            // directly (`label.cell?.titleRect(forBounds: label.bounds)`,
+            // both at a `sizeToFit()`-natural frame and a frame padded
+            // beyond the natural title size) and confirmed `origin.x ==
+            // 0.0` in both cases — it doesn't
             // explain the fix-5 leading gap above (confirmed: this change
             // alone did not move it), but IS a real correctness gap
             // against A-F2's "document frame must include the ghost
@@ -607,15 +646,19 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // a HARD zero at the frame edge, not tapering the way every
             // other glyph in the string does) gets its trailing pixels
             // clipped by `ghostLabel.frame`'s width, since `NSTextField`
-            // clips its cell's drawing to its own frame. Sized via
-            // `NSLayoutManager.boundingRect(forGlyphRange:in:)` first — the
-            // glyph ink bounding box TextKit itself measures, bearing-aware
-            // in principle — but that alone did NOT close the clip
-            // (re-measured: identical hard cutoff at the same column). The
-            // residual is anti-aliasing bleed: CoreText's rasterizer paints
-            // partially-covered pixels up to ~1-2px past even the reported
-            // ink bounds, which no pre-render metric captures exactly.
-            // `ghostInkSize`'s bounding-box width plus a small fixed
+            // clips its cell's drawing to its own frame. Round 2 first
+            // tried sizing via `NSLayoutManager.boundingRect(forGlyphRange:in:)`
+            // on the theory that it's the glyph ink bounding box,
+            // bearing-aware — that did NOT close the clip (re-measured:
+            // identical hard cutoff at the same column), which is itself
+            // proof the theory was wrong (`boundingRect(forGlyphRange:in:)`
+            // is advance-based, same as `NSString.size(withAttributes:)` —
+            // see `ghostInkSize`'s doc comment, corrected in the final
+            // review round). The residual is anti-aliasing bleed:
+            // CoreText's rasterizer paints partially-covered pixels up to
+            // ~1-2px past even the reported advance width, which no
+            // pre-render metric captures exactly. `ghostInkSize`'s
+            // (plain advance-width) measurement plus a small fixed
             // trailing margin (`glyphAntialiasMargin`) covers that bleed
             // without reintroducing `sizeToFit()`'s ~4pt chrome padding —
             // re-measured after this fix: the final glyph tapers over
