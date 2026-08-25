@@ -251,6 +251,33 @@ struct SessionComposerSnapshotTests {
         return count
     }
 
+    /// Fix 1 (review, long-path capture): measures the y-range spanned by
+    /// the ghost gray-band pixels (`ghostGrayBandPixelCount`'s color test,
+    /// same 140-160 luminance band / near-neutral tolerance), scoped to the
+    /// same `y < 280` field region. A single line of ghost text spans a
+    /// tight y-range (glyph ascender to descender, ~15-20px at this font
+    /// size); a wrap regression back to two stacked lines roughly doubles
+    /// it. Returns nil if no matching pixels were found at all.
+    private func ghostGrayBandYSpan(in data: Data) -> Int? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        var minY: Int?
+        var maxY: Int?
+        for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+            for y in stride(from: 0, to: min(280, rep.pixelsHigh), by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.9 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if r >= 140, r <= 160, g >= 140, g <= 160, b >= 140, b <= 160, abs(r - g) < 3, abs(g - b) < 3 {
+                    minY = min(minY ?? y, y)
+                    maxY = max(maxY ?? y, y)
+                }
+            }
+        }
+        guard let minY, let maxY else { return nil }
+        return maxY - minY
+    }
+
     private func writeEvidence(_ data: Data?, filename: String) {
         guard let data else {
             Issue.record("Failed to render PNG for \(filename)")
@@ -421,6 +448,42 @@ struct SessionComposerSnapshotTests {
         writeEvidence(dark, filename: "step3-rest-ghost-path-dark.png")
         #expect(dark != nil)
         if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the rest-state ghost/card content to render, got a near-blank card") }
+    }
+
+    /// Fix 1 (review): a long, realistic resolved path — this repo's own
+    /// `ghostties > feat/composer-ui-11 > Orchestrator` is 45 characters,
+    /// over the ~42-char field width at `.centered` — used to WRAP to a
+    /// second line inside the fixed-height 38pt field before `.lineLimit(1)`/
+    /// `.truncationMode(.tail)` were added. Every OTHER fixture in this file
+    /// uses `"Demo Project"` + a built-in template name, both under 42
+    /// chars, which is why no prior pixel caught it. Pixel-guards it going
+    /// forward: the gray-band pixels (the ghost text) must stay within a
+    /// SINGLE line's y-span — a regression back to wrapping would spread
+    /// them across two stacked lines, roughly doubling the span.
+    @Test func step3RestStateGhostPathLongPathTruncatesLightAndDark() {
+        let project = Project(
+            name: "ghostties-composer-ui-eleven-long-project-name",
+            rootPath: "/tmp/composer-ui-11-snapshot-long-\(UUID().uuidString)"
+        )
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore)
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "step3-rest-ghost-long-path-light.png")
+        #expect(light != nil)
+        if let light {
+            let bandCount = ghostGrayBandPixelCount(in: light)
+            #expect(bandCount > 50, "expected the long-path ghost's rgb(149,149,149) band, found \(bandCount) matching pixels")
+            let ySpan = ghostGrayBandYSpan(in: light)
+            #expect(ySpan != nil && ySpan! < 35, "expected the long path to truncate on ONE line (y-span < 35 — single-line antialiasing measured at 26, a wrapped second line would roughly double it), measured span \(String(describing: ySpan)) — a wrap regression spreads the ghost across two stacked lines")
+        }
+
+        let dark = renderPNG(view, appearance: .darkAqua, size: size)
+        writeEvidence(dark, filename: "step3-rest-ghost-long-path-dark.png")
+        #expect(dark != nil)
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the long-path ghost/card content to render, got a near-blank card") }
     }
 
     // MARK: - Step 5: resolution line deleted, trailing controls shown
@@ -611,5 +674,127 @@ struct SessionComposerSnapshotTests {
                 )
             }
         }
+    }
+
+    // MARK: - Fix 4 evidence: branchControl truncates a long branch name
+
+    /// Real throwaway git repo under `NSTemporaryDirectory()`, one commit,
+    /// torn down by the caller — mirrors `GitWorktreeCreationTests`'s own
+    /// helper. Needed here (not a fake path) because `isGitRepo` is a
+    /// `@Published private(set)` written only by
+    /// `SessionComposerStore.refreshWorktrees`'s real
+    /// `GitWorktreeEnumerator.list(repoPath:)` call — `branchControl` has no
+    /// entry point at all (`isBranchSegmentEligible`) without it.
+    private func makeThrowawayGitRepo() -> String {
+        let unresolvedPath = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("ghostties-composer-ui-11-branch-evidence-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(atPath: unresolvedPath, withIntermediateDirectories: true)
+
+        func run(_ args: [String]) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = args
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+            task.waitUntilExit()
+        }
+
+        run(["git", "-C", unresolvedPath, "init", "-q"])
+        run(["git", "-C", unresolvedPath, "-c", "user.email=test@ghostties.test", "-c", "user.name=Ghostties Test",
+             "commit", "-q", "--allow-empty", "-m", "init"])
+        return unresolvedPath
+    }
+
+    /// Fix 4 (review): `branchControl`'s label had no width cap next to the
+    /// greedy `ComposerQueryField.frame(maxWidth: .infinity)` sibling.
+    /// `.lineLimit(1)`/`.truncationMode(.tail)` was the fix (see
+    /// `branchControl`'s own doc comment for why NOT an added
+    /// `.frame(maxWidth:)`, per `reference_swiftui-frame-maxwidth-is-greedy`).
+    ///
+    /// This captures a 108-character override branch name and asserts the
+    /// composer still renders normally (`containsRenderedContent`, this
+    /// file's existing presence check) rather than breaking down — the
+    /// evidence PNG (`branch-control-long-name-{light,dark}.png`) is the
+    /// artifact Sean's hands-on pass checks the actual truncated pixel
+    /// against (plan §6's visual-acceptance caveat).
+    ///
+    /// A STRICTER geometric assertion (measuring exactly how many pixels
+    /// wide the label renders, or whether it starves the field) was tried
+    /// and abandoned — left here so the next person doesn't re-walk the
+    /// same path. Every pixel-based differential tried gave a result
+    /// that turned out not to isolate `branchControl` at all:
+    /// - Whether the field's own ghost text got squeezed
+    ///   (`fieldGhostRightmostX`) never moved under any mutation against
+    ///   `branchControl`'s modifiers, including a hard
+    ///   `.frame(minWidth: 250)` on the whole button — while the SAME
+    ///   proxy DID move when the FIELD's own `.frame(maxWidth: .infinity)`
+    ///   was mutated directly, confirming the harness itself works. A
+    ///   `Button` label's ideal size does not appear to compete for
+    ///   `HStack` space against a `.frame(maxWidth: .infinity)` sibling the
+    ///   way a bare `Text` would, at least in this offscreen harness.
+    /// - The label's own rendered width, scoped to the row's trailing
+    ///   third (`branchControlLabelSpan`), read identically (201px)
+    ///   whether the truncation modifiers were present or removed
+    ///   entirely.
+    /// - A "middle strip" gray-pixel count (`middleStripGrayBandPixelCount`)
+    ///   appeared to move between a passing and failing run once, but a
+    ///   canary mutation (swapping `.foregroundStyle(.secondary)` for
+    ///   `.red` on the SAME `Text` — a change with no truncation effect at
+    ///   all) moved it by the identical amount (333 either way),
+    ///   proving the signal was actually the field's own ghost text
+    ///   reaching that strip on its own for this fixture, not
+    ///   `branchControl` — a false positive that would have shipped as a
+    ///   "mutant-verified" test guarding nothing.
+    @Test func branchControlTruncatesLongBranchNameLightAndDark() async {
+        let repoPath = makeThrowawayGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoPath) }
+
+        let project = Project(name: "Demo Project", rootPath: repoPath)
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+        let longBranchName = String(repeating: "a-really-long-override-branch-name-", count: 3)
+
+        // `refreshWorktrees` races its three `git` shell-outs against a
+        // timeout (`SF-3`/should-fix 5's `ProcessHandle` design) — under
+        // this suite's OWN parallel test execution (two xctest workers
+        // running concurrently, seen directly while diagnosing this test),
+        // machine load can push a freshly-created repo's first
+        // `git rev-parse --is-inside-work-tree` past that timeout, coming
+        // back `isRepo: false` even though the repo is real. Matches the
+        // documented `GitWorktreeCreationTests` timing-flake class this
+        // repo already carries a known exception for — retried here rather
+        // than fought.
+        func refreshWorktreesWithRetry(_ composerStore: SessionComposerStore) async {
+            for attempt in 0..<10 {
+                await composerStore.refreshWorktrees(for: repoPath, projectId: project.id)
+                if composerStore.isGitRepo { return }
+                try? await Task.sleep(for: .milliseconds(300 * (attempt + 1)))
+            }
+            // Distinguishes the known git-shell-out timing flake (this
+            // comment's own class) from a genuine `branchControl` failure
+            // below — if this fires, the failure that follows is
+            // infrastructure noise, not evidence against the fix.
+            Issue.record("git repo detection never settled after 10 retries — infra flake, not a branchControl regression")
+        }
+
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
+        await refreshWorktreesWithRetry(composerStore)
+        // Not present in `worktrees` (no worktree was actually added for
+        // it) — `currentBranchLabel` falls back to the raw string in that
+        // case, which is exactly what's needed here: an arbitrarily long
+        // label with no real git worktree required.
+        composerStore.selectedWorktreePath = longBranchName
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "branch-control-long-name-light.png")
+        #expect(light != nil)
+        if let light { #expect(containsRenderedContent(in: light, isDark: false), "expected the long-branch card content to render, got a near-blank card") }
+
+        let dark = renderPNG(view, appearance: .darkAqua, size: size)
+        writeEvidence(dark, filename: "branch-control-long-name-dark.png")
+        #expect(dark != nil)
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the long-branch card content to render, got a near-blank card") }
     }
 }
