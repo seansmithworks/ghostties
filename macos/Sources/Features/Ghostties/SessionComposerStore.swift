@@ -526,8 +526,20 @@ final class SessionComposerStore: ObservableObject {
     /// `WorkspaceStore.templates` (user templates + presets + built-ins, all
     /// already merged there). Never runs on a background write. A no-op
     /// (including no `objectWillChange`) when nothing was orphaned.
+    ///
+    /// Fix 3 (review): a plausibility floor on `validIds` before pruning at
+    /// all. `PresetLoader.loadPresets()` returns `[]` on several soft-failure
+    /// paths with no error surfaced (missing directory, a symlinked
+    /// directory, an enumeration failure — `PresetLoader.swift:171-176`), so
+    /// a caller can legitimately hand this an id universe that's empty, or
+    /// smaller than the persisted pin set, purely because ITS load failed —
+    /// not because the pins are genuinely orphaned. Wiping every preset pin
+    /// on a transient load hiccup is worse than leaving a stale id behind
+    /// until the next successful `open()` prunes it correctly.
     func prunePins(validIds: Set<UUID>) {
         let current = pinnedTemplateIds
+        guard !current.isEmpty else { return }
+        guard !validIds.isEmpty, validIds.count >= current.count else { return }
         let pruned = current.filter { validIds.contains($0) }
         guard pruned != current else { return }
         objectWillChange.send()

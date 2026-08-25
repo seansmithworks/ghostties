@@ -56,4 +56,53 @@ struct SessionComposerLaneOrderingTests {
 
         #expect(lane1.map(\.id) == [shared.id, onlyRecent.id])
     }
+
+    // MARK: - Fix 2: pin toggle reseeds selection by id, not stale index
+
+    /// `SessionComposerPalette.reselectedIndex(preserving:in:)` is the pure
+    /// seam behind the pin-toggle reseed fix. A row highlighted BELOW the
+    /// pin toggle moves UP a lane when it's pinned — the option at the old
+    /// index is now a DIFFERENT template, so re-finding by id (not reusing
+    /// the old index) is the whole point of the fix.
+    ///
+    /// Mutant-verified directly against the production symbol: with
+    /// `reselectedIndex`'s body temporarily replaced with
+    /// `optionId.map { _ in 2 }` (the STALE index the row held before the
+    /// reorder — the exact bug this fix closes), this test failed with
+    /// `newIndex : 2` vs. expected `newIndex : 0` — the mutation resolved to
+    /// whatever template now sits at the old position instead of the one
+    /// actually highlighted. The mutation was then reverted; production
+    /// `reselectedIndex` is unchanged from what's committed here.
+    @Test func reselectedIndexFindsTheHighlightedOptionAfterAPinReordersTheLanes() {
+        let recentA = makeOption(name: "Recent A")
+        let recentB = makeOption(name: "Recent B")
+        // The row the user had highlighted before pinning it — at index 2,
+        // the bottom of a 3-row lane.
+        let highlighted = makeOption(name: "Highlighted Recent")
+        let before = [recentA, recentB, highlighted]
+
+        // Pinning `highlighted` moves it to the front of lane 1 — the old
+        // index 2 now points at whatever recent is left there instead.
+        let after = SessionComposerPalette.composeLane1(
+            pinned: [highlighted],
+            recent: [recentA, recentB, highlighted]
+        )
+        #expect(before[2].id == highlighted.id)
+        #expect(after[2].id != highlighted.id)
+
+        let newIndex = SessionComposerPalette.reselectedIndex(preserving: highlighted.id, in: after)
+
+        #expect(newIndex == 0)
+    }
+
+    /// A `nil` preserved id (nothing was highlighted before the toggle)
+    /// falls back to "no index found" so the caller reseeds via
+    /// `reselectBestMatch()` instead.
+    @Test func reselectedIndexReturnsNilWhenNothingWasPreviouslySelected() {
+        let option = makeOption(name: "Some Option")
+
+        let newIndex = SessionComposerPalette.reselectedIndex(preserving: nil, in: [option])
+
+        #expect(newIndex == nil)
+    }
 }

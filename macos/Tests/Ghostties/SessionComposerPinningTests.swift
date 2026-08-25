@@ -62,9 +62,49 @@ struct SessionComposerPinningTests {
         store.togglePin(templateId: orphanId)
         #expect(store.pinnedTemplateIds == [orphanId, validId])
 
-        store.prunePins(validIds: [validId])
+        // `validIds` count (2) meets the plausibility floor (>= the 2
+        // persisted pins) — a genuinely orphaned id still gets dropped.
+        store.prunePins(validIds: [validId, UUID()])
 
         #expect(store.pinnedTemplateIds == [validId])
+    }
+
+    // MARK: - Plausibility floor (fix 3): soft-failed loads must not wipe pins
+
+    /// `PresetLoader.loadPresets()`'s soft-fail paths return `[]` with no
+    /// error — this proves `prunePins` does not treat that as "every pin is
+    /// now orphaned" and wipe the persisted set. Names the real production
+    /// symbol (`prunePins`), fails under a mutation that removes the floor
+    /// (see report).
+    @Test func prunePinsSkipsAnEmptyValidIdUniverse() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let first = UUID()
+        let second = UUID()
+        store.togglePin(templateId: first)
+        store.togglePin(templateId: second)
+
+        store.prunePins(validIds: [])
+
+        #expect(store.pinnedTemplateIds == [second, first])
+    }
+
+    /// A `validIds` universe smaller than the persisted pin set is the same
+    /// soft-failure shape (a caller's partial load, not genuine orphaning) —
+    /// the floor skips pruning rather than dropping pins down to whatever
+    /// fraction happens to overlap.
+    @Test func prunePinsSkipsAnImplausiblySmallValidIdUniverse() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let first = UUID()
+        let second = UUID()
+        let third = UUID()
+        store.togglePin(templateId: first)
+        store.togglePin(templateId: second)
+        store.togglePin(templateId: third)
+
+        // Only one valid id against three persisted pins — implausibly small.
+        store.prunePins(validIds: [first])
+
+        #expect(store.pinnedTemplateIds == [third, second, first])
     }
 
     /// `prunePins` runs from `open()` — proves the real call site actually

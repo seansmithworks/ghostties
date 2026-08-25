@@ -1160,7 +1160,19 @@ struct SessionComposerPalette: View {
                     templateToDelete = $0
                     showDeleteConfirmation = true
                 },
-                onTogglePin: { composerStore.togglePin(templateId: $0.id) },
+                // Fix 2 (review): pinning reshapes lane 1 (moves a row
+                // between lanes) without changing the option COUNT, so
+                // neither `clampSelectedIndex` (keyed on `selectedProjectId`)
+                // nor `reselectBestMatch` (keyed on `searchText`) ever fires
+                // here — a stale index silently pointed Return at whatever
+                // row now sits at the OLD index, not the row the user had
+                // highlighted. Capture the highlighted option's id BEFORE
+                // the toggle reorders the lanes, then re-find it by id.
+                onTogglePin: { template in
+                    let previouslySelectedId = selectedOption?.id
+                    composerStore.togglePin(templateId: template.id)
+                    reselect(preserving: previouslySelectedId)
+                },
                 // `New template` moved in-list (Step 2) — a non-option row
                 // rendered after the last lane, NOT part of `flattenedOptions`
                 // (zero index-math change, no interaction with the G-F8 seed).
@@ -1382,10 +1394,21 @@ struct SessionComposerPalette: View {
                     .font(.system(size: subtitleFontSize))
                     .foregroundStyle(.tertiary)
                 if let label {
+                    // Fix 4 (review): no width cap next to the greedy
+                    // `ComposerQueryField.frame(maxWidth: .infinity)`
+                    // sibling — a long branch name could starve the field.
+                    // Per `reference_swiftui-frame-maxwidth-is-greedy`, the
+                    // fix is `.truncationMode(.tail)` alongside the existing
+                    // `.lineLimit(1)`, NOT an added `.frame(maxWidth:)`
+                    // (that shipped wrong three times on this exact line
+                    // class already): the HStack's own space division
+                    // already bounds it once the sibling can't be squeezed
+                    // below its truncated minimum.
                     Text(label)
                         .font(.system(size: subtitleFontSize))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
             .frame(minWidth: 16, minHeight: 16)
@@ -1554,6 +1577,32 @@ struct SessionComposerPalette: View {
             return
         }
         selectedIndex = bestSelectionIndex(in: options)
+    }
+
+    /// Fix 2 (review): reseeds `selectedIndex` to the option that was
+    /// highlighted BEFORE a pin toggle reshaped the lanes, by id rather than
+    /// by index — the option's position in `flattenedOptions` moves (lane 1
+    /// vs lane 2) but its identity doesn't. Falls back to
+    /// `reselectBestMatch()` if the id no longer resolves (defensive; not
+    /// expected on this call path since pinning never removes an option).
+    private func reselect(preserving optionId: UUID?) {
+        if let index = Self.reselectedIndex(preserving: optionId, in: flattenedOptions) {
+            selectedIndex = index
+        } else {
+            reselectBestMatch()
+        }
+    }
+
+    /// Pure seam for `reselect(preserving:)` above — extracted the same way
+    /// `composeLane1` was (this file's established pattern) so the
+    /// by-id-not-by-index fix is a testable production symbol without a
+    /// SwiftUI view-test harness. `nil` means "the id no longer resolves,
+    /// fall back to `reselectBestMatch()`" — not expected on the pin-toggle
+    /// call path, since pinning only reorders lanes, it never removes an
+    /// option.
+    static func reselectedIndex(preserving optionId: UUID?, in options: [ComposerOption]) -> UInt? {
+        guard let optionId, let index = options.firstIndex(where: { $0.id == optionId }) else { return nil }
+        return UInt(index)
     }
 
     private func commit(template: AgentTemplate) {
@@ -2046,6 +2095,15 @@ struct ComposerQueryField: View {
                 Text(placeholder)
                     .font(.system(size: fontSize, weight: .regular))
                     .foregroundColor(Color(nsColor: .labelColor).opacity(Self.ghostPlaceholderOpacity))
+                    // Fix 1 (review): the deleted `resolutionSegment` code
+                    // carried both of these on every segment; without them a
+                    // long resolved path (this repo's own
+                    // `ghostties > feat/composer-ui-11 > Orchestrator` is 45
+                    // chars, over the ~42-char field width at `.centered`)
+                    // wraps to a second line inside the fixed-height 38pt
+                    // field instead of truncating on one.
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .padding(.vertical, 6)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .allowsHitTesting(false)
