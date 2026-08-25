@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #E8501E; } a:hover { color: #C43F14; }
+    .stage { width: 480px; height: 560px; background: #F0E9E6; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+    .card { width: 360px; background: #FAF7F3; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.30); overflow: hidden; }
+    .tag { position: absolute; top: 14px; left: 16px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: #9A8F88; text-transform: uppercase; }
+    .wrap { position: relative; }
+    .num { font-size: 10px; font-weight: 500; color: #B0A8A2; width: 14px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="tag">03 · Rams — indexed, systematic</div>
+  <div class="stage">
+    <div class="card">
+
+      <div style="padding: 14px 14px 11px 14px; display: flex; align-items: baseline; gap: 10px;">
+        <div style="font-size: 15px; color: #1a1a1a; flex-grow: 1;">orchestrator</div>
+        <div style="font-size: 10px; font-weight: 500; letter-spacing: 0.06em; color: #E8501E;">GHOSTTIES</div>
+      </div>
+
+      <div style="height: 2px; background: #1a1a1a;"></div>
+
+      <div style="padding: 6px 0 6px 0; display: flex; flex-direction: column;">
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 7px 14px; background: #F1EDE8; border-left: 2px solid #E8501E;">
+          <div class="num">01</div>
+          <div style="font-size: 13px; font-weight: 500; color: #1a1a1a; flex-grow: 1;">Orchestrator</div>
+          <div style="font-size: 10px; color: #8A8078; letter-spacing: 0.04em;">RECENT</div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-left: 2px solid transparent;">
+          <div class="num">02</div>
+          <div style="font-size: 13px; font-weight: 500; color: #1a1a1a; flex-grow: 1;">cco</div>
+          <div style="font-size: 10px; color: #8A8078; letter-spacing: 0.04em;">RECENT</div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-left: 2px solid transparent;">
+          <div class="num">03</div>
+          <div style="font-size: 13px; font-weight: 500; color: #1a1a1a; flex-grow: 1;">Default</div>
+          <div style="font-size: 10px; color: #B0A8A2; letter-spacing: 0.04em;">TEMPLATE</div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-left: 2px solid transparent;">
+          <div class="num">04</div>
+          <div style="font-size: 13px; font-weight: 500; color: #1a1a1a; flex-grow: 1;">Review</div>
+          <div style="font-size: 10px; color: #B0A8A2; letter-spacing: 0.04em;">TEMPLATE</div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-left: 2px solid transparent;">
+          <div class="num">05</div>
+          <div style="font-size: 13px; font-weight: 500; color: #1a1a1a; flex-grow: 1;">Debug</div>
+          <div style="font-size: 10px; color: #B0A8A2; letter-spacing: 0.04em;">TEMPLATE</div>
+        </div>
+
+      </div>
+
+      <div style="height: 1px; background: #E5E5E3;"></div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 8px 14px;">
+        <div class="num">+</div>
+        <div style="font-size: 11px; color: #636363;">New template</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

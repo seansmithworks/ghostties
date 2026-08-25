@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&display=swap');
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Tight", system-ui, sans-serif; }
+    a { color: #5B8DEF; } a:hover { color: #3E6FD0; }
+    .stage { width: 480px; height: 560px; background: #F0E9E6; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+    .card { width: 360px; background: #FAF7F3; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.30); overflow: hidden; }
+    .tag { position: absolute; top: 14px; left: 16px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: #9A8F88; text-transform: uppercase; }
+    .wrap { position: relative; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="tag">01 · Current — baseline</div>
+  <div class="stage">
+    <div class="card">
+
+      <div style="padding: 12px 12px 0 12px;">
+        <div style="font-size: 15px; color: #1a1a1a; line-height: 20px;">orchestrator</div>
+        <div style="display: flex; align-items: center; gap: 5px; font-size: 11px; color: #636363; padding-top: 5px; padding-bottom: 8px;">
+          <span style="color: #9A8F88;">→</span>
+          <span>ghostties</span>
+          <span style="color: #C4BAB3;">·</span>
+          <span>Default</span>
+          <span style="color: #C4BAB3;">·</span>
+          <span>Orchestrator</span>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #E5E5E3;"></div>
+
+      <div style="padding: 8px; display: flex; flex-direction: column; gap: 2px;">
+
+        <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: #A9A29C; padding: 6px 4px 2px 4px;">RECENT</div>
+
+        <div style="display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; background: rgba(91,141,239,0.20);">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#5B8DEF" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="2"></rect><path d="M5 7l2 2-2 2"></path><path d="M9 11h2.5"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 1px;">
+            <div style="font-size: 13px; font-weight: 500; color: #1a1a1a;">Orchestrator</div>
+            <div style="font-size: 11px; color: #636363;">ghostties</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#8A8078" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="2"></rect><path d="M5 7l2 2-2 2"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 1px;">
+            <div style="font-size: 13px; font-weight: 500; color: #1a1a1a;">cco</div>
+            <div style="font-size: 11px; color: #636363;">ghostties</div>
+          </div>
+        </div>
+
+        <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: #A9A29C; padding: 6px 4px 2px 4px;">TEMPLATES</div>
+
+        <div style="display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#8A8078" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h10M3 8h10M3 12h6"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 1px;">
+            <div style="font-size: 13px; font-weight: 500; color: #1a1a1a;">Default</div>
+            <div style="font-size: 11px; color: #636363;">ghostties</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#8A8078" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"></circle><path d="M8 5.5v3"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 1px;">
+            <div style="font-size: 13px; font-weight: 500; color: #1a1a1a;">Review</div>
+            <div style="font-size: 11px; color: #636363;">ghostties</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="height: 1px; background: #E5E5E3;"></div>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 11px; color: #636363;">
+        <span style="font-size: 13px; line-height: 1;">+</span>
+        <span>New template…</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

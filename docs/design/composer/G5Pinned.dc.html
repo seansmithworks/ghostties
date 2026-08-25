@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #5B8DEF; } a:hover { color: #3E6FD0; }
+    .stage { width: 480px; height: 560px; background: #F0E9E6; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+    .card { width: 360px; background: #FAF7F3; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.30); overflow: hidden; }
+    .tag { position: absolute; top: 14px; left: 16px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: #9A8F88; text-transform: uppercase; }
+    .wrap { position: relative; }
+    .field { display: flex; align-items: baseline; font-size: 15px; line-height: 20px; }
+    .typed { color: #1A1A1A; }
+    .ghost { color: #1A1A1A7E; }
+    .caret { width: 1.5px; height: 16px; background: #1A1A1A; align-self: center; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; }
+    .rt { font-size: 13px; font-weight: 500; color: #1a1a1a; flex-grow: 1; }
+    .slot { width: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="tag">G5 · Pin as the only mark</div>
+  <div class="stage">
+    <div class="card">
+
+      <div style="padding: 13px 12px 10px 12px;">
+        <div class="field">
+          <div class="typed">Gho</div>
+          <div class="caret"></div>
+          <div class="ghost">stties &gt; Default &gt; Stand Up Agent</div>
+        </div>
+      </div>
+
+      <div style="padding: 4px 8px 8px 8px; display: flex; flex-direction: column; gap: 1px;">
+
+        <div class="row">
+          <div class="slot">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="#8A8078"><path d="M6.2 0.5 L9.5 3.8 L8.1 4.2 L6.6 5.7 L6.9 8.2 L5.6 6.9 L2.4 10 L1.7 9.3 L4.8 6.1 L3.5 4.8 L6 5.1 L7.5 3.6 Z"/></svg>
+          </div>
+          <div class="rt">cco</div>
+        </div>
+
+        <div class="row" style="background: rgba(91,141,239,0.20);">
+          <div class="slot">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="#3E6FD0"><path d="M6.2 0.5 L9.5 3.8 L8.1 4.2 L6.6 5.7 L6.9 8.2 L5.6 6.9 L2.4 10 L1.7 9.3 L4.8 6.1 L3.5 4.8 L6 5.1 L7.5 3.6 Z"/></svg>
+          </div>
+          <div class="rt">Stand Up Agent</div>
+        </div>
+
+        <div class="row"><div class="slot"></div><div class="rt">Task Sync</div><div style="font-size: 11px; color: #B0A8A2;">4m</div></div>
+
+        <div style="height: 1px; background: #E9E4E0; margin: 5px 10px;"></div>
+
+        <div class="row"><div class="slot"></div><div class="rt">Codex</div></div>
+        <div class="row"><div class="slot"></div><div class="rt">Review</div></div>
+        <div class="row"><div class="slot"></div><div class="rt">Debug</div></div>
+        <div class="row"><div class="slot"></div><div class="rt" style="color: #1A1A1A60;">New template</div></div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

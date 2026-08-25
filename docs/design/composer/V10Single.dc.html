@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #5B8DEF; } a:hover { color: #3E6FD0; }
+    .stage { width: 480px; height: 560px; background: #F0E9E6; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+    .card { width: 360px; background: #FAF7F3; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.30); overflow: hidden; }
+    .tag { position: absolute; top: 14px; left: 16px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: #9A8F88; text-transform: uppercase; }
+    .wrap { position: relative; }
+    .seg { display: flex; flex-direction: column; gap: 3px; padding: 7px 10px; }
+    .segl { font-size: 8px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #B0A8A2; }
+    .segv { font-size: 12px; font-weight: 500; color: #1a1a1a; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="tag">10 · Single line — segment rail, no list</div>
+  <div class="stage">
+    <div class="card">
+
+      <div style="display: flex; align-items: stretch; background: #F1EDE8;">
+        <div class="seg" style="border-right: 1px solid #E2DCD6;">
+          <div class="segl">Project</div>
+          <div class="segv">ghostties</div>
+        </div>
+        <div class="seg" style="border-right: 1px solid #E2DCD6;">
+          <div class="segl">Branch</div>
+          <div class="segv" style="color: #A9A29C;">main</div>
+        </div>
+        <div class="seg" style="flex-grow: 1; background: #FAF7F3; border-bottom: 2px solid #5B8DEF;">
+          <div class="segl" style="color: #3E6FD0;">Template</div>
+          <div class="segv">orchestrator</div>
+        </div>
+      </div>
+
+      <div style="padding: 14px; display: flex; align-items: center; gap: 8px;">
+        <div style="font-size: 15px; color: #1a1a1a; flex-grow: 1;">orchestrator</div>
+        <div style="font-size: 10px; color: #B0A8A2;">1 of 4</div>
+      </div>
+
+      <div style="height: 1px; background: #ECE7E2;"></div>
+      <div style="display: flex; align-items: center; padding: 8px 14px; font-size: 10px; color: #A9A29C; gap: 12px;">
+        <span>⇥ next segment</span>
+        <span>↑↓ cycle</span>
+        <span style="flex-grow: 1;"></span>
+        <span>↵ launch</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
