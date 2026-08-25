@@ -55,6 +55,43 @@ struct SessionComposerGhostPlaceholderTests {
         #expect(result == "Project unavailable")
     }
 
+    /// Fix 9 (review): the test above constructs `Segments` as a LOCAL
+    /// LITERAL (`projectLabel: "Project unavailable"`) — hand-copied from
+    /// `resolutionLineSegments`'s own literal (`SessionComposerCommandParser.swift:1176`),
+    /// which `ghostPlaceholder` in turn compares against a SECOND
+    /// hand-copied literal (`lockedUnresolvableProjectLabel`, `:1210`).
+    /// Nothing enforces the three stay in sync — this repo already burned
+    /// on exactly this shape twice (`feedback_vacuous-tests-pass-green`).
+    /// This test instead calls the REAL `resolutionLineSegments(...)` and
+    /// feeds its ACTUAL output into `ghostPlaceholder`, so a change to
+    /// EITHER literal (the one `resolutionLineSegments` emits, or the one
+    /// `ghostPlaceholder` compares against) breaks the round trip.
+    /// Mutant-verified: temporarily changing `resolutionLineSegments`'s
+    /// `"Project unavailable"` literal (`:1176`) to `"Project MUTANT"`
+    /// (leaving `ghostPlaceholder`'s comparison literal at `:1210`
+    /// untouched — exactly the divergence this test exists to catch) failed
+    /// with `Expectation failed: (result → "Type a project, branch, and
+    /// command…") == "Project unavailable"` — the mismatched literal no
+    /// longer matched `ghostPlaceholder`'s `lockedUnresolvableProjectLabel`
+    /// comparison, so it silently fell through to rule 4's generic hint
+    /// instead of rule 2's locked-status message. Reverted immediately
+    /// after confirming the failure.
+    @Test func lockedUnresolvableRoundTripsThroughTheRealResolutionLineSegments() {
+        let segments = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: nil,
+            isProjectLocked: true,
+            isBranchSegmentEligible: false,
+            isCreatingWorktree: false,
+            typedBranchResolution: .notTyped,
+            currentBranchLabel: nil,
+            templateTitle: nil
+        )
+        let result = SessionComposerCommandParser.ghostPlaceholder(
+            segments: segments, hasSelection: false, projectsExist: true
+        )
+        #expect(result == "Project unavailable")
+    }
+
     // MARK: - Rule 3: zero projects exist
 
     @Test func zeroProjectsRendersAddProjectPrompt() {

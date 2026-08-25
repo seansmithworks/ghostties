@@ -120,6 +120,137 @@ struct SessionComposerSnapshotTests {
         return rep.representation(using: .png, properties: [:])
     }
 
+    /// Fix 7 (review): six tests below previously asserted only
+    /// `#expect(image != nil)` — true for ANY non-zero view, including a
+    /// blank card with no rows, no controls, and no empty-state affordance
+    /// at all (a `bitmapImageRepForCachingDisplay` capture of a flat
+    /// `.regularMaterial` rectangle is still a non-nil PNG). This counts
+    /// pixels meaningfully darker (light mode: luminance `< 150`) or
+    /// brighter (dark mode: luminance `>= 120`) than a genuinely blank
+    /// card+border produces on its own — measured directly against a bare
+    /// `RoundedRectangle.stroke` card with no content: 12 such pixels in
+    /// light mode, 0 in dark (border-stroke antialiasing only).
+    ///
+    /// LIMITATION, stated plainly: over the WHOLE image (no `y` bound) this
+    /// guards against a genuinely blank card only — it does NOT distinguish
+    /// "the results area rendered its content" from "only the field's own
+    /// ghost/placeholder text rendered", because that text alone already
+    /// clears the threshold (mutant-verified: removing `addProjectRow`
+    /// entirely left this passing, see `resultsAreaContainsContent` below
+    /// for the fix used where that distinction matters). Used here only for
+    /// the DARK-mode captures, where the stronger, row-specific checks
+    /// (`selectionHighlightPixelCount`, `resultsAreaContainsContent`) were
+    /// not re-validated against dark-mode color math.
+    private func containsRenderedContent(in data: Data, isDark: Bool) -> Bool {
+        guard let rep = NSBitmapImageRep(data: data) else { return false }
+        var count = 0
+        for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                let luminance = (r + g + b) / 3
+                if isDark ? luminance >= 120 : luminance < 150 {
+                    count += 1
+                    if count > 100 { return true }
+                }
+            }
+        }
+        return false
+    }
+
+    /// Fix 7 (review), step 4 specifically: `containsRenderedContent` above
+    /// stayed true against a mutant that deleted `addProjectRow` entirely
+    /// (rendered `EmptyView()` instead), because the field's own "Add a
+    /// project to begin" ghost text — unrelated to G-F7's empty-state row —
+    /// already cleared the threshold. Scoped to `y >= 280`, the same
+    /// field/results-area boundary `ghostGrayBandPixelCount` establishes
+    /// (rows there measured at `y` 332-519; the field is `y` 195-212), so
+    /// this only sees the results area, never the field.
+    private func resultsAreaContainsContent(in data: Data, isDark: Bool) -> Bool {
+        guard let rep = NSBitmapImageRep(data: data) else { return false }
+        var count = 0
+        for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+            for y in stride(from: 280, to: rep.pixelsHigh, by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                let luminance = (r + g + b) / 3
+                if isDark ? luminance >= 120 : luminance < 150 {
+                    count += 1
+                    if count > 20 { return true }
+                }
+            }
+        }
+        return false
+    }
+
+    /// Fix 7 (review): a text-luminance count alone can't distinguish "rows
+    /// rendered" from "one line of empty-state copy rendered" — both are
+    /// gray text of similar pixel mass, and `containsRenderedContent` above
+    /// stayed true against a mutant that zeroed every lane's options,
+    /// because the field's own ghost text still cleared its threshold.
+    /// This counts pixels tinted toward `Color.accentColor` — the
+    /// selection highlight (`Color.accentColor.opacity(0.2)`, `#5B8DEF`)
+    /// `onAppear`'s S5 seed ALWAYS paints on row 0 whenever
+    /// `flattenedOptions` is non-empty. `b - r > 8` isolates it: neutral
+    /// gray text/background/border have `b == r`; the blue accent tint
+    /// does not. Mutant-verified directly (see report): forcing every lane
+    /// empty dropped this from 9485 to 0 at this exact render size/stride —
+    /// LIGHT MODE ONLY (`lane-light`/`plain-light`/`step5-light` all have a
+    /// selectable row 0 by construction).
+    private func selectionHighlightPixelCount(in data: Data) -> Int {
+        guard let rep = NSBitmapImageRep(data: data) else { return 0 }
+        var count = 0
+        for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if b - r > 8 { count += 1 }
+            }
+        }
+        return count
+    }
+
+    /// Fix 7 (review), step 3 specifically: counts pixels in the exact gray
+    /// band the 11.1 ghost placeholder renders at rest —
+    /// `Color(nsColor: .labelColor).opacity(0.49)` over the card's
+    /// near-white light-mode background measures `rgb(149,149,149)`
+    /// (measured directly against this test's own render: 1656 matching
+    /// pixels at a 2px sample stride, `r == 149` at the sample coordinates,
+    /// all at `y` 195-212). A band (140-160, near-equal channels), not an
+    /// exact triple, to tolerate antialiasing at glyph edges.
+    ///
+    /// Scoped to `y < 280` — WITHOUT that bound, this mutant-verified false
+    /// GREEN on a 0.49 -> 0.03 opacity mutation (the ghost went
+    /// near-invisible, but the band count barely dropped) because
+    /// `makePlainComposer`'s template ROWS below the field render their own
+    /// `.secondary`-styled subtitle text in the SAME 140-160 luminance band
+    /// (measured: 274 leftover matches, all at `y` 332-519 — the row list,
+    /// not the field). `y < 280` sits between the two with margin on both
+    /// sides, at this test's fixed render size (`WorkspaceLayout.composerOverlayWidth
+    /// + 16` wide, 420 tall). LIGHT MODE ONLY, same limitation this file's
+    /// `darkestGhostPixel` already documents for dark mode.
+    private func ghostGrayBandPixelCount(in data: Data) -> Int {
+        guard let rep = NSBitmapImageRep(data: data) else { return 0 }
+        var count = 0
+        for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+            for y in stride(from: 0, to: min(280, rep.pixelsHigh), by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.9 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if r >= 140, r <= 160, g >= 140, g <= 160, b >= 140, b <= 160, abs(r - g) < 3, abs(g - b) < 3 {
+                    count += 1
+                }
+            }
+        }
+        return count
+    }
+
     private func writeEvidence(_ data: Data?, filename: String) {
         guard let data else {
             Issue.record("Failed to render PNG for \(filename)")
@@ -133,6 +264,29 @@ struct SessionComposerSnapshotTests {
         } catch {
             Issue.record("Failed to write \(filename): \(error)")
         }
+    }
+
+    /// Fix 8 (review): the stale-PNG class (`fb09ce9c9`'s PNGs were
+    /// committed without being re-rendered from the build that fixed
+    /// them — two full review rounds burned catching it by eye) is not a
+    /// "the file is old" problem this test can detect at RUN time (a test
+    /// can't know what a human will commit after it passes). What it CAN
+    /// guarantee: this suite's own PASS/FAIL never depends on trusting the
+    /// on-disk PNG's content — every pixel assertion above (`ghostGrayBandPixelCount`,
+    /// `selectionHighlightPixelCount`, `darkestGhostPixel`) reads the
+    /// FRESH in-memory render, never the file. This asserts the converse
+    /// half explicitly: immediately after a write, the bytes on disk
+    /// byte-for-byte match what was just rendered — catching a write-side
+    /// failure (a stale file left in place by a failed/partial write) fail
+    /// loudly instead of silently leaving a mismatched artifact for the
+    /// next reviewer to eyeball.
+    private func assertEvidenceMatchesDisk(_ data: Data, filename: String) {
+        let url = evidenceDirectory().appendingPathComponent(filename)
+        guard let onDisk = try? Data(contentsOf: url) else {
+            Issue.record("Evidence file \(filename) missing on disk immediately after write")
+            return
+        }
+        #expect(onDisk == data, "\(filename) on disk does not match the freshly rendered image — stale/partial write")
     }
 
     /// Builds an isolated composer, pre-seeded with one pin and one recent
@@ -190,10 +344,15 @@ struct SessionComposerSnapshotTests {
         let light = renderPNG(view, appearance: .aqua, size: size)
         writeEvidence(light, filename: "step2-lane-state-light.png")
         #expect(light != nil)
+        if let light {
+            let highlightCount = selectionHighlightPixelCount(in: light)
+            #expect(highlightCount > 100, "expected a selected pinned/recent row 0, found \(highlightCount) accent-tinted pixels — a near-blank card would pass a plain text-content check")
+        }
 
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step2-lane-state-dark.png")
         #expect(dark != nil)
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected pinned/recent rows to render, got a near-blank card") }
     }
 
     // MARK: - Plain templates state (no pins, no recents)
@@ -208,10 +367,15 @@ struct SessionComposerSnapshotTests {
         let light = renderPNG(view, appearance: .aqua, size: size)
         writeEvidence(light, filename: "step2-plain-templates-light.png")
         #expect(light != nil)
+        if let light {
+            let highlightCount = selectionHighlightPixelCount(in: light)
+            #expect(highlightCount > 100, "expected a selected template row 0, found \(highlightCount) accent-tinted pixels — a near-blank card would pass a plain text-content check")
+        }
 
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step2-plain-templates-dark.png")
         #expect(dark != nil)
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected template rows to render, got a near-blank card") }
     }
 
     // MARK: - Step 3: rest-state ghost path (11.1)
@@ -240,10 +404,23 @@ struct SessionComposerSnapshotTests {
         let light = renderPNG(view, appearance: .aqua, size: size)
         writeEvidence(light, filename: "step3-rest-ghost-path-light.png")
         #expect(light != nil)
+        if let light { assertEvidenceMatchesDisk(light, filename: "step3-rest-ghost-path-light.png") }
+        // Fix 7 (review): asserts the ghost actually renders IN the correct
+        // gray band (`rgb(149,149,149)`, measured — see
+        // `ghostGrayBandPixelCount`'s doc comment), not just that some PNG
+        // came back. 1656 matching pixels measured at this exact render
+        // size/stride; the threshold (50) is a wide margin under that,
+        // catching a missing/wrong-opacity ghost without being brittle to
+        // minor layout drift.
+        if let light {
+            let bandCount = ghostGrayBandPixelCount(in: light)
+            #expect(bandCount > 50, "expected the rest-state ghost's rgb(149,149,149) band, found \(bandCount) matching pixels")
+        }
 
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step3-rest-ghost-path-dark.png")
         #expect(dark != nil)
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the rest-state ghost/card content to render, got a near-blank card") }
     }
 
     // MARK: - Step 5: resolution line deleted, trailing controls shown
@@ -272,10 +449,15 @@ struct SessionComposerSnapshotTests {
         let light = renderPNG(view, appearance: .aqua, size: size)
         writeEvidence(light, filename: "step5-line-deleted-light.png")
         #expect(light != nil)
+        if let light {
+            let highlightCount = selectionHighlightPixelCount(in: light)
+            #expect(highlightCount > 100, "expected a selected row 0 (rows survived the resolution-line deletion), found \(highlightCount) accent-tinted pixels")
+        }
 
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step5-line-deleted-dark.png")
         #expect(dark != nil)
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the field/hairline/rows/trailing controls to render, got a near-blank card") }
     }
 
     // MARK: - Step 3: ghost placeholder opacity
@@ -313,10 +495,12 @@ struct SessionComposerSnapshotTests {
         let light = renderPNG(view, appearance: .aqua, size: size)
         writeEvidence(light, filename: "step4-zero-project-light.png")
         #expect(light != nil)
+        if let light { #expect(resultsAreaContainsContent(in: light, isDark: false), "expected the 'Add project…' empty-state row to render in the results area, found none") }
 
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step4-zero-project-dark.png")
         #expect(dark != nil)
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the 'Add project…' empty-state row to render, got a near-blank card") }
     }
 
     // MARK: - Step 7: model B ghost field (UNVERIFIED-INTERACTION)
@@ -400,21 +584,32 @@ struct SessionComposerSnapshotTests {
         let lightData = renderPNGWithExtraLayoutPass(view, appearance: .aqua, size: size)
         writeEvidence(lightData, filename: "step7-modelb-light.png")
         #expect(lightData != nil)
+        if let lightData { assertEvidenceMatchesDisk(lightData, filename: "step7-modelb-light.png") }
 
         let darkData = renderPNGWithExtraLayoutPass(view, appearance: .darkAqua, size: size)
         writeEvidence(darkData, filename: "step7-modelb-dark.png")
         #expect(darkData != nil)
 
-        // Ghost pixel measurement (acceptance criterion 5): report, don't
-        // hard-assert an exact RGB triple — AppKit font rendering/hinting
-        // makes the exact darkest antialiased pixel environment-dependent,
-        // and per the task brief, a MISSING ghost (A-F2 reproducing) must
-        // be reported plainly, not hidden behind an assertion that only
-        // checks "rendered something".
-        if let lightData, let pixel = darkestGhostPixel(in: lightData) {
-            print("step7-modelb-light.png darkest ghost-region pixel: rgb(\(pixel.r),\(pixel.g),\(pixel.b))")
-        } else {
-            print("step7-modelb-light.png: NO ghost pixel found (all-white to the right of the typed text) — possible A-F2 reproduction, see plan §7 acceptance criterion 5")
+        // Ghost pixel measurement (acceptance criterion 5). Fix 7 (review):
+        // this used to print either branch and stay green unconditionally —
+        // a MISSING ghost (A-F2 reproducing) passed silently. Now asserts
+        // presence explicitly. Does NOT hard-assert an exact RGB triple —
+        // AppKit font rendering/hinting makes the exact darkest antialiased
+        // pixel environment-dependent, and `ComposerGhostTextField.swift`
+        // itself is out of scope for this fix set — but DOES assert the
+        // pixel is neutral gray (the only property the ghost's own color
+        // math can produce, whatever the exact opacity), so a colored or
+        // clipped-to-black regression still fails loudly.
+        if let lightData {
+            let pixel = darkestGhostPixel(in: lightData)
+            #expect(pixel != nil, "step7-modelb-light.png: no ghost pixel found — possible A-F2 regression (ghost clipped/missing)")
+            if let pixel {
+                print("step7-modelb-light.png darkest ghost-region pixel: rgb(\(pixel.r),\(pixel.g),\(pixel.b))")
+                #expect(
+                    abs(pixel.r - pixel.g) < 3 && abs(pixel.g - pixel.b) < 3,
+                    "expected a neutral gray ghost pixel, got rgb(\(pixel.r),\(pixel.g),\(pixel.b))"
+                )
+            }
         }
     }
 }
