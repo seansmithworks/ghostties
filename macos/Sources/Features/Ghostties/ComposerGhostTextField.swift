@@ -62,14 +62,26 @@ import SwiftUI
 ///   but has not been checked against every parser edge case (quoted
 ///   tokens, `--resume`, etc.).
 /// - A small residual gap between typed text and the ghost's first glyph
-///   (review fix 5): reduced from an earlier double-draw-era defect where
-///   the ghost briefly rendered OVERLAPPING the typed text, but not fully
-///   closed to zero — measured ~2pt logical (4px @2x) in
-///   `step7-modelb-light.png`, roughly double this specific string's own
-///   largest intra-word gap. Two independent, self-consistent measurement
-///   fixes (`applyStyles()`'s fix-5 comments) did not move this number;
-///   most likely this glyph pair's (`o`→`s`) natural side-bearing, not a
-///   construction defect, but not proven either way.
+///   (review fix 5): round 1's diagnosis ("`o`→`s` glyph-pair side
+///   bearing") was WRONG, found in round 2 — the header and
+///   `applyStyles()`'s own fix-5 comment both stated it. The actual cause
+///   was BLOCKER 1 (this file's header, above): `typedWidth` measured
+///   "Gho" against `textView.font` (15pt) while the glyphs it was
+///   measuring against actually DREW at 12pt (unattributed programmatic
+///   text, TextKit's own default), so the two numbers were never
+///   comparing like with like. With Blocker 1 fixed — typed text now
+///   carries `textView.typingAttributes` (15pt) on write, matching the
+///   font `typedWidth` was always measuring against — the residual
+///   RE-measured at ~3.5pt logical (7px @2x) in `step7-modelb-light.png`
+///   (was ~2pt/4px under the old, mismatched-font measurement; the two
+///   numbers are not comparable, since the earlier one was measuring the
+///   wrong thing). Not fully closed to zero; most likely ordinary
+///   sub-pixel slop between `firstRect(forCharacterRange:)`'s caret
+///   position and `NSString.size(withAttributes:)`'s independently
+///   computed advance width — both are legitimate, independently correct
+///   measurements of slightly different things (an insertion-point rect
+///   vs. a string's typographic advance), not proven fully closed, but no
+///   longer attributed to a specific glyph pair's bearing.
 ///
 /// Settled-segment temporary-attribute TINTING is explicitly OUT OF SCOPE
 /// tonight (Q2 in `plan.md` §11 is open — one grey vs two is Sean's call).
@@ -120,17 +132,31 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// which is out of scope.
     static let ghostOpacity: CGFloat = 0.49
 
-    /// Fix 3 (review): the shipping SwiftUI field computes
-    /// `Color(nsColor: .labelColor).opacity(0.49)` — SwiftUI's `.opacity`
-    /// MULTIPLIES the color's own existing alpha (`labelColor`'s is
-    /// `0.85`), giving an effective `0.4165`. This is that same effective
-    /// value, computed the AppKit way, so both fields render the
-    /// identical ghost grey. Applied as the LABEL's `alphaValue` (a
-    /// view-level, post-composite alpha — see `installGhostLabel`'s doc
-    /// comment for why NOT baked into `textColor`), not
-    /// `NSColor.withAlphaComponent`, which REPLACES alpha instead of
-    /// multiplying it and would reintroduce the shipping-path mismatch on
-    /// top of the rendering defect `alphaValue` avoids.
+    /// Fix 3 (review, round 1) computed this as `labelColor.alphaComponent
+    /// * ghostOpacity` (0.4165) on the theory that it mirrors the shipping
+    /// SwiftUI field's `Color(nsColor: .labelColor).opacity(0.49)` math
+    /// (SwiftUI's `.opacity` multiplies the color's own existing alpha).
+    /// Round 2 found that value was landing right for the WRONG reason: it
+    /// was measured to match only because `installGhostLabel` ALSO set
+    /// `label.textColor = .labelColor` (carrying labelColor's own 0.85
+    /// alpha) — if that alpha were genuinely composited a second time on
+    /// top of this value the result would be visibly darker than measured
+    /// (0.85 x 0.4165 ≈ 0.354, not 0.4165). The accidental-but-correct
+    /// result only held because labelColor's own alpha does NOT reliably
+    /// apply in this view's rendering path (a layer-backed `NSTextField`
+    /// subview inside an `NSTextView`'s document view, under an
+    /// `NSHostingView`) — an ambient rendering detail, not a designed
+    /// property. Fixed deliberately: `installGhostLabel` now forces the
+    /// label's `textColor` alpha to `1.0` explicitly
+    /// (`.withAlphaComponent(1)`), so `alphaValue` below is GUARANTEED to be
+    /// the field's only alpha multiplier regardless of whether the
+    /// rendering path would otherwise have honored `textColor`'s own alpha.
+    /// This value still equals `labelColor.alphaComponent * ghostOpacity`
+    /// (0.4165) — it needs to, since the label's ink color is now clamped
+    /// opaque and this is the ONLY place `labelColor`'s 0.85 factor is
+    /// applied — but it is now the single, sole, deliberate source of the
+    /// composite alpha, not a coincidental match against a second hidden
+    /// one.
     static var ghostAlpha: CGFloat {
         NSColor.labelColor.alphaComponent * ghostOpacity
     }
@@ -341,10 +367,17 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// `.labelColor`, correctly antialiased) fixes it — measured
         /// `rgb(151,151,151)` light against the shipping SwiftUI path's
         /// own `rgb(149,149,149)`, within AA-rounding noise.
+        ///
+        /// BLOCKER (review round 2): that match was against the WRONG
+        /// mechanism — see `ghostAlpha`'s doc comment. `textColor` is now
+        /// forced to alpha `1.0` explicitly (`.withAlphaComponent(1)`) so
+        /// `alphaValue` is deterministically the only alpha reduction this
+        /// label applies, matching the shipping path's math on purpose
+        /// rather than by an unproven rendering-path coincidence.
         func installGhostLabel(in textView: ComposerGhostNSTextView) {
             let label = NSTextField(labelWithString: "")
             label.font = textView.font
-            label.textColor = .labelColor
+            label.textColor = NSColor.labelColor.withAlphaComponent(1.0)
             label.alphaValue = ComposerGhostTextField.ghostAlpha
             label.isSelectable = false
             label.isEditable = false
@@ -366,12 +399,38 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// delegate's `textDidChange`, so a single write path satisfies
         /// A-F3's "re-apply on programmatic write" requirement without a
         /// second manual trigger site.
+        ///
+        /// BLOCKER 1 fix (review round 2): `replaceCharacters(in:with:)`
+        /// takes a plain `String`, which carries no attributes. Writing
+        /// into EMPTY storage (the common case — every `setText` call from
+        /// `makeNSView`/`updateNSView` starts from an empty or
+        /// about-to-be-fully-replaced text view) left the inserted run with
+        /// NO preceding character to inherit attributes from, so it rendered
+        /// at TextKit's own layout-manager defaults — NOT `textView.font`
+        /// (this field's 15pt) or `textView.textColor` (`.labelColor`).
+        /// Measured (pre-fix `0db87aef3` vs the regression, `step7-modelb-
+        /// light.png`): typed "Gho" glyph height 24px -> 19px (19/24 ≈
+        /// 12/15), darkest typed pixel rgb(39,39,39) (labelColor at 0.85)
+        /// -> rgb(0,0,0) (unattributed). Fix: after the replace, explicitly
+        /// stamp the inserted range with `textView.typingAttributes` — the
+        /// same attribute dictionary AppKit itself derives from
+        /// `font`/`textColor` and applies to USER-typed input via
+        /// `insertText:` — so a programmatic write and a keystroke produce
+        /// IDENTICAL attributes on the same range, rather than depending on
+        /// storage-adjacency inheritance that silently fails on empty
+        /// storage.
         func setText(_ text: String, in textView: NSTextView) {
             let fullRange = NSRange(location: 0, length: (textView.string as NSString).length)
             guard textView.shouldChangeText(in: fullRange, replacementString: text) else { return }
             textView.textStorage?.replaceCharacters(in: fullRange, with: text)
-            textView.didChangeText()
             let newLength = (text as NSString).length
+            if newLength > 0 {
+                textView.textStorage?.setAttributes(
+                    textView.typingAttributes,
+                    range: NSRange(location: 0, length: newLength)
+                )
+            }
+            textView.didChangeText()
             textView.setSelectedRange(NSRange(location: newLength, length: 0))
         }
 
@@ -429,23 +488,31 @@ struct ComposerGhostTextField: NSViewRepresentable {
             }
             let windowRect = window.convertFromScreen(screenRect)
             let viewRect = textView.convert(windowRect, from: nil)
-            // Fix 5 (review): `firstRect`'s x left a visible gap between
-            // the typed text and the ghost (`Gho stties`, not
+            // Fix 5 (review round 1): `firstRect`'s x left a visible gap
+            // between the typed text and the ghost (`Gho stties`, not
             // `Ghostties`). Measuring the typed text's OWN width with
             // `NSString.size(withAttributes:)` (the same family
             // `sizeToFit()` uses for the ghost label, below) gives both
-            // pieces a consistent measurement basis — verified against
-            // `firstRect`'s own value directly (both agree to the pixel).
-            // HONEST RESULT (measured against `step7-modelb-light.png`
-            // after this fix): the gap did NOT close to zero — it
-            // measures ~2pt logical (4px @2x), about double this
-            // specific string's OWN largest intra-word gap (the widest
-            // gap inside "stties" alone measures ~1pt/2px). Both
-            // measurement systems agreeing rules out a mismatched-origin
-            // bug; the residual is most likely this specific glyph pair's
-            // (`o`→`s`) natural side-bearing, not a construction defect —
-            // reported here rather than claimed fixed, per this fix set's
-            // instructions.
+            // pieces a consistent measurement basis.
+            //
+            // BLOCKER 1 correction (review round 2): round 1's diagnosis of
+            // the residual gap ("`o`→`s` glyph-pair side bearing") was
+            // WRONG — see this file's header for the full write-up. This
+            // line measures `typed` against `textView.font` (15pt); with
+            // Blocker 1 unfixed, the ACTUAL typed glyphs drew at an
+            // unattributed default (~12pt), so `typedWidth` was always
+            // wider than what was really on screen, inflating the gap and
+            // producing a plausible-looking-but-wrong "glyph bearing"
+            // explanation. With Blocker 1 fixed (typed text now carries
+            // `textView.typingAttributes`, 15pt, matching the font measured
+            // here), re-measured against the freshly rendered
+            // `step7-modelb-light.png`: gap is ~3.5pt logical (7px @2x) —
+            // not directly comparable to round 1's ~2pt/4px figure, since
+            // that number was measuring a mismatched-font comparison, not
+            // a smaller version of this same gap. Not fully closed to
+            // zero; most likely ordinary rounding between `firstRect`'s
+            // insertion-point rect and this independently computed advance
+            // width, not a specific glyph pair's bearing.
             let typedWidth = (typed as NSString).size(withAttributes: [.font: textView.font as Any]).width
             let originX = textView.textContainerInset.width + typedWidth
             let origin = NSPoint(x: originX, y: viewRect.minY)
@@ -478,7 +545,9 @@ struct ComposerGhostTextField: NSViewRepresentable {
 
             ghostLabel.stringValue = ghostText
             ghostLabel.font = textView.font
-            ghostLabel.textColor = .labelColor
+            // BLOCKER (review round 2): forced opaque, same as
+            // `installGhostLabel` — see `ghostAlpha`'s doc comment.
+            ghostLabel.textColor = NSColor.labelColor.withAlphaComponent(1.0)
             ghostLabel.alphaValue = ComposerGhostTextField.ghostAlpha
             // `sizeToFit()` sizes the label from `NSTextFieldCell`'s own
             // `titleRect(forBounds:)`, which pads several points WIDER
