@@ -51,7 +51,27 @@ struct SessionComposerPalette: View {
 
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
-    @ObservedObject private var composerStore = SessionComposerStore.shared
+    @ObservedObject private var composerStore: SessionComposerStore
+
+    /// `composerStore` defaults to the real process-wide singleton for
+    /// every production call site (`SessionComposerOverlay`,
+    /// `ProjectDisclosureRow`), unchanged from before this initializer
+    /// existed. The parameter exists so the Step 2 snapshot harness
+    /// (`SessionComposerSnapshotTests`) can mount this view against an
+    /// isolated `SessionComposerStore(isolatedForTesting:)` instead — this
+    /// repo's `.shared` composer store has no environment-object seam, so
+    /// without this the harness would have no way to avoid mutating the
+    /// developer's real, persisted UserDefaults (pins, recents) on every
+    /// test run.
+    init(
+        isPresented: Binding<Bool>,
+        request: SessionComposerRequest,
+        composerStore: SessionComposerStore = .shared
+    ) {
+        self._isPresented = isPresented
+        self.request = request
+        self.composerStore = composerStore
+    }
 
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
@@ -166,12 +186,31 @@ struct SessionComposerPalette: View {
 
     /// Row vertical padding — `ComposerRow`'s existing 5pt (Phase 2,
     /// `.anchored` only) predates the 4pt spacing scale; left as-is since
-    /// restyling the popover is out of scope. `.centered` gets the scale's
-    /// 8pt.
+    /// restyling the popover is out of scope. `.centered` adopts the board's
+    /// row chrome (6/10/6, `V02Quieted222.dc.html`) over DESIGN.md's 4pt
+    /// scale — tension flagged to Sean (11.4), not resolved here.
     private var rowVerticalPadding: CGFloat {
         switch request.presentation {
         case .anchored: return 5
-        case .centered: return 8
+        case .centered: return 6
+        }
+    }
+
+    /// Row horizontal padding — `.anchored` keeps its existing 8pt
+    /// (unstyled). `.centered` adopts the board's 10pt.
+    private var rowHorizontalPadding: CGFloat {
+        switch request.presentation {
+        case .anchored: return 8
+        case .centered: return 10
+        }
+    }
+
+    /// Row corner radius — `.anchored` keeps its existing 5pt (unstyled).
+    /// `.centered` adopts the board's 6pt.
+    private var rowCornerRadius: CGFloat {
+        switch request.presentation {
+        case .anchored: return 5
+        case .centered: return 6
         }
     }
 
@@ -200,8 +239,6 @@ struct SessionComposerPalette: View {
     private var composerClipShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: cornerStyle)
     }
-
-    private static let sectionHeaderFontSize: CGFloat = 10
 
     private var isProjectLocked: Bool {
         if case .locked = request.projectBinding { return true }
@@ -658,6 +695,62 @@ struct SessionComposerPalette: View {
         return SessionComposerRanking.sorted(base, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
     }
 
+    // MARK: - Pinned lane (Composer UI 11, Step 2)
+
+    /// Pinned templates, in pin order (most-recently-pinned-first), ranked
+    /// within the lane by `SessionComposerRanking` once a query exists (a
+    /// no-op against a blank query — `sorted` returns items unreordered
+    /// then). Each carries `.pinned` trailing meta.
+    private var pinnedOptions: [ComposerOption] {
+        var seen = Set<UUID>()
+        var result: [ComposerOption] = []
+        for id in composerStore.pinnedTemplateIds {
+            guard !seen.contains(id), let template = availableTemplates.first(where: { $0.id == id }) else { continue }
+            seen.insert(id)
+            result.append(makeOption(for: template).withTrailingMeta(.pinned))
+        }
+        return SessionComposerRanking.sorted(result, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle })
+    }
+
+    /// Lane 1 (board 11.2): pinned options first, then recents minus
+    /// whatever's already pinned — a pinned-and-recent item renders once, in
+    /// the pinned block, keeping only the pin glyph (11.11 backlog strawman,
+    /// built as adapted). Non-pinned recents carry `.recent` trailing meta.
+    private var lane1Options: [ComposerOption] {
+        Self.composeLane1(
+            pinned: pinnedOptions,
+            recent: filteredRecentOptions.map { $0.withTrailingMeta(.recent) }
+        )
+    }
+
+    /// Pure composition of lane 1 — extracted as a static, directly
+    /// testable seam (this file's established pattern, e.g.
+    /// `SessionComposerStore.resolveLaunchTemplate`) because `onAppear`'s
+    /// `selectedIndex = bestSelectionIndex(in: flattenedOptions)` seeds off
+    /// `flattenedOptions[0]`, i.e. THIS array's first element whenever the
+    /// query is blank (`SessionComposerRanking.bestMatchIndex` returns 0 for
+    /// a blank query) — and neither `flattenedOptions` nor `onAppear`'s
+    /// `@State` write is otherwise reachable from a test (no SwiftUI
+    /// view-test harness in this repo). G-F8: pinned options always precede
+    /// non-pinned recents here, so a pin existing moves index 0 from "most
+    /// recent" to "top pinned" — a real, deliberate first-open-Return change
+    /// (11.11, flagged to Sean), proven by
+    /// `SessionComposerLaneOrderingTests.composeLane1PutsThePinnedHeadAtIndexZero`.
+    static func composeLane1(pinned: [ComposerOption], recent: [ComposerOption]) -> [ComposerOption] {
+        let pinnedIds = Set(pinned.map { $0.id })
+        let recentMinusPinned = recent.filter { !pinnedIds.contains($0.id) }
+        return pinned + recentMinusPinned
+    }
+
+    /// Lane 2 (board 11.2): remaining templates minus anything already
+    /// surfaced in lane 1 (recent OR pinned) — `filteredTemplateOptions`
+    /// already excludes recents; this additionally excludes pins so a
+    /// pinned-but-not-recent template doesn't render twice.
+    private var lane2Options: [ComposerOption] {
+        let pinnedIds = Set(pinnedOptions.map { $0.id })
+        return filteredTemplateOptions.filter { !pinnedIds.contains($0.id) }
+    }
+
     /// Query-matching projects (S2, locked decision: "the search field
     /// filters BOTH templates and projects"). Empty when the query is
     /// blank — the trailing dropdown already covers browsing every project
@@ -685,8 +778,14 @@ struct SessionComposerPalette: View {
     /// The full flattened list, in on-screen order, used for keyboard
     /// navigation and selection clamping. COMMAND renders last — matching
     /// templates in TEMPLATES rank first, per the locked design.
+    ///
+    /// G-F8 (Step 2): lane 1 is now pinned-then-recent, not recent-only, so
+    /// index 0 here — what `onAppear` seeds `selectedIndex` to — is the top
+    /// PINNED template whenever any pin exists, not the most recent one.
+    /// Deliberate consequence of pinned-first ordering (11.11 flagged to
+    /// Sean), not an accident of this refactor.
     private var flattenedOptions: [ComposerOption] {
-        filteredRecentOptions + filteredTemplateOptions + filteredProjectOptions + commandOptions
+        lane1Options + lane2Options + filteredProjectOptions + commandOptions
     }
 
     private var selectedOption: ComposerOption? {
@@ -973,19 +1072,25 @@ struct SessionComposerPalette: View {
             Divider()
 
             ComposerResultsTable(
+                // Headerless (Step 2 board `V02Quieted222.dc.html`): no
+                // visible section title renders, but each lane still carries
+                // an `accessibilityLabel` so VoiceOver retains grouping.
+                // PROJECTS/COMMAND keep their existing content, just without
+                // the rendered header.
                 sections: [
-                    (title: filteredRecentOptions.isEmpty ? nil : "RECENT", options: filteredRecentOptions),
-                    (title: "TEMPLATES", options: filteredTemplateOptions),
-                    (title: filteredProjectOptions.isEmpty ? nil : "PROJECTS", options: filteredProjectOptions),
-                    (title: commandOptions.isEmpty ? nil : "COMMAND", options: commandOptions)
+                    (accessibilityLabel: "Recent", options: lane1Options),
+                    (accessibilityLabel: "Templates", options: lane2Options),
+                    (accessibilityLabel: "Projects", options: filteredProjectOptions),
+                    (accessibilityLabel: "Command", options: commandOptions)
                 ],
                 query: query,
                 selectedIndex: $selectedIndex,
                 hoveredOptionID: $hoveredOptionID,
                 rowFontSize: rowFontSize,
                 subtitleFontSize: subtitleFontSize,
-                sectionHeaderFontSize: Self.sectionHeaderFontSize,
                 rowVerticalPadding: rowVerticalPadding,
+                rowHorizontalPadding: rowHorizontalPadding,
+                rowCornerRadius: rowCornerRadius,
                 onEditTemplate: { newTemplateToEdit = $0 },
                 onDuplicateTemplate: { _ = store.duplicateTemplate(id: $0.id) },
                 onDuplicateAndEditTemplate: {
@@ -995,6 +1100,17 @@ struct SessionComposerPalette: View {
                 onRequestDeleteTemplate: {
                     templateToDelete = $0
                     showDeleteConfirmation = true
+                },
+                onTogglePin: { composerStore.togglePin(templateId: $0.id) },
+                // `New template` moved in-list (Step 2) — a non-option row
+                // rendered after the last lane, NOT part of `flattenedOptions`
+                // (zero index-math change, no interaction with the G-F8 seed).
+                // Hidden while naming: `newTemplateRow` below takes over in
+                // the old footer position for that state.
+                showNewTemplateRow: !isAddingTemplate,
+                onNewTemplate: {
+                    newTemplateName = ""
+                    isAddingTemplate = true
                 }
             ) { option in
                 // Does NOT dismiss the popover here — `option.action()` (a
@@ -1004,8 +1120,6 @@ struct SessionComposerPalette: View {
                 // visible error whenever `commit()`'s pre-check failed.
                 option.action()
             }
-
-            Divider()
 
             if let writeError = composerStore.writeError {
                 Text(writeError)
@@ -1281,7 +1395,13 @@ struct SessionComposerPalette: View {
         )
     }
 
-    // MARK: - Footer: + New template…
+    // MARK: - Footer: naming a new template
+    //
+    // Step 2: the idle "+ New template…" affordance moved IN-LIST
+    // (`ComposerResultsTable`'s trailing row, `showNewTemplateRow`/
+    // `onNewTemplate`) — this computed property now renders ONLY the
+    // inline-naming `TextField`, in the same footer position it always
+    // rendered in, while `isAddingTemplate` is true.
 
     @ViewBuilder
     private var newTemplateRow: some View {
@@ -1302,25 +1422,6 @@ struct SessionComposerPalette: View {
             .onAppear {
                 DispatchQueue.main.async { newTemplateNameFocused = true }
             }
-        } else {
-            Button {
-                newTemplateName = ""
-                isAddingTemplate = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 11))
-                        .frame(width: 16)
-                    Text("New template…")
-                        .font(.system(size: rowFontSize, weight: .medium))
-                    Spacer()
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
         }
     }
 
@@ -1705,6 +1806,15 @@ private struct ShakeEffect: GeometryEffect {
 /// template — `ComposerRow` uses them to decide whether (and which)
 /// context menu to attach; project options and other rows carry no menu.
 struct ComposerOption: Identifiable, Hashable {
+    /// Trailing meta rendered on the right edge of a composer row (Composer
+    /// UI 11, Step 2, board `V02Quieted222.dc.html`): a pin glyph for a
+    /// pinned template, or the literal string `recent` for a non-pinned
+    /// recent — never a timestamp (`lastUsedAt` was cut, G-F18).
+    enum TrailingMeta: Equatable {
+        case pinned
+        case recent
+    }
+
     let id: UUID
     let title: String
     let subtitle: String?
@@ -1712,6 +1822,7 @@ struct ComposerOption: Identifiable, Hashable {
     let action: () -> Void
     let template: AgentTemplate?
     let templateGroup: SessionTemplateResolver.Group?
+    let trailingMeta: TrailingMeta?
 
     init(
         id: UUID,
@@ -1720,7 +1831,8 @@ struct ComposerOption: Identifiable, Hashable {
         leadingIcon: String?,
         action: @escaping () -> Void,
         template: AgentTemplate? = nil,
-        templateGroup: SessionTemplateResolver.Group? = nil
+        templateGroup: SessionTemplateResolver.Group? = nil,
+        trailingMeta: TrailingMeta? = nil
     ) {
         self.id = id
         self.title = title
@@ -1729,6 +1841,25 @@ struct ComposerOption: Identifiable, Hashable {
         self.action = action
         self.template = template
         self.templateGroup = templateGroup
+        self.trailingMeta = trailingMeta
+    }
+
+    /// Returns a copy with `trailingMeta` replaced — every other field
+    /// (including `id`, so `==`/`hash` are unaffected) untouched. Used by
+    /// the pinned/recent lane builders to tag an otherwise-identical option
+    /// after the fact rather than threading a meta parameter through every
+    /// `makeOption` call site.
+    func withTrailingMeta(_ meta: TrailingMeta?) -> ComposerOption {
+        ComposerOption(
+            id: id,
+            title: title,
+            subtitle: subtitle,
+            leadingIcon: leadingIcon,
+            action: action,
+            template: template,
+            templateGroup: templateGroup,
+            trailingMeta: meta
+        )
     }
 
     static func == (lhs: ComposerOption, rhs: ComposerOption) -> Bool { lhs.id == rhs.id }
@@ -1902,26 +2033,37 @@ struct ComposerQueryField: View {
 
 // MARK: - Results table
 
-/// Forked from `CommandTable`, with two changes: it renders named sections
-/// (RECENT / TEMPLATES / PROJECTS — `CommandPaletteView` has no section
-/// grouping at all) and it uses a plain `VStack`, never `LazyVStack` — this
-/// repo has a known bug class where `LazyVStack` never re-invokes
-/// `ForEach`'s content closure when an element changes but its `id` does
-/// not, which froze sidebar rows at first construction (PR #121).
+/// Forked from `CommandTable`. Step 2 (Composer UI 11) made it headerless —
+/// boards `V02Quieted22.dc.html`/`V02Quieted222.dc.html` render no section
+/// titles, lanes separated only by whitespace — so `sections` no longer
+/// carries a visible `title`, only an `accessibilityLabel` VoiceOver reads
+/// per lane so the grouping isn't lost with the header text. Uses a plain
+/// `VStack`, never `LazyVStack` — this repo has a known bug class where
+/// `LazyVStack` never re-invokes `ForEach`'s content closure when an element
+/// changes but its `id` does not, which froze sidebar rows at first
+/// construction (PR #121).
 private struct ComposerResultsTable: View {
-    var sections: [(title: String?, options: [ComposerOption])]
+    var sections: [(accessibilityLabel: String, options: [ComposerOption])]
     var query: String
     @Binding var selectedIndex: UInt?
     @Binding var hoveredOptionID: UUID?
     var rowFontSize: CGFloat
     var subtitleFontSize: CGFloat
-    var sectionHeaderFontSize: CGFloat
     var rowVerticalPadding: CGFloat
+    var rowHorizontalPadding: CGFloat
+    var rowCornerRadius: CGFloat
     var onEditTemplate: (AgentTemplate) -> Void
     var onDuplicateTemplate: (AgentTemplate) -> Void
     var onDuplicateAndEditTemplate: (AgentTemplate) -> Void
     var onEditPresetFile: (AgentTemplate) -> Void
     var onRequestDeleteTemplate: (AgentTemplate) -> Void
+    var onTogglePin: (AgentTemplate) -> Void
+    /// `New template` (Step 2): rendered as the last list row, NOT an
+    /// option — it never appears in `flattened`/`selectedIndex` math. Hidden
+    /// while naming (`SessionComposerPalette.newTemplateRow` takes over in
+    /// the footer for that state).
+    var showNewTemplateRow: Bool
+    var onNewTemplate: () -> Void
     var action: (ComposerOption) -> Void
 
     private var flattened: [ComposerOption] {
@@ -1929,26 +2071,20 @@ private struct ComposerResultsTable: View {
     }
 
     var body: some View {
-        if flattened.isEmpty {
-            Text("No matches")
-                .font(.system(size: rowFontSize))
-                .foregroundStyle(.secondary)
-                .padding(12)
-        } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                            if !section.options.isEmpty {
-                                if let title = section.title {
-                                    Text(title)
-                                        .font(.system(size: sectionHeaderFontSize, weight: .semibold))
-                                        .foregroundStyle(.tertiary)
-                                        .padding(.horizontal, 4)
-                                        .padding(.top, 6)
-                                        .padding(.bottom, 2)
-                                }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 1) {
+                    if flattened.isEmpty {
+                        Text("No matches")
+                            .font(.system(size: rowFontSize))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, rowHorizontalPadding)
+                            .padding(.vertical, rowVerticalPadding)
+                    }
 
+                    ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                        if !section.options.isEmpty {
+                            VStack(alignment: .leading, spacing: 1) {
                                 ForEach(section.options) { option in
                                     ComposerRow(
                                         option: option,
@@ -1958,27 +2094,55 @@ private struct ComposerResultsTable: View {
                                         titleFontSize: rowFontSize,
                                         subtitleFontSize: subtitleFontSize,
                                         verticalPadding: rowVerticalPadding,
+                                        horizontalPadding: rowHorizontalPadding,
+                                        cornerRadius: rowCornerRadius,
                                         onEditTemplate: onEditTemplate,
                                         onDuplicateTemplate: onDuplicateTemplate,
                                         onDuplicateAndEditTemplate: onDuplicateAndEditTemplate,
                                         onEditPresetFile: onEditPresetFile,
-                                        onRequestDeleteTemplate: onRequestDeleteTemplate
+                                        onRequestDeleteTemplate: onRequestDeleteTemplate,
+                                        onTogglePin: onTogglePin
                                     ) {
                                         action(option)
                                     }
                                 }
                             }
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel(section.accessibilityLabel)
                         }
                     }
-                    .padding(8)
+
+                    if showNewTemplateRow {
+                        newTemplateRow
+                    }
                 }
-                .frame(maxHeight: 220)
-                .onChange(of: selectedIndex) { _ in
-                    guard let selectedIndex, selectedIndex < flattened.count else { return }
-                    proxy.scrollTo(flattened[Int(selectedIndex)].id)
-                }
+                .padding(8)
+            }
+            .frame(maxHeight: 220)
+            .onChange(of: selectedIndex) { _ in
+                guard let selectedIndex, selectedIndex < flattened.count else { return }
+                proxy.scrollTo(flattened[Int(selectedIndex)].id)
             }
         }
+    }
+
+    /// The `New template` in-list row (board copy, no ellipsis, no leading
+    /// icon, `#1A1A1A60` — `Color(nsColor: .labelColor).opacity(0.375)`,
+    /// 0x60/0xFF ≈ 0.375). Not an option: no selection highlight, no context
+    /// menu, action fires `onNewTemplate` directly.
+    private var newTemplateRow: some View {
+        Button(action: onNewTemplate) {
+            HStack(spacing: 8) {
+                Text("New template")
+                    .font(.system(size: rowFontSize, weight: .medium))
+                    .foregroundStyle(Color(nsColor: .labelColor).opacity(0.375))
+                Spacer()
+            }
+            .padding(.horizontal, rowHorizontalPadding)
+            .padding(.vertical, rowVerticalPadding)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func isSelected(_ option: ComposerOption) -> Bool {
@@ -2007,11 +2171,14 @@ private struct ComposerRow: View {
     var titleFontSize: CGFloat
     var subtitleFontSize: CGFloat
     var verticalPadding: CGFloat
+    var horizontalPadding: CGFloat
+    var cornerRadius: CGFloat
     var onEditTemplate: (AgentTemplate) -> Void
     var onDuplicateTemplate: (AgentTemplate) -> Void
     var onDuplicateAndEditTemplate: (AgentTemplate) -> Void
     var onEditPresetFile: (AgentTemplate) -> Void
     var onRequestDeleteTemplate: (AgentTemplate) -> Void
+    var onTogglePin: (AgentTemplate) -> Void
     var action: () -> Void
 
     private var highlightedTitle: Text {
@@ -2033,30 +2200,39 @@ private struct ComposerRow: View {
         return Text(attributed)
     }
 
+    /// Board row content (Step 2, `V02Quieted222.dc.html`): trailing `recent`
+    /// text for a non-pinned recent, a pin glyph for a pinned row — never
+    /// both, `option.trailingMeta` already carries whichever applies (or
+    /// `nil` for a plain template/project/command row).
+    @ViewBuilder
+    private var trailingMetaView: some View {
+        switch option.trailingMeta {
+        case .recent:
+            Text("recent")
+                .font(.system(size: subtitleFontSize))
+                .foregroundStyle(.secondary)
+        case .pinned:
+            Image(systemName: "pin.fill")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        case nil:
+            EmptyView()
+        }
+    }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                if let icon = option.leadingIcon {
-                    Image(systemName: icon)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16)
-                }
-
-                VStack(alignment: .leading, spacing: 1) {
-                    highlightedTitle
-
-                    if let subtitle = option.subtitle {
-                        Text(subtitle)
-                            .font(.system(size: subtitleFontSize))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
+                // Board rows are single-line with no leading icon and no
+                // subtitle (G-F9) — `option.leadingIcon`/`option.subtitle`
+                // still feed ranking and a11y, just not this row's visuals.
+                highlightedTitle
 
                 Spacer()
+
+                trailingMetaView
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .contentShape(Rectangle())
             .background(
@@ -2064,7 +2240,7 @@ private struct ComposerRow: View {
                     ? Color.accentColor.opacity(0.2)
                     : (hoveredID == option.id ? Color.secondary.opacity(0.2) : Color.clear)
             )
-            .cornerRadius(5)
+            .cornerRadius(cornerRadius)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -2075,14 +2251,17 @@ private struct ComposerRow: View {
         }
     }
 
-    /// Replicates `TemplatePickerView.templateRow`'s context menu exactly:
-    /// presets get "Duplicate and Edit..." (+ "Edit Preset File..." when a
+    /// Replicates `TemplatePickerView.templateRow`'s context menu, with
+    /// Pin/Unpin added as the FIRST item (Step 2) for template-backed rows.
+    /// Presets get "Duplicate and Edit..." (+ "Edit Preset File..." when a
     /// description exists), built-ins get "Duplicate and Edit..." only,
     /// user templates get Edit… / Duplicate / Delete. Renders nothing for
     /// non-template rows (project options).
     @ViewBuilder
     private var templateContextMenu: some View {
         if let template = option.template, let group = option.templateGroup {
+            Button(option.trailingMeta == .pinned ? "Unpin" : "Pin") { onTogglePin(template) }
+            Divider()
             if group == .preset {
                 Button("Duplicate and Edit...") { onDuplicateAndEditTemplate(template) }
                 if template.templateDescription != nil {
