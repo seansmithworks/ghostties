@@ -167,4 +167,88 @@ struct SessionComposerSnapshotTests {
         writeEvidence(dark, filename: "step2-plain-templates-dark.png")
         #expect(dark != nil)
     }
+
+    // MARK: - Step 3: rest-state ghost path (11.1)
+
+    /// A fresh, empty-search composer against a resolvable, unlocked
+    /// project — `onAppear`'s S5 seed selects the project's default
+    /// template, so the ghost placeholder renders the FULL path (rule 1),
+    /// comparable side-by-side with `V02Quieted22.dc.html`'s rest state
+    /// (one grey, full path, no sub-ranges).
+    @Test func step3RestStateGhostPathRendersLightAndDark() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore)
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "step3-rest-ghost-path-light.png")
+        #expect(light != nil)
+
+        let dark = renderPNG(view, appearance: .darkAqua, size: size)
+        writeEvidence(dark, filename: "step3-rest-ghost-path-dark.png")
+        #expect(dark != nil)
+    }
+
+    // MARK: - Step 5: resolution line deleted, trailing controls shown
+
+    /// An UNLOCKED project (`.open`, not `.locked`) so `projectControl`
+    /// renders — `trailingControlVisibility`'s locked-hides-projectControl
+    /// branch is covered structurally by `SessionComposerTrailingControlTests`,
+    /// not a second screenshot. Proves the resolution line is gone (field +
+    /// hairline + rows only) and the trailing controls are the field row's
+    /// mouse route now.
+    @Test func step5LineDeletedShowsTrailingControlsLightAndDark() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "step5-line-deleted-light.png")
+        #expect(light != nil)
+
+        let dark = renderPNG(view, appearance: .darkAqua, size: size)
+        writeEvidence(dark, filename: "step5-line-deleted-dark.png")
+        #expect(dark != nil)
+    }
+
+    // MARK: - Step 4: zero-project empty state
+
+    /// Zero projects anywhere (`WorkspaceStore(testingProjects: [], ...)`)
+    /// — the ghost placeholder falls to "Add a project to begin" (Step 3
+    /// rule 3) and the results area renders the "Add project…" row instead
+    /// of a dead-end "No matches" (G-F7).
+    @Test func step4ZeroProjectEmptyStateRendersLightAndDark() {
+        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "step4-zero-project-light.png")
+        #expect(light != nil)
+
+        let dark = renderPNG(view, appearance: .darkAqua, size: size)
+        writeEvidence(dark, filename: "step4-zero-project-dark.png")
+        #expect(dark != nil)
+    }
 }

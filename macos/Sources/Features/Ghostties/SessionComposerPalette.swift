@@ -12,11 +12,13 @@ import SwiftUI
 /// - Sectioned RECENT / TEMPLATES / PROJECTS results instead of one flat
 ///   list — the search field filters both templates and projects.
 /// - TYPE-FIRST entry (model A, replacing Slice A/B's breadcrumb chips —
-///   see the note below). The field holds the literal typed string, always;
-///   a RESOLUTION LINE beneath it (`resolutionLine`) shows what that string
-///   currently resolves to — project, branch, and the template Return would
-///   commit — and is the only mouse entry point into the project/branch
-///   pickers.
+///   see the note below). The field holds the literal typed string, always.
+///   Composer UI 11 (plan §3 Step 3/4/5) replaced the resolution line that
+///   used to sit beneath it with an in-field GHOST PLACEHOLDER
+///   (`ghostPlaceholder`, `.centered` only) showing the exact path Return
+///   would currently commit, a STATUS STRIP for pre/post-Return errors, and
+///   two trailing controls (`projectControl`/`branchControl`) as the only
+///   mouse entry point left into the project/branch pickers.
 /// - Prefix-first relevance ranking (`SessionComposerRanking`) instead of
 ///   boolean-match + color scoring.
 /// - Focus-loss auto-dismiss removed: the project dropdown and
@@ -75,14 +77,15 @@ struct SessionComposerPalette: View {
 
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
-    /// Whether the inline project picker is expanded — opened from the
-    /// resolution line's project segment (model A rebuild; used to be the
-    /// project chip's own click target, Slice A/A2). Drives an expansion
-    /// INSIDE the card, not a `.popover`.
+    /// Whether the inline project picker is expanded — opened from
+    /// `projectControl` (Step 5; used to be the resolution line's project
+    /// segment, before that the project chip's own click target, Slice
+    /// A/A2). Drives an expansion INSIDE the card, not a `.popover`.
     @State private var isProjectPickerOpen = false
-    /// Whether the inline branch picker is expanded — opened from the
-    /// resolution line's branch segment (model A rebuild; used to be the
-    /// branch chip's click target, Slice B/B3). Mutually exclusive with
+    /// Whether the inline branch picker is expanded — opened from
+    /// `branchControl` (Step 5; used to be the resolution line's branch
+    /// segment, before that the branch chip's click target, Slice B/B3).
+    /// Mutually exclusive with
     /// `isProjectPickerOpen` BY CONSTRUCTION — every site that flips one to
     /// `true` flips the other to `false` in the same statement — never
     /// merely "the two happen not to overlap in practice". A second live
@@ -347,7 +350,7 @@ struct SessionComposerPalette: View {
     /// Fix 4 (round-2 review), re-routed through `effectiveParse` (round-3
     /// review, Blockers 2/3): when no project token was typed at all
     /// (`commandParse.projectId == nil`) but `currentProject` already
-    /// resolves (the sticky/selected default the resolution line is
+    /// resolves (the sticky/selected default the ghost placeholder is
     /// already showing), branch/operator/thread typing still needs to
     /// resolve against THAT project's context — `commandParse` itself came
     /// back `.none` in this shape, so its remainder fields are empty/
@@ -403,9 +406,9 @@ struct SessionComposerPalette: View {
 
     // MARK: - Branch segment eligibility (Slice B, B3 — chip deleted)
 
-    /// Whether the project is a git repo at all — the resolution line's
-    /// branch segment (and its picker) has no entry point unless the
-    /// project genuinely IS one. Blocker 6 fix (Slice B review round 1):
+    /// Whether the project is a git repo at all — `branchControl` (and its
+    /// picker) has no entry point unless the project genuinely IS one.
+    /// Blocker 6 fix (Slice B review round 1):
     /// this used to be keyed off "did enumeration find anything to offer"
     /// (`!worktrees.isEmpty || !branchesWithoutWorktree.isEmpty`), but BOTH
     /// of those lists exclude cases that still mean "yes, this is a
@@ -1198,42 +1201,65 @@ struct SessionComposerPalette: View {
         .modifier(ShakeEffect(animatableData: shakeTrigger))
     }
 
-    // MARK: - Query row (type-first field + resolution line, model A rebuild)
+    // MARK: - Query row (type-first field + trailing picker controls, model
+    // A rebuild)
     //
     // Replaces Slice A/B's project/branch chips with plain text entry: the
-    // field holds `composerStore.searchText` verbatim (`searchTextBinding`),
-    // and `resolutionLine` below it shows what that string resolves to,
-    // segment by segment, as the ONLY mouse entry point left into the
-    // project/branch pickers. Changing a segment still expands the SAME
-    // inline pickers this replaced (`inlineProjectPicker`/`inlineBranchPicker`,
-    // both unchanged) — never a `.popover`, for the same nested-popover
-    // reason Slice A originally recorded (a child popover taking key can
-    // dismiss the parent composer).
+    // field holds `composerStore.searchText` verbatim (`searchTextBinding`).
+    // The resolution line that used to sit beneath it is deleted (Composer
+    // UI 11 plan §3 Step 5, §4 table) — its six labels and two mouse routes
+    // were each given a named successor: the ghost placeholder (Step 3),
+    // the status strip (Step 4), and the two trailing controls below
+    // (`projectControl`/`branchControl`), the field row's only mouse entry
+    // point left into the project/branch pickers. Changing a segment still
+    // expands the SAME inline pickers Slice A/B built
+    // (`inlineProjectPicker`/`inlineBranchPicker`, both unchanged) — never a
+    // `.popover`, for the same nested-popover reason Slice A originally
+    // recorded (a child popover taking key can dismiss the parent
+    // composer).
+
+    /// Step 5: visibility + content for `projectControl`/`branchControl`,
+    /// one pure read so the view and `SessionComposerTrailingControlTests`
+    /// see the exact same decision.
+    private var trailingControlVisibility: SessionComposerCommandParser.TrailingControlVisibility {
+        SessionComposerCommandParser.trailingControlVisibility(
+            isProjectLocked: isProjectLocked,
+            isBranchSegmentEligible: isBranchSegmentEligible,
+            isCreatingWorktree: composerStore.isCreatingWorktree,
+            currentBranchLabel: currentBranchLabel
+        )
+    }
 
     private var queryRow: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ComposerQueryField(
-                query: searchTextBinding,
-                fontSize: fieldFontSize,
-                focusTrigger: $composerStore.focusSearchFieldTrigger,
-                hasSelection: selectedOption != nil,
-                // D6/B3: while EITHER inline picker is open, the field's own
-                // ↑/↓/Return handlers must go quiet — see
-                // `ComposerQueryField.isPickerOpen`'s doc comment. The two
-                // pickers are mutually exclusive by construction (see
-                // `isBranchPickerOpen`'s doc comment) — the field only needs
-                // "is ANY picker open", the OR.
-                isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
-                placeholder: ghostPlaceholder
-            ) { event in
-                handle(event)
+            HStack(spacing: 6) {
+                ComposerQueryField(
+                    query: searchTextBinding,
+                    fontSize: fieldFontSize,
+                    focusTrigger: $composerStore.focusSearchFieldTrigger,
+                    hasSelection: selectedOption != nil,
+                    // D6/B3: while EITHER inline picker is open, the field's
+                    // own ↑/↓/Return handlers must go quiet — see
+                    // `ComposerQueryField.isPickerOpen`'s doc comment. The
+                    // two pickers are mutually exclusive by construction
+                    // (see `isBranchPickerOpen`'s doc comment) — the field
+                    // only needs "is ANY picker open", the OR.
+                    isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
+                    placeholder: ghostPlaceholder
+                ) { event in
+                    handle(event)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if trailingControlVisibility.showBranchControl {
+                    branchControl(label: trailingControlVisibility.branchControlLabel)
+                }
+                if trailingControlVisibility.showProjectControl {
+                    projectControl
+                }
             }
             .frame(height: fieldHeight)
             .padding(.horizontal, 10)
-
-            resolutionLine
-                .padding(.horizontal, 10)
-                .padding(.bottom, 6)
 
             if isProjectPickerOpen {
                 Divider()
@@ -1269,122 +1295,67 @@ struct SessionComposerPalette: View {
         // B3: opening the branch picker is also a refresh trigger (on top
         // of the project-selection and initial-open triggers) — Sean runs
         // 2-7 parallel sessions creating worktrees constantly, so this is
-        // the moment accuracy matters most. Used to live on the deleted
-        // branch chip's own `Button`; moved here since the resolution
-        // line's branch segment is a plain click target, not a dedicated
-        // view worth attaching a modifier to.
+        // the moment accuracy matters most. Lives here rather than on
+        // `branchControl`'s own `Button` since `isBranchPickerOpen` is what
+        // actually drives it, not the click itself.
         .onChange(of: isBranchPickerOpen) { isOpen in
             guard isOpen, let project = currentProject else { return }
             Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
         }
     }
 
-    /// The resolution line: what the CURRENT field text resolves to, one
-    /// clause per segment — project, branch (only when the project is a git
-    /// repo), and the template Return would currently commit. Answers
-    /// "where will this go?" even with an empty field, which is the whole
-    /// point of the feature (Sean's words: "when hitting Cmd+T I have an
-    /// intent"). This is now the ONLY mouse entry point into the
-    /// project/branch pickers — the project and branch segments are
-    /// clickable (unless `.locked`); the template segment is plain text,
-    /// since template choice is made from the results list below, not a
-    /// third picker.
-    ///
-    /// Kept quiet by design (Sean's ask: "maybe on hover the chips are
-    /// shown" — this is the resting, always-visible form of that): plain
-    /// secondary text, no pill background, no border — a status line, not a
-    /// control strip. DESIGN.md §4 documents the exact styling.
-    private var resolutionLine: some View {
-        let segments = SessionComposerCommandParser.resolutionLineSegments(
-            projectName: currentProject?.name,
-            isProjectLocked: isProjectLocked,
-            isBranchSegmentEligible: isBranchSegmentEligible,
-            isCreatingWorktree: composerStore.isCreatingWorktree,
-            typedBranchResolution: typedBranchResolution,
-            currentBranchLabel: currentBranchLabel,
-            templateTitle: selectedOption?.title
-        )
-
-        return HStack(spacing: 4) {
-            Text("→")
+    /// Step 5: the project picker's mouse route, now that the deleted
+    /// resolution line's clickable project segment is gone (plan §4 table).
+    /// `chevron.down`, `.tertiary`, subtitle scale, 16pt hit target. Hidden
+    /// (not disabled) when `isProjectLocked` — the locked rule survives
+    /// verbatim (DESIGN.md: a locked composer must never expose a live
+    /// picker affordance).
+    private var projectControl: some View {
+        Button {
+            isBranchPickerOpen = false
+            isProjectPickerOpen.toggle()
+        } label: {
+            Image(systemName: "chevron.down")
                 .font(.system(size: subtitleFontSize))
                 .foregroundStyle(.tertiary)
-                .accessibilityHidden(true)
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Select project")
+        .accessibilityHint("Opens project picker")
+    }
 
-            resolutionSegment(
-                segments.projectLabel,
-                isClickable: segments.isProjectClickable,
-                accessibilityLabel: "Project: \(segments.projectLabel)",
-                accessibilityHint: segments.isProjectClickable ? "Opens project picker" : nil
-            ) {
-                isBranchPickerOpen = false
-                isProjectPickerOpen.toggle()
-            }
-
-            // B3: rendered only when the project is eligible (a git repo
-            // enumeration found something to offer) — a non-git project
-            // shows no branch segment at all, not a disabled one (Sean's
-            // call, unchanged from the deleted chip's own reasoning).
-            if let branchLabel = segments.branchLabel {
-                resolutionDot
-                resolutionSegment(
-                    branchLabel,
-                    isClickable: true,
-                    isError: segments.branchIsError,
-                    accessibilityLabel: "Branch: \(branchLabel)",
-                    accessibilityHint: "Opens branch picker"
-                ) {
-                    isProjectPickerOpen = false
-                    isBranchPickerOpen.toggle()
+    /// Step 5: the branch picker's mouse route (plan §4 table). Shown only
+    /// when `isBranchSegmentEligible` — a non-git project shows no branch
+    /// control at all, not a disabled one (mirrors the deleted branch
+    /// segment's own rule). Carries a text label beside the glyph only
+    /// "when it has news" — `label` is the override branch name, or
+    /// `Creating…` while a `git worktree add` is in flight
+    /// (`trailingControlVisibility`); `nil` means default branch, and the
+    /// word "Default" is never restated outside the rest-state ghost path.
+    private func branchControl(label: String?) -> some View {
+        Button {
+            isProjectPickerOpen = false
+            isBranchPickerOpen.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: subtitleFontSize))
+                    .foregroundStyle(.tertiary)
+                if let label {
+                    Text(label)
+                        .font(.system(size: subtitleFontSize))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
-
-            resolutionDot
-            Text(segments.templateLabel)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Template: \(segments.templateLabel)")
+            .frame(minWidth: 16, minHeight: 16)
+            .contentShape(Rectangle())
         }
-        .font(.system(size: subtitleFontSize))
-    }
-
-    private var resolutionDot: some View {
-        Text("·")
-            .font(.system(size: subtitleFontSize))
-            .foregroundStyle(.tertiary)
-            .accessibilityHidden(true)
-    }
-
-    /// One resolution-line segment: a plain `Text` when `isClickable` is
-    /// false (the `.locked` project — a locked composer must never expose a
-    /// live picker affordance, same rule the deleted chip's `.locked` state
-    /// enforced), otherwise a plain-styled `Button` opening the segment's
-    /// picker. `isError` renders in `.systemRed` — the legible, on-screen
-    /// form of an unresolved typed branch (previously visible only as a
-    /// `writeError` message after a failed commit attempt).
-    @ViewBuilder
-    private func resolutionSegment(
-        _ label: String,
-        isClickable: Bool,
-        isError: Bool = false,
-        accessibilityLabel: String,
-        accessibilityHint: String?,
-        action: @escaping () -> Void
-    ) -> some View {
-        let text = Text(label)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .foregroundStyle(isError ? AnyShapeStyle(Color(nsColor: .systemRed)) : AnyShapeStyle(.secondary))
-
-        if isClickable {
-            Button(action: action) { text }
-                .buttonStyle(.plain)
-                .accessibilityLabel(accessibilityLabel)
-                .accessibilityHint(accessibilityHint ?? "")
-        } else {
-            text.accessibilityLabel(accessibilityLabel)
-        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Select branch")
+        .accessibilityHint("Opens branch picker")
     }
 
     /// `ProjectDropdownView`'s list content, reused verbatim, but presented
@@ -1716,8 +1687,9 @@ struct SessionComposerPalette: View {
         }
     }
 
-    // MARK: - Project/branch segment actions (resolution line, model A —
-    // was "Breadcrumb chip actions, Slice A" before the chips were deleted)
+    // MARK: - Project/branch control actions (trailing controls, model A —
+    // was "Breadcrumb chip actions, Slice A" before the chips were deleted,
+    // then the resolution line's segment actions before Step 5 deleted it)
 
     /// Change the resolved project via the inline picker. The cascade rule
     /// (clear-on-change, no-op-on-repick) and the ⌘Z undo capture both live
@@ -1944,12 +1916,13 @@ struct ComposerQueryField: View {
     /// `.handled` unconditionally, swallowing Return against an empty
     /// list).
     var hasSelection: Bool
-    /// D6: whether the resolution line's inline project/branch picker is
-    /// currently open (opened by clicking a resolution-line segment, model A
-    /// rebuild — used to be the breadcrumb chip's own click target). While
+    /// D6: whether the inline project/branch picker is currently open
+    /// (opened by clicking `projectControl`/`branchControl`, Step 5 — used
+    /// to be the resolution line's segment click target, before that the
+    /// breadcrumb chip's own click target). While
     /// `true`, this field's own ↑/↓/Return handlers go quiet — the picker
     /// (`ProjectDropdownView.keyboardCaptureLayer`) becomes the only live
-    /// ↑/↓/Return handler on screen. Clicking a segment to open the picker
+    /// ↑/↓/Return handler on screen. Clicking a control to open the picker
     /// does NOT move first responder away from this field (deliberate — see
     /// this type's own doc comment on why focus-loss auto-dismiss was
     /// removed), so without this gate the field's hidden ↑/↓ `Button`s and

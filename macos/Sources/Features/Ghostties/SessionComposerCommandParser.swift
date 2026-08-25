@@ -1121,17 +1121,20 @@ enum SessionComposerCommandParser {
         }
     }
 
-    // MARK: - Resolution line (model A rebuild — replaces the breadcrumb
-    // chips' label logic)
+    // MARK: - Resolution segments (model A rebuild — replaces the breadcrumb
+    // chips' label logic; the resolution LINE itself was deleted in the
+    // Composer UI 11 rebuild, plan §3 Step 5 — this struct and the function
+    // below it are load-bearing under D-B: the ghost placeholder's genuine
+    // source, not preserved for their tests)
 
-    /// What the resolution line's three segments show, computed from the
-    /// same inputs the deleted chips read (`SessionComposerPalette`'s
-    /// `currentProject`/`typedBranchResolution`/`currentBranchLabel`/
-    /// `selectedOption`) — pure and testable, unlike those (private
-    /// computed properties on a SwiftUI `View`, this repo's usual
-    /// view-test-harness gap). `SessionComposerPalette.resolutionLine`
-    /// calls this once and renders the result; it does not re-derive any of
-    /// this logic inline.
+    /// What the deleted resolution line's three segments used to show,
+    /// computed from the same inputs the deleted chips read
+    /// (`SessionComposerPalette`'s `currentProject`/`typedBranchResolution`/
+    /// `currentBranchLabel`/`selectedOption`) — pure and testable, unlike
+    /// those (private computed properties on a SwiftUI `View`, this repo's
+    /// usual view-test-harness gap). Now consumed by
+    /// `SessionComposerPalette.ghostPlaceholder` (Step 3) and
+    /// `trailingControlVisibility` (Step 5) instead of a rendered line.
     struct ResolutionLineSegments: Equatable {
         let projectLabel: String
         let isProjectClickable: Bool
@@ -1276,5 +1279,42 @@ enum SessionComposerCommandParser {
     /// `isProjectsEmpty` is true, plain text otherwise.
     static func emptyResultsCopy(isProjectsEmpty: Bool) -> String {
         isProjectsEmpty ? "Add project…" : "No matches"
+    }
+
+    // MARK: - Trailing picker controls (Composer UI 11 plan §3 Step 5)
+
+    /// The two trailing controls' visibility + content, replacing the
+    /// deleted resolution line's mouse route into the pickers (plan §4
+    /// table, rows "mouse route into project/branch picker"). A single
+    /// pure function so the view and this test suite read the exact same
+    /// decision — never two independently-written copies that can diverge.
+    struct TrailingControlVisibility: Equatable {
+        /// `isBranchSegmentEligible` — a non-git project shows no branch
+        /// control at all, not a disabled one (mirrors the deleted branch
+        /// segment's own rule).
+        let showBranchControl: Bool
+        /// `nil` means "no news": default branch. The word "Default" is
+        /// never restated outside the rest-state ghost path. Always `nil`
+        /// when `showBranchControl` is `false`.
+        let branchControlLabel: String?
+        /// Hidden (not disabled) when the project is `.locked` — the
+        /// locked rule survives verbatim (DESIGN.md: a locked composer
+        /// must never expose a live picker affordance).
+        let showProjectControl: Bool
+    }
+
+    static func trailingControlVisibility(
+        isProjectLocked: Bool,
+        isBranchSegmentEligible: Bool,
+        isCreatingWorktree: Bool,
+        currentBranchLabel: String?
+    ) -> TrailingControlVisibility {
+        TrailingControlVisibility(
+            showBranchControl: isBranchSegmentEligible,
+            branchControlLabel: isBranchSegmentEligible
+                ? (isCreatingWorktree ? "Creating…" : currentBranchLabel)
+                : nil,
+            showProjectControl: !isProjectLocked
+        )
     }
 }
