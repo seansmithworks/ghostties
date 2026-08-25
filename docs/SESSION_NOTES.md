@@ -3208,3 +3208,62 @@ Eight findings went to the orchestrator builder thread; seven shipped as `b8326e
 ### Open
 
 `ORCHESTRATOR.md`'s PICKUP block is dated 2026-08-14 and does not reflect beta.23-era work owned by other threads.
+
+## Aug 25, 2026 — Pac-Man IP closed: robot-ghost silhouette + tonal shading; BACKLOG.md trimmed
+
+### Headline
+
+Closed the Pac-Man trademark exposure on ghostties.org's ambient ghost field — names were
+fixed in a prior session (`92a3bb297`), the silhouette (the larger residual exposure) is fixed
+now. Also fixed `BACKLOG.md`, which had grown to 1,736 lines / 157KB of changelog narrative;
+trimmed to ~65 lines of open items, full history preserved.
+
+### Commits (all on `feat/web-redesign-round4`, pushed)
+
+- `a96fb453e` — `design(web): wire robot-ghost silhouettes + tonal shading into ghost-field.js`.
+  Nine `GHOSTS_DATA.pixels` grids swapped to robot sprites (antenna/visor/vent/mast/thruster
+  vocabulary); glyph set widened (`e` eye recess, `l` lit accent); tonal-shading engine
+  (flood-fill edge classification, eased curve exponent 0.55, continuous level 1.0–4.0) ported
+  from an interactive JS preview into the SVG renderer; vapor tail-wave animation removed
+  (meaningless on a robot); hover (armed, → level 4.0 held) and arm/disarm (→ level 1.0 fired
+  spike) wired to a per-ghost level tween. Delegated to an implementer subagent; verified via
+  Playwright (9 robot ghosts render, hover/fire animate and recover, zero console errors,
+  reduced-motion still renders shaded).
+- `949ea1c29` — `docs(web): commit robot-ghost tonal-shading reference tooling`. Committed
+  `sprites.py` (the algorithm, Python) and `preview.html` (the same algorithm, interactive
+  canvas JS — used to get Sean's sign-off on the eased curve and the hover/fire mapping) as
+  reference material in `docs/design/web-redesign/robot-ghosts/`.
+- BACKLOG.md/BACKLOG-log.md split — pending commit at session end (see Open below).
+
+### Decisions (Sean)
+
+- Accepted the nine-sprite robot roster over redlining or killing it.
+- Accepted the **eased (0.55)** tonal-shading curve over linear, after reacting that the
+  linear curve's low end (levels 1.0–2.4) read too flat — shown a live comparison, not just
+  described.
+- Confirmed the trigger mapping: idle rest 2.4, hover/agent-active holds 4.0, arm/disarm fires
+  a 1.0 spike and eases back.
+
+### What moved (BACKLOG.md)
+
+- Full 1,736-line history archived verbatim to `BACKLOG-log.md` — nothing deleted.
+- New `BACKLOG.md` holds only unchecked items, ~65 lines. Pre-2026-08-22 items (before the
+  whole-site-rebuild → coin-plate → robot-ghost pivots) flagged under one heading for a fresh
+  relevance pass rather than individually re-verified or dropped.
+
+### Memory written
+
+- `feedback_backlog-stays-open-items-only.md` — the fix pattern, so `BACKLOG.md` gets the same
+  discipline `ORCHESTRATOR.md` already has (decision log pruned, old content archived).
+- `reference_pacman-trademark-exposure.md` updated — silhouette section now records the fix,
+  not just the exposure.
+
+### Open
+
+- Per-sprite accent animations (antenna spark, visor sweep, etc.) — deliberately deferred,
+  tracked in `BACKLOG.md`.
+- `MEMORY.md` (22.7KB) and `ORCHESTRATOR.md` (19.0KB) are both over their target size —
+  `/orchestrator-route` needed on both, tracked in `BACKLOG.md`.
+- `ORCHESTRATOR.md`'s In-Flight items outside this session's scope (composer/beta.24,
+  v3-build direction, coin-plate round 3) were NOT re-verified this session — the file was
+  ~2 days stale walking in and is flagged as such at its own top.
