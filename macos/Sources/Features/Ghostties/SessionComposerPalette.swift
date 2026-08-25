@@ -75,6 +75,15 @@ struct SessionComposerPalette: View {
         self.composerStore = composerStore
     }
 
+    /// DEFECT 4 fix (Composer UI 11 review round 2): named production
+    /// symbols for `projectControl`/`branchControl`'s `.accessibilityLabel`
+    /// and `branchControl`'s no-override `.accessibilityValue` fallback —
+    /// see `AccessibilityTests` for why a re-declared local literal doesn't
+    /// guard anything.
+    static let accessibilityProjectControlLabel: String = "Select project"
+    static let accessibilityBranchControlLabel: String = "Select branch"
+    static let accessibilityBranchControlDefaultValue: String = "Default"
+
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
     /// Whether the inline project picker is expanded — opened from
@@ -1419,7 +1428,7 @@ struct SessionComposerPalette: View {
         // current without opening the picker. `accessibilityValue` carries
         // that alongside the action, the same label/value split a system
         // Picker uses.
-        .accessibilityLabel("Select project")
+        .accessibilityLabel(Self.accessibilityProjectControlLabel)
         .accessibilityValue(currentProject?.name ?? "No project selected")
         .accessibilityHint("Opens project picker")
     }
@@ -1470,8 +1479,8 @@ struct SessionComposerPalette: View {
         // restores it (mirroring `projectControl`'s split); `nil` reads as
         // "Default", matching what the absence of the on-screen label
         // already means.
-        .accessibilityLabel("Select branch")
-        .accessibilityValue(label ?? "Default")
+        .accessibilityLabel(Self.accessibilityBranchControlLabel)
+        .accessibilityValue(label ?? Self.accessibilityBranchControlDefaultValue)
         .accessibilityHint("Opens branch picker")
     }
 
@@ -2092,6 +2101,13 @@ struct ComposerQueryField: View {
     /// pin it without drifting from the value actually rendered.
     static let ghostPlaceholderOpacity: Double = 0.49
 
+    /// DEFECT 4 fix (Composer UI 11 review round 2): a named production
+    /// symbol for the field's `.accessibilityLabel`, so
+    /// `AccessibilityTests` can assert against the string the field
+    /// actually renders instead of a re-declared local literal that would
+    /// still pass against a typo'd production string.
+    static let accessibilityFieldLabel: String = "New session command"
+
     enum KeyboardEvent {
         case exit
         case submit
@@ -2205,7 +2221,7 @@ struct ComposerQueryField: View {
                 // override replaces). The ghost `Text` itself stays
                 // `.accessibilityHidden(true)` — decorative once its value
                 // is carried here.
-                .accessibilityLabel("New session command")
+                .accessibilityLabel(Self.accessibilityFieldLabel)
                 .accessibilityValue(query.isEmpty ? placeholder : query)
                 .focused($isTextFieldFocused)
                 .onExitCommand { onEvent?(.exit) }

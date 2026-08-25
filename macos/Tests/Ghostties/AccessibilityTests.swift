@@ -212,36 +212,60 @@ final class AccessibilityTests: XCTestCase {
     // MARK: - Session composer field carries a value, not just a label (Composer UI 11 review, fix 5/6)
 
     func testComposerQueryFieldHasLabelAndValueSeparateFromEachOther() {
-        // Fix 5: the deleted `resolutionLine` announced "Project: <name>",
-        // "Branch: <name>", "Template: <name>" — restored via
-        // `ComposerQueryField`'s `TextField.accessibilityLabel("New session
-        // command")` + `.accessibilityValue(query.isEmpty ? placeholder :
-        // query)` (`SessionComposerPalette.swift`). Documents the contract
-        // the same way this file's other composer tests do — SwiftUI's
-        // accessibility modifiers require a UI-testing host to query at
-        // runtime (see this file's header), so this is a regression guard
-        // on the literal strings, not a runtime assertion.
-        let fieldLabel = "New session command"
-
-        XCTAssertFalse(fieldLabel.isEmpty,
+        // DEFECT 4 fix (Composer UI 11 review round 2): round 1's version of
+        // this test declared a local string literal ("New session command")
+        // and asserted it was non-empty — that names no production symbol,
+        // so it passed against an implementation with NO accessibility
+        // modifiers at all (an empty-string typo in production would still
+        // pass, since the test never reads production's own value). Now
+        // asserts against `ComposerQueryField.accessibilityFieldLabel`, the
+        // literal symbol `.accessibilityLabel(Self.accessibilityFieldLabel)`
+        // actually renders with (`SessionComposerPalette.swift`).
+        //
+        // Fix 5 (round 1, still the underlying rationale): the deleted
+        // `resolutionLine` announced "Project: <name>", "Branch: <name>",
+        // "Template: <name>" — restored via this field's
+        // `.accessibilityLabel` + `.accessibilityValue(query.isEmpty ?
+        // placeholder : query)`.
+        //
+        // NOT established: whether `.accessibilityValue` on a SwiftUI
+        // `TextField` actually overrides the AX bridge's `AXValue` at
+        // runtime — SwiftUI's accessibility modifiers require a UI-testing
+        // host to query (see this file's header), which this test does not
+        // have. This asserts the LABEL constant only; it makes no claim
+        // about the value override actually reaching VoiceOver.
+        XCTAssertEqual(ComposerQueryField.accessibilityFieldLabel, "New session command")
+        XCTAssertFalse(ComposerQueryField.accessibilityFieldLabel.isEmpty,
             "Composer query field must have a non-empty VoiceOver label")
     }
 
     func testComposerTrailingControlsCarryTheirCurrentValue() {
-        // Fix 6: `projectControl`/`branchControl` used `.accessibilityLabel`
-        // alone, which REPLACES a Button's auto-generated label — on
-        // `branchControl` that suppressed the branch name / `Creating…`
-        // text rendered inside its own HStack exactly when it carried news.
-        // Both now split label (the action) from
-        // `.accessibilityValue` (the current state), the same pattern a
-        // system Picker uses.
-        let projectControlLabel = "Select project"
-        let branchControlLabel = "Select branch"
-        let branchControlDefaultValue = "Default"
-
-        XCTAssertFalse(projectControlLabel.isEmpty)
-        XCTAssertFalse(branchControlLabel.isEmpty)
-        XCTAssertFalse(branchControlDefaultValue.isEmpty,
+        // DEFECT 4 fix (Composer UI 11 review round 2): same shape as
+        // `testComposerQueryFieldHasLabelAndValueSeparateFromEachOther`
+        // above — round 1 asserted local literals against themselves, which
+        // named no production symbol. Now asserts against
+        // `SessionComposerPalette.accessibilityProjectControlLabel`/
+        // `accessibilityBranchControlLabel`/
+        // `accessibilityBranchControlDefaultValue`, the literal symbols
+        // `projectControl`/`branchControl` actually render
+        // `.accessibilityLabel`/`.accessibilityValue` with.
+        //
+        // Fix 6 (round 1, still the underlying rationale): `.accessibilityLabel`
+        // alone REPLACES a Button's auto-generated label — on `branchControl`
+        // that suppressed the branch name / `Creating…` text rendered inside
+        // its own HStack exactly when it carried news. Both now split label
+        // (the action) from `.accessibilityValue` (the current state), the
+        // same pattern a system Picker uses.
+        //
+        // NOT established: whether `.accessibilityValue` actually reaches
+        // VoiceOver's `AXValue` for a SwiftUI `Button` at runtime — see the
+        // sibling test's note above; this asserts the constants only.
+        XCTAssertEqual(SessionComposerPalette.accessibilityProjectControlLabel, "Select project")
+        XCTAssertEqual(SessionComposerPalette.accessibilityBranchControlLabel, "Select branch")
+        XCTAssertEqual(SessionComposerPalette.accessibilityBranchControlDefaultValue, "Default")
+        XCTAssertFalse(SessionComposerPalette.accessibilityProjectControlLabel.isEmpty)
+        XCTAssertFalse(SessionComposerPalette.accessibilityBranchControlLabel.isEmpty)
+        XCTAssertFalse(SessionComposerPalette.accessibilityBranchControlDefaultValue.isEmpty,
             "branchControl's accessibilityValue must read 'Default' rather than announcing nothing when no override is active")
     }
 
