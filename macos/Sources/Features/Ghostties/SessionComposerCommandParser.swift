@@ -1194,4 +1194,59 @@ enum SessionComposerCommandParser {
             templateLabel: templateTitle ?? "No match"
         )
     }
+
+    // MARK: - Ghost placeholder (Composer UI 11 plan §3 Step 3, model A)
+
+    /// The literal fallback strings `resolutionLineSegments` above renders
+    /// when nothing real resolved — shared here so `ghostPlaceholder` can
+    /// tell "a real project name" apart from "the unresolved fallback text"
+    /// without a second source of truth. `resolutionLineSegments` is the
+    /// only producer of `ResolutionLineSegments.projectLabel`; these two
+    /// constants are that function's own literals, not a guess.
+    private static let unlockedNoProjectLabel = "Select project"
+    private static let lockedUnresolvableProjectLabel = "Project unavailable"
+
+    /// The 11.1 rest-state ghost placeholder — a pure function over
+    /// `ResolutionLineSegments`, D-B: the SAME values `resolutionLine` (now
+    /// the trailing controls, Step 5) renders and `selectedOption` carries
+    /// into a Return commit, so the placeholder can never state a
+    /// destination Return would not launch — nothing here is computed
+    /// independently. `SessionComposerPalette` gates every call to
+    /// `.centered` only (G-F28: `.anchored` is 11pt/30pt at sidebar width
+    /// and cannot fit the path).
+    ///
+    /// Four rules, checked in this order (plan §3 Step 3):
+    /// 1. A real project resolved (`segments.projectLabel` isn't one of the
+    ///    two fallback strings above) AND `hasSelection` — render the exact
+    ///    path Return would commit: `"<project> > <branch> > <template>"`,
+    ///    branch segment omitted when `segments.branchLabel == nil`
+    ///    (`!isBranchSegmentEligible`).
+    /// 2. Locked and unresolvable — a status, not a destination.
+    /// 3. `!projectsExist` — the zero-project first-run lifeline (G-F7).
+    /// 4. Otherwise — the field never states a destination Return will not
+    ///    go to.
+    static func ghostPlaceholder(
+        segments: ResolutionLineSegments,
+        hasSelection: Bool,
+        projectsExist: Bool
+    ) -> String {
+        if hasSelection,
+           segments.projectLabel != unlockedNoProjectLabel,
+           segments.projectLabel != lockedUnresolvableProjectLabel {
+            if let branchLabel = segments.branchLabel {
+                return "\(segments.projectLabel) > \(branchLabel) > \(segments.templateLabel)"
+            }
+            return "\(segments.projectLabel) > \(segments.templateLabel)"
+        }
+
+        if !segments.isProjectClickable, segments.projectLabel == lockedUnresolvableProjectLabel {
+            return "Project unavailable"
+        }
+
+        if !projectsExist {
+            return "Add a project to begin"
+        }
+
+        return "Type a project, branch, and command…"
+    }
 }

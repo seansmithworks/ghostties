@@ -532,6 +532,33 @@ struct SessionComposerPalette: View {
         return composerStore.worktrees.first(where: { $0.path == path })?.branch ?? path
     }
 
+    /// The 11.1 rest-state ghost placeholder (Step 3, Composer UI 11 plan
+    /// §3) — feeds `ComposerQueryField.placeholder`. Gated to `.centered`
+    /// (G-F28: `.anchored` is 11pt/30pt at sidebar width and cannot fit the
+    /// path, so it keeps the generic placeholder unconditionally). Built
+    /// from the exact same segments `selectedOption` and a Return commit
+    /// read (D-B) — see `SessionComposerCommandParser.ghostPlaceholder`'s
+    /// doc comment for the four rules and their order.
+    private var ghostPlaceholder: String {
+        guard request.presentation == .centered else {
+            return "Type a project, branch, and command…"
+        }
+        let segments = SessionComposerCommandParser.resolutionLineSegments(
+            projectName: currentProject?.name,
+            isProjectLocked: isProjectLocked,
+            isBranchSegmentEligible: isBranchSegmentEligible,
+            isCreatingWorktree: composerStore.isCreatingWorktree,
+            typedBranchResolution: typedBranchResolution,
+            currentBranchLabel: currentBranchLabel,
+            templateTitle: selectedOption?.title
+        )
+        return SessionComposerCommandParser.ghostPlaceholder(
+            segments: segments,
+            hasSelection: selectedOption != nil,
+            projectsExist: !store.projects.isEmpty
+        )
+    }
+
     /// The query field's binding (model A rebuild — replaces the deleted
     /// `queryFieldText`/`resolvedFieldSplit` prefix-consuming transform).
     /// `get` returns `composerStore.searchText` VERBATIM — never a computed
@@ -1180,7 +1207,7 @@ struct SessionComposerPalette: View {
                 // `isBranchPickerOpen`'s doc comment) — the field only needs
                 // "is ANY picker open", the OR.
                 isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
-                placeholder: "Type a project, branch, and command…"
+                placeholder: ghostPlaceholder
             ) { event in
                 handle(event)
             }
@@ -1913,6 +1940,11 @@ struct ComposerQueryField: View {
     /// was highlighted and dismissed the whole composer instead of choosing
     /// a project from the now-open picker.
     var isPickerOpen: Bool
+    /// Step 3 (Composer UI 11 plan §3): the 11.1 ghost path when it renders
+    /// (`.centered`, rest state), else the generic hint. Fed through
+    /// `TextField`'s `prompt:` initializer, not the plain title-key form, so
+    /// the 49% grey (`DESIGN.md` §4, `#1A1A1A7E`) can be applied — the plain
+    /// form always renders at system placeholder grey with no styling hook.
     var placeholder: String
     var onEvent: ((KeyboardEvent) -> Void)?
     @FocusState private var isTextFieldFocused: Bool
@@ -1968,7 +2000,12 @@ struct ComposerQueryField: View {
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
 
-            TextField(placeholder, text: $query)
+            TextField(
+                "",
+                text: $query,
+                prompt: Text(placeholder)
+                    .foregroundColor(Color(nsColor: .labelColor).opacity(0.49))
+            )
                 .padding(.vertical, 6)
                 // R6 (Phase 3 review round 2): `.light` isn't an allowed
                 // DESIGN.md weight (§3: `.regular`/`.medium`, `.semibold`
