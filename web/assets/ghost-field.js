@@ -39,20 +39,19 @@
       persp: 120,
       rx: -18,
       ry: 26,
-      eyeRows: [3, 4],
       pixels: [
-        "...XXXXXX...",
+        "....X..X....",
+        ".....XX.....",
         "..XXXXXXXX..",
         ".XXXXXXXXXX.",
-        ".XX..XX..XX.",
-        ".XX..XX..XX.",
+        "XXXXXXXXXXXX",
+        "XX.ee..ee.XX",
+        "XX.ee..ee.XX",
         "XXXXXXXXXXXX",
         "XXXXXXXXXXXX",
         "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
+        "X.XXXXXXXX.X",
         "XX.XX..XX.XX",
-        "X...X..X...X",
       ],
       tier: "S",
       overall: 91,
@@ -70,20 +69,19 @@
       persp: 160,
       rx: -9,
       ry: -22,
-      eyeRows: [3, 4],
       pixels: [
-        "....XXXX....",
         "..XXXXXXXX..",
         ".XXXXXXXXXX.",
-        ".X..XXXX..X.",
-        ".X..XXXX..X.",
+        "XXXXXXXXXXXX",
+        "X.eeeeeeee.X",
+        "X.eeeeeeee.X",
         "XXXXXXXXXXXX",
         "XXXXXXXXXXXX",
         "XXXXXXXXXXXX",
+        "X.XXXXXXXX.X",
         "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXX..XX..XXX",
-        "X..........X",
+        "XX.XX..XX.XX",
+        "XX.XX..XX.XX",
       ],
       tier: "A",
       overall: 88,
@@ -101,20 +99,19 @@
       persp: 110,
       rx: -20,
       ry: 30,
-      eyeRows: [3, 4],
       pixels: [
-        "...XXXXXX...",
-        "..XXXXXXXX..",
         ".XXXXXXXXXX.",
-        ".XXX....XXX.",
-        ".XXX....XXX.",
+        "XXXXXXXXXXXX",
+        "X.XXXXXXXX.X",
+        "X.eXXXXXXe.X",
+        "X.eeXXXXee.X",
+        "X.XXXXXXXX.X",
+        "XXXXXXXXXXXX",
+        "X..........X",
         "XXXXXXXXXXXX",
         "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "X.XX.XX.XX.X",
-        "X..X....X..X",
+        ".X.X.XX.X.X.",
+        ".X.X.XX.X.X.",
       ],
       tier: "A",
       overall: 89,
@@ -132,20 +129,19 @@
       persp: 145,
       rx: -12,
       ry: -20,
-      eyeRows: [3, 4],
       pixels: [
-        "..XXXXXXXX..",
+        "...XXXXXX...",
+        "..XlXXXXlX..",
         ".XXXXXXXXXX.",
         "XXXXXXXXXXXX",
-        "XX..XXXX..XX",
-        "XX..XXXX..XX",
+        "XX.ee..ee.XX",
+        "XXXXXXXXXXXX",
+        "XlXXXXXXXXlX",
         "XXXXXXXXXXXX",
         "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXX.XXXX.XXX",
-        "X....XX....X",
+        "XlXXXXXXXXlX",
+        "XX.XX..XX.XX",
+        "XX.XX..XX.XX",
       ],
       tier: "A",
       overall: 87,
@@ -163,20 +159,19 @@
       persp: 130,
       rx: -16,
       ry: 22,
-      eyeRows: [3, 4],
       pixels: [
-        "...XXXXXX...",
+        ".....l......",
+        ".....X......",
+        ".....X......",
+        "..XXXXXXXX..",
         ".XXXXXXXXXX.",
         "XXXXXXXXXXXX",
-        "XX..XXXX..XX",
-        "X...XXXX...X",
+        "XX.eeeeee.XX",
+        "XX.eeeeee.XX",
         "XXXXXXXXXXXX",
         "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XX..XXXX..XX",
-        "X....XX....X",
+        "X.XXXXXXXX.X",
+        "XX.XX..XX.XX",
       ],
       tier: "S",
       overall: 90,
@@ -194,20 +189,19 @@
       persp: 170,
       rx: -8,
       ry: -28,
-      eyeRows: [3, 4],
       pixels: [
         "....XXXX....",
+        "...XXXXXX...",
+        "X.XXXXXXXX.X",
+        "XX.X.ee.ee.X",
+        "XXXXXXXXXXXX",
+        "X.XXXXXXXX.X",
+        "...XXXXXX...",
+        "...XXXXXX...",
         "..XXXXXXXX..",
-        ".XXXXXXXXXX.",
-        "XXX..XX..XXX",
-        "XXX..XX..XXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        ".XXXXXXXXXX.",
-        ".XXXXXXXXXX.",
-        "..XX.XX.XX..",
-        "...X....X...",
+        ".XX.XXXX.XX.",
+        "....l..l....",
+        ".....ll.....",
       ],
       tier: "A",
       overall: 88,
@@ -225,20 +219,19 @@
       persp: 115,
       rx: -22,
       ry: 18,
-      eyeRows: [3, 4],
       pixels: [
-        "..XXXXXXXX..",
         ".XXXXXXXXXX.",
         "XXXXXXXXXXXX",
-        "XXX..X..XXXX",
-        "XXX..X..XXXX",
         "XXXXXXXXXXXX",
-        "XXXX....XXXX",
+        "X.ee....ee.X",
+        "X.ee....ee.X",
         "XXXXXXXXXXXX",
+        "X..XXXXXX..X",
         "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        "X.XXX..XXX.X",
         "X..X....X..X",
+        "XXXXXXXXXXXX",
+        "XX.XX..XX.XX",
+        "XX.XX..XX.XX",
       ],
       tier: "A",
       overall: 87,
@@ -256,20 +249,19 @@
       persp: 150,
       rx: -10,
       ry: -24,
-      eyeRows: [3, 4],
       pixels: [
-        "....XXXX....",
         "..XXXXXXXX..",
         ".XXXXXXXXXX.",
-        ".XX..XX..XX.",
-        ".XX..XX..XX.",
         "XXXXXXXXXXXX",
+        "XX.ee..ee.XX",
         "XXXXXXXXXXXX",
+        "X.XXXXXXXX.X",
+        "X.XllllllX.X",
+        "X.XllllllX.X",
+        "X.XXXXXXXX.X",
         "XXXXXXXXXXXX",
-        ".XXXXXXXXXX.",
-        ".XX.XXXX.XX.",
-        "..X..XX..X..",
-        ".....XX.....",
+        "XX.XX..XX.XX",
+        "X..X....X..X",
       ],
       tier: "A",
       overall: 88,
@@ -287,20 +279,19 @@
       persp: 140,
       rx: -14,
       ry: 26,
-      eyeRows: [4, 5],
       pixels: [
-        "....XXXX....",
+        "...XXXXXX...",
         "..XXXXXXXX..",
-        ".XXXXXXXXXX.",
+        "X.XXXXXXXX.X",
+        "XX.X.ee.ee.X",
+        "X.XXXXXXXX.X",
         "XXXXXXXXXXXX",
-        "XXX..XX..XXX",
-        "XXX..XX..XXX",
+        "X.X.X..X.X.X",
         "XXXXXXXXXXXX",
+        "X.X.X..X.X.X",
         "XXXXXXXXXXXX",
-        "XXXXXXXXXXXX",
-        ".XXXXXXXXXX.",
-        "..XXXXXXXX..",
-        "....XXXX....",
+        "XX.XX..XX.XX",
+        ".X.X.XX.X.X.",
       ],
       tier: "B",
       overall: 86,
@@ -317,6 +308,230 @@
 
   var PX = 5;
   var _uid = 0;
+  var EYE_COLOR = "#0d0b12";
+  var LIT_COLOR = "#fffbe8";
+
+  // ── Tonal shading (ported from
+  // docs/design/web-redesign/robot-ghosts/preview.html) ────────────────────
+  // A continuous shading level (1.0..4.0) drives per-cell highlight/shadow
+  // tint on "X" body cells, via a flood fill that tells true silhouette
+  // edges (reachable from outside the sprite) from interior holes (eye
+  // slots, vents, gaps between legs). See preview.html for the exact
+  // derivation of the constants below — ported verbatim.
+  var SHADE_EASE = 0.55;
+
+  function shadeLerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+  function shadeClamp(v, lo, hi) {
+    if (lo === undefined) lo = 0;
+    if (hi === undefined) hi = 1;
+    return Math.max(lo, Math.min(hi, v));
+  }
+  function shadeHexToRgb(h) {
+    h = h.replace("#", "");
+    return [
+      parseInt(h.slice(0, 2), 16),
+      parseInt(h.slice(2, 4), 16),
+      parseInt(h.slice(4, 6), 16),
+    ];
+  }
+  function shadeScaleColor(rgb, mult) {
+    return rgb.map(function (c) {
+      return c * mult;
+    });
+  }
+  function shadeBlendColor(base, target, t) {
+    return base.map(function (c, i) {
+      return shadeLerp(c, target[i], t);
+    });
+  }
+  function shadeCellAt(rows, x, y) {
+    if (x >= 0 && x < rows[0].length && y >= 0 && y < rows.length)
+      return rows[y][x];
+    return ".";
+  }
+
+  // Flood fill from a 1-cell padding border around the sprite, through
+  // empty ("." ) cells. Returns the set of padded-space coordinate keys
+  // ("x,y") reachable from outside the sprite.
+  function floodOutside(rows) {
+    var cols = rows[0].length,
+      rowsN = rows.length;
+    var size = Math.max(cols, rowsN) + 2;
+    var visited = {};
+    function key(x, y) {
+      return x + "," + y;
+    }
+    function isEmpty(px, py) {
+      var gx = px - 1,
+        gy = py - 1;
+      if (gx >= 0 && gx < cols && gy >= 0 && gy < rowsN)
+        return rows[gy][gx] === ".";
+      return true;
+    }
+    var queue = [[0, 0]];
+    visited[key(0, 0)] = true;
+    while (queue.length) {
+      var p = queue.shift();
+      var px = p[0],
+        py = p[1];
+      var dirs = [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ];
+      for (var i = 0; i < dirs.length; i++) {
+        var nx = px + dirs[i][0],
+          ny = py + dirs[i][1];
+        if (
+          nx >= 0 &&
+          nx < size &&
+          ny >= 0 &&
+          ny < size &&
+          !visited[key(nx, ny)] &&
+          isEmpty(nx, ny)
+        ) {
+          visited[key(nx, ny)] = true;
+          queue.push([nx, ny]);
+        }
+      }
+    }
+    return visited;
+  }
+
+  // Classify every "X" cell's edge kind, independent of level — computed
+  // once at build time. Returns a 2D array (rows x cols) where each "X"
+  // cell holds "outer-highlight" | "outer-shadow" | "inner-highlight" |
+  // "inner-shadow" | "plain", and non-"X" cells hold null.
+  function classifyShadeCells(rows) {
+    var cols = rows[0].length,
+      rowsN = rows.length;
+    var outside = floodOutside(rows);
+    function isOuterGap(gx, gy) {
+      return !!outside[gx + 1 + "," + (gy + 1)];
+    }
+    var out = [];
+    for (var y = 0; y < rowsN; y++) {
+      var row = [];
+      for (var x = 0; x < cols; x++) {
+        if (rows[y][x] !== "X") {
+          row.push(null);
+          continue;
+        }
+        var up = shadeCellAt(rows, x, y - 1),
+          left = shadeCellAt(rows, x - 1, y);
+        var down = shadeCellAt(rows, x, y + 1),
+          right = shadeCellAt(rows, x + 1, y);
+        var highlightDirs = [
+          [x, y - 1, up],
+          [x - 1, y, left],
+        ];
+        var shadowDirs = [
+          [x, y + 1, down],
+          [x + 1, y, right],
+        ];
+        function classify(dirs) {
+          var gaps = dirs.filter(function (d) {
+            return d[2] === ".";
+          });
+          if (!gaps.length) return null;
+          for (var g = 0; g < gaps.length; g++) {
+            if (isOuterGap(gaps[g][0], gaps[g][1])) return "outer";
+          }
+          return "inner";
+        }
+        var hKind = classify(highlightDirs);
+        var sKind = classify(shadowDirs);
+        var kind = "plain";
+        if (hKind === "outer") kind = "outer-highlight";
+        else if (sKind === "outer") kind = "outer-shadow";
+        else if (hKind === "inner") kind = "inner-highlight";
+        else if (sKind === "inner") kind = "inner-shadow";
+        row.push(kind);
+      }
+      out.push(row);
+    }
+    return out;
+  }
+
+  // Given the current level, compute the shadow/highlight RGB and inner
+  // blend weight once per ghost per frame.
+  function shadeLevelParams(level) {
+    level = shadeClamp(level, 1.0, 4.0);
+    var i = (level - 1.0) / 3.0;
+    var iEased = Math.pow(i, SHADE_EASE);
+    return {
+      shadowMult: shadeLerp(1.0, 0.58, iEased),
+      highlightMult: shadeLerp(1.0, 1.34, iEased),
+      innerWeight: shadeClamp((iEased - 0.55) / 0.45, 0, 1),
+    };
+  }
+
+  // Resolve a single cell's fill color string given its edge `kind`, the
+  // sprite's base color, and the current level params.
+  function shadeColorFor(kind, baseRgb, params) {
+    var rgb;
+    if (kind === "outer-highlight")
+      rgb = shadeScaleColor(baseRgb, params.highlightMult);
+    else if (kind === "outer-shadow")
+      rgb = shadeScaleColor(baseRgb, params.shadowMult);
+    else if (kind === "inner-highlight")
+      rgb = shadeBlendColor(
+        baseRgb,
+        shadeScaleColor(baseRgb, params.highlightMult),
+        params.innerWeight,
+      );
+    else if (kind === "inner-shadow")
+      rgb = shadeBlendColor(
+        baseRgb,
+        shadeScaleColor(baseRgb, params.shadowMult),
+        params.innerWeight,
+      );
+    else rgb = baseRgb;
+    return (
+      "rgb(" + (rgb[0] | 0) + "," + (rgb[1] | 0) + "," + (rgb[2] | 0) + ")"
+    );
+  }
+
+  // --- animation easing (ported from preview.html) ---
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+  function easeOutQuad(t) {
+    return 1 - (1 - t) * (1 - t);
+  }
+  function easeInQuad(t) {
+    return t * t;
+  }
+
+  // Tween helper: {start, from, to, dur, fn, then}. `then` fires once when
+  // the tween completes. `startLevelTween` overwrites any tween in
+  // progress on the ghost, starting from its current interpolated level —
+  // no special conflict resolution, matches preview.html's behavior.
+  function startLevelTween(g, to, dur, fn, then) {
+    g.levelAnim = {
+      start: performance.now(),
+      from: g.level,
+      to: to,
+      dur: dur,
+      fn: fn,
+      then: then || null,
+    };
+  }
+
+  function tickLevelTween(g, now) {
+    if (!g.levelAnim) return;
+    var t = shadeClamp((now - g.levelAnim.start) / g.levelAnim.dur, 0, 1);
+    g.level = shadeLerp(g.levelAnim.from, g.levelAnim.to, g.levelAnim.fn(t));
+    if (t >= 1) {
+      g.level = g.levelAnim.to;
+      var then = g.levelAnim.then;
+      g.levelAnim = null;
+      if (then) then();
+    }
+  }
 
   // ── Coin (single physical object, drifts with the field, grabbable
   //    before arming) ──────────────────────────────────────────────────
@@ -422,9 +637,10 @@
     );
   }
 
+  var SHADE_IDLE_LEVEL = 2.4;
+
   function buildSVG(ghost) {
     var pixels = ghost.pixels,
-      eyeRows = ghost.eyeRows || [],
       color = ghost.color;
     var rows = pixels.length,
       cols = pixels[0].length;
@@ -432,78 +648,44 @@
       H = rows * PX;
     var gid = "gxg" + _uid++;
     var glassRows = Math.ceil(rows * 0.42);
-    var LEG_ROW = rows - 2;
+
+    var shadeKinds = classifyShadeCells(pixels);
+    var baseRgb = shadeHexToRgb(color);
+    var idleParams = shadeLevelParams(SHADE_IDLE_LEVEL);
 
     var body = "",
-      glass = "",
+      eyes = "",
+      lit = "",
       blink = "",
-      tailRects = "";
+      glass = "";
 
     pixels.forEach(function (row, r) {
-      if (r >= LEG_ROW) {
-        for (var c = 0; c < cols; c++) {
-          var isOn = row[c] === "X";
-          tailRects +=
-            '<rect x="' +
-            c * PX +
-            '" y="' +
-            r * PX +
-            '" width="' +
-            PX +
-            '" height="' +
-            PX +
-            '" fill="' +
-            color +
-            '" opacity="' +
-            (isOn ? 1 : 0) +
-            '" data-gx-tc="' +
-            (isOn ? 1 : 0) +
-            "," +
-            c +
-            "," +
-            r +
-            '"/>';
+      row.split("").forEach(function (cell, c) {
+        var x = c * PX,
+          y = r * PX;
+        var rectOpen =
+          '<rect x="' + x + '" y="' + y + '" width="' + PX + '" height="' + PX;
+        if (cell === "X") {
+          var kind = shadeKinds[r][c];
+          var fill = shadeColorFor(kind, baseRgb, idleParams);
+          body +=
+            rectOpen +
+            '" data-gx-shade="' +
+            kind +
+            '" style="fill:' +
+            fill +
+            ';"/>';
+          if (r < glassRows) glass += rectOpen + '"/>';
+        } else if (cell === "e") {
+          eyes += rectOpen + '"/>';
+          // Also feeds .gx-blink-cover (body color) at the same position —
+          // triggerBlink() toggles this cover's opacity to visually "close"
+          // the eye by painting body color over the dark recess.
+          blink += rectOpen + '"/>';
+        } else if (cell === "l") {
+          lit += rectOpen + '"/>';
         }
-      } else {
-        row.split("").forEach(function (cell, c) {
-          var x = c * PX,
-            y = r * PX;
-          if (cell === "X") {
-            body +=
-              '<rect x="' +
-              x +
-              '" y="' +
-              y +
-              '" width="' +
-              PX +
-              '" height="' +
-              PX +
-              '"/>';
-            if (r < glassRows)
-              glass +=
-                '<rect x="' +
-                x +
-                '" y="' +
-                y +
-                '" width="' +
-                PX +
-                '" height="' +
-                PX +
-                '"/>';
-          } else if (eyeRows.indexOf(r) !== -1) {
-            blink +=
-              '<rect x="' +
-              x +
-              '" y="' +
-              y +
-              '" width="' +
-              PX +
-              '" height="' +
-              PX +
-              '"/>';
-          }
-        });
-      }
+      });
     });
 
     return (
@@ -523,18 +705,23 @@
       '<stop offset="65%" stop-color="white" stop-opacity="0.05"/>' +
       '<stop offset="100%" stop-color="white" stop-opacity="0"/>' +
       "</linearGradient></defs>" +
-      '<g fill="' +
-      color +
-      '">' +
+      "<g>" +
       body +
+      "</g>" +
+      '<g fill="' +
+      EYE_COLOR +
+      '">' +
+      eyes +
+      "</g>" +
+      '<g fill="' +
+      LIT_COLOR +
+      '">' +
+      lit +
       "</g>" +
       '<g class="gx-blink-cover" fill="' +
       color +
       '">' +
       blink +
-      "</g>" +
-      "<g>" +
-      tailRects +
       "</g>" +
       '<g class="gx-glass" fill="url(#' +
       gid +
@@ -555,34 +742,30 @@
       H = rows * px;
     var gid = "gxp" + _uid++;
     var glassRows = Math.ceil(rows * 0.42);
+
+    var shadeKinds = classifyShadeCells(pixels);
+    var baseRgb = shadeHexToRgb(color);
+    var idleParams = shadeLevelParams(SHADE_IDLE_LEVEL);
+
     var body = "",
+      eyes = "",
+      lit = "",
       glass = "";
     pixels.forEach(function (row, r) {
       row.split("").forEach(function (cell, c) {
-        if (cell !== "X") return;
         var x = c * px,
           y = r * px;
-        body +=
-          '<rect x="' +
-          x +
-          '" y="' +
-          y +
-          '" width="' +
-          px +
-          '" height="' +
-          px +
-          '"/>';
-        if (r < glassRows)
-          glass +=
-            '<rect x="' +
-            x +
-            '" y="' +
-            y +
-            '" width="' +
-            px +
-            '" height="' +
-            px +
-            '"/>';
+        var rectOpen =
+          '<rect x="' + x + '" y="' + y + '" width="' + px + '" height="' + px;
+        if (cell === "X") {
+          var fill = shadeColorFor(shadeKinds[r][c], baseRgb, idleParams);
+          body += rectOpen + '" style="fill:' + fill + ';"/>';
+          if (r < glassRows) glass += rectOpen + '"/>';
+        } else if (cell === "e") {
+          eyes += rectOpen + '"/>';
+        } else if (cell === "l") {
+          lit += rectOpen + '"/>';
+        }
       });
     });
     return (
@@ -602,10 +785,18 @@
       '<stop offset="65%" stop-color="white" stop-opacity="0.04"/>' +
       '<stop offset="100%" stop-color="white" stop-opacity="0"/>' +
       "</linearGradient></defs>" +
-      '<g fill="' +
-      color +
-      '">' +
+      "<g>" +
       body +
+      "</g>" +
+      '<g fill="' +
+      EYE_COLOR +
+      '">' +
+      eyes +
+      "</g>" +
+      '<g fill="' +
+      LIT_COLOR +
+      '">' +
+      lit +
       "</g>" +
       '<g fill="url(#' +
       gid +
@@ -856,11 +1047,10 @@
         "</div>";
       field.appendChild(el);
 
-      var tailCells = Array.prototype.map.call(
-        el.querySelectorAll("[data-gx-tc]"),
+      var shadeCells = Array.prototype.map.call(
+        el.querySelectorAll("[data-gx-shade]"),
         function (rect) {
-          var parts = rect.getAttribute("data-gx-tc").split(",").map(Number);
-          return { el: rect, baseOn: !!parts[0], col: parts[1], row: parts[2] };
+          return { el: rect, kind: rect.getAttribute("data-gx-shade") };
         },
       );
 
@@ -872,7 +1062,10 @@
       return {
         cfg: cfg,
         el: el,
-        tailCells: tailCells,
+        shadeCells: shadeCells,
+        baseRgb: shadeHexToRgb(cfg.color),
+        level: SHADE_IDLE_LEVEL,
+        levelAnim: null,
         w: W,
         h: H,
         r: Math.min(W, H) * 0.45,
@@ -1193,6 +1386,10 @@
       });
 
       var svgEl = g.el.querySelector("svg");
+      g.el.addEventListener("mouseenter", function () {
+        if (!armed) return;
+        startLevelTween(g, 4.0, 300, easeOutQuad);
+      });
       g.el.addEventListener("mousemove", function (e) {
         if (!armed || g === dragging) return;
         var rect = g.el.getBoundingClientRect();
@@ -1216,6 +1413,7 @@
         svgEl.style.transition = "";
         svgEl.style.transform = "";
         svgEl.style.imageRendering = "";
+        startLevelTween(g, SHADE_IDLE_LEVEL, 300, easeInQuad);
       });
     });
 
@@ -1434,22 +1632,10 @@
         var bob = Math.sin(g.t * 0.024 + g.bobPhase) * 5;
         g.el.style.transform = "translate(" + g.x + "px," + (g.y + bob) + "px)";
 
-        var spd = Math.hypot(g.vx, g.vy);
-        var waveSpeed = 0.0025 + spd * 0.0008;
-        g.tailCells.forEach(function (tc) {
-          var phase =
-            now * waveSpeed + tc.col * 0.65 + tc.row * 0.4 + g.bobPhase;
-          var wave = Math.sin(phase);
-          var vertY = wave * 2;
-          var op;
-          if (tc.baseOn) {
-            op = 0.45 + (wave * 0.5 + 0.5) * 0.55;
-          } else {
-            var v = wave * 0.5 + 0.5;
-            op = v > 0.72 ? (v - 0.72) * 3.57 * 0.48 : 0;
-          }
-          tc.el.style.opacity = op.toFixed(2);
-          tc.el.style.transform = "translateY(" + vertY.toFixed(1) + "px)";
+        tickLevelTween(g, now);
+        var shadeParams = shadeLevelParams(g.level);
+        g.shadeCells.forEach(function (sc) {
+          sc.el.style.fill = shadeColorFor(sc.kind, g.baseRgb, shadeParams);
         });
 
         g.blinkTimer -= dt;
@@ -1541,12 +1727,21 @@
     // paths. The plate's own choreography (label/credit/panel) listens
     // for "gx-armchange" instead of running inline here, for the same
     // reason.
+    function fireShadeSpike() {
+      ghosts.forEach(function (g) {
+        startLevelTween(g, 1.0, 90, easeOutQuad, function () {
+          startLevelTween(g, SHADE_IDLE_LEVEL, 260, easeInQuad);
+        });
+      });
+    }
+
     function coinIn() {
       if (armed) return;
       armed = true;
       coinInsert();
       field.classList.add("gx-armed");
       document.body.classList.add("gx-coin-in");
+      fireShadeSpike();
       document.dispatchEvent(
         new CustomEvent("gx-armchange", { detail: { armed: true } }),
       );
@@ -1562,6 +1757,7 @@
       field.classList.remove("gx-armed");
       document.body.classList.remove("gx-coin-in");
       coinEject();
+      fireShadeSpike();
       document.dispatchEvent(
         new CustomEvent("gx-armchange", { detail: { armed: false } }),
       );
