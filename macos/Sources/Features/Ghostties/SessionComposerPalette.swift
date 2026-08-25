@@ -559,6 +559,17 @@ struct SessionComposerPalette: View {
         )
     }
 
+    /// Step 4 (Composer UI 11 plan §3): the status strip's single occupant —
+    /// generalized from the old `writeError`-only strip. Additive: the
+    /// resolution line is still present after this step, so its deletion
+    /// (Step 5) reverts independently.
+    private var statusStripMessage: String? {
+        SessionComposerCommandParser.statusStripMessage(
+            writeError: composerStore.writeError,
+            typedBranchResolution: typedBranchResolution
+        )
+    }
+
     /// The query field's binding (model A rebuild — replaces the deleted
     /// `queryFieldText`/`resolvedFieldSplit` prefix-consuming transform).
     /// `get` returns `composerStore.searchText` VERBATIM — never a computed
@@ -1138,7 +1149,13 @@ struct SessionComposerPalette: View {
                 onNewTemplate: {
                     newTemplateName = ""
                     isAddingTemplate = true
-                }
+                },
+                // Step 4 (G-F7): a zero-project composer must never render
+                // a dead-end "No matches" — the empty-state row reaches the
+                // same NSOpenPanel flow the trailing project control (Step
+                // 5) and the inline picker's own "+ Add project…" row use.
+                isProjectsEmpty: store.projects.isEmpty,
+                onAddProject: { composerStore.addProjectViaPanel(workspaceStore: store) }
             ) { option in
                 // Does NOT dismiss the popover here — `option.action()` (a
                 // template commit) only clears `isPresented` once the store
@@ -1148,8 +1165,8 @@ struct SessionComposerPalette: View {
                 option.action()
             }
 
-            if let writeError = composerStore.writeError {
-                Text(writeError)
+            if let statusStripMessage {
+                Text(statusStripMessage)
                     .font(.system(size: subtitleFontSize))
                     .foregroundStyle(Color(nsColor: .systemRed))
                     .padding(.horizontal, 10)
@@ -2101,6 +2118,10 @@ private struct ComposerResultsTable: View {
     /// the footer for that state).
     var showNewTemplateRow: Bool
     var onNewTemplate: () -> Void
+    /// Step 4: `store.projects.isEmpty` — swaps the empty-results row from
+    /// plain "No matches" text to a clickable "Add project…" row (G-F7).
+    var isProjectsEmpty: Bool
+    var onAddProject: () -> Void
     var action: (ComposerOption) -> Void
 
     private var flattened: [ComposerOption] {
@@ -2112,11 +2133,15 @@ private struct ComposerResultsTable: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
                     if flattened.isEmpty {
-                        Text("No matches")
-                            .font(.system(size: rowFontSize))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, rowHorizontalPadding)
-                            .padding(.vertical, rowVerticalPadding)
+                        if isProjectsEmpty {
+                            addProjectRow
+                        } else {
+                            Text(SessionComposerCommandParser.emptyResultsCopy(isProjectsEmpty: false))
+                                .font(.system(size: rowFontSize))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, rowHorizontalPadding)
+                                .padding(.vertical, rowVerticalPadding)
+                        }
                     }
 
                     ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
@@ -2173,6 +2198,26 @@ private struct ComposerResultsTable: View {
                 Text("New template")
                     .font(.system(size: rowFontSize, weight: .medium))
                     .foregroundStyle(Color(nsColor: .labelColor).opacity(0.375))
+                Spacer()
+            }
+            .padding(.horizontal, rowHorizontalPadding)
+            .padding(.vertical, rowVerticalPadding)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Step 4's zero-project empty-state row (G-F7) — reaches the same
+    /// `addProjectViaPanel` flow the inline project picker's own
+    /// `+ Add project…` row and Step 5's `projectControl` chevron reach.
+    /// Row-styled to match `newTemplateRow` above it, not a plain text
+    /// dead end.
+    private var addProjectRow: some View {
+        Button(action: onAddProject) {
+            HStack(spacing: 8) {
+                Text(SessionComposerCommandParser.emptyResultsCopy(isProjectsEmpty: true))
+                    .font(.system(size: rowFontSize, weight: .medium))
+                    .foregroundStyle(.secondary)
                 Spacer()
             }
             .padding(.horizontal, rowHorizontalPadding)

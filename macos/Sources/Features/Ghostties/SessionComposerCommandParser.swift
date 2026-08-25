@@ -1249,4 +1249,32 @@ enum SessionComposerCommandParser {
 
         return "Type a project, branch, and command…"
     }
+
+    // MARK: - Status strip + empty state (Composer UI 11 plan §3 Step 4)
+
+    /// The status strip's single occupant, if any — the `writeError` strip
+    /// generalized (plan §3 Step 4). `writeError` (a failed Return,
+    /// post-commit, unchanged) always beats a pre-Return typed-branch-not-
+    /// found message (`TypedBranchResolution.unresolved`, plan §4 row 5);
+    /// `nil` renders nothing, so the happy-path card matches the board
+    /// exactly with no strip at all.
+    static func statusStripMessage(
+        writeError: String?,
+        typedBranchResolution: TypedBranchResolution
+    ) -> String? {
+        if let writeError { return writeError }
+        if case .unresolved(let token) = typedBranchResolution {
+            return "branch \"\(token)\" not found"
+        }
+        return nil
+    }
+
+    /// What the results area's single empty-state row shows when nothing
+    /// matches. Zero projects is the first-run lifeline (G-F7) — the
+    /// composer must never render a dead-end "No matches" against an empty
+    /// project list; the caller pairs this copy with a clickable row when
+    /// `isProjectsEmpty` is true, plain text otherwise.
+    static func emptyResultsCopy(isProjectsEmpty: Bool) -> String {
+        isProjectsEmpty ? "Add project…" : "No matches"
+    }
 }
