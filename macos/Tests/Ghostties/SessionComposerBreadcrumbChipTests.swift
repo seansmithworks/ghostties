@@ -162,24 +162,15 @@ struct SessionComposerBreadcrumbChipTests {
         #expect(store.searchText == "cco -n test")
     }
 
-    // MARK: - F8 (round-2 review): popChipToText / noteSearchTextEditedByTyping
-
-    /// `popChipToText(projectName:)` is the single write path for the A5
-    /// "backspace the chip back to raw text" gesture: it must clear
-    /// `selectedProjectId` (the chip has nothing selected anymore) AND set
-    /// `searchText` to the popped project's name (not clear it, unlike
-    /// `selectProject(_:)`, which this deliberately does NOT reuse).
-    @Test func popChipToTextClearsSelectionAndSetsSearchTextToProjectName() {
-        let store = SessionComposerStore(isolatedForTesting: ())
-        let projectA = makeProject(name: "A")
-        store.selectedProjectId = projectA.id
-        store.searchText = "cco -n test"
-
-        store.popChipToText(projectName: "A")
-
-        #expect(store.selectedProjectId == nil)
-        #expect(store.searchText == "A")
-    }
+    // MARK: - F8 (round-2 review): noteSearchTextEditedByTyping
+    //
+    // `popChipToTextClearsSelectionAndSetsSearchTextToProjectName` used to
+    // live here, testing `SessionComposerStore.popChipToText(projectName:)`
+    // — the single write path for the A5 "backspace the chip back to raw
+    // text" gesture. Deleted alongside that method (model A rebuild): the
+    // field has no non-editable chip segment to pop back to text anymore,
+    // so the gesture, its store method, and this test are all dead code
+    // together, not independently.
 
     /// D4: typing by hand must disarm a pending chip-undo. Without this, ⌘Z
     /// after typing past a chip change would discard the typed keystrokes
@@ -214,5 +205,153 @@ struct SessionComposerBreadcrumbChipTests {
         #expect(store.pendingChipUndo == nil)
         #expect(store.selectedProjectId == projectA.id)
         #expect(store.searchText == "cco")
+    }
+
+    // MARK: - B3: branch chip cascade + undo
+
+    /// Cascade rule: changing the PROJECT clears the branch chip too — a
+    /// branch name is meaningless in another repo — and ⌘Z restores
+    /// project + search text + branch as ONE step (extends A3/A4's
+    /// project-only coverage above to the branch segment `changeProjectChip`
+    /// now also cascades).
+    @Test func changeProjectChipClearsSelectedWorktreePathAndUndoRestoresItAsOneStep() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        let projectB = makeProject(name: "B")
+        store.selectedProjectId = projectA.id
+        store.searchText = "cco -n test"
+        store.selectedWorktreePath = "/tmp/A-worktrees/feature-x"
+
+        store.changeProjectChip(to: projectB.id, currentlyShown: projectA.id)
+
+        #expect(store.selectedProjectId == projectB.id)
+        #expect(store.searchText == "")
+        #expect(store.selectedWorktreePath == nil)
+
+        store.undoProjectChipChange()
+
+        #expect(store.selectedProjectId == projectA.id)
+        #expect(store.searchText == "cco -n test")
+        #expect(store.selectedWorktreePath == "/tmp/A-worktrees/feature-x")
+    }
+
+    /// Cascade rule: changing the BRANCH clears nothing else and arms no
+    /// ⌘Z undo — a command is branch-agnostic, per the spec. Mutant check:
+    /// if `changeBranchChip` incorrectly armed `pendingChipUndo`, this test
+    /// goes red on the `#expect(store.pendingChipUndo == nil)` line.
+    @Test func changeBranchChipClearsNothingAndArmsNoUndo() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        store.selectedProjectId = projectA.id
+        store.searchText = "cco -n test"
+
+        let result = store.changeBranchChip(to: "/tmp/A-worktrees/feature-x", currentlyShown: nil)
+
+        #expect(result == .changed)
+        #expect(store.selectedWorktreePath == "/tmp/A-worktrees/feature-x")
+        #expect(store.selectedProjectId == projectA.id)
+        #expect(store.searchText == "cco -n test")
+        #expect(store.pendingChipUndo == nil)
+    }
+
+    /// Re-picking the worktree already shown is a no-op, not a clear —
+    /// same rule `changeProjectChip` enforces for the project segment.
+    @Test func changeBranchChipToTheSameWorktreeIsANoOp() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        store.selectedWorktreePath = "/tmp/A-worktrees/feature-x"
+
+        let result = store.changeBranchChip(to: "/tmp/A-worktrees/feature-x", currentlyShown: "/tmp/A-worktrees/feature-x")
+
+        #expect(result == .noOp)
+        #expect(store.selectedWorktreePath == "/tmp/A-worktrees/feature-x")
+    }
+
+    /// `clearBranchChip()` is the picker's "Default" row — resets the
+    /// override back to nil (no launch-path override) without touching
+    /// project or search text, and arms no undo, same as `changeBranchChip`.
+    @Test func clearBranchChipResetsToDefaultWithoutArmingUndo() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        store.selectedProjectId = projectA.id
+        store.searchText = "cco"
+        store.selectedWorktreePath = "/tmp/A-worktrees/feature-x"
+
+        store.clearBranchChip()
+
+        #expect(store.selectedWorktreePath == nil)
+        #expect(store.selectedProjectId == projectA.id)
+        #expect(store.searchText == "cco")
+        #expect(store.pendingChipUndo == nil)
+    }
+
+    // MARK: - B3: open()/cancel() reset selectedWorktreePath
+
+    /// `open(...)` must reset `selectedWorktreePath` even when called
+    /// while ALREADY open (`wasOpen == true` path) — this store is a
+    /// process-wide singleton, so a stale pick left over from a prior
+    /// project would otherwise launch the NEXT session into a different
+    /// project's worktree path silently.
+    @Test func openResetsSelectedWorktreePath() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let project = makeProject(name: "A")
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        store.selectedWorktreePath = "/tmp/stale-worktree-path"
+
+        store.open(projectBinding: .prefilled(project), workspaceStore: workspaceStore)
+
+        #expect(store.selectedWorktreePath == nil)
+    }
+
+    /// `cancel()` must reset it too — a cancelled composer must not leave
+    /// a worktree pick armed for whatever opens next.
+    @Test func cancelResetsSelectedWorktreePath() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        store.selectedWorktreePath = "/tmp/stale-worktree-path"
+
+        store.cancel()
+
+        #expect(store.selectedWorktreePath == nil)
+    }
+
+    // MARK: - BL-1 (Slice B review round 3): the cascade lives on the
+    // property, not the call site
+
+    /// `SessionComposerPalette.commit(template:)` writes `selectedProjectId`
+    /// DIRECTLY (never through `selectProject(_:)`) when a typed
+    /// `<project> <remainder>` command resolves a different project than the
+    /// dropdown — this is the exact bypass that shipped the bug (no timing
+    /// window required: composer on A, worktree `feat-x` picked via the
+    /// picker, type `web cco`, Return — B's session used to launch with cwd
+    /// inside A's worktree). Proves the fix at the STATE layer: even a raw,
+    /// direct write to `selectedProjectId` — bypassing `selectProject`,
+    /// `changeProjectChip`, and every other named write path — still clears
+    /// the stale branch pick.
+    @Test func directWriteToSelectedProjectIdStillClearsSelectedWorktreePath() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        let projectB = makeProject(name: "B")
+        store.selectedProjectId = projectA.id
+        store.selectedWorktreePath = "/tmp/A-worktrees/feat-x"
+
+        // The exact write `commit(template:)` performs — NOT `selectProject`,
+        // NOT `changeProjectChip`.
+        store.selectedProjectId = projectB.id
+
+        #expect(store.selectedWorktreePath == nil, "a raw write to selectedProjectId must cascade, or a session for B can launch with cwd still pointed at A's worktree")
+        #expect(store.selectedProjectId == projectB.id)
+    }
+
+    /// The cascade must be a genuine no-op when the value doesn't actually
+    /// change — re-assigning the SAME project id must not clear a
+    /// legitimately-still-current worktree pick.
+    @Test func reassigningTheSameProjectIdDoesNotClearSelectedWorktreePath() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let projectA = makeProject(name: "A")
+        store.selectedProjectId = projectA.id
+        store.selectedWorktreePath = "/tmp/A-worktrees/feat-x"
+
+        store.selectedProjectId = projectA.id
+
+        #expect(store.selectedWorktreePath == "/tmp/A-worktrees/feat-x")
     }
 }

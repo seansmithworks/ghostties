@@ -1,0 +1,203 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 560,
+      "title": "01 Current"
+    },
+    {
+      "file": "V02Quieted.dc.html",
+      "x": 580,
+      "y": 0,
+      "w": 480,
+      "h": 560,
+      "title": "02 Quieted"
+    },
+    {
+      "file": "V03Rams.dc.html",
+      "x": 1160,
+      "y": 0,
+      "w": 480,
+      "h": 560,
+      "title": "03 Rams"
+    },
+    {
+      "file": "V04Ive.dc.html",
+      "x": 1740,
+      "y": 0,
+      "w": 480,
+      "h": 560,
+      "title": "04 Ive"
+    },
+    {
+      "file": "V05Lovin.dc.html",
+      "x": 2320,
+      "y": 0,
+      "w": 480,
+      "h": 560,
+      "title": "05 Lovin"
+    },
+    {
+      "file": "V06EvilRabbit.dc.html",
+      "x": 0,
+      "y": 700,
+      "w": 480,
+      "h": 560,
+      "title": "06 Evil Rabbit"
+    },
+    {
+      "file": "V07Bierut.dc.html",
+      "x": 580,
+      "y": 700,
+      "w": 480,
+      "h": 560,
+      "title": "07 Bierut"
+    },
+    {
+      "file": "V08Scher.dc.html",
+      "x": 1160,
+      "y": 700,
+      "w": 480,
+      "h": 560,
+      "title": "08 Scher"
+    },
+    {
+      "file": "V09Inline.dc.html",
+      "x": 1740,
+      "y": 700,
+      "w": 480,
+      "h": 560,
+      "title": "09 Inline"
+    },
+    {
+      "file": "V10Single.dc.html",
+      "x": 2320,
+      "y": 700,
+      "w": 480,
+      "h": 560,
+      "title": "10 Single line"
+    },
+    {
+      "file": "V02Quieted2.dc.html",
+      "x": 595,
+      "y": 1496,
+      "w": 480,
+      "h": 560,
+      "title": "02 Quieted copy"
+    },
+    {
+      "file": "V02Quieted22.dc.html",
+      "x": 1090,
+      "y": 1494,
+      "w": 480,
+      "h": 560,
+      "title": "02 Quieted copy copy"
+    },
+    {
+      "file": "V05Lovin2.dc.html",
+      "x": 1595,
+      "y": 1494,
+      "w": 480,
+      "h": 560,
+      "title": "05 Lovin copy"
+    },
+    {
+      "file": "V02Quieted222.dc.html",
+      "x": 2100,
+      "y": 1494,
+      "w": 480,
+      "h": 560,
+      "title": "02 Quieted copy copy copy"
+    },
+    {
+      "file": "G5Pinned.dc.html",
+      "x": 2320,
+      "y": 2260,
+      "w": 480,
+      "h": 560,
+      "title": "G5 Pinned"
+    },
+    {
+      "file": "G1Rest.dc.html",
+      "x": 0,
+      "y": 2260,
+      "w": 480,
+      "h": 560,
+      "title": "G1 Rest"
+    },
+    {
+      "file": "G2Typing.dc.html",
+      "x": 580,
+      "y": 2260,
+      "w": 480,
+      "h": 560,
+      "title": "G2 Typing"
+    },
+    {
+      "file": "G3Diverge.dc.html",
+      "x": 1160,
+      "y": 2260,
+      "w": 480,
+      "h": 560,
+      "title": "G3 Diverge"
+    },
+    {
+      "file": "G4Inferred.dc.html",
+      "x": 1740,
+      "y": 2260,
+      "w": 480,
+      "h": 560,
+      "title": "G4 Inferred vs predicted"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "scale",
+      "x": 0,
+      "y": -190,
+      "w": 700,
+      "text": "MILD → WILD, left to right, top row then bottom.\n\nAll ten are the same moment: project resolved to ghostties, \"orchestrator\" typed, template matched. Same content everywhere so the only variable is structure.\n\nReal values throughout — 360pt card, 12pt continuous radius, 15/13/11/10pt ramp, F0E9E6 chrome over FAF7F3 canvas, accent@0.2 selection fill."
+    },
+    {
+      "id": "note-minimal",
+      "x": 760,
+      "y": -190,
+      "w": 520,
+      "text": "The label question, three answers:\n\n02/04 delete section headers entirely (rules or air instead)\n03/07 keep them but make them structural — an index column, a vertical spine\n06/09/10 replace the list with something else — mono rows, chips, a segment rail"
+    },
+    {
+      "id": "note-open",
+      "x": 1340,
+      "y": -190,
+      "w": 480,
+      "text": "All light theme on purpose — dark is a second pass once a direction is picked, not ten more artboards now.\n\n08 is the deliberate overshoot. It is there to mark the far end, not because I think it ships."
+    },
+    {
+      "id": "ghost-row",
+      "x": 0,
+      "y": 2070,
+      "w": 900,
+      "text": "GHOST PREFILL — your direction, built out at the four states it has to survive.\n\nNo subtitle line anywhere, per your note. Path lives in the field. 8px rows, no section headers, New template is a ghosted row rather than a footer.\n\nThe one thing I added that your sketches don't have yet: TWO greys, not one. Read G4 next to G1."
+    },
+    {
+      "id": "ghost-two-greys",
+      "x": 960,
+      "y": 2070,
+      "w": 620,
+      "text": "#1A1A1A7E (light) = PREDICTED. A guess from your last selection. Tab accepts it, typing overwrites it.\n\n#636363 (mid) = SETTLED. Already true — project locked by the picker, branch resolved. Typing does not overwrite it.\n\nWithout that split, ghost prefill lies: an inferred project and a guessed template look identical, and you cannot tell what Return will actually do."
+    },
+    {
+      "id": "ghost-pinned",
+      "x": 1640,
+      "y": 2070,
+      "w": 620,
+      "text": "G5 answers your \"Pinned Icon\" note.\n\nOnce section headers are gone, PINNED / RECENT / TEMPLATES have to be carried by the rows themselves. G5 does it with a fixed 11px slot at the left of every row: a pin glyph if pinned, empty otherwise. Templates sit below one hairline. Recency is a timestamp on the right, not a word.\n\nThat is one mark and one rule instead of three headers — and the slot keeps every title on the same left edge, which is what dies if you only indent the pinned ones."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

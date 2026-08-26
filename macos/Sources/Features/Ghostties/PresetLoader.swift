@@ -152,7 +152,9 @@ struct PresetLoader {
         }
     }
 
-    /// Load all presets from `~/.ghostties/presets/`.
+    /// Load all presets from `~/.ghostties/presets/`. Thin wrapper over
+    /// `loadPresetsResult()` for callers that only need the templates, not
+    /// whether the load genuinely succeeded (`WorkspacePersistence.swift`).
     ///
     /// Handles two formats:
     /// - **Flat `.md` files** with YAML frontmatter (legacy format).
@@ -161,6 +163,27 @@ struct PresetLoader {
     /// Returns an array of `AgentTemplate` objects with `isDefault: true` and `isGlobal: true`.
     /// Templates have deterministic UUIDs generated from the filename/foldername so IDs persist across launches.
     static func loadPresets() -> [AgentTemplate] {
+        loadPresetsResult().templates
+    }
+
+    /// DEFECT 5 fix (Composer UI 11 review round 2): `loadPresets()` alone
+    /// cannot distinguish "the presets directory is genuinely empty" from
+    /// "loading it soft-failed" (missing directory, a symlinked directory,
+    /// an enumeration failure) — both return `[]` with no error surfaced.
+    /// `SessionComposerStore.prunePins` needs that distinction to gate
+    /// pruning on LOAD SUCCESS rather than inferring it from a count
+    /// comparison against the id universe (see that function's doc
+    /// comment). `loadSucceeded` is `false` for the directory-level
+    /// soft-failure paths below (not a real directory / a symlinked
+    /// directory / `contentsOfDirectory` throwing) AND when any individual
+    /// `.md` or folder entry fails to parse (I/O failure, malformed
+    /// frontmatter, missing `name`, rejected `command`) — those per-entry
+    /// nils are exactly the "the preset did not genuinely go away" case
+    /// this gate exists to catch (FIX 1, final review round). An
+    /// empty-but-real presets directory with every entry parsing cleanly
+    /// reports `true` with zero templates, which is the correct "nothing
+    /// to prune against was lost" signal.
+    static func loadPresetsResult() -> (templates: [AgentTemplate], loadSucceeded: Bool) {
         let signpostState = Perf.signposter.beginInterval("presets.load")
         defer { Perf.signposter.endInterval("presets.load", signpostState) }
         let fm = FileManager.default
@@ -168,16 +191,17 @@ struct PresetLoader {
 
         // Verify path is a real directory (not a symlink to an attacker-controlled location).
         var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: dirPath, isDirectory: &isDir), isDir.boolValue else { return [] }
+        guard fm.fileExists(atPath: dirPath, isDirectory: &isDir), isDir.boolValue else { return ([], false) }
         let attrs = try? fm.attributesOfItem(atPath: dirPath)
         if let fileType = attrs?[.type] as? FileAttributeType, fileType == .typeSymbolicLink {
             logger.warning("Presets directory is a symlink — refusing to load")
-            return []
+            return ([], false)
         }
 
         do {
             let entries = try fm.contentsOfDirectory(atPath: dirPath)
             var templates: [AgentTemplate] = []
+            var anyEntryFailedToParse = false
 
             // Flat .md presets (legacy format).
             let mdFiles = entries.filter { $0.hasSuffix(".md") }.sorted()
@@ -186,6 +210,8 @@ struct PresetLoader {
                 let url = URL(fileURLWithPath: filePath)
                 if let template = parsePreset(at: url, filename: filename) {
                     templates.append(template)
+                } else {
+                    anyEntryFailedToParse = true
                 }
             }
 
@@ -203,13 +229,15 @@ struct PresetLoader {
                 let folderURL = URL(fileURLWithPath: (dirPath as NSString).appendingPathComponent(subdir))
                 if let template = parseFolderPreset(at: folderURL) {
                     templates.append(template)
+                } else {
+                    anyEntryFailedToParse = true
                 }
             }
 
-            return templates
+            return (templates, !anyEntryFailedToParse)
         } catch {
             logger.error("Failed to read presets directory: \(error.localizedDescription)")
-            return []
+            return ([], false)
         }
     }
 

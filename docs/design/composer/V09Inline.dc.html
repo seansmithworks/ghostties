@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+    a { color: #5B8DEF; } a:hover { color: #3E6FD0; }
+    .stage { width: 480px; height: 560px; background: #F0E9E6; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+    .card { width: 360px; background: #FAF7F3; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.30); overflow: hidden; }
+    .tag { position: absolute; top: 14px; left: 16px; font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: #9A8F88; text-transform: uppercase; }
+    .wrap { position: relative; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="tag">09 · Inline — ghost completion, list collapses</div>
+  <div class="stage">
+    <div class="card">
+
+      <div style="padding: 16px 14px 14px 14px;">
+        <div style="font-size: 17px; line-height: 22px; letter-spacing: -0.01em;">
+          <span style="color: #1a1a1a;">orch</span><span style="color: #B8B0AA;">estrator</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding-top: 9px;">
+          <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.05em; color: #3E6FD0; background: rgba(91,141,239,0.16); border-radius: 4px; padding: 3px 6px;">ghostties</div>
+          <div style="font-size: 10px; color: #C4BAB3;">›</div>
+          <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.05em; color: #3E6FD0; background: rgba(91,141,239,0.16); border-radius: 4px; padding: 3px 6px;">Orchestrator</div>
+          <div style="font-size: 10px; color: #C4BAB3;">›</div>
+          <div style="font-size: 10px; color: #B0A8A2;">name…</div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #ECE7E2;"></div>
+
+      <div style="padding: 8px 14px 10px 14px;">
+        <div style="font-size: 10px; color: #B0A8A2; padding-bottom: 7px;">3 others</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <div style="font-size: 12px; color: #636363; background: #F1EDE8; border-radius: 5px; padding: 4px 8px;">cco</div>
+          <div style="font-size: 12px; color: #636363; background: #F1EDE8; border-radius: 5px; padding: 4px 8px;">Default</div>
+          <div style="font-size: 12px; color: #636363; background: #F1EDE8; border-radius: 5px; padding: 4px 8px;">Review</div>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: #ECE7E2;"></div>
+      <div style="display: flex; align-items: center; padding: 8px 14px; font-size: 10px; color: #A9A29C;">
+        <span style="flex-grow: 1;">⇥ to accept</span>
+        <span>↵ launch</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

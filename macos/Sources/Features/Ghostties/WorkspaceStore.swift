@@ -37,6 +37,16 @@ final class WorkspaceStore: ObservableObject {
     }
     @Published private(set) var templates: [AgentTemplate] = []
 
+    /// DEFECT 5 fix (Composer UI 11 review round 2): whether the last
+    /// `PresetLoader.loadPresetsResult()` call genuinely succeeded (as
+    /// opposed to soft-failing and returning `[]`) — see
+    /// `SessionComposerStore.prunePins`'s doc comment for why this, not a
+    /// count comparison, is what pin pruning gates on. `true` in the
+    /// test-only initializer (below) and before the real `private init()`
+    /// ever runs a load — "no load attempted" reads as "nothing was lost",
+    /// not as a failure.
+    private(set) var presetsLoadSucceeded: Bool = true
+
     /// Global session status — shared across all windows so that a session
     /// running in Window A shows a green dot in Window B's sidebar too.
     /// Coordinators write via `updateSessionStatus`; views read directly.
@@ -168,7 +178,9 @@ final class WorkspaceStore: ObservableObject {
         PresetLoader.seedIfNeeded()
 
         // Load file-based presets from ~/.ghostties/presets/ and sanitize them.
-        let presets = PresetLoader.loadPresets().map {
+        let presetsResult = PresetLoader.loadPresetsResult()
+        self.presetsLoadSucceeded = presetsResult.loadSucceeded
+        let presets = presetsResult.templates.map {
             WorkspacePersistence.sanitizeTemplate($0)
         }
 

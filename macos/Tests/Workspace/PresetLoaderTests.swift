@@ -103,4 +103,91 @@ struct PresetLoaderTests {
         let uuid2 = PresetLoader.deterministicUUID(from: "orchestrator.md")
         #expect(uuid1 != uuid2)
     }
+
+    // MARK: - loadPresetsResult's loadSucceeded (FIX 1, final review round)
+
+    /// A malformed preset file (invalid frontmatter) must NOT be reported as
+    /// a load success. Before this fix, `loadPresetsResult` skipped
+    /// per-file `parsePreset` failures silently and returned
+    /// `loadSucceeded: true`, which `SessionComposerStore.prunePins` reads
+    /// as "nothing was lost" — the exact condition that permanently drops a
+    /// pin for a preset with a frontmatter typo (see `loadPresetsResult`'s
+    /// doc comment). Manipulates the real `~/.ghostties/presets` directory
+    /// because `presetsDirectoryPath` is a fixed path, not injectable;
+    /// backs up and restores its contents around the test.
+    @Test func loadPresetsResultReportsFailureOnAMalformedEntry() throws {
+        let fm = FileManager.default
+        let dirPath = PresetLoader.presetsDirectoryPath
+        let dirURL = URL(fileURLWithPath: dirPath)
+        let backupURL = fm.temporaryDirectory.appendingPathComponent("presets-backup-\(UUID().uuidString)")
+
+        var hadOriginalDir = false
+        if fm.fileExists(atPath: dirPath) {
+            hadOriginalDir = true
+            try fm.moveItem(at: dirURL, to: backupURL)
+        }
+        defer {
+            try? fm.removeItem(at: dirURL)
+            if hadOriginalDir {
+                try? fm.moveItem(at: backupURL, to: dirURL)
+            }
+        }
+
+        try fm.createDirectory(at: dirURL, withIntermediateDirectories: true)
+
+        // One valid preset, one with a missing "name" field (parsePreset
+        // returns nil for this — see testParseFrontmatterMissingName above).
+        let validContent = """
+        ---
+        name: Valid Preset
+        command: claude
+        ---
+
+        Body.
+        """
+        try validContent.write(
+            to: dirURL.appendingPathComponent("valid.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let malformedContent = """
+        ---
+        model: sonnet
+        description: No name field
+        ---
+
+        Body.
+        """
+        try malformedContent.write(
+            to: dirURL.appendingPathComponent("malformed.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let result = PresetLoader.loadPresetsResult()
+
+        #expect(result.templates.count == 1)
+        #expect(result.templates.first?.name == "Valid Preset")
+        #expect(result.loadSucceeded == false)
+    }
+
+    /// Pins survive the failure: `prunePins` reads `loadSucceeded == false`
+    /// (from the malformed-entry case above, reproduced against
+    /// `SessionComposerStore` directly to avoid a second real-directory
+    /// round-trip) and must not drop a pin whose template is temporarily
+    /// missing from the id universe as a result.
+    @Test @MainActor func pinsSurviveAMalformedPresetEntry() throws {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        let pinnedId = UUID()
+        store.togglePin(templateId: pinnedId)
+
+        // The malformed entry means `pinnedId`'s template is absent from the
+        // valid-id universe, but `presetsLoadSucceeded: false` (what
+        // `loadPresetsResult` now reports per the test above) must still
+        // block the prune.
+        store.prunePins(validIds: [], presetsLoadSucceeded: false)
+
+        #expect(store.pinnedTemplateIds == [pinnedId])
+    }
 }

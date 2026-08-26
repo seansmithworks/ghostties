@@ -4,6 +4,291 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-25 — composer UI 11.1/11.2 BUILT overnight, on `feat/composer-ui-11`
+
+Branch `feat/composer-ui-11` @ `d4bd0afde`, 24 commits off `a1daa6608`, +4,290/-268 across
+35 files, pushed to origin. Parent `feat/composer-branch-segment` UNTOUCHED and still frozen at
+`a1daa6608` (it remains the sole gate on beta.24). Suite 949 passed / 1 flake / 1 skipped;
+the single failure is `GitWorktreeCreationTests/raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes`,
+proven flaky (20/20 in isolation, and a full run earlier on this same branch was 0 failures).
+
+Plan + unedited adversarial-gate evidence at `docs/plans/composer-ui-11/`. Artifact:
+https://claude.ai/code/artifact/8a9cfc9e-7629-4bff-b7c3-631e4f5e4491
+
+**Shipped on the default path:** 11.1 rest-state ghost path (model A computed placeholder,
+`.centered` only), board-exact headerless list restyle, template pinning with load-gated
+pruning, resolution line DELETED with all six labels rehomed, trailing project/branch picker
+controls, zero-project empty state, DESIGN.md §4 rewritten.
+
+**Built but flag-OFF (model B):** `ComposerGhostTextField` NSTextView field with real two-tone
+typing. Drive it with
+`defaults write com.seansmithdesign.ghostties.dev ghostties.composerModelBField -bool YES`.
+UNVERIFIED by construction: every acceptance gate is a manual key matrix agents are forbidden
+to drive, and this machine is macOS 27 so macOS 13 Return cannot be tested here either.
+
+- [ ] **DECIDE — long paths truncate away the destination.** The ghost tail-truncates, so a long
+  project name eats the `> Branch > Template` half, which is the part that says where Return
+  goes. **Strawman: head-truncate the project segment** (`…-long-project-name > Default >
+  Orchestrator`) so the destination always survives; drop the project segment entirely when even
+  that will not fit.
+- [ ] **DECIDE — VoiceOver announces the ghost as the field's VALUE on an empty field.** A
+  screen-reader user is told the field contains `ghostties > Default > Orchestrator` when it is
+  empty, and Delete does nothing to it. Deliberate trade for A-F17 (otherwise it announces
+  "empty" over a visible path). Alternative is announcing it as a hint: honest, less
+  discoverable.
+- [ ] **DECIDE — ghost contrast.** The board's own `#1A1A1A7E` measures ~2.5:1 on the card, under
+  WCAG AA's 4.5:1, and it is content (it states where Return goes), not decoration. Reviewer
+  strawman was 0.62 alpha (`#1A1A1A9E`) as the point where it clears AA while staying clearly
+  quieter than typed ink.
+- [ ] **DECIDE — four smaller design calls left untouched:** the board-hex alpha conversion
+  (`labelColor.opacity(x)` multiplies by 0.85, so every board grey lands ~15% light), system
+  `Color.accentColor` vs brand `#5B8DEF` for row selection, the fixed 220pt results well (card
+  does not hug content), and whether `.anchored` should have inherited the headerless/single-line
+  list and the two new controls at all (the boards never addressed it).
+- [ ] **Known, not blocking:** model B's typed-to-ghost gap is ~1.5-2pt wider than intra-word
+  spacing. Diagnosed wrongly TWICE (side-bearing, then `firstRect` rounding — the latter is
+  structurally impossible since `firstRect`'s x is never used). `titleRect` was tested and returns
+  `origin.x == 0`, which does not explain it. Left labelled UNTESTED in the file.
+- [ ] **Known, not blocking:** the a11y tests guard the constant STRINGS, not the WIRING —
+  deleting `.accessibilityLabel(...)` from a call site still passes. Third instance of this shape
+  in the wave; documented rather than papered over.
+
+## 2026-08-25 — composer UI redesign: 11.1 / 11.2 are the build directions
+
+Design canvas: https://claude.ai/code/artifact/0ea41226-7a92-40c8-9f8c-a68f9775edf2
+Sources committed at `docs/design/composer/` (`783e90537`). Seeded 2.2MB output is
+gitignored — regenerate with the `design` skill's `seed-canvas.mjs`.
+
+- [ ] **carried — build 11.1 and 11.2** (Sean's direction, in-canvas comment 2026-08-25:
+  "11.1 and 11.2 are directions to build tonight"). They are `V02Quieted22.dc.html`
+  (titled **11.1**) and `V02Quieted222.dc.html` (titled **11.2**).
+  - **11.1 — ghosted full-path prefill at rest.** Field shows the whole path
+    `Ghostties > Default > Orchestrator` ghosted at `#1A1A1A7E`, predicted from last
+    selection. Sean's note on the board: *"ghosted prefill based on last selection.
+    We don't need the sub title."* The separate breadcrumb line is DELETED — the path
+    lives in the field.
+  - **11.2 — inline completion while typing.** `Gho` solid `#1A1A1A` + `stties` ghosted,
+    plus a list carrying **pinned / recent / template** without section headers. Rows in
+    his sketch: `cco` (marked "Pinned Icon"), `Stand Up Agent` (selected), `Task Sync`
+    (recent), then Codex / Review / Debug, then `New template` as a ghosted row rather
+    than a footer. Sean's note: *"trying to show the ghosted prefilled text, predicting
+    what may be typed."*
+  - Claude's build-out of this direction is on disk as `G1Rest` / `G2Typing` /
+    `G3Diverge` / `G4Inferred` / `G5Pinned` — four states plus a pinned treatment. **They
+    are NOT in the live canvas**: a save collision (Sean saved from a view loaded before
+    a republish) dropped them. Re-seed from the working files, don't rebuild.
+
+- [ ] **DECIDE OR KILL — two open design questions** blocking a clean 11.1/11.2 build:
+  1. **Can an item be pinned AND recent?** 11.2 merges pinned + recent above one hairline.
+     If both can be true, sort order needs a rule. **Strawman: pinned sorts first and
+     keeps the pin glyph; recency shows as a right-aligned timestamp on any row, pinned
+     or not.** Kill by confirming.
+  2. **Does the ghost predict the whole path, or only the template?** 11.1 predicts all
+     three segments. `G4Inferred` argues a picker-locked project is not a prediction at
+     all and should read as settled (`#636363`), not predicted (`#1A1A1A7E`). **Strawman:
+     two greys — settled vs predicted — because one grey makes an inferred project and a
+     guessed template look identical, so you cannot tell what Return will do.** Kill by
+     confirming or by choosing one grey.
+
+- [ ] **parked — `Run "<text>"` auto-selects when it is the only option.** Found by Sean
+  in live use 2026-08-24: typing `main` then backspacing to `mai` leaves `Run "mai"` as
+  the sole row, auto-selected; Return shell-execs it (`command not found: mai`) and
+  leaves a dead session in ACTIVE. Working as specified — the Run row for unmatched
+  remainder is settled grammar design — but a half-typed branch name is one Return from
+  a shell exec. **Strawman: when the Run row is the ONLY option and the text is a single
+  token, do not auto-select it** (Return does nothing; arrow-down still reaches it);
+  keep current behavior at ≥2 tokens where intent to run a command is unambiguous.
+  Off-objective for beta.24 — parked, not carried.
+
+## 2026-08-24 — beta.24 is gated on ONE branch: land type-first composer first
+
+**The composer on `main` is the chip design Sean rejected.** `377ae4b2c` (Sean's own
+commit, 2026-08-23) deletes the breadcrumb chips and rebuilds the field type-first —
+and it is **not on `main`**. It lives only on `feat/composer-branch-segment`. `main`
+still carries the chips (7 refs in `SessionComposerPalette.swift`). Cutting beta.24
+from `main` today ships a UX that was already tested and reversed.
+
+- [ ] **carried — the ONLY thing gating beta.24.** Land `feat/composer-branch-segment`
+  on `main`. 22 commits, +5,288/−378 across 11 files, carrying the type-first rebuild
+  **plus** Slice B (branch→worktree). They cannot be separated — `377ae4b2c` sits on
+  top of the B1–B4 commits. `main` has not moved since the fork point (`07abc440a`
+  both sides), so it merges clean, no rebase. This branch also closes a gap that is
+  open on `main`: the typable `>` separator (`6b76559c0`, spec decision #3).
+  Sequence, in order: (1) round-3 pass on the 3 blockers + chevron-literal defect;
+  (2) discriminating tests for all 5 round-2 fix items — currently zero; (3) a review
+  round on those fixes (eight-for-eight rule); (4) **Sean runs the build** and accepts
+  the type-first feel; (5) merge — **Claude decides timing, Sean authorized this
+  2026-08-24**; (6) release mechanics. Perf defect (50-100 parses/keystroke) is
+  explicitly deferred, not a gate.
+
+  **Rounds 3–7 COMPLETE, 2026-08-24. Branch @ `0513a0450`, build green, suite
+  885/0/1. Steps 1–3 are DONE; the branch now sits on step (4), Sean's hands-on
+  accept-the-feel pass — nothing else gates the merge.**
+
+  - `4560d9b5c` (r3) — fixed r2's 3 blockers + chevron-literal defect; +10 tests.
+  - `ada35ef0b` (r4) — fixed a blocker r3 introduced: `.onChange(of: query)` couldn't
+    see a trailing space (`query` is trimmed `searchText`), so selection never
+    re-seeded; trigger swapped to `searchText`, and `commandParse`/
+    `commandProjectIdHint` switched to raw text. +3 tests.
+  - `0513a0450` (r6) — fixed the worst find of the arc: **`cachedProjectId:` was
+    silently dropped from the only production call site at `4560d9b5c`**, defaulting
+    to `nil` against a non-nil `resolvingForProjectId`, so every typed branch returned
+    `.pending` forever. **Slice B's branch→worktree feature was entirely dead** and
+    884 green tests never noticed. Argument restored and the assembly hoisted into
+    `SessionComposerPalette.resolveTypedBranch` (a seam that reads `cachedProjectId`
+    off the store internally, so no caller can omit it). Also added the missing
+    `.onChange(of: composerStore.worktrees)` — an async refresh reshaped the options
+    list with no keystroke, leaving a stale `selectedIndex` that fell through to
+    `options.last` (the `Run` row) and would blanket-run `main cco` as a shell command.
+  - r5 and r7 were review rounds (r7 narrowed to two questions and returned COMPLETE
+    with the strongest tracing of the arc; it confirmed the new wiring test is a true
+    discriminator, mutation-red, and kills the obvious counter-mutant).
+
+  **Known residual, accepted:** the wiring test covers the seam's body but not
+  `typedBranchResolution`'s choice of `resolvingForProjectId: currentProject?.id`.
+  That argument is non-defaulted, so it can only be changed deliberately, never
+  silently dropped — silent-drop being the class that actually bit us.
+
+- [ ] **new — the real lesson of rounds 3–7, worth acting on before the next feature.**
+  Rounds 3, 4, and 6 were each triggered by the *previous round's fix*, not by original
+  code, and every defect lived in **wiring** (call sites, triggers, argument passing),
+  never in pure-function logic. The 885-test suite exercises pure functions well and
+  production wiring almost not at all — that gap generated the entire arc. Two concrete
+  contributors: (a) **silently-defaulted required arguments** — `cachedProjectId: UUID?
+  = nil` turned a deleted argument into a permanently-broken runtime state instead of a
+  compile error; (b) **tests that pin the broken state as desired** —
+  `typedBranchAtBeforeAnyRefreshHasLandedIsPending` hardcodes both args and asserts
+  `.pending`, so the suite actively certified the dead feature. Also: overstated
+  coverage claims misled three separate rounds (an implementer claimed a test
+  discriminated the palette fix when it never touched the palette). Candidate fix is
+  not "more tests" — it's a small number that actually instantiate the palette and
+  drive it, plus dropping `= nil` defaults on required wiring args. Feeds the parked
+  QA/release-readiness agent item below.
+
+- [ ] **carried — release mechanics for beta.24**, all manual, all pre-tag except the
+  last three. `CHANGELOG.md` is topped at **beta.22** — beta.23 shipped without an
+  entry, so beta.24 needs write-ups covering **both**. Then copy the changelog section
+  into `web/appcast-beta.xml`'s `<description><![CDATA[…]]></description>`. Then smoke
+  test a local build (focus the composer — `BACKLOG` claims #132/#133 merged without
+  Sean's runtime pass; they ARE merged, that text is stale). Tag → CI ~20 min → fill
+  the GitHub release body (CI leaves it blank) → verify `ghostties.org/appcast-beta.xml`
+  is live (assets are `max-age=3600`, check the deployed file not a warm browser) →
+  Sparkle smoke test from the DMG. **The tag is a public release trigger — it stays
+  Sean's explicit nod, never delegated.** Full checklist: `docs/release-checklist.md`.
+  Homebrew auto-bump is unset and skips cleanly; if ever set, `HOMEBREW_TAP_TOKEN`
+  (secret) must go in BEFORE `HOMEBREW_TAP_REPO` (variable) or the job reddens after
+  the release is already public.
+
+- [ ] **parked — QA / release-readiness agent** (Sean floated 2026-08-24, own thread).
+  Evidence that motivates it, from this session's infra inventory: **CI never executes
+  the macOS suite** — `test-ghostties.yml` runs `build-for-testing` only, because the
+  app-hosted test host hangs ~6 min on headless runners; the 871/0/1 run this session
+  was by hand. **10 UI test files have never executed** — `TEST_TARGET_NAME = Ghostty`
+  (should be `Ghostties`) in all three build configs; arming it is a known hazard, it
+  wakes nine GUI-driving tests that type shell text and Cmd+W at whatever holds focus.
+  **Web has zero test coverage** and Vercel auto-deploys `main` to prod. Empirically:
+  review rounds catch ~8 defects per phase, the test suite has caught **0** real
+  defects. The chip design passed four review rounds and a green suite, then died in
+  minutes of real use — **no gate puts the running app in front of Sean before
+  "done"**. That is the gap worth closing, not more tests. Hard constraint on the
+  design: prod deploys are never delegated, so this is a readiness agent producing a
+  go/no-go with evidence, never a deploy button.
+
+## 2026-08-24 — composer round-2 review: fix wave dispatched, one decision deferred
+
+Round 2 adversarial review of `948ad5fa8` (two independent parallel reviewers) found 2
+blockers + 5 defects, all confirmed against the real running app (not just static
+analysis) before any fix was dispatched — one of them crashed a real session
+(`ghostties main > refactor the parser` tried to exec a binary literally named `main`,
+launcher log: `command not found: main`). Full finding detail is in this thread's
+transcript, not restated here.
+
+- [ ] **carried, round 3 needed** — Fix wave scope: (1) wire real branch/template lists
+  into `parse()`'s adapter call to `parsePath` (`SessionComposerCommandParser.swift:547`)
+  — was hardcoded to empty lists, permanently disabling branch resolution; (2) replace
+  the false `activeKind` invariant the round-1 B3 guard rested on with a real,
+  directly-set signal (`PathParse.openRunIsThreadRun`) for "is the open run a thread
+  run"; (3) fix the locked-composer path (`isLocked` guard) which disabled parsing
+  entirely regardless of input; (4) `SessionComposerPalette.swift` —
+  `templateFilterQuery`/`commandOptions` ignored the already-selected project
+  (`currentProject`'s sticky fallback) when no project name is typed, so a bare ad-hoc
+  command like `cco` showed "No matches" even though the breadcrumb already showed a
+  resolved project; (5) chevron ahead of the operator position was skipping template
+  matching entirely, contradicting already-decided D4 ("templates first").
+
+  **Build + test VERIFIED GREEN** at `364c1d98c` (2026-08-24): `xcodebuild build`
+  ReleaseLocal succeeded; `xcodebuild test` Debug config (per `TESTING.md` — NOT
+  ReleaseLocal, `ENABLE_TESTABILITY` is Debug-only project-wide) ran the full unfiltered
+  suite via `xcresulttool`: **871 passed / 0 failed / 1 skipped**, matches baseline
+  exactly. One real break was found and fixed en route: `c15b92a5e` added
+  `PathParse.openRunIsThreadRun` but missed one direct-construction call site in
+  `SessionComposerCommandParserTests.swift:1224` — fixed at `364c1d98c` (`openRunIsThreadRun: false`, matching `.none`'s convention since that test passes
+  `remainderRange: nil`).
+
+  **A SEPARATE reviewer (builder ≠ reviewer) then reviewed the full `948ad5fa8..HEAD`
+  diff and returned: NOT COMPLETE, needs another pass.** 3 blockers, 1 defect, 1 perf
+  defect, and a test-coverage gap across all 5 items (871/0/1 unchanged from baseline —
+  none of the 5 behavior changes have discriminating test coverage). Full review
+  transcript is in this thread; summary:
+  - **Blocker 1** — `ParseResult` doesn't carry the resolved-template segment Fix 5
+    produces, so the palette can't see it; a resolved operator template (e.g.
+    `ghostties orchestrator > my thread`) empties the remainder, which unranks the
+    template list and can launch the wrong (most-recent) template on Return instead of
+    the one just typed. Fix 1 + Fix 5 are net-negative in the shipped UI until
+    `ParseResult` carries this.
+  - **Blocker 2** — `fallbackCommandParse` (Fix 4) passes the *trimmed* search text into
+    `parse()`, but `parsePath`'s termination signal is trailing whitespace. This breaks
+    the D3 sticky-chip state: typing `"ghostties "` (project + space, no chevron) now
+    opens an operation run on the project name itself, filters out every template, and
+    offers `Run "ghostties"` — regressing the exact case D3 exists for. `ghostties>`
+    (chevron, no space) still works, which is the tell.
+  - **Blocker 3** — Fix 4 reads `fallbackCommandParse` for `templateFilterQuery`/
+    `commandOptions` but `typedBranchResolution`/`currentBranchLabel`/commit still read
+    the original `commandParse`. A typed branch in the implied-project shape (e.g.
+    project selected via picker, then typing `main cco -n test`) gets consumed into the
+    Run-row remainder by the fallback parse but never reaches branch resolution —
+    silently launches in the picker's worktree instead of `main`. This is the exact
+    silent-inheritance failure `TypedBranchResolution` was built to eliminate,
+    reintroduced by having two parses of record.
+  - **Defect** — Fix 5 hard-sets `openRunKind = .thread` after a template match instead
+    of returning to matching-live (mirroring the ordinary match path), so the *next*
+    `>` after a chevron-resolved operator becomes a literal instead of a separator:
+    `ghostties > orchestrator > mythread` yields thread name `"> mythread"`, while
+    `ghostties orchestrator > mythread` (no leading chevron) correctly yields
+    `"mythread"`. Currently masked at the `parse()` adapter (Blocker 1 nils the
+    remainder either way) but is wrong data in `PathParse` itself.
+  - **Defect (perf)** — the `commandParse`/`fallbackCommandParse`/`currentProject`
+    cluster in `SessionComposerPalette.swift` is uncached SwiftUI computed vars calling
+    each other; ballpark 50-100 `parse()` calls + 30-60 template-list rebuilds per
+    keystroke. No hang, but this is a hot path in a project with an existing documented
+    render-cost problem ([[project_perf-contextmenu-render-cost]]).
+  - **Also flagged, secondary:** branch lists fed to the parser in `SessionComposerPalette.swift` aren't gated against `worktreesProjectId`, so a stale cross-project branch name can be consumed by the parser before the downstream `.pending` guard catches it (surfaces as a loud "still checking branches" error, not a wrong launch — lower severity than the 3 blockers).
+  - **What's confirmed solid:** Fix 1's wiring is correct and does fix the original
+    round-2 crash (`ghostties main > refactor the parser` execing a binary named
+    `main`) when traced by hand. Fix 2's field is constructed correctly at all 3 sites
+    and is a strict widening with no regression case found. B3 and D6 semantics are
+    preserved. Fix 4's "no project selected at all" case is byte-identical to
+    pre-fix-wave. Fix 5's core intent (templates-first at the operator position) is
+    achieved — the defects are in what happens after the match, not the match itself.
+
+  **Next action:** needs a round-3 fix pass targeting the 3 blockers + defect above,
+  ideally with real test coverage added this time (Fix 4's logic lives in a SwiftUI
+  `View` with no seam — extracting an `effectiveParse(...)` free function would let it
+  be tested and would likely have caught blockers 2 and 3 directly). Not dispatched yet
+  — this is new scope beyond the round-2 fix-wave-plus-verify that was authorized;
+  checkpointing here for Sean's review rather than pushing another autonomous pass.
+
+- [ ] **carried, DECIDE OR KILL** — `>` chevron-counting semantics (BACKLOG D6) for a
+  shape like `ghostties > > orchestrator`: does the first `>` skip over the branch
+  position (landing `orchestrator` in the operator slot), or does `>` only count among
+  free-text positions (operator→thread), landing it in thread as currently shipped and
+  tested? **Strawman: keep current shipped behavior** (`> >` = thread) — it has a
+  legitimate positional reading (3 skippable positions after project: branch, operator,
+  thread) and an already-merged test pinning it; changing it risks regressing that test
+  on a guess. Explicitly excluded from the round-2 fix wave above to avoid touching this
+  without your sign-off. Kill this item by confirming the strawman, or give the
+  alternate reading if you want it changed.
+
 ## 2026-08-23 — linear-sync preset has no installed MCP binary
 
 Surfaced while running a Linear→Ghostties sync from an ordinary `~/Code` session. Full
@@ -1314,3 +1599,188 @@ What shipped: `addProject(at:pinned: Bool = false)` — picker funnel passes `pi
 - [ ] **Sean's Dev-instance pass — three checks, one sitting:** (1) "+ New Project" → long multi-word folder → type 3 chars WITHOUT clicking: does focus land in the composer field or the shell behind it? (2) Does the locked project label truncate or wrap the card header? (3) NEW from Phase 5: task-row click on an unregistered project now enters the sidebar at the bottom ("All") and slides up to "Active Now" on session focus, instead of appearing pinned at top — and for existing users the "Pinned" section starts empty until they pin manually. Taste verdict on both beats. | app | needs-Sean
 - [ ] **Pre-existing doc nits in `SessionCoordinator` (~:467-470), flagged by review, deliberately not fixed:** doc item 2 writes `Project(name:, rootPath:)` but production names from `url.lastPathComponent`; doc item 3 omits `forceSpawn`. Predate Phase 5. | app | new
 - [ ] **Stale plan snapshot:** `docs/plans/session-creation-unified.html` §Phase 5 (`:459`) still describes the old always-pin semantics; plan is now fully shipped so the whole doc is archival. | docs | new
+
+## 2026-08-22 — Slice B dispatched (branch segment → worktree)
+
+Branch `feat/composer-branch-segment` off `main` @ `5e6636022`. Spec: `docs/plans/composer-breadcrumb-spec.html` §"Slice B". Phases written at dispatch, flipped as they land.
+
+- [x] ~~**B-plan** — build brief returned; five decisions recommended, build order revised (separator moves ahead of the chip).~~ | app | done
+- [x] **B1** — worktree enumeration (`git worktree list --porcelain`) behind a cache; never per-keystroke. | app | done
+- [x] **B2** — typable `>` separator (was B4; promoted — the branch segment exists only when an explicit `>` introduced it, so the chip cannot precede it). | app | done
+- [x] **B3** — branch chip: third segment; picker lists existing worktrees **and** branches without a worktree, second group disabled pending B4; cascade rule (branch change clears nothing, project change clears branch + arms ⌘Z). Interactive acceptance criteria (screenshots/recording) NOT captured — driving the composer UI via synthetic input is a hard rule violation; needs Sean's manual pass. | app | done, needs visual verification
+- [x] **B4** — `+ new worktree` row — explicit only; all four failure modes surface in `writeError`. `bd4705372`. | app | done
+- [ ] **B5** — review rounds. Round 1: 6 blockers + 13 should-fix, all fixed in `d1c414e03` (suite 827/0/1). Round 2 in flight. | app | in-flight
+- [ ] **B-visual** — criteria 2/3/4 unmet: two-chip layout at `.anchored` AND `.centered`, non-git project shows no chip, picker mutual exclusion. Needs pixels, not source argument — `.frame(maxWidth:)` shipped wrong 3× in Slice A on reading alone. Blocked: capture requires either Sean's manual pass or a fixed XCUITest harness. | app | blocked
+- [ ] **B-keyboard** — the `+ new worktree` / no-worktree creation rows are mouse-only; the hidden-Button arrow-key capture layer was not extended to cover them. | app | new
+
+Parked, not in Slice B: the breadcrumb chip has **no keyboard route** (left-arrow focus was deleted as unverifiable, stranding the Return/Down handlers). Slice A polish, non-blocking. | app | parked
+
+## 2026-08-23 — Composer direction change: type-first, chips on demand (Sean)
+
+Sean, testing the Slice B build live: *"Overall I'm not sure I like the two chips… I want it to be something I can just type in. Text entry end to end. When hitting Cmd+T I have an intent. Lower the barriers to entry. Let me backspace to delete as well. Maybe on hover the chips are shown, maybe on tab entry."*
+
+This reverses Slice A's chips-as-primary model. **The engine is unaffected** — the parser, worktree enumeration, cache, creation path and launch override (B1–B4, three review rounds) all stand. What changes is the interaction layer: resolved segments must stop *consuming* text into a non-editable prefix.
+
+Note this also deletes an entire bug class: every prefix/remainder blocker in review rounds 1–3 existed because the field's text and the chips are two representations of one string. One representation, no divergence.
+
+- [x] ~~**C1** — model decided (Sean 2026-08-23): **A first, then B.** Plain field + resolution line now; inline-styled text as the finish.~~ | app | done
+- [ ] **C1a** — build model A: field holds the literal string, nothing consumed, resolution shown as a quiet line beneath with clickable segments as the picker entry points. Slice B held unmerged; C lands with it. | app | in-flight
+- [ ] **C2** — chips become on-demand (hover / Tab), not permanent furniture. | app | new
+- [ ] **C3** — backspace deletes through a resolved segment like ordinary text, on macOS 13 too (`Backport.onKeyPress` is dead below 14). | app | new
+- [ ] **C4** — re-review both chips (project + branch) under the new model; Slice A's chip is in scope, not just Slice B's. | app | new
+- [ ] Humanize `writeError` — currently renders git's raw `fatal: …` text in the composer card. Correct content, terminal tone. | app | new
+
+## 2026-08-23 — Composer: path grammar + autocomplete (Sean, live testing model A)
+
+Direction beyond model A. Sean: *"we don't force branch/worktree but allow the foldering… let people choose if possible"* — `Ghostties > branch > operator > name of thread`, every segment optional, `>` opts you into depth. Also: *"It would be awesome to have a tab to fill. So if I start typing `gho` I see `ghostties` there and can tab forward to complete."*
+
+Corrected in discussion: branch and worktree cannot both be segments — git allows a branch in only one worktree, so picking the branch *is* picking its worktree. Four segments: **project › branch › operator › thread**.
+
+- [ ] **D1** — parser generalizes from two fixed positions to an ordered segment list, each with its own resolver. Slice B's engine (enumeration, cache, creation, launch override) is reused, not rewritten. | app | new
+- [ ] **D2** — Tab-to-complete: typing `gho` shows the completion and Tab accepts it. Needs ghost text inline, which is model B's AppKit text view — model A can only do Tab-accepts-highlighted-row. | app | new
+- [ ] **D3** — **the suggestion list must be scoped to the segment being typed.** Currently typing a project name shows the picker list AND templates AND a PROJECTS section stacked together (screenshot 2026-08-23). Sean: *"this is a lot — I would have expected any list/suggestion below to be replaced."* One list, one segment. | app | new
+- [x] ~~**D4** — operator segment: ad-hoc command allowed, or known templates only?~~
+  **DECIDED 2026-08-23 (Sean): ad-hoc AND templates.** The operator segment resolves
+  against known templates first; anything unmatched runs as an ad-hoc command through
+  Slice 1's login-shell wrapper (`~/.ghostties/cache/launchers/<uuid>.sh`), which already
+  works. Consequence to design around: the operator segment is unbounded text, so the
+  parser cannot infer where an ad-hoc command ends — a thread name after an ad-hoc
+  operator requires an explicit `>`. | app | done
+- [ ] **D5** — thread-name segment must feed the existing `-n` naming path, never introduce a competing one ([[decision_session-naming-stays-one-way]]). | app | new
+
+## 2026-08-23 — Composer: fewer chevrons; dictation as a tiebreaker (Sean)
+
+Sean, on the path grammar requiring a third `>` for the thread segment: *"I mean really I
+want to be light weight... powerful but crisp and short. I think something that hasn't been
+covered but dictating could be a challenge to solve for too."* Clarified immediately after:
+dictation is **"not a strict one right now but a curiosity"** — NOT a requirement, and not
+grounds for re-planning anything on its own.
+
+So: the driver is **crisp and short**. Dictation is a tiebreaker when two designs are
+otherwise close, nothing more.
+
+- [ ] **D6** — reduce the chevron cost of the common path. Strawman: space separates, `>`
+  becomes an optional override rather than the mechanism. Greedy left-to-right, each segment
+  matching only KNOWN values; the first token matching nothing starts the thread name, which
+  runs to the end — `ghostties main cco refactor the parser` resolves with no punctuation.
+  `>` survives for skipping a level (`ghostties > > cco`) and for ad-hoc commands, where
+  unbounded text genuinely needs a marker. Justified by "crisp and short" on its own;
+  dictation-friendliness is a bonus, not the reason. **Weigh against the delivered plan's
+  chevron-count rule before D1 is built — this is a fork in D1's center, not an addition.**
+  Undecided. | app | new
+- [ ] **D7** — IF the greedy model is chosen, project/branch resolution needs fuzzy matching
+  rather than exact prefix. Also the standing dictation annoyance
+  ([[feedback-dictation-ghostty-ghostties]]): dictation writes "Ghostty" for "Ghostties", so
+  voice cannot reach Sean's own project by name today. Low priority, tracked not scheduled. | app | new
+
+
+## 2026-08-23 — Composer: greedy grammar locked; resolution line out; ghost-text prefill
+
+Sean's calls, live-testing model A.
+
+- [x] ~~**D6 fork** — chevron-count grammar vs greedy.~~ **DECIDED: greedy.** *"Greedy is my
+  personal preference."* Space separates; `>` survives only as an override (skip a level) and
+  for ad-hoc commands, where unbounded text needs a marker. Match by **TYPE, not position** —
+  otherwise `cco refactor the parser` (no project) would read `cco` as a thread name. First
+  token matching no known project/branch/template starts the thread name, which runs to the
+  end. | app | done
+- [ ] **D9** — delete the resolution line. Sean: *"I'm also not sure if I like the line under
+  the text field."* Diagnosis: it conflates two jobs and does neither. With an EMPTY field it
+  renders `→ Career-ops · Default · Linear Sync`, which is persisted last-used project + a
+  literal fallback string (`currentBranchLabel ?? "Default"` — **not** a branch name) + the
+  currently highlighted row (`selectedOption?.title`), joined by `→` as if it were a parse of
+  text that was never typed. Parse feedback moves into the field as hover tint bands; launch
+  preview moves into the highlighted row's subtitle. | app | new
+- [ ] **D10** — drop the `"Type a project, branch, and command…"` placeholder. Replace with the
+  last-used path as **prefilled ghost text**, trivially replaceable — start typing and it goes.
+  Sean: *"maybe that is fastest actually."* Note this is NOT the D2 inline-completion ghost text
+  that needs model B's `NSTextView`; a replaceable prefill is a placeholder string or a
+  pre-selected value, cheap either way. Confirm which before building. | app | new
+- [ ] **D11 — hover reveals segmentation.** Greedy leaves the field text unmarked, so hover is
+  what pays that off. Resting = plain text. Hover field = soft tint band behind each resolved
+  run. Hover one run = that run and its counterpart highlight together. Click = open that
+  segment's picker. No chips; the tint band IS the chip, and only while pointed at. | app | new
+- [ ] **D12 — suggestions: ONE flat list, no sections.** Rows carry a type label
+  (`ghostties  Project` / `cco  Template`) instead of stacked section headers, scoped to the
+  token under the caret and filtered to segment types not already filled. Tab accepts the top
+  row. In the thread-name position there are no candidates, so it collapses to the single
+  commit row — load-bearing, since an empty list makes `hasSelection` false and Return shakes
+  instead of launching. Closes D3. | app | new
+
+- [x] ~~**D13** — what happens to ad-hoc commands under greedy?~~ **DECIDED 2026-08-23
+  (Claude's call, Sean said proceed):** unmatched trailing text is a **thread name only if an
+  operator already resolved**; otherwise it is an **ad-hoc command**. Both readings render as
+  rows in the one flat list, ranked by that rule, so the other is always one arrow-key away.
+  **This is load-bearing: naive greedy would silently REGRESS slice 1** (merged PR #136), which
+  ships `ghostties <command>` as ad-hoc — under a plain "first unmatched token starts the thread
+  name" rule that Run row vanishes. `>` survives as the explicit override to force the operator
+  position (`ghostties main > npm run dev`). | app | done
+
+### Bug — `NSOpenPanel.init()` blocks the main thread ~0.9s (SHIPPED, not Dev-only)
+
+**Sean confirms he has hit the same thing on prod beta builds, occasionally.** Nothing about
+it is Dev-specific — `addProjectViaFolderPicker` is shared, unchanged, and reachable from four
+entry points including the composer's `+ Add project…` (`SessionComposerStore.swift:1278`),
+which is why Sean experienced it as a composer fault.
+
+**Why occasional (hypothesis, fitted to one spindump — NOT reproduced):** the function does
+`NSOpenPanel()` fresh on every call (`WorkspaceStore.swift:984`), and the ~0.9s is spent in
+*construction*, before the panel is shown — AppKit cold-starting the out-of-process
+save/open-panel service plus Finder's browser view. Warm service = fast; it idles out and gets
+torn down, so the first add-project of a session pays and the next few do not.
+
+**Mitigation options, none free:** pre-warm a throwaway `NSOpenPanel` at a quiet moment after
+launch (moves the cost to launch); cache and reuse one panel instance on `WorkspaceStore`
+(helps repeats, not the first); or accept it. Note `runModal()` (`:1000`) is synchronous by
+design and blocks main for the panel's lifetime — that part is intended, not the bug.
+**Recommendation: do not fix during the composer work.** Low frequency, and the fix is a
+tradeoff rather than a clean win.
+
+- [ ] Spindump `/Library/Logs/DiagnosticReports/ghostty_2026-08-23-134321_*.spin`, reason
+  *"Slow response to HID event"*, 1.25s. Main thread: `WorkspaceSidebarView.presentFolderPicker()`
+  (`WorkspaceSidebarView.swift:220`) → `WorkspaceStore.addProjectViaFolderPicker()`
+  (`WorkspaceStore.swift:952`) → `NSOpenPanel.init()`, **91 of 125 samples**. Sean reported this
+  as "tried to open the browser via composer and the app crashed" — it is neither the browser
+  (zero CEF frames; the `BrowserView` frames are Finder's own, inside the open-panel XPC service)
+  nor provably a crash (no crash report exists; Dev pid 57389 has since exited). Beachball on
+  Add-project, from the sidebar titlebar toolbar. | app | new
+
+## 2026-08-23 — Carried at context reset (parser built, round 2 NOT run)
+
+Branch `feat/composer-branch-segment` @ `948ad5fa8`, pushed, suite 871/0/1, tree clean.
+
+- [ ] **Re-run review round 2 on `948ad5fa8` from scratch.** *Carried.* It was dispatched and
+  **killed mid-run by the wrap — it produced no findings.** Do not treat the parser as cleared:
+  second rounds here are **fourteen-for-fourteen** on finding what the first missed, and two fix
+  commits have regressed paths a prior round explicitly cleared. Attack first: the
+  `activeKind != .thread` adapter guard (`SessionComposerCommandParser.swift:582-584`) and the
+  hand-argued invariant at `:572-581` — it is the builder's own addition, not instructed, and it
+  rests on a proof written in a comment. | quality | carried
+- [ ] **DECIDE OR KILL: what does `ghostties main claude > refactor the parser` do?** `claude` and
+  `codex` have no `-n` flag, so a thread name paired with a KNOWN template has nowhere to go.
+  Strawman (build this unless redlined): render the thread segment in the error color with
+  `"<thread>" needs a typed command`. Rejected alternative: `renameSession`, which is a second
+  naming route and violates D5 + [[decision_session-naming-stays-one-way]]. The planner argues
+  template+thread is now common rather than an edge case, which is a fair point against the
+  strawman but does not outweigh re-opening one-way naming. | app | carried
+- [ ] **Mutation-proof as standing policy.** Write into `agent-quality.md`: every test a builder
+  adds or changes must be shown red-then-green against a named mutation. Round 1 found **four
+  inert tests** among those not mutation-proved; two more shipped historically
+  ([[feedback_vacuous-tests-pass-green]]). Free to adopt, and it is the only thing that makes a
+  green suite evidence. *Offered to Sean, unanswered.* | quality | new
+- [ ] **Structural guard against the `Backport.onKeyPress` class.** A test asserting every
+  keyboard route has a non-`Backport` companion. Catches the bug that shipped dead in #130
+  without needing a macOS 13 machine (target is 13.0, this Mac is 27). ~1hr.
+  *Offered to Sean, unanswered.* | quality | new
+- [ ] **Rebuild the capture harness BEFORE D12.** The plan concedes D12's type-label width
+  contention "cannot be settled by reading the source." Recipe is already in this file from the
+  reverted attempt: stub `templates`/`sidebarMode`/`lastSelectedProjectId` for hermetic captures,
+  mark `GhosttyUITests` `skipped = "YES"` in the shared scheme, THEN fix `TEST_TARGET_NAME`. All
+  three together — the name fix alone arms 8 GUI-driving classes. | quality | new
+- [ ] **`feat/web-redesign-round4` carries the `TEST_TARGET_NAME` hazard.** Verified 2026-08-23:
+  at `2165c2f86` the tree has `TEST_TARGET_NAME = Ghostties` (fixed) with `GhosttyUITests` still
+  `skipped = "NO"`. Not on `origin/main`. Needs the scheme half before it merges. | quality | new
+
+**Accepted risks, stated rather than solved:** no macOS 13 coverage (a VM is disproportionate);
+keyboard behavior gated on Sean's manual pass — subagents may screen-capture but must NEVER drive
+synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
