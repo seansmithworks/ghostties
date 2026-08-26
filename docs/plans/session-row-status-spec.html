@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Session row status — design spec</title>
+<style>
+  body { font-family: -apple-system, "SF Pro Text", sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.5; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 15px; margin-top: 40px; border-top: 1px solid #e5e5e3; padding-top: 20px; }
+  p { margin: 8px 0; }
+  code { background: #f0e9e6; padding: 1px 5px; border-radius: 4px; font-family: "SF Mono", monospace; font-size: 12px; }
+  .lede { color: #636363; font-size: 13px; margin-bottom: 24px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #e5e5e3; vertical-align: top; }
+  th { color: #636363; font-weight: 500; }
+  details summary { cursor: pointer; color: #636363; font-size: 13px; margin: 8px 0; }
+  .decision { background: #f0e9e6; border-radius: 8px; padding: 12px 16px; margin: 10px 0; }
+  .decision b { display: block; margin-bottom: 4px; }
+
+  /* --- Mockup: sidebar chrome --- */
+  .sidebar-mock {
+    background: #F0E9E6;
+    border-radius: 12px;
+    padding: 8px;
+    width: 260px;
+    font-size: 11px;
+    font-family: -apple-system, "SF Pro Text", sans-serif;
+    color: #1a1a1a;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    cursor: default;
+  }
+  .row:hover { background: rgba(0,0,0,0.035); }
+  .glyph {
+    width: 14px; height: 14px; flex: none; margin-top: 1px;
+    font-size: 14px; line-height: 14px; text-align: center;
+  }
+  .glyph.idle { color: #9a9a9a; }
+  .glyph.processing { color: #5B8DEF; }
+  .glyph.blocked { color: #C97350; }
+  .row-main { flex: 1; min-width: 0; }
+  .row-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-sub { color: #636363; font-size: 10.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-sub.action { color: #C97350; font-weight: 500; cursor: pointer; }
+  .row-sub.action:hover { text-decoration: underline; }
+  .chevron { flex: none; width: 10px; text-align: center; color: #9a9a9a; font-size: 9px; margin-top: 3px; }
+  .accordion {
+    margin: 2px 0 4px 22px;
+    padding: 4px 0 4px 8px;
+    border-left: 1px solid #e5e5e3;
+    font-size: 10.5px;
+  }
+  .todo-item { display: flex; gap: 6px; padding: 2px 0; align-items: baseline; }
+  .todo-dot { flex: none; width: 10px; text-align: center; }
+  .todo-item.done { color: #9a9a9a; text-decoration: line-through; }
+  .todo-item.active { color: #1a1a1a; font-weight: 500; text-decoration: none; }
+  .todo-item.pending { color: #636363; }
+  .section-caption { color: #636363; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; padding: 4px 8px 2px; }
+</style>
+</head>
+<body>
+
+<h1>Sessions-tab row: showing more than the icon</h1>
+<p class="lede">Recommendation, shown first. Reasoning and dependencies below the fold.</p>
+
+<p><b>Recommendation:</b> the row keeps its single ghost glyph as the primary read, and gains one optional second line underneath the name. That line is absent when there's nothing to say (the common case), a progress fragment when a todo list exists, and an accent-colored action when the session is genuinely blocked on the user. A chevron only appears when there's a list to disclose — never as a dead affordance.</p>
+
+<div class="sidebar-mock">
+  <div class="section-caption">Sessions</div>
+
+  <div class="row">
+    <div class="glyph idle">👻</div>
+    <div class="row-main">
+      <div class="row-name">refactor-sidebar-store</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="glyph processing">👻</div>
+    <div class="row-main">
+      <div class="row-name">composer-branch-segment</div>
+      <div class="row-sub">3 of 5 done · Fixing the shadow guard</div>
+    </div>
+    <div class="chevron">▾</div>
+  </div>
+  <div class="accordion">
+    <div class="todo-item done"><span class="todo-dot">●</span>Add pid/sessionId join</div>
+    <div class="todo-item done"><span class="todo-dot">●</span>Read live session file</div>
+    <div class="todo-item done"><span class="todo-dot">●</span>Wire join into row view</div>
+    <div class="todo-item active"><span class="todo-dot">◐</span>Fixing the shadow guard</div>
+    <div class="todo-item pending"><span class="todo-dot">○</span>Ship review round</div>
+  </div>
+
+  <div class="row">
+    <div class="glyph blocked">👻</div>
+    <div class="row-main">
+      <div class="row-name">upstream-merge-v1.4</div>
+      <div class="row-sub action">Needs input: approve merge to main</div>
+    </div>
+  </div>
+</div>
+
+<h2>How the action is displayed, and what clicking it does</h2>
+<p>The action line replaces the progress line (a row shows one or the other, never both) and is the only place terracotta appears outside the glyph — <code>DESIGN.md</code> already reserves that color for the <code>waiting</code>/blocked state, so the action pill spends the same accent budget rather than opening a new one. The text itself is the actual blocking question, not a generic "needs attention" label — sourced from the same live-state read that produces the glyph color, not invented copy.</p>
+<p>Clicking it does exactly what clicking the row already does today: focuses that session's terminal and scrolls it to the bottom. No modal, no inline approve/deny — Ghostties doesn't have a side-channel to the agent that a click could satisfy, so the affordance is "take me there," not "resolve this here."</p>
+
+<h2>Degrading into the Projects view</h2>
+<p>Projects don't get the accordion — a project row is a group, and disclosing every child's todo list two levels deep would defeat the density <code>agent-craft.md</code> asks for. It gets the same vocabulary, compressed: the project's ghost glyph tints to the highest-priority child state (error &gt; needsAttention &gt; waiting &gt; longRunning &gt; processing &gt; idle — this ordering already exists for the menu bar per <code>agent-experience.md</code>, reused rather than invented), and a project with at least one blocked child shows a one-line count instead of a name: <code>2 need you</code> in terracotta, replacing the normal subtitle. No progress fractions at the project level — that detail is what expanding into Sessions is for.</p>
+
+<h2>What has to exist first</h2>
+<p>This entire design is downstream of one gap: <code>AgentSession</code> carries no <code>pid</code> and no <code>sessionId</code> (<code>Models/AgentSession.swift:10-51</code>), so a row has no way to locate its own todo file or its own live-status file. Until that join exists, every element above the base glyph is unbuildable — this is a dependency, not a phase to schedule.</p>
+<p>The join path already exists as the launcher-UUID script (<code>~/.ghostties/cache/launchers/&lt;sessionUUID&gt;.sh</code>), but it's only written when <code>template.launchBanner</code> is set (<code>SessionCoordinator.swift:224</code>), which is why only 8 of 13 live sessions have it today. Closing that gate to write unconditionally is the smallest fix that gets coverage to 13/13.</p>
+
+<h2>The state-source fork</h2>
+<p>Today's <code>needsAttention</code>/<code>waiting</code> are inferred from terminal output heuristics, and a direct measurement caught that inference lying at scale: 7 sessions genuinely idle, 4 genuinely busy, zero genuinely waiting — while the sidebar painted nearly all of them as attention states. <code>.idle</code> depends on OSC 133, which Claude's TUI never emits, so <code>.waiting</code> isn't a real wait state today, it's the branch inference falls into when it can't tell what's happening.</p>
+<p>Building the richer row on top of that inference would just make the lie more visible — a progress fraction and a named action look authoritative, and an authoritative-looking wrong answer is worse than today's vague glyph, because it teaches Sean to stop checking the terminal himself. <b>Recommendation: read real state from <code>~/.claude/sessions/&lt;pid&gt;.json</code></b> instead of inferring it. That file already carries <code>status</code>, and pairing it with the todo file gives both the state and the detail for free, from data the agent itself wrote — no heuristic in between. The cost is real: it requires the pid/sessionId join above, plus a live file-watcher on two directories instead of the existing output-heuristic timer. That's the one thing this recommendation gives up — inference is already running and cheap; reading is a build. Sean is trading a small amount of build time now for a badge he can trust indefinitely, which is the right trade for a status surface whose entire job is to be believed at a glance.</p>
+
+<details>
+<summary>Full seven-state → glyph-tint mapping (unchanged by this spec)</summary>
+<table>
+<tr><th>State</th><th>Glyph tint</th><th>Second line</th></tr>
+<tr><td>inactive</td><td>muted</td><td>none</td></tr>
+<tr><td>idle</td><td>muted</td><td>none, unless a todo list exists (progress line)</td></tr>
+<tr><td>processing / longRunning</td><td>system blue</td><td>progress line if a todo list exists, else none</td></tr>
+<tr><td>waiting / needsAttention</td><td>terracotta</td><td>action line (this spec's new element)</td></tr>
+<tr><td>error</td><td>destructive red</td><td>error's own short message, same slot as the action line</td></tr>
+</table>
+</details>
+
+<h2>Decisions for Sean</h2>
+
+<div class="decision">
+  <b>1. Infer status vs. read it from <code>~/.claude/sessions/&lt;pid&gt;.json</code></b>
+  Recommend: read. Inference is measurably wrong at the rate this richer row would expose; a trustworthy badge is worth the extra build (file-watcher + join) over the cheaper heuristic.
+</div>
+
+<div class="decision">
+  <b>2. Close the <code>template.launchBanner</code> gate so every session gets a launcher script</b>
+  Recommend: yes, write it unconditionally. It's the one change that takes join coverage from 8/13 to 13/13 and nothing in this spec works below full coverage.
+</div>
+
+<div class="decision">
+  <b>3. Show a progress/second line for every non-default state, or only when a todo list exists</b>
+  Recommend: only when a todo list exists. 95% of rows never call TodoWrite; a "processing" label with nothing under it just adds noise back to a row that today is deliberately quiet.
+</div>
+
+<div class="decision">
+  <b>4. Project-row aggregate: a "N need you" count vs. reusing the child's glyph tint alone</b>
+  Recommend: add the count. The tint alone answers "is something wrong in here," not "how many things," and Sean's actual question in the ask was sizing the action, not just spotting it.
+</div>
+
+</body>
+</html>
