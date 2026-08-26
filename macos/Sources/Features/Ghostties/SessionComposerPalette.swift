@@ -267,11 +267,16 @@ struct SessionComposerPalette: View {
     }
 
     /// Results well cap — render evidence showed `ScrollView` never reports
-    /// an intrinsic content height, so a bare `maxHeight` behaves as a
-    /// target rather than a cap (a two-row list still opened a full-height
-    /// well with dead space below it). `ComposerResultsTable` combines this
-    /// cap with `.fixedSize(horizontal: false, vertical: true)` so the well
-    /// hugs its content up to this height, then scrolls past it.
+    /// an intrinsic content height, so a bare `maxHeight` (even paired with
+    /// `.fixedSize(horizontal: false, vertical: true)`) behaves as a target
+    /// rather than a cap: a two-row list opened at (near) the full 440pt
+    /// well with dead space above AND below the rows, because the ScrollView
+    /// isn't built to hug — its `sizeThatFits` answers with its own
+    /// proposed/maximum height, not its content's. `ComposerResultsTable`
+    /// instead measures its content's real height via
+    /// `ComposerResultsHeightPreferenceKey` and sets the `ScrollView`'s own
+    /// `.frame(height:)` to `min(measured, maxHeight)` explicitly, so short
+    /// lists hug and long lists stop at this cap and scroll.
     /// `.anchored` keeps its existing 220pt (sidebar popover — a 440pt well
     /// does not belong there; whether `.anchored` should otherwise adopt
     /// the `.centered` list treatment is a separate, unresolved question).
@@ -2384,6 +2389,17 @@ struct ComposerQueryField: View {
 /// `LazyVStack` never re-invokes `ForEach`'s content closure when an element
 /// changes but its `id` does not, which froze sidebar rows at first
 /// construction (PR #121).
+/// Reports the natural (unclamped) height of `ComposerResultsTable`'s
+/// content `VStack` up through its `.background(GeometryReader { ... })`
+/// probe — see `ComposerResultsTable.body`'s doc comment for why this
+/// replaced `.fixedSize(horizontal: false, vertical: true)`.
+private struct ComposerResultsHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 private struct ComposerResultsTable: View {
     var sections: [(accessibilityLabel: String, options: [ComposerOption])]
     var query: String
@@ -2395,9 +2411,10 @@ private struct ComposerResultsTable: View {
     var rowHorizontalPadding: CGFloat
     var rowCornerRadius: CGFloat
     /// The results well's cap — `SessionComposerPalette.resultsWellMaxHeight`,
-    /// 220pt `.anchored` / 440pt `.centered`. Combined below with
-    /// `.fixedSize(horizontal: false, vertical: true)` so the well hugs its
-    /// content up to this height rather than always opening at full height.
+    /// 220pt `.anchored` / 440pt `.centered`. `body` measures the content's
+    /// own height via `ComposerResultsHeightPreferenceKey` and clamps the
+    /// `ScrollView`'s explicit `.frame(height:)` to `min(measured, maxHeight)`
+    /// — see `body`'s doc comment for why a bare `maxHeight` cannot do this.
     var maxHeight: CGFloat
     var onEditTemplate: (AgentTemplate) -> Void
     var onDuplicateTemplate: (AgentTemplate) -> Void
@@ -2421,7 +2438,27 @@ private struct ComposerResultsTable: View {
         sections.flatMap { $0.options }
     }
 
+    /// Content's own unclamped height, read back via
+    /// `ComposerResultsHeightPreferenceKey` — see `body`'s doc comment.
+    @State private var measuredContentHeight: CGFloat = 0
+
     var body: some View {
+        // `ScrollView` has no intrinsic content size: `.fixedSize(horizontal:
+        // false, vertical: true)` on it (the previous approach) asks the
+        // ScrollView for its ideal height ignoring the proposal, but a
+        // ScrollView's `sizeThatFits` always answers with something close to
+        // ITS OWN proposed/maximum height, never its content's — it isn't
+        // built to hug. That's why a two-row list still opened at (near) the
+        // full 440pt cap with dead space both above AND below the rows: the
+        // content is top-anchored inside an oversized scroll container, and
+        // "dead space above too" was the tell that the CONTAINER was too
+        // tall, not that it failed to shrink around correctly-positioned
+        // content. Fix: measure the content `VStack`'s real height directly
+        // (`GeometryReader` in a `.background`, reported up through
+        // `ComposerResultsHeightPreferenceKey`) and set the `ScrollView`'s
+        // own `.frame(height:)` to `min(measured, maxHeight)` explicitly —
+        // an exact height, not a cap, so short lists hug and long lists stop
+        // at 440/220 and scroll.
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
@@ -2472,9 +2509,17 @@ private struct ComposerResultsTable: View {
                     }
                 }
                 .padding(8)
+                .background(
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: ComposerResultsHeightPreferenceKey.self,
+                            value: geometry.size.height
+                        )
+                    }
+                )
             }
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxHeight: maxHeight)
+            .onPreferenceChange(ComposerResultsHeightPreferenceKey.self) { measuredContentHeight = $0 }
+            .frame(height: measuredContentHeight > 0 ? min(measuredContentHeight, maxHeight) : nil)
             .onChange(of: selectedIndex) { _ in
                 guard let selectedIndex, selectedIndex < flattened.count else { return }
                 proxy.scrollTo(flattened[Int(selectedIndex)].id)
