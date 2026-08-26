@@ -1,159 +1,553 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<title>Session row status — design spec</title>
-<style>
-  body { font-family: -apple-system, "SF Pro Text", sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.5; }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  h2 { font-size: 15px; margin-top: 40px; border-top: 1px solid #e5e5e3; padding-top: 20px; }
-  p { margin: 8px 0; }
-  code { background: #f0e9e6; padding: 1px 5px; border-radius: 4px; font-family: "SF Mono", monospace; font-size: 12px; }
-  .lede { color: #636363; font-size: 13px; margin-bottom: 24px; }
-  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #e5e5e3; vertical-align: top; }
-  th { color: #636363; font-weight: 500; }
-  details summary { cursor: pointer; color: #636363; font-size: 13px; margin: 8px 0; }
-  .decision { background: #f0e9e6; border-radius: 8px; padding: 12px 16px; margin: 10px 0; }
-  .decision b { display: block; margin-bottom: 4px; }
+  <head>
+    <meta charset="UTF-8" />
+    <title>Session row status — design spec</title>
+    <style>
+      body {
+        font-family: -apple-system, "SF Pro Text", sans-serif;
+        max-width: 760px;
+        margin: 40px auto;
+        padding: 0 20px;
+        color: #1a1a1a;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 20px;
+        margin-bottom: 4px;
+      }
+      h2 {
+        font-size: 15px;
+        margin-top: 40px;
+        border-top: 1px solid #e5e5e3;
+        padding-top: 20px;
+      }
+      p {
+        margin: 8px 0;
+      }
+      code {
+        background: #f0e9e6;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-family: "SF Mono", monospace;
+        font-size: 12px;
+      }
+      .lede {
+        color: #636363;
+        font-size: 13px;
+        margin-bottom: 24px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 12px 0;
+        font-size: 13px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 6px 10px;
+        border-bottom: 1px solid #e5e5e3;
+        vertical-align: top;
+      }
+      th {
+        color: #636363;
+        font-weight: 500;
+      }
+      details summary {
+        cursor: pointer;
+        color: #636363;
+        font-size: 13px;
+        margin: 8px 0;
+      }
+      .decision {
+        background: #f0e9e6;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 10px 0;
+      }
+      .decision b {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .decision .meta {
+        color: #636363;
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      .callout {
+        background: #fbeee7;
+        border: 1px solid #e8b39a;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 14px 0;
+      }
+      .callout b {
+        display: block;
+        margin-bottom: 4px;
+        color: #a4552c;
+      }
 
-  /* --- Mockup: sidebar chrome --- */
-  .sidebar-mock {
-    background: #F0E9E6;
-    border-radius: 12px;
-    padding: 8px;
-    width: 260px;
-    font-size: 11px;
-    font-family: -apple-system, "SF Pro Text", sans-serif;
-    color: #1a1a1a;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  }
-  .row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 6px 8px;
-    border-radius: 5px;
-    cursor: default;
-  }
-  .row:hover { background: rgba(0,0,0,0.035); }
-  .glyph {
-    width: 14px; height: 14px; flex: none; margin-top: 1px;
-    font-size: 14px; line-height: 14px; text-align: center;
-  }
-  .glyph.idle { color: #9a9a9a; }
-  .glyph.processing { color: #5B8DEF; }
-  .glyph.blocked { color: #C97350; }
-  .row-main { flex: 1; min-width: 0; }
-  .row-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row-sub { color: #636363; font-size: 10.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .row-sub.action { color: #C97350; font-weight: 500; cursor: pointer; }
-  .row-sub.action:hover { text-decoration: underline; }
-  .chevron { flex: none; width: 10px; text-align: center; color: #9a9a9a; font-size: 9px; margin-top: 3px; }
-  .accordion {
-    margin: 2px 0 4px 22px;
-    padding: 4px 0 4px 8px;
-    border-left: 1px solid #e5e5e3;
-    font-size: 10.5px;
-  }
-  .todo-item { display: flex; gap: 6px; padding: 2px 0; align-items: baseline; }
-  .todo-dot { flex: none; width: 10px; text-align: center; }
-  .todo-item.done { color: #9a9a9a; text-decoration: line-through; }
-  .todo-item.active { color: #1a1a1a; font-weight: 500; text-decoration: none; }
-  .todo-item.pending { color: #636363; }
-  .section-caption { color: #636363; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; padding: 4px 8px 2px; }
-</style>
-</head>
-<body>
+      /* --- Mockup: sidebar chrome --- */
+      .sidebar-mock {
+        background: #f0e9e6;
+        border-radius: 12px;
+        padding: 8px;
+        width: 260px;
+        font-size: 11px;
+        font-family: -apple-system, "SF Pro Text", sans-serif;
+        color: #1a1a1a;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .row {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 5px;
+        cursor: default;
+      }
+      .row:hover {
+        background: rgba(0, 0, 0, 0.035);
+      }
+      .glyph {
+        width: 14px;
+        height: 14px;
+        flex: none;
+        margin-top: 1px;
+        font-size: 14px;
+        line-height: 14px;
+        text-align: center;
+      }
+      .glyph.idle {
+        color: #9a9a9a;
+      }
+      .glyph.processing {
+        color: #5b8def;
+      }
+      .glyph.blocked {
+        color: #c97350;
+      }
+      .row-main {
+        flex: 1;
+        min-width: 0;
+      }
+      .row-name {
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .row-sub {
+        color: #636363;
+        font-size: 10.5px;
+        margin-top: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .row-sub.action {
+        color: #c97350;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .row-sub.action:hover {
+        text-decoration: underline;
+      }
+      .chevron {
+        flex: none;
+        width: 10px;
+        text-align: center;
+        color: #9a9a9a;
+        font-size: 9px;
+        margin-top: 3px;
+      }
+      .accordion {
+        margin: 2px 0 4px 22px;
+        padding: 4px 0 4px 8px;
+        border-left: 1px solid #e5e5e3;
+        font-size: 10.5px;
+      }
+      .todo-item {
+        display: flex;
+        gap: 6px;
+        padding: 2px 0;
+        align-items: baseline;
+      }
+      .todo-dot {
+        flex: none;
+        width: 10px;
+        text-align: center;
+      }
+      .todo-item.done {
+        color: #9a9a9a;
+        text-decoration: line-through;
+      }
+      .todo-item.active {
+        color: #1a1a1a;
+        font-weight: 500;
+        text-decoration: none;
+      }
+      .todo-item.pending {
+        color: #636363;
+      }
+      .section-caption {
+        color: #636363;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        padding: 4px 8px 2px;
+      }
+      .approve-btn {
+        flex: none;
+        font-size: 10px;
+        font-weight: 600;
+        color: #fff;
+        background: #c97350;
+        border-radius: 5px;
+        padding: 3px 8px;
+        margin-top: 1px;
+        cursor: pointer;
+      }
+      .row-sub.terminal-link {
+        color: #c97350;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .row-sub.terminal-link:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sessions-tab row: showing more than the icon</h1>
+    <p class="lede">
+      Recommendation, shown first. Reasoning and dependencies below the fold.
+    </p>
 
-<h1>Sessions-tab row: showing more than the icon</h1>
-<p class="lede">Recommendation, shown first. Reasoning and dependencies below the fold.</p>
+    <p>
+      <b>Recommendation:</b> the row keeps its single ghost glyph as the primary
+      read — the glyph alone answers "is this running, idle, or blocked." The
+      second line, when present, never repeats that answer; it's a breakdown of
+      what the work is, not a restatement that it's happening. Three shapes for
+      that line: absent (nothing to say, the common case), a todo breakdown
+      fragment (only when a todo list exists), or an action (only when the
+      session is genuinely blocked on the user, and now sometimes actionable
+      right from the row — see below).
+    </p>
 
-<p><b>Recommendation:</b> the row keeps its single ghost glyph as the primary read, and gains one optional second line underneath the name. That line is absent when there's nothing to say (the common case), a progress fragment when a todo list exists, and an accent-colored action when the session is genuinely blocked on the user. A chevron only appears when there's a list to disclose — never as a dead affordance.</p>
+    <div class="sidebar-mock">
+      <div class="section-caption">Sessions</div>
 
-<div class="sidebar-mock">
-  <div class="section-caption">Sessions</div>
+      <div class="row">
+        <div class="glyph idle">👻</div>
+        <div class="row-main">
+          <div class="row-name">refactor-sidebar-store</div>
+        </div>
+      </div>
 
-  <div class="row">
-    <div class="glyph idle">👻</div>
-    <div class="row-main">
-      <div class="row-name">refactor-sidebar-store</div>
+      <div class="row">
+        <div class="glyph processing">👻</div>
+        <div class="row-main">
+          <div class="row-name">composer-branch-segment</div>
+          <div class="row-sub">Fixing the shadow guard · 3 of 5</div>
+        </div>
+        <div class="chevron">▾</div>
+      </div>
+      <div class="accordion">
+        <div class="todo-item done">
+          <span class="todo-dot">●</span>Add pid/sessionId join
+        </div>
+        <div class="todo-item done">
+          <span class="todo-dot">●</span>Read live session file
+        </div>
+        <div class="todo-item done">
+          <span class="todo-dot">●</span>Wire join into row view
+        </div>
+        <div class="todo-item active">
+          <span class="todo-dot">◐</span>Fixing the shadow guard
+        </div>
+        <div class="todo-item pending">
+          <span class="todo-dot">○</span>Ship review round
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="glyph blocked">👻</div>
+        <div class="row-main">
+          <div class="row-name">upstream-merge-v1.4</div>
+          <div class="row-sub">Approve merge to main?</div>
+        </div>
+        <div class="approve-btn">Approve</div>
+      </div>
+
+      <div class="row">
+        <div class="glyph blocked">👻</div>
+        <div class="row-main">
+          <div class="row-name">composer-command-grammar</div>
+          <div class="row-sub terminal-link">Answer in terminal →</div>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <div class="row">
-    <div class="glyph processing">👻</div>
-    <div class="row-main">
-      <div class="row-name">composer-branch-segment</div>
-      <div class="row-sub">3 of 5 done · Fixing the shadow guard</div>
+    <h2>The todo line is a breakdown, never a status restatement</h2>
+    <p>
+      The glyph already says <i>running</i>, <i>idle</i>, or <i>blocked</i> —
+      color is the status signal. The line under the name must never re-announce
+      that ("Working…", "In progress") because it adds nothing the glyph didn't
+      already say and costs a line of density. Its job is to say <i>what</i>,
+      not <i>that</i>: the active todo item's own text, plus a fraction (<code
+        >3 of 5</code
+      >) so the count reads without opening the accordion. If a session has no
+      todo list, this line stays absent — no placeholder, no generic label.
+      That's the correction from the prior draft, which had put "Fixing the
+      shadow guard" behind a progress-y prefix; the fix is to drop the prefix
+      and let the breakdown stand alone.
+    </p>
+
+    <h2>Two shapes of blocked, only one of which can be actioned inline</h2>
+    <p>
+      Not every <code>needsAttention</code> row asks the same kind of question,
+      and the sidebar can only safely answer one kind of them. A permission
+      prompt — approve or deny, run or don't — is a bounded choice: the agent is
+      waiting on one keystroke, and a sidebar button can supply that keystroke
+      because there's no ambiguity about what "approve" means once it's sent. An
+      open question from the agent — "which approach do you want, A or B?", or
+      anything that expects prose back — can't be answered from a row no matter
+      how it's styled, because the answer has to be typed and the sidebar has no
+      text field for it. For that shape, the correct action is the same one this
+      spec already recommended for blocked rows: focus the terminal and let Sean
+      type there.
+    </p>
+    <p>
+      So the row's action bifurcates on payload, not on a new state:
+      <code>needsAttention</code> rows with a structured (single-choice) prompt
+      get an inline button (<b>Approve</b>, mirroring whatever the actual
+      bounded choice is); rows with a freeform prompt get the text action
+      <b>Answer in terminal →</b>, which behaves exactly like clicking the row
+      already does — focus and scroll to bottom, no modal. Sean's own guess that
+      this "falls under needs input" is right in spirit: it's the existing
+      seventh state, carrying more information, not an eighth state.
+    </p>
+    <p>
+      This keeps the two things that would break if
+      <code>needsAttention</code> split into two enum cases: the priority
+      ordering at <code>Models/AgentSession.swift:185-195</code> (error &gt;
+      needsAttention &gt; waiting &gt; longRunning &gt; processing &gt; idle)
+      and the color mapping at <code>WorkspaceStore.swift:1004</code> both
+      already treat <code>needsAttention</code> as one thing, and every other
+      call site that switches on the seven-case enum would need a matching
+      update for an eighth case that changes nothing about how it's prioritized
+      or tinted. A payload on the existing case gets the new behavior without
+      touching either of those.
+    </p>
+
+    <div class="callout">
+      <b>Risk: a sidebar button writes into a live terminal session</b>
+      Approve is real input injection — the button calls
+      <code>sendText</code>/<code>sendKeyEvent</code> against whatever surface
+      <code>SessionCoordinator.sessionTrees[id]</code> currently holds for that
+      session, and that surface doesn't stop and check with anyone first. Two
+      failure modes matter: (1) the prompt is answered already — Sean approved
+      from the terminal a second before the row updates — and the button fires a
+      keystroke at a shell that's moved on to something else; (2) the agent has
+      since exited the prompt state entirely (crashed, cancelled, started a new
+      turn), so the keystroke lands in whatever's now on screen, which could be
+      a running command or an open editor. Guard: read the live state file
+      immediately before sending, not the cached row state the button was drawn
+      from, and no-op with a brief inline "already resolved" flash if the live
+      read doesn't match a pending structured prompt. Never fire on stale state.
     </div>
-    <div class="chevron">▾</div>
-  </div>
-  <div class="accordion">
-    <div class="todo-item done"><span class="todo-dot">●</span>Add pid/sessionId join</div>
-    <div class="todo-item done"><span class="todo-dot">●</span>Read live session file</div>
-    <div class="todo-item done"><span class="todo-dot">●</span>Wire join into row view</div>
-    <div class="todo-item active"><span class="todo-dot">◐</span>Fixing the shadow guard</div>
-    <div class="todo-item pending"><span class="todo-dot">○</span>Ship review round</div>
-  </div>
 
-  <div class="row">
-    <div class="glyph blocked">👻</div>
-    <div class="row-main">
-      <div class="row-name">upstream-merge-v1.4</div>
-      <div class="row-sub action">Needs input: approve merge to main</div>
+    <h2>Where the approve action gets its capability</h2>
+    <p>
+      Confirmed feasible against the actual API, not assumed:
+      <code>sendText(_ text: String)</code> and
+      <code>sendKeyEvent(_ event: Input.KeyEvent)</code> both exist on the
+      surface type (<code>macos/Sources/Ghostty/Ghostty.Surface.swift:41</code>
+      and <code>:59</code>), wrapping
+      <code>ghostty_surface_text</code>/<code>ghostty_surface_key</code>, and
+      <code>SessionCoordinator</code> already keeps each session's surface
+      reachable by id in <code>sessionTrees</code>.
+      <code>macos/Sources/Ghostty/</code> is the upstream seam — the button's
+      fork code in <code>Features/Ghostties/</code> is a consumer of those two
+      public methods, nothing in <code>Ghostty/</code> itself needs to change.
+    </p>
+
+    <h2>Degrading into the Projects view</h2>
+    <p>
+      Projects don't get the accordion — a project row is a group, and
+      disclosing every child's todo list two levels deep would defeat the
+      density <code>agent-craft.md</code> asks for. It gets the same vocabulary,
+      compressed: the project's ghost glyph tints to the highest-priority child
+      state (error &gt; needsAttention &gt; waiting &gt; longRunning &gt;
+      processing &gt; idle — this ordering already exists for the menu bar per
+      <code>agent-experience.md</code>, reused rather than invented), and a
+      project with at least one blocked child shows a count instead of a name:
+      <code>2 need you</code> in terracotta, replacing the normal subtitle. The
+      count doesn't distinguish structured from freeform prompts at the project
+      level — that split only shows up once you expand into Sessions and see the
+      individual rows. No progress fractions at the project level either; that
+      detail is what expanding is for.
+    </p>
+
+    <h2>What has to exist first</h2>
+    <p>
+      This entire design is downstream of one gap:
+      <code>AgentSession</code> carries no <code>pid</code> and no
+      <code>sessionId</code> (<code>Models/AgentSession.swift:10-51</code>), so
+      a row has no way to locate its own todo file or its own live-status file.
+      Until that join exists, every element above the base glyph is unbuildable
+      — this is a dependency, not a phase to schedule.
+    </p>
+    <p>
+      The join path already exists as the launcher-UUID script
+      (<code>~/.ghostties/cache/launchers/&lt;sessionUUID&gt;.sh</code>), but
+      it's only written when <code>template.launchBanner</code> is set
+      (<code>SessionCoordinator.swift:224</code>), which is why only 8 of 13
+      live sessions have it today. Closing that gate to write unconditionally is
+      the smallest fix that gets coverage to 13/13, and it's settled — see
+      decisions below.
+    </p>
+
+    <h2>The state-source fork</h2>
+    <p>
+      Today's <code>needsAttention</code>/<code>waiting</code> are inferred from
+      terminal output heuristics, and a direct measurement caught that inference
+      lying at scale: 7 sessions genuinely idle, 4 genuinely busy, zero
+      genuinely waiting — while the sidebar painted nearly all of them as
+      attention states. <code>.idle</code> depends on OSC 133, which Claude's
+      TUI never emits, so <code>.waiting</code> isn't a real wait state today,
+      it's the branch inference falls into when it can't tell what's happening.
+    </p>
+    <p>
+      Building the richer row on top of that inference would just make the lie
+      more visible — a progress fraction and a named action look authoritative,
+      and an authoritative-looking wrong answer is worse than today's vague
+      glyph, because it teaches Sean to stop checking the terminal himself.
+      Settled: read real state from
+      <code>~/.claude/sessions/&lt;pid&gt;.json</code> instead of inferring it.
+      That file already carries <code>status</code>, and pairing it with the
+      todo file gives both the state and the breakdown for free, from data the
+      agent itself wrote — no heuristic in between.
+    </p>
+
+    <details>
+      <summary>
+        Full seven-state → glyph-tint mapping (unchanged by this spec)
+      </summary>
+      <table>
+        <tr>
+          <th>State</th>
+          <th>Glyph tint</th>
+          <th>Second line</th>
+        </tr>
+        <tr>
+          <td>inactive</td>
+          <td>muted</td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td>idle</td>
+          <td>muted</td>
+          <td>none, unless a todo list exists (breakdown line)</td>
+        </tr>
+        <tr>
+          <td>processing / longRunning</td>
+          <td>system blue</td>
+          <td>breakdown line if a todo list exists, else none</td>
+        </tr>
+        <tr>
+          <td>waiting / needsAttention (structured prompt)</td>
+          <td>terracotta</td>
+          <td>inline action button (Approve / Deny etc.)</td>
+        </tr>
+        <tr>
+          <td>waiting / needsAttention (freeform prompt)</td>
+          <td>terracotta</td>
+          <td>"Answer in terminal →"</td>
+        </tr>
+        <tr>
+          <td>error</td>
+          <td>destructive red</td>
+          <td>error's own short message, same slot as the action line</td>
+        </tr>
+      </table>
+    </details>
+
+    <h2>Decisions</h2>
+
+    <div class="decision">
+      <b
+        >1. Status source: infer from terminal output, or read from
+        <code>~/.claude/sessions/&lt;pid&gt;.json</code></b
+      >
+      Decided: read. Approved by Sean. Inference was measurably wrong at the
+      rate this richer row would expose (0 of 11 genuinely-waiting sessions were
+      actually waiting); a badge that gets checked at a glance has to be right,
+      and reading real state is the only way to guarantee that.
     </div>
-  </div>
-</div>
 
-<h2>How the action is displayed, and what clicking it does</h2>
-<p>The action line replaces the progress line (a row shows one or the other, never both) and is the only place terracotta appears outside the glyph — <code>DESIGN.md</code> already reserves that color for the <code>waiting</code>/blocked state, so the action pill spends the same accent budget rather than opening a new one. The text itself is the actual blocking question, not a generic "needs attention" label — sourced from the same live-state read that produces the glyph color, not invented copy.</p>
-<p>Clicking it does exactly what clicking the row already does today: focuses that session's terminal and scrolls it to the bottom. No modal, no inline approve/deny — Ghostties doesn't have a side-channel to the agent that a click could satisfy, so the affordance is "take me there," not "resolve this here."</p>
+    <div class="decision">
+      <b
+        >2. Close the <code>template.launchBanner</code> gate so every session
+        gets a launcher script</b
+      >
+      Decided: yes, write it unconditionally. Approved by Sean. Takes
+      pid/sessionId join coverage from 8/13 to 13/13, and nothing else in this
+      spec works below full coverage.
+    </div>
 
-<h2>Degrading into the Projects view</h2>
-<p>Projects don't get the accordion — a project row is a group, and disclosing every child's todo list two levels deep would defeat the density <code>agent-craft.md</code> asks for. It gets the same vocabulary, compressed: the project's ghost glyph tints to the highest-priority child state (error &gt; needsAttention &gt; waiting &gt; longRunning &gt; processing &gt; idle — this ordering already exists for the menu bar per <code>agent-experience.md</code>, reused rather than invented), and a project with at least one blocked child shows a one-line count instead of a name: <code>2 need you</code> in terracotta, replacing the normal subtitle. No progress fractions at the project level — that detail is what expanding into Sessions is for.</p>
+    <div class="decision">
+      <b
+        >3. Second line: on for every non-default state, or only when a todo
+        list exists</b
+      >
+      Decided: only when a todo list exists —
+      <b>and it is a breakdown of the work, never a restatement of status.</b>
+      Approved by Sean, with a correction to the original framing: "actual
+      progress status should come from the ghost icons. the todo is more of a
+      breakdown." The glyph owns status; the todo line answers what, not that.
+    </div>
 
-<h2>What has to exist first</h2>
-<p>This entire design is downstream of one gap: <code>AgentSession</code> carries no <code>pid</code> and no <code>sessionId</code> (<code>Models/AgentSession.swift:10-51</code>), so a row has no way to locate its own todo file or its own live-status file. Until that join exists, every element above the base glyph is unbuildable — this is a dependency, not a phase to schedule.</p>
-<p>The join path already exists as the launcher-UUID script (<code>~/.ghostties/cache/launchers/&lt;sessionUUID&gt;.sh</code>), but it's only written when <code>template.launchBanner</code> is set (<code>SessionCoordinator.swift:224</code>), which is why only 8 of 13 live sessions have it today. Closing that gate to write unconditionally is the smallest fix that gets coverage to 13/13.</p>
+    <div class="decision">
+      <b
+        >4. Project-row aggregate: a "N need you" count vs. the child's glyph
+        tint alone</b
+      >
+      Decided: add the count. Approved by Sean. Tint alone answers "is something
+      wrong in here," not "how many," and sizing the action was the actual ask.
+    </div>
 
-<h2>The state-source fork</h2>
-<p>Today's <code>needsAttention</code>/<code>waiting</code> are inferred from terminal output heuristics, and a direct measurement caught that inference lying at scale: 7 sessions genuinely idle, 4 genuinely busy, zero genuinely waiting — while the sidebar painted nearly all of them as attention states. <code>.idle</code> depends on OSC 133, which Claude's TUI never emits, so <code>.waiting</code> isn't a real wait state today, it's the branch inference falls into when it can't tell what's happening.</p>
-<p>Building the richer row on top of that inference would just make the lie more visible — a progress fraction and a named action look authoritative, and an authoritative-looking wrong answer is worse than today's vague glyph, because it teaches Sean to stop checking the terminal himself. <b>Recommendation: read real state from <code>~/.claude/sessions/&lt;pid&gt;.json</code></b> instead of inferring it. That file already carries <code>status</code>, and pairing it with the todo file gives both the state and the detail for free, from data the agent itself wrote — no heuristic in between. The cost is real: it requires the pid/sessionId join above, plus a live file-watcher on two directories instead of the existing output-heuristic timer. That's the one thing this recommendation gives up — inference is already running and cheap; reading is a build. Sean is trading a small amount of build time now for a badge he can trust indefinitely, which is the right trade for a status surface whose entire job is to be believed at a glance.</p>
+    <div class="decision">
+      <b
+        >5. Can the sidebar action a blocked session directly, or must it always
+        hand off to the terminal?</b
+      >
+      Decided: split by prompt shape. A structured (bounded-choice) prompt gets
+      an inline button using <code>sendText</code>/<code>sendKeyEvent</code>
+      against <code>SessionCoordinator</code>'s held surface; a freeform prompt
+      still hands off to the terminal, because the answer requires typing the
+      sidebar can't take. No new enum case — the existing
+      <code>needsAttention</code> state carries a payload distinguishing the
+      two, keeping the priority ordering and color mapping untouched. Guarded
+      against stale prompts per the risk callout above.
+    </div>
 
-<details>
-<summary>Full seven-state → glyph-tint mapping (unchanged by this spec)</summary>
-<table>
-<tr><th>State</th><th>Glyph tint</th><th>Second line</th></tr>
-<tr><td>inactive</td><td>muted</td><td>none</td></tr>
-<tr><td>idle</td><td>muted</td><td>none, unless a todo list exists (progress line)</td></tr>
-<tr><td>processing / longRunning</td><td>system blue</td><td>progress line if a todo list exists, else none</td></tr>
-<tr><td>waiting / needsAttention</td><td>terracotta</td><td>action line (this spec's new element)</td></tr>
-<tr><td>error</td><td>destructive red</td><td>error's own short message, same slot as the action line</td></tr>
-</table>
-</details>
-
-<h2>Decisions for Sean</h2>
-
-<div class="decision">
-  <b>1. Infer status vs. read it from <code>~/.claude/sessions/&lt;pid&gt;.json</code></b>
-  Recommend: read. Inference is measurably wrong at the rate this richer row would expose; a trustworthy badge is worth the extra build (file-watcher + join) over the cheaper heuristic.
-</div>
-
-<div class="decision">
-  <b>2. Close the <code>template.launchBanner</code> gate so every session gets a launcher script</b>
-  Recommend: yes, write it unconditionally. It's the one change that takes join coverage from 8/13 to 13/13 and nothing in this spec works below full coverage.
-</div>
-
-<div class="decision">
-  <b>3. Show a progress/second line for every non-default state, or only when a todo list exists</b>
-  Recommend: only when a todo list exists. 95% of rows never call TodoWrite; a "processing" label with nothing under it just adds noise back to a row that today is deliberately quiet.
-</div>
-
-<div class="decision">
-  <b>4. Project-row aggregate: a "N need you" count vs. reusing the child's glyph tint alone</b>
-  Recommend: add the count. The tint alone answers "is something wrong in here," not "how many things," and Sean's actual question in the ask was sizing the action, not just spotting it.
-</div>
-
-</body>
+    <h2>Open question for Sean</h2>
+    <p>
+      <b
+        >Does "thread has questions" need its own visible affordance in the
+        Projects (compressed) view, or does it stay folded into the same "N need
+        you" count as approvals?</b
+      >
+      At the Sessions-row level this spec already answers it — expand and you
+      see which blocked rows are one-click and which say "Answer in terminal."
+      At the Projects level, right now a freeform question and a one-click
+      approval both just add to the same count. If Sean wants the count itself
+      to hint at "some of these need typing, not tapping," that's a second
+      number or a mixed icon on the project row — a real density cost this spec
+      hasn't taken a position on.
+    </p>
+  </body>
 </html>
