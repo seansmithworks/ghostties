@@ -154,6 +154,24 @@
       .row-sub.action:hover {
         text-decoration: underline;
       }
+      .row-sub.need-you {
+        color: #c97350;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+      }
+      .mixed-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+        flex: none;
+        background: conic-gradient(
+          #c97350 0deg 180deg,
+          rgba(201, 115, 80, 0.35) 180deg 360deg
+        );
+      }
       .chevron {
         flex: none;
         width: 10px;
@@ -384,12 +402,31 @@
       processing &gt; idle — this ordering already exists for the menu bar per
       <code>agent-experience.md</code>, reused rather than invented), and a
       project with at least one blocked child shows a count instead of a name:
-      <code>2 need you</code> in terracotta, replacing the normal subtitle. The
-      count doesn't distinguish structured from freeform prompts at the project
-      level — that split only shows up once you expand into Sessions and see the
-      individual rows. No progress fractions at the project level either; that
-      detail is what expanding is for.
+      <code>2 need you</code> in terracotta, replacing the normal subtitle. When
+      those blocked children mix a structured (one-click) prompt with a
+      freeform one, the count is led by a small two-tone dot — solid terracotta
+      for the tappable share, translucent terracotta for the type-in share — so
+      the aggregate hints at effort without spelling out two numbers (decision
+      6, mocked up below). A project blocked entirely on one prompt kind just
+      omits the dot; the split reads at a glance, never as a second status, and
+      the actual structured-vs-freeform breakdown still only shows up once you
+      expand into Sessions. No progress fractions at the project level either;
+      that detail is what expanding is for.
     </p>
+
+    <div class="sidebar-mock" style="margin-top: 12px">
+      <div class="section-caption">Projects</div>
+      <div class="row">
+        <div class="glyph blocked">👻</div>
+        <div class="row-main">
+          <div class="row-name">ghostties</div>
+          <div class="row-sub need-you">
+            <span class="mixed-dot"></span>2 need you
+          </div>
+        </div>
+        <div class="chevron">▾</div>
+      </div>
+    </div>
 
     <h2>What has to exist first</h2>
     <p>
@@ -534,20 +571,16 @@
       against stale prompts per the risk callout above.
     </div>
 
-    <h2>Open question for Sean</h2>
-    <p>
+    <div class="decision">
       <b
-        >Does "thread has questions" need its own visible affordance in the
-        Projects (compressed) view, or does it stay folded into the same "N need
-        you" count as approvals?</b
+        >6. Projects-view "N need you" aggregate: one number, two separate
+        numbers, or one number with a mixed glyph</b
       >
-      At the Sessions-row level this spec already answers it — expand and you
-      see which blocked rows are one-click and which say "Answer in terminal."
-      At the Projects level, right now a freeform question and a one-click
-      approval both just add to the same count. If Sean wants the count itself
-      to hint at "some of these need typing, not tapping," that's a second
-      number or a mixed icon on the project row — a real density cost this spec
-      hasn't taken a position on.
-    </p>
+      Decided: one number, with a small two-tone dot hinting that not all of
+      them are one-click taps. Approved by Sean, overriding this spec's
+      density-favored recommendation of a plain single number — a real UX call,
+      Sean's to make. Mocked up above; the dot reuses terracotta at two
+      opacities rather than a new color, so it costs no new token.
+    </div>
   </body>
 </html>
