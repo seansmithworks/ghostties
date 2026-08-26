@@ -4,6 +4,37 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-26 — composer UI 11 MERGED to main (PR #138)
+
+`main` @ `89e6dfb94`, merge commit, CI green (6/6). Verified `6e9bb6836` is a true ancestor of
+`origin/main`, not just an API "merged" claim. **Carries 28 commits of Slice B** (branch→worktree)
+that had been frozen at `a1daa6608` awaiting Sean's hands-on pass — it merged WITHOUT that pass,
+by his explicit call. Suite 962/1 known flake/1 skipped.
+
+Shipped in it: 11.1 rest ghost path, 11.2 inline completion with Spotlight+Raycast semantics
+(ghost previews the full destination, Tab drills one segment, Enter commits the visible path),
+headerless list, template pinning, resolution line deleted, **View → Experimental Composer Field**
+toggle (Release-reachable), two mutant-proven regression tests, adversarial-gate evidence at
+`docs/plans/composer-qa/`.
+
+- [ ] **CARRIED — render the four visual design calls for Sean.** He asked to *see* them, not read
+  them again. Ghost contrast (board's 49% ≈ 2.5:1, under AA, and it is content), system vs brand
+  accent on row selection, the fixed 220pt results well vs hugging, and whether `.anchored` should
+  have inherited the headerless list + two trailing controls. Use the existing snapshot harness;
+  PNGs are gitignored now, so attach them rather than committing.
+- [ ] **DECIDE — alpha conversion policy (not renderable, answer directly).** `labelColor.opacity(x)`
+  MULTIPLIES against the system label's built-in 0.85, so every board grey lands ~15% light.
+  Strawman: use `NSColor.withAlphaComponent`, which replaces. Affects every future grey spec'd
+  off a board.
+- [ ] **Slice B has never been exercised by Sean** and is now on `main`, so it ships in the next
+  beta regardless. If he wants a look, it has to happen before that beta.
+- [ ] **beta.24 HELD** by Sean 2026-08-26 — "hold b24 still, we need to merge to main and clean
+  everything up when we are ready." Nothing tagged, no release run.
+- [ ] **Model B remains UNVERIFIED for interaction.** All keyboard/mouse feel, IME, undo scope.
+  macOS 13 key routing IS verified from source: model B routes all six keys through native
+  AppKit `doCommandBySelector`, zero `Backport` dependency, making it SAFER on the floor OS
+  than model A. Drive it via View → Experimental Composer Field.
+
 ## 2026-08-25 — composer UI 11.1/11.2 BUILT overnight, on `feat/composer-ui-11`
 
 Branch `feat/composer-ui-11` @ `d4bd0afde`, 24 commits off `a1daa6608`, +4,290/-268 across
