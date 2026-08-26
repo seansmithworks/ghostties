@@ -216,22 +216,25 @@ struct SessionComposerSnapshotTests {
     }
 
     /// Fix 7 (review), step 3 specifically: counts pixels in the exact gray
-    /// band the 11.1 ghost placeholder renders at rest —
+    /// band the 11.1 ghost placeholder renders at rest — was
     /// `Color(nsColor: .labelColor).opacity(0.49)` over the card's
-    /// near-white light-mode background measures `rgb(149,149,149)`
-    /// (measured directly against this test's own render: 1656 matching
-    /// pixels at a 2px sample stride, `r == 149` at the sample coordinates,
-    /// all at `y` 195-212). A band (140-160, near-equal channels), not an
+    /// near-white light-mode background, `rgb(149,149,149)`; raised to
+    /// 0.65 for the AA-contrast fix (`ComposerQueryField
+    /// .ghostPlaceholderOpacity`'s doc comment), which measures
+    /// `rgb(115,115,115)` at this same fixture
+    /// (`ComposerDesignCallRenderTests.call1ModelAGhostContrast065`,
+    /// untracked harness). A band (105-125, near-equal channels), not an
     /// exact triple, to tolerate antialiasing at glyph edges.
     ///
     /// Scoped to `y < 280` — WITHOUT that bound, this mutant-verified false
     /// GREEN on a 0.49 -> 0.03 opacity mutation (the ghost went
     /// near-invisible, but the band count barely dropped) because
     /// `makePlainComposer`'s template ROWS below the field render their own
-    /// `.secondary`-styled subtitle text in the SAME 140-160 luminance band
-    /// (measured: 274 leftover matches, all at `y` 332-519 — the row list,
-    /// not the field). `y < 280` sits between the two with margin on both
-    /// sides, at this test's fixed render size (`WorkspaceLayout.composerOverlayWidth
+    /// `.secondary`-styled subtitle text in a nearby luminance band
+    /// (measured against the original 140-160 band: 274 leftover matches,
+    /// all at `y` 332-519 — the row list, not the field). `y < 280` sits
+    /// between the two with margin on both sides, at this test's fixed
+    /// render size (`WorkspaceLayout.composerOverlayWidth
     /// + 16` wide, 420 tall). LIGHT MODE ONLY, same limitation this file's
     /// `darkestGhostPixel` already documents for dark mode.
     private func ghostGrayBandPixelCount(in data: Data) -> Int {
@@ -243,7 +246,7 @@ struct SessionComposerSnapshotTests {
                 let r = Int((color.redComponent * 255).rounded())
                 let g = Int((color.greenComponent * 255).rounded())
                 let b = Int((color.blueComponent * 255).rounded())
-                if r >= 140, r <= 160, g >= 140, g <= 160, b >= 140, b <= 160, abs(r - g) < 3, abs(g - b) < 3 {
+                if r >= 105, r <= 125, g >= 105, g <= 125, b >= 105, b <= 125, abs(r - g) < 3, abs(g - b) < 3 {
                     count += 1
                 }
             }
@@ -253,7 +256,7 @@ struct SessionComposerSnapshotTests {
 
     /// Fix 1 (review, long-path capture): measures the y-range spanned by
     /// the ghost gray-band pixels (`ghostGrayBandPixelCount`'s color test,
-    /// same 140-160 luminance band / near-neutral tolerance), scoped to the
+    /// same 105-125 luminance band / near-neutral tolerance), scoped to the
     /// same `y < 280` field region. A single line of ghost text spans a
     /// tight y-range (glyph ascender to descender, ~15-20px at this font
     /// size); a wrap regression back to two stacked lines roughly doubles
@@ -268,7 +271,7 @@ struct SessionComposerSnapshotTests {
                 let r = Int((color.redComponent * 255).rounded())
                 let g = Int((color.greenComponent * 255).rounded())
                 let b = Int((color.blueComponent * 255).rounded())
-                if r >= 140, r <= 160, g >= 140, g <= 160, b >= 140, b <= 160, abs(r - g) < 3, abs(g - b) < 3 {
+                if r >= 105, r <= 125, g >= 105, g <= 125, b >= 105, b <= 125, abs(r - g) < 3, abs(g - b) < 3 {
                     minY = min(minY ?? y, y)
                     maxY = max(maxY ?? y, y)
                 }
@@ -432,7 +435,7 @@ struct SessionComposerSnapshotTests {
         writeEvidence(light, filename: "step3-rest-ghost-path-light.png")
         #expect(light != nil)
         // Fix 7 (review): asserts the ghost actually renders IN the correct
-        // gray band (`rgb(149,149,149)`, measured — see
+        // gray band (`rgb(115,115,115)`, measured — see
         // `ghostGrayBandPixelCount`'s doc comment), not just that some PNG
         // came back. 1656 matching pixels measured at this exact render
         // size/stride; the threshold (50) is a wide margin under that,
@@ -440,7 +443,7 @@ struct SessionComposerSnapshotTests {
         // minor layout drift.
         if let light {
             let bandCount = ghostGrayBandPixelCount(in: light)
-            #expect(bandCount > 50, "expected the rest-state ghost's rgb(149,149,149) band, found \(bandCount) matching pixels")
+            #expect(bandCount > 50, "expected the rest-state ghost's rgb(115,115,115) band, found \(bandCount) matching pixels")
         }
 
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
@@ -474,7 +477,7 @@ struct SessionComposerSnapshotTests {
         #expect(light != nil)
         if let light {
             let bandCount = ghostGrayBandPixelCount(in: light)
-            #expect(bandCount > 50, "expected the long-path ghost's rgb(149,149,149) band, found \(bandCount) matching pixels")
+            #expect(bandCount > 50, "expected the long-path ghost's rgb(115,115,115) band, found \(bandCount) matching pixels")
             let ySpan = ghostGrayBandYSpan(in: light)
             #expect(ySpan != nil && ySpan! < 35, "expected the long path to truncate on ONE line (y-span < 35 — single-line antialiasing measured at 26, a wrapped second line would roughly double it), measured span \(String(describing: ySpan)) — a wrap regression spreads the ghost across two stacked lines")
         }
@@ -526,12 +529,37 @@ struct SessionComposerSnapshotTests {
 
     /// Pins `ComposerQueryField.ghostPlaceholderOpacity` — the production
     /// symbol the overlay `Text` actually renders with — to the `DESIGN.md`
-    /// §4 target (`#1A1A1A7E`, 0x7E/0xFF ≈ 0.49). Guards against a
+    /// §4 target (`#1A1A1AA6`, 0xA6/0xFF ≈ 0.65). Guards against a
     /// regression back to the `prompt:` route's un-honoured
     /// `.foregroundColor`, which measured at ~0.83 (`step3-rest-ghost-path-
     /// light.png`'s darkest pixel, `rgb(64,64,64)` against a white ground).
     @Test func ghostPlaceholderOpacityMatchesDesignSpec() {
-        #expect(ComposerQueryField.ghostPlaceholderOpacity == 0.49)
+        #expect(ComposerQueryField.ghostPlaceholderOpacity == 0.65)
+    }
+
+    /// AA-contrast fix follow-up (`def5e9cd4` raised model B's
+    /// `ComposerGhostTextField.ghostOpacity` to 0.65 but left this
+    /// constant — the SHIPPING DEFAULT field's ghost — at 0.49, so the
+    /// accessibility fix never reached anyone). Mirrors
+    /// `ComposerGhostTextFieldTests.ghostOpacityStaysAtOrAboveTheAAContrastFloor`.
+    /// References the production symbol directly, not a re-declared
+    /// literal, so a regression back toward 0.49 fails this test instead of
+    /// silently passing.
+    @Test func ghostPlaceholderOpacityStaysAtOrAboveTheAAContrastFloor() {
+        #expect(
+            ComposerQueryField.ghostPlaceholderOpacity >= 0.65,
+            "ghostPlaceholderOpacity dropped below 0.65, the value measured to clear WCAG AA 4.5:1 text contrast (0.49 measured 2.99:1 light / 3.99:1 dark; 0.65 measures 4.74:1 light / 5.93:1 dark)"
+        )
+    }
+
+    /// The two ghost-opacity constants (`ComposerQueryField.ghostPlaceholderOpacity`,
+    /// model A/shipping default, and `ComposerGhostTextField.ghostOpacity`,
+    /// model B/experimental) are deliberately kept in lockstep so the two
+    /// fields render the same ghost — see either constant's doc comment.
+    /// This is exactly the drift `def5e9cd4` introduced (raised one, not
+    /// the other); this test fails the moment they diverge again.
+    @Test func ghostOpacityConstantsStayInLockstep() {
+        #expect(ComposerQueryField.ghostPlaceholderOpacity == Double(ComposerGhostTextField.ghostOpacity))
     }
 
     // MARK: - Step 4: zero-project empty state

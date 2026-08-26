@@ -147,7 +147,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// (not shared) because this type has its own AppKit color path
     /// (`NSColor`, not SwiftUI `Color`) and no common base to hang a shared
     /// constant on without touching `ComposerQueryField`, which is out of
-    /// scope.
+    /// scope. Deliberately kept in lockstep with that constant — this is
+    /// model B (behind View → Experimental Composer Field, default OFF);
+    /// `ComposerQueryField` is model A, the shipping default. If you change
+    /// one, change the other.
     static let ghostOpacity: CGFloat = 0.65
 
     /// DEFECT 3 fix (review round 2): a small fixed trailing pad added to

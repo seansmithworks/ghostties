@@ -2196,10 +2196,18 @@ struct ComposerQueryField: View {
     var onEvent: ((KeyboardEvent) -> Void)?
     @FocusState private var isTextFieldFocused: Bool
 
-    /// `DESIGN.md` §4's ghost placeholder grey, `#1A1A1A7E` (0x7E/0xFF ≈
-    /// 0.49). A production symbol, not a re-declared literal, so a test can
-    /// pin it without drifting from the value actually rendered.
-    static let ghostPlaceholderOpacity: Double = 0.49
+    /// Was `DESIGN.md` §4's ghost placeholder grey, `#1A1A1A7E` (0x7E/0xFF ≈
+    /// 0.49), but that value failed WCAG AA text contrast (4.5:1): measured
+    /// 2.99:1 light / 3.99:1 dark. Raised to 0.65, which clears AA on both
+    /// (4.74:1 light / 5.93:1 dark). This is the field users actually get
+    /// (model A, the shipping default — `ComposerGhostTextField` is model
+    /// B, behind View → Experimental Composer Field, default OFF).
+    /// Deliberately kept in lockstep with
+    /// `ComposerGhostTextField.ghostOpacity` so the two fields render the
+    /// same ghost — if you change one, change the other. A production
+    /// symbol, not a re-declared literal, so a test can pin it without
+    /// drifting from the value actually rendered.
+    static let ghostPlaceholderOpacity: Double = 0.65
 
     /// DEFECT 4 fix (Composer UI 11 review round 2): a named production
     /// symbol for the field's `.accessibilityLabel`, so
