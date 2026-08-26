@@ -4,6 +4,22 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-26 — Session-row status: spec + adversarially-gated build plan (carried to a fresh thread)
+
+Thread "side bar tasks". Objective: thread status IN the sidebar rows (Sessions view first, Projects second): what is done and not done, and the action a thread needs from Sean. Spec `docs/plans/session-row-status-spec.html` (six decisions settled by Sean). Build plan `docs/plans/session-row-status/plan.md`, gate evidence beside it (two refuters, both `rethink`, 51-row ledger). Branch `docs/session-row-status-spec` @ `bf4146944`; the build branches from `origin/main` @ `89e6dfb94` (#138 merged 2026-08-26 08:04Z).
+
+- [ ] **Build Phases 0–5 of `docs/plans/session-row-status/plan.md`.** Phase 0 = `GHOSTTIES_SESSION_ID` in the spawn env for every template (one line, `SessionCoordinator.swift:249`). Phase 1 = the hook script. Phase 2 = `ClaudeStateStore` feeding `indicatorState(for:)` inside the 1Hz tick (both caches), plus the 30-min false-orange fix. Phase 3 = Sessions row second line. Phase 4 = Approve mechanics + guard. Phase 5 = Projects badge + glyph gate. Step 0 re-measures the suite baseline. | app | carried
+- [ ] **DECIDE OR KILL — hook entry in `~/.claude/settings.json`.** Hooks can only come from a settings file; no injection route exists. "No" kills Phases 2–5. Recommended: yes, user-level. | app | needs-Sean
+- [ ] **DECIDE — breakdown/action line replaces `projectName` on the Sessions row vs row grows 36→48pt.** Recommended: replace. | design | needs-Sean
+- [ ] **DECIDE — if the mixed-glyph gate fails on light (predicted ~1.05:1), ship the plain number.** Sean pre-authorised ("maybe 1 later if it feels off"). Recommended: yes. | design | needs-Sean
+- [ ] **Fix `DESIGN.md` status palette** (six lines claim terracotta is `waiting`; shipped `needsAttention` is gold `#FFC400` `WorkspaceLayout.swift:178`, `waiting` blue `#5B8DEF` `:170`) and re-colour the spec mock in the same commit. Colour map lives in SIX files, not two (`RecentsRowView`, `WorkspaceStore`, `SessionDetailView`, `ProjectDisclosureRow`, `MenuBarDropdownView`, `MenuBarIconRenderer`). | design | carried
+- [ ] **Existing bug, fix inside Phase 2:** `processingStartTimes` is cleared only by OSC 133 (`SessionCoordinator.swift:1235-1236`), which Claude never emits, so every Claude session older than 30 min paints `.longRunning` orange when busy. | app | carried
+- [ ] **Cross-window suspicion, UNVERIFIED, parked:** `SessionCoordinator` is per-window and `isRunning(id:)` per-instance while the sidebar reads globally, so a session running in Window A may show Relaunch/Delete in Window B and Delete would wipe shared store state. 30-second check: two windows, right-click the running row in the other one. | app | parked
+- [ ] **Un-hide Tasks in View → Sidebar View?** Phase 1 of the task view SHIPPED (file-watching, row-click-open, row-click-terminal) and is in the beta.23 binary; only the menu item was removed (#100). Reachable via `defaults write com.seansmithdesign.ghostties ghostties.sidebarViewMode taskFirst`. Sean's call, not B24. | app | parked
+- [ ] **Three stale claims in this file, corrected here rather than edited in place:** (a) PRs #132/#133/#136/#138 are all MERGED; (b) the Archive load-order item is FIXED by #109 (`RecentsListView.swift:361` is a real newest-first sort with index tiebreak; the identity `sorted(sessions:)` at `:436` is deliberate and documented); (c) the "invalid sort predicate at `RecentsListView.swift:156`" item is wrong, that line is row construction. | docs | closed
+- [ ] **`clearRuntime` cache asymmetry is NOT a bug** — verified self-healing (`PerfSignpost.swift:35` swaps the comparator wholesale; every production teardown runs `setStatus` first). Do not add the one-liner as its own PR. | app | closed
+
+
 ## 2026-08-23 — linear-sync preset has no installed MCP binary
 
 Surfaced while running a Linear→Ghostties sync from an ordinary `~/Code` session. Full
