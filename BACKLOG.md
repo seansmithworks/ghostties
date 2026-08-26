@@ -74,6 +74,12 @@ This file is open items only — no changelog, no findings essays. Prune at `/wr
   Cheap middle option if that reads badly once live — port only the shell (fonts, colors,
   header, footer), no redesign. | design | new
 
+- [ ] Favicon is still the OLD Pac-Man-shaped ghost — the inline-SVG generator carried over
+  from the v1 `index.html` into the v3 cutover (`0ca62754a`) draws the classic rounded-top /
+  wavy-bottom ghost with two eyes. Every other ghost on the site was redrawn as a robot in
+  `a96fb453e`; this one was missed because it lives in a `<script>` in the head, not in
+  `ghost-field.js`. Same IP exposure class Sean just closed. | design | new
+
 ## Needs a fresh relevance pass (pre-2026-08-22, likely superseded)
 
 Full detail in `BACKLOG-log.md`. Spans: v3 section-by-section build (review rounds 1-3,
