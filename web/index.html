@@ -3,7 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ghostties</title>
+  <title>Ghostties — one window, every agent</title>
+  <meta name="description" content="Ghostties — a multi-agent workspace terminal. Now in beta.">
+  <meta property="og:title" content="Ghostties — one window, every agent">
+  <meta property="og:description" content="A multi-agent workspace terminal. Now in beta.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ghostties.org/">
+  <meta property="og:image" content="https://ghostties.org/assets/social-card.png">
+  <meta property="og:image:width" content="2560">
+  <meta property="og:image:height" content="1280">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://ghostties.org/assets/social-card.png">
   <link rel="icon" type="image/svg+xml">
   <script>
     (function() {
@@ -20,1274 +30,350 @@
       link.href = 'data:image/svg+xml;base64,' + btoa(svg);
     })();
   </script>
-  <meta name="description" content="Ghostties — a multi-agent workspace terminal. Now in beta.">
-  <meta property="og:title" content="ghostties">
-  <meta property="og:description" content="A multi-agent workspace terminal. Now in beta.">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://ghostties.org/">
-  <meta property="og:image" content="https://ghostties.org/assets/social-card.png">
-  <meta property="og:image:width" content="2560">
-  <meta property="og:image:height" content="1280">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://ghostties.org/assets/social-card.png">
-  <link rel="stylesheet" href="/style.css">
-  <style>
-    /* Homepage only. Shared tokens, reset, and footer base: /style.css */
-
-    /* Self-hosted, latin subset only — font-src 'self' in vercel.json blocks
-       the Google Fonts CDN in production. Licences: OFL, see the matching
-       OFL-*.txt beside each file in /assets/fonts. Archivo is a variable
-       font upstream; the same file backs all four weights below, the
-       browser picks the instance from font-weight. */
-    @font-face {
-      font-family: "Archivo";
-      font-style: normal;
-      font-weight: 400;
-      font-display: swap;
-      src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
-    }
-    @font-face {
-      font-family: "Archivo";
-      font-style: normal;
-      font-weight: 500;
-      font-display: swap;
-      src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
-    }
-    @font-face {
-      font-family: "Archivo";
-      font-style: normal;
-      font-weight: 600;
-      font-display: swap;
-      src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
-    }
-    @font-face {
-      font-family: "Archivo";
-      font-style: normal;
-      font-weight: 800;
-      font-display: swap;
-      src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
-    }
-    @font-face {
-      font-family: "DM Mono";
-      font-style: normal;
-      font-weight: 300;
-      font-display: swap;
-      src: url("/assets/fonts/dmmono-300-latin.woff2") format("woff2");
-    }
-    @font-face {
-      font-family: "DM Mono";
-      font-style: normal;
-      font-weight: 400;
-      font-display: swap;
-      src: url("/assets/fonts/dmmono-400-latin.woff2") format("woff2");
-    }
-    @font-face {
-      font-family: "DM Mono";
-      font-style: normal;
-      font-weight: 500;
-      font-display: swap;
-      src: url("/assets/fonts/dmmono-500-latin.woff2") format("woff2");
-    }
-    @font-face {
-      font-family: "Silkscreen";
-      font-style: normal;
-      font-weight: 400;
-      font-display: swap;
-      src: url("/assets/fonts/silkscreen-400-latin.woff2") format("woff2");
-    }
-    @font-face {
-      font-family: "Silkscreen";
-      font-style: normal;
-      font-weight: 700;
-      font-display: swap;
-      src: url("/assets/fonts/silkscreen-700-latin.woff2") format("woff2");
-    }
-
-    html, body {
-      height: 100%;
-    }
-
-    body {
-      padding: 24px;
-    }
-
-    /* --- Scene container --- */
-    .scene {
-      position: relative;
-      z-index: 1;
-      width: 100%;
-      padding: 48px 32px 40px;
-      user-select: none;
-    }
-
-    /* --- Ghost grid (pyramid) --- */
-    .ghosts {
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 48px;
-    }
-
-    .ghost-row {
-      display: flex;
-      justify-content: center;
-      gap: 16px;
-    }
-
-    .ghost {
-      width: 72px;
-      height: 72px;
-      opacity: 0;
-    }
-
-    .ghost svg {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
-    /* --- Entrance: each ghost flies in from a unique direction --- */
-    .animate .g0 { animation: entrance-g0 0.8s ease-out forwards, float-g0 2.4s ease-in-out 1.5s infinite alternate; }
-    .animate .g1 { animation: entrance-g1 0.8s 1.8s ease-out forwards, float-g1 2.8s ease-in-out 3.0s infinite alternate; }
-    .animate .g2 { animation: entrance-g2 0.8s 2.0s ease-out forwards, float-g2 3.1s ease-in-out 3.2s infinite alternate; }
-    .animate .g3 { animation: entrance-g3 0.8s 2.2s ease-out forwards, float-g3 2.6s ease-in-out 3.4s infinite alternate; }
-    .animate .g4 { animation: entrance-g4 0.8s 2.4s ease-out forwards, float-g4 3.3s ease-in-out 3.6s infinite alternate; }
-    .animate .g5 { animation: entrance-g5 0.8s 2.6s ease-out forwards, float-g5 2.9s ease-in-out 3.8s infinite alternate; }
-    .animate .g6 { animation: entrance-g6 0.8s 2.8s ease-out forwards, float-g6 3.5s ease-in-out 4.0s infinite alternate; }
-    .animate .g7 { animation: entrance-g7 0.8s 3.0s ease-out forwards, float-g7 2.7s ease-in-out 4.2s infinite alternate; }
-
-    @keyframes entrance-g0 { from { transform: translateY(-300px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    @keyframes entrance-g1 { from { transform: translate(-300px, -150px); opacity: 0; } to { transform: translate(0, 0); opacity: 1; } }
-    @keyframes entrance-g2 { from { transform: translate(300px, -150px); opacity: 0; } to { transform: translate(0, 0); opacity: 1; } }
-    @keyframes entrance-g3 { from { transform: translate(-400px, 0); opacity: 0; } to { transform: translate(0, 0); opacity: 1; } }
-    @keyframes entrance-g4 { from { transform: translateY(-350px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    @keyframes entrance-g5 { from { transform: translate(400px, 0); opacity: 0; } to { transform: translate(0, 0); opacity: 1; } }
-    @keyframes entrance-g6 { from { transform: translate(-250px, 200px); opacity: 0; } to { transform: translate(0, 0); opacity: 1; } }
-    @keyframes entrance-g7 { from { transform: translate(250px, 200px); opacity: 0; } to { transform: translate(0, 0); opacity: 1; } }
-
-    @keyframes float-g0 { from { transform: translate(0, -5px); }   to { transform: translate(1px, 4px); } }
-    @keyframes float-g1 { from { transform: translate(2px, -3px); } to { transform: translate(-2px, 5px); } }
-    @keyframes float-g2 { from { transform: translate(-1px, -4px); } to { transform: translate(2px, 3px); } }
-    @keyframes float-g3 { from { transform: translate(1px, -6px); } to { transform: translate(-1px, 3px); } }
-    @keyframes float-g4 { from { transform: translate(-2px, -3px); } to { transform: translate(1px, 5px); } }
-    @keyframes float-g5 { from { transform: translate(0, -4px); }   to { transform: translate(-2px, 4px); } }
-    @keyframes float-g6 { from { transform: translate(2px, -5px); } to { transform: translate(-1px, 4px); } }
-    @keyframes float-g7 { from { transform: translate(-1px, -3px); } to { transform: translate(2px, 6px); } }
-
-    /* --- Terminal text --- */
-    .terminal {
-      font-family: var(--font-mono);
-      font-size: 1.125rem; /* 18px */
-      font-weight: 600;
-      line-height: 2;
-      color: var(--terminal-fg);
-      width: 46ch;
-      max-width: calc(100vw - 112px);
-      margin: 0 auto;
-      text-align: left;
-      /* .line children animate to hard-coded ch widths (e.g. 43ch for the
-         GitHub URL). At narrow widths that line can exceed .terminal's own
-         width; clipping it beats letting it force horizontal page scroll. */
-      overflow: hidden;
-    }
-
-    .line {
-      overflow: hidden;
-      white-space: nowrap;
-      width: 0;
-      border-right: 2px solid transparent;
-    }
-
-    /* Diff line colors + hanging indent */
-    .line-1, .line-2 {
-      margin-left: 2ch;
-    }
-
-    .line-3, .line-4, .line-5, .line-6 {
-      color: transparent;
-      background: transparent;
-      padding-left: 2ch;
-      text-indent: -2ch;
-    }
-
-    .line-6 a {
-      color: inherit;
-      text-decoration: none;
-      cursor: pointer;
-    }
-
-    .line-6 a:hover {
-      text-decoration: underline;
-    }
-
-    /* Copy buttons nested in line-4/line-5. Must stay a plain block .line
-       with the button nested inside it — a .line that IS a button breaks
-       stacking (buttons are inline-block), the -2ch hanging indent (doesn't
-       apply to buttons), and the green reveal background (would paint per-
-       button instead of across the line). Hidden via visibility (not
-       opacity/display) so it's never tab-reachable before its line types in;
-       see reveal-btn below. */
-    .term-btn {
-      background: transparent;
-      border: none;
-      padding: 0;
-      margin: 0;
-      font: inherit;
-      color: inherit;
-      cursor: pointer;
-      text-decoration: none;
-      visibility: hidden;
-      user-select: text;
-    }
-
-    .term-btn:hover {
-      text-decoration: underline;
-    }
-
-    /* line-5's copy icon drops on mobile; see the max-width: 480px block. */
-    .btn-icon {
-      display: inline;
-    }
-
-    /* Forces the copy icon (U+29C9) to an exact 1ch advance. The glyph's
-       natural advance in the resolved mono stack measures ~1.29ch (see PR
-       description) -- not 1ch like every other character in these lines --
-       so it silently pushed the typewriter's hard-coded ch widths past the
-       actual rendered width and .line's overflow: hidden ate the trailing
-       "]". margin-left supplies the 1ch gap the source string's literal
-       space used to provide. */
-    .copy-icon {
-      display: inline-block;
-      width: 2ch;
-      text-align: center;
-    }
-
-    /* Default (>480px): show the full line-3 string, hide the mobile-short
-       one. Without this rule both spans render above 480px — the
-       max-width: 480px block below only sets the mobile state, there was
-       no default-state rule, so the version string doubled in the DOM and
-       accessibility tree at every width above mobile (invisible on screen
-       only because .line's overflow:hidden + typewriter animation clips
-       the second span's pixels — an accident, not a design). */
-    .line-3-full { display: inline; }
-    .line-3-short { display: none; }
-
-    /* Caret blink states */
-    .animate .line-1.caret-visible {
-      border-right-color: var(--terminal-fg);
-    }
-
-    .animate .line-2.caret-visible {
-      border-right-color: var(--terminal-fg);
-    }
-
-    .animate .line-6.caret-blink {
-      animation: blink-caret-green 0.53s step-end infinite;
-    }
-
-    /* Typing animations */
-    /* line-1: "cd ~/ghostties" = 14 chars */
-    .animate .line-1 {
-      animation: type-line1 0.56s steps(14) 1.0s forwards;
-    }
-
-    /* line-2: "https://github.com/SeanSmithWorks/ghostties" = 43 chars */
-    .animate .line-2 {
-      animation: type-line2 1.1s steps(43) 4.2s forwards;
-    }
-
-    /* line-3: "+ ghostties % v0.1.0-beta.23 · macOS 13+" = 40 chars */
-    .animate .line-3 {
-      animation:
-        type-line3 1.0s steps(40) 5.65s forwards,
-        reveal-line-green 0s 5.65s forwards;
-    }
-
-    /* line-4: "+ [brew install ⧉]" = 18 chars */
-    .animate .line-4 {
-      animation:
-        type-line4 0.45s steps(18) 7.0s forwards,
-        reveal-line-green 0s 7.0s forwards;
-    }
-
-    .animate .line-4 .term-btn {
-      animation: reveal-btn 0s 7.0s forwards;
-    }
-
-    /* line-5: "+ [npx ghostties-install ⧉]" = 27 chars */
-    .animate .line-5 {
-      animation:
-        type-line5 0.675s steps(27) 7.825s forwards,
-        reveal-line-green 0s 7.825s forwards;
-    }
-
-    .animate .line-5 .term-btn {
-      animation: reveal-btn 0s 7.825s forwards;
-    }
-
-    /* line-6: "+ [download now]" = 16 chars */
-    .animate .line-6 {
-      animation:
-        type-line6 0.4s steps(16) 8.85s forwards,
-        reveal-line-green 0s 8.85s forwards;
-    }
-
-    @keyframes type-line1 { from { width: 0; } to { width: 14ch; } }
-    @keyframes type-line2 { from { width: 0; } to { width: 43ch; } }
-    @keyframes type-line3 { from { width: 0; } to { width: 40ch; } }
-    @keyframes type-line4 { from { width: 0; } to { width: 18ch; } }
-    @keyframes type-line5 { from { width: 0; } to { width: 27ch; } }
-    @keyframes type-line6 { from { width: 0; } to { width: 16ch; } }
-
-    @keyframes reveal-line-green {
-      to { color: var(--diff-add-fg); background: var(--diff-add-bg); }
-    }
-
-    @keyframes reveal-btn {
-      to { visibility: visible; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .term-btn { visibility: visible; animation: none; }
-    }
-
-    @keyframes blink-caret-green {
-      0%, 100% { border-right-color: var(--diff-add-fg); }
-      50%       { border-right-color: transparent; }
-    }
-
-    .terminal a.gh-link {
-      color: var(--terminal-fg);
-      text-decoration: none;
-      cursor: pointer;
-    }
-
-    .terminal a.gh-link:hover {
-      text-decoration: underline;
-    }
-
-    /* --- Scatter (click ghosts to burst apart, then reassemble) --- */
-    @keyframes scatter-g0 { 0% { opacity:1; transform:translate(0,0); }   100% { opacity:0; transform:translate(0,-600px) scale(0.4); } }
-    @keyframes scatter-g1 { 0% { opacity:1; transform:translate(0,0); }   100% { opacity:0; transform:translate(-500px,-400px) scale(0.4); } }
-    @keyframes scatter-g2 { 0% { opacity:1; transform:translate(0,0); }   100% { opacity:0; transform:translate(500px,-400px) scale(0.4); } }
-    @keyframes scatter-g3 { 0% { opacity:1; transform:translate(0,0); }   100% { opacity:0; transform:translate(-600px,0) scale(0.4); } }
-    @keyframes scatter-g4 { 0% { opacity:1; transform:translate(0,0); }   100% { opacity:0; transform:translate(0,-550px) scale(0.4); } }
-    @keyframes scatter-g5 { 0% { opacity:1; transform:translate(0,0); }   100% { opacity:0; transform:translate(600px,0) scale(0.4); } }
-    @keyframes scatter-g6 { 0% { opacity:1; transform:translate(0,0); }   100% { opacity:0; transform:translate(-400px,500px) scale(0.4); } }
-    @keyframes scatter-g7 { 0% { opacity:1; transform:translate(0,0); }   100% { opacity:0; transform:translate(400px,500px) scale(0.4); } }
-
-    .scatter .g0 { animation: scatter-g0 0.55s ease-in forwards !important; }
-    .scatter .g1 { animation: scatter-g1 0.55s ease-in forwards !important; }
-    .scatter .g2 { animation: scatter-g2 0.55s ease-in forwards !important; }
-    .scatter .g3 { animation: scatter-g3 0.55s ease-in forwards !important; }
-    .scatter .g4 { animation: scatter-g4 0.55s ease-in forwards !important; }
-    .scatter .g5 { animation: scatter-g5 0.55s ease-in forwards !important; }
-    .scatter .g6 { animation: scatter-g6 0.55s ease-in forwards !important; }
-    .scatter .g7 { animation: scatter-g7 0.55s ease-in forwards !important; }
-
-    .scatter .terminal {
-      transition: opacity 0.3s ease-in;
-      opacity: 0;
-    }
-
-    /* --- Product section --- */
-    .product {
-      position: relative;
-      z-index: 1;
-      width: 100%;
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 24px 32px 96px;
-      text-align: center;
-      /* .product-window::before (the glow) uses inset:-10%, which escapes
-         past .product's own edge once the window is wide enough — confirmed
-         at 768/820/900px. .product's own width never exceeds its container
-         (100%, capped at 900px), so clipping overflow here can only remove
-         the escaping glow; it can never clip real content. */
-      overflow: hidden;
-    }
-
-    /* Intro line — reuses .lead's type but with a tighter margin than the
-       shared 40px. The homepage's fixed footer already overlaps in-flow
-       content on short viewports before this line existed (pre-existing,
-       out of scope here); a smaller margin keeps this addition from
-       widening that overlap more than it has to. */
-    .product .lead {
-      margin-bottom: 24px;
-    }
-
-    /* Display heading — opts out of the shared uppercase eyebrow h2. */
-    .product h2 {
-      font-family: var(--font-ui);
-      font-size: 1.875rem; /* 30px */
-      font-weight: 700;
-      color: var(--terminal-fg);
-      text-transform: none;
-      margin-top: 0;
-      margin-bottom: 40px;
-      letter-spacing: -0.01em;
-      line-height: 1.25;
-    }
-
-    /* Window card: glow behind, tilt + video on top.
-       margin-bottom stays small here — the 56px gap belongs to
-       .product-caption below, so each caption reads as its own window's
-       label instead of the next window's header. */
-    .product-window {
-      position: relative;
-      margin: 0 auto 12px;
-      max-width: 860px;
-    }
-
-    /* :last-child never matched here — the last child of .product is a
-       .product-caption, not a .product-window. :last-of-type is the
-       selector that actually reaches the flow window. */
-    .product-window:last-of-type {
-      margin-bottom: 12px;
-    }
-
-    .product-window--sessions .product-card {
-      transform: rotate(-1.1deg);
-    }
-
-    .product-window--flow .product-card {
-      transform: rotate(1.1deg);
-    }
-
-    .product-window::before {
-      content: '';
-      position: absolute;
-      inset: -10%;
-      background: radial-gradient(circle at 50% 45%, rgba(201, 115, 80, 0.3), transparent 65%);
-      filter: blur(40px);
-      z-index: 0;
-    }
-
-    .product-card {
-      position: relative;
-      z-index: 1;
-      border-radius: 10px;
-      overflow: hidden;
-      background: var(--surface-card);
-      box-shadow:
-        0 34px 80px -22px rgba(0, 0, 0, 0.7),
-        0 6px 18px rgba(0, 0, 0, 0.35);
-    }
-
-    .product-card video,
-    .product-card img {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-
-    /* The 56px gap between a window and the next one lives here, not on
-       .product-window, so each caption reads as its own window's label
-       instead of the next window's header. */
-    .product-caption {
-      font-family: var(--font-mono);
-      font-size: 0.75rem; /* 12px */
-      color: var(--accent);
-      margin-bottom: 56px;
-    }
-
-    .product-caption:last-of-type {
-      margin-bottom: 0;
-    }
-
-    /* --- Footer (homepage variant: mono, smaller, pinned to the hero) ---
-       style.css made footer position:static for the document pages (a
-       fixed footer rendered on top of body text once a page ran past one
-       viewport). The homepage is a scrolling page (2132px tall at
-       1280x900, well past one screen) but is designed around the footer
-       glued to the *viewport's* bottom edge regardless of scroll
-       position, so it re-pins to fixed here rather than following
-       style.css's in-flow footer.
-
-       z-index:2 (> .product's z-index:1) so the footer wins hit-testing
-       where the two boxes overlap — without it .product's stacking
-       context painted on top and silently ate every tap on the footer's
-       links, even though the footer was still visibly rendered beneath.
-       The opaque background is required by the same fix: once the footer
-       stacks above .product, .product-caption would otherwise show
-       through a transparent footer as it scrolls under it. */
-    footer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      z-index: 2;
-      background: var(--bg);
-      padding: 14px 24px;
-      font-family: var(--font-mono);
-      font-size: 0.6875rem; /* 11px */
-    }
-
-    .footer-icons {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    footer svg {
-      width: 14px;
-      height: 14px;
-    }
-
-    /* --- Ambient ghost backdrop (passive, low-opacity, behind all content) --- */
-    .ghost-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      overflow: hidden;
-      pointer-events: none;
-    }
-
-    .bg-ghost {
-      position: absolute;
-      width: 24px;
-      height: 24px;
-      opacity: 0.10;
-      pointer-events: none;
-      will-change: transform;
-    }
-
-    .bg-ghost svg {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
-    .bg-ghost-1 { top: 8%;  left: 6%;  animation: bg-drift-1 34s ease-in-out infinite; animation-delay: 0s; }
-    .bg-ghost-2 { top: 62%; left: 84%; animation: bg-drift-2 41s ease-in-out infinite; animation-delay: 5s; }
-    .bg-ghost-3 { top: 30%; left: 90%; animation: bg-drift-3 28s ease-in-out infinite; animation-delay: 10s; }
-    .bg-ghost-4 { top: 80%; left: 12%; animation: bg-drift-4 45s ease-in-out infinite; animation-delay: 3s; }
-    .bg-ghost-5 { top: 16%; left: 48%; animation: bg-drift-5 37s ease-in-out infinite; animation-delay: 8s; }
-    .bg-ghost-6 { top: 52%; left: 3%;  animation: bg-drift-6 32s ease-in-out infinite; animation-delay: 14s; }
-
-    @keyframes bg-drift-1 { 0% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(16px, 12px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0deg); } }
-    @keyframes bg-drift-2 { 0% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(-18px, 10px) rotate(-1deg); } 100% { transform: translate(0, 0) rotate(0deg); } }
-    @keyframes bg-drift-3 { 0% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(-12px, -14px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0deg); } }
-    @keyframes bg-drift-4 { 0% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(14px, -10px) rotate(-1deg); } 100% { transform: translate(0, 0) rotate(0deg); } }
-    @keyframes bg-drift-5 { 0% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(-10px, 16px) rotate(1deg); } 100% { transform: translate(0, 0) rotate(0deg); } }
-    @keyframes bg-drift-6 { 0% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(12px, -12px) rotate(-1deg); } 100% { transform: translate(0, 0) rotate(0deg); } }
-
-    @media (prefers-reduced-motion: reduce) {
-      .bg-ghost { animation: none !important; }
-    }
-
-    /* --- Product windows: reset tilt below ~720px --- */
-    @media (max-width: 720px) {
-      .product-window { max-width: 100%; }
-      .product-window--sessions .product-card,
-      .product-window--flow .product-card { transform: none; }
-    }
-
-    /* --- Mobile --- */
-    @media (max-width: 480px) {
-      body { padding: 16px; }
-      .scene { padding: 32px 20px 28px; }
-      .ghost { width: 64px; height: 64px; }
-      .ghost-row { gap: 10px; }
-      .ghosts { gap: 10px; margin-bottom: 28px; }
-      .terminal { font-size: 1rem; max-width: calc(100vw - 72px); } /* 16px; .scene 20px + body 16px per side at this width */
-
-      /* line-3 drops "ghostties" and " · macOS 13+" (still on /download) —
-         at this width even the "+ ghostties % v0.1.0-beta.23" wording
-         measures ~395.6px against a 248px .terminal, ~148px (about 15
-         chars) past the budget and invisibly truncated by .terminal's
-         overflow:hidden. Dropping "ghostties" (redundant — line-1 already
-         establishes it) and the bare "%" (had nothing in front of it, read
-         as a rendering bug rather than an abbreviation) clears the budget.
-         Two spans, not visual-only hiding, so a screen reader never reads
-         the string twice. */
-      .line-3-full { display: none; }
-      .line-3-short { display: inline; }
-
-      /* line-5 drops the ⧉ icon to fit the same budget. */
-      .btn-icon { display: none; }
-
-      /* Retimed so mobile stays coherent: line-3's shorter string types
-         faster (16 chars vs 40), and line-5 without its icon is 25 chars
-         vs 27, so every line after line-3 shifts earlier. Every line-3–6
-         typing rate is a uniform 25ms/char; gaps between lines stay a
-         uniform 0.35s. Total run: ~8.575s (desktop: ~9.25s). */
-      /* line-3: "+ v0.1.0-beta.23" = 16 chars */
-      .animate .line-3 {
-        animation:
-          type-line3 0.4s steps(16) 5.65s forwards,
-          reveal-line-green 0s 5.65s forwards;
-      }
-
-      /* line-4: "+ [brew install ⧉]" = 18 chars, unchanged */
-      .animate .line-4 {
-        animation:
-          type-line4 0.45s steps(18) 6.4s forwards,
-          reveal-line-green 0s 6.4s forwards;
-      }
-
-      .animate .line-4 .term-btn {
-        animation: reveal-btn 0s 6.4s forwards;
-      }
-
-      /* line-5: "+ [npx ghostties-install]" = 25 chars (icon dropped) */
-      .animate .line-5 {
-        animation:
-          type-line5 0.625s steps(25) 7.2s forwards,
-          reveal-line-green 0s 7.2s forwards;
-      }
-
-      .animate .line-5 .term-btn {
-        animation: reveal-btn 0s 7.2s forwards;
-      }
-
-      /* line-6: "+ [download now]" = 16 chars, unchanged */
-      .animate .line-6 {
-        animation:
-          type-line6 0.4s steps(16) 8.175s forwards,
-          reveal-line-green 0s 8.175s forwards;
-      }
-
-      @keyframes type-line3 { from { width: 0; } to { width: 16ch; } }
-      @keyframes type-line5 { from { width: 0; } to { width: 25ch; } }
-
-      footer { padding: 8px 16px; font-size: 0.625rem; } /* 10px; matches the document-page footer padding trim */
-      /* Bottom padding raised from 72px to clear the fixed footer's own
-         height (up to 96px once its icons + link row wrap at this width).
-         Needed only because the footer fix above (z-index:2, opaque
-         background) now paints over anything under it instead of the other
-         way around — previously the caption showed through a transparent
-         footer, so this padding didn't need to reach that far. */
-      .product { padding: 16px 20px 112px; }
-      .product h2 { font-size: 1.375rem; margin-bottom: 28px; } /* 22px */
-      .product-window { margin-bottom: 8px; }
-      .product-window--sessions .product-card,
-      .product-window--flow .product-card { transform: none; }
-      .product-caption { font-size: 0.6875rem; margin-bottom: 28px; } /* 11px */
-      .product-caption:last-of-type { margin-bottom: 0; }
-      .bg-ghost { width: 22px; height: 22px; }
-
-      /* Touch target: the icon stays 14px, the anchor's clickable box
-         grows to 44x44 via padding around it. */
-      .footer-icons a {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 15px;
-      }
-    }
-
-    /* --- 03 THE SIDEBAR / 04 GT LIST ---
-       Static B1 foundation for the round-4 redesign. Scoped to these two
-       sections only via the .board- prefix so the rest of the page is
-       untouched. Dark capture only — the site is dark-only today; the light
-       PNG/WebP pair was removed unused (re-copy from
-       docs/design/web-redesign/captures/ when the light theme is built). */
-    .board-sidebar,
-    .board-gtlist {
-      font-family: "Archivo", var(--font-ui);
-    }
-
-    /* Same specificity and later source order than .product h2 (:root h2 is
-       lower specificity and loses outright), so this rule wins font-size and
-       letter-spacing outright — .product h2's text-transform: none, margin,
-       and color still apply since this rule doesn't touch them. 24px lands
-       on Silkscreen's 8px pixel grid, between the page's h1 and .product h2
-       (30px) and the body copy well below it. 0.24em was the shared eyebrow
-       rule's uppercase-label tracking; this heading renders mixed-case
-       ("03 — The Sidebar"), so it keeps only a light pixel-face loosening. */
-    .board-sidebar h2,
-    .board-gtlist h2 {
-      font-family: "Silkscreen", var(--font-ui);
-      font-size: 1.5rem; /* 24px */
-      letter-spacing: 0.02em;
-    }
-
-    .board-sidebar .lead,
-    .board-gtlist .lead {
-      font-family: "Archivo", var(--font-ui);
-      font-weight: 500;
-    }
-
-    /* Status key (section 03) — priority order IS the claim, so the list
-       renders top (highest priority, wins in a project header) to bottom. */
-    .status-key {
-      margin: 0 auto 56px;
-      max-width: 640px;
-      text-align: left;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      overflow: hidden;
-    }
-
-    /* Column header + direction cue for .status-priority — otherwise a bare
-       descending "6 5 4 3 2 1 0" reads as arbitrary IDs, not an order. Mirrors
-       the → cue already used on .lane-ramp below. */
-    .status-key-header {
-      padding: 8px 16px;
-      border-bottom: 1px solid var(--line-faint);
-      background: var(--surface-raised);
-      font-family: "DM Mono", var(--font-mono);
-      font-size: var(--size-caption);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-faint);
-    }
-
-    .status-key-list {
-      list-style: none;
-      margin: 0;
-    }
-
-    .status-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 16px;
-      border-bottom: 1px solid var(--line-faint);
-      font-family: "DM Mono", var(--font-mono);
-      font-size: var(--size-small);
-    }
-
-    .status-row:last-child {
-      border-bottom: none;
-    }
-
-    .status-priority {
-      width: 1.5ch;
-      flex: 0 0 auto;
-      color: var(--text-faint);
-      font-variant-numeric: tabular-nums;
-    }
-
-    /* Square marks only — a circular status dot is a named AI-slop tell. */
-    .status-mark {
-      width: 10px;
-      height: 10px;
-      flex: 0 0 auto;
-      background: var(--mark);
-    }
-
-    /* .inactive renders as an outline, matching the source comment
-       ("collapsed, outline ghost") instead of a filled square. */
-    .status-mark--outline {
-      background: transparent;
-      border: 1.5px solid var(--mark);
-    }
-
-    .status-name {
-      width: 15ch;
-      flex: 0 0 auto;
-      color: var(--text-heading);
-    }
-
-    .status-hex {
-      width: 8ch;
-      flex: 0 0 auto;
-      color: var(--text-faint);
-    }
-
-    .status-meaning {
-      flex: 1;
-      color: var(--text-body);
-    }
-
-    /* gt list (section 04) — real, selectable stdout from the built gt
-       binary, not hand-typed text. */
-    .gt-block {
-      margin: 0 auto 40px;
-      max-width: 780px;
-      text-align: left;
-      background: var(--surface-raised);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      padding: 20px 24px;
-      overflow-x: auto;
-    }
-
-    /* Literal captured stdout — real whitespace, real ragged columns (see
-       ListCommand.padRight: only pads when the id/lane is shorter than the
-       column, so wide ids/lanes stay unpadded). No flex layout: what you see
-       is the actual bytes gt printed, not a re-laid-out approximation. */
-    .gt-pre {
-      margin: 0;
-      font-family: "DM Mono", var(--font-mono);
-      font-size: var(--size-small);
-      line-height: 1.7;
-      color: var(--text-body);
-      white-space: pre;
-    }
-
-    .gt-example-label {
-      margin: 0 auto 12px;
-      max-width: 780px;
-      font-family: "DM Mono", var(--font-mono);
-      font-size: var(--size-caption);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-label);
-    }
-
-    .lane-needsyou {
-      color: #ff5f5f;
-    }
-
-    .lane-running {
-      color: #87d787;
-    }
-
-    .lane-review {
-      color: #d7af5f;
-    }
-
-    .lane-inbox {
-      color: #87afd7;
-    }
-
-    /* Raised from #808080 (3.89:1) to clear WCAG AA (4.5:1) against
-       --surface-raised composited over --bg (#232336). Measured 5.071:1.
-       Still the second-quietest lane in the ramp — dimmer than needs-you
-       (5.167:1), the next-lowest of the four passing colors. */
-    .lane-backlog {
-      color: #949494;
-    }
-
-    /* Raised from #585858 (2.16:1) to clear WCAG AA. Measured 4.818:1 —
-       kept as the quietest lane in the ramp. */
-    .lane-done {
-      color: #909090;
-    }
-
-    /* Lane priority ramp — block labels butted together sharing hairlines,
-       per the site's ruled-in convention (no pill chips). */
-    .lane-ramp {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      border: 1px solid var(--line-strong);
-      border-radius: var(--radius-sm);
-      overflow: hidden;
-      font-family: "DM Mono", var(--font-mono);
-      font-size: var(--size-small);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .lane-chip {
-      padding: 8px 14px;
-      border-right: 1px solid var(--line-strong);
-    }
-
-    .lane-chip:last-child {
-      border-right: none;
-    }
-
-    .lane-chip::after {
-      content: "\2192"; /* → */
-      margin-left: 10px;
-      color: var(--text-faint);
-    }
-
-    .lane-chip:last-child::after {
-      content: none;
-    }
-
-    /* Raised from the site's shared 480px breakpoint: the fixed priority +
-       mark + name + hex columns (~251px) left .status-meaning squeezed to
-       ~168px between 481–640px, wrapping to four lines. 640px matches
-       .status-key's own max-width, so above it the key is never
-       viewport-constrained in the first place. */
-    @media (max-width: 640px) {
-      .status-row {
-        flex-wrap: wrap;
-      }
-
-      .status-meaning {
-        flex-basis: 100%;
-        padding-left: calc(1.5ch + 10px + 12px);
-      }
-
-      .lane-ramp {
-        flex-direction: column;
-      }
-
-      .lane-chip {
-        border-right: none;
-        border-bottom: 1px solid var(--line-strong);
-        text-align: center;
-      }
-
-      .lane-chip:last-child {
-        border-bottom: none;
-      }
-
-      .lane-chip::after {
-        content: none;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="/v3.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
-  <div class="ghost-backdrop" aria-hidden="true">
-    <div class="bg-ghost bg-ghost-1">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF4136" shape-rendering="crispEdges">
-        <rect x="12" y="0" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="8" height="8"/><rect x="20" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="8" height="4"/><rect x="12" y="40" width="8" height="4"/><rect x="28" y="40" width="8" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="16" y="44" width="4" height="4"/><rect x="28" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
-      </svg>
-    </div>
-    <div class="bg-ghost bg-ghost-2">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#00BCD4" shape-rendering="crispEdges">
-        <rect x="12" y="0" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="12" height="8"/><rect x="32" y="12" width="12" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="4" height="4"/><rect x="8" y="40" width="8" height="4"/><rect x="20" y="40" width="8" height="4"/><rect x="32" y="40" width="8" height="4"/><rect x="44" y="40" width="4" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="12" y="44" width="4" height="4"/><rect x="32" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
-      </svg>
-    </div>
-    <div class="bg-ghost bg-ghost-3">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF9800" shape-rendering="crispEdges">
-        <rect x="8" y="0" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="8" height="8"/><rect x="16" y="12" width="16" height="8"/><rect x="40" y="12" width="8" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="12" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="36" y="40" width="12" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
-      </svg>
-    </div>
-    <div class="bg-ghost bg-ghost-4">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#81D4FA" shape-rendering="crispEdges">
-        <rect x="16" y="0" width="16" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="0" y="12" width="48" height="4"/><rect x="0" y="16" width="12" height="8"/><rect x="20" y="16" width="8" height="8"/><rect x="36" y="16" width="12" height="8"/><rect x="0" y="24" width="48" height="12"/><rect x="4" y="36" width="40" height="4"/><rect x="8" y="40" width="32" height="4"/><rect x="16" y="44" width="16" height="4"/>
-      </svg>
-    </div>
-    <div class="bg-ghost bg-ghost-5">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#7C4DFF" shape-rendering="crispEdges">
-        <rect x="12" y="0" width="24" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="8" height="4"/><rect x="16" y="12" width="16" height="4"/><rect x="40" y="12" width="8" height="4"/><rect x="0" y="16" width="4" height="4"/><rect x="16" y="16" width="16" height="4"/><rect x="44" y="16" width="4" height="4"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="8" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
-      </svg>
-    </div>
-    <div class="bg-ghost bg-ghost-6">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#7986CB" shape-rendering="crispEdges">
-        <rect x="8" y="0" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="12" height="4"/><rect x="20" y="12" width="28" height="4"/><rect x="0" y="16" width="8" height="4"/><rect x="20" y="16" width="28" height="4"/><rect x="0" y="20" width="12" height="4"/><rect x="20" y="20" width="28" height="4"/><rect x="0" y="24" width="48" height="16"/><rect x="0" y="40" width="8" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
-      </svg>
-    </div>
-  </div>
 
-  <main id="main">
-    <h1 class="visually-hidden">Ghostties — a multi-agent workspace terminal for macOS</h1>
+  <!-- Ambient ghost field — full-bleed background, pure drift until coin-in.
+       Decorative: aria-hidden, out of the tab order, pointer-events: none
+       (see #gx-field in v3.css). Populated by /assets/ghost-field.js. -->
+  <div id="gx-field" aria-hidden="true"></div>
 
-    <div class="scene animate">
-      <div class="ghosts" aria-hidden="true">
-      <!-- Row 1: flicker (red) -->
-      <div class="ghost-row">
-        <div class="ghost g0">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF4136" shape-rendering="crispEdges" aria-hidden="true">
-            <rect x="12" y="0" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="8" height="8"/><rect x="20" y="12" width="8" height="8"/><rect x="36" y="12" width="8" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="8" height="4"/><rect x="12" y="40" width="8" height="4"/><rect x="28" y="40" width="8" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="16" y="44" width="4" height="4"/><rect x="28" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
-          </svg>
-        </div>
-      </div>
-      <!-- Row 2: specter (purple), murk (cyan) -->
-      <div class="ghost-row">
-        <div class="ghost g1">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#7C4DFF" shape-rendering="crispEdges" aria-hidden="true">
-            <rect x="12" y="0" width="24" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="8" height="4"/><rect x="16" y="12" width="16" height="4"/><rect x="40" y="12" width="8" height="4"/><rect x="0" y="16" width="4" height="4"/><rect x="16" y="16" width="16" height="4"/><rect x="44" y="16" width="4" height="4"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="8" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
-          </svg>
-        </div>
-        <div class="ghost g2">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#00BCD4" shape-rendering="crispEdges" aria-hidden="true">
-            <rect x="12" y="0" width="24" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="12" height="8"/><rect x="32" y="12" width="12" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="4" height="4"/><rect x="8" y="40" width="8" height="4"/><rect x="20" y="40" width="8" height="4"/><rect x="32" y="40" width="8" height="4"/><rect x="44" y="40" width="4" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="12" y="44" width="4" height="4"/><rect x="32" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
-          </svg>
-        </div>
-      </div>
-      <!-- Row 3: shade (pink), haze (orange), banshee (yellow) -->
-      <div class="ghost-row">
-        <div class="ghost g3">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF80AB" shape-rendering="crispEdges" aria-hidden="true">
-            <rect x="16" y="0" width="16" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="4" y="12" width="4" height="8"/><rect x="16" y="12" width="16" height="8"/><rect x="40" y="12" width="4" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="12" height="4"/><rect x="20" y="40" width="8" height="4"/><rect x="36" y="40" width="12" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="44" y="44" width="4" height="4"/>
-          </svg>
-        </div>
-        <div class="ghost g4">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FF9800" shape-rendering="crispEdges" aria-hidden="true">
-            <rect x="8" y="0" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="8" height="8"/><rect x="16" y="12" width="16" height="8"/><rect x="40" y="12" width="8" height="8"/><rect x="0" y="20" width="48" height="20"/><rect x="0" y="40" width="12" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="36" y="40" width="12" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
-          </svg>
-        </div>
-        <div class="ghost g5">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#FFEB3B" shape-rendering="crispEdges" aria-hidden="true">
-            <rect x="8" y="0" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="4" height="8"/><rect x="16" y="12" width="16" height="8"/><rect x="44" y="12" width="4" height="8"/><rect x="0" y="20" width="48" height="4"/><rect x="0" y="24" width="12" height="4"/><rect x="36" y="24" width="12" height="4"/><rect x="0" y="28" width="48" height="12"/><rect x="0" y="40" width="8" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
-          </svg>
-        </div>
-      </div>
-      <!-- Row 4: chill (light blue, round), dusk (muted purple) -->
-      <div class="ghost-row">
-        <div class="ghost g6">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#81D4FA" shape-rendering="crispEdges" aria-hidden="true">
-            <rect x="16" y="0" width="16" height="4"/><rect x="8" y="4" width="32" height="4"/><rect x="4" y="8" width="40" height="4"/><rect x="0" y="12" width="48" height="4"/><rect x="0" y="16" width="12" height="8"/><rect x="20" y="16" width="8" height="8"/><rect x="36" y="16" width="12" height="8"/><rect x="0" y="24" width="48" height="12"/><rect x="4" y="36" width="40" height="4"/><rect x="8" y="40" width="32" height="4"/><rect x="16" y="44" width="16" height="4"/>
-          </svg>
-        </div>
-        <div class="ghost g7">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="#7986CB" shape-rendering="crispEdges" aria-hidden="true">
-            <rect x="8" y="0" width="32" height="4"/><rect x="4" y="4" width="40" height="4"/><rect x="0" y="8" width="48" height="4"/><rect x="0" y="12" width="12" height="4"/><rect x="20" y="12" width="28" height="4"/><rect x="0" y="16" width="8" height="4"/><rect x="20" y="16" width="28" height="4"/><rect x="0" y="20" width="12" height="4"/><rect x="20" y="20" width="28" height="4"/><rect x="0" y="24" width="48" height="16"/><rect x="0" y="40" width="8" height="4"/><rect x="16" y="40" width="16" height="4"/><rect x="40" y="40" width="8" height="4"/><rect x="0" y="44" width="4" height="4"/><rect x="20" y="44" width="8" height="4"/><rect x="44" y="44" width="4" height="4"/>
-          </svg>
-        </div>
-      </div>
-      </div>
+  <div class="cabinet">
+    <div class="maze" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
 
-      <div class="terminal">
-      <!-- line-1: 14 chars: cd ~/ghostties -->
-      <div class="line line-1">cd ~/ghostties</div>
-      <!-- line-2: 43 chars: https://github.com/SeanSmithWorks/ghostties -->
-      <div class="line line-2"><a class="gh-link" href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener">https://github.com/SeanSmithWorks/ghostties</a></div>
-      <!-- line-3: 40 chars: + ghostties % v0.1.0-beta.23 · macOS 13+
-           (16 chars on mobile: "+ v0.1.0-beta.23" — "ghostties", the bare
-           "%", and " · macOS 13+" are dropped, see the max-width: 480px
-           block. Two spans, not visual-only hiding, so a screen reader
-           never reads the string twice.) -->
-      <div class="line line-3"><span class="line-3-full">+ ghostties % v0.1.0-beta.23 &middot; macOS 13+</span><span class="line-3-short">+ v0.1.0-beta.23</span></div>
-      <!-- line-4: 18 chars: + [brew install ⧉] (clickable — copies the command) -->
-      <div class="line line-4"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">brew install<span class="copy-icon" aria-hidden="true">⧉</span></button><span aria-hidden="true">]</span></div>
-      <!-- line-5: 27 chars: + [npx ghostties-install ⧉] (clickable — copies the command)
-           25 chars on mobile: the icon is dropped, see .btn-icon below. -->
-      <div class="line line-5"><span aria-hidden="true">+ [</span><button type="button" class="term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">npx ghostties-install<span class="btn-icon copy-icon" aria-hidden="true">⧉</span></button><span aria-hidden="true">]</span></div>
-      <!-- line-6: 16 chars: + [download now] (clickable) -->
-      <!-- Hardcoded DMG URL — bump the version tag with each release. Decoration
-           ("+ [" / "]") sits outside the link so the accessible name is just
-           "download now"; both spans render normally, so the visible text and
-           the 16ch typing width are unchanged. -->
-      <div class="line line-6"><span aria-hidden="true">+ [</span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>download now</a><span aria-hidden="true">]</span></div>
-      </div>
-    </div>
+    <main id="main">
 
-    <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
-
-    <section class="product">
-      <p class="lead">Ghostties is a multi-agent workspace terminal for macOS &mdash; a fork of <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">Ghostty</a>, built by Sean Smith.</p>
-      <h2>Multiple agent terminals, one window</h2>
-      <div class="product-window product-window--sessions">
-        <div class="product-card">
-          <video src="/assets/product-sessions.mp4" poster="/assets/product-sessions-poster.jpg" autoplay muted loop playsinline aria-label="Ghostties sidebar showing multiple parallel Claude Code agent sessions running in one window"></video>
+      <!-- ============================================================
+           01 — HERO
+           ============================================================ -->
+      <section id="hero" class="hero">
+        <div class="head">
+          <h1 class="h-xl">TOO MANY<br><span class="amber">TERMINALS.</span></h1>
+          <p class="lead" style="margin-top: 24px;">
+            Ghostties runs every Claude Code session in <strong>one window</strong> —
+            a sidebar of live agents, with status you can read at a glance.
+          </p>
         </div>
-      </div>
-      <div class="product-caption">every session, one window</div>
 
-      <div class="product-window product-window--flow">
-        <div class="product-card">
-          <video src="/assets/product-flow.mp4" poster="/assets/product-flow-poster.jpg" autoplay muted loop playsinline aria-label="gt list showing every task across projects organized into status lanes like needs-you and running"></video>
+        <div class="install-row">
+          <button type="button" class="cab-btn primary term-btn" data-copy="brew install --cask seansmithworks/tap/ghostties" aria-label="Copy Homebrew install command: brew install --cask seansmithworks/tap/ghostties" title="brew install --cask seansmithworks/tap/ghostties">
+            BREW INSTALL <span class="cab-cmd"><small>--cask seansmithworks/tap/ghostties</small><span class="copy-icon" aria-hidden="true">⧉</span></span>
+          </button>
+          <button type="button" class="cab-btn secondary term-btn" data-copy="npx ghostties-install" aria-label="Copy npx install command: npx ghostties-install" title="npx ghostties-install">
+            NPX <span class="cab-cmd"><small>ghostties-install</small><span class="copy-icon" aria-hidden="true">⧉</span></span>
+          </button>
+          <a class="cab-btn tertiary" href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>.DMG</a>
         </div>
-      </div>
-      <div class="product-caption">gt list &mdash; every task, one lane</div>
-    </section>
+        <div class="visually-hidden" role="status" aria-live="polite" id="copy-status"></div>
+        <p class="body-text" style="margin-top: 8px;">macOS 13+, Apple Silicon. Currently in beta.</p>
 
-    <section class="product board-sidebar" id="the-sidebar">
-      <h2>03 &mdash; The Sidebar</h2>
-      <p class="lead">Every session in one window. The single strongest thing the app does.</p>
-      <div class="product-window">
-        <div class="product-card">
+        <!-- Hero product asset — a real, verified capture (not a video yet).
+             The 14s hero film is still being recorded; when hero-dark.mp4 /
+             hero-light.mp4 land, this still becomes the poster and the
+             video takes over. See HERO_VIDEO in the script below. -->
+        <figure class="product-frame">
           <picture>
             <source srcset="/assets/app-sessions-dark@2x.webp" type="image/webp">
-            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to" width="1280" height="705" loading="lazy">
+            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing live Claude Code sessions in one window, each labeled by project and status" width="1280" height="705">
+          </picture>
+        </figure>
+      </section>
+
+      <!-- ============================================================
+           02 — SIDEBAR (real captures, theme-aware)
+           ============================================================ -->
+      <section id="sidebar">
+        <h2 class="h-l">The Sidebar</h2>
+        <p class="lead">Every session in one window. The single strongest thing the app does.</p>
+        <div class="projects-figure">
+          <picture data-app-state="sessions" data-app-theme="light" class="theme-light-only">
+            <source srcset="/assets/app-sessions-light@2x.webp" type="image/webp">
+            <img src="/assets/app-sessions-light@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to, light mode" width="1280" height="705" loading="lazy">
+          </picture>
+          <picture data-app-state="sessions" data-app-theme="dark" class="theme-dark-only">
+            <source srcset="/assets/app-sessions-dark@2x.webp" type="image/webp">
+            <img src="/assets/app-sessions-dark@2x.png" alt="Ghostties sidebar showing every session in one window, each with a status ghost and the project it belongs to, dark mode" width="1280" height="705" loading="lazy">
           </picture>
         </div>
-      </div>
-      <div class="product-caption">every session, one window, live status</div>
+        <p class="projects-caption">every session, one window, live status</p>
+      </section>
 
-      <div class="status-key">
-        <div class="status-key-header" aria-hidden="true">priority &mdash; 6 highest &darr; 0 lowest</div>
-        <ol class="status-key-list" aria-label="Session status priority, highest first">
-          <li class="status-row">
-            <span class="status-priority">6</span>
-            <!-- Dark-appearance systemRed. No red ghost appears in the
-                 committed dark capture to sample directly, so this is
-                 Apple's documented dark-mode systemRed value, not a sample. -->
-            <span class="status-mark" style="--mark: #ff453a" aria-hidden="true"></span>
-            <span class="status-name">error</span>
-            <span class="status-hex">#FF453A</span>
-            <span class="status-meaning">errored</span>
-          </li>
-          <li class="status-row">
-            <span class="status-priority">5</span>
-            <span class="status-mark" style="--mark: #ffc400" aria-hidden="true"></span>
-            <span class="status-name">needsAttention</span>
-            <span class="status-hex">#FFC400</span>
-            <span class="status-meaning">agent blocked on user input (permission prompt, question)</span>
-          </li>
-          <li class="status-row">
-            <span class="status-priority">4</span>
-            <span class="status-mark" style="--mark: #5b8def" aria-hidden="true"></span>
-            <span class="status-name">waiting</span>
-            <span class="status-hex">#5B8DEF</span>
-            <span class="status-meaning">silent, not at shell prompt (subprocess may be running)</span>
-          </li>
-          <li class="status-row">
-            <span class="status-priority">3</span>
-            <span class="status-mark" style="--mark: #f97316" aria-hidden="true"></span>
-            <span class="status-name">longRunning</span>
-            <span class="status-hex">#F97316</span>
-            <span class="status-meaning">processing for 30+ min continuously</span>
-          </li>
-          <li class="status-row">
-            <span class="status-priority">2</span>
-            <!-- Sampled from the ghost icon in app-sessions-dark@2x.png
-                 (dark-appearance systemGreen), not the light-mode literal. -->
-            <span class="status-mark" style="--mark: #68ce67" aria-hidden="true"></span>
-            <span class="status-name">processing</span>
-            <span class="status-hex">#68CE67</span>
-            <span class="status-meaning">actively producing output</span>
-          </li>
-          <li class="status-row">
-            <span class="status-priority">1</span>
-            <!-- Color.primary, not opaque white: dark-appearance label
-                 color resolves to ~85% white. -->
-            <span class="status-mark" style="--mark: rgba(255, 255, 255, 0.85)" aria-hidden="true"></span>
-            <span class="status-name">idle</span>
-            <span class="status-hex">&mdash;</span>
-            <span class="status-meaning">at shell prompt, nothing to do</span>
-          </li>
-          <li class="status-row">
-            <span class="status-priority">0</span>
-            <!-- tertiaryLabelColor: 25% white, not 35%. -->
-            <span class="status-mark status-mark--outline" style="--mark: rgba(255, 255, 255, 0.25)" aria-hidden="true"></span>
-            <span class="status-name">inactive</span>
-            <span class="status-hex">&mdash;</span>
-            <span class="status-meaning">exited/completed/killed &mdash; collapsed, outline ghost</span>
-          </li>
-        </ol>
-      </div>
-    </section>
+      <!-- ============================================================
+           03 — STILL GHOSTTY (adapted from v2, trimmed to one paragraph)
+           ============================================================ -->
+      <section id="still-ghostty">
+        <h2 class="h-m">Still Ghostty</h2>
+        <p class="lead" style="max-width: 64ch;">
+          Ghostties is a fork of
+          <a href="https://github.com/ghostty-org/ghostty" target="_blank" rel="noopener">ghostty-org/ghostty</a>,
+          not a rewrite — your config, themes and keybinds load unchanged, the terminal
+          engine underneath is still upstream Ghostty, and the sidebar is an additional
+          surface, not a replacement.
+        </p>
+      </section>
 
-    <section class="product board-gtlist" id="gt-list">
-      <h2>04 &mdash; The GT List</h2>
-      <p class="lead">One command answers &ldquo;what is actually going on&rdquo; across every project. The thing nothing else does.</p>
+      <!-- ============================================================
+           04 — GET STARTED (adapted from v2's install section, trimmed)
+           ============================================================ -->
+      <section id="get-started">
+        <h2 class="h-m">Get Started</h2>
+        <p class="lead">brew, npx, or a direct download. Requirements and how updates arrive.</p>
+        <div class="install-grid">
+          <div class="install-cell">
+            <b>BREW</b>
+            <span>brew install --cask<br>seansmithworks/tap/ghostties</span>
+          </div>
+          <div class="install-cell">
+            <b>NPX</b>
+            <span>npx ghostties-install</span>
+          </div>
+          <div class="install-cell">
+            <b>DMG</b>
+            <span><a href="https://github.com/SeanSmithWorks/ghostties/releases/download/v0.1.0-beta.23/Ghostties.dmg" download>Ghostties.dmg</a><br>v0.1.0-beta.23</span>
+          </div>
+          <div class="install-cell">
+            <b>REQUIREMENTS</b>
+            <span>macOS 13 or later, Apple Silicon</span>
+          </div>
+        </div>
+        <p class="body-text channels-note">
+          Current release is <strong>v0.1.0-beta.23</strong> on the beta channel.
+          Auto-update ships via Sparkle — installs check for a new build on
+          launch and apply it in the background.
+        </p>
+      </section>
 
-      <p class="gt-example-label">Example output &mdash; not a live capture</p>
-      <div class="gt-block"><pre class="gt-pre" aria-label="Example output of gt list against a fixture task directory, not a live capture">wire-status-badge  <span class="lane-needsyou">needs-you</span>   Wire status badge to session state  [project: switchboard]
-audit-nightly-job  <span class="lane-running">running</span>     Audit nightly ingestion job  [project: fieldwork]
-migrate-schema  <span class="lane-running">running</span>     Migrate task schema to v2  [project: atlas-api]
-review-lane-copy  <span class="lane-review">review</span>      Review lane copy for clarity  [project: pendulum]
-triage-inbox-dupes  <span class="lane-inbox">inbox</span>       Triage duplicate inbox entries  [project: silo]
-sync-export-format  <span class="lane-backlog">backlog</span>     Sync export format across clients  [project: trove]
-retire-legacy-hook  <span class="lane-done">graveyard</span>   Retire legacy pre-commit hook  [project: wren]</pre></div>
+    </main>
 
-      <div class="lane-ramp" aria-label="Lane priority order, highest first">
-        <span class="lane-chip lane-needsyou">needs-you</span><span class="lane-chip lane-running">running</span><span class="lane-chip lane-review">review</span><span class="lane-chip lane-inbox">inbox</span><span class="lane-chip lane-backlog">backlog</span><span class="lane-chip lane-done">graveyard</span>
-      </div>
-      <div class="product-caption">gt list &mdash; sorted by lane priority, then task id</div>
-    </section>
-  </main>
+    <footer id="site-footer">
+      <span class="footer-icons">
+        <a href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener" aria-label="GitHub">
+          <svg viewBox="0 0 24 24"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+        </a>
+      </span>
+      <span class="footer-links">
+        <span>&copy; 2026</span>
+        <a href="/changelog">Changelog</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+      </span>
+    </footer>
+    <div class="visually-hidden" role="status" aria-live="polite" id="gx-coin-status"></div>
+  </div>
 
-  <footer>
-    <span class="footer-icons">
-      <a href="https://github.com/SeanSmithWorks/ghostties" target="_blank" rel="noopener" aria-label="GitHub">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
-      </a>
-      <a href="/download" aria-label="Download">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
-      </a>
-    </span>
-    <span class="footer-links">
-      <span>&copy; 2026</span>
-      <a href="/changelog">Changelog</a>
-      <a href="/privacy">Privacy</a>
-      <a href="/support">Support</a>
-    </span>
-  </footer>
+  <!-- Coin entry plate — a lit arcade coin plate, not a promoted button.
+       Fixed top-right; a black bezel houses a backlit red panel with a
+       tall slot on the left and stacked INSERT / COIN type. Direction is
+       from the user's own reference photos (coin-slot-spec.md), which
+       superseded an earlier discreet dark-plate concept. Arms the ghost
+       field's drag/high-five/hover-card interactivity; Escape (or
+       activating the plate again) returns the coin. Keyboard route:
+       press "c". Hidden entirely under prefers-reduced-motion (see
+       v3.css) — the field is a static no-op there, so there is nothing
+       for the plate to arm.
+
+       There is also a real coin drifting in the field itself
+       (assets/ghost-field.js) — the one object that stays grabbable
+       before coin-in, unlike every ghost. Dragging it onto this slot
+       arms the field exactly like clicking the plate does; the plate's
+       own choreography (this script, below) reacts to the "gx-armchange"
+       event GXField fires so the two paths never disagree. -->
+  <button type="button" class="gx-coin" id="gx-coin-btn" aria-label="Insert coin" title="Insert coin (C)">
+    <span class="gx-coin-bezel">
+        <span class="gx-coin-panel">
+          <span class="gx-coin-slot">
+            <span class="gx-coin-lamp"></span>
+            <svg class="gx-coin-piece" viewBox="0 0 6 6"><path d="M1 0h4v1h1v4H5v1H1V5H0V1h1z"/></svg>
+          </span>
+          <span class="gx-coin-info">
+            <span class="gx-coin-price">25&#162;</span>
+            <span class="gx-coin-label">
+              <span class="gx-coin-label-line" data-line="1"></span>
+              <span class="gx-coin-label-line" data-line="2">INSERT</span>
+              <span class="gx-coin-label-line gx-coin-label-line-big" data-line="3">COIN</span>
+            </span>
+            <span class="gx-coin-credit">CR <b>0</b></span>
+          </span>
+          <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+            <defs>
+              <filter id="gx-coin-moulded" x="0" y="0" width="100%" height="100%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="4" seed="7" result="n"/>
+                <feColorMatrix in="n" type="saturate" values="0"/>
+              </filter>
+              <filter id="gx-coin-moulded-coarse" x="0" y="0" width="100%" height="100%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.055 0.11" numOctaves="2" seed="3" result="n"/>
+                <feColorMatrix in="n" type="saturate" values="0"/>
+              </filter>
+            </defs>
+          </svg>
+          <span class="gx-coin-fx-grain-coarse"></span>
+          <span class="gx-coin-fx-grain"></span>
+          <span class="gx-coin-fx-pass gx-coin-fx-pass-dodge"></span>
+          <span class="gx-coin-fx-pass gx-coin-fx-pass-overlay"></span>
+          <span class="gx-coin-fx-pass gx-coin-fx-pass-screen"></span>
+          <span class="gx-coin-fx-pass gx-coin-fx-pass-plus"></span>
+        </span>
+      </span>
+  </button>
 
   <script>
-    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-  </script>
-  <script defer src="/_vercel/insights/script.js"></script>
-
-  <script>
-    const scene = document.querySelector('.scene');
-    const ghLink = document.querySelector('.gh-link');
-    const dlLink = document.querySelector('.line-6 a');
-    const termBtns = document.querySelectorAll('.term-btn');
-    const copyStatus = document.getElementById('copy-status');
-    let animating = false;
-
-    // Mobile retimes line-3 (shorter string) and line-5 (icon dropped),
-    // which shifts every line after them — see the max-width: 480px block.
-    function lockDelayMs() {
-      return window.matchMedia('(max-width: 480px)').matches ? 8575 : 9250;
-    }
-
-    function activateCarets() {
-      const line1 = document.querySelector('.line-1');
-      const line2 = document.querySelector('.line-2');
-      const line3 = document.querySelector('.line-3');
-      const line4 = document.querySelector('.line-4');
-      const line5 = document.querySelector('.line-5');
-      const line6 = document.querySelector('.line-6');
-      const narrow = window.matchMedia('(max-width: 480px)').matches;
-
-      // Line 1: caret appears at 1.0s, disappears when line 2 starts at 4.2s
-      setTimeout(() => { line1.classList.add('caret-visible'); }, 1000);
-      setTimeout(() => { line1.classList.remove('caret-visible'); }, 4200);
-
-      // Line 2: caret appears at 4.2s, disappears when line 3 starts at 5.65s
-      setTimeout(() => { line2.classList.add('caret-visible'); }, 4200);
-      setTimeout(() => { line2.classList.remove('caret-visible'); }, 5650);
-
-      // WebKit's step-timing animation lands at progress 0.9999999999999997, not
-      // 1.0, so it floors one step short and every typed line settles one
-      // character narrow inside .line's overflow:hidden box (clips the last
-      // glyph — on line 5 that's the closing "]"). Chromium lands exactly on
-      // 1.0 and is unaffected. A held `forwards` animation outranks a plain
-      // inline style in the cascade, so a bare `.style.width =` assignment
-      // is silently ignored while the animation is still in effect — the
-      // lock must be `!important` to actually win. Lock each line's width
-      // once its own typing animation ends.
-      setTimeout(() => { line1.style.setProperty('width', '14ch', 'important'); }, 1560);
-      setTimeout(() => { line2.style.setProperty('width', '43ch', 'important'); }, 5300);
-      setTimeout(() => { line3.style.setProperty('width', narrow ? '16ch' : '40ch', 'important'); }, narrow ? 6050 : 6650);
-      setTimeout(() => { line4.style.setProperty('width', '18ch', 'important'); }, narrow ? 6850 : 7450);
-      setTimeout(() => { line5.style.setProperty('width', narrow ? '25ch' : '27ch', 'important'); }, narrow ? 7825 : 8500);
-
-      // Line 6: caret + inline locks when typing ends
-      setTimeout(() => {
-        line6.classList.add('caret-blink');
-        line6.style.setProperty('width', '16ch', 'important');
-        line6.style.color = 'rgba(100, 220, 120, 0.9)';
-        line6.style.background = 'rgba(80, 210, 100, 0.13)';
-      }, lockDelayMs());
-    }
-
-    activateCarets();
-
-    // Click ghosts to scatter, then reassemble after a pause
-    const ghosts = document.querySelector('.ghosts');
-    ghosts.addEventListener('click', () => {
-      if (animating) return;
-      animating = true;
-      scene.classList.add('scatter');
-
-      setTimeout(() => {
-        scene.classList.remove('scatter');
-
-        // Clear caret state
-        const line1 = document.querySelector('.line-1');
-        const line2 = document.querySelector('.line-2');
-        const line6 = document.querySelector('.line-6');
-        line1.classList.remove('caret-visible');
-        line2.classList.remove('caret-visible');
-        line6.classList.remove('caret-blink');
-        line6.style.width = '';
-        line6.style.color = '';
-        line6.style.background = '';
-
-        // Restart entrance animations
-        scene.classList.remove('animate');
-        void scene.offsetWidth;
-        scene.classList.add('animate');
-
-        activateCarets();
-        animating = false;
-      }, 1400); // 0.55s scatter + ~0.85s pause before ghosts fly back in
-    });
-
-    // Don't scatter when clicking links or copy buttons
-    ghLink.addEventListener('click', (e) => e.stopPropagation());
-    dlLink.addEventListener('click', (e) => e.stopPropagation());
-    termBtns.forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const text = btn.dataset.copy;
-        navigator.clipboard.writeText(text).then(() => {
+    // Clipboard copy for the hero install row.
+    var copyStatus = document.getElementById('copy-status');
+    document.querySelectorAll('.term-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var text = btn.dataset.copy;
+        navigator.clipboard.writeText(text).then(function () {
           copyStatus.textContent = 'Copied';
-          setTimeout(() => { copyStatus.textContent = ''; }, 2000);
+          setTimeout(function () { copyStatus.textContent = ''; }, 2000);
         });
       });
     });
+
+    // Hero product asset — dormant video swap point. The hero currently
+    // shows a still (app-sessions-dark@2x.webp/png, wired directly into
+    // the <picture> markup above). When the 14s hero film is cut, wire a
+    // <video id="hero-video"> back into .product-frame, point it at
+    // HERO_VIDEO.src with HERO_VIDEO.poster set to today's still, and
+    // reintroduce play-once-on-load / replay-on-hover-or-click behaviour
+    // (respecting prefers-reduced-motion — poster only, click to play).
+    // Kept as a constant, not deleted, so the swap is one path, not a
+    // rewrite.
+    var HERO_VIDEO = {
+      src: '/assets/hero-dark.mp4', // not recorded yet
+      poster: '/assets/app-sessions-dark@2x.webp'
+    };
+
+    // Coin plate — lit backlit plate fixed top-right, stacked
+    // INSERT/COIN (ESC/EXIT armed) label lines, plus the secret "c" key
+    // route (kept; see coin-slot-spec.md).
+    (function () {
+      var btn = document.getElementById('gx-coin-btn');
+      if (!btn) return;
+      var status = document.getElementById('gx-coin-status');
+      var labelLines = btn.querySelectorAll('.gx-coin-label-line');
+      var digit = btn.querySelector('.gx-coin-credit b');
+      var clearTimer = null;
+
+      // render() just writes the plate's label/credit/aria for the given
+      // `armed` boolean — it does not read GXField.isArmed() itself. The
+      // single source of truth is GXField's own `armed` flag; render() is
+      // only ever called (via armedVisuals()/disarmedVisuals() below) in
+      // response to the "gx-armchange" event GXField fires on every real
+      // transition, so what it draws always matches what GXField reports.
+      // The label is two stacked lines (INSERT/COIN, ESC/EXIT), so
+      // render() writes both lines, not one string.
+      function render(armed) {
+        if (armed) {
+          labelLines[0].textContent = '';
+          labelLines[1].textContent = 'ESC';
+          labelLines[2].textContent = 'EXIT';
+          digit.textContent = '1';
+          btn.setAttribute('aria-label', 'Return coin and exit the ghost field');
+          btn.setAttribute('title', 'Return coin (Esc)');
+        } else {
+          labelLines[0].textContent = '';
+          labelLines[1].textContent = 'INSERT';
+          labelLines[2].textContent = 'COIN';
+          digit.textContent = '0';
+          btn.setAttribute('aria-label', 'Insert coin');
+          btn.setAttribute('title', 'Insert coin (C)');
+        }
+      }
+
+      function announce(armed) {
+        if (clearTimer) {
+          clearTimeout(clearTimer);
+          clearTimer = null;
+        }
+        if (armed) {
+          status.textContent = 'Credit 1. The ghost field is live. Press Escape to return your coin.';
+        } else {
+          status.textContent = 'Coin returned. The ghost field is ambient again.';
+          clearTimer = setTimeout(function () {
+            status.textContent = '';
+            clearTimer = null;
+          }, 3000);
+        }
+      }
+
+      // The plate never drives its own choreography directly — it only
+      // asks GXField to change state (click, "c", or letting GXField's own
+      // Escape handler run) and then reacts to "gx-armchange", the one
+      // event GXField fires on every real state transition regardless of
+      // how it was reached (drag-drop onto the slot, the plate, or the key
+      // route). That keeps the coin's physical position, the plate's
+      // label/credit, and the field's interactivity from ever disagreeing.
+      //
+      // armTimer/firingOffTimer are the pending 200ms settle / 420ms
+      // firing-off handles. A disarm landing inside that 200ms window
+      // (double-click, "c" then Escape fast, a drop then Escape fast) must
+      // cancel them — otherwise the orphaned timer fires later and
+      // re-applies the armed label/credit/class on top of an already
+      // disarmed plate, latching it into a permanently wrong armed look.
+      var armTimer = null;
+      var firingOffTimer = null;
+
+      function clearArmTimers() {
+        if (armTimer) {
+          clearTimeout(armTimer);
+          armTimer = null;
+        }
+        if (firingOffTimer) {
+          clearTimeout(firingOffTimer);
+          firingOffTimer = null;
+        }
+      }
+
+      function armedVisuals() {
+        clearArmTimers();
+        btn.classList.add('gx-coin-firing');
+        // Lamp flash plays immediately; the credit flip and the armed
+        // border/label settle land together at t=200ms (coin-slot-spec.md).
+        armTimer = setTimeout(function () {
+          armTimer = null;
+          btn.classList.add('gx-coin-armed');
+          render(true);
+          announce(true);
+        }, 200);
+        firingOffTimer = setTimeout(function () {
+          firingOffTimer = null;
+          btn.classList.remove('gx-coin-firing');
+        }, 420);
+      }
+
+      function disarmedVisuals() {
+        clearArmTimers();
+        btn.classList.remove('gx-coin-firing');
+        btn.classList.remove('gx-coin-armed');
+        render(false);
+        announce(false);
+      }
+
+      document.addEventListener('gx-armchange', function (e) {
+        if (e.detail && e.detail.armed) armedVisuals();
+        else disarmedVisuals();
+      });
+
+      function toggle() {
+        if (!window.GXField) return;
+        if (window.GXField.isArmed()) window.GXField.coinOut();
+        else window.GXField.coinIn();
+      }
+
+      btn.addEventListener('click', toggle);
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'c' && e.key !== 'C') return;
+        var tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+        toggle();
+      });
+    })();
   </script>
+  <script src="/assets/ghost-field.js" defer></script>
 </body>
 </html>
