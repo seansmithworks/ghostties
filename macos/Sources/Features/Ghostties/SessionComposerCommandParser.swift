@@ -31,6 +31,13 @@ enum SessionComposerCommandParser {
     /// is what keeps hover/scroll state settled while the label updates.
     static let runRowId = UUID(uuidString: "89FA0000-0000-0000-0000-000000000001")!
 
+    /// The fixed identity of the composer's synthesized "Create worktree
+    /// for <branch>" row — Sean's decision 1: a typed branch that matches a
+    /// known branch with no worktree gets an offered row to create it,
+    /// mirroring `runRowId`'s stable-sentinel reasoning above (the label
+    /// changes on every keystroke; the id must not).
+    static let createWorktreeRowId = UUID(uuidString: "89FA0000-0000-0000-0000-000000000002")!
+
     /// Result of tokenizing a composer query against the known project
     /// list. `projectId == nil` means "no command was recognized" — every
     /// caller must fall through to the existing whole-string filter,
@@ -418,6 +425,22 @@ enum SessionComposerCommandParser {
         // terminated token).
         var openedByFinalUnterminatedToken = false
 
+        // Bug fix (shipped-parser defect, 2026-08-26): `>` used to be able
+        // to advance PAST an unfilled `.branch` position straight to
+        // `.operation`/`.thread` (`nextFreeTextKind()` only ever returns
+        // those two) — a `>` typed right after the project could never
+        // land on branch, so `ghostties > mybranch` fell through to the
+        // ad-hoc/thread free-text path and got exec'd as a shell command.
+        // `branchArmed` makes the FIRST `>` seen while matching is still
+        // live (rule 4, case 1) claim the branch position instead of
+        // skipping it: it opens no run, just arms the very next word token
+        // to resolve (or fail) as the branch, unconditionally. A SECOND
+        // `>` (branch already armed, or already filled) falls through to
+        // the pre-existing behavior — Sean's decision 2: a double chevron
+        // lands on operator (`ghostties > > do the thing` now offers
+        // `Run "do the thing"`, where before it offered nothing).
+        var branchArmed = false
+
         func nextFreeTextKind() -> SegmentKind {
             filled.contains(.operation) ? .thread : .operation
         }
@@ -428,6 +451,23 @@ enum SessionComposerCommandParser {
             switch token {
             case .word(let range, let matchText, let terminated):
                 if openRunKind == nil {
+                    if branchArmed {
+                        // An explicit `>` armed the branch position (rule
+                        // 4, case 1 below) — this token resolves (or
+                        // fails) as the branch UNCONDITIONALLY, regardless
+                        // of `terminated`. It must never fall through to
+                        // rule 3 and become ad-hoc/thread content: that's
+                        // the exact defect this fix closes (a typed branch
+                        // silently exec'd as a shell command).
+                        branchArmed = false
+                        if let canonical = knownBranchNames.first(where: { $0.caseInsensitiveCompare(matchText) == .orderedSame }) {
+                            segments.append(Segment(kind: .branch, range: range, resolved: .branch(canonical)))
+                        } else {
+                            segments.append(Segment(kind: .branch, range: range, resolved: .unresolved))
+                        }
+                        filled.insert(.branch)
+                        continue
+                    }
                     if !terminated {
                         // B1 fix: this must be set regardless of whether we
                         // continue below without opening a run (the bare
@@ -457,8 +497,15 @@ enum SessionComposerCommandParser {
                         continue
                     }
                     if !filled.contains(.branch),
-                       knownBranchNames.contains(where: { $0.caseInsensitiveCompare(matchText) == .orderedSame }) {
-                        segments.append(Segment(kind: .branch, range: range, resolved: .branch(matchText)))
+                       let canonical = knownBranchNames.first(where: { $0.caseInsensitiveCompare(matchText) == .orderedSame }) {
+                        // Store the CANONICAL repo casing, not whatever
+                        // case the user typed — `resolveTypedBranch`
+                        // compares this token EXACTLY against
+                        // `worktrees`/`currentBranchAtProjectRoot`, so a
+                        // case-insensitive match here that kept the typed
+                        // casing (`matchText`) produced a wrong "No
+                        // worktree found" message for e.g. `Main`.
+                        segments.append(Segment(kind: .branch, range: range, resolved: .branch(canonical)))
                         filled.insert(.branch)
                         continue
                     }
@@ -558,10 +605,35 @@ enum SessionComposerCommandParser {
                         if openRunStart == nil { openRunStart = range.location }
                         openRunEnd = range.location + range.length
                     }
+                } else if !filled.contains(.branch), !filled.contains(.operation), !branchArmed {
+                    // Rule 4, case 1, branch fix: the FIRST `>` seen while
+                    // matching is still live and branch is still reachable
+                    // arms the branch position instead of skipping past it
+                    // — opens no run. The next word token resolves (or
+                    // fails) as the branch, see the `branchArmed` handling
+                    // in the word case above.
+                    //
+                    // The `!filled.contains(.operation)` guard matters:
+                    // branch can be legitimately BYPASSED without ever
+                    // being filled — rule 2 tries each terminated word
+                    // against every still-unfilled type in order, so
+                    // `ghostties cco` (a known TEMPLATE name, not a
+                    // branch) tries "cco" against branch first (fails),
+                    // then operation (matches), leaving branch permanently
+                    // unfilled but no longer reachable. Without this
+                    // guard, a `>` after that point wrongly re-armed
+                    // branch and swallowed the NEXT word as an unresolved
+                    // branch instead of opening the thread run rule 4
+                    // otherwise would.
+                    branchArmed = true
                 } else {
-                    // Rule 4, case 1: matching was still live — stop it for
+                    // Rule 4, case 1: matching was still live (branch
+                    // already filled, or a second `>` with branch still
+                    // armed but no word claimed it yet — decision 2, a
+                    // double chevron lands on operator) — stop it for
                     // good and open a run at the next free-text position.
                     // No content yet (lazy start, as above).
+                    branchArmed = false
                     openRunKind = nextFreeTextKind()
                     openRunStart = nil
                     openRunEnd = nil
@@ -670,9 +742,18 @@ enum SessionComposerCommandParser {
         )
         guard let projectId = path.projectId else { return .none }
 
+        // Also surface a `.branch`-kind segment that resolved `.unresolved`
+        // (an armed `>` whose word didn't match any known branch) — this is
+        // what lets `statusStripMessage`/the commit-time reject in
+        // `SessionComposerPalette` see and reject a typed-but-nonexistent
+        // branch, instead of it silently vanishing because only the
+        // `.branch(token)` case above used to be read.
         let branchToken: String? = path.segments.lazy.compactMap { segment -> String? in
-            guard case .branch(let token) = segment.resolved else { return nil }
-            return token
+            switch segment.resolved {
+            case .branch(let token): return token
+            case .unresolved where segment.kind == .branch: return segment.text(in: path.source)
+            default: return nil
+            }
         }.first
 
         // The remainder this adapter reports is "the command." Two sources,

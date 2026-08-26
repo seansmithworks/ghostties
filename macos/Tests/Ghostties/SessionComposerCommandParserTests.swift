@@ -411,37 +411,50 @@ final class SessionComposerCommandParserTests: XCTestCase {
     // MARK: - Slice B (composer breadcrumb spec): typable `>` segment
     // separator. Parser only — no UI, no store changes.
 
-    /// Path-grammar rewrite: `>` no longer means "advance to branch" through
-    /// `parse`'s adapter — it closes whatever free-text run is open and
-    /// advances (rule 4). With no branch list offered (`parse` never passes
-    /// `knownBranchNames`), `main` matches nothing, so `ghostties > main`
-    /// resolves the project and reports `main` as the ad-hoc remainder, not
-    /// a branch.
+    /// Bug fix (2026-08-26, shipped-parser defect): this test USED TO PIN
+    /// THE BUG — it asserted `branchToken == nil` and
+    /// `remainderTokens == ["main"]`, i.e. that a `>` could never land on
+    /// the branch position and a typed branch fell through to the ad-hoc
+    /// remainder. That is exactly the real-world failure (`ghostties >
+    /// backlog/migrate-ghostties` spawned `exec 'backlog/migrate-
+    /// ghostties'` instead of opening the branch's worktree). No known
+    /// branch list is passed to `parse` here, so "main" resolves to an
+    /// UNRESOLVED branch segment — a truthful "not found" reported via
+    /// `branchToken`, never silently exec'd. See
+    /// `testParseResolvesTypedBranchAgainstKnownBranchNames` below for the
+    /// branch-actually-exists case, and
+    /// `testParseReproducesTheReportedGhosttiesBacklogMigrateBug` for the
+    /// exact reported input.
     func testParseRecognizesChevronAsBranchSeparatorWithSpaces() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parse(query: "ghostties > main", projects: [project], isLocked: false)
         XCTAssertEqual(result.projectId, project.id)
-        XCTAssertNil(result.branchToken)
-        XCTAssertEqual(result.remainderTokens, ["main"])
+        XCTAssertEqual(result.branchToken, "main")
+        XCTAssertTrue(result.remainderTokens.isEmpty)
     }
 
+    /// See `testParseRecognizesChevronAsBranchSeparatorWithSpaces` — same
+    /// bug, no-space chevron form.
     func testParseRecognizesChevronAsBranchSeparatorWithoutSpaces() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parse(query: "ghostties>main", projects: [project], isLocked: false)
         XCTAssertEqual(result.projectId, project.id)
-        XCTAssertNil(result.branchToken)
-        XCTAssertEqual(result.remainderTokens, ["main"])
+        XCTAssertEqual(result.branchToken, "main")
+        XCTAssertTrue(result.remainderTokens.isEmpty)
     }
 
-    /// Path-grammar rewrite (split from the old
-    /// `testParseKeepsChevronLiteralInRemainderPastBranchSegment`, which
-    /// tested a now-defunct branch reading of `>`). Exercises the
-    /// free-text-run rule directly against `parsePath`: the first `>`
-    /// (matching still live) opens an ad-hoc run at `main`; the second `>`
-    /// (run open, kind `.operation`) closes it and opens a thread run; the
-    /// third `>` (run open, kind `.thread`) is swallowed as a literal
-    /// character since thread is the terminal position.
-    func testParsePathChevronClosesAdHocThenLiteralInsideThread() {
+    /// Bug fix (2026-08-26): rewritten now that `>` lands on branch. The
+    /// first `>` arms the branch position; "main" (no known branch list
+    /// passed to `parsePath` here) resolves it as UNRESOLVED, not ad-hoc
+    /// content. The second `>` (branch now filled) advances to operator and
+    /// opens an ad-hoc run at "npm run build"; the third `>` (run open,
+    /// kind `.operation`) closes it and opens a thread run; "log.txt"
+    /// becomes the thread run's content — there's no fourth `>` in this
+    /// query to test the "literal inside thread" rule, see
+    /// `testParsePathChevronLiteralInsideThreadRun` for that half
+    /// (previously combined into this one test, split because the meaning
+    /// of every position after branch shifted by one chevron).
+    func testParsePathChevronAdvancesThroughBranchThenClosesAdHocThenOpensThread() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parsePath(
             rawQuery: "ghostties > main > npm run build > log.txt",
@@ -450,35 +463,44 @@ final class SessionComposerCommandParserTests: XCTestCase {
             isLocked: false
         )
         XCTAssertEqual(result.projectId, project.id)
+        let branchSegment = result.segments.first { $0.kind == .branch }
+        XCTAssertEqual(branchSegment?.resolved, .unresolved)
+        XCTAssertEqual(branchSegment.map { $0.text(in: result.source) }, "main")
         let adHocSegments = result.segments.filter { $0.kind == .operation && $0.resolved == .adHoc }
-        XCTAssertEqual(adHocSegments.map { $0.text(in: result.source) }, ["main"])
+        XCTAssertEqual(adHocSegments.map { $0.text(in: result.source) }, ["npm run build"])
         XCTAssertEqual(result.activeKind, .thread)
-        XCTAssertEqual(text(result.remainderRange, in: result.source), "npm run build > log.txt")
+        XCTAssertEqual(text(result.remainderRange, in: result.source), "log.txt")
     }
 
-    /// B3 (round-1 review), both halves. `ghostties > > refactor the
-    /// parser` — Sean's own skip-a-level shape (BACKLOG D6): two chevrons
-    /// close an EMPTY operator run and open a thread run with no operator
-    /// ever resolved. Before the fix this reached `commandOptions` (via
-    /// `parse`'s adapter) reporting the THREAD NAME as the ad-hoc command —
-    /// `Run "refactor the parser"` would have executed the thread name as
-    /// a shell command. Tests both the `parsePath` half (no operator
-    /// segment, empty or otherwise) and the `parse` adapter half (no
-    /// remainder reported at all, since parse() has no thread-name
-    /// concept to fall back to).
-    ///
-    /// Mutation (parsePath half): restore `filled.insert(.operation)`
-    /// outside the `stop > start` guard — `result.segments.contains {
-    /// $0.kind == .operation }` alone wouldn't catch this (no segment is
-    /// EVER appended for an empty run, guard or no guard — the append was
-    /// already correctly guarded), so this only proves the `filled` state
-    /// hygiene half, not the observable bug; the adapter assertion below
-    /// is what actually proves the fix. Mutation (parse adapter half):
-    /// drop the `openRunIsThread` guard in `parse`'s remainder derivation
-    /// — this goes red because `remainderTokens` would then contain
-    /// `["refactor", "the", "parser"]`. Ran red against both mutations
-    /// independently, confirmed green after reverting each.
-    func testAdapterDoesNotExecuteThreadNameAsAdHocCommand() {
+    /// The "literal `>` inside an open thread run" half of the old combined
+    /// test, re-derived for the shifted grammar: one extra `>` (four total)
+    /// is needed to actually reach thread and still have a `>` left over to
+    /// swallow literally, now that the first `>` is spent arming branch.
+    func testParsePathChevronLiteralInsideThreadRun() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parsePath(
+            rawQuery: "ghostties > main > npm build > log.txt > extra",
+            projects: [project],
+            templates: [],
+            isLocked: false
+        )
+        XCTAssertEqual(result.activeKind, .thread)
+        XCTAssertEqual(text(result.remainderRange, in: result.source), "log.txt > extra")
+    }
+
+    /// Sean's decision 2 (2026-08-26): each `>` advances exactly one slot,
+    /// matching Tab — project > branch > operator > thread. A double
+    /// chevron with nothing typed between them now skips the (still
+    /// unfilled) branch slot entirely and lands on operator, so `ghostties
+    /// > > refactor the parser` now offers `Run "refactor the parser"`
+    /// where before the branch-arming fix it offered nothing (that
+    /// unreachability was a side effect of the SAME bug this whole change
+    /// fixes — two chevrons used to reach thread directly, skipping branch
+    /// AND operator, because branch could never be landed on in the first
+    /// place). This test previously asserted the OPPOSITE — that the
+    /// thread name could never be reported as an ad-hoc command — and is
+    /// rewritten per Sean's explicit acceptance of the new shape.
+    func testDoubleChevronLandsOnOperatorPerDecision2() {
         let project = makeProject(name: "ghostties")
         let path = SessionComposerCommandParser.parsePath(
             rawQuery: "ghostties > > refactor the parser",
@@ -486,8 +508,10 @@ final class SessionComposerCommandParserTests: XCTestCase {
             templates: [],
             isLocked: false
         )
+        XCTAssertFalse(path.segments.contains { $0.kind == .branch })
         XCTAssertFalse(path.segments.contains { $0.kind == .operation })
-        XCTAssertEqual(path.activeKind, .thread)
+        XCTAssertEqual(path.activeKind, .operation)
+        XCTAssertFalse(path.openRunIsThreadRun)
         XCTAssertEqual(text(path.remainderRange, in: path.source), "refactor the parser")
 
         let result = SessionComposerCommandParser.parse(
@@ -496,7 +520,7 @@ final class SessionComposerCommandParserTests: XCTestCase {
             isLocked: false
         )
         XCTAssertEqual(result.projectId, project.id)
-        XCTAssertTrue(result.remainderTokens.isEmpty, "the thread name must never be reported as the ad-hoc command")
+        XCTAssertEqual(result.remainderTokens, ["refactor", "the", "parser"])
     }
 
     /// The other half of the old test's real requirement: a redirect inside
@@ -530,6 +554,151 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(template?.command, "npm")
         XCTAssertEqual(template?.agent?.additionalFlags, ["run", "build", ">", "log.txt"])
         XCTAssertEqual(template?.buildCommand(), "'npm' 'run' 'build' '>' 'log.txt'")
+    }
+
+    // MARK: - Bug fix coverage (2026-08-26): typed branches unreachable,
+    // silently exec'd as a shell command. Every production symbol here is
+    // the real one — `parsePath`/`parse`, `knownBranchNames`,
+    // `resolveTypedBranch` — never a re-declared literal.
+
+    /// The exact reported input: `ghostties > backlog/migrate-ghostties`,
+    /// with `backlog/migrate-ghostties` a real branch that simply has no
+    /// worktree yet (`knownBranchNames` mirrors what
+    /// `SessionComposerPalette.commandKnownBranchNames` now passes after
+    /// appending `SessionComposerStore.branchesWithoutWorktree` — see that
+    /// property's own fix comment). Before this fix the token was absorbed
+    /// as ad-hoc content and `makeAdHocTemplate` would have synthesized a
+    /// `Run "backlog/migrate-ghostties"` row, which
+    /// `SessionCoordinator`'s login-shell wrapper then execs literally
+    /// (the real failure: `exec 'backlog/migrate-ghostties'`, "no such
+    /// file or directory"). After the fix: the branch resolves (not ad-hoc
+    /// content), the remainder is empty, and `makeAdHocTemplate` refuses to
+    /// synthesize a Run row at all — there is nothing left to exec.
+    func testParseReproducesTheReportedGhosttiesBacklogMigrateBug() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties > backlog/migrate-ghostties",
+            projects: [project],
+            knownBranchNames: ["backlog/migrate-ghostties"],
+            isLocked: false
+        )
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertEqual(result.branchToken, "backlog/migrate-ghostties")
+        XCTAssertTrue(result.remainderTokens.isEmpty)
+        XCTAssertNil(
+            SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: result.remainderTokens),
+            "no Run row must be synthesized — the token resolved as a branch, not a shell command"
+        )
+    }
+
+    /// A branch WITH a worktree, reached via chevron — the
+    /// `TypedBranchResolution.resolved` case, the ordinary "open a session
+    /// in that branch's worktree" path. `resolveTypedBranch` is the real
+    /// production seam `SessionComposerPalette.typedWorktreePath` reads.
+    func testParseChevronBranchWithWorktreeResolvesToWorktreePath() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties > feature-x",
+            projects: [project],
+            knownBranchNames: ["feature-x"],
+            isLocked: false
+        )
+        XCTAssertEqual(result.branchToken, "feature-x")
+
+        let worktree = GitWorktreeEnumerator.Worktree(path: "/Users/sean/Code/ghostties-feature-x", branch: "feature-x", isLocked: false)
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: result.branchToken,
+            worktrees: [worktree],
+            currentBranchAtProjectRoot: "main"
+        )
+        XCTAssertEqual(resolution, .resolved(path: "/Users/sean/Code/ghostties-feature-x"))
+    }
+
+    /// A branch with NO worktree, reached via chevron — resolves as a
+    /// branch segment (not ad-hoc), then `resolveTypedBranch` reports
+    /// `.unresolved`, which is the signal `SessionComposerPalette` uses to
+    /// offer a "Create worktree" row (decision 1) rather than a dead end.
+    func testParseChevronBranchWithNoWorktreeReachesUnresolvedForCreateOffer() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties > backlog/no-worktree-yet",
+            projects: [project],
+            knownBranchNames: ["backlog/no-worktree-yet"],
+            isLocked: false
+        )
+        XCTAssertEqual(result.branchToken, "backlog/no-worktree-yet")
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: result.branchToken,
+            worktrees: [],
+            currentBranchAtProjectRoot: "main"
+        )
+        XCTAssertEqual(resolution, .unresolved(token: "backlog/no-worktree-yet"))
+    }
+
+    /// A branch that genuinely does not exist — must fail truthfully
+    /// (`.unresolved`, surfaced as "branch \"...\" not found"), never
+    /// silently exec'd and never confused with the create-offer case above
+    /// (that one distinguishes itself only at the `SessionComposerPalette`
+    /// layer, by checking `branchesWithoutWorktree`; the parser/engine
+    /// layer reports the identical `.unresolved` shape for both, correctly
+    /// — see `SessionComposerCommandParser.TypedBranchResolution.unresolved`'s
+    /// doc comment).
+    func testParseNonexistentBranchReachesTruthfulError() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties > totally-made-up-branch",
+            projects: [project],
+            knownBranchNames: ["main", "feature-x"],
+            isLocked: false
+        )
+        // Doesn't match any known branch name at all: the segment is
+        // `.unresolved`, and `branchToken` still surfaces the raw typed
+        // text (item 3's fix) rather than vanishing.
+        XCTAssertEqual(result.branchToken, "totally-made-up-branch")
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: result.branchToken,
+            worktrees: [],
+            currentBranchAtProjectRoot: "main"
+        )
+        XCTAssertEqual(resolution, .unresolved(token: "totally-made-up-branch"))
+        let commitResult = SessionComposerCommandParser.resolveCommitWorktreePathForCommit(
+            typedBranch: resolution,
+            selectedWorktreePath: nil
+        )
+        switch commitResult {
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("No worktree found for branch"))
+        case .success:
+            XCTFail("a genuinely nonexistent branch must fail the commit, not silently succeed")
+        }
+    }
+
+    /// Case-sensitivity fix: `resolveTypedBranch` compares the token
+    /// EXACTLY (`:1090`/`:1093`-equivalent lines) while `parsePath` now
+    /// matches branch names case-INSENSITIVELY — without storing the
+    /// CANONICAL repo casing on the resolved segment, typing "Main" against
+    /// a repo branch actually named "main" would resolve the segment (typed
+    /// casing preserved) but then fail the exact-match downstream, reporting
+    /// a wrong "No worktree found" error for a branch that plainly exists.
+    func testParseTypedBranchCasingResolvesToCanonicalRepoBranchName() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties > Main",
+            projects: [project],
+            knownBranchNames: ["main"],
+            isLocked: false
+        )
+        // Canonical casing ("main"), NOT what was typed ("Main").
+        XCTAssertEqual(result.branchToken, "main")
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: result.branchToken,
+            worktrees: [],
+            currentBranchAtProjectRoot: "main"
+        )
+        XCTAssertEqual(resolution, .isDefaultBranch, "must resolve, not report a false \"not found\"")
     }
 
     /// A quoted `>` must stay a literal character inside the quoted
@@ -1268,12 +1437,22 @@ final class SessionComposerCommandParserTests: XCTestCase {
     /// assertion goes red (`"> mythread"` instead of `"mythread"`) while the
     /// no-leading-chevron assertion stays green, which is exactly the
     /// asymmetry the defect describes. Verified red against that reversion.
+    /// Bug fix (2026-08-26): a single `>` now arms BRANCH, not operator —
+    /// reaching a template-resolved operator via chevron now needs the
+    /// double-chevron form (decision 2: each `>` advances exactly one
+    /// slot). Rewritten from the single-chevron form, which under the new
+    /// grammar tries "orchestrator" as a branch first (no branch list
+    /// passed here, so it would resolve `.unresolved`, not the template) —
+    /// still asserts the same "operator resolving returns matching to
+    /// live, so the next `>` is a separator, not a literal" property this
+    /// test exists to prove, now also asserting the operator segment
+    /// itself resolved (the old test never checked that directly).
     func testChevronResolvedOperatorReturnsToLiveMatchingSoTheNextChevronIsASeparatorNotALiteral() {
         let project = makeProject(name: "ghostties")
         let template = makeTemplate(name: "orchestrator")
 
         let leadingChevron = SessionComposerCommandParser.parsePath(
-            rawQuery: "ghostties > orchestrator > mythread",
+            rawQuery: "ghostties > > orchestrator > mythread",
             projects: [project], templates: [template], isLocked: false
         )
         let noLeadingChevron = SessionComposerCommandParser.parsePath(
@@ -1281,6 +1460,8 @@ final class SessionComposerCommandParserTests: XCTestCase {
             projects: [project], templates: [template], isLocked: false
         )
 
+        let operatorSegment = leadingChevron.segments.first { $0.kind == .operation }
+        XCTAssertEqual(operatorSegment?.resolved, .template(template.id))
         XCTAssertEqual(text(leadingChevron.remainderRange, in: leadingChevron.source), "mythread")
         XCTAssertEqual(text(noLeadingChevron.remainderRange, in: noLeadingChevron.source), "mythread")
     }
@@ -1596,11 +1777,16 @@ final class SessionComposerCommandParserTests: XCTestCase {
     /// (only try it for the ordinary "nothing matched" run-open path) — this
     /// test goes red (no `.operation` segment at all; the text stays an
     /// open, unresolved run).
+    /// Bug fix (2026-08-26): single chevron now arms branch; reaching an
+    /// operator template via chevron now needs the double-chevron form —
+    /// rewritten from the single-chevron query, which under the new
+    /// grammar tries "orchestrator" as a branch first and, with no branch
+    /// list passed here, resolves it `.unresolved` instead.
     func testChevronOpenedOperatorRunStillResolvesAgainstKnownTemplates() {
         let project = makeProject(name: "ghostties")
         let template = makeTemplate(name: "orchestrator")
         let result = SessionComposerCommandParser.parsePath(
-            rawQuery: "ghostties > orchestrator ",
+            rawQuery: "ghostties > > orchestrator ",
             projects: [project], templates: [template], isLocked: false
         )
         let operatorSegment = result.segments.first { $0.kind == .operation }

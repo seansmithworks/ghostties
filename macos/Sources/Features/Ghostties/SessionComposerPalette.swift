@@ -366,6 +366,16 @@ struct SessionComposerPalette: View {
         if let rootBranch = composerStore.currentBranchAtProjectRoot {
             names.append(rootBranch)
         }
+        // Bug fix: the parser's `knownBranchNames` used to only ever see
+        // branches that already have a worktree (plus the root branch) —
+        // every other branch in the repo fell through to the ad-hoc/thread
+        // free-text path regardless of the `>`-armed-branch fix above.
+        // `branchesWithoutWorktree` is the store's already-computed list of
+        // exactly those; appending it here is what makes a typed branch
+        // with no worktree yet resolve to `.branch(...)` (unresolved, or
+        // creatable — see `typedBranchCreateOffer` below) instead of
+        // silently becoming a shell command.
+        names.append(contentsOf: composerStore.branchesWithoutWorktree)
         return names
     }
 
@@ -424,6 +434,10 @@ struct SessionComposerPalette: View {
             if let rootBranch = composerStore.currentBranchAtProjectRoot {
                 names.append(rootBranch)
             }
+            // Bug fix: see `commandKnownBranchNames`'s matching comment
+            // above — the same gap exists here for the implied-project
+            // (no project literally typed) resolution path.
+            names.append(contentsOf: composerStore.branchesWithoutWorktree)
             return names
         }()
         return SessionComposerCommandParser.effectiveParse(
@@ -697,10 +711,32 @@ struct SessionComposerPalette: View {
     /// resolution line is still present after this step, so its deletion
     /// (Step 5) reverts independently.
     private var statusStripMessage: String? {
-        SessionComposerCommandParser.statusStripMessage(
+        // Decision 1: a typed branch with no worktree gets an offered row
+        // (`commandOptions`, below) rather than reading as a dead end — the
+        // plain "not found" message would contradict that offer, so it's
+        // suppressed whenever `typedBranchCreateOffer` applies. `writeError`
+        // still wins over either, matching `statusStripMessage`'s own
+        // priority.
+        if composerStore.writeError == nil, typedBranchCreateOffer != nil {
+            return nil
+        }
+        return SessionComposerCommandParser.statusStripMessage(
             writeError: composerStore.writeError,
             typedBranchResolution: typedBranchResolution
         )
+    }
+
+    /// Decision 1: the typed branch token, if it names a KNOWN branch that
+    /// simply has no worktree yet (`composerStore.branchesWithoutWorktree`)
+    /// — the case `commandOptions` offers a "Create worktree" row for
+    /// instead of `typedBranchResolution`'s plain `.unresolved` dead end.
+    /// `nil` for every other shape (nothing typed, already resolved, or
+    /// genuinely nonexistent).
+    private var typedBranchCreateOffer: String? {
+        guard case .unresolved(let token) = typedBranchResolution,
+              composerStore.branchesWithoutWorktree.contains(token)
+        else { return nil }
+        return token
     }
 
     /// The query field's binding (model A rebuild — replaces the deleted
@@ -750,11 +786,31 @@ struct SessionComposerPalette: View {
     /// project prefix, against an already-implied `currentProject`, still
     /// gets a Run row.
     private var commandOptions: [ComposerOption] {
+        var options: [ComposerOption] = []
+
+        // Decision 1: a typed branch that names a real branch with no
+        // worktree yet gets an offered row, not silent creation and not a
+        // dead-end error. Selecting it does NOT launch a session — it
+        // arms creation exactly like `inlineBranchPicker`'s own
+        // `onCreateWorktree` row does, leaving the composer open with the
+        // branch control reading "Creating…" until it resolves.
+        if let currentProject, let token = typedBranchCreateOffer {
+            options.append(
+                ComposerOption(
+                    id: SessionComposerCommandParser.createWorktreeRowId,
+                    title: "Create worktree for \"\(token)\"",
+                    subtitle: currentProject.name,
+                    leadingIcon: "arrow.triangle.branch",
+                    action: { composerStore.createWorktree(named: token, in: currentProject) }
+                )
+            )
+        }
+
         guard let currentProject,
               let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: effectiveCommandParse.remainderTokens)
-        else { return [] }
+        else { return options }
 
-        return [
+        options.append(
             ComposerOption(
                 id: SessionComposerCommandParser.runRowId,
                 title: "Run \"\(effectiveCommandParse.remainderText)\"",
@@ -762,7 +818,8 @@ struct SessionComposerPalette: View {
                 leadingIcon: "terminal",
                 action: { commit(template: template) }
             )
-        ]
+        )
+        return options
     }
 
     // MARK: - Options
