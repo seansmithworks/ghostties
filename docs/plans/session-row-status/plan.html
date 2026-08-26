@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Session row status: implementation plan</title>
+    <link rel="stylesheet" href="http://localhost:4849/assets/plan.css" />
+  </head>
+  <body>
+    <h1>Session row status: implementation plan</h1>
+
+    <div class="doc-meta">
+      <span>Project: Ghostties</span>
+      <span>2026-08-26</span>
+      <span>Status: gate passed: rethink absorbed, see findings-ledger.md</span>
+    </div>
+
+<p>Re-draft after an adversarial gate returned <code>rethink</code> twice. The previous draft's foundation (a launcher-UUID argv join plus <code>~/.claude/sessions/&lt;pid&gt;.json</code>) is dead and is not patched here. Target ref <code>origin/main</code> @ <code>89e6dfb945e2d2a3622268adb6328555f574c8f5</code>; every <code>macos/</code> citation was read from that object store via <code>git show</code>, and every line number is an <code>origin/main</code> line number. Origin <code>SeanSmithWorks/ghostties</code> only, never upstream.</p>
+<h2>1. The plan in one screen</h2>
+<p>The sidebar stops inferring what a Claude session is doing from terminal-title regex and reads what Claude reports about itself. Six phases, in order, each shippable alone.</p>
+<ul>
+<li><strong>Phase 0, one line.</strong> <code>config.environmentVariables["GHOSTTIES_SESSION_ID"] = session.id.uuidString</code> at <code>SessionCoordinator.swift:249</code>, for every template including plain shell. Environment survives <code>exec</code> and is inherited by a <code>claude</code> the user types into that surface an hour later. This is the whole join.</li>
+<li><strong>Phase 1, one script.</strong> A shell script shipped in the app bundle and seeded to <code>~/.ghostties/hooks/ghostties-status.sh</code>. Claude Code runs it on seven events; it reads <code>$GHOSTTIES_SESSION_ID</code>, writes <code>~/.ghostties/state/&lt;uuid&gt;.json</code> by temp-file-plus-rename, and exits. A session outside Ghostties costs one <code>test -z</code> and <code>exit 0</code>.</li>
+<li><strong>Phase 2, the read.</strong> A new <code>ClaudeStateStore</code> watches that directory and feeds one branch of <code>SessionCoordinator.indicatorState(for:)</code>, inside the existing 1Hz tick so both indicator caches stay coherent by construction. Also fixes the 30-minute false-orange bug. Not pixel-neutral: six named things change on screen.</li>
+<li><strong>Phase 3, the Sessions row.</strong> The second line arrives: a todo breakdown when a todo list exists, an action line when the row is blocked. This is the half of the request Sean led with.</li>
+<li><strong>Phase 4, Approve mechanics.</strong> The inline button, the identity guard that stops it firing into a session that moved on, and the split-session lockout.</li>
+<li><strong>Phase 5, the Projects header.</strong> "N need you" as a trailing badge, plus the mixed-glyph legibility gate (which the arithmetic predicts will fail on light, with a fallback Sean pre-authorised).</li>
+</ul>
+<p><strong>The single dependency, and it is not code.</strong> Claude Code hooks can be configured only in a settings file: <code>~/.claude/settings.json</code>, a project <code>.claude/settings.json</code>, managed policy, or a plugin's <code>hooks/hooks.json</code>. There is no injection route for a third-party app. Ghostties cannot install this hook; Sean has to accept one entry in his own settings file. <strong>Under "no", everything from Phase 2 up is dead</strong> and what remains is Phase 0's one line plus the <code>DESIGN.md</code> correction. That is decision 1, at the end of this document, with a recommended answer.</p>
+<p><strong>What the gate killed and this plan does not carry:</strong> the launcher-script wrapper and its <code>template.launchBanner</code> gate (spec decision 2 is dead, it could never reach shell templates), the <code>KERN_PROC</code> ancestor walk, <code>~/.claude/sessions/&lt;pid&gt;.json</code> as a status source (undocumented, and its <code>status</code> is only <code>idle</code> or <code>busy</code>), reading a hardened process's environment back with <code>sysctl</code> (measured dead: <code>~/.local/bin/claude</code> is signed <code>flags=0x10000(runtime)</code>, so <code>ps -wwE</code> returns argv-only bytes and no <code>GHOSTTY*</code> keys), and transcript JSONL parsing.</p>
+<hr />
+<h2>2. Phases</h2>
+<p>Every phase runs the unfiltered suite: <code>xcodebuild test -derivedDataPath macos/build ONLY_ACTIVE_ARCH=YES ARCHS=arm64</code>, totals read from <code>xcrun xcresulttool get test-results summary</code> (raw log lines carry a constant offset). Do not touch <code>TEST_TARGET_NAME</code>: fixing it arms nine GUI-driving UI tests. Never <code>killall ghostty</code> or <code>killall ghostties</code>. Subagent briefs may capture the screen; synthetic keystrokes and AX driving are forbidden.</p>
+<p><strong>Step 0, before any code.</strong> Re-measure the baseline suite count on the branch point and record it in the PR body. Prior claims range from 625 to 885 and none of them is current. A delta is meaningless without this number.</p>
+<h3>Phase 0: stamp the session id into the environment</h3>
+<p><strong>Files</strong></p>
+<ul>
+<li><code>macos/Sources/Features/Ghostties/SessionCoordinator.swift</code>. The env block is <code>:249-259</code>: <code>config.environmentVariables = template.environmentVariables</code>, then the <code>GHOSTTIES_TASK_FILE</code> overlay (<code>:251</code>), the <code>GHOSTTIES_TASK_ID</code> overlay (<code>:254</code>), then the <code>extraEnvironment</code> loop (<code>:257-259</code>). Extract that assembly into a <code>nonisolated static func spawnEnvironment(template:taskFilePath:taskId:extra:sessionId:) -&gt; [String: String]</code> on <code>SessionCoordinator</code> and call it from <code>createSession</code>. Add the <code>GHOSTTIES_SESSION_ID</code> entry inside it, before the <code>extra</code> overlay so a caller can still override.</li>
+</ul>
+<p><strong>Why it works.</strong> <code>SurfaceConfiguration.environmentVariables</code> is marshalled into <code>ghostty_env_var_s</code> in <code>withCValue</code> (<code>macos/Sources/Ghostty/Surface View/SurfaceView.swift:705-723</code>), unconditionally, with no dependence on <code>config.command</code>. So a shell template (which has <code>command: nil</code> and therefore never got a launcher script) gets the stamp too. Ghostty spawns through <code>login -flp</code>, which preserves the environment, and the refuter measured five <code>GHOSTTY_*</code> keys already reaching a live <code>claude</code> pid through that path plus an interactive zsh plus <code>cco</code>. Nothing here depends on argv, so <code>exec</code> cannot erase it.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>New <code>macos/Tests/Ghostties/SessionEnvironmentStampTests.swift</code>, test <code>testShellTemplateStampsGhosttiesSessionId</code>, calling the real <code>SessionCoordinator.spawnEnvironment(...)</code> with <code>AgentTemplate.shell</code> and asserting <code>result["GHOSTTIES_SESSION_ID"] == id.uuidString</code>. It names a production symbol; the id is generated in the test and read back from production output, so neither side is free to drift. Mutant-verify by deleting the assignment line and watching it fail.</li>
+<li>Second test <code>testExtraEnvironmentCanOverrideSessionIdStamp</code>, asserting the overlay ordering, so a future caller reordering the block breaks a test rather than the join.</li>
+<li>Live evidence: launch one shell session and one agent session from the sidebar, type <code>echo $GHOSTTIES_SESSION_ID</code> in each, and confirm both print the row's id. Two commands, no build gate.</li>
+</ul>
+<h3>Phase 1: the hook</h3>
+<p><strong>Files</strong></p>
+<ul>
+<li><code>macos/Resources/hooks/ghostties-status.sh</code> (new).</li>
+<li><code>macos/Sources/Features/Ghostties/HookInstaller.swift</code> (new). <code>seedIfNeeded()</code> modelled directly on <code>PresetLoader.seedIfNeeded()</code> (<code>PresetLoader.swift:44</code>), same versioned <code>.seed-version</code> marker, same <code>0o700</code> directory mode. One deliberate difference: the hook script is app-owned code, not user content, so it is <strong>overwritten</strong> on a version bump rather than preserved. Presets are preserved because they are user-editable; a stale hook script is a bug.</li>
+<li><code>macos/Sources/Features/Ghostties/WorkspaceStore.swift:178</code>. Call <code>HookInstaller.seedIfNeeded()</code> on the line after <code>PresetLoader.seedIfNeeded()</code>.</li>
+<li><code>macos/Ghostties.xcodeproj/project.pbxproj</code>. <code>presets</code> ships as a folder reference in four places: a <code>PBXBuildFile</code> (<code>:36</code>), a <code>PBXFileReference</code> with <code>lastKnownFileType = folder; path = Resources/presets</code> (<code>:110</code>), a group child (<code>:344</code>), and a Resources build-phase member (<code>:634</code>). <code>hooks</code> needs the identical four entries.</li>
+</ul>
+<p><strong>Where the script lives, decided.</strong> <code>macos/Resources/hooks/</code>, not <code>scripts/</code>. <code>scripts/</code> holds build-time shell that never enters the bundle; this file has to be reachable from a stable path at runtime. Seeding to <code>~/.ghostties/hooks/</code> means Sean's settings entry points at one path that survives worktree churn, repo moves, and app updates.</p>
+<p><strong>What the script does.</strong> Six steps and no JSON parser.</p>
+<ol>
+<li><code>[ -z "$GHOSTTIES_SESSION_ID" ] &amp;&amp; exit 0</code>.</li>
+<li>Read stdin whole into a variable.</li>
+<li>Wrap it: <code>{"ghosttiesSessionId":"&lt;uuid&gt;","updatedAt":&lt;epoch&gt;,"hook":&lt;raw stdin&gt;}</code>.</li>
+<li>Write to <code>&lt;dest&gt;.$$.tmp</code>, then <code>mv -f</code> onto <code>&lt;dest&gt;</code>. Same-directory <code>mv</code> is <code>rename(2)</code>, which changes a directory entry, which is what a directory vnode source fires on. The previous draft's in-place write was the bug the gate found twice.</li>
+<li>If the raw bytes contain <code>"tool_name":"TodoWrite"</code>, the destination is <code>~/.ghostties/state/&lt;uuid&gt;.todos.json</code>; otherwise it is <code>~/.ghostties/state/&lt;uuid&gt;.json</code>. A <code>case</code> glob match, no parser.</li>
+<li><code>exit 0</code>, always.</li>
+</ol>
+<p><strong>Deviation from the brief, stated.</strong> The brief specified the script derive <code>state</code> and write a flat <code>{state, structuredPrompt, todos, ...}</code> shape. Deriving state in shell needs a JSON parser, which means a hard runtime dependency on <code>jq</code> (not guaranteed) or <code>/usr/bin/python3</code> (can trigger a Command Line Tools prompt). So the <strong>on-disk</strong> format is the raw hook payload plus a two-field wrapper, and the derivation moves into Swift where <code>JSONDecoder</code> is free and the mapping table is unit-testable against fixtures. The contract the brief named survives exactly, as the <code>ClaudeState</code> struct in Phase 2. Splitting todos into their own file is what stops the next <code>PreToolUse</code> from overwriting the last <code>TodoWrite</code> payload.</p>
+<p><strong>Events registered, all <code>"async": true</code>.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Matcher</th>
+<th>Derived state</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>UserPromptSubmit</code></td>
+<td>none</td>
+<td><code>busy</code></td>
+</tr>
+<tr>
+<td><code>PreToolUse</code></td>
+<td>none</td>
+<td><code>busy</code> (this is also what clears an attention state after Sean answers in the terminal)</td>
+</tr>
+<tr>
+<td><code>PostToolUse</code></td>
+<td><code>TodoWrite</code></td>
+<td>todos only, no state change</td>
+</tr>
+<tr>
+<td><code>Stop</code></td>
+<td>none</td>
+<td><code>idle</code></td>
+</tr>
+<tr>
+<td><code>Notification</code></td>
+<td>none</td>
+<td><code>needsPermission</code> if <code>notification_type == permission_prompt</code>; <code>needsInput</code> if <code>idle_prompt</code>, <code>elicitation_dialog</code>, <code>elicitation_url_dialog</code>, or <code>agent_needs_input</code>; ignored otherwise</td>
+</tr>
+<tr>
+<td><code>PermissionRequest</code></td>
+<td>none</td>
+<td><code>needsPermission</code>, carrying <code>tool_name</code></td>
+</tr>
+<tr>
+<td><code>SessionEnd</code></td>
+<td>none</td>
+<td><code>ended</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>"async": true</code> on <code>PermissionRequest</code> is not a performance choice. An async hook cannot return a <code>decision</code>, so it is the mechanism that guarantees v1 can never alter a permission outcome. Observe-only is enforced by the transport, not by discipline.</p>
+<p><strong>Pruning <code>~/.ghostties/state/</code>.</strong> Three mechanisms, because the launcher directory leaked for exactly the reason of having only one.</p>
+<ul>
+<li><code>SessionCoordinator.setStatus(_:for:)</code> (<code>:1464-1477</code>), <code>.completed</code>/<code>.exited</code>/<code>.killed</code> branch: delete both files for that id. This is the right seam because <code>closeSession</code> and <code>handleSurfaceClose</code> both funnel through it; the launcher script's delete sits in <code>closeSession</code> alone (<code>:664</code>), which is why stale scripts accumulate.</li>
+<li>App-launch sweep, <code>ClaudeStateStore.sweepStale()</code>, called from <code>macos/Sources/App/macOS/AppDelegate.swift:265</code> alongside <code>SessionCoordinator.sweepStaleLauncherScripts()</code>. Delete <code>*.json</code> older than 24h, using the same symlink-aware <code>attributesOfItem</code> plus <code>.typeRegular</code> check the launcher sweep uses (<code>:1006-1025</code>).</li>
+<li>A <code>SessionEnd</code> event marks the file <code>ended</code>; the store deletes it on the next read.</li>
+</ul>
+<p>Directory mode <code>0o700</code>. These files carry todo text and tool names, the same per-session context class the launcher-script comment warns about at <code>SessionCoordinator.swift:987-990</code>.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>New <code>macos/Tests/Ghostties/HookInstallerTests.swift</code>: <code>testSeedWritesExecutableHookScript</code> asserts the seeded file exists at <code>HookInstaller.hooksDirectoryPath</code> with mode <code>0o700</code>, and <code>testSeedOverwritesOnVersionBump</code> asserts a modified seeded script is replaced when <code>seedVersion</code> advances (the deliberate divergence from <code>PresetLoader</code>). Both name production symbols. Mutant-verify the second by restoring <code>PresetLoader</code>'s preserve-on-exists behaviour and watching it fail.</li>
+<li>Live evidence: the three experiments in section 3. There is no useful unit test of the script itself; its correctness is the observed payloads.</li>
+</ul>
+<h3>Phase 2: the read, into both caches</h3>
+<p><strong>Files</strong></p>
+<ul>
+<li><code>macos/Sources/Features/Ghostties/ClaudeStateStore.swift</code> (new). A <code>@MainActor final class</code> with a <code>static let shared</code>, not a per-coordinator instance: <code>SessionCoordinator</code> is per-window (<code>:19-20</code>) and <code>~/.ghostties/state/</code> is global. Holds <code>private var states: [UUID: ClaudeState]</code>, refreshed by a single <code>TaskFileWatcher(url:debounceInterval:onChange:)</code> on <code>~/.ghostties/state/</code>. The watcher needs no change: it is already a general directory vnode source over <code>[.write, .extend, .rename, .delete, .attrib]</code> (<code>TaskFileWatcher.swift:58-72</code>), it fires once on attach, it retries every 500ms if the directory does not exist yet, and Phase 1 writes by rename so directory entries genuinely change.</li>
+<li><code>ClaudeState</code> is the struct the brief specified: <code>ghosttiesSessionId</code>, <code>claudeSessionId</code>, <code>cwd</code>, <code>state</code> (<code>busy</code> / <code>idle</code> / <code>needsInput</code> / <code>needsPermission</code> / <code>ended</code>), <code>structuredPrompt: (toolName: String, toolUseId: String?)?</code>, <code>todos: [ClaudeTodo]?</code>, <code>updatedAt: Date</code>. Decoded from the raw wrapper; the event-to-state mapping is a <code>static func derive(from:)</code> so it is testable without a filesystem.</li>
+<li><code>macos/Sources/Features/Ghostties/SessionCoordinator.swift:1345-1372</code>. One branch at the top of the <code>.running</code> case, before the <code>lastOutputTimestamps</code> check.</li>
+</ul>
+<p><strong>All file IO stays off the render path.</strong> <code>indicatorState(for:)</code> has two callers in <code>body</code> (<code>ProjectDisclosureRow.swift:176</code> and <code>:413</code>, the latter mapping over every session in the project). The branch does a dictionary lookup on an already-parsed in-memory map. Parsing happens only in the watcher callback, which arrives on the main queue debounced at 150ms. Nothing in <code>body</code> touches the disk.</p>
+<p><strong>Mapping into the seven-case enum</strong></p>
+<table>
+<thead>
+<tr>
+<th><code>ClaudeState.state</code></th>
+<th><code>SessionIndicatorState</code></th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>busy</code></td>
+<td><code>.processing</code>, promoted to <code>.longRunning</code> past 1800s</td>
+<td>Promotion keeps <code>processingStartTimes</code> and <code>Self.longRunningThreshold</code> (<code>:138</code>)</td>
+</tr>
+<tr>
+<td><code>idle</code></td>
+<td><code>.idle</code></td>
+<td>Also clears <code>processingStartTimes[id]</code></td>
+</tr>
+<tr>
+<td><code>needsInput</code></td>
+<td><code>.needsAttention</code></td>
+<td>Payload <code>.freeform</code></td>
+</tr>
+<tr>
+<td><code>needsPermission</code></td>
+<td><code>.needsAttention</code></td>
+<td>Payload <code>.permission(toolName:toolUseId:)</code></td>
+</tr>
+<tr>
+<td><code>ended</code>, or <code>updatedAt</code> older than 30 minutes</td>
+<td>no branch taken</td>
+<td>Falls through to today's heuristics</td>
+</tr>
+</tbody>
+</table>
+<p><code>.waiting</code> is never produced by the hook, and that is correct: it was always the branch inference fell into when it could not tell, and <code>:1362-1371</code> already returns <code>.idle</code> for silent agent sessions.</p>
+<p><strong>The payload does not go on the enum.</strong> <code>SessionIndicatorState</code> is a plain <code>Comparable</code> enum with a <code>priority</code> switch (<code>Models/AgentSession.swift:175-199</code>). Adding an associated value changes its synthesized <code>Equatable</code>, which is what <code>Perf.publishIfChanged</code>'s <code>guard cached != current</code> compares, so a tool-name change would republish and re-render the whole sidebar. The payload lives in <code>ClaudeStateStore.attention(for: UUID) -&gt; AttentionPayload?</code>, read by the row view directly. The enum, its ordering, and all six colour maps stay untouched, which is what decision 5 asked for.</p>
+<p><strong>Fix the 30-minute false orange.</strong> <code>processingStartTimes</code> is set on the first title-change output (<code>:1100-1101</code>) and cleared in exactly one place: <code>promptDidBecomeReady</code>, on OSC 133 (<code>:1235-1236</code>), which Claude's TUI never emits. So every Claude session promotes to <code>.longRunning</code> orange 30 minutes after its first output and stays there. The branch clears <code>processingStartTimes[id]</code> on a hook <code>idle</code>, the same mutation <code>promptDidBecomeReady</code> performs. Hook-covered rows get correct orange; rows without a hook are unchanged.</p>
+<p><strong>Both caches stay coherent by construction.</strong> The read enters through <code>indicatorState(for:)</code>, which <code>performActivityTick()</code> (<code>:1279-1320</code>) already calls to build <code>current</code>, hands to <code>Perf.publishIfChanged</code> with the coordinator's own <code>cachedIndicatorStates</code> passed inout (<code>:1301-1304</code>), and publishes into <code>WorkspaceStore.updateIndicatorState</code> (<code>:1311</code>). No second publish path is added. A second path is the exact shape of the PR #90 and #92 bugs.</p>
+<p><strong>No abstain rule.</strong> A row with no state file keeps today's heuristics unchanged. The previous draft's "non-joined rows are never eligible for an attention colour" is a regression switch until hook coverage is real, and it contradicted its own mapping section.</p>
+<p><strong>What changes on screen. Phase 2 is not pixel-neutral.</strong></p>
+<ol>
+<li>Agent rows stop flickering between <code>.processing</code> and <code>.idle</code> every 2 seconds of silence (<code>activityThreshold</code>, <code>:88</code>). A busy turn holds green for its whole duration.</li>
+<li>Projects stop bouncing in and out of the ACTIVE NOW section during that flicker. <code>WorkspaceStore.isActiveIndicatorState</code> (<code>:1080-1087</code>) excludes <code>.idle</code>, and <code>computeSectionedProjects</code> reads it at <code>:1141-1143</code>.</li>
+<li>The menu-bar dot stops flickering for the same reason. <code>MenuBarController.swift:26</code> subscribes to the published indicator dict; <code>MenuBarIconRenderer.dotColor</code> is at <code>:151-161</code>.</li>
+<li>Gold appears when a permission prompt is genuinely up and clears when it is answered, instead of whenever the terminal title happens to end in <code>?</code> or <code>:</code> (<code>isLikelyPromptingForInput</code>, <code>:1416-1432</code>).</li>
+<li>Orange stops appearing on every Claude session older than 30 minutes.</li>
+<li>Sessions-tab section membership does <strong>not</strong> move: <code>belongsInActive</code> is a plain "not inactive" test (<code>RecentsListView.swift:305</code>), so processing and idle are both Active. No row reshuffling under the cursor.</li>
+</ol>
+<p><strong>Every surface the global indicator dict drives</strong>, so a review round covers all of them: the row glyph (<code>RecentsRowView.swift:119-128</code>), Sessions-tab section membership (<code>RecentsListView.swift:215</code>, <code>:225</code>, <code>:236</code>), the project ghost tint (<code>WorkspaceStore.projectGhostColor</code>, <code>:1049-1073</code>), project section bucketing (<code>:1141</code>), the per-project grace tracker (<code>:574</code>, <code>:596</code>), the sectioned-projects and session-groups cache invalidation in the <code>didSet</code> (<code>:58-62</code>), the menu-bar icon (<code>MenuBarController.swift:26</code>), and the menu-bar dropdown rows (<code>MenuBarDropdownView.swift:164-174</code>). The sixth colour map is <code>SessionDetailView.swift:156-166</code>; the fourth is <code>ProjectDisclosureRow.projectHeaderColor</code> (<code>:418-428</code>).</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>New <code>macos/Tests/Ghostties/ClaudeStateStoreTests.swift</code>: <code>testDerivesNeedsPermissionFromNotificationPayload</code>, <code>testDerivesBusyFromPreToolUse</code>, <code>testDerivesIdleFromStop</code>, <code>testStateOlderThanThirtyMinutesIsIgnored</code>, each calling the real <code>ClaudeStateStore.derive(from:)</code> against a fixture captured in experiment E1 or E2, never a hand-written literal. Mutant-verify by swapping two rows of the mapping.</li>
+<li>New <code>macos/Tests/Ghostties/SessionCoordinatorClaudeStateTests.swift</code>, following <code>SessionCoordinatorIndicatorCacheTests.swift:115-158</code>: inject a stub state provider, <code>seedRunningSessionForTesting(id:)</code> (<code>:1537</code>), <code>runActivityTickForTesting()</code> (<code>:1544</code>), assert the published indicator for that id. One test per mapping row. Mutant-verify by inverting <code>busy</code> and <code>idle</code>.</li>
+<li><code>testHookIdleClearsProcessingStartTime</code>: seed via <code>seedIndicatorStateForTesting(id:processingStartSecondsAgo:)</code> (<code>:1552-1572</code>) at 2000 seconds, feed a hook <code>idle</code> then a hook <code>busy</code>, assert the result is <code>.processing</code> and not <code>.longRunning</code>. This is the false-orange regression test and it fails without the clear.</li>
+<li>Capture the sidebar at @1x and @2x with at least three real sessions in mixed states, light and dark. The chip-width line shipped wrong three times running on source-reading alone in this repo; a layout or colour claim needs pixels.</li>
+</ul>
+<h3>Phase 3: the Sessions row second line</h3>
+<p><strong>Files</strong></p>
+<ul>
+<li><code>macos/Sources/Features/Ghostties/RecentsRowView.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/RecentsListView.swift:148-164</code></li>
+</ul>
+<p><strong>The layout, decided.</strong> The breakdown or action line <strong>replaces</strong> <code>Text(projectName)</code> (<code>RecentsRowView.swift:84-87</code>) while present, and the row reverts to <code>projectName</code> when it clears. Row height stays 36 (<code>:104</code>), the two-line stack at <code>:59</code> keeps its shape, and density is unchanged. The glyph owns status; the second line is a breakdown or an action, never a status word.</p>
+<p><strong>The cost of that, named.</strong> The Sessions tab groups by indicator state, not by project (<code>activeSessions</code> / <code>inactiveSessions</code> / <code>archiveSessions</code>, <code>RecentsListView.swift:215-243</code>), so rows from different worktrees interleave and <code>projectName</code> is the only project attribution on the tab. While the second line is a breakdown, that attribution is gone from the pixels. Mitigation: it stays in the accessibility label, which already reads "in <projectName>" (<code>RecentsRowView.swift:152-164</code>). This is decision 3 at the end, and the alternative (grow the row to three lines at 48pt) is the fork.</p>
+<p><strong>Two shapes for the line</strong></p>
+<ul>
+<li><strong>Breakdown</strong>, when the store has a non-empty todo list: the <code>activeForm</code> of the single <code>in_progress</code> item, then a middot, then "N of M". Absent when the list is empty or missing. No placeholder, no disabled state.</li>
+<li><strong>Action</strong>, when the state is <code>.needsAttention</code>: <code>needsPermission</code> renders an inline Approve button labelled from <code>toolName</code> (for example "Approve Bash"); <code>needsInput</code> renders the text action "Answer in terminal", which calls the same <code>coordinator.focusSession(id:)</code> (<code>SessionCoordinator.swift:421</code>) that tapping the row already calls.</li>
+</ul>
+<p>Action wins over breakdown when both apply. A blocked row's job is to be actioned.</p>
+<p><strong>The comparator, which is where this breaks silently.</strong> <code>RecentsRowView</code> is manually <code>Equatable</code> and its <code>==</code> compares exactly <code>session</code>, <code>projectName</code>, <code>indicatorState</code>, <code>isActive</code>, <code>isEditing</code> (<code>:42-48</code>), and <code>RecentsListView</code> applies <code>.equatable()</code> at <code>:164</code>. <strong>Every new prop must be added to <code>==</code> or the line renders once and freezes</strong>, which is the same failure family as the lazy-container freeze and no store-level unit test can see it. Add one prop, <code>rowDetail: RowDetail?</code>, an <code>Equatable</code> enum with <code>.breakdown(text:)</code> and <code>.action(AttentionPayload)</code> cases, computed in <code>sessionRow(for:)</code> (<code>RecentsListView.swift:148</code>) and compared in <code>==</code>.</p>
+<p><strong>Colour.</strong> Gold is a glyph tint and never a text colour (about 1.3:1 as text on light chrome). The breakdown line uses <code>WorkspaceLayout.textSecondaryLight</code> / <code>textSecondaryDark</code> (<code>:216</code>, <code>:219</code>), the same tokens <code>projectName</code> uses today. The Approve button is a filled control, so its label is white on a filled background, and its fill is the accent, not the status gold.</p>
+<p><strong>Accessibility.</strong> <code>RecentsRowView</code> ends with a combined accessibility element plus an explicit <code>.accessibilityLabel(accessibilityLabel)</code> (<code>:112-113</code>), and the explicit label overrides the combined children, so a new visual line reaches VoiceOver only if it is appended in <code>accessibilityLabel</code> (<code>:152-164</code>). The Approve button inside a combined element is not focusable, so the row also gains <code>.accessibilityAction(named:)</code> carrying the same label. <code>a11y</code> is a declared design layer for this repo.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li><code>RecentsRowDetailTests.testEqualityIncludesRowDetail</code>: construct two <code>RecentsRowView</code> values differing only in <code>rowDetail</code> and assert they compare unequal. Names the production <code>==</code>. Mutant-verify by removing the <code>rowDetail</code> clause from <code>==</code>.</li>
+<li><code>ClaudeTodoBreakdownTests.testBreakdownUsesActiveFormAndFraction</code> and <code>testEmptyTodoListYieldsNoBreakdown</code>, against the real formatter and an E1 fixture.</li>
+<li><code>RecentsRowAccessibilityTests.testAccessibilityLabelIncludesBreakdown</code>, asserting on the production <code>accessibilityLabel</code>.</li>
+<li>Capture at @1x and @2x, light and dark, with one breakdown row, one <code>needsPermission</code> row, one <code>needsInput</code> row, and one plain row in frame. Budget two review rounds: UI fixes in this repo have regressed each other six times for six.</li>
+</ul>
+<h3>Phase 4: Approve mechanics</h3>
+<p><strong>Files</strong></p>
+<ul>
+<li><code>macos/Sources/Features/Ghostties/SessionCoordinator.swift</code>, new method <code>func sendApproval(for id: UUID, matching: AttentionPayload) -&gt; Bool</code>.</li>
+<li><code>macos/Sources/Features/Ghostties/RecentsRowView.swift</code>, the button action.</li>
+<li>Nothing in <code>macos/Sources/Ghostty/</code>. That is the upstream seam and is consume-only.</li>
+</ul>
+<p><strong>The path, confirmed.</strong> <code>SplitTree</code> conforms to <code>Sequence</code> and <code>Collection</code> over leaf views (<code>SplitTree.swift:1181-1195</code>), so <code>sessionTrees[id]?.first</code> is the leftmost leaf <code>Ghostty.SurfaceView</code>. <code>SurfaceView</code> exposes <code>private(set) var surfaceModel: Ghostty.Surface?</code> (<code>SurfaceView_AppKit.swift:180</code>), internal to the same module because <code>PRODUCT_MODULE_NAME</code> is <code>Ghostty</code>. <code>Ghostty.Surface.sendText(_:)</code> is at <code>Ghostty.Surface.swift:41</code>. <code>focusSession</code> already uses <code>tree.first</code> this way (<code>SessionCoordinator.swift:448</code>).</p>
+<p><strong>Split sessions are locked out.</strong> The previous draft filed "root reaches a single leaf" as confirmed; it is not. A split session's root is a <code>.split</code>, and the leftmost leaf is not necessarily where Claude runs. If <code>sessionTrees[id]</code> has more than one leaf, the Approve button is not drawn at all and the row falls back to "Answer in terminal". A wrong-pane keystroke is worse than a hand-off.</p>
+<p><strong>The guard, which is the whole of this phase.</strong> <code>sendApproval</code> re-reads the state file from disk inside the action, immediately before sending, and no-ops unless <strong>both</strong> hold: <code>state == needsPermission</code>, and the prompt identity matches the one the button was drawn from. <strong>Identity is <code>tool_use_id</code>, not <code>updatedAt</code>.</strong> <code>updatedAt</code> is a wall-clock stamp that two consecutive prompts inside one second can share, and it also changes for reasons that are not a new prompt. <code>tool_use_id</code> is the field Claude assigns per tool invocation and is the only value in the payload that is unique to this prompt. If <code>tool_use_id</code> is absent from the observed payload (E2 answers this), the button does not ship and Approve moves to the v2 route below. Returning <code>false</code> flashes an inline "already resolved" on the row and does not send.</p>
+<p><strong>What gets sent.</strong> The literal text <code>1\r</code>, which selects the first option in Claude Code's permission select. E2 must confirm the prompt shape in Sean's installed version before this line ships; if the affirmative keystroke is not stable across the prompt variants observed, Phase 4 ships "Answer in terminal" only and Approve waits for v2.</p>
+<p><strong>The injection-free alternative, and why it is v2.</strong> A <strong>synchronous</strong> <code>PermissionRequest</code> hook can return a JSON <code>decision</code>, so Ghostties could answer the permission without ever touching the terminal: the hook writes its request, then polls <code>~/.ghostties/state/&lt;uuid&gt;.answer</code> for up to N seconds and returns the decision it finds. That removes input injection entirely. It is v2 because a synchronous hook <strong>blocks the agent</strong>: every permission prompt would stall for N seconds before the terminal even draws it, so the cost of the safer route is paid by Sean on every prompt whether or not he uses the sidebar. Ship the guarded injection first, measure how often the sidebar is actually the answering surface, then decide whether the stall is worth it.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li><code>SendApprovalGuardTests.testNoOpWhenToolUseIdDoesNotMatch</code> and <code>testNoOpWhenStateIsNoLongerNeedsPermission</code>, both asserting <code>sendApproval</code> returns <code>false</code> and that no send occurred (assert on a send-count spy, not on the absence of a crash). Mutant-verify by relaxing the guard to check <code>state</code> alone and watching the identity test fail; the repo's precedent is that a test which cannot discriminate the mutant is vacuous.</li>
+<li><code>testApproveHiddenForSplitSession</code>, asserting the row detail resolves to <code>.action(.freeform)</code> when the tree has more than one leaf.</li>
+<li>No synthetic-keystroke verification by an agent. Sean drives the live send himself, once, and the evidence is his word plus a screen capture of the row before and after.</li>
+</ul>
+<h3>Phase 5: the Projects header, and the DESIGN.md correction</h3>
+<p><strong>Files</strong></p>
+<ul>
+<li><code>macos/Sources/Features/Ghostties/WorkspaceStore.swift</code>, new <code>nonisolated static func needsYouCount(project:sessions:indicatorStates:) -&gt; Int</code>, mirroring the pure-static <code>projectGhostColor</code> at <code>:1049-1073</code> so the count is testable without a view.</li>
+<li><code>macos/Sources/Features/Ghostties/ProjectDisclosureRow.swift:339-355</code>.</li>
+<li><code>DESIGN.md</code> and <code>docs/plans/session-row-status-spec.html</code>, in the same commit.</li>
+</ul>
+<p><strong>Read the store, not the coordinator.</strong> The header currently mixes two sources: the ghost tint comes from <code>store.projectGhostColor(for:)</code> (<code>:330-334</code>, global dict) while the chevron comes from <code>projectHeaderIndicator</code>, which maps <code>coordinator.indicatorState(for:)</code> over every session (<code>:406-410</code>). The count reads the store, so it can never disagree with the ghost beside it. It can still disagree with the chevron; fixing that mixed read is out of scope here and is listed in section 5.</p>
+<p><strong>Coexisting with the plus button.</strong> The trailing slot already holds a <code>plus</code> <code>Button</code> when expanded (<code>:345-355</code>), and <code>Text(project.name)</code> is greedy at <code>.frame(maxWidth: .infinity, alignment: .leading)</code> (<code>:343</code>). The badge goes between them with <code>.layoutPriority(1)</code> so the greedy name truncates instead of the count. Row height stays 32. <strong>This is a pixel claim, not a source claim</strong>: verify with a capture on a long project name at 220pt sidebar width.</p>
+<p><strong>The badge is decorative.</strong> The whole header is one <code>Button</code> whose label carries <code>.contentShape(Rectangle())</code> (<code>:305-364</code>), so clicking the badge toggles the disclosure. That is correct behaviour, not a defect: the badge reports, the header expands. The header's hardcoded accessibility label at <code>:394</code> gains ", N need you".</p>
+<p><strong>The mixed glyph (decision 6), with an honest prediction.</strong> The gate: render the two-tone dot as a SwiftUI shape at its real 7pt size, capture at @1x and @2x, view at 100%, in light and dark, with the shipped <code>WorkspaceLayout.statusNeedsDecisionGold</code> <code>#FFC400</code> (<code>:178</code>) and not terracotta. Pass condition is that the two halves are distinguishable side by side against the sidebar chrome in <strong>both</strong> themes. <strong>Expect it to fail on light.</strong> Gold at 35 percent over chrome light <code>#F0E9E6</code> (<code>:139</code>) composites to roughly (245, 220, 150) against (240, 233, 230), a luminance ratio near 1.05 to 1. The dark composite reads clearly. A token that survives one theme is not shippable against the round-4 lock that both themes follow system. The fallback is the plain single number with no dot, which Sean pre-authorised ("maybe 1 later if it feels off"). A failed pixel check is new information, not a reopened decision, and the two captures are the evidence.</p>
+<p>Separately: there is no status dot in this sidebar. Session rows draw a 14pt ghost (<code>WorkspaceLayout.sessionGhostSize</code>, <code>:260</code>, used at <code>RecentsRowView.swift:53-56</code>) and the project header a 12pt ghost (<code>ProjectDisclosureRow.swift:330-335</code>). A 7pt two-tone circle introduces a primitive the vocabulary does not contain, sitting beside a glyph already carrying the same colour. Say that in the PR body alongside the captures so Sean rules on it once.</p>
+<p><strong>Fix <code>DESIGN.md</code>, not just the spec.</strong> <code>DESIGN.md</code> on <code>origin/main</code> asserts six times that terracotta <code>#C97350</code> is the <code>waiting</code> colour: <code>:72</code> ("reserved for <code>waiting</code> state"), <code>:104</code> (the palette table row "Accent (waiting)"), <code>:109</code> ("reserved exclusively for the <code>waiting</code> activity indicator state"), <code>:203</code> (the indicator table row), <code>:261</code> and <code>:270</code> (the do and do-not lists), <code>:303</code> (the summary rule). <code>:65</code> mentions terracotta as a general warmth cue and is correct as written. The shipped palette is <code>error</code> systemRed, <code>needsAttention</code> gold <code>#FFC400</code>, <code>waiting</code> blue <code>#5B8DEF</code>, <code>longRunning</code> orange <code>#F97316</code>, <code>processing</code> systemGreen, all six maps agreeing, and <code>WorkspaceLayout.swift:155-158</code> says in a comment that terracotta "is NOT the session-status waiting color." Correct <code>DESIGN.md</code> to the shipped palette and update the spec's mock colours in the same commit, or the next agent reintroduces terracotta from the source of truth.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li><code>NeedsYouCountTests.testCountsOnlyNeedsAttentionSessions</code> against the real static, with sessions in all seven states. Mutant-verify by widening the filter to include <code>.waiting</code>.</li>
+<li>Name collision to avoid: <code>NeedsYouZoneView</code> already exists (<code>NeedsYouZoneView.swift:11</code>) and reads an unrelated task concept in the hidden <code>taskFirst</code> view. Do not reuse the symbol.</li>
+<li>Captures: header with badge at @1x and @2x, light and dark, collapsed and expanded, with a long project name. Plus the two mixed-glyph gate captures.</li>
+</ul>
+<hr />
+<h2>3. Build-time experiments that gate later phases</h2>
+<p>All three run from one temporary log-only hook: a script registered for every event that appends its stdin to <code>~/.ghostties/state/_probe.log</code> and exits. It is the Phase 1 script with the write target changed, so writing it is not throwaway work. Nothing in Phases 2 to 5 starts until all three have run.</p>
+<p><strong>E1. Observe one real <code>TodoWrite</code> hook payload.</strong> Gates Phase 3. The <code>tool_input</code> shape for <code>TodoWrite</code> is undocumented; the expectation is <code>todos: [{content, status, activeForm}]</code> but that must be observed, not assumed. Capture one payload, commit it as a test fixture (redact the content strings), and write <code>ClaudeTodoBreakdownTests</code> against it. If <code>activeForm</code> is absent, the breakdown line uses <code>content</code> and the spec's copy changes.</p>
+<p><strong>E2. Confirm <code>Notification</code> with <code>notification_type: permission_prompt</code> actually fires, in Sean's permission mode.</strong> Gates Phase 2's attention mapping and all of Phase 4. Two things to record: whether the event fires at all (if he runs in a mode that auto-approves, it never will, and gold has no source), and whether the payload carries <code>tool_use_id</code>. Phase 4's guard has no identity without it and the button does not ship. Also record the observed rate over one working hour, which is the input to the risk in section 4.</p>
+<p><strong>E3. Confirm the hook sees <code>GHOSTTIES_SESSION_ID</code> from a <code>cco</code>-typed session.</strong> Gates everything. Phase 0 stamps the env at spawn; the chain to the hook is <code>login -flp</code>, an interactive zsh, <code>cco</code>, the <code>claude()</code> shell function, <code>claude</code>, then the hook process. Every link preserves the environment in principle and five <code>GHOSTTY_*</code> keys were measured arriving at a live <code>claude</code> pid, but the hook process itself has never been observed. One line in the probe log settles it. If it fails, the whole plan fails here and nothing downstream is worth building.</p>
+<hr />
+<h2>4. Risks</h2>
+<ul>
+<li><strong>Input injection is real and the guard is the only thing between it and a wrong keystroke.</strong> <code>sendText</code> goes straight to <code>ghostty_surface_text</code> with no confirmation (<code>Ghostty.Surface.swift:41-50</code>), so a fired keystroke lands wherever the TUI now is: a running command, an editor, a new turn. The guard is a fresh disk read plus a <code>tool_use_id</code> match plus the split-session lockout, evaluated inside the action. The row's cached state is never sufficient. State match alone is not sufficient either, because two consecutive prompts both read as pending.</li>
+<li><strong>The hook runs on every tool call.</strong> <code>PreToolUse</code> has no matcher, so a busy agent spawns one short-lived process per tool invocation, plus one more per <code>TodoWrite</code>. <code>"async": true</code> means it never blocks the agent, and the script's first statement is the env check, but this is a real cost on a machine already running 2 to 7 parallel sessions. E1 measures the rate; if it is bad, the mitigation is dropping <code>PreToolUse</code> and accepting that an attention state clears on tool completion instead of tool start.</li>
+<li><strong>The needs-you badge may be lit constantly.</strong> In default permission mode Claude prompts often, so "N need you" could be permanently non-zero and therefore meaningless. This is a design risk, not a bug: a badge that is always on is furniture. E2's rate measurement is what tells us whether the badge needs a floor (for example, only count prompts older than 10 seconds) before Phase 5 ships.</li>
+<li><strong>A user with no hook installed sees exactly today's sidebar.</strong> No abstain rule, no degraded mode, no empty states. That is deliberate and it is also what makes decision 1 load-bearing: the feature does not partially work without the hook, it does not exist.</li>
+<li><strong>A killed <code>claude</code> leaves a <code>busy</code> file behind.</strong> The 30-minute staleness cap handles it, and the branch only runs inside the <code>.running</code> lifecycle case so a dead surface never reads it. A working agent refreshes <code>updatedAt</code> on every tool call, so 30 minutes of silence while claiming busy is genuinely dead.</li>
+<li><strong>Two hooks from one session can interleave.</strong> Both write by rename, so no file is ever half-written; last-write-wins, ordered by <code>updatedAt</code>. Acceptable.</li>
+</ul>
+<hr />
+<h2>5. Out of scope</h2>
+<ul>
+<li><strong>The cross-window coordinator defect.</strong> <code>ProjectDisclosureRow</code> reads <code>coordinator.indicatorState(for:)</code> at <code>:409</code> and <code>:176</code> while the ghost beside it reads the store. <code>SessionCoordinator</code> is per-window (<code>:19-20</code>), so the two can disagree. Phase 5 reads the store for its own new count and touches neither call site.</li>
+<li><strong><code>isRunning(id:)</code>'s per-instance asymmetry</strong> (<code>:605-606</code>). Same family, same decision.</li>
+<li><strong>Un-hiding the Tasks view.</strong> <code>taskFirst</code> stays reachable only by a defaults write. No <code>AppDelegate.swift</code> edit.</li>
+<li><strong>Anything in <code>macos/Sources/Ghostty/</code>.</strong> Consumed only. <code>sendText</code> and <code>SplitTree</code> are read, never modified.</li>
+<li><strong>An eighth enum case.</strong> Settled by decision 5, and Phase 2 explains why the payload cannot live on the enum either.</li>
+<li><strong>Transcript parsing</strong> of <code>~/.claude/projects/&lt;encoded-cwd&gt;/&lt;sessionId&gt;.jsonl</code>. The AppKit refuter is right that it is the live todo store, but <code>PostToolUse</code> on <code>TodoWrite</code> delivers the same list directly and the docs say the JSONL format is unsupported for external parsing. Rejected as a mechanism, accepted as the evidence that Phase 3 is buildable.</li>
+<li><strong>The <code>KERN_PROCARGS2</code> environment read-back.</strong> Both refuters proposed it; it is measured dead against a hardened binary. See the final row of the findings ledger.</li>
+<li><strong><code>~/.claude/sessions/&lt;pid&gt;.json</code>, <code>~/.claude/todos/</code>, <code>~/.claude/tasks/</code>.</strong> All three are either undocumented, dormant, or too coarse. Not read, not cleaned up, not migrated.</li>
+<li><strong>A Settings affordance that writes the hook for Sean.</strong> Decision 2, recommended for v2.</li>
+</ul>
+<hr />
+<h2>6. ASSUMPTIONS</h2>
+<p>Numbered, and anything not opened is here.</p>
+<ol>
+<li><strong>The hook process inherits <code>GHOSTTIES_SESSION_ID</code>.</strong> Documented behaviour (hooks inherit the parent environment except <code>OTEL_*</code>) and every intermediate link preserves the environment, but the hook process itself has not been observed. E3 settles it. If false, the plan dies at Phase 1.</li>
+<li><strong><code>tool_use_id</code> is present on the <code>Notification</code> or <code>PermissionRequest</code> payload for a permission prompt.</strong> Documented for <code>PostToolUse</code>; not documented for the other two. E2 settles it. If false, Phase 4's Approve does not ship.</li>
+<li><strong><code>TodoWrite</code>'s <code>tool_input</code> carries <code>activeForm</code> and a <code>pending</code>/<code>in_progress</code>/<code>completed</code> status.</strong> Expected, undocumented. E1 settles it.</li>
+<li><strong><code>Notification</code> fires with <code>permission_prompt</code> in Sean's current permission mode.</strong> E2 settles it.</li>
+<li><strong>Claude Code's permission prompt is a numbered select where option 1 is affirmative.</strong> Not verified against the installed version. E2 settles it; Phase 4 is conditional on it.</li>
+<li><strong><code>AgentTemplate.shell</code> is constructible in a test</strong> for the Phase 0 test. I did not open <code>Models/AgentTemplate.swift</code> on this pass; the refutations cite <code>:115-121</code> for the shell kind and <code>:26</code> for <code>command: String?</code>.</li>
+<li><strong>The suite is green and its count.</strong> Not measured. Step 0 measures it.</li>
+<li><strong>The <code>hooks</code> folder reference in <code>project.pbxproj</code> behaves like <code>presets</code>.</strong> I read the four <code>presets</code> entries but did not add or build the <code>hooks</code> ones.</li>
+<li><strong>No fork code outside the files listed reads the global indicator dict in a way Phase 2 breaks.</strong> I enumerated <code>WorkspaceStore</code>, both row views, both menu-bar files, and <code>SessionDetailView</code>. I did not grep the whole tree.</li>
+<li><strong><code>TaskFileWatcher</code> fires on a same-directory <code>mv</code>.</strong> Strongly implied (a rename changes a directory entry, and the source takes <code>.rename</code> and <code>.write</code> on the directory fd at <code>:58-72</code>), but not observed on this specific write pattern. Cheap to confirm during Phase 1.</li>
+<li><strong>The 30-minute staleness cap does not cut a legitimately long turn.</strong> Rests on <code>PreToolUse</code> firing during long turns, which E1's log will show.</li>
+<li><strong>Nothing else in <code>~/.ghostties/</code> collides with a <code>state/</code> subdirectory.</strong> <code>cache/launchers</code>, <code>presets</code>, and per-project <code>.ghostties/tasks/</code> are the known users.</li>
+</ol>
+<hr />
+
+<h2>7. Decisions for Sean</h2>
+
+<blockquote class="callout">
+<p><strong>1. Does the hook go in <code>~/.claude/settings.json</code> (all projects) or a per-project <code>.claude/settings.json</code>?</strong>
+Recommended: <strong>user-level <code>~/.claude/settings.json</code></strong>. He already runs <code>SessionStart</code>, <code>PreToolUse</code>, <code>PostToolUse</code>, <code>Stop</code>, and <code>SubagentStop</code> there, so this is one more entry in a file he maintains, and it covers every project without per-repo bookkeeping. Per-project means editing N settings files and re-editing every new repo, for no benefit: the script already no-ops outside Ghostties. <strong>What "no" costs:</strong> there is no third-party injection route for a Claude Code hook, so "no" is "no hook anywhere". Phases 2 through 5 are dead, the feature does not exist, and what ships is Phase 0's one line plus the <code>DESIGN.md</code> correction. This is the first decision because everything else is downstream of it.</p>
+</blockquote>
+
+<blockquote class="callout">
+<p><strong>2. Should Ghostties later grow a Settings affordance that writes the hook entry for him?</strong>
+Recommended: <strong>v2, not now.</strong> It is a small amount of code (read, merge, write JSON, with a backup) but it means a third-party app editing his Claude Code configuration, which is a trust surface worth designing rather than bolting on. For v1 the install is one paste into a file he already edits. Revisit when the feature has earned its place.</p>
+</blockquote>
+
+<blockquote class="callout">
+<p><strong>3. Does the breakdown/action line replace <code>projectName</code>, or does the row grow?</strong>
+Recommended: <strong>replace.</strong> Row height stays 36pt, density holds, and the change is temporary (the line reverts to <code>projectName</code> the moment the todo list clears or the block resolves). The honest cost: the Sessions tab groups by state, not project, so while the breakdown is showing, that row loses its only visible project attribution, and he runs 2 to 7 sessions across several worktrees. The alternative is a 48pt three-line row, which is a permanent density cost for an intermittent line. This is his call, not mine; the strawman is built for replace.</p>
+</blockquote>
+
+<blockquote class="callout">
+<p><strong>4. If the mixed-glyph gate fails on light (expect it to), does the plain number ship?</strong>
+Recommended: <strong>yes, plain number, no dot.</strong> He pre-authorised it. The alternative that would survive both themes is a second solid hue for the freeform share, which reads as a second status and costs a new token. Flagged here so a predicted failure does not turn into a stalled phase.</p>
+</blockquote>
+
+<blockquote class="callout">
+<p><strong>5. Does the badge need a floor before it ships?</strong>
+Recommended: <strong>decide after E2's rate measurement, default no floor.</strong> If permission prompts turn out to be near-constant in his mode, "N need you" is lit permanently and stops carrying information. Only count prompts older than a few seconds if the measurement shows it. Not building it speculatively.</p>
+</blockquote>
+
+<h2>8. What I opened</h2>
+<p>All <code>macos/</code> and root-level paths were read from the <code>origin/main</code> object store via <code>git show origin/main:&lt;path&gt;</code>, not from this worktree's checkout (which is 60 commits behind). Line numbers are <code>origin/main</code> line numbers.</p>
+<ul>
+<li><code>macos/Sources/Features/Ghostties/SessionCoordinator.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/WorkspaceStore.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/WorkspaceLayout.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/RecentsRowView.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/RecentsListView.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/ProjectDisclosureRow.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/SessionDetailView.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/TaskFileWatcher.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/PresetLoader.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/MenuBar/MenuBarController.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/MenuBar/MenuBarDropdownView.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/MenuBar/MenuBarIconRenderer.swift</code></li>
+<li><code>macos/Sources/Features/Ghostties/Models/AgentSession.swift</code></li>
+<li><code>macos/Sources/Features/Splits/SplitTree.swift</code></li>
+<li><code>macos/Sources/Ghostty/Ghostty.Surface.swift</code></li>
+<li><code>macos/Sources/Ghostty/Surface View/SurfaceView.swift</code></li>
+<li><code>macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift</code> (grepped for <code>surfaceModel</code>)</li>
+<li><code>macos/Sources/App/macOS/AppDelegate.swift</code></li>
+<li><code>macos/Tests/Ghostties/SessionCoordinatorIndicatorCacheTests.swift</code></li>
+<li><code>macos/Ghostties.xcodeproj/project.pbxproj</code> (grepped for the <code>presets</code> folder reference)</li>
+<li><code>DESIGN.md</code> (grepped for terracotta)</li>
+<li><code>docs/plans/composer-ui-11/plan.md</code> and <code>docs/plans/composer-ui-11/findings-ledger.md</code> (shape precedent)</li>
+</ul>
+<p>Read from this worktree's checkout:</p>
+<ul>
+<li><code>docs/plans/session-row-status/draft-plan.md</code></li>
+<li><code>docs/plans/session-row-status/refutation.md</code></li>
+<li><code>docs/plans/session-row-status/refutation-appkit.md</code></li>
+<li><code>docs/plans/session-row-status-spec.html</code></li>
+</ul>
+<p>Memory and instruction files:</p>
+<ul>
+<li><code>~/.claude/BREVITY.md</code></li>
+<li><code>MEMORY.md</code>, <code>agent-craft.md</code>, <code>decision_session-row-status-vocabulary.md</code>, <code>reference_indicator-state-two-cache-coupling.md</code>, <code>feedback_vacuous-tests-pass-green.md</code>, <code>feedback_ui-fixes-regress-each-other.md</code></li>
+</ul>
+<p>Not opened, and listed as assumptions: <code>Models/AgentTemplate.swift</code>, the whole-tree grep for the global indicator dict, and the Claude Code hooks reference beyond the facts the orchestrator verified.</p>
+<hr />
+<p>Cut or demoted: the previous draft's launcher-script phases, its ancestor-walk port, and its "specified but not scheduled" Approve section are gone rather than demoted, because the foundation they stood on is dead. The full six-surface enumeration and the six colour-map sites sit inside Phase 2 rather than in a section of their own.</p>
+
+<details><summary>Findings ledger (51 rows)</summary>
+<p>51 rows: 28 from the generalist refutation (<code>refutation.md</code>, G-F1 to G-F28, verdict rethink), 22 from the AppKit/macOS-systems refutation (<code>refutation-appkit.md</code>, A-F1 to A-F22, verdict rethink), plus one row for the change both refuters named as their single most important. Neither refuter was the drafter. Evidence unedited on disk.</p>
+<p><strong>"Superseded"</strong> means the finding is about the dead join (launcher-UUID argv, or <code>~/.claude/sessions/&lt;pid&gt;.json</code>) and the new foundation makes it moot, not that it was wrong. Those findings were correct; the thing they were correct about no longer exists in the plan.</p>
+<h2>Structural decisions taken from the gate</h2>
+<p><strong>D-A. The join is one environment variable, not a process-table read.</strong> <code>GHOSTTIES_SESSION_ID</code> in <code>config.environmentVariables</code> at <code>SessionCoordinator.swift:249</code>. Environment survives <code>exec</code>, covers shell templates (which never had a command and therefore never had a launcher script), and covers a <code>claude</code> typed into a surface an hour later. Deletes the <code>launchBanner</code> gate, the ancestor walk, the launcher lifecycle coupling, and the entitlements question in one move. G-F8 and A-F15, first halves.</p>
+<p><strong>D-B. The status source is Claude Code hooks, not a status file.</strong> All seven states plus the prompt-shape payload decision 5 needs, written by the agent itself, delivered to a script that is Claude's own child and therefore already holds the environment. G-F9 and G-F28. This is what moves Phase 3 (todos) and Phase 4 (Approve) from "parked" to "scheduled", which is the half of the request Sean led with.</p>
+<p><strong>D-C. The read-back half of both refuters' fix is rejected on measurement.</strong> See the final row.</p>
+<p><strong>D-D. No abstain rule.</strong> A row with no state file keeps today's heuristics exactly. G-F19 and G-F6: as written the rule was a regression switch that also contradicted the draft's own mapping section.</p>
+<p><strong>D-E. Every write is temp-file-plus-rename.</strong> G-F2, G-F24, A-F4. A directory vnode source fires on entry changes, not in-place writes; the draft's watcher would have frozen at first read.</p>
+<h2>Ledger</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Source</th>
+<th>Claim</th>
+<th>Disposition</th>
+<th>What changed in the plan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G-F1</td>
+<td>generalist</td>
+<td>Launcher-UUID join resolves 0 of 10 live sessions, before or after 1.1</td>
+<td>ACCEPTED</td>
+<td>Decisive. The whole join is replaced by D-A; steps 1.1, 1.2, 1.3 are deleted, not fixed.</td>
+</tr>
+<tr>
+<td>G-F2</td>
+<td>generalist</td>
+<td><code>TaskFileWatcher</code> on a directory never sees an in-place write to a child</td>
+<td>ACCEPTED</td>
+<td>D-E. Phase 1's script writes <code>.tmp</code> then <code>mv -f</code>, so the directory entry changes and the watcher fires.</td>
+</tr>
+<tr>
+<td>G-F3</td>
+<td>generalist</td>
+<td>The 1.4 branch kills the only attention signal, and preserves the false-<code>longRunning</code> bug by name</td>
+<td>ACCEPTED, both halves</td>
+<td>Hook events supply attention states directly. Phase 2 clears <code>processingStartTimes[id]</code> on a hook <code>idle</code>, with <code>testHookIdleClearsProcessingStartTime</code> as the regression gate.</td>
+</tr>
+<tr>
+<td>G-F4</td>
+<td>generalist</td>
+<td>The needsAttention source is a terminal-title regex that effectively never fires, and fires falsely</td>
+<td>ACCEPTED</td>
+<td><code>isLikelyPromptingForInput</code> (<code>:1416-1432</code>) is no longer the attention source for hook-covered rows. It survives untouched as the fallback for rows without a hook.</td>
+</tr>
+<tr>
+<td>G-F5</td>
+<td>generalist</td>
+<td>Swapping terracotta for gold makes the mock's action text illegible (about 1.3:1)</td>
+<td>ACCEPTED</td>
+<td>Gold is a glyph tint only. Every text line in Phases 3 and 5 uses <code>WorkspaceLayout.textSecondaryLight</code> / <code>textSecondaryDark</code> (<code>:216</code>, <code>:219</code>).</td>
+</tr>
+<tr>
+<td>G-F6</td>
+<td>generalist</td>
+<td>The draft asserts the abstain rule and its contradiction in the same document</td>
+<td>ACCEPTED</td>
+<td>D-D. The rule is gone, so there is nothing to contradict.</td>
+</tr>
+<tr>
+<td>G-F7</td>
+<td>generalist</td>
+<td>ASSUMPTION 4 (entitlements) is resolved, not open: no app-sandbox key in any entitlements file</td>
+<td>ACCEPTED, now moot</td>
+<td>Correct, and it no longer matters: the new base makes no <code>sysctl</code> call. Removed from the assumptions list.</td>
+</tr>
+<tr>
+<td>G-F8</td>
+<td>generalist</td>
+<td>Set the session id in the spawn environment, then read it back via <code>KERN_PROCARGS2</code></td>
+<td>SPLIT: env inject ACCEPTED, read-back REJECTED</td>
+<td>The inject is Phase 0 and is the whole join. The read-back is measured dead against a hardened binary; see the final row.</td>
+</tr>
+<tr>
+<td>G-F9</td>
+<td>generalist</td>
+<td>A prompt-shape source exists (hooks), and the draft said none did</td>
+<td>ACCEPTED</td>
+<td>D-B. This is the plan's foundation. Phases 3 and 4 exist because of it.</td>
+</tr>
+<tr>
+<td>G-F10</td>
+<td>generalist</td>
+<td>Measure what <code>status</code> reads during a permission prompt before writing any code</td>
+<td>SUPERSEDED</td>
+<td><code>~/.claude/sessions/&lt;pid&gt;.json</code> is not read at all. The equivalent measurement survives as experiment E2, against the hook payload.</td>
+</tr>
+<tr>
+<td>G-F11</td>
+<td>generalist</td>
+<td><code>RecentsRowView</code>'s hand-written <code>==</code> (<code>:42-48</code>) must include any new prop or the row freezes</td>
+<td>ACCEPTED</td>
+<td>Phase 3 adds exactly one prop, <code>rowDetail</code>, to both the struct and <code>==</code>, with <code>testEqualityIncludesRowDetail</code> mutant-verified against removing the clause.</td>
+</tr>
+<tr>
+<td>G-F12</td>
+<td>generalist</td>
+<td>The project header's trailing slot already holds the <code>plus</code> button (<code>:345-355</code>)</td>
+<td>ACCEPTED</td>
+<td>Phase 5 places the badge between the greedy name and the plus, with <code>.layoutPriority(1)</code>, and requires a capture rather than a source argument.</td>
+</tr>
+<tr>
+<td>G-F13</td>
+<td>generalist</td>
+<td><code>DESIGN.md</code> says terracotta is the <code>waiting</code> colour six times; editing only the spec leaves the source of truth wrong</td>
+<td>ACCEPTED, verified</td>
+<td>Verified at <code>:72</code>, <code>:104</code>, <code>:109</code>, <code>:203</code>, <code>:261</code>, <code>:270</code>, <code>:303</code> (<code>:65</code> is a general warmth cue and stays). Phase 5 corrects <code>DESIGN.md</code> and the spec mock in one commit.</td>
+</tr>
+<tr>
+<td>G-F14</td>
+<td>generalist</td>
+<td>Launcher scripts are deleted only in <code>closeSession</code> (<code>:664</code>), so a self-exiting process leaks one until the 24h sweep</td>
+<td>SUPERSEDED, lesson kept</td>
+<td>No launcher scripts. The lesson shaped Phase 1's pruning: the state-file delete goes in <code>setStatus</code> (<code>:1464-1477</code>), which both <code>closeSession</code> and <code>handleSurfaceClose</code> funnel through, plus a launch sweep, plus the hook's own <code>SessionEnd</code>.</td>
+</tr>
+<tr>
+<td>G-F15</td>
+<td>generalist</td>
+<td>The colour map lives in six places, not two</td>
+<td>ACCEPTED</td>
+<td>All six enumerated in Phase 2 with line numbers. None of them changes, which is a stated property of putting the payload off the enum.</td>
+</tr>
+<tr>
+<td>G-F16</td>
+<td>generalist</td>
+<td>Cut the ancestor walk</td>
+<td>ACCEPTED</td>
+<td>Deleted. D-A.</td>
+</tr>
+<tr>
+<td>G-F17</td>
+<td>generalist</td>
+<td>Cut the <code>launchBanner</code> gate change; it cannot reach the shell template and widens a context leak</td>
+<td>ACCEPTED</td>
+<td>Deleted. Spec decision 2 is dead and the plan says so on the first screen.</td>
+</tr>
+<tr>
+<td>G-F18</td>
+<td>generalist</td>
+<td>Phase 1 as drafted buys almost nothing visible, and does not claim the two improvements it could</td>
+<td>ACCEPTED</td>
+<td>Phase 2 now names six specific on-screen changes and states plainly that it is not pixel-neutral.</td>
+</tr>
+<tr>
+<td>G-F19</td>
+<td>generalist</td>
+<td>Drop the abstain rule; it is a regression switch at zero coverage</td>
+<td>ACCEPTED</td>
+<td>D-D.</td>
+</tr>
+<tr>
+<td>G-F20</td>
+<td>generalist</td>
+<td>Replace the spec-HTML rewrite with the <code>DESIGN.md</code> fix</td>
+<td>ACCEPTED, widened</td>
+<td>Both, in the same commit. Editing only the mock is churn; editing only <code>DESIGN.md</code> leaves the spec lying.</td>
+</tr>
+<tr>
+<td>G-F21</td>
+<td>generalist</td>
+<td>The legibility gate is well built but gates a badge whose count source is dead</td>
+<td>ACCEPTED</td>
+<td>Resequenced. The gate runs in Phase 5, after a real needs-you source exists in Phase 2.</td>
+</tr>
+<tr>
+<td>G-F22</td>
+<td>generalist</td>
+<td>"4 scripts vs 10 sessions" was a file count, never an argv check</td>
+<td>ACCEPTED</td>
+<td>No coverage number in this plan is a directory listing. E3 measures the join by observing the hook's own environment.</td>
+</tr>
+<tr>
+<td>G-F23</td>
+<td>generalist</td>
+<td><code>decision_launcher-uuid-join-replaces-strategy-b.md</code> carries two false measurements the draft inherited</td>
+<td>ACCEPTED</td>
+<td>Both corrected here: "env vars are a dead end" was measured on a platform binary (it is true for read-back on a hardened binary, false for inheritance), and "coverage is zero because the directory is empty" misdiagnosed an <code>exec</code> problem. That memory file needs updating when this ships.</td>
+</tr>
+<tr>
+<td>G-F24</td>
+<td>generalist</td>
+<td>"TaskFileWatcher needs no change" was asserted from its doc comment, not from how the target files are written</td>
+<td>ACCEPTED</td>
+<td>D-E, and it is now ASSUMPTION 10 with a cheap confirmation step rather than an assertion.</td>
+</tr>
+<tr>
+<td>G-F25</td>
+<td>generalist</td>
+<td>A <code>strings</code> scan cannot answer what <code>status</code> reads during a permission prompt</td>
+<td>SUPERSEDED</td>
+<td>The file is not read. E2 answers the equivalent question by observation.</td>
+</tr>
+<tr>
+<td>G-F26</td>
+<td>generalist</td>
+<td>"Identical in two places" was concluded after opening two files; <code>DESIGN.md</code> was never opened</td>
+<td>ACCEPTED</td>
+<td>Same as G-F15 and G-F13. Both opened and cited here.</td>
+</tr>
+<tr>
+<td>G-F27</td>
+<td>generalist</td>
+<td>ASSUMPTION 7 was answerable in one file, and the 1.1 test named the wrong template</td>
+<td>SUPERSEDED</td>
+<td>No launcher test exists. <code>AgentTemplate.swift</code> is still unopened and is now ASSUMPTION 6, scoped to the Phase 0 test only.</td>
+</tr>
+<tr>
+<td>G-F28</td>
+<td>generalist</td>
+<td>"Nothing distinguishes a permission prompt from a freeform question" was concluded without opening the hooks reference</td>
+<td>ACCEPTED</td>
+<td>D-B. It is the root cause of the draft's whole shape.</td>
+</tr>
+<tr>
+<td>A-F1</td>
+<td>appkit</td>
+<td>Step 1.1's acceptance criterion is unsatisfiable by step 1.1's own change: <code>resolvedCommand</code> is nil for shell templates before the gate is reached</td>
+<td>ACCEPTED</td>
+<td>Same conclusion as G-F17, reached independently and more precisely (<code>:189-191</code> decides it, <code>:224</code> short-circuits). Step deleted.</td>
+</tr>
+<tr>
+<td>A-F2</td>
+<td>appkit</td>
+<td>The launcher UUID is in argv only because <code>buildCommand()</code> shell-escapes <code>'claude'</code>, which defeats <code>resolveCommand</code>, which leaves <code>exec</code> resolving to a zsh function from Sean's own dotfile</td>
+<td>ACCEPTED</td>
+<td>The decisive mechanism. Fixing any one of three unrelated things would have silently killed the feature with no compile error and no failing test. The new join has no such coupling.</td>
+</tr>
+<tr>
+<td>A-F3</td>
+<td>appkit</td>
+<td>The joinable set and the status-file set are currently disjoint: 1 of 11 has a launcher ancestor and it has no <code>.json</code></td>
+<td>SUPERSEDED</td>
+<td>Both sets are gone. The hook writes one file per Ghostties session id, so there is only one set.</td>
+</tr>
+<tr>
+<td>A-F4</td>
+<td>appkit</td>
+<td><code>TaskFileWatcher</code> structurally cannot see a status flip; measured inode-stable, birth hours older than mtime</td>
+<td>ACCEPTED</td>
+<td>D-E, and the measurement is why the plan specifies <code>mv -f</code> explicitly rather than "write the file".</td>
+</tr>
+<tr>
+<td>A-F5</td>
+<td>appkit</td>
+<td>Phase 2 is not "no new UI"; the global indicator dict is section membership, grace tracking, cache invalidation, and the menu bar</td>
+<td>ACCEPTED</td>
+<td>Phase 2 is billed as not pixel-neutral, enumerates all eight consuming surfaces, and states that Sessions-tab membership specifically does not move (<code>belongsInActive</code> is a plain not-inactive test, <code>RecentsListView.swift:305</code>), which is the reshuffling hazard the code comment at <code>:212-221</code> warns about.</td>
+</tr>
+<tr>
+<td>A-F6</td>
+<td>appkit</td>
+<td>Putting file work inside <code>indicatorState(for:)</code> puts it on the render path: two callers in <code>body</code>, one mapping over every session</td>
+<td>ACCEPTED</td>
+<td>Phase 2 states explicitly that parsing happens only in the debounced watcher callback and the branch is a dictionary lookup. No disk access in <code>body</code>.</td>
+</tr>
+<tr>
+<td>A-F7</td>
+<td>appkit</td>
+<td>The "honest downgrade" has no delta to buy: same two states, slower source, more machinery</td>
+<td>ACCEPTED</td>
+<td>Six named deltas replace the concession. The two the draft could have claimed and did not (ending the 2s flicker, killing the false orange) are items 1 and 5.</td>
+</tr>
+<tr>
+<td>A-F8</td>
+<td>appkit</td>
+<td>The mixed dot fails on light by arithmetic (about 1.05:1), and this sidebar has no dots at all</td>
+<td>ACCEPTED</td>
+<td>Phase 5 runs the gate and states the predicted failure in advance, so a failed capture is evidence rather than a stalled phase. The "no dots in this vocabulary" point goes in the PR body for Sean to rule on once. Decision 4.</td>
+</tr>
+<tr>
+<td>A-F9</td>
+<td>appkit</td>
+<td>Manual <code>Equatable</code> plus <code>.equatable()</code> at the call site</td>
+<td>ACCEPTED</td>
+<td>Same as G-F11. Two refuters found it independently, which is why it gets a named test rather than a note.</td>
+</tr>
+<tr>
+<td>A-F10</td>
+<td>appkit</td>
+<td>Neither new element reaches VoiceOver: <code>.combine</code> plus an explicit label discards child text; <code>a11y</code> is a declared design layer</td>
+<td>ACCEPTED</td>
+<td>Phase 3 appends the new line to the production <code>accessibilityLabel</code> (<code>:152-164</code>) with a test, adds <code>.accessibilityAction(named:)</code> for the Approve button, and Phase 5 extends the header's hardcoded label at <code>:394</code>.</td>
+</tr>
+<tr>
+<td>A-F11</td>
+<td>appkit</td>
+<td>The badge lands inside the header <code>Button</code>, so clicking it collapses the group; and the header carries two tints, so reading the store aligns the count with only one</td>
+<td>ACCEPTED</td>
+<td>Phase 5 declares the badge decorative and says the toggle behaviour is intended, and names the ghost-vs-chevron mixed read as an out-of-scope defect rather than pretending the store read fixes it.</td>
+</tr>
+<tr>
+<td>A-F12</td>
+<td>appkit</td>
+<td>"The project name is already implied by the tab's grouping" is false: the tab groups by state, not project</td>
+<td>ACCEPTED</td>
+<td>The strawman still recommends replacing <code>projectName</code>, but the cost is stated in the plan and carried into decision 3 rather than argued away. The a11y label retains the attribution.</td>
+</tr>
+<tr>
+<td>A-F13</td>
+<td>appkit</td>
+<td>Split sessions have no root leaf; ASSUMPTION 5 was filed under "capability confirmed"</td>
+<td>ACCEPTED</td>
+<td>Corrected: <code>SplitTree</code> conforms to <code>Collection</code> over leaves (<code>:1181-1195</code>) so <code>tree.first</code> is the leftmost leaf, and Phase 4 hides Approve entirely when the tree has more than one leaf. A wrong-pane keystroke is worse than a hand-off.</td>
+</tr>
+<tr>
+<td>A-F14</td>
+<td>appkit</td>
+<td>No failure mode for pid reuse; <code>~/.claude/sessions/</code> is pid-keyed and <code>procStart</code> is the unused disambiguator</td>
+<td>SUPERSEDED</td>
+<td>Nothing is pid-keyed. Files are named by the Ghostties session UUID, which the app generates.</td>
+</tr>
+<tr>
+<td>A-F15</td>
+<td>appkit</td>
+<td>One env var replaces 1.1 and most of 1.2; the entitlements question is a non-issue</td>
+<td>ACCEPTED for the env var, REJECTED for the sysctl read-back</td>
+<td>Same split as G-F8. The env var is Phase 0 and the entitlements finding is correct but moot.</td>
+</tr>
+<tr>
+<td>A-F16</td>
+<td>appkit</td>
+<td>The live todo store is <code>~/.claude/projects/&lt;encoded-cwd&gt;/&lt;sessionId&gt;.jsonl</code>, append-only, 106 written in 24h; the draft stopped one directory short</td>
+<td>REJECTED as the mechanism, ACCEPTED as the evidence</td>
+<td>The claim that live todo data exists is right and is why Phase 3 is scheduled rather than parked. But <code>PostToolUse</code> on <code>TodoWrite</code> delivers the same list directly, and the docs say the JSONL format is unsupported for external parsing. Transcript parsing is out of scope.</td>
+</tr>
+<tr>
+<td>A-F17</td>
+<td>appkit</td>
+<td>Phase 5's specification is longer than a parked decision needs</td>
+<td>ACCEPTED IN PART</td>
+<td>The parked framing is gone: Approve is scheduled, so it earns its spec. What was cut is the draft's argument for why it could not be built.</td>
+</tr>
+<tr>
+<td>A-F18</td>
+<td>appkit</td>
+<td>The draft reserved its assumption slot for entitlements and filed the load-bearing assumption as future acceptance criteria</td>
+<td>ACCEPTED</td>
+<td>The three genuinely load-bearing unknowns are ASSUMPTIONS 1 to 5 and each has a named experiment (E1, E2, E3) that runs before any dependent code.</td>
+</tr>
+<tr>
+<td>A-F19</td>
+<td>appkit</td>
+<td>Listing the launcher directory cannot measure join coverage; script-on-disk and uuid-in-argv are different quantities</td>
+<td>ACCEPTED</td>
+<td>Same as G-F22. No file count is used as a coverage measure anywhere in this plan.</td>
+</tr>
+<tr>
+<td>A-F20</td>
+<td>appkit</td>
+<td>The spec's "13/13 after closing the gate" was inherited as a method, not re-derived</td>
+<td>ACCEPTED</td>
+<td>The spec's decision 2 is dead and the plan says so above the fold. Re-measure-at-claim-time applies to method as well as values.</td>
+</tr>
+<tr>
+<td>A-F21</td>
+<td>appkit</td>
+<td>The todo-store search stopped at the second dead candidate instead of widening</td>
+<td>ACCEPTED</td>
+<td>Root cause of the draft parking Phase 3. Widening reached hooks (G-F9), which is a better answer than the transcript.</td>
+</tr>
+<tr>
+<td>A-F22</td>
+<td>appkit</td>
+<td>The draft reported that decision 1's evidence is stale (the polarity fix shipped) and then implemented decision 1 on inertia</td>
+<td>ACCEPTED IN PART</td>
+<td>The staleness is real: <code>:1362-1371</code> returns <code>.idle</code>, not <code>.waiting</code>, for silent agent sessions, so "0 of 11 genuinely waiting" no longer describes the shipped build. Decision 1 still stands, on new and stronger grounds: the only remaining attention source is a regex on the terminal title that fires when a task description happens to end in <code>?</code> or <code>:</code>. That is stated in the plan rather than left as an aside, and Sean is told the original evidence expired.</td>
+</tr>
+<tr>
+<td>FINAL</td>
+<td>both</td>
+<td><code>KERN_PROCARGS2</code> environment read-back, named by both refuters as their single most important change</td>
+<td>REJECTED as the read mechanism, ACCEPTED as the join mechanism</td>
+<td>Rejected on measurement, not judgement: <code>~/.local/bin/claude</code> is signed with hardened runtime (<code>codesign -dv</code> reports <code>flags=0x10000(runtime)</code>, identifier <code>com.anthropic.claude-code</code>), and macOS hides a hardened process's environment from other processes. <code>ps -wwE</code> on three live claude pids returned exactly the same 121 bytes as argv-only, with no <code>GHOSTTY*</code> keys; an unhardened control process did show its environment. So the half of their fix that reads the variable back is dead. The other half is the whole plan: a hook script is Claude's own child and <strong>inherits</strong> the variable directly, with no read-back needed. Both refuters were right about where the id should live and wrong about how to get it out.</td>
+</tr>
+</tbody>
+</table>
+</details>
+  </body>
+</html>

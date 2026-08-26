@@ -1,0 +1,82 @@
+# Refutation: session-row-status draft plan
+
+Target: `origin/main` @ `89e6dfb945e2d2a3622268adb6328555f574c8f5`. Draft: `docs/plans/session-row-status/draft-plan.md`. All `macos/`, `src/`, `include/` citations read via `git show origin/main:<path>`. Live data under `~/.claude/` and `~/.ghostties/` cited by field name and count only. Observed = I ran it; inferred = marked.
+
+## 1. WRONG
+
+**F1. The launcher-UUID join resolves none of Sean's live sessions, before or after Phase 1.1.**
+- Observed now: 10 live `~/.claude/sessions/*.json`, all 10 pids alive. Every ancestor chain is `claude <- zsh <- login <- ghostty` (Ghostties.app). Zero processes machine-wide carry `cache/launchers/` in argv (`ps -axo pid,ppid,command -ww`). The parent zsh's entire argv is 10 bytes: an interactive login shell, not `/bin/zsh -l <launcher>.sh`. These are Claude sessions typed into shell-template surfaces (`cco`, `~/.zshrc:507`; alias `cc`, `:123`).
+- The shell template has `command: nil` (`macos/Sources/Features/Ghostties/Models/AgentTemplate.swift:115-121`). `buildCommand()` returns `""` for it (`:235-240`). `createSession` bails at `guard !built.isEmpty else { return nil }` (`SessionCoordinator.swift:198`), so `finalCommand` returns nil at `:224`, one line BEFORE the `launchBanner` guard at `:225`. Closing that gate changes nothing for shell sessions. 1.1's acceptance ("one from the shell template ... returns 2 files") fails by construction.
+- For agent templates the wrapper ends in `exec` (`:238`). `execve` replaces argv; the script path survives in no process. The 4 scripts on disk (three ~1h old, one ~5.6h old) have 0 matching live processes.
+- Why July's "11/11" ever worked (observed + inferred): `buildCommand()` shell-escapes the command (`AgentTemplate.swift:236`), so `baseCommand` (`SessionCoordinator.swift:201`) is the literal `'claude'` with quotes. `resolveCommand` (`:916-983`) never strips quotes, finds no file named `'claude'` in any PATH dir, and returns the quoted string. The on-disk scripts end `exec 'claude'` / `exec 'migrate-ghostties'`, unresolved. Line 2 of the script sources `~/.zshrc` (`:238`), which defines `claude()` (`~/.zshrc:38`). zsh's `exec` runs a function in-process (verified: `zsh -c 'f(){...}; exec f'` printed from the same pid), the function spawns the binary as a child, and the launcher zsh lingers as a visible ancestor. So the join was an artefact of a quoting bug plus Sean's shell function, and it defeats `e8dbf6ed7`'s stated purpose ("restore exec ... so Ghostty's tracked PID exits when Claude exits"). It never existed for `cco`-typed sessions, which is all 10 live ones.
+- Consequence: 1.3's "10/10" target is unreachable. With 0 joined rows, the abstain rule (plan line 17) makes every row ineligible for an attention colour, a strict regression of today's sidebar. Phases 3, 4, 5 have zero rows to act on.
+
+**F2. `TaskFileWatcher` on `~/.claude/sessions/` never sees a status change.** The watcher is a vnode source on the directory fd (`TaskFileWatcher.swift:59-72`). Directory vnode events fire on entry add/remove/rename, not on in-place writes to a file inside it. Observed: all 10 session files have `birthtime < mtime` (in-place rewrites; a rename-based writer produces a new inode with birth == mtime). Plan 1.3 says the watcher "needs no change", and the Risks section says the 1Hz tick should read only a watcher-populated cache. That cache updates on session create/delete only; status freezes at first read. Fix: mtime-stat the (at most a dozen) joined files inside the existing tick, or one source per file.
+
+**F3. Phase 1.4's branch kills the only attention signal for joined rows, and "still applied" long-running promotion codifies an existing bug.**
+- The branch sits "before the output heuristics" and returns for both `busy` and `idle`, so `isLikelyPromptingForInput` (`SessionCoordinator.swift:1361`) is never reached for a joined row. Line 33's "needsAttention and waiting keep coming from the existing heuristics" is false for exactly the rows the branch handles. Whatever Claude writes during a permission prompt (`busy` mid-tool-call, or `idle`), the row paints green or grey, never gold. The plan never measured what `status` reads during a permission prompt. That is a 60-second experiment and the single fact decision 1 hinges on.
+- `processingStartTimes` is set on first title-change output (`:1100-1101`) and cleared ONLY by OSC 133 prompt-ready (`:1235-1236`), which Claude's TUI never emits (`:1364-1369`, and the shipped polarity comment). So every Claude session older than 30 minutes is promoted to `.longRunning` (orange) the moment it is busy, today and under the plan. The Claude read has the field to fix it (`statusUpdatedAt`); the plan preserves the promotion by name.
+
+**F4. The Phase 4 badge and Phase 5 "Answer in terminal" are built on a needsAttention source that effectively never fires for Claude, and fires falsely.** "Output" is a title change (`macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift:598-608`); `lastSurfaceTitle` is the terminal title (`SessionCoordinator.swift:1105-1106`). Claude's observed titles are `<glyph> <task description>` while working and `<cwd> | Claude Code` when idle (`reference_claude-code-terminal-title-shapes.md`); nothing observed puts prompt text in the title (inferred: a permission prompt does not change the title to "Allow ...?"). So the regex layer (`:141-145`) matches only when the task description happens to contain `approve`/`permission`/`Confirm` or end in `?`/`:`. The spec's own argument ("an authoritative-looking wrong answer is worse than today's vague glyph") applies directly to a gold "2 need you" computed from title regexes. This is the feature Sean asked for, and the plan ships it on the source the spec rejected.
+
+**F5. The colour swap makes the text illegible.** Phase 2 replaces terracotta with `#FFC400` across the mock, which also colours `.row-sub.action`, `.terminal-link`, and `.need-you` text. Computed contrast of gold on light chrome `#F0E9E6` (`WorkspaceLayout.swift:139`) is about 1.3:1. Gold is a glyph tint in shipped code and never a text colour (`RecentsRowView.swift:120-128`, `SessionDetailView.swift:156-166`). The legibility gate covers the 7px dot only. Terracotta text is about 2.9:1, also failing AA, so the fix is a text token, not a swap. Project design layers are craft + a11y.
+
+**F6. Internal contradiction.** Line 17 says non-joined rows are never eligible for an attention colour. Line 33 says attention states keep coming from the heuristics. Either the abstain rule ships (and with F1, gold disappears from the whole sidebar) or it does not (and "a coloured alert always means Claude said so" is false). The plan claims both.
+
+**F7. Assumption 4 is resolved, not open.** `macos/Ghostties.entitlements`, `macos/GhosttyDebug.entitlements`, `macos/GhosttyReleaseLocal.entitlements` contain no `com.apple.security.app-sandbox` key. The app is unsandboxed; `sysctl` KERN_PROC / KERN_PROCARGS2 work (my walk ran as the same user). The planner named this as the assumption that "kills the join". The join dies for F1's reason.
+
+## 2. MISSING
+
+**F8. The join that survives `exec`: the environment.** `execve` keeps envp, and `KERN_PROCARGS2` returns argv AND environment for a same-uid, non-platform process. Observed on a live claude pid: `ps -ww` 4,725 bytes, `ps -wwE` 6,893 bytes, containing 5 `GHOSTTY_*` keys and `TERM_PROGRAM`. The env Ghostty set at spawn reached claude through `login -flp` (`-p` preserves env, `src/termio/Exec.zig:1514`), an interactive zsh, `cco`, and the `claude()` function. The memory claim "env vars are a dead end for read-back" (`decision_launcher-uuid-join-replaces-strategy-b.md`) was measured on `/bin/zsh`, a platform binary whose env the kernel hides (observed: argv+env on the parent zsh is 10 bytes, same as argv). It is wrong for the claude binary, which is the pid in the sessions file. Therefore: set `GHOSTTIES_SESSION_ID=<uuid>` in `config.environmentVariables` at `SessionCoordinator.swift:249` for every template (shell included; env does not depend on `command`, and `SurfaceView.swift:648-655` applies it), then read it off the sessions-file pid with one `KERN_PROCARGS2` call. No ancestor walk, no wrapper, no gate change; 10/10 coverage on today's machine. Verify at build time that the claude binary stays non-restricted (a hardened/restricted binary hides env); the hook route in F9 needs no read-back at all.
+
+**F9. A prompt-shape source exists; the plan says none does.** The installed CLI binary (`~/.local/share/claude/versions/2.1.246`, `strings` scan) contains hook events `Notification`, `PermissionRequest`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `SessionEnd`, `SubagentStop`, `Elicitation`, and notification types `permission_prompt`, `idle_prompt`, `elicitation_dialog`. Sean already runs `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop` hooks (`~/.claude/settings.json`, event names only). A hook command inherits claude's env (so it sees `GHOSTTIES_SESSION_ID`, F8) and receives `session_id`, `hook_event_name`, `notification_type`, `message` on stdin (per the hooks reference; confirm the stdin schema against 2.1.246). Writing `~/.ghostties/state/<ghostties-uuid>.json` from that hook gives: busy (UserPromptSubmit / PreToolUse), idle (Stop), needsAttention-structured (Notification permission_prompt / PermissionRequest, with the tool name for the button label), needsAttention-freeform (idle_prompt / elicitation_dialog), inactive (SessionEnd). All seven states plus the payload decision 5 needs, from data the agent wrote, with no process-table reads. Cost: one hook entry in Sean's user settings (his call; it edits his Claude config) and one script. Phase 5 is "not schedulable" only because this was not looked for.
+
+**F10. What `status` reads during a permission prompt.** Not measured. It decides whether decision 1's source can carry the ask at all. Start a session, trigger a permission prompt, read the field. Do this before any Phase 1 code.
+
+**F11. `RecentsRowView` is gated by `.equatable()`** (`RecentsListView.swift:164`) and its `==` compares only session / projectName / indicatorState / isActive / isEditing (`RecentsRowView.swift:42-48`). A breakdown-line prop not added to `==` renders once and freezes, the same class of bug as `reference_sidebar-rows-frozen-lazyvstack.md`. Phase 3 does not mention it.
+
+**F12. The project header's trailing slot already holds the `plus` button when expanded** (`ProjectDisclosureRow.swift:345-355`). "Trailing gold badge, no height change" must coexist with it; the plan does not say how. With the greedy `Text(...).frame(maxWidth: .infinity)` at `:343`, badge width is a pixel claim, not a source claim.
+
+**F13. `DESIGN.md` at origin/main says six times that terracotta is reserved for the `waiting` indicator** (lines 72, 104, 109, 203, 261, 303). It is the design source of truth per Sean's global rules and is where the spec's terracotta came from. Phase 2 edits the spec HTML and leaves DESIGN.md wrong; the next agent reintroduces terracotta.
+
+**F14. Launcher scripts are deleted only in `closeSession`** (`SessionCoordinator.swift:664`). A process that exits on its own goes through `handleSurfaceClose` (`:844`) and leaves its script until the 24h sweep (`:1006`, called from `AppDelegate.swift:265`). Any acceptance that counts files in `~/.ghostties/cache/launchers/` (1.1) is confounded by leftovers; the 4 present now belong to no live process.
+
+**F15. The colour map lives in six places, not two:** `RecentsRowView.swift:120-128`, `WorkspaceStore.swift:1060-1067`, `SessionDetailView.swift:156-166`, `ProjectDisclosureRow.swift:418-`, `MenuBar/MenuBarDropdownView.swift:167-168`, `MenuBar/MenuBarIconRenderer.swift:155-156`. Any palette or state change touches all six.
+
+## 3. OVERVALUED / GOLD-PLATED
+
+**F16. Phase 1.2 (port the ancestor walk): cut.** From claude's pid the chain reaches `login` then `ghostty` with no launcher between (F1). The env read (F8) is one sysctl on one pid.
+
+**F17. Phase 1.1 (close the launchBanner gate): cut.** It cannot reach the shell template (F1) and, for agent templates, adds a wrapper whose path `exec` erases. It also widens the per-session task-context leak the code warns about at `:987-990`, for zero coverage.
+
+**F18. Phase 1 as a whole buys almost nothing visible even with a working join.** Title-change output already yields processing (the spinner glyph changes every ~2s) and idle (static `| Claude Code` title). The plan concedes "no visible change" and "honest downgrade". The two visible improvements it could claim, ending the processing/idle flicker at the 2s `activityThreshold` (`:88`) and the false orange (F3), it neither claims nor designs for.
+
+**F19. The abstain rule (line 17): drop it** until a join covers more than zero rows. As written it is a regression switch.
+
+**F20. Phase 2's spec-HTML rewrite: replace with the DESIGN.md fix (F13).** Editing the mock is churn; editing the source of truth is the job.
+
+**F21. The 7px mixed-dot legibility gate** is well built but gates a badge whose count source is dead (F4). Sequence it after a real needs-you source exists.
+
+## 4. EVIDENCE
+
+**F22. "4 scripts vs 10 live sessions" was a file count, never an argv check.** The plan proposes to port an ancestor walk without once running `ps -axo command -ww | grep launchers` on the live machine; it returns 0. The spec's "8 of 13" and memory's "11/11" were likewise never reconciled with argv on the current binary.
+
+**F23. The memory file the plan calls "settled"** (`decision_launcher-uuid-join-replaces-strategy-b.md`) carries two false measurements: "env vars are a dead end" (measured on a platform binary, F8) and the 2026-08-18 re-measure's diagnosis "coverage is zero because the directory is empty" (the directory now holds 4 scripts and coverage is still zero; the cause is `exec`, F1). The plan inherited both.
+
+**F24. "TaskFileWatcher ... needs no change"** was asserted from the type's doc comment, not from how the target files are written (in-place, F2).
+
+**F25. The permission-prompt value of `status`** was not taken (F10). The `strings` scan cannot answer it: 332 `"idle"` and 52 `"busy"` literals across unrelated subsystems.
+
+**F26. "Identical in two places"** after opening two files; six exist (F15). `DESIGN.md` was not opened (assumption 9) although it is the origin of the terracotta the plan spends a phase deleting.
+
+**F27. Assumption 7 was answerable in one file.** `AgentTemplate.claudeCode` (`:124-131`) has `command: "claude"` and `agent: nil`, so `launchBanner` is nil and it would take a wrapper; `AgentTemplate.shell` has no command at all and never will. The 1.1 test names the wrong template.
+
+**F28. "Nothing distinguishes a permission prompt from a freeform question"** was concluded from one file format without checking the other data the same process emits (hooks, F9). A Claude-Code-shaped question answered without opening the hooks reference or grepping the binary for hook names.
+
+## 5. WEAKEST ASSUMPTION
+
+The unnumbered one every phase stands on: that after Phase 1.1 the launcher UUID sits in an ancestor's argv for Sean's live Claude sessions. It is false today (0 of 10; 0 processes machine-wide) and stays false after 1.1, because `exec` (`SessionCoordinator.swift:238`) discards argv, the shell template has no command (`AgentTemplate.swift:115-121`; `SessionCoordinator.swift:198,224`), and Sean launches Claude by typing `cco` into shell surfaces (all 10 chains are `claude <- interactive zsh <- login <- ghostty`). With it false: 1.3 joins nothing, 1.4's branch never executes, the abstain rule strips gold from every row, Phase 3 has no session to key a task store on, Phase 4 counts a dead signal, Phase 5 stays parked. Every downstream acceptance criterion reads 0.
+
+## VERDICT: rethink
+
+Single most important change: replace the launcher-UUID join with `GHOSTTIES_SESSION_ID` in the spawn environment (`SessionCoordinator.swift:249`, every template) read back via `KERN_PROCARGS2` on the sessions-file pid, then source status and prompt shape from Claude Code hooks (`UserPromptSubmit` / `PreToolUse` / `Stop` / `Notification` / `PermissionRequest`, env-joined) instead of the two-value sessions file. That puts the thing Sean actually asked for, showing the action a thread needs from him, back on the schedule, and deletes Phases 1.1 and 1.2 outright.
