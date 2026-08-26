@@ -574,7 +574,8 @@ struct SessionComposerSnapshotTests {
     /// un-honoured opacity (`ghostPlaceholderOpacityMatchesDesignSpec`'s
     /// doc comment, `rgb(64,64,64)` measured that way).
     /// The typed text (`"Gho"`, `#1A1A1A` at full opacity) is DARKER than
-    /// the ghost (49% alpha), so a plain "darkest pixel in the whole image"
+    /// the ghost (`ComposerGhostTextField.ghostOpacity`, 65% alpha as of
+    /// the AA-contrast fix), so a plain "darkest pixel in the whole image"
     /// scan always finds the typed text, not the ghost — verified against
     /// this exact PNG (measured column extents, post review-fix set:
     /// `"Gho"`'s solid fill spans roughly x:1–43, the ghost's spans

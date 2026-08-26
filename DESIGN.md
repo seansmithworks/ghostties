@@ -102,6 +102,7 @@ The sidebar itself is `.background(.clear)` in both modes — chrome reads throu
 | **Text Primary**      | `#1a1a1a` | `#f0efed` | `textPrimary`                |
 | **Text Secondary**    | `#636363` | `#9a9a9a` | `textSecondary`              |
 | **Accent (waiting)**  | `#C97350` | `#C97350` | `waitingTerracotta`          |
+| **Composer selection** | `#5B8DEF` | `#5B8DEF` | `composerSelectionAccent`   |
 | **Border**            | `#e5e5e3` | `#2a2a2a` | `border`                     |
 | **Destructive**       | `#dc3545` | `#dc3545` | `destructive`                |
 | **Success**           | `#2d7d46` | `#2d7d46` | `success`                    |

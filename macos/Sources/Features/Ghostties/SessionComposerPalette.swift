@@ -266,6 +266,26 @@ struct SessionComposerPalette: View {
         }
     }
 
+    /// Results well cap — render evidence showed `ScrollView` never reports
+    /// an intrinsic content height, so a bare `maxHeight` behaves as a
+    /// target rather than a cap (a two-row list still opened a full-height
+    /// well with dead space below it). `ComposerResultsTable` combines this
+    /// cap with `.fixedSize(horizontal: false, vertical: true)` so the well
+    /// hugs its content up to this height, then scrolls past it.
+    /// `.anchored` keeps its existing 220pt (sidebar popover — a 440pt well
+    /// does not belong there; whether `.anchored` should otherwise adopt
+    /// the `.centered` list treatment is a separate, unresolved question).
+    /// `.centered` raises to 440pt — roughly 14 rows at the centered row
+    /// metrics, between Sean's requested "400 or 500," and tall enough to
+    /// leave a partial row visible at the cut so a long list reads as
+    /// scrollable rather than truncated.
+    private var resultsWellMaxHeight: CGFloat {
+        switch request.presentation {
+        case .anchored: return 220
+        case .centered: return 440
+        }
+    }
+
     private var composerClipShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: cornerStyle)
     }
@@ -1237,6 +1257,7 @@ struct SessionComposerPalette: View {
                 rowVerticalPadding: rowVerticalPadding,
                 rowHorizontalPadding: rowHorizontalPadding,
                 rowCornerRadius: rowCornerRadius,
+                maxHeight: resultsWellMaxHeight,
                 onEditTemplate: { newTemplateToEdit = $0 },
                 onDuplicateTemplate: { _ = store.duplicateTemplate(id: $0.id) },
                 onDuplicateAndEditTemplate: {
@@ -2365,6 +2386,11 @@ private struct ComposerResultsTable: View {
     var rowVerticalPadding: CGFloat
     var rowHorizontalPadding: CGFloat
     var rowCornerRadius: CGFloat
+    /// The results well's cap — `SessionComposerPalette.resultsWellMaxHeight`,
+    /// 220pt `.anchored` / 440pt `.centered`. Combined below with
+    /// `.fixedSize(horizontal: false, vertical: true)` so the well hugs its
+    /// content up to this height rather than always opening at full height.
+    var maxHeight: CGFloat
     var onEditTemplate: (AgentTemplate) -> Void
     var onDuplicateTemplate: (AgentTemplate) -> Void
     var onDuplicateAndEditTemplate: (AgentTemplate) -> Void
@@ -2439,7 +2465,8 @@ private struct ComposerResultsTable: View {
                 }
                 .padding(8)
             }
-            .frame(maxHeight: 220)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxHeight: maxHeight)
             .onChange(of: selectedIndex) { _ in
                 guard let selectedIndex, selectedIndex < flattened.count else { return }
                 proxy.scrollTo(flattened[Int(selectedIndex)].id)
@@ -2535,7 +2562,7 @@ private struct ComposerRow: View {
             let attrStart = attributed.index(attributed.startIndex, offsetByCharacters: offset)
             let attrEnd = attributed.index(attrStart, offsetByCharacters: 1)
             attributed[attrStart..<attrEnd].font = .system(size: titleFontSize, weight: .bold)
-            attributed[attrStart..<attrEnd].foregroundColor = Color.accentColor
+            attributed[attrStart..<attrEnd].foregroundColor = WorkspaceLayout.composerSelectionAccent
         }
 
         return Text(attributed)
@@ -2578,7 +2605,7 @@ private struct ComposerRow: View {
             .contentShape(Rectangle())
             .background(
                 isSelected
-                    ? Color.accentColor.opacity(0.2)
+                    ? WorkspaceLayout.composerSelectionAccent.opacity(0.2)
                     : (hoveredID == option.id ? Color.secondary.opacity(0.2) : Color.clear)
             )
             .cornerRadius(cornerRadius)

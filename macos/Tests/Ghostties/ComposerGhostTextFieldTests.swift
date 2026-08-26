@@ -315,6 +315,21 @@ struct ComposerGhostTextFieldTests {
         #expect(handled == false)
     }
 
+    /// AA-contrast regression guard. `ghostOpacity` was raised from 0.49 to
+    /// 0.65 because 0.49 measured 2.99:1 light / 3.99:1 dark against WCAG
+    /// AA's 4.5:1 text-contrast floor (the ghost states where Return
+    /// commits, so it is content, not decoration). 0.65 clears both
+    /// (4.74:1 light / 5.93:1 dark); the intermediate 0.62 was tried and
+    /// rejected (4.35:1 light, still under AA). References the production
+    /// symbol directly — a test that re-declared this as a local literal
+    /// would pass even if the shipped constant regressed.
+    @Test func ghostOpacityStaysAtOrAboveTheAAContrastFloor() {
+        #expect(
+            ComposerGhostTextField.ghostOpacity >= 0.65,
+            "ghostOpacity dropped below 0.65, the value measured to clear WCAG AA 4.5:1 text contrast (0.49 measured 2.99:1 light / 3.99:1 dark; 0.65 measures 4.74:1 light / 5.93:1 dark)"
+        )
+    }
+
     // MARK: - Defect 2 class: Tab-drill termination is a fixpoint property,
     // not a fixed-depth script (findings ledger F8)
 

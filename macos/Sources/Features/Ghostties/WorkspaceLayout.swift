@@ -193,6 +193,15 @@ enum WorkspaceLayout {
     /// @deprecated Use `statusNeedsDecisionGold` for session status indicators.
     static let needsAttentionPurple = Color(red: 0.659, green: 0.333, blue: 0.969)
 
+    /// Composer results-list selection accent — the selected-row fill and
+    /// per-character search-match highlight in `ComposerResultsTable`/
+    /// `ComposerRow`, replacing the system `Color.accentColor`. Deliberately
+    /// shares its hex (#5B8DEF) with `statusYourTurnBlue`, a known collision
+    /// Sean has accepted for now rather than reusing that status-named token
+    /// directly (composer selection isn't a session status). Scheduled for
+    /// design-system review — change this one token, not the call sites.
+    static let composerSelectionAccent = Color(red: 0x5B / 255.0, green: 0x8D / 255.0, blue: 0xEF / 255.0)
+
     // MARK: - Activity / Section Foregrounds
 
     /// Foreground color for a project's ghost icon when the project has recent

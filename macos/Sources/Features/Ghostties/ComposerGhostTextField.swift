@@ -137,13 +137,18 @@ struct ComposerGhostTextField: NSViewRepresentable {
     var ghostFullPath: String
     var onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)?
 
-    /// `DESIGN.md` §4's ghost grey, `#1A1A1A7E` (0x7E/0xFF ≈ 0.49) — same
-    /// production symbol `ComposerQueryField.ghostPlaceholderOpacity` pins,
-    /// re-declared here (not shared) because this type has its own AppKit
-    /// color path (`NSColor`, not SwiftUI `Color`) and no common base to
-    /// hang a shared constant on without touching `ComposerQueryField`,
-    /// which is out of scope.
-    static let ghostOpacity: CGFloat = 0.49
+    /// Was `DESIGN.md` §4's ghost grey, `#1A1A1A7E` (0x7E/0xFF ≈ 0.49), but
+    /// that value failed WCAG AA text contrast (4.5:1) since Return commits
+    /// this ghost as content, not decoration: measured 2.99:1 light /
+    /// 3.99:1 dark. Raised to 0.65, which clears AA on both (4.74:1 light /
+    /// 5.93:1 dark); the intermediate 0.62 was rejected (4.35:1 light,
+    /// still under AA). Same production symbol
+    /// `ComposerQueryField.ghostPlaceholderOpacity` pins, re-declared here
+    /// (not shared) because this type has its own AppKit color path
+    /// (`NSColor`, not SwiftUI `Color`) and no common base to hang a shared
+    /// constant on without touching `ComposerQueryField`, which is out of
+    /// scope.
+    static let ghostOpacity: CGFloat = 0.65
 
     /// DEFECT 3 fix (review round 2): a small fixed trailing pad added to
     /// `ghostInkSize`'s measured (advance-width) size — see
@@ -455,7 +460,13 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// instead of baking it into `textColor` (full-opacity
         /// `.labelColor`, correctly antialiased) fixes it — measured
         /// `rgb(151,151,151)` light against the shipping SwiftUI path's
-        /// own `rgb(149,149,149)`, within AA-rounding noise.
+        /// own `rgb(149,149,149)`, within AA-rounding noise. This doubling
+        /// was the historical bug this fix closed, not a description of
+        /// current behavior: `ghostAlpha` applies a single multiplication,
+        /// `labelColor.alphaComponent (0.85) × ghostOpacity`, with no
+        /// second composite anywhere in this path. At the current
+        /// `ghostOpacity` (0.65) the effective rendered alpha is
+        /// 0.85 × 0.65 ≈ 0.553.
         ///
         /// BLOCKER (review round 2): that match was against the WRONG
         /// mechanism — see `ghostAlpha`'s doc comment. `textColor` is now
