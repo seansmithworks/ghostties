@@ -358,6 +358,13 @@
       h.cy = Math.min(ROWS - 1, Math.max(0, Math.round(h.y / CELL)));
     }
 
+    function snapHead() {
+      hpx = px(hx);
+      hpy = py(hy);
+      headEl.style.transform =
+        "translate3d(" + hpx.toFixed(1) + "px," + hpy.toFixed(1) + "px,0)";
+    }
+
     function positionEntities() {
       var fw = field.clientWidth || CELL * COLS;
       var fh = ROWS * CELL;
@@ -374,6 +381,7 @@
         tk.el.style.transform =
           "translate3d(" + px(tk.cx).toFixed(1) + "px," + py(tk.cy).toFixed(1) + "px,0)";
       });
+      snapHead();
     }
 
     function layoutAndPosition() {
@@ -755,6 +763,10 @@
     function winGame() {
       if (mode === "win") return;
       mode = "win";
+      // frame() stops self-rescheduling once mode leaves "play" (S6),
+      // so the head's move-tween would otherwise freeze mid-lerp for
+      // the whole cascade (R5) — snap it to its cell instead.
+      snapHead();
       sfx("win");
       cascadeCanvas.classList.add("go");
       cascadeRunning = true;
