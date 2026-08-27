@@ -79,6 +79,22 @@ struct SessionComposerWorktreeLaunchTests {
         }
     }
 
+    /// Every poll below that waits on `createWorktree` finishing MUST use
+    /// this, not the 5s default above. `SessionComposerStore.createWorktree`
+    /// races its `git worktree add` against its OWN internal 10-second
+    /// timeout (`Self.race(gitTask, timeoutSeconds: 10)`, production code,
+    /// never touched here) — a poll with a shorter budget than that can
+    /// observe genuine MID-FLIGHT state (still creating, not yet
+    /// success/failure) under load and misread it as a broken fix. Proven
+    /// in practice: under the full 975-test unfiltered suite's parallel
+    /// CPU contention, real `git` shell-outs here landed between 5-10s,
+    /// comfortably inside production's 10s ceiling but outside a 5s or 8s
+    /// poll — a false negative in the TEST, not a defect in `createWorktree`
+    /// (all three tests below pass 100% reliably run in isolation). `12`,
+    /// strictly above the 10s it's timed against, not a round number picked
+    /// for comfort.
+    private static let createWorktreeCompletionTimeout: TimeInterval = 12
+
     // MARK: - 1. Launch-on-create fires exactly once when the field is launchable
 
     /// THE mutant-catching test for item 1 of the ruling: revert
@@ -116,7 +132,7 @@ struct SessionComposerWorktreeLaunchTests {
             workspaceStore: workspaceStore
         )
 
-        await Self.waitUntil { !store.isCreatingWorktree }
+        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
 
         #expect(launchCount == 1, "expected exactly one launch, got \(launchCount)")
         #expect(capturedProject?.id == project.id)
@@ -158,7 +174,7 @@ struct SessionComposerWorktreeLaunchTests {
             workspaceStore: workspaceStore
         )
 
-        await Self.waitUntil { !store.isCreatingWorktree }
+        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
 
         #expect(launchCount == 0, "must not launch when nothing launchable was typed")
         #expect(store.selectedWorktreePath == expectedPath, "the branch chip must still resolve to the new worktree")
@@ -199,13 +215,13 @@ struct SessionComposerWorktreeLaunchTests {
 
         store.createWorktree(named: branchName, in: project)
 
-        await Self.waitUntil { !store.isCreatingWorktree }
+        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
         // Same rationale as the setup poll above: the refresh this success
         // path awaits internally can itself hit its 2s race timeout under
         // load, in which case `isCreatingWorktree` already flips `false`
         // before the self-scheduled retry lands the real data — poll
         // rather than assert on the very next runloop tick.
-        await Self.waitUntil(timeout: 8) { !store.branchesWithoutWorktree.contains(branchName) }
+        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.branchesWithoutWorktree.contains(branchName) }
 
         #expect(!store.branchesWithoutWorktree.contains(branchName), "the branch must stop offering a create row once the worktree exists")
     }
