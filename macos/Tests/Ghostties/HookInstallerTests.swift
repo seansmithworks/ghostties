@@ -58,11 +58,14 @@ struct HookInstallerTests {
 
         let destPath = (destDir as NSString).appendingPathComponent(HookInstaller.scriptName)
         try "tampered".write(toFile: destPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: destPath)
 
         #expect(HookInstaller.seed(from: sourceURL, into: destDir, version: 2))
 
         let contents = try String(contentsOfFile: destPath, encoding: .utf8)
         #expect(contents == "#!/bin/sh\necho original\n")
+        let permissions = try FileManager.default.attributesOfItem(atPath: destPath)[.posixPermissions] as? Int
+        #expect(permissions == 0o700)
     }
 
     @Test

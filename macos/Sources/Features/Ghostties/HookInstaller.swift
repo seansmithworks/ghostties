@@ -104,8 +104,12 @@ struct HookInstaller {
 
         do {
             try fm.copyItem(at: sourceURL, to: URL(fileURLWithPath: tmpPath))
-            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tmpPath)
-            _ = try fm.replaceItemAt(URL(fileURLWithPath: destPath), withItemAt: URL(fileURLWithPath: tmpPath))
+            if fm.fileExists(atPath: destPath) {
+                _ = try fm.replaceItemAt(URL(fileURLWithPath: destPath), withItemAt: URL(fileURLWithPath: tmpPath))
+            } else {
+                try fm.moveItem(atPath: tmpPath, toPath: destPath)
+            }
+            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: destPath)
         } catch {
             logger.error("Failed to seed hook script: \(error.localizedDescription)")
             try? fm.removeItem(atPath: tmpPath)

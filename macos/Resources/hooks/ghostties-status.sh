@@ -14,7 +14,7 @@
 # or fail a Claude Code hook, so every exit path is 0.
 #
 # ~/.claude/settings.json snippet — one entry per event, all identical
-# except PostToolUse (matcher "TodoWrite") and the "async": true placement:
+# except PostToolUse (matcher "TodoWrite"):
 #
 #   {
 #     "hooks": {
@@ -78,7 +78,9 @@ esac
 payload=""
 while IFS= read -r line || [ -n "$line" ]; do
     payload="$payload$line"
-done
+done 2>/dev/null
+
+[ -z "$payload" ] && exit 0
 
 state_dir="$HOME/.ghostties/state"
 mkdir -p "$state_dir" || exit 0
@@ -95,14 +97,8 @@ esac
 
 tmp="$dest.$$.tmp"
 
-if [ -z "$payload" ]; then
-    hook_json=null
-else
-    hook_json=$payload
-fi
-
 printf '{"ghosttiesSessionId":"%s","updatedAt":%s,"hook":%s}' \
-    "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$hook_json" > "$tmp" || exit 0
+    "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$payload" > "$tmp" || exit 0
 
 mv -f "$tmp" "$dest" || { rm -f "$tmp"; exit 0; }
 
