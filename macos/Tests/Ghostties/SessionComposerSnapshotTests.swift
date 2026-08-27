@@ -220,6 +220,42 @@ struct SessionComposerSnapshotTests {
         return count
     }
 
+    /// Card-relative scope anchor for `ghostGrayBandPixelCount`/
+    /// `ghostGrayBandYSpan` below. Finds the topmost row containing any
+    /// opaque pixel (alpha `> 0.5`) — the card's own top edge, since the
+    /// window around it is `.clear` (alpha 0) while the card surface
+    /// (`.regularMaterial` + border) is opaque. Same technique as
+    /// `ComposerCardFitTests.opaqueVerticalExtent` (`composer-ghost-and-well-s2`),
+    /// reduced to just the top row since that is all this scope needs.
+    ///
+    /// This exists because `y < 100` used to be measured from the IMAGE
+    /// top, which only worked while the card itself also started near the
+    /// image top. `13011dffa` (the results-well hugging fix, this same
+    /// branch) made `ComposerResultsTable`'s height cap real — a short
+    /// fixture's card is now genuinely shorter than this file's fixed
+    /// 420pt render frame, and `renderPNG`/`renderPNGWithExtraLayoutPass`'s
+    /// `content.frame(width:height:)` center-aligns a shorter view inside
+    /// that larger frame by default. Measured directly (three fixtures,
+    /// `docs/plans/composer-ui-11/evidence/`): the card's top edge moved
+    /// from backing-pixel `y=16` to `y=192` — a 176px (88pt at this
+    /// render's 2x backing scale) downward shift — carrying the ghost
+    /// text's own gray-band pixels from `y=44-65` to `y=220-246` with it
+    /// (same row-count fingerprint at both positions, just translated).
+    /// An absolute band, at ANY fixed number, breaks again the next time
+    /// the card's natural height changes; scoping to the card's own
+    /// measured top edge survives that.
+    private func cardTopEdge(in data: Data) -> Int? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        for y in 0..<rep.pixelsHigh {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+                if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 {
+                    return y
+                }
+            }
+        }
+        return nil
+    }
+
     /// Fix 7 (review), step 3 specifically: counts pixels in the exact gray
     /// band the 11.1 ghost placeholder renders at rest — was
     /// `Color(nsColor: .labelColor).opacity(0.49)` over the card's
@@ -233,26 +269,40 @@ struct SessionComposerSnapshotTests {
     /// the same alpha. A band (137-157, near-equal channels), not an exact
     /// triple, to tolerate antialiasing at glyph edges.
     ///
-    /// Scoped to `y < 100` (backing pixels) — WITHOUT that bound, this
-    /// mutant-verified false GREEN on a 0.49 -> 0.03 opacity mutation (the
-    /// ghost went near-invisible, but the band count barely dropped)
-    /// because `makePlainComposer`'s template ROWS below the field render
-    /// their own `.secondary`-styled subtitle text in a nearby luminance
-    /// band. Re-measured after the results-well hugging fix
-    /// (`ComposerResultsTable` no longer forces a tall well with dead
-    /// space, so row content sits much closer to the field): the field's
-    /// own ghost text now spans `y` 44-70, the next row-content band starts
-    /// at `y` 186 (`debugStep3LongPathPositions` in
-    /// `ComposerDesignCallRenderTests`, untracked harness, long-path
-    /// fixture). `y < 100` sits between the two with margin on both sides,
-    /// at this test's fixed render size (`WorkspaceLayout.composerOverlayWidth
-    /// + 16` wide, 420 tall). LIGHT MODE ONLY, same limitation this file's
+    /// This literal is NOT derived from a production symbol — `137-157`
+    /// cannot be computed cleanly from `ComposerQueryField
+    /// .ghostPlaceholderOpacity`/`ComposerGhostTextField.ghostOpacity`
+    /// alone. Both are SwiftUI/AppKit `.opacity`-style alpha multipliers
+    /// composited against `labelColor` (itself ~0.85 alpha,
+    /// `ComposerGhostTextField.ghostAlpha`'s doc comment) over the card's
+    /// dynamic `.regularMaterial` background — reproducing the exact
+    /// rendered RGB would require guessing labelColor's own RGB and the
+    /// material's effective background RGB at render time, which is a
+    /// second hardcoded guess, not fewer. If `ghostOpacity`/
+    /// `ghostPlaceholderOpacity` (currently `0.50`) changes, re-measure
+    /// this band empirically the same way the 0.49 -> 0.65 -> 0.50 history
+    /// above did (`ComposerDesignCallRenderTests`, untracked harness) and
+    /// update the two literals below.
+    ///
+    /// Scoped to `cardTopEdge(in:)...cardTopEdge+100` (backing pixels) —
+    /// WITHOUT some upper bound, this mutant-verified false GREEN on a
+    /// 0.49 -> 0.03 opacity mutation (the ghost went near-invisible, but
+    /// the band count barely dropped) because `makePlainComposer`'s
+    /// template ROWS below the field render their own `.secondary`-styled
+    /// subtitle text in a nearby luminance band. Card-relative, not image-
+    /// relative (see `cardTopEdge(in:)`'s doc comment for why) — measured
+    /// directly at both the pre-hugging-fix and post-hugging-fix card
+    /// positions: the field's own ghost text sits ~28-54px below the
+    /// card's top edge at either position, the next row-content band sits
+    /// ~170-180px below it. A 100px window leaves margin on both sides at
+    /// either position. LIGHT MODE ONLY, same limitation this file's
     /// `darkestGhostPixel` already documents for dark mode.
     private func ghostGrayBandPixelCount(in data: Data) -> Int {
         guard let rep = NSBitmapImageRep(data: data) else { return 0 }
+        guard let cardTop = cardTopEdge(in: data) else { return 0 }
         var count = 0
         for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
-            for y in stride(from: 0, to: min(100, rep.pixelsHigh), by: 2) {
+            for y in stride(from: cardTop, to: min(cardTop + 100, rep.pixelsHigh), by: 2) {
                 guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.9 else { continue }
                 let r = Int((color.redComponent * 255).rounded())
                 let g = Int((color.greenComponent * 255).rounded())
@@ -268,16 +318,19 @@ struct SessionComposerSnapshotTests {
     /// Fix 1 (review, long-path capture): measures the y-range spanned by
     /// the ghost gray-band pixels (`ghostGrayBandPixelCount`'s color test,
     /// same 137-157 luminance band / near-neutral tolerance), scoped to the
-    /// same `y < 100` field region. A single line of ghost text spans a
-    /// tight y-range (glyph ascender to descender, ~15-20px at this font
-    /// size); a wrap regression back to two stacked lines roughly doubles
-    /// it. Returns nil if no matching pixels were found at all.
+    /// same card-relative field region (`cardTopEdge(in:)...cardTopEdge+100`
+    /// — see `ghostGrayBandPixelCount`'s doc comment). A single line of
+    /// ghost text spans a tight y-range (glyph ascender to descender,
+    /// ~15-20px at this font size); a wrap regression back to two stacked
+    /// lines roughly doubles it. Returns nil if no matching pixels were
+    /// found at all.
     private func ghostGrayBandYSpan(in data: Data) -> Int? {
         guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        guard let cardTop = cardTopEdge(in: data) else { return nil }
         var minY: Int?
         var maxY: Int?
         for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
-            for y in stride(from: 0, to: min(100, rep.pixelsHigh), by: 2) {
+            for y in stride(from: cardTop, to: min(cardTop + 100, rep.pixelsHigh), by: 2) {
                 guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.9 else { continue }
                 let r = Int((color.redComponent * 255).rounded())
                 let g = Int((color.greenComponent * 255).rounded())
