@@ -223,7 +223,9 @@
       CELL = width / COLS;
       field.style.height = Math.round(ROWS * CELL) + "px";
       mount.style.setProperty("--cell", CELL + "px");
-      sizeCascadeCanvas();
+      // Cascade canvas is sized lazily, in winGame() — most homepage
+      // visitors never trigger a win, so it should not exist until one
+      // does (R6). Do not add a call here.
       // A resize can shrink COLS mid-round (e.g. rotating a phone).
       // Hazards re-derive cx from the field fraction every layout
       // (positionEntities, below) so they're always in range, but the
@@ -394,7 +396,16 @@
     // Viewport height can change without the mount's width changing
     // (e.g. mobile URL-bar collapse), which ResizeObserver(mount)
     // won't catch — the cascade canvas needs its own listener.
-    window.addEventListener("resize", sizeCascadeCanvas);
+    function handleCascadeResize() {
+      // Assigning canvas.width/.height clears the bitmap immediately.
+      // Skip the resize while a win is in progress or has settled, or
+      // the cascade the player just earned vanishes on the next
+      // viewport change (R2) — mobile URL-bar collapse is the common
+      // trigger. Safe to resize again once endGame()/replay clears it.
+      if (mode === "win") return;
+      sizeCascadeCanvas();
+    }
+    window.addEventListener("resize", handleCascadeResize);
 
     // --- sound -------------------------------------------------------------
     function sfx(name) {
@@ -842,7 +853,7 @@
       stopLoop();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", layoutAndPosition);
-      window.removeEventListener("resize", sizeCascadeCanvas);
+      window.removeEventListener("resize", handleCascadeResize);
       if (announceTimer) {
         clearTimeout(announceTimer);
         announceTimer = null;
@@ -862,7 +873,7 @@
 
     function reinit() {
       window.addEventListener("keydown", onKeyDown);
-      window.addEventListener("resize", sizeCascadeCanvas);
+      window.addEventListener("resize", handleCascadeResize);
       if (ro) ro.observe(mount);
       else window.addEventListener("resize", layoutAndPosition);
       if (io) io.observe(mount);
