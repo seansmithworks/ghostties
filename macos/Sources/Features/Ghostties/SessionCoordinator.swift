@@ -246,17 +246,13 @@ final class SessionCoordinator: ObservableObject {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = template.workingDirectory ?? project.rootPath
         config.command = finalCommand
-        config.environmentVariables = template.environmentVariables
-        if let taskFilePath = sourceTaskFilePath {
-            config.environmentVariables["GHOSTTIES_TASK_FILE"] = taskFilePath
-        }
-        if let taskId = sourceTaskId {
-            config.environmentVariables["GHOSTTIES_TASK_ID"] = taskId
-        }
-        // Overlay any per-call env vars (e.g. GHOSTTIES_TEMPLATE for review sessions).
-        for (key, value) in extraEnvironment {
-            config.environmentVariables[key] = value
-        }
+        config.environmentVariables = Self.spawnEnvironment(
+            template: template,
+            taskFilePath: sourceTaskFilePath,
+            taskId: sourceTaskId,
+            extra: extraEnvironment,
+            sessionId: session.id
+        )
 
         let newView = Ghostty.SurfaceView(ghosttyApp, baseConfig: config)
         let newTree = SplitTree(view: newView)
@@ -997,6 +993,32 @@ final class SessionCoordinator: ObservableObject {
     nonisolated static func removeLauncherScript(for sessionId: UUID) {
         let path = (launcherScriptDir as NSString).appendingPathComponent("\(sessionId.uuidString).sh")
         try? FileManager.default.removeItem(atPath: path)
+    }
+
+    /// Assemble the environment for a spawned session: the template's own
+    /// vars, the task-context overlays, the `GHOSTTIES_SESSION_ID` stamp
+    /// (every template, including plain shell), and finally any per-call
+    /// overrides so a caller can still win.
+    nonisolated static func spawnEnvironment(
+        template: AgentTemplate,
+        taskFilePath: String?,
+        taskId: String?,
+        extra: [String: String],
+        sessionId: UUID
+    ) -> [String: String] {
+        var result = template.environmentVariables
+        if let taskFilePath {
+            result["GHOSTTIES_TASK_FILE"] = taskFilePath
+        }
+        if let taskId {
+            result["GHOSTTIES_TASK_ID"] = taskId
+        }
+        result["GHOSTTIES_SESSION_ID"] = sessionId.uuidString
+        // Overlay any per-call env vars (e.g. GHOSTTIES_TEMPLATE for review sessions).
+        for (key, value) in extra {
+            result[key] = value
+        }
+        return result
     }
 
     /// Sweep `~/.ghostties/cache/launchers` on app launch for `*.sh` scripts
