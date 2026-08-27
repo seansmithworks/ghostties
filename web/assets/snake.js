@@ -535,6 +535,12 @@
       var d = MAP[k];
       if (!d) return;
       if (!fieldVisible) return;
+      // Arrow keys/WASD were captured window-wide off mode/fieldVisible
+      // alone, with no focus check — confirmed swallowing ArrowDown on
+      // the SOUND OFF button instead of scrolling the page (S3). Only
+      // steer the game while focus is actually inside it.
+      var active = document.activeElement;
+      if (active !== frameEl && !frameEl.contains(active)) return;
       e.preventDefault();
       if (d[0] !== -dir[0] || d[1] !== -dir[1]) next = d;
     }
