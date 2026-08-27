@@ -2571,7 +2571,31 @@ private struct ComposerResultsTable: View {
                     }
                 }
                 .padding(8)
-                .background(
+                // `.overlay`, not `.background` (regression fix, second
+                // investigation): `.background(GeometryReader { ... })`
+                // proposes the CONTAINER's own incoming (often unconstrained)
+                // size to the background content rather than this VStack's
+                // own resolved size, so `geometry.size.height` here read 0 on
+                // every delivery — confirmed empirically (file-logged every
+                // `onPreferenceChange` call across the full render-evidence
+                // suite: always exactly 0.0, never once nonzero, across
+                // dozens of renders with real multi-row content). Because
+                // the height was always 0, `ComposerResultsTable.body`'s
+                // ternary below always took the `nil` branch — the
+                // `.frame(height:)` cap from `3512a500a` was NEVER applied,
+                // in this file's own tests or in production; the ScrollView
+                // stayed permanently unconstrained/greedy, filling whatever
+                // height its ambient parent chain offered (up to the full
+                // window height once routed through `SessionComposerOverlay`'s
+                // `.frame(maxWidth: .infinity, maxHeight: .infinity)` — the
+                // reported card-fills-window bug). `.overlay(GeometryReader
+                // { ... })` proposes THIS VStack's own resolved size to its
+                // content instead, and reports real values (verified: 93pt
+                // for a 2-row filtered list, 189pt for the reported 7-row
+                // case, 769pt for an unfiltered 25-template list — see
+                // `ComposerDesignCallRenderTests.cardFitReproducesOnCurrentCode`
+                // et al.).
+                .overlay(
                     GeometryReader { geometry in
                         Color.clear.preference(
                             key: ComposerResultsHeightPreferenceKey.self,
