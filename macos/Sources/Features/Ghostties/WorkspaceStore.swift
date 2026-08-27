@@ -176,6 +176,7 @@ final class WorkspaceStore: ObservableObject {
 
         // Seed bundled presets to ~/.ghostties/presets/ on first launch.
         PresetLoader.seedIfNeeded()
+        HookInstaller.seedIfNeeded()
 
         // Load file-based presets from ~/.ghostties/presets/ and sanitize them.
         let presetsResult = PresetLoader.loadPresetsResult()
