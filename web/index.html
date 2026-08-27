@@ -90,6 +90,32 @@
            rewrite: this block was removed whole. -->
 
       <!-- ============================================================
+           02b — TOKEN-COLLECTOR GAME. Decorative until Insert Coin is
+           pressed, so the mount stays out of the accessibility tree; the
+           start button and sound toggle are real controls that live
+           outside it. Logic lives in /assets/snake.js, hazard art comes
+           from /assets/ghost-field.js (window.GXField.buildGhostSVG) —
+           not duplicated here. Removed whole under prefers-reduced-motion
+           (see v3.css), same contract as the coin plate.
+           ============================================================ -->
+      <section id="token-game">
+        <h2 class="h-m">Fill the Context Window</h2>
+        <p class="lead">
+          Collect tokens before the ghosts evict them from context. Arrow keys
+          or WASD once you're in — no death, no losing, just a full context
+          window and a proper payoff for getting there.
+        </p>
+        <div class="snake-wrap">
+          <div id="snake-mount" aria-hidden="true"></div>
+          <div class="snake-controls">
+            <button type="button" class="cab-btn primary" id="snake-start" aria-label="Insert coin — play the token collector game">◄ INSERT COIN</button>
+            <button type="button" class="snake-sound" id="snake-sound" aria-pressed="false">SOUND OFF</button>
+          </div>
+        </div>
+        <div class="visually-hidden" role="status" aria-live="polite" id="snake-status"></div>
+      </section>
+
+      <!-- ============================================================
            03 — STILL GHOSTTY (adapted from v2, trimmed to one paragraph)
            ============================================================ -->
       <section id="still-ghostty">
@@ -179,9 +205,9 @@
           <span class="gx-coin-info">
             <span class="gx-coin-price">25&#162;</span>
             <span class="gx-coin-label">
-              <span class="gx-coin-label-line" data-line="1"></span>
-              <span class="gx-coin-label-line" data-line="2">INSERT</span>
-              <span class="gx-coin-label-line gx-coin-label-line-big" data-line="3">COIN</span>
+              <span class="gx-coin-label-line" data-line="1">INSERT</span>
+              <span class="gx-coin-label-line" data-line="2">COIN TO</span>
+              <span class="gx-coin-label-line gx-coin-label-line-big" data-line="3">PLAY</span>
             </span>
             <span class="gx-coin-credit">CR <b>0</b></span>
           </span>
@@ -262,9 +288,9 @@
           btn.setAttribute('aria-label', 'Return coin and exit the ghost field');
           btn.setAttribute('title', 'Return coin (Esc)');
         } else {
-          labelLines[0].textContent = '';
-          labelLines[1].textContent = 'INSERT';
-          labelLines[2].textContent = 'COIN';
+          labelLines[0].textContent = 'INSERT';
+          labelLines[1].textContent = 'COIN TO';
+          labelLines[2].textContent = 'PLAY';
           digit.textContent = '0';
           btn.setAttribute('aria-label', 'Insert coin');
           btn.setAttribute('title', 'Insert coin (C)');
@@ -362,5 +388,6 @@
     })();
   </script>
   <script src="/assets/ghost-field.js" defer></script>
+  <script src="/assets/snake.js" defer></script>
 </body>
 </html>

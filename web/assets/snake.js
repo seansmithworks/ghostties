@@ -1,117 +1,71 @@
 /*
- * ghostties.org — hero snake game (v2, pass 2)
+ * ghostties.org — hero token-collector game
  *
- * Ported from docs/design/web-redesign/Snake.dc.html. Not classic Snake:
- * the head wraps on every edge (no lose state), loose ghosts drift the
- * field, walking into one joins your tail, and the tail's last ghost
- * periodically strays off and has to be re-collected. Idle mode runs an
- * autopilot demo with nobody touching a key; pressing "I" (or the Insert
- * Coin button) hands control to WASD/arrows.
+ * Ported from the v2 herd-the-ghosts prototype (see git history for the
+ * original), gutted and re-mechanic'd per the locked decision: the head is
+ * a cursor, not a snake body; the collectibles are LLM tokens, not ghosts;
+ * the robot sprites drift as ambient hazards; and the payoff is a
+ * confetti-solitaire cascade when the context window fills.
  *
- * Deliberate deviations from the prototype (see task brief):
- *  - One shared ghost shape + visor face for all eight, site palette
- *    instead of arcade primaries.
- *  - Grid is derived from the mount's measured width and re-derived on
- *    resize, not hardcoded to a 1360px artboard.
- *  - Sound defaults off; AudioContext is built lazily on first real
- *    gesture, never eagerly.
- *  - Real focusable start control + keyboard/motion hygiene throughout.
+ * What survives the port unchanged from the original engine:
+ *  - Grid derived from the mount's measured width, responsive COLS.
+ *  - The head's tweened translate3d movement + wraparound.
+ *  - Sound (lazy AudioContext, off by default), keyboard input, a11y
+ *    live region, IntersectionObserver pause-when-offscreen, bfcache
+ *    reinit, and the whole start/end game DOM lifecycle.
+ *
+ * What's gone: the eight-ghost herd/rescue/stray mechanic, the old
+ * rounded-dome/wavy-skirt ghost drawing code (Pac-Man IP exposure, see
+ * MEMORY.md), and the autopilot demo (think() + the "auto" flag) — the
+ * page is a page until someone inserts a coin, and once they do, they are
+ * the only thing moving the cursor.
+ *
+ * Ghost hazard art is NOT duplicated here. It's drawn through
+ * window.GXField.buildGhostSVG(i, opts), the one place the sprite data
+ * lives (assets/ghost-field.js). If that API isn't present — e.g. ghost-field.js
+ * failed to load, or snake.js was somehow loaded first — this file
+ * degrades to doing nothing rather than guessing at a shape.
  */
 (function () {
   "use strict";
 
-  var SVG_NS = "http://www.w3.org/2000/svg";
-
-  // Same 4px lattice as the app icons and Ghosts.dc.html. Locked shape:
-  // tall dome, four-point skirt, visor face.
-  var DOME_TALL = "12,0,24,4 8,4,32,4 4,8,40,4 4,12,40,4 0,16,48,24";
-  var SKIRT_FOUR =
-    "0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4 0,44,4,4 16,44,4,4 28,44,4,4 44,44,4,4";
-  var SHADE_FOUR = "0,36,48,4 0,40,8,4 12,40,8,4 28,40,8,4 40,40,8,4";
-  var HI_TALL = "12,0,12,4 8,4,10,4 4,8,8,4";
-
-  function toPath(s) {
-    return s
-      .split(" ")
-      .filter(Boolean)
-      .map(function (t) {
-        var a = t.split(",").map(Number);
-        return (
-          "M" + a[0] + " " + a[1] + "h" + a[2] + "v" + a[3] + "h-" + a[2] + "Z"
-        );
-      })
-      .join("");
-  }
-
-  var BODY_PATH = toPath(DOME_TALL + " " + SKIRT_FOUR);
-  var SHADE_PATH = toPath(SHADE_FOUR);
-  var HI_PATH = toPath(HI_TALL);
-  var EYE_LIT = "#f4f7ff";
-
-  // Eight game pieces, one shape, colours pulled from the site's own
-  // accent families (amber / cyan / purple) rather than arcade primaries.
-  var PALETTE = [
-    "#ffd54f", // amber
-    "#e8b34a", // amber, deeper
-    "#7ce9f7", // cyan, light
-    "#00c2d9", // cyan
-    "#4dd0e1", // cyan, deep
-    "#7c4dff", // purple
-    "#b39cff", // purple, light
-    "#9575cd", // purple, deep
+  // A real BPE/WordPiece token look: "▮" marks a leading space (SentencePiece
+  // style), "##" marks a wordpiece continuation, plain fragments are BPE
+  // merges. Isolated in one spot (buildToken, below) so the visual can be
+  // swapped without touching game logic.
+  var TOKEN_LABELS = [
+    "▮ing",
+    "▮the",
+    "tion",
+    "▮is",
+    "##ed",
+    "▮a",
+    "▮to",
+    "▮of",
+    "▮an",
+    "ate",
+    "er",
+    "▮or",
   ];
 
-  function buildGhostSVG(color) {
-    var svg = document.createElementNS(SVG_NS, "svg");
-    svg.setAttribute("viewBox", "0 0 48 48");
-    svg.setAttribute("shape-rendering", "crispEdges");
-
-    var body = document.createElementNS(SVG_NS, "path");
-    body.setAttribute("d", BODY_PATH);
-    body.setAttribute("fill", color);
-    svg.appendChild(body);
-
-    var shade = document.createElementNS(SVG_NS, "path");
-    shade.setAttribute("d", SHADE_PATH);
-    shade.setAttribute("fill", "rgba(0,0,0,0.24)");
-    svg.appendChild(shade);
-
-    var hi = document.createElementNS(SVG_NS, "path");
-    hi.setAttribute("d", HI_PATH);
-    hi.setAttribute("fill", "rgba(255,255,255,0.2)");
-    svg.appendChild(hi);
-
-    var dark = document.createElementNS(SVG_NS, "rect");
-    dark.setAttribute("x", "8");
-    dark.setAttribute("y", "17");
-    dark.setAttribute("width", "32");
-    dark.setAttribute("height", "9");
-    dark.setAttribute("fill", "rgba(5,5,12,0.72)");
-    svg.appendChild(dark);
-
-    var pupil = document.createElementNS(SVG_NS, "rect");
-    pupil.setAttribute("class", "pupil");
-    pupil.setAttribute("x", "21");
-    pupil.setAttribute("y", "19");
-    pupil.setAttribute("width", "7");
-    pupil.setAttribute("height", "5");
-    pupil.setAttribute("fill", EYE_LIT);
-    svg.appendChild(pupil);
-
-    var ring = document.createElementNS(SVG_NS, "rect");
-    ring.setAttribute("class", "ring");
-    ring.setAttribute("x", "1");
-    ring.setAttribute("y", "1");
-    ring.setAttribute("width", "46");
-    ring.setAttribute("height", "46");
-    ring.setAttribute("fill", "none");
-    ring.setAttribute("stroke", "#ff8a70");
-    ring.setAttribute("stroke-width", "2");
-    ring.setAttribute("stroke-dasharray", "4 4");
-    svg.appendChild(ring);
-
-    return svg;
+  function buildToken(label) {
+    var el = document.createElement("div");
+    el.className = "snake-token";
+    el.textContent = label;
+    return el;
   }
+
+  // Win condition: fill the context window. Tuned by feel for a 60-90s
+  // round at the default herd/evict rates below.
+  var TARGET_TOKENS = 40;
+  // How many tokens a hazard touch knocks out of context.
+  var EVICT_AMOUNT = 4;
+  // How many tokens are live on the field at once.
+  var TOKEN_POOL = 4;
+  // How many robot sprites drift as hazards (indices into the ghost
+  // roster via GXField — a subset, not the full roster, so a 5-row field doesn't
+  // drown in obstacles).
+  var HAZARD_COUNT = 4;
 
   function init() {
     var wrap = document.querySelector(".snake-wrap");
@@ -122,6 +76,11 @@
     var statusEl = document.getElementById("snake-status");
     if (!wrap || !mount || !startBtn || !soundBtn) return;
 
+    // Degrade gracefully if the sprite source isn't there — no ghost
+    // hazards, no game. Nothing user-visible logged.
+    var GX = window.GXField;
+    if (!GX || typeof GX.buildGhostSVG !== "function") return;
+
     function announce(msg) {
       if (statusEl) statusEl.textContent = msg;
     }
@@ -129,6 +88,10 @@
     var reducedMotion = window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
       : false;
+    // The section itself is hidden under reduced motion (see v3.css) —
+    // same contract as the ambient ghost field and coin plate: an inert
+    // control left visible-but-dead is worse than not mounting at all.
+    if (reducedMotion) return;
 
     // --- DOM scaffold ------------------------------------------------------
     mount.innerHTML = "";
@@ -138,9 +101,11 @@
     var hud = document.createElement("div");
     hud.className = "snake-hud";
     hud.innerHTML =
-      '<span class="snake-stat"><span class="k">Herded</span><span class="v" data-herd>0/8</span></span>' +
-      '<span class="snake-stat dim"><span class="k">Rescues</span><span class="v" data-res>0</span></span>' +
-      '<span class="snake-stat" data-lost-cell><span class="k">Stray</span><span class="v" data-lost>0</span></span>' +
+      '<span class="snake-stat"><span class="k">Tokens</span><span class="v" data-tokens>0</span></span>' +
+      '<span class="snake-stat snake-context-stat" data-context-cell>' +
+      '<span class="k">Context</span>' +
+      '<span class="snake-meter"><span class="snake-meter-fill" data-context-fill></span></span>' +
+      "</span>" +
       '<span class="snake-stat dim snake-exit-hint"><span class="k">Esc</span><span class="v">Exit</span></span>';
     frameEl.appendChild(hud);
 
@@ -157,34 +122,16 @@
     flashEl.className = "snake-flash";
     frameEl.appendChild(flashEl);
 
+    var cascadeCanvas = document.createElement("canvas");
+    cascadeCanvas.className = "snake-cascade";
+    frameEl.appendChild(cascadeCanvas);
+    var cascadeCtx = cascadeCanvas.getContext("2d");
+
     mount.appendChild(frameEl);
 
-    var gs = [];
-    for (var i = 0; i < 8; i++) {
-      var svg = buildGhostSVG(PALETTE[i]);
-      var ghEl = document.createElement("div");
-      ghEl.className = "gh";
-      ghEl.appendChild(svg);
-      field.appendChild(ghEl);
-      gs.push({
-        el: ghEl,
-        pupil: svg.querySelector(".pupil"),
-        x: 0,
-        y: 0,
-        ix: 0,
-        iy: 0,
-        idlePhase: i * 0.79,
-        cx: 0,
-        cy: 0,
-        rank: -1,
-        lost: false,
-      });
-    }
-
-    var herdEl = hud.querySelector("[data-herd]");
-    var resEl = hud.querySelector("[data-res]");
-    var lostEl = hud.querySelector("[data-lost]");
-    var lostCell = hud.querySelector("[data-lost-cell]");
+    var tokensEl = hud.querySelector("[data-tokens]");
+    var fillEl = hud.querySelector("[data-context-fill]");
+    var contextCell = hud.querySelector("[data-context-cell]");
 
     // --- responsive grid -----------------------------------------------
     var ROWS = 5;
@@ -203,21 +150,8 @@
       CELL = width / COLS;
       field.style.height = Math.round(ROWS * CELL) + "px";
       mount.style.setProperty("--cell", CELL + "px");
-
-      // re-seed idle drift centers and home cells against the new field
-      var fw = field.clientWidth || width;
-      var fh = ROWS * CELL;
-      var homeRows = [1, 2, 3, 4, 1, 3, 2, 4];
-      for (var j = 0; j < gs.length; j++) {
-        var g = gs[j];
-        g.ix = fw * ((j + 0.5) / gs.length);
-        g.iy = fh * (0.5 + 0.28 * Math.sin(j * 1.7 + 1));
-        g.cx = Math.min(
-          COLS - 1,
-          Math.round(((j + 0.5) / gs.length) * (COLS - 1)),
-        );
-        g.cy = Math.min(ROWS - 1, homeRows[j] % ROWS);
-      }
+      cascadeCanvas.width = field.clientWidth || width;
+      cascadeCanvas.height = Math.round(ROWS * CELL);
     }
 
     function px(c) {
@@ -228,61 +162,114 @@
     }
 
     // --- game state ------------------------------------------------------
-    // Whether the playfield is actually on screen — gates preventDefault()
-    // on WASD/arrows so the game only ever steals scroll keys while it is
-    // visible, per the IntersectionObserver set up below.
     var fieldVisible = false;
-    var mode = "idle";
+    var mode = "idle"; // idle | play | win
     var hx = 1,
       hy = 2,
       dir = [1, 0],
       next = [1, 0];
     var hpx = 0,
       hpy = 0;
-    var trail = [[hx, hy]];
     var f = 0,
-      t = 0,
-      herded = 0,
-      rescues = 0,
-      strays = 0,
-      lastDrop = 0;
-    var auto = true;
+      t = 0;
+    var tokensCollected = 0;
+    var pickupsSinceAnnounce = 0;
     var soundOn = false;
     var ac = null;
-    // Gates the ambient float (ghosts drifting, pupils tracking) in idle.
-    // Off for reduced-motion visitors — nothing moves until they explicitly
-    // insert a coin, at which point startGame() turns it on.
-    var simActive = !reducedMotion;
 
-    layoutGrid();
+    // hazards — same ambient sinusoidal drift as the old herd ghosts,
+    // just no capture/rank state; walking into one always evicts.
+    var hazards = [];
+    for (var hi = 0; hi < HAZARD_COUNT; hi++) {
+      var hazEl = document.createElement("div");
+      hazEl.className = "gh";
+      hazEl.innerHTML = GX.buildGhostSVG(hi % GX.ghostCount(), {});
+      field.appendChild(hazEl);
+      hazards.push({
+        el: hazEl,
+        x: 0,
+        y: 0,
+        ix: 0,
+        iy: 0,
+        idlePhase: hi * 0.79,
+        cx: 0,
+        cy: 0,
+      });
+    }
+
+    // tokens — a small pool live on the field at once; collecting one
+    // respawns a fresh one at a free cell.
+    var tokens = [];
+
+    function occupiedCells() {
+      var set = {};
+      set[hx + "," + hy] = true;
+      hazards.forEach(function (h) {
+        set[h.cx + "," + h.cy] = true;
+      });
+      tokens.forEach(function (tk) {
+        set[tk.cx + "," + tk.cy] = true;
+      });
+      return set;
+    }
+
+    function randomFreeCell() {
+      var occ = occupiedCells();
+      for (var tries = 0; tries < 40; tries++) {
+        var cx = Math.floor(Math.random() * COLS);
+        var cy = Math.floor(Math.random() * ROWS);
+        if (!occ[cx + "," + cy]) return [cx, cy];
+      }
+      return [Math.floor(Math.random() * COLS), Math.floor(Math.random() * ROWS)];
+    }
+
+    function spawnToken() {
+      var cell = randomFreeCell();
+      var label = TOKEN_LABELS[Math.floor(Math.random() * TOKEN_LABELS.length)];
+      var el = buildToken(label);
+      field.appendChild(el);
+      tokens.push({ el: el, cx: cell[0], cy: cell[1] });
+    }
+
+    function positionEntities() {
+      var fw = field.clientWidth || CELL * COLS;
+      var fh = ROWS * CELL;
+      hazards.forEach(function (h, j) {
+        h.ix = fw * ((j + 0.5) / hazards.length);
+        h.iy = fh * (0.5 + 0.28 * Math.sin(j * 1.7 + 1));
+        h.cx = Math.min(COLS - 1, Math.round(((j + 0.5) / hazards.length) * (COLS - 1)));
+        h.cy = Math.min(ROWS - 1, (j * 2 + 1) % ROWS);
+        h.x = h.ix;
+        h.y = h.iy;
+        h.el.style.transform =
+          "translate3d(" + h.x.toFixed(1) + "px," + h.y.toFixed(1) + "px,0)";
+      });
+      tokens.forEach(function (tk) {
+        tk.el.style.transform =
+          "translate3d(" + px(tk.cx).toFixed(1) + "px," + py(tk.cy).toFixed(1) + "px,0)";
+      });
+    }
+
+    function layoutAndPosition() {
+      layoutGrid();
+      positionEntities();
+    }
+
+    layoutAndPosition();
     hpx = px(hx);
     hpy = py(hy);
     headEl.style.transform =
       "translate3d(" + hpx.toFixed(1) + "px," + hpy.toFixed(1) + "px,0)";
-    for (var gi = 0; gi < gs.length; gi++) {
-      gs[gi].x = gs[gi].ix;
-      gs[gi].y = gs[gi].iy;
-      gs[gi].el.style.transform =
-        "translate3d(" +
-        gs[gi].x.toFixed(1) +
-        "px," +
-        gs[gi].y.toFixed(1) +
-        "px,0)";
-    }
 
     var ro = window.ResizeObserver
       ? new ResizeObserver(function () {
-          layoutGrid();
+          layoutAndPosition();
         })
       : null;
     if (ro) ro.observe(mount);
-    else window.addEventListener("resize", layoutGrid);
+    else window.addEventListener("resize", layoutAndPosition);
 
     // --- sound -------------------------------------------------------------
-    // Placeholder synthesised SFX (WebAudio square waves), same shapes as
-    // the prototype. Real SFX are parked. AudioContext is only ever built
-    // inside this function, which is only ever called from a real user
-    // gesture handler (key/click), never eagerly.
     function sfx(name) {
       if (!soundOn) return;
       if (!ac) {
@@ -312,7 +299,9 @@
       } else if (name === "collect") {
         play(660, 0, 0.045, "square", 0.1);
         play(990, 0.045, 0.07, "square", 0.1);
-      } else if (name === "stray") {
+      } else if (name === "evict") {
+        // Same descending-sawtooth shape the old engine used for its
+        // "stray" mechanic — losing something you'd collected.
         var o = ac.createOscillator();
         var g = ac.createGain();
         o.type = "sawtooth";
@@ -324,10 +313,11 @@
         g.connect(ac.destination);
         o.start(now);
         o.stop(now + 0.34);
-      } else if (name === "rescue") {
+      } else if (name === "win") {
         play(784, 0, 0.06);
         play(1046, 0.06, 0.06);
         play(1568, 0.12, 0.2);
+        play(2093, 0.24, 0.3);
       }
     }
 
@@ -356,46 +346,63 @@
     function isEditableTarget(target) {
       if (!target) return false;
       var tag = target.tagName ? target.tagName.toLowerCase() : "";
-      if (tag === "input" || tag === "textarea" || tag === "select")
-        return true;
+      if (tag === "input" || tag === "textarea" || tag === "select") return true;
       if (target.isContentEditable) return true;
       return false;
+    }
+
+    function resetRound() {
+      hx = 1;
+      hy = 2;
+      dir = [1, 0];
+      next = [1, 0];
+      f = 0;
+      tokensCollected = 0;
+      pickupsSinceAnnounce = 0;
+      hpx = px(hx);
+      hpy = py(hy);
+      headEl.style.transform =
+        "translate3d(" + hpx.toFixed(1) + "px," + hpy.toFixed(1) + "px,0)";
+      tokens.forEach(function (tk) {
+        tk.el.remove();
+      });
+      tokens = [];
+      for (var i = 0; i < TOKEN_POOL; i++) spawnToken();
+      positionEntities();
+      tokensEl.textContent = "0";
+      fillEl.style.width = "0%";
+      contextCell.classList.remove("alert");
+      clearCascade();
     }
 
     function startGame() {
       if (mode !== "idle") return;
       mode = "play";
-      lastDrop = t; // don't let idle-time elapsed since the last game count toward a stray
-      simActive = true; // reduced-motion users get their first motion here, explicitly
       wrap.classList.add("is-playing");
       if (heroSection) heroSection.classList.add("is-playing");
-      // The mount is decorative (aria-hidden) until this moment; once it's
-      // a real running game it needs to be in the a11y tree, and focus
-      // needs to leave the button we're about to hide.
       mount.setAttribute("aria-hidden", "false");
       frameEl.tabIndex = -1;
       frameEl.setAttribute("role", "application");
       frameEl.setAttribute(
         "aria-label",
-        "Snake game. Use arrow keys or WASD to herd ghosts. Press Escape to exit.",
+        "Token collector game. Use arrow keys or WASD to collect tokens and fill the context window. Avoid the ghosts. Press Escape to exit.",
       );
       startBtn.setAttribute("aria-hidden", "true");
       startBtn.tabIndex = -1;
+      resetRound();
       flashEl.classList.remove("go");
-      // force reflow so re-adding the class restarts the animation
       void flashEl.offsetWidth;
       flashEl.classList.add("go");
       sfx("coin");
       frameEl.focus({ preventScroll: true });
       announce(
-        "Game started. Use arrow keys or WASD to herd ghosts. Press Escape to exit.",
+        "Game started. Collect tokens to fill the context window. Touching a ghost evicts tokens. Press Escape to exit.",
       );
     }
 
     function endGame() {
-      if (mode !== "play") return;
+      if (mode === "idle") return;
       mode = "idle";
-      auto = true;
       wrap.classList.remove("is-playing");
       if (heroSection) heroSection.classList.remove("is-playing");
       mount.setAttribute("aria-hidden", "true");
@@ -405,39 +412,7 @@
       startBtn.removeAttribute("aria-hidden");
       startBtn.tabIndex = 0;
       startBtn.focus({ preventScroll: true });
-
-      // Restore a true idle state — after Escape the hero must be
-      // indistinguishable from a fresh load, not a frozen/abandoned game
-      // a stray "I" could resume.
-      hx = 1;
-      hy = 2;
-      dir = [1, 0];
-      next = [1, 0];
-      trail = [[hx, hy]];
-      f = 0;
-      herded = 0;
-      rescues = 0;
-      strays = 0;
-      lastDrop = t;
-      hpx = px(hx);
-      hpy = py(hy);
-      headEl.style.transform =
-        "translate3d(" + hpx.toFixed(1) + "px," + hpy.toFixed(1) + "px,0)";
-      for (var i = 0; i < gs.length; i++) {
-        var g = gs[i];
-        g.rank = -1;
-        g.lost = false;
-        g.el.classList.remove("lost");
-        g.x = g.ix;
-        g.y = g.iy;
-        g.el.style.transform =
-          "translate3d(" + g.x.toFixed(1) + "px," + g.y.toFixed(1) + "px,0)";
-      }
-      herdEl.textContent = "0/" + gs.length;
-      resEl.textContent = "0";
-      lostEl.textContent = "0";
-      lostCell.classList.remove("alert");
-
+      clearCascade();
       announce("Game stopped. Press Insert Coin to play again.");
     }
 
@@ -448,10 +423,7 @@
       var k = e.key ? e.key.toLowerCase() : "";
 
       if (mode === "idle") {
-        if (k !== "i") return; // never hijack scroll/typing before play starts
-        // Only insert-coin while the playfield is actually on screen —
-        // otherwise "i" is just a stray keystroke and must not teleport
-        // the visitor to a hero they aren't looking at.
+        if (k !== "i") return;
         if (!fieldVisible) return;
         e.preventDefault();
         startGame();
@@ -464,98 +436,154 @@
         return;
       }
 
+      if (mode === "win") return; // cascade is running — nothing else to do but exit
+
       var d = MAP[k];
       if (!d) return;
-      // Only steal WASD/arrows while the playfield is actually on screen —
-      // otherwise these are just page-scroll keys and must stay that way.
       if (!fieldVisible) return;
-      e.preventDefault(); // safe now — only once the game is actually running and visible
-      auto = false;
+      e.preventDefault();
       if (d[0] !== -dir[0] || d[1] !== -dir[1]) next = d;
     }
     window.addEventListener("keydown", onKeyDown);
 
     // --- simulation ------------------------------------------------------
-    function ranked() {
-      return gs
-        .filter(function (g) {
-          return g.rank >= 0;
-        })
-        .sort(function (a, b) {
-          return a.rank - b.rank;
-        });
-    }
-
-    function think() {
-      var targets = [];
-      for (var i = 0; i < gs.length; i++)
-        if (gs[i].rank < 0) targets.push(gs[i]);
-      if (!targets.length) return;
-      var best = targets[0],
-        bd = Infinity;
-      for (var j = 0; j < targets.length; j++) {
-        var p = targets[j];
-        var d = Math.abs(p.cx - hx) + Math.abs(p.cy - hy);
-        if (d < bd) {
-          bd = d;
-          best = p;
-        }
-      }
-      var dx = best.cx - hx,
-        dy = best.cy - hy;
-      var want =
-        Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
-      if (!want[0] && !want[1]) return;
-      if (want[0] === -dir[0] && want[1] === -dir[1]) return;
-      next = want;
-    }
-
     function move() {
       dir = next;
       hx = (hx + dir[0] + COLS) % COLS;
       hy = (hy + dir[1] + ROWS) % ROWS;
-      trail.unshift([hx, hy]);
-      if (trail.length > 80) trail.pop();
 
-      for (var i = 0; i < gs.length; i++) {
-        var g = gs[i];
-        if (g.rank >= 0) continue;
-        if (g.cx === hx && g.cy === hy) {
-          g.rank = herded;
-          herded++;
-          if (g.lost) {
-            g.lost = false;
-            rescues++;
-            strays--;
-            g.el.classList.remove("lost");
-            sfx("rescue");
-          } else {
-            sfx("collect");
+      for (var i = tokens.length - 1; i >= 0; i--) {
+        var tk = tokens[i];
+        if (tk.cx === hx && tk.cy === hy) {
+          tk.el.remove();
+          tokens.splice(i, 1);
+          tokensCollected++;
+          pickupsSinceAnnounce++;
+          sfx("collect");
+          spawnToken();
+        }
+      }
+
+      for (var j = 0; j < hazards.length; j++) {
+        var h = hazards[j];
+        if (h.cx === hx && h.cy === hy) {
+          var before = tokensCollected;
+          tokensCollected = Math.max(0, tokensCollected - EVICT_AMOUNT);
+          if (tokensCollected !== before) {
+            sfx("evict");
+            contextCell.classList.add("alert");
+            setTimeout(function () {
+              contextCell.classList.remove("alert");
+            }, 320);
+            announce(
+              "Ghost hit. Lost " + (before - tokensCollected) + " tokens from context.",
+            );
           }
         }
       }
 
-      var line = ranked();
-      for (var k = 0; k < line.length; k++) {
-        var s = trail[Math.min(trail.length - 1, line[k].rank + 1)];
-        line[k].cx = s[0];
-        line[k].cy = s[1];
+      tokensEl.textContent = String(tokensCollected);
+      var pct = Math.min(100, Math.round((tokensCollected / TARGET_TOKENS) * 100));
+      fillEl.style.width = pct + "%";
+
+      if (pickupsSinceAnnounce >= 5) {
+        pickupsSinceAnnounce = 0;
+        announce(tokensCollected + " tokens in context.");
       }
 
-      var strayEvery = 9;
-      if (line.length >= 3 && t - lastDrop > strayEvery) {
-        var tail = line[line.length - 1];
-        tail.rank = -1;
-        tail.lost = true;
-        tail.el.classList.add("lost");
-        herded--;
-        strays++;
-        lastDrop = t;
-        ranked().forEach(function (g, idx) {
-          g.rank = idx;
-        });
-        sfx("stray");
+      if (tokensCollected >= TARGET_TOKENS) {
+        winGame();
       }
+    }
+
+    // --- confetti-solitaire cascade --------------------------------------
+    var cascadePieces = [];
+    var cascadeRunning = false;
+    var CASCADE_COLORS = ["#ffd54f", "#00e5ff", "#7c4dff", "#7ce9f7", "#b39cff"];
+    var GRAVITY = 0.32;
+    var RESTITUTION = 0.62;
+
+    function clearCascade() {
+      cascadeRunning = false;
+      cascadePieces = [];
+      if (cascadeCtx) cascadeCtx.clearRect(0, 0, cascadeCanvas.width, cascadeCanvas.height);
+      cascadeCanvas.classList.remove("go");
+    }
+
+    function launchCascadePiece(delayMs) {
+      setTimeout(function () {
+        if (mode !== "win") return;
+        var rect = fillEl.getBoundingClientRect();
+        var fieldRect = field.getBoundingClientRect();
+        var x0 = rect.left - fieldRect.left + rect.width / 2;
+        var y0 = rect.top - fieldRect.top + rect.height / 2;
+        cascadePieces.push({
+          x: x0,
+          y: y0,
+          vx: (Math.random() - 0.5) * 6,
+          vy: -4 - Math.random() * 5,
+          rot: Math.random() * Math.PI * 2,
+          vr: (Math.random() - 0.5) * 0.3,
+          size: 4 + Math.random() * 3,
+          color: CASCADE_COLORS[Math.floor(Math.random() * CASCADE_COLORS.length)],
+          settled: false,
+        });
+      }, delayMs);
+    }
+
+    function tickCascade() {
+      if (!cascadeRunning) return;
+      var w = cascadeCanvas.width,
+        h = cascadeCanvas.height;
+      var active = false;
+      cascadePieces.forEach(function (p) {
+        if (p.settled) return;
+        active = true;
+        p.vy += GRAVITY;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot += p.vr;
+        if (p.x < 0) {
+          p.x = 0;
+          p.vx *= -RESTITUTION;
+        }
+        if (p.x > w) {
+          p.x = w;
+          p.vx *= -RESTITUTION;
+        }
+        if (p.y > h - p.size) {
+          p.y = h - p.size;
+          p.vy *= -RESTITUTION;
+          p.vx *= 0.85; // floor friction
+          if (Math.abs(p.vy) < 0.6) p.settled = true;
+        }
+        cascadeCtx.save();
+        cascadeCtx.translate(p.x, p.y);
+        cascadeCtx.rotate(p.rot);
+        cascadeCtx.fillStyle = p.color;
+        cascadeCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        cascadeCtx.restore();
+      });
+      // Trail is never cleared — the screen fills up. Keep animating as
+      // long as anything is still moving.
+      if (active) requestAnimationFrame(tickCascade);
+      else cascadeRunning = false;
+    }
+
+    function winGame() {
+      if (mode === "win") return;
+      mode = "win";
+      sfx("win");
+      cascadeCanvas.classList.add("go");
+      cascadeRunning = true;
+      cascadePieces = [];
+      announce(
+        "Context window full. " + TARGET_TOKENS + " tokens collected. Press Escape to exit.",
+      );
+      for (var i = 0; i < TARGET_TOKENS; i++) {
+        launchCascadePiece(i * 40);
+      }
+      requestAnimationFrame(tickCascade);
     }
 
     // --- render loop -------------------------------------------------------
@@ -566,20 +594,8 @@
     function frame() {
       t += 1 / 60;
 
-      if (!simActive) {
-        // Nothing drifts and nothing auto-herds before an explicit start
-        // (only reachable pre-start when reduced motion is requested).
-        raf = requestAnimationFrame(frame);
-        return;
-      }
-
-      // The herd loop (think/move) is play-only, per the locked decision
-      // that the page is a page until someone inserts a coin: idle ghosts
-      // drift on their ambient float below, but the head does not move
-      // and nothing is herded until mode === 'play'.
       if (mode === "play") {
         var step = Math.max(1, Math.round(60 / speed));
-        if (auto && f % step === 0) think();
         if (f % step === 0) move();
         f++;
       }
@@ -593,40 +609,19 @@
       headEl.style.transform =
         "translate3d(" + hpx.toFixed(1) + "px," + hpy.toFixed(1) + "px,0)";
 
-      for (var i = 0; i < gs.length; i++) {
-        var g = gs[i];
-        var gx, gy;
-        if (g.rank < 0) {
-          // loose — floats ambiently until the head walks into it
-          gx = g.ix + Math.sin(t * 0.52 + g.idlePhase) * (CELL * 0.35);
-          gy = g.iy + Math.cos(t * 0.63 + g.idlePhase) * (CELL * 0.28);
-          g.x = gx;
-          g.y = gy;
-        } else {
-          // captured — follows its slot in the tail
-          gx = px(g.cx);
-          gy = py(g.cy);
-          if (Math.abs(gx - g.x) > CELL * 1.6) g.x = gx;
-          else g.x += (gx - g.x) * 0.4;
-          if (Math.abs(gy - g.y) > CELL * 1.6) g.y = gy;
-          else g.y += (gy - g.y) * 0.4;
-        }
-        g.el.style.transform =
-          "translate3d(" + g.x.toFixed(1) + "px," + g.y.toFixed(1) + "px,0)";
-
-        var lx = mode === "play" ? hpx : g.ix + Math.sin(t * 0.3) * (CELL * 2);
-        var ly =
-          mode === "play" ? hpy : g.iy + Math.cos(t * 0.24) * (CELL * 1.2);
-        var ang = Math.atan2(ly - g.y, lx - g.x);
-        g.pupil.setAttribute("x", 21 + Math.round((Math.cos(ang) * 5) / 2) * 2);
-        g.pupil.setAttribute("y", 19 + Math.round((Math.sin(ang) * 3) / 2) * 2);
-      }
-
       if (mode === "play") {
-        herdEl.textContent = herded + "/" + gs.length;
-        resEl.textContent = String(rescues);
-        lostEl.textContent = String(strays);
-        lostCell.classList.toggle("alert", strays > 0);
+        hazards.forEach(function (h) {
+          var gx = h.ix + Math.sin(t * 0.52 + h.idlePhase) * (CELL * 0.35);
+          var gy = h.iy + Math.cos(t * 0.63 + h.idlePhase) * (CELL * 0.28);
+          h.x = gx;
+          h.y = gy;
+          h.el.style.transform =
+            "translate3d(" + h.x.toFixed(1) + "px," + h.y.toFixed(1) + "px,0)";
+          // Keep a grid cell for collision even though the sprite floats
+          // continuously — nearest cell to its wander center.
+          h.cx = Math.min(COLS - 1, Math.max(0, Math.round(h.ix / CELL)));
+          h.cy = Math.min(ROWS - 1, Math.max(0, Math.round(h.iy / CELL)));
+        });
       }
 
       raf = requestAnimationFrame(frame);
@@ -643,8 +638,6 @@
       raf = null;
     }
 
-    // Pause entirely when the hero scrolls out of view — this game must
-    // not burn a core forever on a page nobody is looking at.
     var io =
       "IntersectionObserver" in window
         ? new IntersectionObserver(
@@ -666,7 +659,7 @@
     function teardown() {
       stopLoop();
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("resize", layoutGrid);
+      window.removeEventListener("resize", layoutAndPosition);
       if (ro) ro.disconnect();
       if (io) io.disconnect();
       if (ac) {
@@ -676,14 +669,10 @@
     }
     window.addEventListener("pagehide", teardown);
 
-    // Safari (and others) can restore this page from bfcache instead of
-    // reloading it. pagehide's teardown removed the keydown listener and
-    // disconnected both observers, so without this the restored page shows
-    // a frozen playfield that no longer responds to "I" or the arrow keys.
     function reinit() {
       window.addEventListener("keydown", onKeyDown);
       if (ro) ro.observe(mount);
-      else window.addEventListener("resize", layoutGrid);
+      else window.addEventListener("resize", layoutAndPosition);
       if (io) io.observe(mount);
       else {
         fieldVisible = true;

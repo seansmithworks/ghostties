@@ -407,6 +407,249 @@ button.cab-btn {
 }
 
 /* ---------------------------------------------------------------------
+   Token-collector game (assets/snake.js) — the head is a cursor, the
+   collectibles are LLM-token chips, the robot ghosts drift as hazards.
+   Layout only; game logic lives entirely in the JS.
+   --------------------------------------------------------------------- */
+
+.snake-wrap {
+  position: relative;
+  margin-top: 32px;
+}
+#snake-mount {
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(
+      96% 70% at 50% 30%,
+      transparent 55%,
+      rgba(6, 6, 14, 0.9) 100%
+    ),
+    var(--bg);
+  overflow: hidden;
+}
+.snake-frame {
+  position: relative;
+}
+.snake-hud {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--font-mono);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.snake-wrap.is-playing .snake-hud {
+  opacity: 1;
+}
+.snake-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px;
+  border-left: 1px solid var(--line-soft);
+}
+.snake-stat:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+.snake-stat .k {
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.snake-stat .v {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--amber);
+}
+.snake-stat.dim .v {
+  color: var(--ink-dim);
+}
+.snake-context-stat.alert {
+  border-left-color: rgba(255, 120, 96, 0.5);
+}
+.snake-meter {
+  display: block;
+  width: 84px;
+  height: 6px;
+  background: rgba(233, 230, 245, 0.12);
+  border: 1px solid var(--line);
+}
+.snake-meter-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--amber);
+  transition: width 220ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+.snake-context-stat.alert .snake-meter {
+  border-color: rgba(255, 120, 96, 0.5);
+}
+.snake-context-stat.alert .snake-meter-fill {
+  background: #ff8a70;
+}
+
+.snake-field {
+  position: relative;
+  background-image: radial-gradient(
+    rgba(233, 230, 245, 0.09) 1.2px,
+    transparent 1.2px
+  );
+  background-size: var(--cell, 34px) var(--cell, 34px);
+}
+
+/* Ghost hazards — same drifting box the ambient field's own robots use,
+   just sized to the game's grid cell. */
+.gh {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cell, 34px);
+  height: var(--cell, 34px);
+  will-change: transform;
+}
+.gh svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.4));
+}
+
+/* Token collectibles — a small BPE-subword chip. buildToken() in
+   snake.js is the one place the visual is authored; this is layout only. */
+.snake-token {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cell, 34px);
+  height: var(--cell, 34px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.snake-token {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  background: rgba(6, 6, 14, 0.85);
+  border: 1px solid var(--line);
+  box-sizing: border-box;
+  width: 78%;
+  height: 52%;
+  margin: 24% 11%;
+}
+
+.snake-head {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--cell, 34px);
+  height: var(--cell, 34px);
+  z-index: 5;
+  /* Frame + core mark distinguishes the cursor from the token chips and
+     ghost hazards — a hard-edged square outline neither carries, at any
+     cell size. No box-shadow/glow on it, per the house vocabulary. */
+  border: 2px solid var(--ink);
+  will-change: transform;
+}
+.snake-head i {
+  position: absolute;
+  left: 22%;
+  top: 22%;
+  width: 56%;
+  height: 56%;
+  background: var(--amber);
+  animation: snake-cursor 0.9s steps(2, jump-none) infinite;
+}
+@keyframes snake-cursor {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.snake-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  background: var(--amber);
+  opacity: 0;
+}
+.snake-flash.go {
+  animation: snake-fl 0.42s cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+@keyframes snake-fl {
+  0% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Confetti-solitaire cascade canvas — sits above the field, never
+   cleared once the win fires (see clearCascade() in snake.js for the
+   one place it does get wiped, on exit/replay). */
+.snake-cascade {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  display: none;
+}
+.snake-cascade.go {
+  display: block;
+}
+
+.snake-sound {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 9;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  background: rgba(6, 6, 14, 0.6);
+  border: 1px solid var(--ink-faint);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.snake-sound:hover,
+.snake-sound:focus-visible {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.snake-sound[aria-pressed="true"] {
+  color: var(--amber);
+  border-color: rgba(255, 213, 79, 0.4);
+}
+
+.snake-controls {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+@media (max-width: 480px) {
+  .snake-hud {
+    padding: 8px 10px;
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .snake-stat {
+    padding: 0 8px;
+  }
+}
+
+/* ---------------------------------------------------------------------
    03 — STILL GHOSTTY
    --------------------------------------------------------------------- */
 
@@ -1009,6 +1252,15 @@ footer a:hover {
      control here, so it is removed from the page and the tab order
      entirely rather than left visible-but-inert. */
   .gx-coin {
+    display: none !important;
+  }
+  /* snake.js itself bails out under reduced motion before mounting
+     anything (same contract) — this just keeps the section's heading/
+     lead copy from promising a game that was never inserted into the
+     DOM. A still board isn't a meaningful reduced version of a game
+     whose entire payoff is a physics cascade, so it's removed whole
+     rather than shipped inert. */
+  #token-game {
     display: none !important;
   }
 }

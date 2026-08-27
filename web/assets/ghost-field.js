@@ -639,7 +639,7 @@
 
   var SHADE_IDLE_LEVEL = 2.4;
 
-  function buildSVG(ghost) {
+  function buildSVG(ghost, level) {
     var pixels = ghost.pixels,
       color = ghost.color;
     var rows = pixels.length,
@@ -651,7 +651,9 @@
 
     var shadeKinds = classifyShadeCells(pixels);
     var baseRgb = shadeHexToRgb(color);
-    var idleParams = shadeLevelParams(SHADE_IDLE_LEVEL);
+    var idleParams = shadeLevelParams(
+      level === undefined ? SHADE_IDLE_LEVEL : level,
+    );
 
     var body = "",
       eyes = "",
@@ -836,6 +838,17 @@
         isArmed: function () {
           return false;
         },
+        // Additive — lets snake.js draw the same robot sprites here too.
+        // See the main-branch GXField below for the full contract.
+        ghostCount: function () {
+          return GHOSTS_DATA.length;
+        },
+        buildGhostSVG: function (i, opts) {
+          var g = GHOSTS_DATA[i];
+          if (!g) return "";
+          return buildSVG(g, opts && opts.level);
+        },
+        buildCoinSVG: buildCoinSVG,
       };
       return;
     }
@@ -1779,6 +1792,20 @@
       isArmed: function () {
         return armed;
       },
+      // Additive, no behaviour change above this line. One source of
+      // truth for the robot sprites — snake.js draws hazards through
+      // this rather than keeping its own copy of GHOSTS_DATA (that split
+      // is exactly what caused the Pac-Man silhouette to survive a prior
+      // redraw in one file and not the other).
+      ghostCount: function () {
+        return GHOSTS_DATA.length;
+      },
+      buildGhostSVG: function (i, opts) {
+        var g = GHOSTS_DATA[i];
+        if (!g) return "";
+        return buildSVG(g, opts && opts.level);
+      },
+      buildCoinSVG: buildCoinSVG,
     };
   }
 
