@@ -95,6 +95,19 @@ This file is open items only — no changelog, no findings essays. Prune at `/wr
   GUI-driving UI tests. The site shipped as a clean web-only branch off main instead
   (PR #139, `ded288569`). Cherry-pick from this branch; do not merge it. | security | new
 
+- [ ] **PROD IS ONE COMMIT BEHIND — needs Sean.** The Sidebar-section removal is merged to
+  `main` (`2b8439880`) plus an empty retrigger commit (`5dd1db462`), but Vercel produced NO
+  production deployment for either. Preview builds for other branches still run.
+  `get_project` reports `"live": false` with `updatedAt` stamped to the second of the #139
+  prod deploy — reads as the project paused or at a Hobby-plan limit. Unpausing is an
+  account setting, so it is Sean's call, not the orchestrator's. `ghostties.org` currently
+  serves the #139 build: correct, just missing the sidebar removal. | build | needs-Sean
+- [ ] Sidebar section removed from the site 2026-08-27 (Sean: "the side bar is a duplicate
+  so we should hide it for now") — its Projects capture and the hero's Sessions capture are
+  the same window one tab apart. Removed whole, not `display:none`; restore from git history
+  once there is a genuinely different surface to show. Page is now hero / Still Ghostty /
+  Get Started. | design | new
+
 ## Needs a fresh relevance pass (pre-2026-08-22, likely superseded)
 
 Full detail in `BACKLOG-log.md`. Spans: v3 section-by-section build (review rounds 1-3,
