@@ -2,10 +2,11 @@
 
 ## 2026-08-27 — composer field: card-fit + ghost snapshots fixed and verified; parser, worktree-launch, placement still open
 
-Branch `main` @ `92ea7b601` (composer-ghost-and-well-s2 merged). Suite baseline 975 in a clean
-worktree, 986 with the create-worktree branch's 11 new tests; sole recurring failure is the
-documented `GitWorktreeCreationTests` race flake (20/20 in isolation). Totals vary by
-environment — verify by diffing test IDENTIFIER sets, not by comparing totals.
+`main` is at `5dd1db462`. `composer-ghost-and-well-s2` @ `92ea7b601` is unmerged, no PR — nothing
+from this session is on `main`. Suite baseline 975 in a clean worktree, 986 with the
+create-worktree branch's 11 new tests; sole recurring failure is the documented
+`GitWorktreeCreationTests` race flake (20/20 in isolation). Totals vary by environment — verify
+by diffing test IDENTIFIER sets, not by comparing totals.
 
 **Closed this session:**
 - Card-fills-window is FIXED and verified. `13011dffa`'s `.background`→`.overlay` change was the
@@ -53,6 +54,12 @@ environment — verify by diffing test IDENTIFIER sets, not by comparing totals.
 - [ ] **CARRIED — model B typed-to-ghost gap** (~1.5-2pt). Never fixed, misdiagnosed twice
   (side-bearing, then `firstRect` rounding). Sean re-reported it 2026-08-26. Model B is ON for
   him (`ghostties.composerModelBField = 1`).
+- [ ] **DECIDE — merge or PR.** Nothing from this session is on `main` (`5dd1db462`).
+  `composer-ghost-and-well-s2` @ `92ea7b601` (card-fit fix, ghost-band retune) unmerged, no PR.
+  `test/composer-idiom-invariant` @ `151898bbd` (the `-n` idiom tests) unmerged, no PR.
+  `feat/composer-create-worktree-launch` @ `ac7f5ab20` (launch-on-create, round 3 review in
+  flight) unmerged, no PR. All three build on the `composer-ghost-and-well-s2` line. Merging is
+  Sean's call.
 - [ ] **beta.24 still HELD.** Nothing tagged.
 
 
