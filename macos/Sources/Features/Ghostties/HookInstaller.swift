@@ -26,7 +26,7 @@ struct HookInstaller {
 
     /// Current seed version. Bump this when `ghostties-status.sh` changes to
     /// trigger re-seeding (and overwrite any previously-seeded copy).
-    static let seedVersion = 1
+    static let seedVersion = 2
 
     /// Name of the bundled/seeded hook script.
     static let scriptName = "ghostties-status.sh"
@@ -104,6 +104,7 @@ struct HookInstaller {
 
         do {
             try fm.copyItem(at: sourceURL, to: URL(fileURLWithPath: tmpPath))
+            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tmpPath)
             if fm.fileExists(atPath: destPath) {
                 _ = try fm.replaceItemAt(URL(fileURLWithPath: destPath), withItemAt: URL(fileURLWithPath: tmpPath))
             } else {
