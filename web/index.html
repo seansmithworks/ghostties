@@ -106,10 +106,15 @@
           window and a proper payoff for getting there.
         </p>
         <div class="snake-wrap">
+          <!-- #snake-sound is absolutely positioned top-right over the
+               mount (v3.css), rendering above #snake-start visually —
+               it sits first in DOM here too, so tab order matches
+               visual order instead of following source order into a
+               control that renders below-left of it. -->
+          <button type="button" class="snake-sound" id="snake-sound" aria-pressed="false">SOUND OFF</button>
           <div id="snake-mount" aria-hidden="true"></div>
           <div class="snake-controls">
             <button type="button" class="cab-btn primary" id="snake-start" aria-label="Insert coin — play the token collector game">◄ INSERT COIN</button>
-            <button type="button" class="snake-sound" id="snake-sound" aria-pressed="false">SOUND OFF</button>
           </div>
         </div>
         <div class="visually-hidden" role="status" aria-live="polite" id="snake-status"></div>
