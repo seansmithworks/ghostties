@@ -140,7 +140,8 @@
       // the only way out, advertised by an 8px HUD chip with no
       // pointer/touch path at all (B4).
       '<button type="button" class="snake-stat dim snake-exit-hint" ' +
-      'data-exit><span class="k">Esc</span><span class="v">Exit</span></button>';
+      'data-exit tabindex="-1"><span class="k">Esc</span><span class="v">Exit</span>' +
+      "</button>";
     frameEl.appendChild(hud);
 
     var field = document.createElement("div");
@@ -518,6 +519,10 @@
       );
       startBtn.setAttribute("aria-hidden", "true");
       startBtn.tabIndex = -1;
+      // Only a focus stop while a round is actually running — idle,
+      // endGame() no-ops (mode === "idle"), so it was a keyboard trap
+      // with no visible focus ring and no effect on Enter (R1).
+      exitBtn.tabIndex = 0;
       resetRound();
       flashEl.classList.remove("go");
       void flashEl.offsetWidth;
@@ -539,6 +544,7 @@
       frameEl.removeAttribute("aria-label");
       startBtn.removeAttribute("aria-hidden");
       startBtn.tabIndex = 0;
+      exitBtn.tabIndex = -1;
       startBtn.focus({ preventScroll: true });
       clearCascade();
       announce("Game stopped. Press Insert Coin to play again.");
