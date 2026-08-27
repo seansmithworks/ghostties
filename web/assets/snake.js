@@ -310,16 +310,26 @@
       tokens.push({ el: el, cx: cell[0], cy: cell[1] });
     }
 
+    // Single source for a hazard's collision cell, derived from its
+    // actual rendered position (h.x/h.y) — both callers below used to
+    // compute this independently (one from the wander center h.ix/h.iy,
+    // one inline in frame()), and could disagree by up to the sprite's
+    // full drift offset (S1): the sprite draws at h.x/h.y, so the
+    // eviction hitbox now always matches what's on screen.
+    function updateHazardCell(h) {
+      h.cx = Math.min(COLS - 1, Math.max(0, Math.round(h.x / CELL)));
+      h.cy = Math.min(ROWS - 1, Math.max(0, Math.round(h.y / CELL)));
+    }
+
     function positionEntities() {
       var fw = field.clientWidth || CELL * COLS;
       var fh = ROWS * CELL;
       hazards.forEach(function (h, j) {
         h.ix = fw * ((j + 0.5) / hazards.length);
         h.iy = fh * (0.5 + 0.28 * Math.sin(j * 1.7 + 1));
-        h.cx = Math.min(COLS - 1, Math.round(((j + 0.5) / hazards.length) * (COLS - 1)));
-        h.cy = Math.min(ROWS - 1, (j * 2 + 1) % ROWS);
         h.x = h.ix;
         h.y = h.iy;
+        updateHazardCell(h);
         h.el.style.transform =
           "translate3d(" + h.x.toFixed(1) + "px," + h.y.toFixed(1) + "px,0)";
       });
@@ -725,10 +735,9 @@
           h.y = gy;
           h.el.style.transform =
             "translate3d(" + h.x.toFixed(1) + "px," + h.y.toFixed(1) + "px,0)";
-          // Keep a grid cell for collision even though the sprite floats
-          // continuously — nearest cell to its wander center.
-          h.cx = Math.min(COLS - 1, Math.max(0, Math.round(h.ix / CELL)));
-          h.cy = Math.min(ROWS - 1, Math.max(0, Math.round(h.iy / CELL)));
+          // Nearest cell to the sprite's actual drawn position, not
+          // its wander center (S1) — see updateHazardCell() above.
+          updateHazardCell(h);
         });
       }
 
