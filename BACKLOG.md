@@ -61,12 +61,14 @@ This file is open items only — no changelog, no findings essays. Prune at `/wr
   `/orchestrator-route`. | build | new
 
 - [ ] Snake game — DECIDED 2026-08-26 (Sean): the coin unlocks a SNAKE game where you
-  collect LLM tokens. `web/assets/snake.js` (22.6K) already has a working engine — grid,
-  movement, ghost pursuit, sound, keyboard, a11y announce — but it is referenced ONLY by
-  `v2.html`, draws the OLD SVG ghosts (not the new robot sprites), and was built for v2's
-  rejected hero-autopilot. Port = re-skin to robot sprites, swap food to tokens, drop
-  autopilot. Open inside this: what a token looks like, and what collecting one does
-  (score only, or unlocks something). | build | new
+  collect LLM tokens. SCORING DECIDED 2026-08-27 (Sean): scored, ending in an "explosive
+  confetti solitaire" payout — the Windows-Solitaire win cascade, tokens/confetti bouncing
+  out of the score. That ending is the reason to play; build it as the payoff, not a
+  postscript. `web/assets/snake.js` (22.6K) already has a working engine — grid, movement,
+  ghost pursuit, sound, keyboard, a11y announce — but it shipped only on the retired
+  `v2.html`, draws the OLD SVG ghosts (not the robot sprites), and was built for the
+  rejected hero-autopilot. Port = re-skin to robot sprites, food -> LLM tokens, drop
+  autopilot, add the cascade. Still open: what a token looks like. | build | new
 - [ ] Six secondary pages stay on old `style.css` — DECIDED 2026-08-26 (Sean): "no for
   now, keep the new site simpler." `download`, `changelog`, `privacy`, `support`,
   `licenses`, `404`. KNOWN CONSEQUENCE, unresolved: v3's footer links to changelog /
@@ -79,6 +81,19 @@ This file is open items only — no changelog, no findings essays. Prune at `/wr
   wavy-bottom ghost with two eyes. Every other ghost on the site was redrawn as a robot in
   `a96fb453e`; this one was missed because it lives in a `<script>` in the head, not in
   `ghost-field.js`. Same IP exposure class Sean just closed. | design | new
+
+- [ ] Hero film not recorded — script is written and the two storyboard open questions are
+  closed (`docs/design/web-redesign/hero-recording-script.md`). Needs Sean at the desk with
+  Matte, ~20 min for both takes. NOTE: the storyboard's "press Cmd-T" is WRONG — the
+  composer is Cmd-Shift-N (`setupNewTaskComposerShortcut`, `AppDelegate.swift:381`); Cmd-T
+  is New Session in project-first mode. | design | needs-Sean
+- [ ] Ghost field legibility on the shipped site — ghosts render correctly BEHIND the text
+  (verified in the browser, `main` is layered right), but they are bright and dense enough
+  that the headline and lead sit on a busy field. Design call, not a bug. | design | new
+- [ ] `feat/web-redesign-round4` must NEVER be merged to `main` — it carries `5215ce015`
+  (asset leaked a live session capture) and `TEST_TARGET_NAME = Ghostties`, which arms nine
+  GUI-driving UI tests. The site shipped as a clean web-only branch off main instead
+  (PR #139, `ded288569`). Cherry-pick from this branch; do not merge it. | security | new
 
 ## Needs a fresh relevance pass (pre-2026-08-22, likely superseded)
 
