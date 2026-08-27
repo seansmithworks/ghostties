@@ -981,6 +981,17 @@ final class SessionComposerStore: ObservableObject {
     /// branch against the wrong project's cache in that same window.
     private func cascadeProjectChange(to projectId: UUID?) {
         worktreeRefreshToken += 1
+        // Finding 2 (review round 2): this used to bump ONLY
+        // `worktreeRefreshToken`, never `worktreeCreationToken` — so a
+        // project switch mid-creation left blocker 4's `guard token ==
+        // worktreeCreationToken` in `createWorktree` still passing, and its
+        // eventual success handler still ran against the NEW project's
+        // now-current composer. A stale refresh landing in the wrong
+        // composer used to just be visually wrong; a stale creation landing
+        // there is a process spawn in the wrong project. Mirrors `open()`/
+        // `cancel()`'s identical bump for the identical reason.
+        worktreeCreationToken += 1
+        isCreatingWorktree = false
         selectedWorktreePath = nil
         worktrees = []
         branchesWithoutWorktree = []
@@ -1062,26 +1073,31 @@ final class SessionComposerStore: ObservableObject {
     /// `GitWorktreeEnumerator.firstMeaningfulLine(ofStderr:)`), a fixed message
     /// for a timeout — the chip reverts to unset, and the composer stays
     /// open. Never a silent success, never a silent no-op.
+    ///
+    /// `onSuccess` (worktree-launch ruling, 2026-08-27 — control-flow
+    /// INVERSION, review round 2): this store does NOT launch anything
+    /// itself anymore. The prior shape called `precommit` directly from in
+    /// here, which duplicated half of `SessionComposerPalette.commit(template:)`
+    /// and silently dropped the other half — no `resolveCommitProjectId`
+    /// (wrong-project spawn when a typed project differs from
+    /// `selectedProjectId`), no `.workspaceDidCreateSessionInProject` post
+    /// (invisible session into a collapsed project), no `selectedIndex = nil`
+    /// double-Return guard. `onSuccess` instead reports the outcome back to
+    /// the caller — fired with the new worktree's path AFTER
+    /// `selectedWorktreePath`/`worktrees` below already reflect it — so the
+    /// PALETTE can run its own, already-correct `commit(template:)` if it
+    /// decides the field is launchable. This store has no opinion on
+    /// whether to launch; it only reports that creation succeeded.
     @MainActor
-    /// `launchTemplate`/`coordinator`/`workspaceStore` (worktree-launch
-    /// ruling, 2026-08-27): worktree creation must complete the user's
-    /// intent, not park it. When the composer field already resolves to
-    /// something launchable at the moment creation is requested, the caller
-    /// passes the resolved template here and creation ends by launching it
-    /// into the NEW worktree — via `precommit`, the exact same dispatch path
-    /// every other commit uses, so it inherits `precommit`'s own
-    /// `isCreatingWorktree`/`isOpen` guards for free. `nil` (the default,
-    /// and every pre-existing call site's behavior) leaves the branch chip
-    /// resolved and the composer open, same as before this ruling —
-    /// `coordinator`/`workspaceStore` are only read when `launchTemplate`
-    /// is non-nil.
-    func createWorktree(
-        named branchName: String,
-        in project: Project,
-        launchTemplate: AgentTemplate? = nil,
-        coordinator: SessionCoordinator? = nil,
-        workspaceStore: WorkspaceStore? = nil
-    ) {
+    func createWorktree(named branchName: String, in project: Project, onSuccess: ((String) -> Void)? = nil) {
+        // Blocker (review round 2): a SECOND Return/click while a creation
+        // is already in flight used to start a SECOND, concurrent `git
+        // worktree add` against the same directory — the exact
+        // already-exists symptom this whole feature exists to eliminate.
+        // Mirrors `precommit`'s own `guard !isCreatingWorktree` (should-fix
+        // 16) — gate the second attempt instead of racing it.
+        guard !isCreatingWorktree else { return }
+
         worktreeCreationToken += 1
         let token = worktreeCreationToken
         isCreatingWorktree = true
@@ -1185,19 +1201,20 @@ final class SessionComposerStore: ObservableObject {
                 selectedWorktreePath = path
                 isCreatingWorktree = false
 
-                // Worktree-launch ruling: fires ONLY when the caller
-                // resolved something launchable at request time —
-                // `selectedWorktreePath` is already the new worktree's
-                // path above, so `precommit`'s own `resolveLaunchTemplate`
-                // launches into it, not the project root. When
-                // `launchTemplate` is `nil` (nothing typed, or a create
-                // row selected from the picker with no template chosen),
-                // this is a no-op — the branch chip
-                // stays resolved and the composer stays open, unchanged
-                // from before this ruling.
-                if let launchTemplate, let coordinator, let workspaceStore {
-                    _ = precommit(template: launchTemplate, coordinator: coordinator, workspaceStore: workspaceStore)
-                }
+                // Finding 4 (review round 2): `refreshWorktrees` above races
+                // its OWN 2s deadline and deliberately leaves
+                // `branchesWithoutWorktree` untouched on a timeout rather
+                // than block (see that function's doc comment) — under
+                // load, that timeout can land HERE, meaning the branch just
+                // created would otherwise keep offering a create row and a
+                // second Return would re-enter the already-exists path.
+                // `git worktree add` already completed synchronously and
+                // durably before this `case` was ever reached, so removing
+                // it here is never premature, independent of whether the
+                // refresh's own snapshot happened to land it.
+                branchesWithoutWorktree.removeAll { $0 == branchName }
+
+                onSuccess?(path)
             case .completed(.failure(let error)):
                 writeError = error.message
                 if selectedWorktreePath == selectionAtStart {

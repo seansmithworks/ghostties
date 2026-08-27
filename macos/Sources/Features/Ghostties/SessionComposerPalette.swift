@@ -739,24 +739,45 @@ struct SessionComposerPalette: View {
         return token
     }
 
-    /// Worktree-launch ruling (2026-08-27): what "the composer field
-    /// already resolves to something launchable" MEANS, shared by both
-    /// `createWorktree` call sites (this typed-row action and
-    /// `inlineBranchPicker`'s `onCreateWorktree`) so a branch typed with a
-    /// resolved template/command alongside it — `<branch> > cco`, or any
-    /// remainder `makeAdHocTemplate` can turn into a session — launches
-    /// immediately into the worktree it just created, rather than parking
-    /// it. Mirrors `bestSelectionIndex`'s own resolved-operator-wins-outright
-    /// check first, then falls back to the same ad-hoc synthesis
-    /// `commandOptions`'s "Run" row already offers. `nil` means nothing
-    /// launchable is typed — `createWorktree` leaves the branch chip
-    /// resolved and the composer open instead.
+    /// Worktree-launch ruling (2026-08-27, control-flow inversion — review
+    /// round 2): what "the composer field already resolves to something
+    /// launchable" MEANS, for the ONE call site that's still allowed to
+    /// launch (the typed-branch create row in `commandOptions` below — the
+    /// branch picker's `inlineBranchPicker` create rows never launch, per
+    /// finding 1). Thin wrapper over the pure, unit-tested
+    /// `SessionComposerCommandParser.resolveWorktreeCreationLaunchTemplate`
+    /// — see that function's doc comment for the three-tier resolution and
+    /// why finding 3 (an unterminated template name) needed a middle tier
+    /// this view-layer property used to skip entirely.
     private var worktreeCreationLaunchTemplate: AgentTemplate? {
-        if let resolvedTemplateId = effectiveCommandParse.resolvedTemplateId,
-           let template = store.templates.first(where: { $0.id == resolvedTemplateId }) {
-            return template
+        SessionComposerCommandParser.resolveWorktreeCreationLaunchTemplate(
+            resolvedTemplateId: effectiveCommandParse.resolvedTemplateId,
+            remainderTokens: effectiveCommandParse.remainderTokens,
+            templates: store.templates
+        )
+    }
+
+    /// Runs once `createWorktree`'s `onSuccess` fires (worktree-launch
+    /// ruling, control-flow inversion): re-reads `worktreeCreationLaunchTemplate`
+    /// LIVE (not a value captured before creation started — the field could
+    /// have changed during the ≤10s window) and, if something resolves,
+    /// commits through the SAME `commit(template:)` every other Return
+    /// uses — `resolveCommitProjectId`, the `.workspaceDidCreateSessionInProject`
+    /// post, and the `selectedIndex = nil` double-Return guard all come
+    /// along for free, none of them reimplemented here. `commit(template:)`
+    /// reads `composerStore.selectedWorktreePath`/`worktrees` at call time,
+    /// both of which `createWorktree` already updated to the NEW worktree
+    /// before invoking this — no destination needs to be threaded through
+    /// explicitly. When nothing resolves, the composer stays open (B4's
+    /// original behavior) and `reselectBestMatch()` moves the highlight
+    /// onto the template list now that the create-offer row is gone, so the
+    /// next keystroke continues the flow instead of restarting it.
+    private func launchOrFocusAfterWorktreeCreation() {
+        if let template = worktreeCreationLaunchTemplate {
+            commit(template: template)
+        } else {
+            reselectBestMatch()
         }
-        return SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: effectiveCommandParse.remainderTokens)
     }
 
     /// The query field's binding (model A rebuild — replaces the deleted
@@ -808,16 +829,26 @@ struct SessionComposerPalette: View {
     private var commandOptions: [ComposerOption] {
         var options: [ComposerOption] = []
 
-        // Decision 1 (superseded by the worktree-launch ruling, 2026-08-27):
-        // a typed branch that names a real branch with no worktree yet
-        // gets an offered row, not silent creation and not a dead-end
-        // error. Selecting it arms creation exactly like
-        // `inlineBranchPicker`'s own `onCreateWorktree` row does — and now
-        // also launches straight into the new worktree whenever
-        // `worktreeCreationLaunchTemplate` resolves something, so creation
-        // completes the user's intent instead of parking it. When nothing
-        // resolves, this is unchanged: the composer stays open with the
-        // branch control reading "Creating…" until it resolves.
+        // Decision 1 (superseded by the worktree-launch ruling, 2026-08-27;
+        // control flow inverted in review round 2): a typed branch that
+        // names a real branch with no worktree yet gets an offered row, not
+        // silent creation and not a dead-end error. Selecting it arms
+        // creation exactly like `inlineBranchPicker`'s own
+        // `onCreateWorktree` row does — and now also launches straight into
+        // the new worktree whenever `worktreeCreationLaunchTemplate`
+        // resolves something, via `launchOrFocusAfterWorktreeCreation`'s
+        // `onSuccess` callback, so creation completes the user's intent
+        // instead of parking it. When nothing resolves, this is unchanged:
+        // the composer stays open with the branch control reading
+        // "Creating…" until it resolves. `selectedIndex = nil` FIRST,
+        // mirroring `commit(template:)`'s own S1 comment: this row is now
+        // reachable via `selectedOption?.action()` (Return) exactly like
+        // the two call sites that comment already covers, so a second
+        // Return fired before creation resolves must not re-select this
+        // same row and start a second, concurrent `git worktree add` — the
+        // STORE'S own `guard !isCreatingWorktree` in `createWorktree` is
+        // the second, independent guard against the same race (covers the
+        // mouse-click path this one doesn't).
         if let currentProject, let token = typedBranchCreateOffer {
             options.append(
                 ComposerOption(
@@ -826,13 +857,10 @@ struct SessionComposerPalette: View {
                     subtitle: currentProject.name,
                     leadingIcon: "arrow.triangle.branch",
                     action: {
-                        composerStore.createWorktree(
-                            named: token,
-                            in: currentProject,
-                            launchTemplate: worktreeCreationLaunchTemplate,
-                            coordinator: coordinator,
-                            workspaceStore: store
-                        )
+                        selectedIndex = nil
+                        composerStore.createWorktree(named: token, in: currentProject) { _ in
+                            launchOrFocusAfterWorktreeCreation()
+                        }
                     }
                 )
             )
@@ -1255,24 +1283,6 @@ struct SessionComposerPalette: View {
                 // this is a real re-parse of record, same as the
                 // `searchText` trigger above, not just a shorter list.
                 reselectBestMatch()
-            }
-            .onChange(of: composerStore.isOpen) { open in
-                // Worktree-launch ruling: `createWorktree`'s new
-                // launch-on-create path dispatches straight through
-                // `precommit`, which sets `composerStore.isOpen = false`
-                // from INSIDE the store — bypassing `commit(template:)`'s
-                // own explicit `isPresented = false` write, the only other
-                // place this view's presentation currently closes.
-                // `SessionComposerOverlay`'s `isPresented` binding already
-                // reads `composerStore.isOpen` for its getter (so it
-                // self-corrects here for free — this guard is then already
-                // false and a no-op); `ProjectDisclosureRow`'s `.anchored`
-                // popover binds a genuinely separate `@State` that does
-                // not, so this syncs it explicitly whenever the store
-                // closes for a reason this view didn't itself request.
-                if !open, isPresented {
-                    isPresented = false
-                }
             }
             .onChange(of: composerStore.focusSearchFieldTrigger) { triggered in
                 // R8 (Phase 3 review round 2): mirrors the S5 seed in
@@ -1735,25 +1745,23 @@ struct SessionComposerPalette: View {
             onSelectWorktree: { path in
                 changeBranchChip(to: path)
             },
-            // B4, superseded by the worktree-launch ruling (2026-08-27):
-            // selecting a create row closes the picker (same statement,
-            // mirroring `onSelectDefault`/`onSelectWorktree` above) and
-            // arms creation with the composer still open — and now also
-            // launches into the new worktree whenever
-            // `worktreeCreationLaunchTemplate` resolves something typed in
-            // the field. When it doesn't, this is unchanged: the branch
-            // chip shows "Creating…" (`isCreatingWorktree`) until it
-            // resolves, composer left open.
+            // B4 — this row NEVER launches (finding 1, review round 2): it
+            // fires from a control unrelated to the search field, so
+            // "the composer field resolves to something launchable" has no
+            // meaning here the way it does for the typed-branch row in
+            // `commandOptions` — a picker-initiated creation always takes
+            // the ruling's second half (park with the branch resolved, the
+            // composer left open, the template list focused), regardless of
+            // whatever happens to be typed in the field. Closes the picker
+            // (mirroring `onSelectDefault`/`onSelectWorktree` above) and
+            // arms creation; `reselectBestMatch()` runs once it lands so
+            // the highlight moves onto the template list.
             onCreateWorktree: { branchName in
                 guard let project = currentProject else { return }
                 isBranchPickerOpen = false
-                composerStore.createWorktree(
-                    named: branchName,
-                    in: project,
-                    launchTemplate: worktreeCreationLaunchTemplate,
-                    coordinator: coordinator,
-                    workspaceStore: store
-                )
+                composerStore.createWorktree(named: branchName, in: project) { _ in
+                    reselectBestMatch()
+                }
             }
         )
     }
