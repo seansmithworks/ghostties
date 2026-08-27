@@ -530,7 +530,7 @@ button.cab-btn {
 
 /* Ghost hazards — same drifting box the ambient field's own robots use,
    just sized to the game's grid cell. */
-.gh {
+.snake-hazard {
   position: absolute;
   left: 0;
   top: 0;
@@ -538,7 +538,7 @@ button.cab-btn {
   height: var(--cell, 34px);
   will-change: transform;
 }
-.gh svg {
+.snake-hazard svg {
   width: 100%;
   height: 100%;
   display: block;
@@ -547,8 +547,8 @@ button.cab-btn {
 
 /* Token collectibles — a small BPE-subword chip. buildToken() in
    snake.js is the one place the visual is authored; this is layout only.
-   The outer box stays a plain full-cell flex container (matches .gh /
-   .snake-head's grid-cell sizing) — the chip itself is a separate inner
+   The outer box stays a plain full-cell flex container (matches
+   .snake-hazard / .snake-head's grid-cell sizing) — the chip itself is a separate inner
    element sized to its own content. Percentage width/height on an
    absolutely positioned box resolve against the *containing block* (the
    whole field), not the cell, so a shrink-to-fit inner element is the

@@ -283,7 +283,7 @@
     var hazards = [];
     for (var hi = 0; hi < HAZARD_COUNT; hi++) {
       var hazEl = document.createElement("div");
-      hazEl.className = "gh";
+      hazEl.className = "snake-hazard";
       hazEl.innerHTML = GX.buildGhostSVG(hi % GX.ghostCount(), {});
       field.appendChild(hazEl);
       hazards.push({
