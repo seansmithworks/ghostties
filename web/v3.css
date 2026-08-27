@@ -1,0 +1,1538 @@
+/* ghostties.org v3 — five-section rebuild on the Arcade shell.
+   Self-hosted fonts only — font-src 'self' in vercel.json blocks any CDN.
+   Licences: OFL, see the matching OFL-*.txt beside each file in
+   /assets/fonts. Same font set and token values as v2.css (kept in sync by
+   hand — v3 is a sandbox, not yet merged into a shared token file). */
+
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/assets/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/assets/fonts/dmmono-300-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/fonts/dmmono-400-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/fonts/dmmono-500-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/fonts/silkscreen-400-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/assets/fonts/silkscreen-700-latin.woff2") format("woff2");
+}
+
+:root {
+  --bg: #06060e;
+  --ink: #e9e6f5;
+  --ink-dim: rgba(233, 230, 245, 0.66);
+  --ink-faint: rgba(233, 230, 245, 0.5);
+  --amber: #ffd54f;
+  --line: rgba(233, 230, 245, 0.16);
+  --line-soft: rgba(233, 230, 245, 0.09);
+  --line-strong: rgba(233, 230, 245, 0.24);
+
+  --font-display: "Silkscreen", monospace;
+  --font-prose: "Archivo", sans-serif;
+  --font-mono: "DM Mono", monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-prose);
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+a {
+  color: var(--amber);
+  text-decoration: none;
+}
+a:hover {
+  color: #fff;
+}
+
+img,
+picture {
+  max-width: 100%;
+  display: block;
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--amber);
+  color: #06060e;
+  padding: 10px 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.skip-link:focus {
+  left: 16px;
+  top: 16px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------
+   Type ramp — same scale as v2.css.
+   --------------------------------------------------------------------- */
+
+.h-xl,
+.h-l,
+.h-m {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0;
+  color: #fff;
+}
+.h-xl {
+  font-size: 56px;
+  line-height: 1.08;
+}
+.h-l {
+  font-size: 40px;
+  line-height: 1.1;
+}
+.h-m {
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.lead {
+  font-family: var(--font-prose);
+  font-size: 22px;
+  line-height: 1.5;
+  max-width: 52ch;
+  color: var(--ink-dim);
+  margin: 0;
+}
+.body-text {
+  font-family: var(--font-prose);
+  font-size: 16px;
+  line-height: 1.66;
+  max-width: 52ch;
+  color: var(--ink-faint);
+  margin: 0;
+}
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--amber);
+  background: rgba(255, 213, 79, 0.09);
+  padding: 1px 5px;
+  border-radius: 0;
+}
+
+/* ---------------------------------------------------------------------
+   Cabinet shell — same grid/vignette/scanline treatment as v2, minus the
+   HUD (v3 has no marquee bar).
+   --------------------------------------------------------------------- */
+
+.cabinet {
+  position: relative;
+  min-height: 100vh;
+}
+
+.maze {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(124, 77, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 77, 255, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    78% 62% at 50% 30%,
+    transparent 40%,
+    rgba(0, 0, 0, 0.72) 100%
+  );
+}
+
+.scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.34) 0 1px,
+    transparent 1px 3px
+  );
+  animation: v3-roll 8s linear infinite;
+}
+@keyframes v3-roll {
+  to {
+    transform: translateY(3px);
+  }
+}
+
+main {
+  position: relative;
+  z-index: 1;
+}
+
+section {
+  position: relative;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 96px 32px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* ---------------------------------------------------------------------
+   01 — HERO
+   --------------------------------------------------------------------- */
+
+.hero .head {
+  max-width: 720px;
+}
+.hero h1 .amber {
+  color: var(--amber);
+  text-shadow:
+    0 0 26px rgba(255, 213, 79, 0.5),
+    0 0 62px rgba(255, 152, 0, 0.25);
+}
+.hero .lead {
+  margin-top: 24px;
+}
+
+.install-row {
+  margin-top: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+.cab-btn {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  padding: 14px 18px;
+  border: 3px solid;
+  border-radius: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: inherit;
+}
+button.cab-btn {
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: normal;
+}
+.cab-btn small {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  opacity: 0.6;
+  text-align: left;
+}
+.cab-btn .cab-cmd {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.cab-btn.primary {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(255, 213, 79, 0.09);
+  box-shadow:
+    0 0 22px rgba(255, 213, 79, 0.22),
+    inset 0 0 22px rgba(255, 213, 79, 0.06);
+}
+.cab-btn.secondary {
+  border-color: rgba(0, 229, 255, 0.55);
+  color: #7ce9f7;
+}
+.cab-btn.tertiary {
+  border-color: var(--line-strong);
+  color: var(--ink-faint);
+}
+.cab-btn .copy-icon {
+  font-size: 12px;
+}
+
+/* Hero product frame — a real capture (app-sessions-dark@2x), not a
+   placeholder. HERO_VIDEO in v3.html is the dormant swap point for the
+   hero film; when it lands, this img becomes the video's poster.
+
+   The asset already carries real macOS window chrome and its own baked-in
+   corner rounding (~13px at 1x, sampled from the capture) — border-radius
+   here is tuned to match that at the frame's typical rendered width rather
+   than inventing a second, differently-curved corner on top of it. Depth
+   comes from a layered shadow (contact shadow + ambient falloff) plus an
+   inset hairline that catches light along the top edge. */
+.product-frame {
+  margin-top: 56px;
+  max-width: 960px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 20px rgba(0, 0, 0, 0.45),
+    0 30px 60px -12px rgba(0, 0, 0, 0.6);
+}
+.product-frame img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.product-frame-caption {
+  margin-top: 12px;
+  max-width: 960px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+/* ---------------------------------------------------------------------
+   02 — SIDEBAR (theme-aware real captures)
+   --------------------------------------------------------------------- */
+
+.projects-figure {
+  margin-top: 32px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  overflow: hidden;
+}
+.projects-figure img {
+  width: 100%;
+  height: auto;
+}
+.projects-caption {
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+/* Pinned to dark regardless of system theme: the page chrome is dark-only
+   right now (light mode is parked), so a light system theme must not put a
+   light app screenshot on a dark page. Restore the prefers-color-scheme
+   swap below when the light-mode pass lands — the light assets and the
+   <picture> split stay in place so that's a one-line revert, not a
+   rewrite. */
+.theme-light-only {
+  display: none;
+}
+.theme-dark-only {
+  display: block;
+}
+
+/* ---------------------------------------------------------------------
+   03 — STILL GHOSTTY
+   --------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------
+   04 — GET STARTED
+   --------------------------------------------------------------------- */
+
+.install-grid {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 0;
+  overflow: hidden;
+}
+.install-cell {
+  padding: 18px 20px;
+  border-right: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  margin: 0 -1px -1px 0;
+}
+.install-cell b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.install-cell span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.6;
+}
+.channels-note {
+  margin-top: 20px;
+}
+
+/* ---------------------------------------------------------------------
+   Footer
+   --------------------------------------------------------------------- */
+
+footer {
+  position: relative;
+  z-index: 1;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+footer a {
+  color: var(--ink-faint);
+}
+footer a:hover {
+  color: var(--amber);
+}
+.footer-icons {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.footer-icons svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+.footer-links {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+/* Coin entry plate — a lit arcade sign, not a coloured rectangle. Thick
+   black bezel with a wide margin, coarse crinkle-plastic texture and
+   corner-screw hardware; a tall PORTRAIT red panel lit from a strip lamp
+   across the top that falls off to near-black by the bottom third; a
+   tall slot down the left with its own red-lit edge; and glowing RED
+   type (not white/orange) — hotter than the field behind it, still
+   unmistakably red. Direction is the user's own close-up reference photo
+   (a backlit 25c / INSERT COIN TO PLAY panel) — see docs/design/
+   web-redesign/coin-slot-spec.md. Colour is scoped locally to this
+   component (--coin-*), never --amber, which stays the page's CTA
+   colour. State is never colour-alone: the label line text and the
+   credit digit both swap on arm/disarm (script in v3.html), which is
+   also how this clears WCAG 1.4.11. */
+.gx-coin {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 90;
+  width: 92px;
+  height: 144px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  --coin-bezel: #0c0c0d;
+  --coin-red-hi: #8a1a10;
+  --coin-red-lo: #2a0806;
+  --coin-frame: #ff4634;
+  --coin-gold: #e8b545;
+  --coin-glow: rgba(255, 40, 34, 0.4);
+  --coin-type: #ff2a18;
+  --coin-type-lo: #e01810;
+}
+
+.gx-coin-bezel {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 12px 10px;
+  border-radius: 6px;
+  background:
+    radial-gradient(
+      circle at 10px 10px,
+      rgba(70, 70, 76, 0.9) 0,
+      rgba(70, 70, 76, 0.9) 1.3px,
+      transparent 1.7px
+    ),
+    radial-gradient(
+      circle at calc(100% - 10px) 10px,
+      rgba(70, 70, 76, 0.9) 0,
+      rgba(70, 70, 76, 0.9) 1.3px,
+      transparent 1.7px
+    ),
+    radial-gradient(
+      circle at 10px calc(100% - 10px),
+      rgba(70, 70, 76, 0.9) 0,
+      rgba(70, 70, 76, 0.9) 1.3px,
+      transparent 1.7px
+    ),
+    radial-gradient(
+      circle at calc(100% - 10px) calc(100% - 10px),
+      rgba(70, 70, 76, 0.9) 0,
+      rgba(70, 70, 76, 0.9) 1.3px,
+      transparent 1.7px
+    ),
+    repeating-radial-gradient(
+      circle at 3px 3px,
+      rgba(255, 255, 255, 0.06) 0,
+      rgba(255, 255, 255, 0.06) 1px,
+      transparent 1px,
+      transparent 6px
+    ),
+    repeating-linear-gradient(
+      118deg,
+      rgba(0, 0, 0, 0.4) 0,
+      rgba(0, 0, 0, 0.4) 2px,
+      transparent 2px,
+      transparent 5px
+    ),
+    repeating-linear-gradient(
+      26deg,
+      rgba(0, 0, 0, 0.28) 0,
+      rgba(0, 0, 0, 0.28) 1.5px,
+      transparent 1.5px,
+      transparent 6px
+    ),
+    radial-gradient(
+      circle at 18% 15%,
+      rgba(255, 255, 255, 0.07),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 82% 88%,
+      rgba(255, 255, 255, 0.04),
+      transparent 45%
+    ),
+    var(--coin-bezel);
+  box-shadow:
+    0 3px 9px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(233, 230, 245, 0.08),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.7);
+  transition: box-shadow 220ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.gx-coin-panel {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  padding: 7px 8px 7px 6px;
+  border-radius: 3px;
+  overflow: visible;
+  border: 1px solid var(--coin-frame);
+  /* Base falloff — a fixed top-to-bottom gradient (never animated) so the
+     "bottom third nearly black-red" reading holds regardless of the
+     pulse below. The pulsing hot lamp bar lives on ::after. */
+  background: linear-gradient(
+    180deg,
+    var(--coin-red-hi) 0%,
+    #5c120c 38%,
+    var(--coin-red-lo) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 100, 70, 0.3),
+    inset 0 0 10px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+    0 0 10px var(--coin-glow),
+    0 0 20px rgba(255, 20, 16, 0.16);
+}
+
+/* Strip lamp — a bright bar just under the top edge with a visible hot
+   point, on a screen-blend layer so it reads as light falling onto the
+   plastic rather than a flat colour. This is also the ONLY piece that
+   pulses (gx-coin-breathe-glow, unchanged 1700ms alternate) — the base
+   panel gradient above stays fixed, so the pulse is a change in the
+   lamp's intensity, never a flicker of the label. */
+.gx-coin-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 205, 170, 0.85) 0%,
+      rgba(255, 110, 60, 0.4) 14%,
+      transparent 40%
+    ),
+    radial-gradient(
+      34% 90% at 46% 0%,
+      rgba(255, 255, 255, 0.85),
+      transparent 55%
+    );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  opacity: 0.34;
+  animation: gx-coin-breathe-glow 1700ms ease-in-out infinite alternate;
+}
+
+.gx-coin-slot {
+  position: relative;
+  flex: none;
+  align-self: center;
+  width: 17%;
+  height: 73%;
+  border-radius: 1px;
+  background: linear-gradient(180deg, #150406, #060102 55%, #150406);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7),
+    inset 2px 0 3px rgba(0, 0, 0, 0.8),
+    0 0 6px rgba(255, 40, 30, 0.45);
+  overflow: visible;
+}
+
+.gx-coin-lamp {
+  position: absolute;
+  inset: 0;
+  border-radius: 1px;
+  box-shadow:
+    inset 1px 0 0 rgba(255, 90, 60, 0.55),
+    inset -1px 0 0 rgba(255, 50, 35, 0.25),
+    inset 0 0 6px rgba(255, 40, 30, 0.4);
+}
+
+.gx-coin-piece {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  fill: var(--coin-gold);
+  opacity: 0;
+}
+
+.gx-coin-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  gap: 3px;
+}
+
+.gx-coin-price {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--coin-type);
+  text-shadow:
+    0 0 2px rgba(255, 90, 60, 0.9),
+    0 0 7px rgba(255, 42, 24, 0.85),
+    0 0 16px rgba(224, 24, 16, 0.6),
+    0 0 30px rgba(160, 14, 10, 0.35);
+}
+
+.gx-coin-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.gx-coin-label-line {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 7.5px;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--coin-type-lo);
+  text-shadow:
+    0 0 1.5px rgba(255, 60, 40, 0.85),
+    0 0 4px rgba(255, 40, 24, 0.75),
+    0 0 9px rgba(224, 24, 16, 0.55),
+    0 0 16px rgba(160, 14, 10, 0.3);
+  transition:
+    color 220ms cubic-bezier(0.25, 1, 0.5, 1),
+    text-shadow 220ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+/* PLAY (or, armed, EXIT) — set largest of the label lines, matching the
+   reference's type hierarchy. */
+.gx-coin-label-line-big {
+  font-size: 12px;
+  color: var(--coin-type);
+}
+
+.gx-coin-credit {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 6.5px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(232, 181, 69, 0.55);
+}
+.gx-coin-credit b {
+  font-weight: 500;
+  color: var(--coin-gold);
+  transition: color 160ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@keyframes gx-coin-breathe-glow {
+  from {
+    opacity: 0.24;
+  }
+  to {
+    opacity: 0.82;
+  }
+}
+
+/* Hover / focus-visible — the machine noticing you: the lamp bar
+   strengthens and widens, with no layout shift. Scoped off the armed
+   state, which already carries a stronger steady glow. `:focus-visible`
+   inherits the site's global focus ring (v3.css `:focus-visible` above);
+   this only adds the backlight response so a keyboard user gets the same
+   "noticed" feedback as a mouse hover. */
+@media (hover: hover) {
+  .gx-coin:not(.gx-coin-armed):hover .gx-coin-panel {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 130, 100, 0.5),
+      inset 0 0 13px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+      0 0 22px rgba(255, 60, 50, 0.8),
+      0 0 40px rgba(255, 20, 16, 0.36);
+  }
+  .gx-coin:not(.gx-coin-armed):hover .gx-coin-panel::after {
+    animation-play-state: running;
+    opacity: 0.9;
+  }
+  .gx-coin:not(.gx-coin-armed):hover .gx-coin-label-line,
+  .gx-coin:not(.gx-coin-armed):hover .gx-coin-price {
+    text-shadow:
+      0 0 2px rgba(255, 110, 80, 1),
+      0 0 6px rgba(255, 60, 35, 1),
+      0 0 13px rgba(224, 30, 20, 0.85),
+      0 0 24px rgba(160, 14, 10, 0.5);
+  }
+}
+.gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-panel {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 130, 100, 0.5),
+    inset 0 0 13px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+    0 0 22px rgba(255, 60, 50, 0.8),
+    0 0 40px rgba(255, 20, 16, 0.36);
+}
+.gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-panel::after {
+  opacity: 0.9;
+}
+.gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-label-line,
+.gx-coin:not(.gx-coin-armed):focus-visible .gx-coin-price {
+  text-shadow:
+    0 0 2px rgba(255, 110, 80, 1),
+    0 0 6px rgba(255, 60, 35, 1),
+    0 0 13px rgba(224, 30, 20, 0.85),
+    0 0 24px rgba(160, 14, 10, 0.5);
+}
+
+/* Press — depress + bevel inversion. Real hardware feedback on the actual
+   press, independent of the longer arm/disarm choreography below. */
+.gx-coin:active .gx-coin-bezel {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.5),
+    inset 0 -1px 0 rgba(233, 230, 245, 0.08),
+    inset 0 2px 3px rgba(0, 0, 0, 0.65);
+  transition: box-shadow 60ms linear;
+}
+
+/* Firing — the ~420ms window from click to armed. .gx-coin-armed is added
+   by the script at t=200ms once the coin has landed, which is also when
+   the credit digit flips and the label/panel settle into the armed
+   state (below). */
+.gx-coin-firing .gx-coin-piece {
+  animation: gx-coin-fall 200ms cubic-bezier(0.5, 0, 0.75, 0) forwards;
+}
+.gx-coin-firing .gx-coin-panel {
+  animation: gx-coin-panel-flash 350ms;
+}
+@keyframes gx-coin-fall {
+  0% {
+    transform: translateY(-18px) scaleX(1);
+    opacity: 1;
+  }
+  75% {
+    transform: translateY(0) scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scaleX(0.5);
+    opacity: 0;
+  }
+}
+@keyframes gx-coin-panel-flash {
+  0% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 130, 100, 0.5),
+      inset 0 0 13px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+      0 0 22px rgba(255, 60, 50, 0.8),
+      0 0 40px rgba(255, 20, 16, 0.36);
+    animation-timing-function: linear;
+  }
+  25.7% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 160, 130, 0.75),
+      inset 0 0 17px rgba(0, 0, 0, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+      0 0 32px rgba(255, 100, 90, 0.9),
+      0 0 54px rgba(255, 30, 20, 0.5);
+    animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+  }
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 130, 100, 0.5),
+      inset 0 0 13px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+      0 0 22px rgba(255, 60, 50, 0.8),
+      0 0 40px rgba(255, 20, 16, 0.36);
+  }
+}
+
+/* Armed — steady state once a coin is in. Set by the script alongside the
+   body.gx-coin-in class ghost-field.js itself toggles in coinIn()/
+   coinOut(), so this never carries a state ghost-field.js doesn't agree
+   with. Backlight goes steady-strong (the lamp keeps its own pulse; it
+   never blinks) — the label lines and credit digit are what carry the
+   state change. */
+.gx-coin-armed .gx-coin-panel {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 150, 120, 0.55),
+    inset 0 0 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -4px 7px rgba(0, 0, 0, 0.65),
+    0 0 17px rgba(255, 50, 40, 0.6),
+    0 0 30px rgba(255, 20, 16, 0.26);
+}
+.gx-coin-armed .gx-coin-panel::after {
+  opacity: 0.62;
+}
+.gx-coin-armed .gx-coin-credit b {
+  color: #ffe9a8;
+}
+
+/* Effect D — chained drop-shadow bloom. box-shadow can't follow a glyph's
+   alpha shape; drop-shadow does. Additive to the existing panel/price/
+   label glow above (text-shadow/box-shadow), never a replacement. */
+.gx-coin-panel {
+  filter:
+    drop-shadow(0 0 2px rgba(255, 120, 60, 0.85))
+    drop-shadow(0 0 7px rgba(255, 54, 26, 0.62))
+    drop-shadow(0 0 16px rgba(214, 20, 10, 0.45));
+}
+.gx-coin-price {
+  filter:
+    drop-shadow(0 0 2.5px rgba(255, 214, 120, 0.9))
+    drop-shadow(0 0 8px rgba(255, 132, 36, 0.7));
+}
+.gx-coin-label-line {
+  filter: drop-shadow(0 0 1.5px rgba(255, 60, 30, 0.8));
+}
+
+/* Effect C — feTurbulence moulded-plastic surface noise. Two SVG noise
+   fields (fine grain + coarse tooling lines), rendered as low-opacity
+   overlay layers inside the panel. Filter defs are the inline <svg><defs>
+   in the button markup, v3.html, just above these overlay elements. */
+.gx-coin-fx-grain-coarse {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+  filter: url(#gx-coin-moulded-coarse);
+  opacity: 0.1;
+  mix-blend-mode: soft-light;
+}
+.gx-coin-fx-grain {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+  filter: url(#gx-coin-moulded);
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+}
+
+/* Effect E — mix-blend-mode light passes. Four overlay layers add to the
+   existing lamp bar (.gx-coin-panel::after) rather than replace it, kept
+   subtle so they read as light falling across the plastic, not a second
+   lamp. */
+.gx-coin-fx-pass {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.gx-coin-fx-pass-dodge {
+  mix-blend-mode: color-dodge;
+  opacity: 0.35;
+  background: radial-gradient(
+    38% 52% at 8% 40%,
+    rgba(120, 26, 10, 0.85),
+    transparent 72%
+  );
+}
+.gx-coin-fx-pass-overlay {
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+  background: linear-gradient(
+    168deg,
+    rgba(255, 206, 170, 0.3) 0%,
+    transparent 34%,
+    transparent 66%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+}
+.gx-coin-fx-pass-screen {
+  mix-blend-mode: screen;
+  opacity: 0.4;
+  background: radial-gradient(
+    58% 30% at 50% -4%,
+    rgba(255, 236, 206, 0.9),
+    rgba(255, 128, 52, 0.42) 46%,
+    transparent 76%
+  );
+}
+.gx-coin-fx-pass-plus {
+  mix-blend-mode: plus-lighter;
+  opacity: 0.3;
+  background: radial-gradient(
+    24% 14% at 97% 60%,
+    rgba(255, 150, 96, 0.8),
+    transparent 70%
+  );
+}
+
+
+
+
+@media (prefers-reduced-motion: reduce) {
+  .scanlines {
+    animation: none !important;
+  }
+  /* ghost-field.js returns a stub GXField in its reduce branch (isArmed
+     permanently false, toggleCoin a no-op) — the plate would be a dead
+     control here, so it is removed from the page and the tab order
+     entirely rather than left visible-but-inert. */
+  .gx-coin {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Ambient ghost field (assets/ghost-field.js)
+   Required constraints (see the port's header comment for detail):
+     - full-bleed, position: fixed; inset: 0
+     - pointer-events: none by default — never blocks page content/CTAs
+     - namespaced gx- selectors throughout, to avoid colliding with the
+       rest of the site's markup
+   --------------------------------------------------------------------- */
+
+#gx-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+/* Armed — the field moves above page content instead of hiding behind it.
+   main/footer sit at z-index: 1; while armed, #gx-field jumps to 20 (still
+   under the coin token at 50 and the plate at 90, so both remain
+   reachable/clickable) and every ghost inside it is pointer-events: auto
+   (rule below), so ghosts are grabbable everywhere with no dead zones and
+   their hover cards (.gx-label, z-index: 300 but scoped to this stacking
+   context) paint above the page instead of underneath it. #gx-field itself
+   stays pointer-events: none in both states — only the ghosts opt in — so
+   empty field area, page text and page controls remain reachable/selectable
+   wherever no ghost is actually sitting on top of them. */
+#gx-field.gx-armed {
+  z-index: 20;
+}
+
+.gx-fx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.gx-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform;
+  z-index: 2;
+}
+#gx-field.gx-armed .gx-ghost {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.gx-ghost.gx-dragging {
+  cursor: grabbing;
+  z-index: 200;
+}
+.gx-ghost.gx-boss {
+  z-index: 3;
+}
+
+/* Coin token — one physical object, drifts under the field's own drift
+   pacing. Unlike every .gx-ghost, it is pointer-events: auto *before*
+   coin-in too (dragging it to the plate is what arms the field), so it
+   never inherits the .gx-armed gate above. z-index sits above the ghosts
+   (2-3) so it's always reachable, below the plate (90) and hover labels
+   (300). */
+.gx-coin-token {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  will-change: transform;
+  /* 50, not the ghosts' 2-4: appended to <body>, so this is its own
+     stacking context, above page content (main is z-index 1) so the
+     coin stays reachable wherever it drifts, but under the plate (90)
+     and skip-link (100). */
+  z-index: 50;
+}
+.gx-coin-token svg {
+  display: block;
+  filter:
+    drop-shadow(0 0 4px rgba(232, 181, 69, 0.55))
+    drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+}
+.gx-coin-token.gx-coin-dragging {
+  cursor: grabbing;
+  z-index: 200;
+}
+.gx-coin-token.gx-coin-dragging svg {
+  filter:
+    drop-shadow(0 0 8px rgba(232, 181, 69, 0.8))
+    drop-shadow(0 10px 16px rgba(0, 0, 0, 0.6));
+}
+@media (hover: hover) {
+  .gx-coin-token:hover svg {
+    filter:
+      drop-shadow(0 0 6px rgba(232, 181, 69, 0.7))
+      drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+  }
+}
+
+.gx-ghost svg {
+  display: block;
+  overflow: visible;
+  image-rendering: pixelated;
+  transition:
+    transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+    filter 0.45s ease;
+}
+
+#gx-field.gx-armed .gx-ghost:not(.gx-dragging):hover svg {
+  image-rendering: auto;
+  transform: perspective(var(--persp)) rotateX(var(--rx)) rotateY(var(--ry))
+    scale(1.8) translateZ(14px);
+  filter: brightness(1.6) saturate(1.3) drop-shadow(0 0 5px var(--glow))
+    drop-shadow(0 0 22px var(--glow)) drop-shadow(0 0 55px var(--glow))
+    drop-shadow(0 26px 40px rgba(0, 0, 0, 0.95));
+}
+#gx-field.gx-armed .gx-ghost.gx-boss:not(.gx-dragging):hover svg {
+  transform: perspective(var(--persp)) rotateX(var(--rx)) rotateY(var(--ry))
+    scale(2.1) translateZ(18px);
+}
+.gx-ghost.gx-dragging svg {
+  image-rendering: auto;
+  transform: perspective(180px) rotateX(-6deg) scale(1.35) translateZ(10px);
+  filter: brightness(1.45) drop-shadow(0 0 10px var(--glow))
+    drop-shadow(0 0 30px var(--glow))
+    drop-shadow(0 32px 44px rgba(0, 0, 0, 0.98));
+  transition:
+    transform 0.2s ease,
+    filter 0.2s ease;
+}
+.gx-ghost.gx-chasing svg {
+  filter: brightness(1.3) drop-shadow(0 0 8px var(--glow))
+    drop-shadow(0 0 20px var(--glow));
+}
+.gx-ghost.gx-boss svg {
+  filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 12px var(--glow));
+}
+
+.gx-ghost svg .gx-glass {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+#gx-field.gx-armed .gx-ghost:not(.gx-dragging):hover svg .gx-glass,
+.gx-ghost.gx-dragging svg .gx-glass {
+  opacity: 0.9;
+}
+
+.gx-ghost svg .gx-blink-cover {
+  opacity: 0;
+  transition: opacity 0.06s ease;
+}
+
+.gx-ghost::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 15%;
+  width: 70%;
+  height: 7px;
+  background: var(--glow);
+  border-radius: 50%;
+  filter: blur(9px);
+  opacity: 0;
+  transform: scaleX(0.8);
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s ease;
+  pointer-events: none;
+}
+#gx-field.gx-armed .gx-ghost:not(.gx-dragging):hover::after {
+  opacity: 0.5;
+  transform: scaleX(1.3);
+}
+.gx-ghost.gx-boss::after {
+  opacity: 0.35;
+  transform: scaleX(1.1);
+  filter: blur(14px);
+}
+.gx-ghost.gx-dragging::after {
+  opacity: 0.6;
+  transform: scaleX(1.5) translateY(10px);
+  filter: blur(16px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+@keyframes gx-bump-flash {
+  0% {
+    filter: brightness(3) saturate(0.2);
+  }
+  40% {
+    filter: brightness(1.8);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+.gx-ghost.gx-bump {
+  animation: gx-bump-flash 0.22s ease-out forwards;
+}
+
+@keyframes gx-jump-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.3) translateY(-10px);
+  }
+  70% {
+    transform: scale(0.93) translateY(3px);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.gx-ghost.gx-highfive svg {
+  animation: gx-jump-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Hover trading card */
+.gx-label {
+  position: absolute;
+  bottom: calc(100% + 16px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.78) translateY(10px);
+  width: 230px;
+  background:
+    linear-gradient(160deg, rgba(28, 24, 40, 0.98), rgba(8, 6, 16, 0.98)),
+    var(--glow);
+  border: 2px solid var(--glow);
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  z-index: 300;
+  box-shadow:
+    0 0 20px var(--glow),
+    0 10px 32px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.gx-label::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--glow) 40%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+.gx-label::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--glow);
+}
+#gx-field.gx-armed .gx-ghost:not(.gx-dragging):hover .gx-label {
+  opacity: 1;
+  transform: translateX(-50%) scale(1) translateY(0);
+}
+
+.gx-label-top {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 9px;
+  position: relative;
+}
+.gx-label-rating {
+  text-align: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.13);
+  padding-right: 6px;
+}
+.gx-rating-num {
+  display: block;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--glow);
+  line-height: 1;
+  text-shadow: 0 0 14px var(--glow);
+  font-variant-numeric: tabular-nums;
+}
+.gx-rating-tier {
+  display: block;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.3em;
+  margin-top: 3px;
+  font-weight: bold;
+}
+.gx-label-id {
+  text-align: left;
+  min-width: 0;
+}
+.gx-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 900;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+.gx-role {
+  display: block;
+  font-size: 8px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin-top: 5px;
+}
+.gx-portrait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 10px 16px;
+  height: 130px;
+  position: relative;
+  background:
+    radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--glow) 22%, transparent),
+      transparent 65%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.45));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.gx-portrait::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px
+  );
+  background-size: 8px 8px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.gx-portrait svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 0 6px var(--glow)) drop-shadow(0 0 18px var(--glow));
+}
+.gx-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.gx-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px;
+  background: rgba(0, 0, 0, 0.45);
+}
+.gx-stat-val {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--glow);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  min-width: 22px;
+}
+.gx-stat-key {
+  font-size: 8px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.18em;
+}
+
+.gx-ghost.gx-boss .gx-label {
+  border-width: 3px;
+  box-shadow:
+    0 0 32px var(--glow),
+    0 0 60px var(--glow),
+    0 10px 32px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.gx-ghost.gx-boss .gx-rating-tier {
+  color: var(--glow);
+  text-shadow: 0 0 8px var(--glow);
+}
+.gx-ghost.gx-boss .gx-label-top::after {
+  content: "★";
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  color: var(--glow);
+  font-size: 13px;
+  text-shadow: 0 0 10px var(--glow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gx-ghost svg,
+  .gx-ghost::after,
+  .gx-label {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* The coin plate is now a PORTRAIT 92x144 box (fixed top:16/right:16,
+   bottom edge at 160px) from 481px up to 899px — measured by sweeping
+   320-1200px in a real browser, not spot-checked. Below 900px the h1's
+   bounding box runs the section's full width, so it collides with the
+   plate vertically at every width down to 320px; the collision only
+   clears above 900px, where .head's own max-width keeps its right edge
+   short of the plate's now-wider left edge. Push the section well past
+   the plate's bottom edge (160 + a real gap) across the whole span. */
+@media (max-width: 900px) {
+  .hero {
+    padding-top: 188px;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero h1 {
+    font-size: 40px !important;
+  }
+  .product-frame {
+    margin-top: 40px;
+    /* Displayed width shrinks a lot below this breakpoint, and the
+       asset's baked-in corner radius scales down with it — match that
+       here instead of holding the desktop value, or the corner reads as
+       two different curves. */
+    border-radius: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  section {
+    padding: 64px 20px;
+  }
+  /* Plate shrinks to 78x122 (top:10, bottom edge at 132px) below this
+     breakpoint but section padding-top also drops to 64px — still not
+     enough clearance; same reasoning as the 640px block above, measured
+     across the full 320-480 span, not just the top of it. */
+  .hero {
+    padding-top: 154px;
+  }
+  .hero h1 {
+    font-size: 36px !important;
+  }
+  .product-frame {
+    border-radius: 5px;
+  }
+  .install-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cab-btn {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    justify-content: flex-start;
+  }
+  .cab-btn .cab-cmd {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+  .cab-btn small {
+    white-space: normal;
+  }
+  footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .gx-coin {
+    top: 10px;
+    right: 10px;
+    width: 78px;
+    height: 122px;
+  }
+  .gx-coin-bezel {
+    padding: 10px 8px;
+  }
+  .gx-coin-panel {
+    padding: 6px 6px 6px 5px;
+  }
+  .gx-coin-piece {
+    width: 7px;
+    height: 7px;
+    margin-left: -3.5px;
+  }
+  .gx-coin-info {
+    gap: 2px;
+  }
+  .gx-coin-price {
+    font-size: 14px;
+  }
+  .gx-coin-label-line {
+    font-size: 6.5px;
+  }
+  .gx-coin-label-line-big {
+    font-size: 10px;
+  }
+  .gx-coin-credit {
+    font-size: 5.5px;
+  }
+}
