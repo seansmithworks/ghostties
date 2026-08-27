@@ -634,17 +634,18 @@ button.cab-btn {
 }
 
 /* Touch d-pad (B4) — only rendered/shown on coarse-pointer devices
-   (.has-touch, set in snake.js), only while a round is running. */
+   with no hover input (.has-touch, set in snake.js), only while a
+   round is running. Appended as a sibling of #snake-mount (snake.js),
+   below it in normal flow — it used to be absolutely positioned
+   inside .snake-frame, overlapping the bottom rows of the playfield
+   and a hazard lane at narrow widths (R3). Never overlaps the board
+   now: it isn't inside it. */
 .snake-dpad {
   display: none;
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
+  margin: 12px auto 0;
   grid-template-columns: repeat(3, 36px);
   grid-template-rows: repeat(2, 36px);
   gap: 4px;
-  z-index: 15;
 }
 .snake-wrap.has-touch.is-playing .snake-dpad {
   display: grid;

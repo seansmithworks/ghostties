@@ -164,7 +164,8 @@
     // coarse-pointer devices, only while playing (see .has-touch in
     // v3.css).
     var isTouch =
-      window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+      window.matchMedia &&
+      window.matchMedia("(hover: none) and (pointer: coarse)").matches;
     if (isTouch) wrap.classList.add("has-touch");
     var dpad = document.createElement("div");
     dpad.className = "snake-dpad";
@@ -177,7 +178,7 @@
       'aria-label="Move right">&#9654;</button>' +
       '<button type="button" class="snake-dpad-btn snake-dpad-down" ' +
       'aria-label="Move down">&#9660;</button>';
-    frameEl.appendChild(dpad);
+    wrap.insertBefore(dpad, mount.nextSibling);
     var DPAD_DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
     ["up", "down", "left", "right"].forEach(function (name) {
       var btn = dpad.querySelector(".snake-dpad-" + name);
