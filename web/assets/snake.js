@@ -227,6 +227,12 @@
       var cell = randomFreeCell();
       var label = TOKEN_LABELS[Math.floor(Math.random() * TOKEN_LABELS.length)];
       var el = buildToken(label);
+      // Must be set here, not just in positionEntities() — that only runs
+      // on layout/resize, so a token spawned mid-round (every pickup
+      // triggers one) would otherwise sit untransformed at the field's
+      // origin instead of its assigned cell.
+      el.style.transform =
+        "translate3d(" + px(cell[0]).toFixed(1) + "px," + py(cell[1]).toFixed(1) + "px,0)";
       field.appendChild(el);
       tokens.push({ el: el, cx: cell[0], cy: cell[1] });
     }
