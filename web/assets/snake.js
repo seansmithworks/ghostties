@@ -84,8 +84,36 @@
     var GX = window.GXField;
     if (!GX || typeof GX.buildGhostSVG !== "function") return;
 
+    // A polite live region only speaks its latest value — setting it
+    // twice in quick succession (e.g. an eviction landing right next
+    // to the periodic pickup aggregate) silently drops whichever
+    // message got overwritten before a screen reader read it.
+    // Confirmed: the eviction message, the one that explains the
+    // mechanic, dropped twice in one round (S4). Queue messages and
+    // space them out instead of writing straight to the node.
+    var announceQueue = [];
+    var announceTimer = null;
+    function drainAnnounce() {
+      if (announceQueue.length === 0) {
+        announceTimer = null;
+        return;
+      }
+      var msg = announceQueue.shift();
+      if (statusEl) {
+        statusEl.textContent = "";
+        requestAnimationFrame(function () {
+          statusEl.textContent = msg;
+        });
+      }
+      announceTimer = setTimeout(drainAnnounce, 900);
+    }
     function announce(msg) {
-      if (statusEl) statusEl.textContent = msg;
+      if (!statusEl) return;
+      announceQueue.push(msg);
+      // Cap the backlog so a burst of hits doesn't queue up minutes of
+      // stale narration — keep the most recent few.
+      if (announceQueue.length > 4) announceQueue.shift();
+      if (!announceTimer) drainAnnounce();
     }
 
     var reducedMotion = window.matchMedia
@@ -784,6 +812,10 @@
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", layoutAndPosition);
       window.removeEventListener("resize", sizeCascadeCanvas);
+      if (announceTimer) {
+        clearTimeout(announceTimer);
+        announceTimer = null;
+      }
       if (ro) ro.disconnect();
       if (io) io.disconnect();
       if (ac) {
