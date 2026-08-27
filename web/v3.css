@@ -519,7 +519,13 @@ button.cab-btn {
 }
 
 /* Token collectibles — a small BPE-subword chip. buildToken() in
-   snake.js is the one place the visual is authored; this is layout only. */
+   snake.js is the one place the visual is authored; this is layout only.
+   The outer box stays a plain full-cell flex container (matches .gh /
+   .snake-head's grid-cell sizing) — the chip itself is a separate inner
+   element sized to its own content. Percentage width/height on an
+   absolutely positioned box resolve against the *containing block* (the
+   whole field), not the cell, so a shrink-to-fit inner element is the
+   only way to get a small chip instead of a field-sized rectangle. */
 .snake-token {
   position: absolute;
   left: 0;
@@ -531,17 +537,16 @@ button.cab-btn {
   justify-content: center;
   pointer-events: none;
 }
-.snake-token {
+.snake-token-chip {
   font-family: var(--font-display);
   font-size: 10px;
   letter-spacing: 0.02em;
   color: var(--ink);
-  background: rgba(6, 6, 14, 0.85);
+  background: rgba(233, 230, 245, 0.1);
   border: 1px solid var(--line);
-  box-sizing: border-box;
-  width: 78%;
-  height: 52%;
-  margin: 24% 11%;
+  padding: 3px 5px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .snake-head {

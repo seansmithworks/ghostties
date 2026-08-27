@@ -51,7 +51,10 @@
   function buildToken(label) {
     var el = document.createElement("div");
     el.className = "snake-token";
-    el.textContent = label;
+    var chip = document.createElement("span");
+    chip.className = "snake-token-chip";
+    chip.textContent = label;
+    el.appendChild(chip);
     return el;
   }
 
