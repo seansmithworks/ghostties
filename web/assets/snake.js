@@ -154,11 +154,24 @@
 
     function layoutGrid() {
       var width = mount.clientWidth || 320;
+      var prevCols = COLS;
       COLS = computeCols(width);
       CELL = width / COLS;
       field.style.height = Math.round(ROWS * CELL) + "px";
       mount.style.setProperty("--cell", CELL + "px");
       sizeCascadeCanvas();
+      // A resize can shrink COLS mid-round (e.g. rotating a phone).
+      // Hazards re-derive cx from the field fraction every layout
+      // (positionEntities, below) so they're always in range, but the
+      // head and tokens keep their old cell index — clamp both back
+      // into the new grid or they render outside the field, clipped
+      // by overflow:hidden and unreachable (B3).
+      if (COLS !== prevCols) {
+        hx = Math.min(hx, COLS - 1);
+        tokens.forEach(function (tk) {
+          tk.cx = Math.min(tk.cx, COLS - 1);
+        });
+      }
     }
 
     // Cascade canvas is fixed to the viewport (see DOM scaffold above),
