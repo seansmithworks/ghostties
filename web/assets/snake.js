@@ -109,7 +109,11 @@
       '<span class="k">Context</span>' +
       '<span class="snake-meter"><span class="snake-meter-fill" data-context-fill></span></span>' +
       "</span>" +
-      '<span class="snake-stat dim snake-exit-hint"><span class="k">Esc</span><span class="v">Exit</span></span>';
+      // A real button, not a decorative span — Escape was previously
+      // the only way out, advertised by an 8px HUD chip with no
+      // pointer/touch path at all (B4).
+      '<button type="button" class="snake-stat dim snake-exit-hint" ' +
+      'data-exit><span class="k">Esc</span><span class="v">Exit</span></button>';
     frameEl.appendChild(hud);
 
     var field = document.createElement("div");
@@ -124,6 +128,37 @@
     var flashEl = document.createElement("div");
     flashEl.className = "snake-flash";
     frameEl.appendChild(flashEl);
+
+    // Touch decision (B4): arrow keys/WASD have no touch equivalent,
+    // so a coarse-pointer device could Insert Coin and then have no
+    // way to move or exit. Rather than dropping the game on touch,
+    // give it a real control — a 4-button d-pad, shown only on
+    // coarse-pointer devices, only while playing (see .has-touch in
+    // v3.css).
+    var isTouch =
+      window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    if (isTouch) wrap.classList.add("has-touch");
+    var dpad = document.createElement("div");
+    dpad.className = "snake-dpad";
+    dpad.innerHTML =
+      '<button type="button" class="snake-dpad-btn snake-dpad-up" ' +
+      'aria-label="Move up">&#9650;</button>' +
+      '<button type="button" class="snake-dpad-btn snake-dpad-left" ' +
+      'aria-label="Move left">&#9664;</button>' +
+      '<button type="button" class="snake-dpad-btn snake-dpad-right" ' +
+      'aria-label="Move right">&#9654;</button>' +
+      '<button type="button" class="snake-dpad-btn snake-dpad-down" ' +
+      'aria-label="Move down">&#9660;</button>';
+    frameEl.appendChild(dpad);
+    var DPAD_DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    ["up", "down", "left", "right"].forEach(function (name) {
+      var btn = dpad.querySelector(".snake-dpad-" + name);
+      btn.addEventListener("click", function () {
+        if (mode !== "play") return;
+        var d = DPAD_DIRS[name];
+        if (d[0] !== -dir[0] || d[1] !== -dir[1]) next = d;
+      });
+    });
 
     var cascadeCanvas = document.createElement("canvas");
     cascadeCanvas.className = "snake-cascade";
@@ -140,6 +175,7 @@
     var tokensEl = hud.querySelector("[data-tokens]");
     var fillEl = hud.querySelector("[data-context-fill]");
     var contextCell = hud.querySelector("[data-context-cell]");
+    var exitBtn = hud.querySelector("[data-exit]");
 
     // --- responsive grid -----------------------------------------------
     var ROWS = 5;
@@ -464,6 +500,7 @@
     }
 
     startBtn.addEventListener("click", startGame);
+    exitBtn.addEventListener("click", endGame);
 
     function onKeyDown(e) {
       if (isEditableTarget(e.target)) return;
