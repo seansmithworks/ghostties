@@ -34,11 +34,11 @@
   // merges. Isolated in one spot (buildToken, below) so the visual can be
   // swapped without touching game logic.
   var TOKEN_LABELS = [
-    "▮ing",
-    "▮the",
-    "tion",
+    "▮in",
+    "▮th",
+    "ion",
     "▮is",
-    "##ed",
+    "-ed",
     "▮a",
     "▮to",
     "▮of",

@@ -566,12 +566,16 @@ button.cab-btn {
 }
 .snake-token-chip {
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 8px;
   letter-spacing: 0.02em;
   color: var(--ink);
   background: rgba(233, 230, 245, 0.1);
   border: 1px solid var(--line);
-  padding: 3px 5px;
+  /* R4: labels now top out at 3 glyphs (TOKEN_LABELS in snake.js) —
+     8px + this tighter padding is what actually fits the smallest
+     cell (375px, COLS 10) without truncating. Font family/prefix/caps
+     are an open call for Sean (BACKLOG.md); this pass is mechanical. */
+  padding: 2px 3px;
   line-height: 1;
   white-space: nowrap;
   /* Shrink-to-fit with no cap against the cell it's centered in
