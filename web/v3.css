@@ -597,13 +597,17 @@ button.cab-btn {
   }
 }
 
-/* Confetti-solitaire cascade canvas — sits above the field, never
-   cleared once the win fires (see clearCascade() in snake.js for the
-   one place it does get wiped, on exit/replay). */
+/* Confetti-solitaire cascade canvas — fixed to the viewport (appended
+   to <body> in snake.js, not the field), so the win payoff escapes
+   the game's box and covers the page the way the Solitaire cascade
+   fills the screen. pointer-events stays none permanently so it never
+   blocks the page underneath; clearCascade() (Escape/replay) is the
+   only way it goes away. Never cleared once the win fires while
+   running — the screen fills up on purpose. */
 .snake-cascade {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 25;
+  z-index: 999;
   pointer-events: none;
   display: none;
 }

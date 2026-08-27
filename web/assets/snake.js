@@ -127,7 +127,12 @@
 
     var cascadeCanvas = document.createElement("canvas");
     cascadeCanvas.className = "snake-cascade";
-    frameEl.appendChild(cascadeCanvas);
+    // Appended to <body>, not frameEl: the cascade escapes the game's
+    // box and covers the page (see winGame()/B2), so it is fixed to
+    // the viewport, not the field. Sized explicitly in
+    // sizeCascadeCanvas() below — inset:0 alone does not stretch a
+    // <canvas> bitmap, it only positions the box.
+    document.body.appendChild(cascadeCanvas);
     var cascadeCtx = cascadeCanvas.getContext("2d");
 
     mount.appendChild(frameEl);
@@ -153,8 +158,24 @@
       CELL = width / COLS;
       field.style.height = Math.round(ROWS * CELL) + "px";
       mount.style.setProperty("--cell", CELL + "px");
-      cascadeCanvas.width = field.clientWidth || width;
-      cascadeCanvas.height = Math.round(ROWS * CELL);
+      sizeCascadeCanvas();
+    }
+
+    // Cascade canvas is fixed to the viewport (see DOM scaffold above),
+    // so it is sized from window dimensions, not the field. Bitmap is
+    // set from CSS size * devicePixelRatio and the context is scaled
+    // back down, or a DPR-2 display renders the cascade at half res.
+    var cascadeW = 0,
+      cascadeH = 0;
+    function sizeCascadeCanvas() {
+      var dpr = window.devicePixelRatio || 1;
+      cascadeW = window.innerWidth;
+      cascadeH = window.innerHeight;
+      cascadeCanvas.style.width = cascadeW + "px";
+      cascadeCanvas.style.height = cascadeH + "px";
+      cascadeCanvas.width = Math.round(cascadeW * dpr);
+      cascadeCanvas.height = Math.round(cascadeH * dpr);
+      if (cascadeCtx) cascadeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
     function px(c) {
@@ -277,6 +298,10 @@
       : null;
     if (ro) ro.observe(mount);
     else window.addEventListener("resize", layoutAndPosition);
+    // Viewport height can change without the mount's width changing
+    // (e.g. mobile URL-bar collapse), which ResizeObserver(mount)
+    // won't catch — the cascade canvas needs its own listener.
+    window.addEventListener("resize", sizeCascadeCanvas);
 
     // --- sound -------------------------------------------------------------
     function sfx(name) {
@@ -508,31 +533,44 @@
     // --- confetti-solitaire cascade --------------------------------------
     var cascadePieces = [];
     var cascadeRunning = false;
+    var cascadeRaf = null;
     var CASCADE_COLORS = ["#ffd54f", "#00e5ff", "#7c4dff", "#7ce9f7", "#b39cff"];
     var GRAVITY = 0.32;
     var RESTITUTION = 0.62;
 
     function clearCascade() {
       cascadeRunning = false;
+      if (cascadeRaf) {
+        cancelAnimationFrame(cascadeRaf);
+        cascadeRaf = null;
+      }
       cascadePieces = [];
-      if (cascadeCtx) cascadeCtx.clearRect(0, 0, cascadeCanvas.width, cascadeCanvas.height);
+      if (cascadeCtx) {
+        cascadeCtx.clearRect(0, 0, cascadeCanvas.width, cascadeCanvas.height);
+      }
       cascadeCanvas.classList.remove("go");
     }
 
     function launchCascadePiece(delayMs) {
       setTimeout(function () {
         if (mode !== "win") return;
+        // Cascade canvas is fixed to the viewport, so the meter's own
+        // getBoundingClientRect() is already in the right coordinate
+        // space — no subtracting the field's offset (B1).
         var rect = fillEl.getBoundingClientRect();
-        var fieldRect = field.getBoundingClientRect();
-        var x0 = rect.left - fieldRect.left + rect.width / 2;
-        var y0 = rect.top - fieldRect.top + rect.height / 2;
+        var x0 = rect.left + rect.width / 2;
+        var y0 = rect.top + rect.height / 2;
+        // Wide horizontal spread scaled to viewport width so the
+        // cascade erupts out of the meter and covers the full page
+        // width (B2), not a single point at the meter's x position.
+        var spread = (Math.random() - 0.5) * cascadeW * 0.9;
         cascadePieces.push({
-          x: x0,
+          x: x0 + spread * 0.08,
+          px: x0 + spread * 0.08,
           y: y0,
-          vx: (Math.random() - 0.5) * 6,
-          vy: -4 - Math.random() * 5,
-          rot: Math.random() * Math.PI * 2,
-          vr: (Math.random() - 0.5) * 0.3,
+          py: y0,
+          vx: spread / 46,
+          vy: -6 - Math.random() * 9,
           size: 4 + Math.random() * 3,
           color: CASCADE_COLORS[Math.floor(Math.random() * CASCADE_COLORS.length)],
           settled: false,
@@ -542,16 +580,17 @@
 
     function tickCascade() {
       if (!cascadeRunning) return;
-      var w = cascadeCanvas.width,
-        h = cascadeCanvas.height;
+      var w = cascadeW,
+        h = cascadeH;
       var active = false;
       cascadePieces.forEach(function (p) {
         if (p.settled) return;
         active = true;
         p.vy += GRAVITY;
+        p.px = p.x;
+        p.py = p.y;
         p.x += p.vx;
         p.y += p.vy;
-        p.rot += p.vr;
         if (p.x < 0) {
           p.x = 0;
           p.vx *= -RESTITUTION;
@@ -566,17 +605,26 @@
           p.vx *= 0.85; // floor friction
           if (Math.abs(p.vy) < 0.6) p.settled = true;
         }
-        cascadeCtx.save();
-        cascadeCtx.translate(p.x, p.y);
-        cascadeCtx.rotate(p.rot);
-        cascadeCtx.fillStyle = p.color;
-        cascadeCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-        cascadeCtx.restore();
+        // Stroke a segment from the last frame's position to this
+        // one, not a single dot at the new position — per-frame vy
+        // can exceed piece size, so a dot-per-frame renders as a
+        // dotted smear instead of the solid overlapping arcs the
+        // Solitaire cascade reads as (B2).
+        cascadeCtx.strokeStyle = p.color;
+        cascadeCtx.lineWidth = p.size;
+        cascadeCtx.lineCap = "round";
+        cascadeCtx.beginPath();
+        cascadeCtx.moveTo(p.px, p.py);
+        cascadeCtx.lineTo(p.x, p.y);
+        cascadeCtx.stroke();
       });
       // Trail is never cleared — the screen fills up. Keep animating as
       // long as anything is still moving.
-      if (active) requestAnimationFrame(tickCascade);
-      else cascadeRunning = false;
+      if (active) cascadeRaf = requestAnimationFrame(tickCascade);
+      else {
+        cascadeRunning = false;
+        cascadeRaf = null;
+      }
     }
 
     function winGame() {
@@ -589,10 +637,11 @@
       announce(
         "Context window full. " + TARGET_TOKENS + " tokens collected. Press Escape to exit.",
       );
+      sizeCascadeCanvas();
       for (var i = 0; i < TARGET_TOKENS; i++) {
         launchCascadePiece(i * 40);
       }
-      requestAnimationFrame(tickCascade);
+      cascadeRaf = requestAnimationFrame(tickCascade);
     }
 
     // --- render loop -------------------------------------------------------
@@ -669,6 +718,7 @@
       stopLoop();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", layoutAndPosition);
+      window.removeEventListener("resize", sizeCascadeCanvas);
       if (ro) ro.disconnect();
       if (io) io.disconnect();
       if (ac) {
@@ -680,6 +730,7 @@
 
     function reinit() {
       window.addEventListener("keydown", onKeyDown);
+      window.addEventListener("resize", sizeCascadeCanvas);
       if (ro) ro.observe(mount);
       else window.addEventListener("resize", layoutAndPosition);
       if (io) io.observe(mount);
