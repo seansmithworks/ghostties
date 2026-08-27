@@ -574,6 +574,15 @@ button.cab-btn {
   padding: 3px 5px;
   line-height: 1;
   white-space: nowrap;
+  /* Shrink-to-fit with no cap against the cell it's centered in
+     measured 1.32x the cell at 375px and 600px — a chip could draw
+     over a hazard or get sliced by the field's overflow:hidden at
+     the last column (S5). box-sizing:border-box so the cap includes
+     the chip's own padding/border, not just its content. */
+  box-sizing: border-box;
+  max-width: calc(var(--cell, 34px) - 6px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .snake-head {
