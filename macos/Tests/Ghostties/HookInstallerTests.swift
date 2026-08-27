@@ -82,4 +82,26 @@ struct HookInstallerTests {
         let contents = try String(contentsOfFile: destPath, encoding: .utf8)
         #expect(contents == "tampered")
     }
+
+    @Test
+    func testSeedRestoresMissingScriptAtSameVersion() throws {
+        let sourceURL = try makeSourceScript(contents: "#!/bin/sh\necho original\n")
+        defer { try? FileManager.default.removeItem(at: sourceURL.deletingLastPathComponent()) }
+        let destDir = makeDestDirectory()
+        defer { try? FileManager.default.removeItem(atPath: destDir) }
+
+        #expect(HookInstaller.seed(from: sourceURL, into: destDir, version: 1))
+
+        let destPath = (destDir as NSString).appendingPathComponent(HookInstaller.scriptName)
+        try FileManager.default.removeItem(atPath: destPath)
+        #expect(!FileManager.default.fileExists(atPath: destPath))
+
+        // Marker still reads version 1 — reseeding at the same version must
+        // still restore the missing script, not treat it as already seeded.
+        #expect(HookInstaller.seed(from: sourceURL, into: destDir, version: 1))
+
+        #expect(FileManager.default.fileExists(atPath: destPath))
+        let contents = try String(contentsOfFile: destPath, encoding: .utf8)
+        #expect(contents == "#!/bin/sh\necho original\n")
+    }
 }

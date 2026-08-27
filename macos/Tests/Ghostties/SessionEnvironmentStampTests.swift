@@ -39,4 +39,34 @@ final class SessionEnvironmentStampTests: XCTestCase {
 
         XCTAssertEqual(result["GHOSTTIES_SESSION_ID"], "override")
     }
+
+    /// Guards against a regression where deleting the `GHOSTTIES_TASK_FILE`
+    /// assignment in `spawnEnvironment` still passes the whole suite, because
+    /// both existing tests use `.shell` (empty `environmentVariables`) with
+    /// nil task overlays. This exercises template vars, task overlays, and
+    /// the extra overlay together against the exact resulting dictionary.
+    func testSpawnEnvironmentPreservesTemplateVarsTaskOverlaysAndExtra() {
+        let id = UUID()
+        let template = AgentTemplate(
+            name: "Custom",
+            kind: .shell,
+            environmentVariables: ["FOO": "bar", "KEEP": "1"]
+        )
+
+        let result = SessionCoordinator.spawnEnvironment(
+            template: template,
+            taskFilePath: "/tmp/x.md",
+            taskId: "t-1",
+            extra: ["FOO": "override", "ONLY_EXTRA": "y"],
+            sessionId: id
+        )
+
+        XCTAssertEqual(result["FOO"], "override")
+        XCTAssertEqual(result["KEEP"], "1")
+        XCTAssertEqual(result["GHOSTTIES_TASK_FILE"], "/tmp/x.md")
+        XCTAssertEqual(result["GHOSTTIES_TASK_ID"], "t-1")
+        XCTAssertEqual(result["ONLY_EXTRA"], "y")
+        XCTAssertEqual(result["GHOSTTIES_SESSION_ID"], id.uuidString)
+        XCTAssertEqual(result.count, 6)
+    }
 }

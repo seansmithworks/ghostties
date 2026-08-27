@@ -10,6 +10,10 @@ import OSLog
 /// hand-edits it — so on a version bump the seeded copy is OVERWRITTEN
 /// rather than left alone. That is required for a hook bugfix to ever reach
 /// an already-seeded machine.
+///
+/// Unlike `PresetLoader`, a missing bundle resource does NOT write the
+/// version marker, so seeding retries on every launch — deliberate, do not
+/// "fix" back.
 struct HookInstaller {
     static let hooksDirectoryPath = ("~/.ghostties/hooks" as NSString).expandingTildeInPath
 
@@ -51,7 +55,7 @@ struct HookInstaller {
 
     // MARK: - Seed Helpers
 
-    /// Seed `scriptName` from `sourceURL` into `directoryPath`, gated by a
+    /// Seed `sourceURL.lastPathComponent` into `directoryPath`, gated by a
     /// `.seed-version` marker file. Returns `true` if a (re)seed occurred.
     ///
     /// Extracted from `seedIfNeeded()` so tests can exercise the real seeding
@@ -72,8 +76,12 @@ struct HookInstaller {
             currentVersion = 0
         }
 
-        // Skip if already at or above the current seed version.
-        guard currentVersion < version else { return false }
+        let destPath = (directoryPath as NSString).appendingPathComponent(sourceURL.lastPathComponent)
+
+        // Skip if already at or above the current seed version — unless the
+        // seeded script itself has gone missing (e.g. deleted by hand), in
+        // which case we must reseed even at the same version.
+        guard currentVersion < version || !fm.fileExists(atPath: destPath) else { return false }
 
         // Create the destination directory if it doesn't exist.
         if !fm.fileExists(atPath: directoryPath) {
@@ -87,24 +95,20 @@ struct HookInstaller {
             }
         }
 
-        let destPath = (directoryPath as NSString).appendingPathComponent(sourceURL.lastPathComponent)
-
-        // App-owned: remove any existing copy so a version bump always wins,
-        // unlike PresetLoader's additive-only copy.
-        if fm.fileExists(atPath: destPath) {
-            do {
-                try fm.removeItem(atPath: destPath)
-            } catch {
-                logger.error("Failed to remove existing hook script: \(error.localizedDescription)")
-                return false
-            }
+        // App-owned: copy to a temp path first and replace atomically, so a
+        // failed copy never leaves the destination with no script at all.
+        let tmpPath = destPath + ".tmp"
+        if fm.fileExists(atPath: tmpPath) {
+            try? fm.removeItem(atPath: tmpPath)
         }
 
         do {
-            try fm.copyItem(at: sourceURL, to: URL(fileURLWithPath: destPath))
-            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: destPath)
+            try fm.copyItem(at: sourceURL, to: URL(fileURLWithPath: tmpPath))
+            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tmpPath)
+            _ = try fm.replaceItemAt(URL(fileURLWithPath: destPath), withItemAt: URL(fileURLWithPath: tmpPath))
         } catch {
             logger.error("Failed to seed hook script: \(error.localizedDescription)")
+            try? fm.removeItem(atPath: tmpPath)
             return false
         }
 
