@@ -1389,6 +1389,22 @@ Sean hit this testing a real build: **can't paste into the URL bar, and none of 
 - **Run phases 0→3 autonomously**, each gated on its own tests + a separate reviewer agent.
 
 ### Open
+
+- [ ] **Token chip type — design fork, needs Sean.** Chips render `▮ING` / `##ED`, not
+  `▮ing` / `##ed`: `--font-display` is Silkscreen, which is caps-only, and `▮` (U+25AE)
+  has no Silkscreen glyph so it falls back to another face mid-chip. Separately, review
+  round 2 measured labels truncating to one glyph below ~900px (3 of 4 at 375px, 4 of 4 at
+  414px) against the `calc(var(--cell) - 6px)` cap. The "that's what a real BPE token looks
+  like" read does not survive either problem. Options: DM Mono for chips only, drop the
+  `▮` prefix, shorten the label set, or accept caps. | design | needs-Sean
+- [ ] **Cascade renders as smooth vector arcs, not pixel confetti — design fork, needs
+  Sean.** `lineCap: round` strokes read as oscilloscope line art on a page whose entire
+  vocabulary is hard pixels. Flagged by review round 2 as taste, not a defect. Also open:
+  whether the cascade burying the page copy is right (it is dismissable with Escape and
+  `pointer-events: none`, so it blocks nothing). | design | needs-Sean
+- [ ] Content pass through `writing:draft` + `sean-default` never run — the game section's
+  copy is placeholder-grade ("no death, no losing, just a full context window"). Covers the
+  whole v3 page, not just the game. | content | new
 - **Naming collision — needs a strawman before any code.** Both codebases define `AgentSession` AND `SessionStatus` with different shapes. Proposed: prefix vendored types `Claude*` (`ClaudeSession`, `ClaudeSessionStatus`). Cheap to decide now, touches every call site later.
 - **`foregroundPID` / `ttyName` are stubbed to `return nil`** (`Ghostty.Surface.swift:96-116`) — the C symbols exist (`include/ghostty.h:1118`) but postdate the local `GhosttyKit.xcframework`, and zig 0.15.2 can't relink on macOS 26. This blocks the exact process-ancestry join. Superseded in practice by the launcher-UUID join (see 07-28 later), but the stub itself is still there.
 
