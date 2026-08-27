@@ -1063,7 +1063,25 @@ final class SessionComposerStore: ObservableObject {
     /// for a timeout — the chip reverts to unset, and the composer stays
     /// open. Never a silent success, never a silent no-op.
     @MainActor
-    func createWorktree(named branchName: String, in project: Project) {
+    /// `launchTemplate`/`coordinator`/`workspaceStore` (worktree-launch
+    /// ruling, 2026-08-27): worktree creation must complete the user's
+    /// intent, not park it. When the composer field already resolves to
+    /// something launchable at the moment creation is requested, the caller
+    /// passes the resolved template here and creation ends by launching it
+    /// into the NEW worktree — via `precommit`, the exact same dispatch path
+    /// every other commit uses, so it inherits `precommit`'s own
+    /// `isCreatingWorktree`/`isOpen` guards for free. `nil` (the default,
+    /// and every pre-existing call site's behavior) leaves the branch chip
+    /// resolved and the composer open, same as before this ruling —
+    /// `coordinator`/`workspaceStore` are only read when `launchTemplate`
+    /// is non-nil.
+    func createWorktree(
+        named branchName: String,
+        in project: Project,
+        launchTemplate: AgentTemplate? = nil,
+        coordinator: SessionCoordinator? = nil,
+        workspaceStore: WorkspaceStore? = nil
+    ) {
         worktreeCreationToken += 1
         let token = worktreeCreationToken
         isCreatingWorktree = true
@@ -1166,6 +1184,20 @@ final class SessionComposerStore: ObservableObject {
                 guard token == worktreeCreationToken else { return }
                 selectedWorktreePath = path
                 isCreatingWorktree = false
+
+                // Worktree-launch ruling: fires ONLY when the caller
+                // resolved something launchable at request time —
+                // `selectedWorktreePath` is already the new worktree's
+                // path above, so `precommit`'s own `resolveLaunchTemplate`
+                // launches into it, not the project root. When
+                // `launchTemplate` is `nil` (nothing typed, or a create
+                // row selected from the picker with no template chosen),
+                // this is a no-op — the branch chip
+                // stays resolved and the composer stays open, unchanged
+                // from before this ruling.
+                if let launchTemplate, let coordinator, let workspaceStore {
+                    _ = precommit(template: launchTemplate, coordinator: coordinator, workspaceStore: workspaceStore)
+                }
             case .completed(.failure(let error)):
                 writeError = error.message
                 if selectedWorktreePath == selectionAtStart {

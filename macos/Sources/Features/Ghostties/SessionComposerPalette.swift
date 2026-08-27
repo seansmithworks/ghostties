@@ -739,6 +739,26 @@ struct SessionComposerPalette: View {
         return token
     }
 
+    /// Worktree-launch ruling (2026-08-27): what "the composer field
+    /// already resolves to something launchable" MEANS, shared by both
+    /// `createWorktree` call sites (this typed-row action and
+    /// `inlineBranchPicker`'s `onCreateWorktree`) so a branch typed with a
+    /// resolved template/command alongside it — `<branch> > cco`, or any
+    /// remainder `makeAdHocTemplate` can turn into a session — launches
+    /// immediately into the worktree it just created, rather than parking
+    /// it. Mirrors `bestSelectionIndex`'s own resolved-operator-wins-outright
+    /// check first, then falls back to the same ad-hoc synthesis
+    /// `commandOptions`'s "Run" row already offers. `nil` means nothing
+    /// launchable is typed — `createWorktree` leaves the branch chip
+    /// resolved and the composer open instead.
+    private var worktreeCreationLaunchTemplate: AgentTemplate? {
+        if let resolvedTemplateId = effectiveCommandParse.resolvedTemplateId,
+           let template = store.templates.first(where: { $0.id == resolvedTemplateId }) {
+            return template
+        }
+        return SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: effectiveCommandParse.remainderTokens)
+    }
+
     /// The query field's binding (model A rebuild — replaces the deleted
     /// `queryFieldText`/`resolvedFieldSplit` prefix-consuming transform).
     /// `get` returns `composerStore.searchText` VERBATIM — never a computed
@@ -788,11 +808,15 @@ struct SessionComposerPalette: View {
     private var commandOptions: [ComposerOption] {
         var options: [ComposerOption] = []
 
-        // Decision 1: a typed branch that names a real branch with no
-        // worktree yet gets an offered row, not silent creation and not a
-        // dead-end error. Selecting it does NOT launch a session — it
-        // arms creation exactly like `inlineBranchPicker`'s own
-        // `onCreateWorktree` row does, leaving the composer open with the
+        // Decision 1 (superseded by the worktree-launch ruling, 2026-08-27):
+        // a typed branch that names a real branch with no worktree yet
+        // gets an offered row, not silent creation and not a dead-end
+        // error. Selecting it arms creation exactly like
+        // `inlineBranchPicker`'s own `onCreateWorktree` row does — and now
+        // also launches straight into the new worktree whenever
+        // `worktreeCreationLaunchTemplate` resolves something, so creation
+        // completes the user's intent instead of parking it. When nothing
+        // resolves, this is unchanged: the composer stays open with the
         // branch control reading "Creating…" until it resolves.
         if let currentProject, let token = typedBranchCreateOffer {
             options.append(
@@ -801,7 +825,15 @@ struct SessionComposerPalette: View {
                     title: "Create worktree for \"\(token)\"",
                     subtitle: currentProject.name,
                     leadingIcon: "arrow.triangle.branch",
-                    action: { composerStore.createWorktree(named: token, in: currentProject) }
+                    action: {
+                        composerStore.createWorktree(
+                            named: token,
+                            in: currentProject,
+                            launchTemplate: worktreeCreationLaunchTemplate,
+                            coordinator: coordinator,
+                            workspaceStore: store
+                        )
+                    }
                 )
             )
         }
@@ -1223,6 +1255,24 @@ struct SessionComposerPalette: View {
                 // this is a real re-parse of record, same as the
                 // `searchText` trigger above, not just a shorter list.
                 reselectBestMatch()
+            }
+            .onChange(of: composerStore.isOpen) { open in
+                // Worktree-launch ruling: `createWorktree`'s new
+                // launch-on-create path dispatches straight through
+                // `precommit`, which sets `composerStore.isOpen = false`
+                // from INSIDE the store — bypassing `commit(template:)`'s
+                // own explicit `isPresented = false` write, the only other
+                // place this view's presentation currently closes.
+                // `SessionComposerOverlay`'s `isPresented` binding already
+                // reads `composerStore.isOpen` for its getter (so it
+                // self-corrects here for free — this guard is then already
+                // false and a no-op); `ProjectDisclosureRow`'s `.anchored`
+                // popover binds a genuinely separate `@State` that does
+                // not, so this syncs it explicitly whenever the store
+                // closes for a reason this view didn't itself request.
+                if !open, isPresented {
+                    isPresented = false
+                }
             }
             .onChange(of: composerStore.focusSearchFieldTrigger) { triggered in
                 // R8 (Phase 3 review round 2): mirrors the S5 seed in
@@ -1685,15 +1735,25 @@ struct SessionComposerPalette: View {
             onSelectWorktree: { path in
                 changeBranchChip(to: path)
             },
-            // B4: selecting a create row does NOT launch a session — it
-            // closes the picker (same statement, mirroring `onSelectDefault`/
-            // `onSelectWorktree` above) and arms creation with the composer
-            // still open. The branch chip shows "Creating…"
-            // (`isCreatingWorktree`) until it resolves.
+            // B4, superseded by the worktree-launch ruling (2026-08-27):
+            // selecting a create row closes the picker (same statement,
+            // mirroring `onSelectDefault`/`onSelectWorktree` above) and
+            // arms creation with the composer still open — and now also
+            // launches into the new worktree whenever
+            // `worktreeCreationLaunchTemplate` resolves something typed in
+            // the field. When it doesn't, this is unchanged: the branch
+            // chip shows "Creating…" (`isCreatingWorktree`) until it
+            // resolves, composer left open.
             onCreateWorktree: { branchName in
                 guard let project = currentProject else { return }
                 isBranchPickerOpen = false
-                composerStore.createWorktree(named: branchName, in: project)
+                composerStore.createWorktree(
+                    named: branchName,
+                    in: project,
+                    launchTemplate: worktreeCreationLaunchTemplate,
+                    coordinator: coordinator,
+                    workspaceStore: store
+                )
             }
         )
     }
