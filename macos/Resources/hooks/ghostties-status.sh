@@ -67,11 +67,18 @@ esac
 
 [ -t 0 ] && exit 0
 
-# Use the `read` builtin rather than `payload=$(cat)`: command substitution
-# forks a subshell, and on this platform's bash-as-sh a closed stdin (0<&-)
-# makes that subshell reacquire the controlling terminal and hang. `read`
-# runs in-process and fails fast on a closed/bad fd instead.
-IFS= read -r payload
+# Use an in-process read loop rather than `payload=$(cat)`: command
+# substitution forks a subshell, and on this platform's bash-as-sh a closed
+# stdin (0<&-) makes that subshell reacquire the controlling terminal and
+# hang. A single `read` avoids the hang but only captures the first line,
+# truncating any multi-line (pretty-printed) JSON payload; loop over every
+# line instead, including a final line with no trailing newline, and
+# concatenate them. Dropping the newlines is safe: outside JSON strings
+# they are insignificant whitespace, and inside strings they are escaped.
+payload=""
+while IFS= read -r line || [ -n "$line" ]; do
+    payload="$payload$line"
+done
 
 state_dir="$HOME/.ghostties/state"
 mkdir -p "$state_dir" || exit 0
