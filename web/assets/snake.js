@@ -499,6 +499,10 @@
     function startGame() {
       if (mode !== "idle") return;
       mode = "play";
+      // frame() only self-reschedules while mode === "play" (S6), so
+      // the loop needs an explicit kick here — it won't still be
+      // spinning from before if the section was idle-but-visible.
+      startLoop();
       wrap.classList.add("is-playing");
       if (heroSection) heroSection.classList.add("is-playing");
       mount.setAttribute("aria-hidden", "false");
@@ -775,7 +779,19 @@
         });
       }
 
-      raf = requestAnimationFrame(frame);
+      // A 60fps loop only has work to do while a round is running —
+      // hazard drift and the head's move-tween both only fire under
+      // mode === "play". Left unconditional, this ran indefinitely
+      // whenever the section was merely visible (attract-screen idle,
+      // or after a win), a second full-rate loop next to the ambient
+      // field's own (S6). Only self-reschedule during play; startGame()
+      // calls startLoop() to restart the chain.
+      if (mode === "play") {
+        raf = requestAnimationFrame(frame);
+      } else {
+        running = false;
+        raf = null;
+      }
     }
 
     function startLoop() {
