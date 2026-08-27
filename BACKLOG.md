@@ -1390,6 +1390,18 @@ Sean hit this testing a real build: **can't paste into the URL bar, and none of 
 
 ### Open
 
+- [ ] **Token game — review round 3 never completed.** `feat/web-snake-game` @ `e26a85af5`
+  (20 commits, pushed, NOT merged). Rounds 1 and 2 are closed: round 1 found 4 blockers +
+  6 should-fix, all fixed; round 2 re-reviewed those fix commits and found 0 blockers +
+  4 should-fix + 2 nits, all fixed. Round 3 was dispatched against the last five fix
+  commits and **killed mid-flight at wrap** — it reported the protect list green but had
+  not resolved its two main hypotheses: (H1) `086cee115` skips the canvas resize while
+  `mode === "win"`, and the prior agent only proved cascade pixels stayed non-zero after a
+  resize, never that the cascade still renders *correctly* in a stale bitmap; (H2) whether
+  `sizeCascadeCanvas()` is always called before the first `launchCascadePiece` on every win
+  path. It wanted one more run at DPR 2 (Sean's real display) to close both. Re-run before
+  merging. | quality | carried
+
 - [ ] **Token chip type — design fork, needs Sean.** Chips render `▮ING` / `##ED`, not
   `▮ing` / `##ed`: `--font-display` is Silkscreen, which is caps-only, and `▮` (U+25AE)
   has no Silkscreen glyph so it falls back to another face mid-chip. Separately, review
