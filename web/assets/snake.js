@@ -75,7 +75,6 @@
     var mount = document.getElementById("snake-mount");
     var startBtn = document.getElementById("snake-start");
     var soundBtn = document.getElementById("snake-sound");
-    var heroSection = document.getElementById("hero");
     var statusEl = document.getElementById("snake-status");
     if (!wrap || !mount || !startBtn || !soundBtn) return;
 
@@ -274,6 +273,7 @@
     var f = 0,
       t = 0;
     var tokensCollected = 0;
+    var alertTimer = null;
     var pickupsSinceAnnounce = 0;
     var soundOn = false;
     var ac = null;
@@ -321,7 +321,12 @@
         var cy = Math.floor(Math.random() * ROWS);
         if (!occ[cx + "," + cy]) return [cx, cy];
       }
-      return [Math.floor(Math.random() * COLS), Math.floor(Math.random() * ROWS)];
+      // 40 tries failed (a near-full field) — fall back to any cell,
+      // but still avoid stacking the token directly on the head.
+      var fx = Math.floor(Math.random() * COLS);
+      var fy = Math.floor(Math.random() * ROWS);
+      if (fx === hx && fy === hy) fx = (fx + 1) % COLS;
+      return [fx, fy];
     }
 
     function spawnToken() {
@@ -504,7 +509,6 @@
       // spinning from before if the section was idle-but-visible.
       startLoop();
       wrap.classList.add("is-playing");
-      if (heroSection) heroSection.classList.add("is-playing");
       mount.setAttribute("aria-hidden", "false");
       frameEl.tabIndex = -1;
       frameEl.setAttribute("role", "application");
@@ -529,7 +533,6 @@
       if (mode === "idle") return;
       mode = "idle";
       wrap.classList.remove("is-playing");
-      if (heroSection) heroSection.classList.remove("is-playing");
       mount.setAttribute("aria-hidden", "true");
       frameEl.removeAttribute("tabindex");
       frameEl.removeAttribute("role");
@@ -604,8 +607,14 @@
           if (tokensCollected !== before) {
             sfx("evict");
             contextCell.classList.add("alert");
-            setTimeout(function () {
+            // Rapid back-to-back hits left overlapping uncancelled
+            // timers stacked on the same class toggle — harmless
+            // since remove() is idempotent, but the trailing one
+            // could cut the flash short instead of extending it.
+            if (alertTimer) clearTimeout(alertTimer);
+            alertTimer = setTimeout(function () {
               contextCell.classList.remove("alert");
+              alertTimer = null;
             }, 320);
             announce(
               "Ghost hit. Lost " + (before - tokensCollected) + " tokens from context.",
@@ -831,6 +840,10 @@
       if (announceTimer) {
         clearTimeout(announceTimer);
         announceTimer = null;
+      }
+      if (alertTimer) {
+        clearTimeout(alertTimer);
+        alertTimer = null;
       }
       if (ro) ro.disconnect();
       if (io) io.disconnect();
