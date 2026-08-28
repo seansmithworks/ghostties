@@ -1299,6 +1299,15 @@ final class SessionCoordinator: ObservableObject {
     /// (by the real timer, or synchronously by tests) without waiting on a
     /// `Timer` fire.
     private func performActivityTick() {
+        // Clear any stale `processingStartTimes` entry for a session whose
+        // latest Claude hook event is `idle` (a `Stop`). This is the
+        // 30-minute false-orange fix: `processingStartTimes` is set on
+        // first output and, before this, cleared in exactly one place
+        // (`promptDidBecomeReady`, on OSC 133) which Claude's TUI never
+        // emits — so every Claude session promoted to `.longRunning` 30
+        // minutes after its first output and stayed there forever.
+        reconcileClaudeState()
+
         // Only fire objectWillChange if there are running sessions that could transition.
         let hasRunning = self.statuses.values.contains { $0.isAlive }
         if hasRunning {
@@ -1342,10 +1351,24 @@ final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// Clear `processingStartTimes` for any alive session whose latest
+    /// Claude hook state is `idle` — the same mutation `promptDidBecomeReady`
+    /// performs on OSC 133. Mutation lives here (called once per 1Hz tick),
+    /// never inside `indicatorState(for:)`, which must stay a pure read
+    /// since it is called directly from SwiftUI `body`.
+    private func reconcileClaudeState() {
+        for id in statuses.keys where statuses[id]?.isAlive == true {
+            if ClaudeStateStore.shared.state(for: id)?.state == .idle {
+                processingStartTimes.removeValue(forKey: id)
+            }
+        }
+    }
+
     /// Compute the view-layer indicator state for a session.
     ///
     /// Combines lifecycle status, output recency, and shell prompt signals into
     /// one of seven visual states. For running sessions:
+    /// - A Claude hook state (if present, not ended, not stale) wins outright
     /// - Recent output → processing (or long-running if 30+ min continuous)
     /// - No recent output + at shell prompt → idle
     /// - No recent output + NOT at prompt + likely prompting → needsAttention
@@ -1365,6 +1388,26 @@ final class SessionCoordinator: ObservableObject {
 
         switch status {
         case .running:
+            // Pure in-memory dictionary lookup — no filesystem access on
+            // this render-path call. `ClaudeStateStore.state(for:)` already
+            // filters out `.ended` and stale entries, so `.ended` never
+            // reaches this switch; the case exists only for exhaustiveness.
+            if let claudeState = ClaudeStateStore.shared.state(for: sessionId) {
+                switch claudeState.state {
+                case .busy:
+                    if let start = processingStartTimes[sessionId],
+                       ContinuousClock.now - start > Self.longRunningThreshold {
+                        return .longRunning
+                    }
+                    return .processing
+                case .idle:
+                    return .idle
+                case .needsInput, .needsPermission:
+                    return .needsAttention
+                case .ended:
+                    break
+                }
+            }
             // Check if the session has produced output recently.
             if let lastOutput = lastOutputTimestamps[sessionId],
                ContinuousClock.now - lastOutput < Self.activityThreshold {
@@ -1490,6 +1533,7 @@ final class SessionCoordinator: ObservableObject {
         case .completed, .exited, .killed:
             cachedIndicatorStates?.removeValue(forKey: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
+            ClaudeStateStore.shared.removeState(for: id)
         case .error:
             cachedIndicatorStates?[id] = .error
             WorkspaceStore.shared.updateIndicatorState(id: id, state: .error)

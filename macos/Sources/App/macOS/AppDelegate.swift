@@ -263,6 +263,7 @@ class AppDelegate: NSObject,
         // script can carry session context, so they shouldn't accumulate.
         DispatchQueue.global(qos: .utility).async {
             SessionCoordinator.sweepStaleLauncherScripts()
+            ClaudeStateStore.sweepStale()
         }
 
         // Check if secure input was enabled when we last quit.
