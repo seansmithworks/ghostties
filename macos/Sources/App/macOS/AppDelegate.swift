@@ -266,6 +266,17 @@ class AppDelegate: NSObject,
             ClaudeStateStore.sweepStale()
         }
 
+        // Warm `ClaudeStateStore.shared` here, at launch, so its filesystem
+        // setup (mkdir/stat/chmod) and `DispatchSource` creation happen
+        // before any render — not on the first sidebar paint, which calls
+        // `ProjectDisclosureRow` → `SessionCoordinator.indicatorState(for:)`
+        // → `ClaudeStateStore.shared` before the 1Hz activity timer's first
+        // tick. `ClaudeStateStore` is `@MainActor`; hop explicitly rather
+        // than relying on this delegate callback's (unannotated) isolation.
+        Task { @MainActor in
+            _ = ClaudeStateStore.shared
+        }
+
         // Check if secure input was enabled when we last quit.
         if UserDefaults.ghostty.bool(forKey: "SecureInput") != SecureInput.shared.enabled {
             toggleSecureInput(self)

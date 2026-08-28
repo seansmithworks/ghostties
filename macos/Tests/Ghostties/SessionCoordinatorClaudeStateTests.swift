@@ -4,16 +4,31 @@ import XCTest
 @testable import Ghostty
 
 /// Coverage for the Phase 2 read: `SessionCoordinator.indicatorState(for:)`
-/// consulting `ClaudeStateStore.shared`, and `performActivityTick()`'s
+/// consulting its `claudeStateStore`, and `performActivityTick()`'s
 /// `reconcileClaudeState()` clearing `processingStartTimes` on a hook
 /// `idle`. Follows the injection pattern in
 /// `SessionCoordinatorIndicatorCacheTests.swift`.
 ///
-/// Seeds go into `ClaudeStateStore.shared` via the in-memory
-/// `seedStateForTesting`/`clearStateForTesting` seams — never through the
-/// filesystem, so these tests never touch the real `~/.ghostties/state/`.
+/// Each test's `SessionCoordinator` is pointed at its own temp-directory
+/// `ClaudeStateStore` via `claudeStateStoreForTesting`, seeded in-memory via
+/// `seedStateForTesting` — never `.shared`, which reads/writes the real
+/// `~/.ghostties/state/` that live sessions are writing to right now.
+///
+/// `seedStateForTesting` mutates the store's in-memory dictionary directly;
+/// it is not durable across a `refresh()`. `refresh()` does a full rebuild
+/// (`states = newStates`), so if a test body ever becomes `async` and lets
+/// the main runloop turn between a seed and its assertion, a watcher-driven
+/// refresh of the (empty) temp directory would wipe the seed. Every test
+/// here is synchronous today, so nothing preempts — keep it that way, or
+/// re-seed after any awaited gap.
 @MainActor
 final class SessionCoordinatorClaudeStateTests: XCTestCase {
+
+    private func makeStore() -> (store: ClaudeStateStore, dir: URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SessionCoordinatorClaudeStateTests-\(UUID().uuidString)", isDirectory: true)
+        return (ClaudeStateStore(directoryURL: dir), dir)
+    }
 
     private func claudeState(
         id: UUID,
@@ -31,19 +46,21 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
         )
     }
 
-    private func teardown(_ id: UUID) {
+    private func teardown(_ id: UUID, dir: URL) {
         WorkspaceStore.shared.removeSessionStatus(id: id)
         WorkspaceStore.shared.removeIndicatorState(id: id)
-        ClaudeStateStore.shared.clearStateForTesting(id: id)
+        try? FileManager.default.removeItem(at: dir)
     }
 
     func testHookBusyMapsToProcessing() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
-        addTeardownBlock { self.teardown(id) }
+        coordinator.claudeStateStoreForTesting = store
+        addTeardownBlock { self.teardown(id, dir: dir) }
 
         coordinator.seedRunningSessionForTesting(id: id)
-        ClaudeStateStore.shared.seedStateForTesting(claudeState(id: id, kind: .busy))
+        store.seedStateForTesting(claudeState(id: id, kind: .busy))
         coordinator.runActivityTickForTesting()
 
         XCTAssertEqual(WorkspaceStore.shared.globalIndicatorStates[id], .processing)
@@ -51,13 +68,15 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
 
     func testHookIdleMapsToIdle() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
-        addTeardownBlock { self.teardown(id) }
+        coordinator.claudeStateStoreForTesting = store
+        addTeardownBlock { self.teardown(id, dir: dir) }
 
         // Recent output would resolve to .processing under today's
         // heuristics alone — the hook idle state must win.
         coordinator.seedRunningSessionForTesting(id: id)
-        ClaudeStateStore.shared.seedStateForTesting(claudeState(id: id, kind: .idle))
+        store.seedStateForTesting(claudeState(id: id, kind: .idle))
         coordinator.runActivityTickForTesting()
 
         XCTAssertEqual(WorkspaceStore.shared.globalIndicatorStates[id], .idle)
@@ -65,11 +84,13 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
 
     func testHookNeedsInputMapsToNeedsAttention() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
-        addTeardownBlock { self.teardown(id) }
+        coordinator.claudeStateStoreForTesting = store
+        addTeardownBlock { self.teardown(id, dir: dir) }
 
         coordinator.seedRunningSessionForTesting(id: id)
-        ClaudeStateStore.shared.seedStateForTesting(claudeState(id: id, kind: .needsInput))
+        store.seedStateForTesting(claudeState(id: id, kind: .needsInput))
         coordinator.runActivityTickForTesting()
 
         XCTAssertEqual(WorkspaceStore.shared.globalIndicatorStates[id], .needsAttention)
@@ -77,11 +98,13 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
 
     func testHookNeedsPermissionMapsToNeedsAttention() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
-        addTeardownBlock { self.teardown(id) }
+        coordinator.claudeStateStoreForTesting = store
+        addTeardownBlock { self.teardown(id, dir: dir) }
 
         coordinator.seedRunningSessionForTesting(id: id)
-        ClaudeStateStore.shared.seedStateForTesting(
+        store.seedStateForTesting(
             claudeState(id: id, kind: .needsPermission, toolName: "Write", toolUseId: nil)
         )
         coordinator.runActivityTickForTesting()
@@ -95,8 +118,10 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
     /// stay `.longRunning` forever, even after a fresh `busy` event.
     func testHookIdleClearsProcessingStartTime() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
-        addTeardownBlock { self.teardown(id) }
+        coordinator.claudeStateStoreForTesting = store
+        addTeardownBlock { self.teardown(id, dir: dir) }
 
         // Seed a session that has been "processing" continuously for far
         // longer than the 1800s long-running threshold, as though it had
@@ -108,11 +133,11 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
         )
 
         // A Stop event lands: the hook says idle.
-        ClaudeStateStore.shared.seedStateForTesting(claudeState(id: id, kind: .idle))
+        store.seedStateForTesting(claudeState(id: id, kind: .idle))
         coordinator.runActivityTickForTesting()
 
         // A fresh turn starts: the hook says busy again.
-        ClaudeStateStore.shared.seedStateForTesting(claudeState(id: id, kind: .busy))
+        store.seedStateForTesting(claudeState(id: id, kind: .busy))
         coordinator.runActivityTickForTesting()
 
         XCTAssertEqual(
@@ -127,12 +152,41 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
     /// heuristic.
     func testSessionWithNoStateFileKeepsExistingHeuristics() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
-        addTeardownBlock { self.teardown(id) }
+        coordinator.claudeStateStoreForTesting = store
+        addTeardownBlock { self.teardown(id, dir: dir) }
 
         coordinator.seedRunningSessionForTesting(id: id)
         coordinator.runActivityTickForTesting()
 
         XCTAssertEqual(WorkspaceStore.shared.globalIndicatorStates[id], .processing)
+    }
+
+    /// F5: `reconcileClaudeState()`'s partner promotion inside
+    /// `indicatorState(for:)` — a hook `busy` whose `processingStartTimes`
+    /// entry already exceeds the long-running threshold must resolve
+    /// `.longRunning`, not `.processing`. No existing test reached this:
+    /// `testHookIdleClearsProcessingStartTime` clears the value on the idle
+    /// tick before the busy read, and every other test above never sets
+    /// `processingStartTimes` at all.
+    func testHookBusyPastThresholdMapsToLongRunning() {
+        let id = UUID()
+        let (store, dir) = makeStore()
+        let coordinator = SessionCoordinator()
+        coordinator.claudeStateStoreForTesting = store
+        addTeardownBlock { self.teardown(id, dir: dir) }
+
+        // Seed a session already past the 1800s long-running threshold, with
+        // no intervening idle tick to clear processingStartTimes.
+        coordinator.seedIndicatorStateForTesting(
+            id: id,
+            lastOutputSecondsAgo: 0,
+            processingStartSecondsAgo: 2000
+        )
+        store.seedStateForTesting(claudeState(id: id, kind: .busy))
+        coordinator.runActivityTickForTesting()
+
+        XCTAssertEqual(WorkspaceStore.shared.globalIndicatorStates[id], .longRunning)
     }
 }

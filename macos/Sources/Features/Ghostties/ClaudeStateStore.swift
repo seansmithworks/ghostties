@@ -154,12 +154,16 @@ final class ClaudeStateStore {
         try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).todos.json"))
     }
 
-    /// Delete `*.json` state files older than 24h, catching any left behind
-    /// by a Claude process that crashed or was force-quit without a
-    /// `SessionEnd` hook firing. Scoped to exactly this directory and this
-    /// extension; symlink-aware stat so a planted symlink can't redirect the
-    /// deletion outside it. Mirrors
-    /// `SessionCoordinator.sweepStaleLauncherScripts()`.
+    /// Delete `*.json` state files, and orphaned `*.tmp` files, older than
+    /// 24h. `*.json` catches state left behind by a Claude process that
+    /// crashed or was force-quit without a `SessionEnd` hook firing. `*.tmp`
+    /// catches `ghostties-status.sh`'s `<dest>.<pid>.tmp` if the process dies
+    /// between its `printf` and `mv -f` — `refresh()` and this sweep both
+    /// filter on `.json`, so a `.tmp` is otherwise never noticed, let alone
+    /// deleted, and it carries the same tool-name/prompt-text content as the
+    /// state file it was about to become. Scoped to exactly this directory;
+    /// symlink-aware stat so a planted symlink can't redirect the deletion
+    /// outside it. Mirrors `SessionCoordinator.sweepStaleLauncherScripts()`.
     nonisolated static func sweepStale() {
         let fm = FileManager.default
         let dir = defaultDirectoryURL.path
@@ -167,7 +171,7 @@ final class ClaudeStateStore {
 
         let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
         for name in entries {
-            guard name.hasSuffix(".json") else { continue }
+            guard name.hasSuffix(".json") || name.hasSuffix(".tmp") else { continue }
             let path = (dir as NSString).appendingPathComponent(name)
 
             guard let attrs = try? fm.attributesOfItem(atPath: path),
@@ -188,11 +192,17 @@ final class ClaudeStateStore {
     /// hook overwrites its one file per session on every event, and a
     /// rebuild is also how a deleted file's session naturally drops out.
     private func refresh() {
-        ensureDirectory()
+        // Do NOT call `ensureDirectory()` here. Its existing-directory branch
+        // does a `chmod`, and `TaskFileWatcher`'s event mask includes
+        // `.attrib`, so a `chmod` on the watched directory fires another
+        // `refresh()` ~150ms later — forever. The directory is already
+        // ensured in `init`, and `TaskFileWatcher` retries every 500ms until
+        // it exists, so a directory created later is picked up without help.
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: directoryURL,
             includingPropertiesForKeys: nil
         ) else {
+            states = [:]
             return
         }
 
@@ -214,11 +224,22 @@ final class ClaudeStateStore {
     /// existing one. These files carry tool names and per-session context —
     /// the same class of leak `SessionCoordinator.launcherScriptDir`'s
     /// comment warns about.
+    ///
+    /// The existing-directory branch only calls `setAttributes` when the
+    /// current mode isn't already `0o700`. `TaskFileWatcher` watches this
+    /// same directory with `.attrib` in its event mask, so an unconditional
+    /// `chmod` here — even a no-op one — fires another debounced `refresh()`.
+    /// `refresh()` no longer calls this method, so today that loop can't
+    /// happen through this path; this guard is defence in depth against a
+    /// future caller reintroducing it.
     private func ensureDirectory() {
         let fm = FileManager.default
         var isDir: ObjCBool = false
         if fm.fileExists(atPath: directoryURL.path, isDirectory: &isDir), isDir.boolValue {
-            try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directoryURL.path)
+            let currentMode = (try? fm.attributesOfItem(atPath: directoryURL.path))?[.posixPermissions] as? NSNumber
+            if currentMode?.uint16Value != 0o700 {
+                try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directoryURL.path)
+            }
         } else {
             try? fm.createDirectory(
                 at: directoryURL,

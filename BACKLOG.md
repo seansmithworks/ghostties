@@ -16,6 +16,7 @@ Parked items that survive context resets. Prune at `/wrap`.
 - [x] DECIDE — plain number if glyph gate fails? Answered 2026-08-27: yes. | app | done
 - [ ] **DECIDE — Phase 3 second-line source.** Main thread has no TodoWrite/Task* tool in 2.1.248; candidates (a) subagent TodoWrite via hook, (b) Stop.last_assistant_message, (c) Stop.background_tasks, (d) re-enable the harness task list (~/.claude/tasks). Evidence: gate-evidence.md §E1. | design | needs-Sean
 - [ ] Global permissions: `ask: Bash(gh pr create:*)` is swallowed by `allow: Bash(*)` — observed 2026-08-27, never prompts. Sean's config, not app code. | ops | needs-Sean
+- [ ] Phase 2 review: sleep/wake can re-arm the false `.longRunning` for one turn (`ContinuousClock` advances across system sleep), self-healing at the next `Stop`; needs previous-state tracking this phase doesn't have. | app | open
 
 ## 2026-08-25 — composer UI 11.1/11.2 BUILT overnight, on `feat/composer-ui-11`
 

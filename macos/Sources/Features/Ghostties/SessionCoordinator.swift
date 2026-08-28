@@ -101,7 +101,25 @@ final class SessionCoordinator: ObservableObject {
     /// an isolated `WorkspaceStore` instead of `WorkspaceStore.shared` (which
     /// persists to the real `workspace.json`). nil in production.
     var agentKindLookupStoreForTesting: WorkspaceStore?
+
+    /// Test-only override for `claudeStateStore`, so tests can point this
+    /// coordinator at a temp-directory `ClaudeStateStore` instead of
+    /// `.shared` (which reads/writes the real `~/.ghostties/state/`, where
+    /// live sessions are writing right now). nil in production.
+    var claudeStateStoreForTesting: ClaudeStateStore?
 #endif
+
+    /// The `ClaudeStateStore` this coordinator reads/writes. Always
+    /// `.shared` in production; overridable in DEBUG builds via
+    /// `claudeStateStoreForTesting` so tests never touch the real
+    /// `~/.ghostties/state/`.
+    private var claudeStateStore: ClaudeStateStore {
+#if DEBUG
+        claudeStateStoreForTesting ?? .shared
+#else
+        .shared
+#endif
+    }
 
     /// Per-session Combine subscription for Claude Code → sidebar name sync.
     /// Subscribes directly to `surface.$title` (see `subscribeNameSync`) —
@@ -1358,7 +1376,7 @@ final class SessionCoordinator: ObservableObject {
     /// since it is called directly from SwiftUI `body`.
     private func reconcileClaudeState() {
         for id in statuses.keys where statuses[id]?.isAlive == true {
-            if ClaudeStateStore.shared.state(for: id)?.state == .idle {
+            if claudeStateStore.state(for: id)?.state == .idle {
                 processingStartTimes.removeValue(forKey: id)
             }
         }
@@ -1388,11 +1406,14 @@ final class SessionCoordinator: ObservableObject {
 
         switch status {
         case .running:
-            // Pure in-memory dictionary lookup — no filesystem access on
-            // this render-path call. `ClaudeStateStore.state(for:)` already
+            // Pure in-memory dictionary lookup, steady-state — no filesystem
+            // access from this render-path call. (The *first* access of
+            // `ClaudeStateStore.shared` does touch the filesystem via its
+            // `init`; `AppDelegate` warms it at launch so that happens before
+            // any render, not here.) `ClaudeStateStore.state(for:)` already
             // filters out `.ended` and stale entries, so `.ended` never
             // reaches this switch; the case exists only for exhaustiveness.
-            if let claudeState = ClaudeStateStore.shared.state(for: sessionId) {
+            if let claudeState = claudeStateStore.state(for: sessionId) {
                 switch claudeState.state {
                 case .busy:
                     if let start = processingStartTimes[sessionId],
@@ -1533,7 +1554,7 @@ final class SessionCoordinator: ObservableObject {
         case .completed, .exited, .killed:
             cachedIndicatorStates?.removeValue(forKey: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
-            ClaudeStateStore.shared.removeState(for: id)
+            claudeStateStore.removeState(for: id)
         case .error:
             cachedIndicatorStates?[id] = .error
             WorkspaceStore.shared.updateIndicatorState(id: id, state: .error)
