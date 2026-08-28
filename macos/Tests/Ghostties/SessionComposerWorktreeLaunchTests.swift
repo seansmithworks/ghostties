@@ -115,8 +115,7 @@ struct SessionComposerWorktreeLaunchTests {
     // MARK: - 1. onSuccess fires exactly once, with the new worktree's path
 
     /// THE mutant-catching test for the inverted contract: revert
-    /// `createWorktree`'s `onSuccess?(path)` call (or the `branchesWithoutWorktree
-    /// .removeAll` line immediately before it) and this goes red.
+    /// `createWorktree`'s `onSuccess?(path)` call and this goes red.
     @Test func onSuccessFiresExactlyOnceWithTheNewWorktreesPathOnSuccessfulCreation() async {
         let repo = Self.makeThrowawayRepo()
         defer { Self.cleanup(repo) }
@@ -141,6 +140,37 @@ struct SessionComposerWorktreeLaunchTests {
         #expect(successCount == 1, "expected exactly one onSuccess call, got \(successCount)")
         #expect(capturedPath == expectedPath)
         #expect(store.selectedWorktreePath == expectedPath, "the branch chip must resolve to the new worktree regardless of onSuccess")
+    }
+
+    /// THE mutant-catching test for round-3 finding 3 (the success branch's
+    /// missing `selectionAtStart` guard): remove the `if selectedWorktreePath
+    /// == selectionAtStart` check around the success branch's
+    /// `selectedWorktreePath = path` write and this goes red. No `await`
+    /// separates `createWorktree`'s call from the write below —
+    /// `isCreatingWorktree` is set synchronously before `createWorktree`
+    /// returns (same ordering guarantee
+    /// `doubleReturnDuringCreationProducesExactlyOneGitWorktreeAdd` relies
+    /// on), so this deterministically lands the user's pick BEFORE the git
+    /// shell-out (on its own detached `Task`) can complete and reach the
+    /// success branch.
+    @Test func aLegitimateMidFlightSelectionSurvivesASuccessfulCreation() async {
+        let repo = Self.makeThrowawayRepo()
+        defer { Self.cleanup(repo) }
+
+        let project = Project(name: "test-project", rootPath: repo)
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let store = SessionComposerStore(isolatedForTesting: ())
+        store.open(projectBinding: .locked(project), workspaceStore: workspaceStore)
+
+        let branchName = "feat-midflight-pick"
+        let userPick = "/tmp/some-other-worktree-the-user-clicked"
+
+        store.createWorktree(named: branchName, in: project)
+        store.selectedWorktreePath = userPick
+
+        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
+
+        #expect(store.selectedWorktreePath == userPick, "a deliberate mid-flight pick must survive a successful creation, not be clobbered by the new worktree's path")
     }
 
     // MARK: - 2. onSuccess is optional — creation still fully resolves without it
@@ -497,6 +527,67 @@ struct SessionComposerWorktreeLaunchTests {
             templates: []
         )
         #expect(result == nil)
+    }
+
+    /// Round-3 finding 2: an unscoped `store.templates` superset lets a
+    /// project-B-scoped "cco" template hijack a project-A composer's ad-hoc
+    /// `cco -n "thread name"` invocation and silently drop the flag —
+    /// `SessionComposerPalette.worktreeCreationLaunchTemplate` must pass the
+    /// PROJECT-SCOPED list (`SessionTemplateResolver.templates(for:store:)`,
+    /// matching every sibling call site) not the raw `store.templates`
+    /// superset. `WorkspaceStore.templates(for:)`'s access control keeps
+    /// this from reaching `SessionComposerPalette`'s private call site
+    /// directly (Swift's `private` is file-scoped, no `@testable` override),
+    /// so this exercises the two real production symbols the fix touches —
+    /// `WorkspaceStore.templates`/`addTemplate` and
+    /// `resolveWorktreeCreationLaunchTemplate` — with the exact unscoped-vs-
+    /// scoped lists the call site chooses between.
+    @Test func unscopedTemplatesLeakACrossProjectCcoThatSwallowsTheDashNFlag() {
+        let projectA = Project(name: "project-a", rootPath: "/tmp/project-a")
+        let projectB = Project(name: "project-b", rootPath: "/tmp/project-b")
+        let workspaceStore = WorkspaceStore(testingProjects: [projectA, projectB], testingSessions: [])
+
+        let crossProjectCco = workspaceStore.addTemplate(
+            AgentTemplate(name: "cco", kind: .custom, command: "some-other-binary", isGlobal: false, projectId: projectB.id)
+        )
+
+        // The bug: feeding the RAW, unscoped superset (what `store.templates`
+        // was before the fix) into the resolver lets project B's "cco"
+        // hijack project A's remainder and swallow `-n "thread name"`.
+        let unscopedResult = SessionComposerCommandParser.resolveWorktreeCreationLaunchTemplate(
+            resolvedTemplateId: nil,
+            remainderTokens: ["cco", "-n", "thread name"],
+            templates: workspaceStore.templates
+        )
+        #expect(unscopedResult?.id == crossProjectCco.id, "sanity: the unscoped superset really does let the wrong project's template hijack the match")
+
+        // The fix: scoping to project A first (mirroring every other call
+        // site's `SessionTemplateResolver.templates(for:store:)`) excludes
+        // project B's "cco" entirely, so the ad-hoc path preserves the flag.
+        let scopedResult = SessionComposerCommandParser.resolveWorktreeCreationLaunchTemplate(
+            resolvedTemplateId: nil,
+            remainderTokens: ["cco", "-n", "thread name"],
+            templates: SessionTemplateResolver.templates(for: projectA, store: workspaceStore)
+        )
+        #expect(scopedResult?.id != crossProjectCco.id, "project A's launch must never resolve to project B's template")
+        #expect(scopedResult?.command == "cco")
+        #expect(scopedResult?.agent?.additionalFlags == ["-n", "thread name"], "the composer must never claim -n — it's cco's own flag")
+    }
+
+    /// Sean's 95% real-usage idiom (`ghostties feat-x cco -n "thread name"`):
+    /// a flagged, quoted `cco` invocation with no matching template must
+    /// fall through to the ad-hoc path with the flag and quoted argument
+    /// intact, not get swallowed into a bare template match that discards
+    /// `-n "thread name"` (the composer must never claim `-n` — it's `cco`'s
+    /// own flag).
+    @Test func launchTemplateFallsBackToAdHocPreservingFlagsForCcoIdiom() {
+        let result = SessionComposerCommandParser.resolveWorktreeCreationLaunchTemplate(
+            resolvedTemplateId: nil,
+            remainderTokens: ["cco", "-n", "thread name"],
+            templates: []
+        )
+        #expect(result?.command == "cco")
+        #expect(result?.agent?.additionalFlags == ["-n", "thread name"])
     }
 
     // MARK: - 8. cascadeProjectChange must invalidate an in-flight creation (finding 2)

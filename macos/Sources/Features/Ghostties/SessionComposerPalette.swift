@@ -753,7 +753,7 @@ struct SessionComposerPalette: View {
         SessionComposerCommandParser.resolveWorktreeCreationLaunchTemplate(
             resolvedTemplateId: effectiveCommandParse.resolvedTemplateId,
             remainderTokens: effectiveCommandParse.remainderTokens,
-            templates: store.templates
+            templates: currentProject.map { SessionTemplateResolver.templates(for: $0, store: store) } ?? []
         )
     }
 

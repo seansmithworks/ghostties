@@ -1198,21 +1198,10 @@ final class SessionComposerStore: ObservableObject {
                 // returned) still landed A's new worktree path into B's
                 // now-current composer.
                 guard token == worktreeCreationToken else { return }
-                selectedWorktreePath = path
+                if selectedWorktreePath == selectionAtStart {
+                    selectedWorktreePath = path
+                }
                 isCreatingWorktree = false
-
-                // Finding 4 (review round 2): `refreshWorktrees` above races
-                // its OWN 2s deadline and deliberately leaves
-                // `branchesWithoutWorktree` untouched on a timeout rather
-                // than block (see that function's doc comment) — under
-                // load, that timeout can land HERE, meaning the branch just
-                // created would otherwise keep offering a create row and a
-                // second Return would re-enter the already-exists path.
-                // `git worktree add` already completed synchronously and
-                // durably before this `case` was ever reached, so removing
-                // it here is never premature, independent of whether the
-                // refresh's own snapshot happened to land it.
-                branchesWithoutWorktree.removeAll { $0 == branchName }
 
                 onSuccess?(path)
             case .completed(.failure(let error)):
