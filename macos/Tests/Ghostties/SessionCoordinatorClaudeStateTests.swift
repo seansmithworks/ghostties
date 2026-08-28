@@ -6,13 +6,16 @@ import XCTest
 /// Coverage for the Phase 2 read: `SessionCoordinator.indicatorState(for:)`
 /// consulting its `claudeStateStore`, and `performActivityTick()`'s
 /// `reconcileClaudeState()` clearing `processingStartTimes` on a hook
-/// `idle`. Follows the injection pattern in
-/// `SessionCoordinatorIndicatorCacheTests.swift`.
+/// `idle`.
 ///
-/// Each test's `SessionCoordinator` is pointed at its own temp-directory
-/// `ClaudeStateStore` via `claudeStateStoreForTesting`, seeded in-memory via
-/// `seedStateForTesting` — never `.shared`, which reads/writes the real
-/// `~/.ghostties/state/` that live sessions are writing to right now.
+/// Each test in *this file*'s `SessionCoordinator` is pointed at its own
+/// temp-directory `ClaudeStateStore` via `claudeStateStoreForTesting`, seeded
+/// in-memory via `seedStateForTesting` — never `.shared`, which reads/writes
+/// the real `~/.ghostties/state/` that live sessions are writing to right
+/// now. `SessionCoordinatorIndicatorCacheTests.swift` and
+/// `SessionCoordinatorIndicatorStateTests.swift` follow the same injection
+/// pattern for their own `SessionCoordinator`/`WorkspaceStore` instances —
+/// this comment describes this file only; check each file for its own seam.
 ///
 /// `seedStateForTesting` mutates the store's in-memory dictionary directly;
 /// it is not durable across a `refresh()`. `refresh()` does a full rebuild
@@ -59,7 +62,13 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
         coordinator.claudeStateStoreForTesting = store
         addTeardownBlock { self.teardown(id, dir: dir) }
 
-        coordinator.seedRunningSessionForTesting(id: id)
+        // Deliberately no recent output seeded (unlike
+        // `seedRunningSessionForTesting`): with no `lastOutputTimestamps`
+        // entry, `isAtPrompt` false, and no surface title, the pre-Phase-2
+        // fall-through resolves `.waiting`, not `.processing` — so this only
+        // passes if the hook busy read is what actually produced
+        // `.processing`.
+        coordinator.seedIndicatorStateForTesting(id: id)
         store.seedStateForTesting(claudeState(id: id, kind: .busy))
         coordinator.runActivityTickForTesting()
 
@@ -178,10 +187,14 @@ final class SessionCoordinatorClaudeStateTests: XCTestCase {
         addTeardownBlock { self.teardown(id, dir: dir) }
 
         // Seed a session already past the 1800s long-running threshold, with
-        // no intervening idle tick to clear processingStartTimes.
+        // no intervening idle tick to clear processingStartTimes. Deliberately
+        // no recent output (`lastOutputSecondsAgo` omitted): with no
+        // `lastOutputTimestamps` entry the pre-Phase-2 fall-through resolves
+        // `.waiting`, not `.longRunning` — so this only passes if the hook
+        // busy + past-threshold read is what actually produced
+        // `.longRunning`.
         coordinator.seedIndicatorStateForTesting(
             id: id,
-            lastOutputSecondsAgo: 0,
             processingStartSecondsAgo: 2000
         )
         store.seedStateForTesting(claudeState(id: id, kind: .busy))

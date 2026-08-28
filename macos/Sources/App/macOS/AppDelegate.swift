@@ -567,6 +567,16 @@ class AppDelegate: NSObject,
     }
 
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+        // This callback runs before `applicationDidFinishLaunching` (see that
+        // function's comment), so its own `ClaudeStateStore.shared` warm
+        // Task hasn't been enqueued yet. Enqueue ours here, before any
+        // `TerminalController.newWindow`/`newTab` call below schedules its
+        // presentation via `DispatchQueue.main.async` — main-queue FIFO then
+        // guarantees the store is warm before the first sidebar paint.
+        Task { @MainActor in
+            _ = ClaudeStateStore.shared
+        }
+
         // Ghostty will validate as well but we can avoid creating an entirely new
         // surface by doing our own validation here. We can also show a useful error
         // this way.

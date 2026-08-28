@@ -25,20 +25,30 @@ final class SessionCoordinatorIndicatorStateTests: XCTestCase {
     /// Builds an isolated `WorkspaceStore` (never touches the real
     /// `workspace.json`) seeded with a single session on the given template,
     /// and a `SessionCoordinator` wired to look up that store instead of
-    /// `WorkspaceStore.shared`.
-    private func makeCoordinator(templateId: UUID) -> (SessionCoordinator, UUID) {
+    /// `WorkspaceStore.shared`. Also points the coordinator's
+    /// `claudeStateStore` at its own temp directory via
+    /// `claudeStateStoreForTesting` — never `.shared`, which
+    /// `indicatorState(for:)` would otherwise reach against the real
+    /// `~/.ghostties/state/` that live sessions are writing to right now.
+    /// Follows the pattern in `SessionCoordinatorClaudeStateTests.swift`.
+    /// The temp directory is torn down in `addTeardownBlock` by the caller.
+    private func makeCoordinator(templateId: UUID) -> (coordinator: SessionCoordinator, sessionId: UUID, claudeStateDir: URL) {
         let project = makeProject()
         let session = AgentSession(name: "Session 1", templateId: templateId, projectId: project.id)
         let store = WorkspaceStore(testingProjects: [project], testingSessions: [session])
         let coordinator = SessionCoordinator()
         coordinator.agentKindLookupStoreForTesting = store
-        return (coordinator, session.id)
+        let claudeStateDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SessionCoordinatorIndicatorStateTests-\(UUID().uuidString)", isDirectory: true)
+        coordinator.claudeStateStoreForTesting = ClaudeStateStore(directoryURL: claudeStateDir)
+        return (coordinator, session.id, claudeStateDir)
     }
 
     // MARK: - The fix
 
     func testAgentSessionSilentNotAtPromptNoPromptTitleIsIdle() {
-        let (coordinator, sessionId) = makeCoordinator(templateId: AgentTemplate.claudeCode.id)
+        let (coordinator, sessionId, claudeStateDir) = makeCoordinator(templateId: AgentTemplate.claudeCode.id)
+        addTeardownBlock { try? FileManager.default.removeItem(at: claudeStateDir) }
         coordinator.seedIndicatorStateForTesting(id: sessionId, status: .running, isAtPrompt: false)
 
         XCTAssertEqual(
@@ -51,7 +61,8 @@ final class SessionCoordinatorIndicatorStateTests: XCTestCase {
     // MARK: - Unchanged behavior for agent sessions
 
     func testAgentSessionRecentOutputIsProcessing() {
-        let (coordinator, sessionId) = makeCoordinator(templateId: AgentTemplate.claudeCode.id)
+        let (coordinator, sessionId, claudeStateDir) = makeCoordinator(templateId: AgentTemplate.claudeCode.id)
+        addTeardownBlock { try? FileManager.default.removeItem(at: claudeStateDir) }
         coordinator.seedIndicatorStateForTesting(
             id: sessionId,
             status: .running,
@@ -64,7 +75,8 @@ final class SessionCoordinatorIndicatorStateTests: XCTestCase {
     }
 
     func testAgentSessionSustainedOutputThirtyPlusMinutesIsLongRunning() {
-        let (coordinator, sessionId) = makeCoordinator(templateId: AgentTemplate.claudeCode.id)
+        let (coordinator, sessionId, claudeStateDir) = makeCoordinator(templateId: AgentTemplate.claudeCode.id)
+        addTeardownBlock { try? FileManager.default.removeItem(at: claudeStateDir) }
         coordinator.seedIndicatorStateForTesting(
             id: sessionId,
             status: .running,
@@ -77,7 +89,8 @@ final class SessionCoordinatorIndicatorStateTests: XCTestCase {
     }
 
     func testAgentSessionPromptShapedTitleIsNeedsAttention() {
-        let (coordinator, sessionId) = makeCoordinator(templateId: AgentTemplate.claudeCode.id)
+        let (coordinator, sessionId, claudeStateDir) = makeCoordinator(templateId: AgentTemplate.claudeCode.id)
+        addTeardownBlock { try? FileManager.default.removeItem(at: claudeStateDir) }
         coordinator.seedIndicatorStateForTesting(
             id: sessionId,
             status: .running,
@@ -99,7 +112,8 @@ final class SessionCoordinatorIndicatorStateTests: XCTestCase {
     /// shell session with no prompt marker yet must keep reading exactly as
     /// it did before this fix — `.waiting` — not flip to `.idle`.
     func testShellSessionSilentNotAtPromptStaysWaitingUnchanged() {
-        let (coordinator, sessionId) = makeCoordinator(templateId: AgentTemplate.shell.id)
+        let (coordinator, sessionId, claudeStateDir) = makeCoordinator(templateId: AgentTemplate.shell.id)
+        addTeardownBlock { try? FileManager.default.removeItem(at: claudeStateDir) }
         coordinator.seedIndicatorStateForTesting(id: sessionId, status: .running, isAtPrompt: false)
 
         XCTAssertEqual(

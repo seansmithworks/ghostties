@@ -192,16 +192,26 @@ final class ClaudeStateStore {
     /// hook overwrites its one file per session on every event, and a
     /// rebuild is also how a deleted file's session naturally drops out.
     private func refresh() {
-        // Do NOT call `ensureDirectory()` here. Its existing-directory branch
-        // does a `chmod`, and `TaskFileWatcher`'s event mask includes
-        // `.attrib`, so a `chmod` on the watched directory fires another
-        // `refresh()` ~150ms later — forever. The directory is already
-        // ensured in `init`, and `TaskFileWatcher` retries every 500ms until
-        // it exists, so a directory created later is picked up without help.
+        // Do NOT call `ensureDirectory()` unconditionally here. Its
+        // existing-directory branch does a `chmod`, and `TaskFileWatcher`'s
+        // event mask includes `.attrib`, so a `chmod` on the watched
+        // directory fires another `refresh()` ~150ms later. On the success
+        // path below the directory's mode is already fine (we just listed
+        // it), so calling it there would re-arm the watcher forever. On the
+        // failure path it is called at most once per failed listing — once
+        // `ensureDirectory()` repairs the mode, the *next* refresh (driven by
+        // the hook's own `chmod 700` in `ghostties-status.sh`, or this same
+        // repair's `.attrib` event) takes the success path above and stops
+        // calling it, so it cannot loop.
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: directoryURL,
             includingPropertiesForKeys: nil
         ) else {
+            // Self-heal a mode-drifted directory (e.g. `chmod 000` while
+            // running) so a permanent EACCES doesn't wipe `states` forever.
+            // `init`'s `ensureDirectory()` alone is not sufficient for this —
+            // it only ever runs once, at construction.
+            ensureDirectory()
             states = [:]
             return
         }
@@ -229,9 +239,11 @@ final class ClaudeStateStore {
     /// current mode isn't already `0o700`. `TaskFileWatcher` watches this
     /// same directory with `.attrib` in its event mask, so an unconditional
     /// `chmod` here — even a no-op one — fires another debounced `refresh()`.
-    /// `refresh()` no longer calls this method, so today that loop can't
-    /// happen through this path; this guard is defence in depth against a
-    /// future caller reintroducing it.
+    /// `refresh()` calls this only on its failure path (a mode-drifted
+    /// directory self-heal), never on success — this conditional-chmod guard
+    /// is what keeps that call from looping: once the mode is `0o700` it's a
+    /// no-op, so the retriggered `.attrib` refresh takes the success path
+    /// and stops calling this method at all.
     private func ensureDirectory() {
         let fm = FileManager.default
         var isDir: ObjCBool = false
@@ -309,12 +321,6 @@ final class ClaudeStateStore {
     /// `~/.ghostties/state/`. Never used in production.
     func seedStateForTesting(_ state: ClaudeState) {
         states[state.ghosttiesSessionId] = state
-    }
-
-    /// Test-only: remove a seeded state so tests don't leak into each other
-    /// via the `.shared` singleton. Never used in production.
-    func clearStateForTesting(id: UUID) {
-        states.removeValue(forKey: id)
     }
 #endif
 }

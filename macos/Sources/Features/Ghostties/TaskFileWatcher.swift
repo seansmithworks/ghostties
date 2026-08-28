@@ -83,11 +83,13 @@ final class TaskFileWatcher {
             self.scheduleDebouncedFire()
         }
 
-        src.setCancelHandler { [weak self] in
-            guard let self = self else { return }
-            if self.fd >= 0 {
-                close(self.fd)
-                self.fd = -1
+        src.setCancelHandler { [descriptor] in
+            // Capture the fd by value, not `[weak self]`: `deinit` ->
+            // `stopInternal()` -> `src.cancel()` runs while `self` is already
+            // deallocating, so a weak lookup here would find nil and leak
+            // the descriptor.
+            if descriptor >= 0 {
+                close(descriptor)
             }
         }
 

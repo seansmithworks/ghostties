@@ -14,16 +14,33 @@ import XCTest
 @MainActor
 final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
 
+    /// Every `SessionCoordinator` here must be pointed at its own
+    /// temp-directory `ClaudeStateStore` via `claudeStateStoreForTesting` —
+    /// never `.shared`, which reads/writes the real `~/.ghostties/state/`
+    /// that live sessions are writing to right now. `closeSession` and
+    /// `setStatusForTesting(.exited/.killed, ...)` both reach
+    /// `claudeStateStore.removeState(for:)`, and `indicatorState(for:)` on a
+    /// `.running` session reaches `claudeStateStore.state(for:)`. Follows
+    /// the pattern in `SessionCoordinatorClaudeStateTests.swift`.
+    private func makeStore() -> (store: ClaudeStateStore, dir: URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SessionCoordinatorIndicatorCacheTests-\(UUID().uuidString)", isDirectory: true)
+        return (ClaudeStateStore(directoryURL: dir), dir)
+    }
+
     /// A `.killed` session's cached indicator state must not survive its own
     /// close: the 1Hz tick only recomputes indicators for sessions where
     /// `status.isAlive`, so once a session goes terminal nothing else will
     /// ever refresh a stale cached value.
     func testClosedSessionIndicatorStateIsInactiveNotStale() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
+        coordinator.claudeStateStoreForTesting = store
         addTeardownBlock {
             WorkspaceStore.shared.removeSessionStatus(id: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
+            try? FileManager.default.removeItem(at: dir)
         }
 
         // Seed a live-looking indicator, mirroring what the 1Hz tick would
@@ -51,10 +68,13 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
     /// `handleSurfaceClose` without a live GhosttyKit surface.
     func testExitedSessionIndicatorStateIsInactive() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
+        coordinator.claudeStateStoreForTesting = store
         addTeardownBlock {
             WorkspaceStore.shared.removeSessionStatus(id: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
+            try? FileManager.default.removeItem(at: dir)
         }
 
         WorkspaceStore.shared.updateIndicatorState(id: id, state: .processing)
@@ -75,10 +95,13 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
     /// user relaunches or Removes them.
     func testErrorSessionIndicatorStateIsErrorAndStaysActive() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
+        coordinator.claudeStateStoreForTesting = store
         addTeardownBlock {
             WorkspaceStore.shared.removeSessionStatus(id: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
+            try? FileManager.default.removeItem(at: dir)
         }
 
         // Seed a live-looking indicator, mirroring what the 1Hz tick would
@@ -114,10 +137,13 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
     /// line in `setStatus(_:for:)` and passes with it.
     func testRelaunchedSessionPublishesIndicatorAfterError() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
+        coordinator.claudeStateStoreForTesting = store
         addTeardownBlock {
             WorkspaceStore.shared.removeSessionStatus(id: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
+            try? FileManager.default.removeItem(at: dir)
         }
 
         // 1. Session starts running and producing output; the tick populates
@@ -159,10 +185,13 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
     /// line in `setStatus(_:for:)` and passes with it.
     func testRelaunchedSessionPublishesIndicatorAfterClose() {
         let id = UUID()
+        let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
+        coordinator.claudeStateStoreForTesting = store
         addTeardownBlock {
             WorkspaceStore.shared.removeSessionStatus(id: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
+            try? FileManager.default.removeItem(at: dir)
         }
 
         // 1. Session starts running and producing output; the tick populates
