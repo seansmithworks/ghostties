@@ -133,6 +133,32 @@ final class TaskFileWatcherTests: XCTestCase {
                       "reattached watcher should fire on subsequent writes")
     }
 
+    /// Regression test for the fd single-owner invariant in `stopInternal()`.
+    /// The cancel handler (added in G7, `52c321495`) captures `fd` by value
+    /// and closes it itself; `stopInternal()` must clear the property the
+    /// moment it hands off that close, or a later `stop()`/`deinit` call
+    /// (source == nil, stale fd) closes the same descriptor a second time.
+    func testStopAfterCancelDoesNotDoubleClose() throws {
+        let (watcher, getCount) = makeWatcher()
+        watcher.start()
+        defer { watcher.stop() }
+
+        XCTAssertTrue(waitForCondition(timeout: 2.0) { getCount() >= 1 },
+                      "watcher should fire once on attach; count=\(getCount())")
+
+        watcher.stop()
+        let fdAfterFirstStop = watcher.debugDrainAndReadFD()
+        XCTAssertEqual(fdAfterFirstStop, -1,
+            "fd must be cleared once its close is handed to the cancel handler, " +
+            "or a later stop()/deinit call will close it a second time")
+
+        // Mirrors TaskStore.deinit racing an explicit stop(): a second
+        // teardown call must be a safe no-op now that fd is already -1.
+        watcher.stop()
+        let fdAfterSecondStop = watcher.debugDrainAndReadFD()
+        XCTAssertEqual(fdAfterSecondStop, -1)
+    }
+
     func testBurstOfWritesDebouncesToOneFire() throws {
         // Use a longer debounce so the burst clearly falls inside one window.
         let (watcher, getCount) = makeWatcher(debounce: .milliseconds(300))

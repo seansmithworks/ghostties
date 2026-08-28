@@ -366,6 +366,13 @@ final class RecentsListViewTests: XCTestCase {
         let sessions = [stopped]
 
         let coordinator = SessionCoordinator()
+        // closeSession -> setStatus(.killed) reaches claudeStateStore.removeState(for:);
+        // point it at a temp directory so this never touches Sean's real
+        // ~/.ghostties/state/ (matches SessionCoordinatorIndicatorCacheTests).
+        let claudeStateDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RecentsListViewTests-\(UUID().uuidString)", isDirectory: true)
+        coordinator.claudeStateStoreForTesting = ClaudeStateStore(directoryURL: claudeStateDir)
+        addTeardownBlock { try? FileManager.default.removeItem(at: claudeStateDir) }
         coordinator.seedEmptySessionTreeForTesting(id: stopped.id)
         XCTAssertTrue(coordinator.hasLiveSurface(id: stopped.id), "sanity: session has a live surface right after starting")
 

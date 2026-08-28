@@ -144,4 +144,26 @@ final class ClaudeStateStoreTests: XCTestCase {
         XCTAssertNotNil(store.state(for: goodId), "a malformed sibling file must not prevent a valid file from being decoded")
         XCTAssertNil(store.state(for: badId))
     }
+
+    /// Coverage for `refresh()`'s failure branch (G5): a mode-drifted
+    /// directory that fails `contentsOfDirectory` must self-heal via
+    /// `ensureDirectory()` rather than leaving `states` permanently wedged.
+    /// `chmod 000` on our own temp dir deterministically denies even the
+    /// owner read access, so this doesn't depend on filesystem timing.
+    func testRefreshSelfHealsAModeDriftedDirectory() throws {
+        let (store, dir) = makeTempStore()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: dir.path)
+
+        store.refreshForTesting()
+
+        let mode = (try? FileManager.default.attributesOfItem(atPath: dir.path))?[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.uint16Value, 0o700,
+            "a directory that fails to list must be repaired back to 0700 by the failure-path ensureDirectory() call")
+        XCTAssertNil(store.state(for: UUID()), "states must reset to empty on the failure path, not retain stale data")
+    }
 }

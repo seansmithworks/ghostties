@@ -567,9 +567,10 @@ class AppDelegate: NSObject,
     }
 
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-        // This callback runs before `applicationDidFinishLaunching` (see that
-        // function's comment), so its own `ClaudeStateStore.shared` warm
-        // Task hasn't been enqueued yet. Enqueue ours here, before any
+        // AppKit can invoke this callback (e.g. opening a file at launch)
+        // before `applicationDidFinishLaunching` runs, so that function's
+        // `ClaudeStateStore.shared` warm Task hasn't been enqueued yet.
+        // Enqueue ours here, before any
         // `TerminalController.newWindow`/`newTab` call below schedules its
         // presentation via `DispatchQueue.main.async` — main-queue FIFO then
         // guarantees the store is warm before the first sidebar paint.
