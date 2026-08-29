@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import GhosttiesCore
 
 // MARK: - ReturnKeyActivationModifier
 

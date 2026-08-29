@@ -6,6 +6,7 @@
 // NOTE (R14): j/k full-row cycling is explicitly deferred to v0.1+.
 // Only Return (activate) and ⌘O (open .md) are wired in v0.
 import XCTest
+import struct GhosttiesCore.Project
 @testable import Ghostty
 
 /// Tests for the U11 keyboard shortcut infrastructure:

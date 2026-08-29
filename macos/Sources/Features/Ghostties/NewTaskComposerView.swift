@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import GhosttiesCore
 
 /// Inline composer card for creating a new task (U8 / SEA-164).
 ///

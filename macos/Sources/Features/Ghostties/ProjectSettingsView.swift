@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// Popover for editing a project's display name, ghost character, and default template.
 struct ProjectSettingsView: View {

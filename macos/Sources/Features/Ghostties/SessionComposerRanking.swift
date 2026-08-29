@@ -1,4 +1,5 @@
 import Foundation
+import GhosttiesCore
 
 /// Pure, testable relevance ranking + project ordering for the session
 /// composer (Phase 2 of session-creation-unified). Neither type touches

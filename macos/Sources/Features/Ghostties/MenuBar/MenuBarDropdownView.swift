@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// SwiftUI view shown inside the menu bar popover.
 ///

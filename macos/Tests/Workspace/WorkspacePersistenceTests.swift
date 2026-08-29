@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 struct WorkspacePersistenceTests {
@@ -90,6 +91,66 @@ struct WorkspacePersistenceTests {
         #expect(decoded.projects.isEmpty)
         #expect(decoded.sessions.isEmpty)
         #expect(decoded.templates.isEmpty)
+    }
+
+    /// Module-move proof (composer-parser-to-core): `Project`, `AgentSession`,
+    /// and `GhostCharacter` moved from the app target into `GhosttiesCore`.
+    /// JSON `Codable` doesn't embed module names, so this SHOULD be
+    /// transparent — but that's a claim, not a fact, until a real-shaped
+    /// `workspace.json` fixture with a persisted `ghostCharacter` value
+    /// round-trips through the actual decoder. A silent decode failure here
+    /// wipes Sean's sidebar state.
+    @Test func decodingRealShapedWorkspaceJsonRoundTripsPersistedGhostCharacter() throws {
+        let projectId = UUID()
+        let templateId = UUID()
+        let json = """
+        {
+            "projects": [
+                {
+                    "id": "\(projectId.uuidString)",
+                    "name": "ghostties",
+                    "rootPath": "/Users/sean/Code/ghostties",
+                    "isPinned": true,
+                    "ghostCharacter": "blinky",
+                    "defaultTemplateId": "\(templateId.uuidString)",
+                    "lastActiveAt": 780000000.0
+                }
+            ],
+            "sessions": [],
+            "templates": [
+                {
+                    "id": "\(templateId.uuidString)",
+                    "name": "Claude Code",
+                    "kind": "claudeCode",
+                    "isDefault": true,
+                    "isGlobal": true,
+                    "command": "claude",
+                    "environmentVariables": {}
+                }
+            ],
+            "sidebarMode": 0,
+            "lastSelectedProjectId": "\(projectId.uuidString)"
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(WorkspacePersistence.State.self, from: data)
+
+        #expect(decoded.projects.count == 1)
+        #expect(decoded.projects[0].id == projectId)
+        #expect(decoded.projects[0].ghostCharacter == .blinky)
+        #expect(decoded.projects[0].isPinned == true)
+        #expect(decoded.projects[0].defaultTemplateId == templateId)
+        #expect(decoded.templates.count == 1)
+        #expect(decoded.templates[0].kind == .claudeCode)
+
+        // Full round-trip: re-encode the decoded state and decode it again —
+        // the persisted ghostCharacter must survive a real save/load cycle,
+        // not just a single one-shot decode of a hand-written fixture.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let reEncoded = try encoder.encode(decoded)
+        let reDecoded = try JSONDecoder().decode(WorkspacePersistence.State.self, from: reEncoded)
+        #expect(reDecoded.projects[0].ghostCharacter == .blinky)
     }
 
     @Test func decodingLegacySidebarVisibleTrueMigratesToPinned() throws {

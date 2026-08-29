@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Coverage for the composer's pinned-template data layer (Composer UI 11,

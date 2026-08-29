@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import GhosttiesCore
 
 /// Describes how a `SessionComposerPalette` was invoked (Phase 2 of
 /// session-creation-unified). Nothing else parameterizes the composer.
@@ -239,7 +240,7 @@ final class SessionComposerStore: ObservableObject {
     /// landing after a newer one — this store is a process-wide singleton,
     /// so a slow enumeration for project A must not overwrite project B's
     /// already-returned result if the user switched projects (or reopened
-    /// the composer) before A's `Task.detached` finished.
+    /// the composer) before A's `_Concurrency.Task.detached` finished.
     private var worktreeRefreshToken: Int = 0
 
     /// Re-enumerates worktrees for `repoPath` off the main actor, discarding
@@ -250,7 +251,7 @@ final class SessionComposerStore: ObservableObject {
     /// `await`ed `listTask.value`, which does not return early against a
     /// blocking `Process.waitUntilExit()` (cancellation is cooperative —
     /// nothing inside `GitWorktreeEnumerator.list`/`branchesWithoutWorktree`
-    /// checks `Task.isCancelled`). A hung `git` left `isRefreshingWorktrees`
+    /// checks `_Concurrency.Task.isCancelled`). A hung `git` left `isRefreshingWorktrees`
     /// stuck true forever, showing "Refreshing…" permanently, with every
     /// reopen spawning another hung process on top. `race(_:timeoutSeconds:)`
     /// is the same unstructured, never-await-the-loser shape
@@ -302,7 +303,7 @@ final class SessionComposerStore: ObservableObject {
         // entry point still called directly from this `@MainActor` method,
         // running a blocking `realpath(3)` syscall on the main thread on
         // every refresh.
-        let listTask = Task.detached(priority: .userInitiated) { () -> (isRepo: Bool, canonicalRepoPath: String, rawList: [GitWorktreeEnumerator.Worktree], branches: [String]) in
+        let listTask = _Concurrency.Task.detached(priority: .userInitiated) { () -> (isRepo: Bool, canonicalRepoPath: String, rawList: [GitWorktreeEnumerator.Worktree], branches: [String]) in
             let canonicalRepoPath = GitWorktreeEnumerator.canonicalPath(repoPath)
             // Should-fix 7 fix: derived from `git rev-parse
             // --is-inside-work-tree`'s exit status, never from
@@ -327,11 +328,11 @@ final class SessionComposerStore: ObservableObject {
             // terminate, since the caller had already returned. `listTask`
             // is now explicitly `.cancel()`ed on timeout (below) so this
             // check actually trips.
-            guard !Task.isCancelled else { return (false, canonicalRepoPath, [], []) }
+            guard !_Concurrency.Task.isCancelled else { return (false, canonicalRepoPath, [], []) }
             let rawList = GitWorktreeEnumerator.list(repoPath: repoPath) { process in
                 processHandle.set(process)
             }
-            guard !Task.isCancelled else { return (isRepo, canonicalRepoPath, rawList, []) }
+            guard !_Concurrency.Task.isCancelled else { return (isRepo, canonicalRepoPath, rawList, []) }
             // Nit fix (Slice B review round 2): pass the already-fetched
             // claimed-branch set in rather than letting
             // `branchesWithoutWorktree` call `list(repoPath:)` a SECOND
@@ -352,7 +353,7 @@ final class SessionComposerStore: ObservableObject {
             processHandle.terminate()
             // SF-3 fix (Slice B review round 3): cancels the still-running
             // detached task itself, not just the process it's currently
-            // blocked on — see the `Task.isCancelled` guards threaded
+            // blocked on — see the `_Concurrency.Task.isCancelled` guards threaded
             // through `listTask` above. Without this, killing ONE hung
             // process just let the task move on to the NEXT of the three
             // git invocations, which nothing was left to terminate.
@@ -386,8 +387,8 @@ final class SessionComposerStore: ObservableObject {
             // project, with no new UI surface and no synthetic input
             // required, until the machine's load clears and a refresh
             // finally lands.
-            Task {
-                try? await Task.sleep(for: .seconds(2))
+            _Concurrency.Task {
+                try? await _Concurrency.Task.sleep(for: .seconds(2))
                 guard token == worktreeRefreshToken else { return }
                 await self.refreshWorktrees(for: repoPath, projectId: projectId)
             }
@@ -634,7 +635,7 @@ final class SessionComposerStore: ObservableObject {
 
         if let projectId = selectedProjectId,
            let project = workspaceStore.projects.first(where: { $0.id == projectId }) {
-            Task { await self.refreshWorktrees(for: project.rootPath, projectId: project.id) }
+            _Concurrency.Task { await self.refreshWorktrees(for: project.rootPath, projectId: project.id) }
         }
     }
 
@@ -802,7 +803,7 @@ final class SessionComposerStore: ObservableObject {
         // no composer left to surface it into. This is exactly the
         // existing Option-click instant-create path's behaviour today —
         // the composer is at parity, not newly regressed.
-        Task.detached { [coordinator, launchTemplate] in
+        _Concurrency.Task.detached { [coordinator, launchTemplate] in
             _ = await coordinator.createQuickSession(for: project, template: launchTemplate)
         }
 
@@ -1004,7 +1005,7 @@ final class SessionComposerStore: ObservableObject {
         guard let projectId,
               let project = cachedWorkspaceStore?.projects.first(where: { $0.id == projectId })
         else { return }
-        Task { await self.refreshWorktrees(for: project.rootPath, projectId: project.id) }
+        _Concurrency.Task { await self.refreshWorktrees(for: project.rootPath, projectId: project.id) }
     }
 
     // MARK: - Branch chip (Slice B, B3)
@@ -1128,7 +1129,7 @@ final class SessionComposerStore: ObservableObject {
         // Unstructured (not a child of any task group) so a hang in the
         // `git` call it eventually makes never blocks the race below from
         // returning at the timeout deadline.
-        let gitTask = Task.detached(priority: .userInitiated) { () -> Result<String, GitWorktreeEnumerator.GitWorktreeCreationError> in
+        let gitTask = _Concurrency.Task.detached(priority: .userInitiated) { () -> Result<String, GitWorktreeEnumerator.GitWorktreeCreationError> in
             // Blocker 17 fix: resolves the repo's MAIN worktree explicitly
             // via `git rev-parse --git-common-dir`, never by assuming
             // `list(repoPath:)`'s first element is main — that list drops
@@ -1155,7 +1156,7 @@ final class SessionComposerStore: ObservableObject {
             return result
         }
 
-        Task {
+        _Concurrency.Task {
             let outcome = await Self.race(gitTask, timeoutSeconds: 10)
 
             // Discard if superseded — see `worktreeCreationToken`'s doc
@@ -1266,7 +1267,7 @@ final class SessionComposerStore: ObservableObject {
     /// that shape calls `.cancel()` on a timeout and then still `await`s
     /// the cancelled task's `.value`, which only works because
     /// `resolveCommand` eventually returns on its own — a blocking
-    /// `Process.waitUntilExit()` never checks `Task.isCancelled`, so the
+    /// `Process.waitUntilExit()` never checks `_Concurrency.Task.isCancelled`, so the
     /// same shape here would block on a hung `git worktree add` indefinitely
     /// regardless of the "timeout". Both branches below are independent,
     /// unstructured `Task`s (not children of a `TaskGroup`, which would
@@ -1278,12 +1279,12 @@ final class SessionComposerStore: ObservableObject {
     /// short `timeoutSeconds` against a task that never completes, since a
     /// real `createWorktree` timeout would otherwise take an actual 10
     /// seconds of wall-clock time to prove.
-    static func race(_ task: Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never>, timeoutSeconds: Double) async -> WorktreeCreationOutcome {
+    static func race(_ task: _Concurrency.Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never>, timeoutSeconds: Double) async -> WorktreeCreationOutcome {
         await withCheckedContinuation { continuation in
             let lock = NSLock()
             var didResume = false
-            var waiterTask: Task<Void, Never>?
-            var timeoutTask: Task<Void, Never>?
+            var waiterTask: _Concurrency.Task<Void, Never>?
+            var timeoutTask: _Concurrency.Task<Void, Never>?
             func resumeOnce(_ outcome: WorktreeCreationOutcome) {
                 lock.lock()
                 defer { lock.unlock() }
@@ -1304,12 +1305,12 @@ final class SessionComposerStore: ObservableObject {
             // genuine data race on the references themselves, independent
             // of the (much narrower, effectively unobservable in practice
             // given the real work — a detached `git worktree add`, or a
-            // multi-second `Task.sleep` — each side does before it can call
+            // multi-second `_Concurrency.Task.sleep` — each side does before it can call
             // `resumeOnce`) ordering window where a task could finish and
             // call `resumeOnce` before its OWN reference is even stored.
             // Locking every write closes the data race the reviewer flagged;
             // the latter, narrower window is unchanged from before this fix.
-            let waiter = Task<Void, Never> {
+            let waiter = _Concurrency.Task<Void, Never> {
                 let result = await task.value
                 resumeOnce(.completed(result))
             }
@@ -1317,8 +1318,8 @@ final class SessionComposerStore: ObservableObject {
             waiterTask = waiter
             lock.unlock()
 
-            let timeout = Task<Void, Never> {
-                try? await Task.sleep(for: .seconds(timeoutSeconds))
+            let timeout = _Concurrency.Task<Void, Never> {
+                try? await _Concurrency.Task.sleep(for: .seconds(timeoutSeconds))
                 resumeOnce(.timedOut)
             }
             lock.lock()
@@ -1345,12 +1346,12 @@ final class SessionComposerStore: ObservableObject {
     /// caller's `T` (this file's own tuple result type) is already
     /// `Sendable`, so this is a compile-time-only tightening, not a
     /// behavior change.
-    static func raceAny<T: Sendable>(_ task: Task<T, Never>, timeoutSeconds: Double) async -> T? {
+    static func raceAny<T: Sendable>(_ task: _Concurrency.Task<T, Never>, timeoutSeconds: Double) async -> T? {
         await withCheckedContinuation { continuation in
             let lock = NSLock()
             var didResume = false
-            var waiterTask: Task<Void, Never>?
-            var timeoutTask: Task<Void, Never>?
+            var waiterTask: _Concurrency.Task<Void, Never>?
+            var timeoutTask: _Concurrency.Task<Void, Never>?
             func resumeOnce(_ outcome: T?) {
                 lock.lock()
                 defer { lock.unlock() }
@@ -1366,7 +1367,7 @@ final class SessionComposerStore: ObservableObject {
             // Nit fix (Slice B review round 3): same synchronization fix as
             // `race(_:timeoutSeconds:)` above — see that function's matching
             // comment.
-            let waiter = Task<Void, Never> {
+            let waiter = _Concurrency.Task<Void, Never> {
                 let result = await task.value
                 resumeOnce(result)
             }
@@ -1374,8 +1375,8 @@ final class SessionComposerStore: ObservableObject {
             waiterTask = waiter
             lock.unlock()
 
-            let timeout = Task<Void, Never> {
-                try? await Task.sleep(for: .seconds(timeoutSeconds))
+            let timeout = _Concurrency.Task<Void, Never> {
+                try? await _Concurrency.Task.sleep(for: .seconds(timeoutSeconds))
                 resumeOnce(nil)
             }
             lock.lock()

@@ -1,4 +1,5 @@
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for the recents-list ordering + section-membership logic in RecentsListView.

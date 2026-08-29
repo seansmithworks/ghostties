@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import GhosttiesCore
 
 /// Inline triage card for orphan Inbox rows (U6 / SEA-162).
 ///

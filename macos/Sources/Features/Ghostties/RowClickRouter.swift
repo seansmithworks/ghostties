@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import GhosttiesCore
 
 /// The logical lane a task row belongs to, derived at click-time from the
 /// task's `status` + whether it has valid project context in `WorkspaceStore`.

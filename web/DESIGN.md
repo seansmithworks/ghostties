@@ -187,6 +187,27 @@ Un-tokenised sizes, all single-use inside one page block: 0.6875rem/11px
 (changelog `h3`, homepage footer), 18px (licenses `h2`, hero terminal),
 1.25rem/20px (changelog `h2`), 30px (product heading).
 
+### Round-4 board fonts (index only, `03 — The Sidebar` / `04 — The GT List`)
+
+Three fonts, self-hosted from `web/assets/fonts/` — **not** loaded from
+Google Fonts. `font-src 'self'` in `vercel.json` blocks the Google Fonts CDN
+in production; loading it via `<link>` (how this shipped originally) silently
+fails every rule back to `--font-ui` on the live site while looking correct
+locally, where `python3 -m http.server` sends no CSP. Each weight below is
+one `.woff2`, latin subset only, `font-display: swap`, licensed OFL (licence
+text sits beside each file as `OFL-*.txt`).
+
+| Font | Weights | Use |
+| --- | --- | --- |
+| Silkscreen | 400, 700 | `.board-sidebar h2` / `.board-gtlist h2` — the two pixel-face section headings |
+| Archivo | 400, 500, 600, 800 | `.board-sidebar`, `.board-gtlist` body text and `.lead` |
+| DM Mono | 300, 400, 500 | `.status-row`, `.gt-pre`, `.lane-ramp` — the captured-stdout and status-key mono text |
+
+Archivo ships as one variable-font file backing all four declared weights
+(the browser selects the instance); DM Mono and Silkscreen are separate
+static files per weight. Scoped to these two sections only, same as the rest
+of this block — not promoted to the shared `--font-ui`/`--font-mono` stacks.
+
 **The tokenised sizes above are now all `rem`**, converted in the
 2026-08-03 fix pass so they scale with the user's font-size setting instead
 of ignoring it. The un-tokenised sizes right above this were converted too —
@@ -273,6 +294,42 @@ the seven pages that is down from 131 occurrences of 29 distinct literals.
    card's drop shadow. The only shadow on the site; tokenise if a second one
    ever appears.
 
+### Round-4 board colours (index only)
+
+Not counted in the six above — these are a set (six lane colours, seven
+status colours), not single literals, and each set is used more than once
+within its own section. Kept as page-block literals, not `:root` tokens,
+because they're specific to the `03`/`04` board sections' own semantics and
+don't recur anywhere else on the site.
+
+**Lane colours** (`.lane-needsyou`, `.lane-running`, `.lane-review`,
+`.lane-inbox`, `.lane-backlog`, `.lane-done`) — each used twice: once
+colouring the lane token inside `.gt-pre`'s captured `gt list` output, once
+as a `.lane-ramp` chip. `.lane-backlog` (`#949494`, 5.071:1) and `.lane-done`
+(`#909090`, 4.818:1) were raised from `#808080`/`#585858` (3.89:1/2.16:1) to
+clear WCAG AA for real body-size text; the other four already passed.
+
+**Status colours** (the `--mark` custom property set inline per
+`.status-mark`, one per row in the sidebar status key) — five are exact
+literals from `WorkspaceStore.swift`'s hardcoded `Color(hex:)` values
+(`needsAttention` `#FFC400`, `waiting` `#5B8DEF`, `longRunning` `#F97316`).
+The other two source from **dynamic** system colors and needed sampling, not
+copying, since there's no single hex to copy:
+
+- `error` — `#FF453A`. `WorkspaceStore.swift` uses `Color(nsColor: .systemRed)`,
+  which resolves per-appearance. No red ghost appears in the committed dark
+  capture to sample directly, so this is Apple's documented dark-appearance
+  `systemRed` value, not a screenshot sample.
+- `processing` — `#68CE67`. `WorkspaceStore.swift` uses
+  `Color(nsColor: .systemGreen)`. Sampled directly from the green ghost icon
+  in `assets/app-sessions-dark@2x.png` (the committed dark capture) — the
+  light-appearance value (`#65C466`, sampled from the equivalent light
+  capture) does not apply since this section is dark-only.
+- `idle` — `rgba(255,255,255,0.85)`, matching `Color.primary`'s dark-appearance
+  label alpha, not opaque white.
+- `inactive` — `rgba(255,255,255,0.25)`, matching `tertiaryLabelColor`'s 25%
+  alpha, not 35%.
+
 Two more things this file does not fix:
 
 - **The homepage JS restates the diff colours inline.** The script at the
@@ -320,3 +377,52 @@ concludes from this document that the system is finished.
   its own variant (an icons span plus a three-link row, no Licenses link).
   Collapsing them to one is a taste call, and deleting the homepage override
   is all it takes.
+
+---
+
+## 8. v2 redesign token set (`web/v2.css`) — in-progress system, not the live site
+
+`v2.html`/`v2.css` (Arcade shell, `feat/web-redesign-round4`) is a sandbox for
+the redesign in flight, served at `/v2.html` alongside the live `index.html`
+(`vercel.json` has no `/v2` rewrite, so the extension is required). It
+declares its own `:root` block, deliberately **not** merged into `style.css`'s
+tokens above — the two pages don't share a design system yet, and nothing in
+§3–§5 of this document applies to `/v2`. Document it here so it isn't an
+undocumented parallel system; promote it into the shared tokens (and delete
+this section) if and when `/v2` replaces `index.html`.
+
+### Colour
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `--bg` | `#06060e` | Page background |
+| `--ink` | `#e9e6f5` | Headings, primary text |
+| `--ink-dim` | `rgba(233,230,245,0.66)` | `.lead` |
+| `--ink-faint` | `rgba(233,230,245,0.5)` | `.body-text`, `.small-text`, captions |
+| `--ink-quiet` | `rgba(233,230,245,0.52)` | Insert-coin border (text is `--ink-dim`); also `.snake-stat .k` and `.snake-sound` — tuned to clear both 4.5:1 text and 3:1 non-text AA floors against `--bg` |
+| `--amber` | `#ffd54f` | The one saturated accent — links, primary CTA, inline `code`, headline highlight |
+| `--cyan` | `#00e5ff` | HUD "1UP" blip, section numbers, secondary CTA border |
+| `--purple` | `#7c4dff` | Maze grid lines only |
+| `--line` | `rgba(233,230,245,0.16)` | Outer frame hairlines (cards, grids) |
+| `--line-soft` | `rgba(233,230,245,0.09)` | Interior row separators |
+| `--line-strong` | `rgba(233,230,245,0.24)` | Emphasized borders (lane ramp, source links, tertiary button) |
+
+### Type
+
+| Token | Stack | Use |
+| --- | --- | --- |
+| `--font-display` | `"Silkscreen", monospace` | `h1`–`h2` (`.h-xl`/`.h-l`/`.h-m`/`.h-s`), cabinet buttons, step counters |
+| `--font-prose` | `"Archivo", sans-serif` | Body copy (`.lead`, `.body-text`, `.small-text`, `.micro`) |
+| `--font-mono` | `"DM Mono", monospace` | Commands, file paths, inline `code`, captured stdout |
+
+Self-hosted from `web/assets/fonts/` (`font-src 'self'` blocks any CDN) — same
+three families as the "Round-4 board fonts" set in §4 above, which only
+covered `index.html`'s two lifted sections; `/v2` uses them page-wide.
+
+### House vocabulary (locked, `docs/design/web-redesign/README.md`)
+
+Square status marks, never circles or pills. Block labels butted together
+sharing hairlines. **No rounded corners or drop shadows on chrome** — the one
+named exception is the amber `box-shadow` glow on `.cab-btn.primary`, which
+reads as arcade CRT bloom, not a drop shadow. Uppercase micro-labels at
+0.2em tracking (`.micro`, `.mono-tag`).

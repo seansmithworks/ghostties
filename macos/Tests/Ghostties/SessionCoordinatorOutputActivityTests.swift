@@ -2,6 +2,7 @@
 // Run via Xcode Cmd+U or xcodebuild test locally.
 import Combine
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Pins `SessionCoordinator.subscribeToOutput`'s `isOutput: true` argument —

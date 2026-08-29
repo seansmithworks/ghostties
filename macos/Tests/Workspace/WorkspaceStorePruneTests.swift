@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for the launch-time stale-session prune (`pruneStaleSessionsAtLaunch()`).

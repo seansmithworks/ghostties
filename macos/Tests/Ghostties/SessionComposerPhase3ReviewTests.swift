@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import SwiftUI
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Regression coverage for the Phase 3 review pass of session-creation-unified

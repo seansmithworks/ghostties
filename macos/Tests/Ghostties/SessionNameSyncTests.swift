@@ -2,6 +2,7 @@
 // Run via Xcode Cmd+U or xcodebuild test locally.
 import Combine
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for `WorkspaceStore.syncSessionNameFromTitle` / `renameSession` /

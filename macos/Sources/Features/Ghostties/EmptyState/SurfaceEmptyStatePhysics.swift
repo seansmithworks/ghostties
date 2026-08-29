@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// Ambient ghost-drift layer for an empty terminal surface.
 ///

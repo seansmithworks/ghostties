@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import GhosttiesCore
 
 /// State machine and commit logic for the inline new-task composer (U8 / SEA-164).
 ///

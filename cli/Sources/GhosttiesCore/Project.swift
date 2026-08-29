@@ -1,26 +1,26 @@
 import Foundation
 
 /// A workspace project representing a directory the user has pinned.
-struct Project: Identifiable, Codable, Hashable {
-    let id: UUID
-    var name: String
-    var rootPath: String
-    var isPinned: Bool
+public struct Project: Identifiable, Codable, Hashable {
+    public let id: UUID
+    public var name: String
+    public var rootPath: String
+    public var isPinned: Bool
 
     /// The pixel-art ghost character displayed in the icon rail.
     /// Nil means the project predates the ghost system (shows initial fallback).
-    var ghostCharacter: GhostCharacter?
+    public var ghostCharacter: GhostCharacter?
 
     /// The default template to use when creating sessions with a single click.
     /// Nil means always show the template picker.
-    var defaultTemplateId: UUID?
+    public var defaultTemplateId: UUID?
 
     /// The last moment any session in this project produced output, was focused,
     /// or was created. Drives the "Recent" smart-section membership rule.
     /// Nil means this project predates the timestamp system or has never been touched.
-    var lastActiveAt: Date?
+    public var lastActiveAt: Date?
 
-    init(
+    public init(
         id: UUID = UUID(),
         name: String,
         rootPath: String,
@@ -40,7 +40,7 @@ struct Project: Identifiable, Codable, Hashable {
 
     // Custom decoder so existing workspace.json files (without ghost/template/timestamp
     // fields) load without error. New fields default to nil when missing.
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
         self.name = try container.decode(String.self, forKey: .name)

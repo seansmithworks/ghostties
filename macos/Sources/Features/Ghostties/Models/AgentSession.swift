@@ -1,4 +1,5 @@
 import Foundation
+import GhosttiesCore
 
 /// Persistent metadata for a terminal session.
 ///
