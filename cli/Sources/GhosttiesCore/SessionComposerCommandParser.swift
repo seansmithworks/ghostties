@@ -1104,7 +1104,7 @@ public enum SessionComposerCommandParser {
     /// 3. `makeAdHocTemplate` — a genuine shell command with no matching
     ///    template name.
     /// `nil` when none of the three apply (nothing typed).
-    static func resolveWorktreeCreationLaunchTemplate(
+    public static func resolveWorktreeCreationLaunchTemplate(
         resolvedTemplateId: UUID?,
         remainderTokens: [String],
         templates: [AgentTemplate]
