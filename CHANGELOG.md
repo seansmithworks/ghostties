@@ -6,6 +6,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [0.1.0-beta.24] — Unreleased
+
+The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into.
+
+### Added
+
+- **Pin templates in the composer.** Right-click a template row for Pin/Unpin — pinned templates stay at the top of the list, ahead of your recents.
+- **An "Add project…" row** where the composer used to just say "No matches" if you have no projects yet.
+- **Experimental ghost-text composer field**, opt-in from View → Experimental Composer Field (off by default). As you type a session name, it previews the full destination — project, branch, template — as greyed-out ghost text, and Tab accepts one segment at a time instead of committing the whole thing at once.
+- **Typing `>` to target any branch in the repo now works**, not just branches that already have a worktree — Ghostties offers to create one on the spot if it doesn't.
+
+### Changed
+
+- **The composer field row drops its resolution-line text** in favor of two small trailing buttons — a chevron for the project picker, a branch glyph for the branch picker — shown inline instead of underneath the field.
+- **Template rows in the composer are single-line now**, with the pin glyph or "recent" label trailing instead of a subtitle underneath.
+
+### Fixed
+
+- **The composer's results list no longer opens with dead space below a short list**, and stops growing past its cap on a long one.
+- **The composer card now resizes cleanly to fit its content at every window width**, instead of clipping or leaving extra space.
+
+---
+
+## [0.1.0-beta.23] — 2026-08-17
+
+A small fix release: idle Claude Code sessions stop reading as if they need you, and sidebar session names stay in sync.
+
+### Fixed
+
+- **Idle Claude Code sessions no longer show up as needing your attention.** Claude Code's terminal never emits the shell-prompt marker Ghostties used to detect "waiting for input," so every session went quiet and immediately looked like it needed you. Silence with no other evidence now reads as idle for agent sessions; plain shell sessions are unaffected.
+- **Session names fully shed the leading status glyph.** A prior fix stripped it from new names, but a title shaped like "repo | ✳ Claude Code" — the actual production shape — could still leak the glyph in the second segment, and already-stored names with a glyph baked in weren't cleaned up. Both are fixed now, including self-healing existing names on their next sync.
+- **The Sessions tab shows a session's current name and status without needing a tab toggle first.** Renaming or a terminal title change could sit stale on screen until you switched away and back.
+- **Guarded against a rare case where a window's terminal or browser shadow could disappear.** Unverified against a live repro, but a code-level gap (shadow path rebuilding from empty bounds) is now closed defensively.
+
+---
+
 ## [0.1.0-beta.22] — 2026-08-09
 
 The Sessions tab gets a real Inactive zone, session keyboard shortcuts, and a titlebar fix that finally sticks.
