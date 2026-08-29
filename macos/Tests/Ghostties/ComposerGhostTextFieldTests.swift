@@ -315,6 +315,22 @@ struct ComposerGhostTextFieldTests {
         #expect(handled == false)
     }
 
+    /// Design-spec pin, NOT an AA guarantee — `ghostOpacity` went 0.49
+    /// (2.99:1 light / 3.99:1 dark) → 0.65 (4.74:1 light / 5.93:1 dark,
+    /// cleared WCAG AA's 4.5:1 text-contrast floor) → 0.50, Sean's call
+    /// looking at the real build, which measures ≈3.0:1 light mode and
+    /// does NOT clear AA. That drop is deliberate and accepted, not a
+    /// regression — this test only pins the shipped value so an
+    /// UNINTENTIONAL further drop still fails loudly. References the
+    /// production symbol directly — a test that re-declared this as a
+    /// local literal would pass even if the shipped constant regressed.
+    @Test func ghostOpacityMatchesDesignSpec() {
+        #expect(
+            ComposerGhostTextField.ghostOpacity == 0.50,
+            "ghostOpacity drifted from 0.50, the shipped design value (deliberately below WCAG AA — Sean's call)"
+        )
+    }
+
     // MARK: - Defect 2 class: Tab-drill termination is a fixpoint property,
     // not a fixed-depth script (findings ledger F8)
 

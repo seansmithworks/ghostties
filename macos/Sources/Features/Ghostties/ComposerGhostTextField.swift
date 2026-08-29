@@ -137,13 +137,23 @@ struct ComposerGhostTextField: NSViewRepresentable {
     var ghostFullPath: String
     var onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)?
 
-    /// `DESIGN.md` §4's ghost grey, `#1A1A1A7E` (0x7E/0xFF ≈ 0.49) — same
-    /// production symbol `ComposerQueryField.ghostPlaceholderOpacity` pins,
-    /// re-declared here (not shared) because this type has its own AppKit
-    /// color path (`NSColor`, not SwiftUI `Color`) and no common base to
-    /// hang a shared constant on without touching `ComposerQueryField`,
-    /// which is out of scope.
-    static let ghostOpacity: CGFloat = 0.49
+    /// DESIGN.md §4's ghost grey went through `#1A1A1A7E` (0x7E/0xFF ≈ 0.49,
+    /// measured 2.99:1 light / 3.99:1 dark against WCAG AA text contrast's
+    /// 4.5:1 floor) and 0.65 (measured 4.74:1 light / 5.93:1 dark, clearing
+    /// AA) before Sean, looking at the real build, called 0.50 as a
+    /// deliberate contrast/legibility tradeoff for ghost-completion text —
+    /// his call as design authority, not an accessibility miss. **0.50 does
+    /// NOT meet WCAG AA** (measured ≈3.0:1 light mode; see
+    /// `ComposerDesignCallRenderTests`' evidence for the exact rendered
+    /// ratio). Same production symbol `ComposerQueryField.ghostPlaceholderOpacity`
+    /// pins, re-declared here (not shared) because this type has its own
+    /// AppKit color path (`NSColor`, not SwiftUI `Color`) and no common base
+    /// to hang a shared constant on without touching `ComposerQueryField`,
+    /// which is out of scope. Deliberately kept in lockstep with that
+    /// constant — this is model B (behind View → Experimental Composer
+    /// Field, default OFF); `ComposerQueryField` is model A, the shipping
+    /// default. If you change one, change the other.
+    static let ghostOpacity: CGFloat = 0.50
 
     /// DEFECT 3 fix (review round 2): a small fixed trailing pad added to
     /// `ghostInkSize`'s measured (advance-width) size — see
@@ -178,11 +188,11 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// the field's only alpha multiplier regardless of whether the
     /// rendering path would otherwise have honored `textColor`'s own alpha.
     /// This value still equals `labelColor.alphaComponent * ghostOpacity`
-    /// (0.4165) — it needs to, since the label's ink color is now clamped
-    /// opaque and this is the ONLY place `labelColor`'s 0.85 factor is
-    /// applied — but it is now the single, sole, deliberate source of the
-    /// composite alpha, not a coincidental match against a second hidden
-    /// one.
+    /// (0.4165 when `ghostOpacity` was 0.49; 0.425 at the current 0.50) —
+    /// it needs to, since the label's ink color is now clamped opaque and
+    /// this is the ONLY place `labelColor`'s 0.85 factor is applied — but
+    /// it is now the single, sole, deliberate source of the composite
+    /// alpha, not a coincidental match against a second hidden one.
     static var ghostAlpha: CGFloat {
         NSColor.labelColor.alphaComponent * ghostOpacity
     }
@@ -455,7 +465,13 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// instead of baking it into `textColor` (full-opacity
         /// `.labelColor`, correctly antialiased) fixes it — measured
         /// `rgb(151,151,151)` light against the shipping SwiftUI path's
-        /// own `rgb(149,149,149)`, within AA-rounding noise.
+        /// own `rgb(149,149,149)`, within AA-rounding noise. This doubling
+        /// was the historical bug this fix closed, not a description of
+        /// current behavior: `ghostAlpha` applies a single multiplication,
+        /// `labelColor.alphaComponent (0.85) × ghostOpacity`, with no
+        /// second composite anywhere in this path. At the current
+        /// `ghostOpacity` (0.50) the effective rendered alpha is
+        /// 0.85 × 0.50 ≈ 0.425.
         ///
         /// BLOCKER (review round 2): that match was against the WRONG
         /// mechanism — see `ghostAlpha`'s doc comment. `textColor` is now

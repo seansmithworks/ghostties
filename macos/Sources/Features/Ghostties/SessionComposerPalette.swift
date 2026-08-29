@@ -266,6 +266,31 @@ struct SessionComposerPalette: View {
         }
     }
 
+    /// Results well cap — render evidence showed `ScrollView` never reports
+    /// an intrinsic content height, so a bare `maxHeight` (even paired with
+    /// `.fixedSize(horizontal: false, vertical: true)`) behaves as a target
+    /// rather than a cap: a two-row list opened at (near) the full 440pt
+    /// well with dead space above AND below the rows, because the ScrollView
+    /// isn't built to hug — its `sizeThatFits` answers with its own
+    /// proposed/maximum height, not its content's. `ComposerResultsTable`
+    /// instead measures its content's real height via
+    /// `ComposerResultsHeightPreferenceKey` and sets the `ScrollView`'s own
+    /// `.frame(height:)` to `min(measured, maxHeight)` explicitly, so short
+    /// lists hug and long lists stop at this cap and scroll.
+    /// `.anchored` keeps its existing 220pt (sidebar popover — a 440pt well
+    /// does not belong there; whether `.anchored` should otherwise adopt
+    /// the `.centered` list treatment is a separate, unresolved question).
+    /// `.centered` raises to 440pt — roughly 14 rows at the centered row
+    /// metrics, between Sean's requested "400 or 500," and tall enough to
+    /// leave a partial row visible at the cut so a long list reads as
+    /// scrollable rather than truncated.
+    private var resultsWellMaxHeight: CGFloat {
+        switch request.presentation {
+        case .anchored: return 220
+        case .centered: return 440
+        }
+    }
+
     private var composerClipShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: cornerStyle)
     }
@@ -341,6 +366,16 @@ struct SessionComposerPalette: View {
         if let rootBranch = composerStore.currentBranchAtProjectRoot {
             names.append(rootBranch)
         }
+        // Bug fix: the parser's `knownBranchNames` used to only ever see
+        // branches that already have a worktree (plus the root branch) —
+        // every other branch in the repo fell through to the ad-hoc/thread
+        // free-text path regardless of the `>`-armed-branch fix above.
+        // `branchesWithoutWorktree` is the store's already-computed list of
+        // exactly those; appending it here is what makes a typed branch
+        // with no worktree yet resolve to `.branch(...)` (unresolved, or
+        // creatable — see `typedBranchCreateOffer` below) instead of
+        // silently becoming a shell command.
+        names.append(contentsOf: composerStore.branchesWithoutWorktree)
         return names
     }
 
@@ -399,6 +434,10 @@ struct SessionComposerPalette: View {
             if let rootBranch = composerStore.currentBranchAtProjectRoot {
                 names.append(rootBranch)
             }
+            // Bug fix: see `commandKnownBranchNames`'s matching comment
+            // above — the same gap exists here for the implied-project
+            // (no project literally typed) resolution path.
+            names.append(contentsOf: composerStore.branchesWithoutWorktree)
             return names
         }()
         return SessionComposerCommandParser.effectiveParse(
@@ -672,10 +711,32 @@ struct SessionComposerPalette: View {
     /// resolution line is still present after this step, so its deletion
     /// (Step 5) reverts independently.
     private var statusStripMessage: String? {
-        SessionComposerCommandParser.statusStripMessage(
+        // Decision 1: a typed branch with no worktree gets an offered row
+        // (`commandOptions`, below) rather than reading as a dead end — the
+        // plain "not found" message would contradict that offer, so it's
+        // suppressed whenever `typedBranchCreateOffer` applies. `writeError`
+        // still wins over either, matching `statusStripMessage`'s own
+        // priority.
+        if composerStore.writeError == nil, typedBranchCreateOffer != nil {
+            return nil
+        }
+        return SessionComposerCommandParser.statusStripMessage(
             writeError: composerStore.writeError,
             typedBranchResolution: typedBranchResolution
         )
+    }
+
+    /// Decision 1: the typed branch token, if it names a KNOWN branch that
+    /// simply has no worktree yet (`composerStore.branchesWithoutWorktree`)
+    /// — the case `commandOptions` offers a "Create worktree" row for
+    /// instead of `typedBranchResolution`'s plain `.unresolved` dead end.
+    /// `nil` for every other shape (nothing typed, already resolved, or
+    /// genuinely nonexistent).
+    private var typedBranchCreateOffer: String? {
+        guard case .unresolved(let token) = typedBranchResolution,
+              composerStore.branchesWithoutWorktree.contains(token)
+        else { return nil }
+        return token
     }
 
     /// The query field's binding (model A rebuild — replaces the deleted
@@ -725,11 +786,31 @@ struct SessionComposerPalette: View {
     /// project prefix, against an already-implied `currentProject`, still
     /// gets a Run row.
     private var commandOptions: [ComposerOption] {
+        var options: [ComposerOption] = []
+
+        // Decision 1: a typed branch that names a real branch with no
+        // worktree yet gets an offered row, not silent creation and not a
+        // dead-end error. Selecting it does NOT launch a session — it
+        // arms creation exactly like `inlineBranchPicker`'s own
+        // `onCreateWorktree` row does, leaving the composer open with the
+        // branch control reading "Creating…" until it resolves.
+        if let currentProject, let token = typedBranchCreateOffer {
+            options.append(
+                ComposerOption(
+                    id: SessionComposerCommandParser.createWorktreeRowId,
+                    title: "Create worktree for \"\(token)\"",
+                    subtitle: currentProject.name,
+                    leadingIcon: "arrow.triangle.branch",
+                    action: { composerStore.createWorktree(named: token, in: currentProject) }
+                )
+            )
+        }
+
         guard let currentProject,
               let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: effectiveCommandParse.remainderTokens)
-        else { return [] }
+        else { return options }
 
-        return [
+        options.append(
             ComposerOption(
                 id: SessionComposerCommandParser.runRowId,
                 title: "Run \"\(effectiveCommandParse.remainderText)\"",
@@ -737,7 +818,8 @@ struct SessionComposerPalette: View {
                 leadingIcon: "terminal",
                 action: { commit(template: template) }
             )
-        ]
+        )
+        return options
     }
 
     // MARK: - Options
@@ -1237,6 +1319,7 @@ struct SessionComposerPalette: View {
                 rowVerticalPadding: rowVerticalPadding,
                 rowHorizontalPadding: rowHorizontalPadding,
                 rowCornerRadius: rowCornerRadius,
+                maxHeight: resultsWellMaxHeight,
                 onEditTemplate: { newTemplateToEdit = $0 },
                 onDuplicateTemplate: { _ = store.duplicateTemplate(id: $0.id) },
                 onDuplicateAndEditTemplate: {
@@ -2175,10 +2258,23 @@ struct ComposerQueryField: View {
     var onEvent: ((KeyboardEvent) -> Void)?
     @FocusState private var isTextFieldFocused: Bool
 
-    /// `DESIGN.md` §4's ghost placeholder grey, `#1A1A1A7E` (0x7E/0xFF ≈
-    /// 0.49). A production symbol, not a re-declared literal, so a test can
-    /// pin it without drifting from the value actually rendered.
-    static let ghostPlaceholderOpacity: Double = 0.49
+    /// DESIGN.md §4's ghost placeholder grey went through `#1A1A1A7E`
+    /// (0x7E/0xFF ≈ 0.49, measured 2.99:1 light / 3.99:1 dark against WCAG
+    /// AA text contrast's 4.5:1 floor) and 0.65 (measured 4.74:1 light /
+    /// 5.93:1 dark, clearing AA) before Sean, looking at the real build,
+    /// called 0.50 as a deliberate contrast/legibility tradeoff for
+    /// ghost-completion text — his call as design authority, not an
+    /// accessibility miss. **0.50 does NOT meet WCAG AA** (measured ≈3.0:1
+    /// light mode; see `ComposerDesignCallRenderTests`' evidence for the
+    /// exact rendered ratio). This is the field users actually get (model
+    /// A, the shipping default — `ComposerGhostTextField` is model B,
+    /// behind View → Experimental Composer Field, default OFF).
+    /// Deliberately kept in lockstep with
+    /// `ComposerGhostTextField.ghostOpacity` so the two fields render the
+    /// same ghost — if you change one, change the other. A production
+    /// symbol, not a re-declared literal, so a test can pin it without
+    /// drifting from the value actually rendered.
+    static let ghostPlaceholderOpacity: Double = 0.50
 
     /// DEFECT 4 fix (Composer UI 11 review round 2): a named production
     /// symbol for the field's `.accessibilityLabel`, so
@@ -2355,6 +2451,17 @@ struct ComposerQueryField: View {
 /// `LazyVStack` never re-invokes `ForEach`'s content closure when an element
 /// changes but its `id` does not, which froze sidebar rows at first
 /// construction (PR #121).
+/// Reports the natural (unclamped) height of `ComposerResultsTable`'s
+/// content `VStack` up through its `.background(GeometryReader { ... })`
+/// probe — see `ComposerResultsTable.body`'s doc comment for why this
+/// replaced `.fixedSize(horizontal: false, vertical: true)`.
+private struct ComposerResultsHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 private struct ComposerResultsTable: View {
     var sections: [(accessibilityLabel: String, options: [ComposerOption])]
     var query: String
@@ -2365,6 +2472,12 @@ private struct ComposerResultsTable: View {
     var rowVerticalPadding: CGFloat
     var rowHorizontalPadding: CGFloat
     var rowCornerRadius: CGFloat
+    /// The results well's cap — `SessionComposerPalette.resultsWellMaxHeight`,
+    /// 220pt `.anchored` / 440pt `.centered`. `body` measures the content's
+    /// own height via `ComposerResultsHeightPreferenceKey` and clamps the
+    /// `ScrollView`'s explicit `.frame(height:)` to `min(measured, maxHeight)`
+    /// — see `body`'s doc comment for why a bare `maxHeight` cannot do this.
+    var maxHeight: CGFloat
     var onEditTemplate: (AgentTemplate) -> Void
     var onDuplicateTemplate: (AgentTemplate) -> Void
     var onDuplicateAndEditTemplate: (AgentTemplate) -> Void
@@ -2387,7 +2500,27 @@ private struct ComposerResultsTable: View {
         sections.flatMap { $0.options }
     }
 
+    /// Content's own unclamped height, read back via
+    /// `ComposerResultsHeightPreferenceKey` — see `body`'s doc comment.
+    @State private var measuredContentHeight: CGFloat = 0
+
     var body: some View {
+        // `ScrollView` has no intrinsic content size: `.fixedSize(horizontal:
+        // false, vertical: true)` on it (the previous approach) asks the
+        // ScrollView for its ideal height ignoring the proposal, but a
+        // ScrollView's `sizeThatFits` always answers with something close to
+        // ITS OWN proposed/maximum height, never its content's — it isn't
+        // built to hug. That's why a two-row list still opened at (near) the
+        // full 440pt cap with dead space both above AND below the rows: the
+        // content is top-anchored inside an oversized scroll container, and
+        // "dead space above too" was the tell that the CONTAINER was too
+        // tall, not that it failed to shrink around correctly-positioned
+        // content. Fix: measure the content `VStack`'s real height directly
+        // (`GeometryReader` in a `.background`, reported up through
+        // `ComposerResultsHeightPreferenceKey`) and set the `ScrollView`'s
+        // own `.frame(height:)` to `min(measured, maxHeight)` explicitly —
+        // an exact height, not a cap, so short lists hug and long lists stop
+        // at 440/220 and scroll.
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
@@ -2438,8 +2571,41 @@ private struct ComposerResultsTable: View {
                     }
                 }
                 .padding(8)
+                // `.overlay`, not `.background` (regression fix, second
+                // investigation): `.background(GeometryReader { ... })`
+                // proposes the CONTAINER's own incoming (often unconstrained)
+                // size to the background content rather than this VStack's
+                // own resolved size, so `geometry.size.height` here read 0 on
+                // every delivery — confirmed empirically (file-logged every
+                // `onPreferenceChange` call across the full render-evidence
+                // suite: always exactly 0.0, never once nonzero, across
+                // dozens of renders with real multi-row content). Because
+                // the height was always 0, `ComposerResultsTable.body`'s
+                // ternary below always took the `nil` branch — the
+                // `.frame(height:)` cap from `3512a500a` was NEVER applied,
+                // in this file's own tests or in production; the ScrollView
+                // stayed permanently unconstrained/greedy, filling whatever
+                // height its ambient parent chain offered (up to the full
+                // window height once routed through `SessionComposerOverlay`'s
+                // `.frame(maxWidth: .infinity, maxHeight: .infinity)` — the
+                // reported card-fills-window bug). `.overlay(GeometryReader
+                // { ... })` proposes THIS VStack's own resolved size to its
+                // content instead, and reports real values (verified: 93pt
+                // for a 2-row filtered list, 189pt for the reported 7-row
+                // case, 769pt for an unfiltered 25-template list — see
+                // `ComposerDesignCallRenderTests.cardFitReproducesOnCurrentCode`
+                // et al.).
+                .overlay(
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: ComposerResultsHeightPreferenceKey.self,
+                            value: geometry.size.height
+                        )
+                    }
+                )
             }
-            .frame(maxHeight: 220)
+            .onPreferenceChange(ComposerResultsHeightPreferenceKey.self) { measuredContentHeight = $0 }
+            .frame(height: measuredContentHeight > 0 ? min(measuredContentHeight, maxHeight) : nil)
             .onChange(of: selectedIndex) { _ in
                 guard let selectedIndex, selectedIndex < flattened.count else { return }
                 proxy.scrollTo(flattened[Int(selectedIndex)].id)
@@ -2535,7 +2701,7 @@ private struct ComposerRow: View {
             let attrStart = attributed.index(attributed.startIndex, offsetByCharacters: offset)
             let attrEnd = attributed.index(attrStart, offsetByCharacters: 1)
             attributed[attrStart..<attrEnd].font = .system(size: titleFontSize, weight: .bold)
-            attributed[attrStart..<attrEnd].foregroundColor = Color.accentColor
+            attributed[attrStart..<attrEnd].foregroundColor = WorkspaceLayout.composerSelectionAccent
         }
 
         return Text(attributed)
@@ -2578,7 +2744,7 @@ private struct ComposerRow: View {
             .contentShape(Rectangle())
             .background(
                 isSelected
-                    ? Color.accentColor.opacity(0.2)
+                    ? WorkspaceLayout.composerSelectionAccent.opacity(0.2)
                     : (hoveredID == option.id ? Color.secondary.opacity(0.2) : Color.clear)
             )
             .cornerRadius(cornerRadius)

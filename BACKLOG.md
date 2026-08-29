@@ -1,5 +1,46 @@
 # Ghostties — Backlog
 
+## 2026-08-27 — composer field: 4 design calls ruled, parser bug found, layout unverified
+
+Branch `feat/composer-ghost-and-well` @ `13011dffa`, 6 commits off `main` @ `89e6dfb94`, pushed.
+NOT merged, no PR. Suite 982 at `c9c166724`; not re-run since.
+
+Shipped and verified: ghost 0.50 both fields in lockstep (`5846251fd`, measured 3.07:1 light /
+4.05:1 dark — deliberately below AA, documented as such); brand accent `composerSelectionAccent`
+`#5B8DEF` (`def5e9cd4`); `>` now lands on the branch position (`c9c166724`) — Sean confirmed the
+"Create worktree for …" row appears and the worktree gets made.
+
+- [ ] **CARRIED — card fills window, WIP committed UNVERIFIED** (`13011dffa`). Root cause IS
+  found: `.background(GeometryReader)` proposes the container's incoming size, so height read
+  **0 on every delivery** — the `.frame(height:)` cap from `3512a500a` was NEVER applied, in
+  tests or production. `.overlay` reports real values (93pt/2 rows, 189pt/7, 769pt/25). Owed:
+  render evidence + snapshot retune + suite run. Agent was stopped mid-verification.
+- [ ] **CARRIED — snapshot harness cannot measure height.** `renderPNG`/`renderPNGWithExtraLayoutPass`
+  mount as `content.frame(width:height:)`, forcing the palette to fill. Every height claim taken
+  through it is measuring the harness. Fix before trusting any layout evidence.
+- [ ] **CARRIED — create-worktree stops after creating.** Enter creates the worktree, then: no
+  session launches, composer stays open, row stays on offer, second Enter surfaces raw
+  `fatal: ... already exists`. **Strawman:** create, then launch immediately using whatever
+  template/command is already in the field; if none, keep the composer open with the branch
+  resolved and the template list focused. Apply or redline — do not re-ask.
+- [ ] **CARRIED — composer placement should follow entry point.** `+ New Session` → popover
+  anchored below the button; `Cmd+T` → centered card. Sean's ruling; supersedes the old
+  "should `.anchored` have inherited the new list" question. Unstarted.
+- [ ] **CARRIED — model B typed-to-ghost gap** (~1.5-2pt). Never fixed, misdiagnosed twice
+  (side-bearing, then `firstRect` rounding). Sean re-reported it 2026-08-26. Model B is ON for
+  him (`ghostties.composerModelBField = 1`).
+- [ ] **NEW — automate what this session caught by hand.** Sean: "self verifying success."
+  Rule written to `agent-quality.md` § Self-Verifying Success. Order: (1) harness fix makes
+  layout assertable; (2) invariant tests over the real branch list — his 95% idiom is
+  `repo cco -n "thread name"` / `repo ccp`, so **`-n` must stay cco's flag, never claimed by the
+  composer**; (3) extract `rowsToOffer(state)` out of the View body so composer rules are
+  testable at all; (4) move parser/resolution logic into GhosttiesCore — CI runs
+  `build-for-testing` only, so the 982 app-hosted tests **never execute in CI**.
+- [ ] **DECIDE — merge or PR.** 6 commits unreviewed on origin. Recommendation: merge the parser
+  + ghost + accent work, hold the two well commits until `13011dffa` is verified.
+- [ ] **beta.24 still HELD.** Nothing tagged. Slice B ships in it regardless.
+
+
 Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
