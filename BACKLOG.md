@@ -1390,6 +1390,51 @@ Sean hit this testing a real build: **can't paste into the URL bar, and none of 
 
 ### Open
 
+- [ ] **Token game — pixel-art neon glow is UNVERIFIED on `feat/web-ghost-cascade`.**
+  *carried 2026-08-29.* Branch: `18dea71d4` (geometry fix, fully verified) → `a773fd6c1`
+  (ghost-cast cascade, verified) → WIP commit (glow pass, **NOT verified — agent killed
+  mid-verification**). Sean rejected `a773fd6c1`'s look: *"I don't want a flat matt ribbon.
+  I want pixel art neon glow."* Density stays **maximal** (his call).
+  - Technique briefed: trail = discrete grid-snapped pixel blocks matched to the sprite
+    pixel scale, `imageSmoothingEnabled = false`; glow = a **second stacked canvas** with a
+    CSS `filter: blur()` + `plus-lighter`, NOT canvas `shadowBlur` (pathologically slow) and
+    NOT a wider translucent stroke (that is what produced the flat ribbon).
+  - **Why the last round passed while looking wrong:** the acceptance criterion was "distinct
+    hues survive" (734 hue buckets), which a flat matte ribbon passes. Glow must be tested by
+    sampling **perpendicular** to a trail — luminance falling off gradually over ~8px, not
+    cliff-edging to black in 1-2px.
+  - Also fixed in the WIP: sprite stamped at every frame position produced a serrated
+    caterpillar edge. Sprite goes at the **head only**.
+  - Must not regress: both resize guards, the viewport→canvas spawn scaling, no
+    `style.width`/`.height` on the canvas, `clearCascade()` clearing **both** canvases.
+  | design | carried
+
+- [ ] **Round 4 review of the whole cascade stack — never run.** *carried 2026-08-29.*
+  Covers `18dea71d4` + `a773fd6c1` + the glow WIP together; they touch the same functions,
+  so reviewing them separately wastes a pass. Non-optional: this repo is seven-for-seven on
+  fix commits introducing the next round's defect, and the glow work rewires the coordinate
+  space the whole cascade draws in. | quality | carried
+
+
+- [ ] **Token game — full-screen focus mode.** Sean's direction 2026-08-29, verbatim:
+  *"the snake game should be a full screen game, lets fade/blue out the content to
+  'focus' on the game."* Today the game is inline in a page section. Wanted: on INSERT
+  COIN it takes over the viewport and the page content behind it fades/blurs out.
+  Queued behind `feat/web-ghost-cascade` — both touch `snake.js` + `v3.css`, so they
+  ship sequentially, never in parallel.
+  - **Use a fixed-position overlay, NOT the browser Fullscreen API.** Fullscreen hijacks
+    Escape to exit, which would break the game's own Escape-to-exit, and it prompts.
+  - **Blur trap:** `filter`/`backdrop-filter` on an ancestor creates a containing block,
+    which breaks `position: fixed` on descendants. The cascade canvas is `position: fixed`
+    on `<body>` at `z-index: 999` — blur the page content, never an ancestor of the canvas,
+    or the win cascade will mis-position.
+  - **DECIDE — does the field grow?** `computeCols()` returns 10/16/22 by width and `ROWS`
+    is fixed at 5. Strawman: keep the 5-row strip, scale it up and centre it on the blurred
+    page (arcade-cabinet read). Growing rows re-opens every gameplay tuning question —
+    hazard density, 40-token target, speed — all of which round 3 verified against a strip.
+  | design | needs-Sean
+
+
 - [ ] **Token game — review round 3 never completed.** `feat/web-snake-game` @ `e26a85af5`
   (20 commits, pushed, NOT merged). Rounds 1 and 2 are closed: round 1 found 4 blockers +
   6 should-fix, all fixed; round 2 re-reviewed those fix commits and found 0 blockers +
