@@ -701,6 +701,23 @@ button.cab-btn {
   display: block;
 }
 
+/* Glow layer for the cascade trail: a second full-viewport canvas
+   painted with the same grid-snapped blocks in the ghost's dimmer
+   "glow" color, stacked directly behind the crisp core canvas (DOM
+   order puts it first, so it paints underneath at the shared
+   z-index). filter:blur() is a compositor-only cost the browser
+   already pays for free -- far cheaper than canvas shadowBlur at 40
+   pieces/60fps, and unlike a wider stroke it actually produces a
+   soft halo bleeding into the black. plus-lighter is a true additive
+   blend, so overlapping trails brighten where they cross instead of
+   painting over each other. Safe to filter this element directly:
+   the containing-block trap only bites position:fixed descendants,
+   and a canvas has none. */
+.snake-cascade-glow {
+  filter: blur(9px);
+  mix-blend-mode: plus-lighter;
+}
+
 .snake-sound {
   position: absolute;
   top: 10px;

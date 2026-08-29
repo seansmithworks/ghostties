@@ -189,8 +189,15 @@
       });
     });
 
-    var cascadeCanvas = document.createElement("canvas");
-    cascadeCanvas.className = "snake-cascade";
+    // Glow is a blurred duplicate layer, not a wider stroke — two
+    // stacked canvases, both fixed to the viewport with identical
+    // geometry. The back layer is CSS-blurred (browser compositor, ~
+    // free) and additively blended for the bloom; the front layer is
+    // crisp and sits on top for the pixel-art core. DOM order (glow
+    // appended first) is what puts the core on top -- both share the
+    // same z-index, so paint order follows document order.
+    var cascadeGlowCanvas = document.createElement("canvas");
+    cascadeGlowCanvas.className = "snake-cascade snake-cascade-glow";
     // Appended to <body>, not frameEl: the cascade escapes the game's
     // box and covers the page (see winGame()/B2), so it is fixed to
     // the viewport, not the field. Box is stretched to the viewport by
@@ -198,8 +205,15 @@
     // positions the box, percentages are what stretch a replaced
     // element). Bitmap is sized separately in sizeCascadeCanvas()
     // below.
+    document.body.appendChild(cascadeGlowCanvas);
+    var cascadeGlowCtx = cascadeGlowCanvas.getContext("2d");
+    if (cascadeGlowCtx) cascadeGlowCtx.imageSmoothingEnabled = false;
+
+    var cascadeCanvas = document.createElement("canvas");
+    cascadeCanvas.className = "snake-cascade snake-cascade-core";
     document.body.appendChild(cascadeCanvas);
     var cascadeCtx = cascadeCanvas.getContext("2d");
+    if (cascadeCtx) cascadeCtx.imageSmoothingEnabled = false;
 
     mount.appendChild(frameEl);
 
@@ -260,6 +274,12 @@
       cascadeCanvas.width = Math.round(cascadeW * dpr);
       cascadeCanvas.height = Math.round(cascadeH * dpr);
       if (cascadeCtx) cascadeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Glow layer shares the exact same bitmap geometry so the two
+      // canvases stay pixel-aligned — any mismatch would show as the
+      // bloom drifting off the core it's supposed to be haloing.
+      cascadeGlowCanvas.width = Math.round(cascadeW * dpr);
+      cascadeGlowCanvas.height = Math.round(cascadeH * dpr);
+      if (cascadeGlowCtx) cascadeGlowCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
     function px(c) {
@@ -684,6 +704,15 @@
     var GRAVITY = 0.32;
     var RESTITUTION = 0.62;
 
+    // Trail block size, in CSS px (pre-DPR — the canvas is already
+    // scaled by devicePixelRatio via setTransform). Same pixel-art
+    // vocabulary as the ghost sprites and the rest of the page: a
+    // clean multiple of the sprite's own raw rasterization unit
+    // (CASCADE_SPRITE_PX below), chunky enough to read as discrete
+    // blocks next to the 12x12 sprites rather than dissolving into a
+    // smooth line.
+    var CASCADE_BLOCK_PX = 4;
+
     // Dark recess color for the sprite's eye cells — matches EYE_COLOR
     // in ghost-field.js. Not exposed on ghostMeta() (it's a page-wide
     // constant, not per-ghost data), so it's repeated here rather than
@@ -766,7 +795,16 @@
       if (cascadeCtx) {
         cascadeCtx.clearRect(0, 0, cascadeCanvas.width, cascadeCanvas.height);
       }
+      if (cascadeGlowCtx) {
+        cascadeGlowCtx.clearRect(
+          0,
+          0,
+          cascadeGlowCanvas.width,
+          cascadeGlowCanvas.height,
+        );
+      }
       cascadeCanvas.classList.remove("go");
+      cascadeGlowCanvas.classList.remove("go");
     }
 
     function launchCascadePiece(delayMs, ghost) {
@@ -803,8 +841,30 @@
           vrot: 0,
           ghost: ghost,
           settled: false,
+          spriteDrawn: false,
         });
       }, delayMs);
+    }
+
+    // Stamps grid-snapped square blocks along a segment (not a
+    // continuous stroke — a wide translucent line under a narrow
+    // opaque one still reads as a fatter line, not light). Walks the
+    // segment in block-sized steps so a fast-moving piece doesn't
+    // leave gaps between stamps.
+    function stampTrailBlocks(ctx, x0, y0, x1, y1, block, color, alpha) {
+      var dx = x1 - x0,
+        dy = y1 - y0;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      var steps = Math.max(1, Math.ceil(dist / (block * 0.6)));
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      for (var s = 0; s <= steps; s++) {
+        var tt = s / steps;
+        var gx = Math.floor((x0 + dx * tt) / block) * block;
+        var gy = Math.floor((y0 + dy * tt) / block) * block;
+        ctx.fillRect(gx, gy, block, block);
+      }
+      ctx.globalAlpha = 1;
     }
 
     function tickCascade() {
@@ -843,55 +903,68 @@
         // Fallback if the roster wasn't ready when the piece launched —
         // ghost-field.js loads before this file, so this should never
         // fire in practice, but a piece shouldn't crash the loop.
-        var g = p.ghost || { color: "#00e5ff", rgb: "0,229,255", sprite: null };
+        var g = p.ghost || {
+          color: "#00e5ff",
+          rgb: "0,229,255",
+          glow: "#00e5ff",
+          sprite: null,
+        };
 
-        // Neon trail, cheap version (no shadowBlur — pathologically
-        // slow at 40 pieces/60fps). Two strokes: a wide low-alpha bloom
-        // pass in the ghost's glow color using additive ("lighter")
-        // blending, so overlapping trails light up where they cross,
-        // then a narrow full-alpha core pass in the ghost's true color
-        // on normal ("source-over") blending. The core pass is what
-        // keeps each ribbon reading as its own hue — the canvas is
-        // never cleared (accumulating trail is the intended effect), so
-        // if the bloom pass were also full-alpha/additive across 40
-        // pieces it would blow every intersection out to white by the
-        // time the pieces settle. Capping bloom alpha low and confining
-        // "lighter" to that one pass is what keeps the settled frame
-        // reading as distinct ribbons instead of a white smear.
-        cascadeCtx.lineCap = "round";
+        // Pixel-art neon: two accumulating canvases (see DOM scaffold),
+        // both painted with grid-snapped blocks instead of a stroke.
+        // The back (glow) canvas is CSS-blurred + additively blended —
+        // the browser's compositor does the blur for free, which is
+        // what actually makes light bleed into the black; canvas
+        // shadowBlur would be far too slow at 40 pieces/60fps and a
+        // wider stroke alone never reads as glow. The front (core)
+        // canvas is crisp, full-alpha, on top.
+        stampTrailBlocks(
+          cascadeGlowCtx,
+          p.px,
+          p.py,
+          p.x,
+          p.y,
+          CASCADE_BLOCK_PX,
+          g.glow,
+          0.85,
+        );
+        stampTrailBlocks(
+          cascadeCtx,
+          p.px,
+          p.py,
+          p.x,
+          p.y,
+          CASCADE_BLOCK_PX,
+          g.color,
+          1,
+        );
 
-        cascadeCtx.globalCompositeOperation = "lighter";
-        cascadeCtx.strokeStyle = "rgba(" + g.rgb + ",0.16)";
-        cascadeCtx.lineWidth = p.size * 2.6;
-        cascadeCtx.beginPath();
-        cascadeCtx.moveTo(p.px, p.py);
-        cascadeCtx.lineTo(p.x, p.y);
-        cascadeCtx.stroke();
+        // Near-white hot pixel at the current head only, low alpha —
+        // real neon has a white-hot centre, but stamping it every
+        // frame at full strength across 40 overlapping trails would
+        // blow the settled frame out to white.
+        var hgx = Math.floor(p.x / CASCADE_BLOCK_PX) * CASCADE_BLOCK_PX;
+        var hgy = Math.floor(p.y / CASCADE_BLOCK_PX) * CASCADE_BLOCK_PX;
+        cascadeCtx.globalAlpha = 0.4;
+        cascadeCtx.fillStyle = "#ffffff";
+        cascadeCtx.fillRect(
+          hgx + CASCADE_BLOCK_PX * 0.25,
+          hgy + CASCADE_BLOCK_PX * 0.25,
+          CASCADE_BLOCK_PX * 0.5,
+          CASCADE_BLOCK_PX * 0.5,
+        );
+        cascadeCtx.globalAlpha = 1;
 
-        cascadeCtx.globalCompositeOperation = "source-over";
-        cascadeCtx.strokeStyle = g.color;
-        cascadeCtx.lineWidth = p.size * 0.85;
-        cascadeCtx.beginPath();
-        cascadeCtx.moveTo(p.px, p.py);
-        cascadeCtx.lineTo(p.x, p.y);
-        cascadeCtx.stroke();
-
-        // Thin near-white core, source-over (not additive) — a hot
-        // filament down the middle of the ribbon without contributing
-        // to the saturation buildup.
-        cascadeCtx.strokeStyle = "rgba(255,255,255,0.4)";
-        cascadeCtx.lineWidth = Math.max(1, p.size * 0.28);
-        cascadeCtx.beginPath();
-        cascadeCtx.moveTo(p.px, p.py);
-        cascadeCtx.lineTo(p.x, p.y);
-        cascadeCtx.stroke();
-
-        // Restore before the sprite draw and before the next piece's
-        // bloom pass reads the wrong blend mode.
-        cascadeCtx.globalCompositeOperation = "source-over";
-
-        // Ghost sprite rides the head of its own trail.
-        if (g.sprite) {
+        // Ghost sprite rides the head — drawn exactly once, on the
+        // frame the piece settles, onto the crisp core canvas.
+        // Drawing it every frame (the previous behavior) stamped a
+        // sprite at every intermediate position along the fall since
+        // the canvas is never cleared, which is what produced the
+        // stippled "caterpillar" trail edge. A single stamp at rest is
+        // what "sprite at the head" means once the trail itself is a
+        // permanent accumulation.
+        if (p.settled && !p.spriteDrawn && g.sprite) {
+          p.spriteDrawn = true;
           var spriteSize = 12 + p.size;
           cascadeCtx.save();
           cascadeCtx.translate(p.x, p.y);
@@ -924,6 +997,7 @@
       snapHead();
       sfx("win");
       cascadeCanvas.classList.add("go");
+      cascadeGlowCanvas.classList.add("go");
       cascadeRunning = true;
       cascadePieces = [];
       announce(
