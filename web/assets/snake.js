@@ -672,13 +672,89 @@
       }
     }
 
-    // --- confetti-solitaire cascade --------------------------------------
+    // --- ghost-cast cascade -------------------------------------------
+    // Win celebration is the ghost roster itself: each of the nine
+    // ghosts erupts from the context meter trailing a neon ribbon in its
+    // own color. Sprites come from ghost-field.js's GHOSTS_DATA (single
+    // source of truth for the robot art — see the ghostMeta() contract
+    // there) so this file never keeps its own copy of the roster.
     var cascadePieces = [];
     var cascadeRunning = false;
     var cascadeRaf = null;
-    var CASCADE_COLORS = ["#ffd54f", "#00e5ff", "#7c4dff", "#7ce9f7", "#b39cff"];
     var GRAVITY = 0.32;
     var RESTITUTION = 0.62;
+
+    // Dark recess color for the sprite's eye cells — matches EYE_COLOR
+    // in ghost-field.js. Not exposed on ghostMeta() (it's a page-wide
+    // constant, not per-ghost data), so it's repeated here rather than
+    // widening that accessor for two hex values.
+    var CASCADE_EYE_COLOR = "#0d0b12";
+    var CASCADE_SPRITE_PX = 3; // raw px per grid cell when rasterized
+
+    // Ghost metadata + a prerasterized sprite per ghost, built once on
+    // first win rather than per piece/frame. Rasterizing the 12x12 grid
+    // to an offscreen canvas up front (route: draw the pixel grid, not
+    // the SVG) keeps the per-frame cost to a single drawImage per piece
+    // instead of ~144 fillRect calls x 40 pieces x 60fps, which is the
+    // same "don't pay this every frame" reasoning that rules out
+    // shadowBlur for the trail glow below.
+    var CASCADE_GHOSTS = null;
+
+    function buildCascadeGhosts() {
+      if (CASCADE_GHOSTS) return CASCADE_GHOSTS;
+      if (!window.GXField || !window.GXField.ghostMeta) return [];
+      var count = window.GXField.ghostCount ? window.GXField.ghostCount() : 0;
+      var list = [];
+      for (var i = 0; i < count; i++) {
+        var meta = window.GXField.ghostMeta(i);
+        if (!meta || !meta.pixels) continue;
+        list.push({
+          name: meta.name,
+          color: meta.color,
+          rgb: meta.rgb,
+          glow: meta.glow,
+          sprite: rasterizeGhostSprite(meta),
+        });
+      }
+      CASCADE_GHOSTS = list;
+      return CASCADE_GHOSTS;
+    }
+
+    function rasterizeGhostSprite(meta) {
+      var rows = meta.pixels.length;
+      var cols = meta.pixels[0].length;
+      var off = document.createElement("canvas");
+      off.width = cols * CASCADE_SPRITE_PX;
+      off.height = rows * CASCADE_SPRITE_PX;
+      var octx = off.getContext("2d");
+      octx.fillStyle = meta.color;
+      for (var r = 0; r < rows; r++) {
+        var row = meta.pixels[r];
+        for (var c = 0; c < cols; c++) {
+          if (row[c] !== "X") continue;
+          octx.fillRect(
+            c * CASCADE_SPRITE_PX,
+            r * CASCADE_SPRITE_PX,
+            CASCADE_SPRITE_PX,
+            CASCADE_SPRITE_PX,
+          );
+        }
+      }
+      octx.fillStyle = CASCADE_EYE_COLOR;
+      for (var r2 = 0; r2 < rows; r2++) {
+        var row2 = meta.pixels[r2];
+        for (var c2 = 0; c2 < cols; c2++) {
+          if (row2[c2] !== "e") continue;
+          octx.fillRect(
+            c2 * CASCADE_SPRITE_PX,
+            r2 * CASCADE_SPRITE_PX,
+            CASCADE_SPRITE_PX,
+            CASCADE_SPRITE_PX,
+          );
+        }
+      }
+      return off;
+    }
 
     function clearCascade() {
       cascadeRunning = false;
@@ -693,7 +769,7 @@
       cascadeCanvas.classList.remove("go");
     }
 
-    function launchCascadePiece(delayMs) {
+    function launchCascadePiece(delayMs, ghost) {
       setTimeout(function () {
         if (mode !== "win") return;
         // Cascade canvas is fixed to the viewport, so the meter's own
@@ -723,7 +799,9 @@
           vx: spread / 46,
           vy: -6 - Math.random() * 9,
           size: 4 + Math.random() * 3,
-          color: CASCADE_COLORS[Math.floor(Math.random() * CASCADE_COLORS.length)],
+          rot: (Math.random() - 0.5) * Math.PI,
+          vrot: 0,
+          ghost: ghost,
           settled: false,
         });
       }, delayMs);
@@ -742,6 +820,11 @@
         p.py = p.y;
         p.x += p.vx;
         p.y += p.vy;
+        // Gentle tumble while airborne, tied to horizontal speed so it
+        // reads as motion rather than a random spin — settles to a
+        // stop with the piece.
+        p.vrot = p.vx * 0.02;
+        p.rot += p.vrot;
         if (p.x < 0) {
           p.x = 0;
           p.vx *= -RESTITUTION;
@@ -756,18 +839,72 @@
           p.vx *= 0.85; // floor friction
           if (Math.abs(p.vy) < 0.6) p.settled = true;
         }
-        // Stroke a segment from the last frame's position to this
-        // one, not a single dot at the new position — per-frame vy
-        // can exceed piece size, so a dot-per-frame renders as a
-        // dotted smear instead of the solid overlapping arcs the
-        // Solitaire cascade reads as (B2).
-        cascadeCtx.strokeStyle = p.color;
-        cascadeCtx.lineWidth = p.size;
+
+        // Fallback if the roster wasn't ready when the piece launched —
+        // ghost-field.js loads before this file, so this should never
+        // fire in practice, but a piece shouldn't crash the loop.
+        var g = p.ghost || { color: "#00e5ff", rgb: "0,229,255", sprite: null };
+
+        // Neon trail, cheap version (no shadowBlur — pathologically
+        // slow at 40 pieces/60fps). Two strokes: a wide low-alpha bloom
+        // pass in the ghost's glow color using additive ("lighter")
+        // blending, so overlapping trails light up where they cross,
+        // then a narrow full-alpha core pass in the ghost's true color
+        // on normal ("source-over") blending. The core pass is what
+        // keeps each ribbon reading as its own hue — the canvas is
+        // never cleared (accumulating trail is the intended effect), so
+        // if the bloom pass were also full-alpha/additive across 40
+        // pieces it would blow every intersection out to white by the
+        // time the pieces settle. Capping bloom alpha low and confining
+        // "lighter" to that one pass is what keeps the settled frame
+        // reading as distinct ribbons instead of a white smear.
         cascadeCtx.lineCap = "round";
+
+        cascadeCtx.globalCompositeOperation = "lighter";
+        cascadeCtx.strokeStyle = "rgba(" + g.rgb + ",0.16)";
+        cascadeCtx.lineWidth = p.size * 2.6;
         cascadeCtx.beginPath();
         cascadeCtx.moveTo(p.px, p.py);
         cascadeCtx.lineTo(p.x, p.y);
         cascadeCtx.stroke();
+
+        cascadeCtx.globalCompositeOperation = "source-over";
+        cascadeCtx.strokeStyle = g.color;
+        cascadeCtx.lineWidth = p.size * 0.85;
+        cascadeCtx.beginPath();
+        cascadeCtx.moveTo(p.px, p.py);
+        cascadeCtx.lineTo(p.x, p.y);
+        cascadeCtx.stroke();
+
+        // Thin near-white core, source-over (not additive) — a hot
+        // filament down the middle of the ribbon without contributing
+        // to the saturation buildup.
+        cascadeCtx.strokeStyle = "rgba(255,255,255,0.4)";
+        cascadeCtx.lineWidth = Math.max(1, p.size * 0.28);
+        cascadeCtx.beginPath();
+        cascadeCtx.moveTo(p.px, p.py);
+        cascadeCtx.lineTo(p.x, p.y);
+        cascadeCtx.stroke();
+
+        // Restore before the sprite draw and before the next piece's
+        // bloom pass reads the wrong blend mode.
+        cascadeCtx.globalCompositeOperation = "source-over";
+
+        // Ghost sprite rides the head of its own trail.
+        if (g.sprite) {
+          var spriteSize = 12 + p.size;
+          cascadeCtx.save();
+          cascadeCtx.translate(p.x, p.y);
+          cascadeCtx.rotate(p.rot);
+          cascadeCtx.drawImage(
+            g.sprite,
+            -spriteSize / 2,
+            -spriteSize / 2,
+            spriteSize,
+            spriteSize,
+          );
+          cascadeCtx.restore();
+        }
       });
       // Trail is never cleared — the screen fills up. Keep animating as
       // long as anything is still moving.
@@ -790,11 +927,15 @@
       cascadeRunning = true;
       cascadePieces = [];
       announce(
-        "Context window full. " + TARGET_TOKENS + " tokens collected. Press Escape to exit.",
+        "Context window full. " +
+          TARGET_TOKENS +
+          " tokens collected. Press Escape to exit.",
       );
       sizeCascadeCanvas();
+      var ghosts = buildCascadeGhosts();
       for (var i = 0; i < TARGET_TOKENS; i++) {
-        launchCascadePiece(i * 40);
+        var ghost = ghosts.length ? ghosts[i % ghosts.length] : null;
+        launchCascadePiece(i * 40, ghost);
       }
       cascadeRaf = requestAnimationFrame(tickCascade);
     }

@@ -848,6 +848,20 @@
           if (!g) return "";
           return buildSVG(g, opts && opts.level);
         },
+        // Additive — raw sprite data for canvas-drawn ghosts (the token-
+        // game win cascade). Returns the same GHOSTS_DATA record snake.js
+        // needs (name/color/rgb/glow/pixels) without copying the roster.
+        ghostMeta: function (i) {
+          var g = GHOSTS_DATA[i];
+          if (!g) return null;
+          return {
+            name: g.name,
+            color: g.color,
+            rgb: g.rgb,
+            glow: g.glow,
+            pixels: g.pixels,
+          };
+        },
         buildCoinSVG: buildCoinSVG,
       };
       return;
@@ -1804,6 +1818,20 @@
         var g = GHOSTS_DATA[i];
         if (!g) return "";
         return buildSVG(g, opts && opts.level);
+      },
+      // Additive — raw sprite data for canvas-drawn ghosts (the token-
+      // game win cascade). Returns the same GHOSTS_DATA record snake.js
+      // needs (name/color/rgb/glow/pixels) without copying the roster.
+      ghostMeta: function (i) {
+        var g = GHOSTS_DATA[i];
+        if (!g) return null;
+        return {
+          name: g.name,
+          color: g.color,
+          rgb: g.rgb,
+          glow: g.glow,
+          pixels: g.pixels,
+        };
       },
       buildCoinSVG: buildCoinSVG,
     };
