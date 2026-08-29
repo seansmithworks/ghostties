@@ -98,18 +98,22 @@ struct SessionComposerWorktreeLaunchTests {
     /// against, not a round number picked for comfort.
     private static let createWorktreeCompletionTimeout: TimeInterval = 12
 
-    /// The setup poll that waits on a PLAIN `refreshWorktrees(for:projectId:)`
-    /// call (not `createWorktree`) needs its OWN, separately-derived budget
-    /// — `refreshWorktrees` races its own 2-second deadline
+    /// Any wait bounded by `refreshWorktrees(for:projectId:)`'s own
+    /// worst-case latency — not just the plain setup poll it was first
+    /// written for, but also the post-creation poll further down that waits
+    /// on the SAME call's retry landing (`refreshWorktrees` is invoked
+    /// internally there too, just not directly by the test) — needs its
+    /// OWN, separately-derived budget from `createWorktreeCompletionTimeout`
+    /// above, which is timed against a different, longer-running call
+    /// (`createWorktree`'s 10s git-shell-out ceiling). `refreshWorktrees`
+    /// races its own 2-second deadline
     /// (`Store.swift`'s `raceAny(listTask, timeoutSeconds: 2)`) and, on a
     /// timeout, self-schedules exactly ONE retry after ANOTHER 2-second
     /// sleep, whose own race can itself take up to 2 more seconds:
     /// worst-case observable latency is 2 (first race) + 2 (retry sleep) +
     /// 2 (retry's own race) = 6 seconds. `8`, the same +2s margin style
     /// `createWorktreeCompletionTimeout` uses over ITS ceiling, applied to
-    /// this call's 6s worst case instead of `createWorktree`'s 10s one —
-    /// not `createWorktreeCompletionTimeout` itself, which is timed against
-    /// a different, longer-running call.
+    /// this call's 6s worst case instead of `createWorktree`'s 10s one.
     private static let refreshWorktreesSetupTimeout: TimeInterval = 8
 
     // MARK: - 1. onSuccess fires exactly once, with the new worktree's path
@@ -166,7 +170,8 @@ struct SessionComposerWorktreeLaunchTests {
         let userPick = "/tmp/some-other-worktree-the-user-clicked"
         let expectedPath = (repo as NSString).appendingPathComponent(".claude/worktrees/\(branchName)")
 
-        store.createWorktree(named: branchName, in: project)
+        var successPath: String?
+        store.createWorktree(named: branchName, in: project) { successPath = $0 }
         store.selectedWorktreePath = userPick
 
         await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
@@ -175,9 +180,17 @@ struct SessionComposerWorktreeLaunchTests {
         // without this, the assertion below also holds if creation failed or
         // timed out (both branches are guarded by the same `selectionAtStart`
         // check and produce identical state), so it would go green without
-        // ever exercising the success branch it claims to guard.
+        // ever exercising the success branch it claims to guard. Observing
+        // `successPath` directly (rather than inferring success from
+        // `writeError == nil` alone) closes the guarded-early-return gap:
+        // `SessionComposerStore.swift`'s stale-token guards at :1163/:1200
+        // return without writing `writeError`, so `writeError == nil` alone
+        // cannot distinguish "succeeded" from "silently discarded as stale"
+        // — `onSuccess?(path)` at :1206 only fires on the real success path,
+        // strictly after the guarded `selectedWorktreePath` write at
+        // :1201-1203, so observing it can't perturb the assertion below.
         #expect(store.writeError == nil)
-        #expect(FileManager.default.fileExists(atPath: expectedPath), "the worktree must actually exist on disk for this to be a real success case")
+        #expect(successPath == expectedPath, "onSuccess must fire with the new worktree's path on the real success path")
 
         #expect(store.selectedWorktreePath == userPick, "a deliberate mid-flight pick must survive a successful creation, not be clobbered by the new worktree's path")
     }
@@ -264,8 +277,19 @@ struct SessionComposerWorktreeLaunchTests {
         // production (correctly — it caused a worse bug), which leaves this
         // assertion depending entirely on the post-creation `refreshWorktrees`
         // beating its hardcoded 2s race. Poll it like the setup poll above
-        // rather than reading state once — a single synchronous read can
-        // observe the stale pre-refresh list under suite contention.
+        // rather than reading state once. This is NOT racing the success
+        // branch's own ordering — `await refreshWorktrees(...)` at
+        // `SessionComposerStore.swift:1192` already completes before
+        // `isCreatingWorktree = false` at `:1204`, and both the store's Task
+        // and this @MainActor test body run on the main actor, so a single
+        // read after `!isCreatingWorktree` can never observe the stale
+        // pre-refresh list from THAT call. What the poll actually covers:
+        // `refreshWorktrees` can lose its own internal
+        // `raceAny(listTask, timeoutSeconds: 2)` (`:348`), leaving
+        // `branchesWithoutWorktree` untouched and self-scheduling exactly
+        // one retry after a 2s sleep (`:389-394`) — this poll's window is
+        // what catches that retry landing after `isCreatingWorktree` already
+        // flipped false.
         await Self.waitUntil(timeout: Self.refreshWorktreesSetupTimeout) { !store.branchesWithoutWorktree.contains(branchName) }
 
         #expect(!store.branchesWithoutWorktree.contains(branchName), "the branch must stop offering a create row once the worktree exists")
@@ -621,14 +645,42 @@ struct SessionComposerWorktreeLaunchTests {
     ///
     /// Mutation: swap the static func's `templates:` argument back to the
     /// unscoped `store.templates` superset (the pre-round-3 bug) and this
-    /// goes red — `result?.id` resolves to project B's "cco", not `nil`.
+    /// goes red — `result?.id` resolves to project B's "cco".
+    ///
+    /// Finding 1 (review round 5): the original version of this test only
+    /// asserted the negative half of scoping (`id != crossProjectCco.id`)
+    /// against `WorkspaceStore(testingProjects:testingSessions:)`'s SEEDED
+    /// global templates (Shell / Claude Code / Codex / Orchestrator /
+    /// Browser — all `isGlobal: true`, none named "cco"). Against that
+    /// fixture, project A's correctly-scoped list and an EMPTY list are
+    /// behaviorally identical for the token "cco": both fall through to the
+    /// ad-hoc path, both produce `command == "cco"`, both preserve the
+    /// flags, and neither can equal `crossProjectCco.id`. Mutating
+    /// production to `templates: []` (dropping the project argument
+    /// entirely) passed every assertion here. A project-A-scoped "cco"
+    /// template closes that gap: now the correct list must resolve to IT,
+    /// not fall through — discriminating "scoped correctly" from "scoped to
+    /// nothing" and from "scoped to everything" (project B's "cco" would win
+    /// `first(where:)` on insertion order if the raw superset were passed).
     @Test func staticWorktreeCreationLaunchTemplateNeverResolvesAnotherProjectsTemplate() {
         let projectA = Project(name: "project-a", rootPath: "/tmp/project-a")
         let projectB = Project(name: "project-b", rootPath: "/tmp/project-b")
         let workspaceStore = WorkspaceStore(testingProjects: [projectA, projectB], testingSessions: [])
 
+        // Cross-project template inserted FIRST so an unscoped `store.templates`
+        // superset's `first(where:)` would land on IT before project A's own
+        // "cco" — insertion order alone must not be what makes this test
+        // pass; only correct scoping can. Named "CCO" (not "cco") so
+        // `WorkspaceStore.addTemplate`'s exact-string dedupe (`uniqueName`,
+        // case-SENSITIVE) doesn't rename it out from under
+        // `matchesTemplate`'s case-INSENSITIVE lookup — both names must
+        // still match the typed token "cco" identically, just not collide
+        // in the store's own bookkeeping.
         let crossProjectCco = workspaceStore.addTemplate(
-            AgentTemplate(name: "cco", kind: .custom, command: "some-other-binary", isGlobal: false, projectId: projectB.id)
+            AgentTemplate(name: "CCO", kind: .custom, command: "some-other-binary", isGlobal: false, projectId: projectB.id)
+        )
+        let projectACco = workspaceStore.addTemplate(
+            AgentTemplate(name: "cco", kind: .custom, command: "cco", isGlobal: false, projectId: projectA.id)
         )
 
         let parse = SessionComposerCommandParser.ParseResult(
@@ -642,9 +694,25 @@ struct SessionComposerWorktreeLaunchTests {
             parse: parse
         )
 
+        #expect(result?.id == projectACco.id, "project A's own \"cco\" template must resolve, not fall through to the ad-hoc path")
         #expect(result?.id != crossProjectCco.id, "project A's launch must never resolve to project B's template")
-        #expect(result?.command == "cco", "no matching template in project A's scope must fall through to the ad-hoc path")
-        #expect(result?.agent?.additionalFlags == ["-n", "thread name"], "the composer must never claim -n — it's cco's own flag")
+
+        // Pins `resolvedTemplateId` through the same seam: a hardcoded `nil`
+        // in `worktreeCreationLaunchTemplate` would stay green against the
+        // first `parse` above (whose `resolvedTemplateId` really is `nil`),
+        // so a second parse carrying a real id proves the argument is wired
+        // through, not ignored.
+        let terminatedParse = SessionComposerCommandParser.ParseResult(
+            projectId: projectA.id,
+            remainderTokens: [],
+            resolvedTemplateId: projectACco.id
+        )
+        let terminatedResult = SessionComposerPalette.worktreeCreationLaunchTemplate(
+            project: projectA,
+            store: workspaceStore,
+            parse: terminatedParse
+        )
+        #expect(terminatedResult?.id == projectACco.id, "a resolvedTemplateId in the scoped list must resolve directly, proving the argument reaches the resolver")
     }
 
     // MARK: - 8. cascadeProjectChange must invalidate an in-flight creation (finding 2)
