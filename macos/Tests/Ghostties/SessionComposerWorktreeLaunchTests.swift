@@ -98,22 +98,28 @@ struct SessionComposerWorktreeLaunchTests {
     /// against, not a round number picked for comfort.
     private static let createWorktreeCompletionTimeout: TimeInterval = 12
 
-    /// Any wait bounded by `refreshWorktrees(for:projectId:)`'s own
-    /// worst-case latency — not just the plain setup poll it was first
-    /// written for, but also the post-creation poll further down that waits
-    /// on the SAME call's retry landing (`refreshWorktrees` is invoked
-    /// internally there too, just not directly by the test) — needs its
-    /// OWN, separately-derived budget from `createWorktreeCompletionTimeout`
+    /// A poll used both for the plain setup wait it was first written for,
+    /// and for the post-creation poll further down that waits on the SAME
+    /// call's retry landing (`refreshWorktrees` is invoked internally there
+    /// too, just not directly by the test) — needs its OWN,
+    /// separately-derived budget from `createWorktreeCompletionTimeout`
     /// above, which is timed against a different, longer-running call
     /// (`createWorktree`'s 10s git-shell-out ceiling). `refreshWorktrees`
     /// races its own 2-second deadline
     /// (`Store.swift`'s `raceAny(listTask, timeoutSeconds: 2)`) and, on a
-    /// timeout, self-schedules exactly ONE retry after ANOTHER 2-second
-    /// sleep, whose own race can itself take up to 2 more seconds:
-    /// worst-case observable latency is 2 (first race) + 2 (retry sleep) +
-    /// 2 (retry's own race) = 6 seconds. `8`, the same +2s margin style
-    /// `createWorktreeCompletionTimeout` uses over ITS ceiling, applied to
-    /// this call's 6s worst case instead of `createWorktree`'s 10s one.
+    /// timeout, schedules a retry after ANOTHER 2-second sleep that
+    /// RE-ENTERS `refreshWorktrees` itself (`Store.swift:389-393`) — and
+    /// that re-entrant call bumps `worktreeRefreshToken` at its own entry
+    /// (`:263`), so the retry guard at `:391` keeps passing and the chain
+    /// stays live: ONE retry per timeout, re-entering recursively, not one
+    /// retry total. There is NO bound on this while the token holds —
+    /// production's own comment (`Store.swift:384-388`) says the composer
+    /// "keeps retrying on its own every ~4s while it stays open on this
+    /// project." `8` covers exactly ONE retry cycle (2s first race + 2s
+    /// retry sleep + 2s retry's own race = 6s, +2s margin) — it is NOT a
+    /// worst case. A SECOND consecutive timeout on the same call will
+    /// exceed it, so a red at the post-creation poll below may be a
+    /// contention flake rather than proof of a defect.
     private static let refreshWorktreesSetupTimeout: TimeInterval = 8
 
     // MARK: - 1. onSuccess fires exactly once, with the new worktree's path
@@ -286,10 +292,13 @@ struct SessionComposerWorktreeLaunchTests {
         // pre-refresh list from THAT call. What the poll actually covers:
         // `refreshWorktrees` can lose its own internal
         // `raceAny(listTask, timeoutSeconds: 2)` (`:348`), leaving
-        // `branchesWithoutWorktree` untouched and self-scheduling exactly
-        // one retry after a 2s sleep (`:389-394`) — this poll's window is
-        // what catches that retry landing after `isCreatingWorktree` already
-        // flipped false.
+        // `branchesWithoutWorktree` untouched and scheduling a retry after a
+        // 2s sleep that RE-ENTERS `refreshWorktrees` itself (`:389-393`) —
+        // this poll's window is what catches that retry landing after
+        // `isCreatingWorktree` already flipped false.
+        // `refreshWorktreesSetupTimeout` covers exactly one retry cycle, not
+        // an arbitrary number of them; a SECOND consecutive timeout on this
+        // same call can still outlast it.
         await Self.waitUntil(timeout: Self.refreshWorktreesSetupTimeout) { !store.branchesWithoutWorktree.contains(branchName) }
 
         #expect(!store.branchesWithoutWorktree.contains(branchName), "the branch must stop offering a create row once the worktree exists")
@@ -645,7 +654,7 @@ struct SessionComposerWorktreeLaunchTests {
     ///
     /// Mutation: swap the static func's `templates:` argument back to the
     /// unscoped `store.templates` superset (the pre-round-3 bug) and this
-    /// goes red — `result?.id` resolves to project B's "cco".
+    /// goes red — `result?.id` resolves to project B's "CCO".
     ///
     /// Finding 1 (review round 5): the original version of this test only
     /// asserted the negative half of scoping (`id != crossProjectCco.id`)
@@ -683,9 +692,27 @@ struct SessionComposerWorktreeLaunchTests {
             AgentTemplate(name: "cco", kind: .custom, command: "cco", isGlobal: false, projectId: projectA.id)
         )
 
+        // Fixture premise: the unscoped superset really does resolve
+        // project B's "CCO" FIRST — if this fails, the scoped assertions
+        // below no longer discriminate the superset bug (either
+        // `crossProjectCco` wasn't inserted before `projectACco`, or
+        // `matchesTemplate`'s case-insensitive compare stopped matching
+        // "CCO" against the typed token "cco").
+        #expect(SessionComposerCommandParser.resolveWorktreeCreationLaunchTemplate(
+            resolvedTemplateId: nil,
+            remainderTokens: ["cco"],
+            templates: workspaceStore.templates
+        )?.id == crossProjectCco.id,
+        "fixture premise: the unscoped superset really does resolve project B's template FIRST — if this fails, the scoped assertion below no longer discriminates the superset bug")
+
+        // Unterminated tier-2 token: with project A owning a template named
+        // "cco", a space-terminated "cco" resolves as an operator segment
+        // (`resolvedTemplateId` set, empty remainder) — a bare, unterminated
+        // "cco" is the only shape this scoped resolver can still be
+        // exercised through here.
         let parse = SessionComposerCommandParser.ParseResult(
             projectId: projectA.id,
-            remainderTokens: ["cco", "-n", "thread name"]
+            remainderTokens: ["cco"]
         )
 
         let result = SessionComposerPalette.worktreeCreationLaunchTemplate(
