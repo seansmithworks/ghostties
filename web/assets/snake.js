@@ -193,9 +193,11 @@
     cascadeCanvas.className = "snake-cascade";
     // Appended to <body>, not frameEl: the cascade escapes the game's
     // box and covers the page (see winGame()/B2), so it is fixed to
-    // the viewport, not the field. Sized explicitly in
-    // sizeCascadeCanvas() below — inset:0 alone does not stretch a
-    // <canvas> bitmap, it only positions the box.
+    // the viewport, not the field. Box is stretched to the viewport by
+    // CSS (width/height: 100% on .snake-cascade — inset:0 alone only
+    // positions the box, percentages are what stretch a replaced
+    // element). Bitmap is sized separately in sizeCascadeCanvas()
+    // below.
     document.body.appendChild(cascadeCanvas);
     var cascadeCtx = cascadeCanvas.getContext("2d");
 
@@ -242,17 +244,19 @@
     }
 
     // Cascade canvas is fixed to the viewport (see DOM scaffold above),
-    // so it is sized from window dimensions, not the field. Bitmap is
-    // set from CSS size * devicePixelRatio and the context is scaled
-    // back down, or a DPR-2 display renders the cascade at half res.
+    // so it is sized from window dimensions, not the field. The box
+    // itself is sized by CSS (.snake-cascade width/height: 100%) so a
+    // resize during a win keeps the box matched to the viewport without
+    // touching the bitmap below — assigning canvas.width/.height clears
+    // it (see handleCascadeResize). Bitmap is set from CSS size *
+    // devicePixelRatio and the context is scaled back down, or a DPR-2
+    // display renders the cascade at half res.
     var cascadeW = 0,
       cascadeH = 0;
     function sizeCascadeCanvas() {
       var dpr = window.devicePixelRatio || 1;
       cascadeW = window.innerWidth;
       cascadeH = window.innerHeight;
-      cascadeCanvas.style.width = cascadeW + "px";
-      cascadeCanvas.style.height = cascadeH + "px";
       cascadeCanvas.width = Math.round(cascadeW * dpr);
       cascadeCanvas.height = Math.round(cascadeH * dpr);
       if (cascadeCtx) cascadeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -412,6 +416,11 @@
       // viewport change (R2) — mobile URL-bar collapse is the common
       // trigger. Safe to resize again once endGame()/replay clears it.
       if (mode === "win") return;
+      // Cascade canvas is 300x150 (browser default) until a win first
+      // sizes it — most homepage visitors never trigger one. Guard
+      // against allocating the full-viewport bitmap (megabytes at
+      // DPR 2) on an idle page's first resize.
+      if (cascadeW === 0) return;
       sizeCascadeCanvas();
     }
     window.addEventListener("resize", handleCascadeResize);
@@ -691,8 +700,17 @@
         // getBoundingClientRect() is already in the right coordinate
         // space — no subtracting the field's offset (B1).
         var rect = fillEl.getBoundingClientRect();
-        var x0 = rect.left + rect.width / 2;
-        var y0 = rect.top + rect.height / 2;
+        // getBoundingClientRect() is in current-viewport coordinates,
+        // but the canvas box is CSS-stretched over a bitmap sized to
+        // whatever the viewport was when the win started (cascadeW/H
+        // are frozen there while mode === "win" — see
+        // handleCascadeResize). A resize mid-cascade desyncs the two
+        // spaces, so scale into canvas space or a piece launched after
+        // a resize lands off the meter.
+        var scaleX = window.innerWidth ? cascadeW / window.innerWidth : 1;
+        var scaleY = window.innerHeight ? cascadeH / window.innerHeight : 1;
+        var x0 = (rect.left + rect.width / 2) * scaleX;
+        var y0 = (rect.top + rect.height / 2) * scaleY;
         // Wide horizontal spread scaled to viewport width so the
         // cascade erupts out of the meter and covers the full page
         // width (B2), not a single point at the meter's x position.
