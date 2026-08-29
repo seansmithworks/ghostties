@@ -1,5 +1,60 @@
 # Ghostties — Backlog
 
+## 2026-08-29 — three composer branches MERGED; two of three objective legs on `main`
+
+`main` @ `1a679c62d`. PRs #142 (card fit + ghost-band snapshot retune), #144 (backlog), #143
+(parser → `GhosttiesCore`) all merged. Verified on the merge result, not the branches: **974
+passed / 1 failed / 1 skipped**, the sole failure being the documented `raceReturnsTimedOut`
+flake (passes class-filtered in isolation at 0.91s against a 2.0s threshold). `swift test
+--parallel` exit 0, 114 tests, all four `-n` idiom tests executing.
+
+Objective legs: card fits ✅ · `-n` invariant runs in CI ✅ · **create-worktree finishes the
+job ⬜ — still not on `main`.**
+
+- [ ] **carried — round 4 on `feat/composer-create-worktree-launch`** (`c27843a51`, unmerged,
+  no PR). This is the third objective leg. Round 3 found 1 blocker + 6 should-fix; the fix
+  commit landed 4 of them but **2 of the 4 have no discriminating test**: (a) the blocker
+  deletion (`branchesWithoutWorktree.removeAll`) can only be exercised by forcing
+  `refreshWorktrees` past its hardcoded 2s deadline, and there is no timing-injection seam;
+  (b) the template-scoping fix touches a `private`/`@EnvironmentObject`-bound call site no
+  test can reach — the added test proves the mechanism but never touches the changed line.
+  Review the fix commit as NEW code, seeded with what round 3 cleared. Three round-3 findings
+  were deliberately left unfixed and are Sean's call: finding 4 (hoist `processHandle`/
+  `gitTask` onto the store so `cancel()`/`open()` can terminate an in-flight `git worktree
+  add` — today Esc leaves it unkillable and the next Return fires a second concurrent add),
+  finding 5 (a test labelled mutant-catching that re-implements the fix in its own closure),
+  finding 6 (tier 2's doc comment justifies itself with a claim `makeAdHocTemplate`'s own
+  comment nine lines above contradicts).
+
+- [ ] **carried — CHANGELOG for beta.23 AND beta.24, then the appcast copy.** `CHANGELOG.md`
+  is topped at beta.22; beta.23 shipped with no entry, so this tag owes two write-ups. Then
+  copy the section into `web/appcast-beta.xml`'s `<description><![CDATA[…]]></description>`.
+  Pre-tag, no decisions in it, fully delegable.
+
+- [ ] **new — BACKLOG's own beta.24 entry is STALE and contradicts reality.** `BACKLOG.md:111`
+  still calls landing `feat/composer-branch-segment` "the ONLY thing gating beta.24." That
+  branch (`a1daa6608`) merged into `main` under PR #138, riding in beneath
+  `feat/composer-ui-11`. The same entry's "`main` still carries the chips" is also false —
+  what remains are residual identifiers (`stickyChipProjectId`, `closeChipPickerOrDismiss`,
+  `pendingChipUndo`), not the rejected chip UI. **Beta.24 has no code gate left.** Correct
+  both claims in place.
+
+- [ ] **new — `MEMORY.md` is silently truncated at load.** 26,129 chars against a 20,000-char
+  cap and a 24.4KB read limit, so entries at the end are already invisible every boot. Route
+  older/resolved entries to `INDEX.md` (archive, never delete) and get it under 17.1KB.
+
+- [ ] **new — seven finished agent worktrees hold 13.4GB.** `.claude/worktrees/` totals 36GB;
+  the disk hit 253Mi free mid-session and failed a dispatch with `No space left on device`.
+  All seven branches are pushed and removing a worktree never deletes its branch, so this is
+  free space. Needs Sean's nod on which `session-*` trees are dead.
+
+- [ ] **parked (off-objective) — composer entry-point placement.** `+ New Session` is
+  hardcoded `.centered` at `WorkspaceViewContainer.swift:1556`; `.anchored` works at
+  `ProjectDisclosureRow.swift:466`.
+
+- [ ] **parked — `BACKLOG.md` is ~1,850 lines / 187KB**, past the size that triggered the last
+  archive to `BACKLOG-log.md`.
+
 ## 2026-08-27 — composer field: card-fit + ghost snapshots fixed and verified; parser, worktree-launch, placement still open
 
 `main` is at `5dd1db462`. `composer-ghost-and-well-s2` @ `92ea7b601` is unmerged, no PR — nothing
