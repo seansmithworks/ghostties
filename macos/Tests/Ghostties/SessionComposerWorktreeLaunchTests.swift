@@ -164,11 +164,20 @@ struct SessionComposerWorktreeLaunchTests {
 
         let branchName = "feat-midflight-pick"
         let userPick = "/tmp/some-other-worktree-the-user-clicked"
+        let expectedPath = (repo as NSString).appendingPathComponent(".claude/worktrees/\(branchName)")
 
         store.createWorktree(named: branchName, in: project)
         store.selectedWorktreePath = userPick
 
         await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
+
+        // Prove creation actually SUCCEEDED before asserting the survival —
+        // without this, the assertion below also holds if creation failed or
+        // timed out (both branches are guarded by the same `selectionAtStart`
+        // check and produce identical state), so it would go green without
+        // ever exercising the success branch it claims to guard.
+        #expect(store.writeError == nil)
+        #expect(FileManager.default.fileExists(atPath: expectedPath), "the worktree must actually exist on disk for this to be a real success case")
 
         #expect(store.selectedWorktreePath == userPick, "a deliberate mid-flight pick must survive a successful creation, not be clobbered by the new worktree's path")
     }
@@ -250,6 +259,14 @@ struct SessionComposerWorktreeLaunchTests {
         store.createWorktree(named: branchName, in: project)
 
         await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
+
+        // Round 3 deleted the `branchesWithoutWorktree.removeAll` line from
+        // production (correctly — it caused a worse bug), which leaves this
+        // assertion depending entirely on the post-creation `refreshWorktrees`
+        // beating its hardcoded 2s race. Poll it like the setup poll above
+        // rather than reading state once — a single synchronous read can
+        // observe the stale pre-refresh list under suite contention.
+        await Self.waitUntil(timeout: Self.refreshWorktreesSetupTimeout) { !store.branchesWithoutWorktree.contains(branchName) }
 
         #expect(!store.branchesWithoutWorktree.contains(branchName), "the branch must stop offering a create row once the worktree exists")
     }
@@ -588,6 +605,46 @@ struct SessionComposerWorktreeLaunchTests {
         )
         #expect(result?.command == "cco")
         #expect(result?.agent?.additionalFlags == ["-n", "thread name"])
+    }
+
+    /// Round-4 review, item 3: `SessionComposerPalette.worktreeCreationLaunchTemplate`
+    /// used to be a private computed property with no testable seam — the
+    /// prior review's "no testable seam" claim was wrong; the same pattern
+    /// (`typedBranchResolution`/`resolveTypedBranch`) already had one in
+    /// this same file. This exercises the extracted `internal static func`
+    /// directly against a REAL project + store, proving the scoping the
+    /// round-3 fix introduced: a template belonging to a DIFFERENT project
+    /// must never be reachable. Mirrors
+    /// `unscopedTemplatesLeakACrossProjectCcoThatSwallowsTheDashNFlag`'s
+    /// setup above, but through the actual `SessionComposerPalette` seam
+    /// rather than the pure resolver alone.
+    ///
+    /// Mutation: swap the static func's `templates:` argument back to the
+    /// unscoped `store.templates` superset (the pre-round-3 bug) and this
+    /// goes red — `result?.id` resolves to project B's "cco", not `nil`.
+    @Test func staticWorktreeCreationLaunchTemplateNeverResolvesAnotherProjectsTemplate() {
+        let projectA = Project(name: "project-a", rootPath: "/tmp/project-a")
+        let projectB = Project(name: "project-b", rootPath: "/tmp/project-b")
+        let workspaceStore = WorkspaceStore(testingProjects: [projectA, projectB], testingSessions: [])
+
+        let crossProjectCco = workspaceStore.addTemplate(
+            AgentTemplate(name: "cco", kind: .custom, command: "some-other-binary", isGlobal: false, projectId: projectB.id)
+        )
+
+        let parse = SessionComposerCommandParser.ParseResult(
+            projectId: projectA.id,
+            remainderTokens: ["cco", "-n", "thread name"]
+        )
+
+        let result = SessionComposerPalette.worktreeCreationLaunchTemplate(
+            project: projectA,
+            store: workspaceStore,
+            parse: parse
+        )
+
+        #expect(result?.id != crossProjectCco.id, "project A's launch must never resolve to project B's template")
+        #expect(result?.command == "cco", "no matching template in project A's scope must fall through to the ad-hoc path")
+        #expect(result?.agent?.additionalFlags == ["-n", "thread name"], "the composer must never claim -n — it's cco's own flag")
     }
 
     // MARK: - 8. cascadeProjectChange must invalidate an in-flight creation (finding 2)

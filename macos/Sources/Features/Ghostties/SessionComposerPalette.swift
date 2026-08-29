@@ -750,10 +750,28 @@ struct SessionComposerPalette: View {
     /// why finding 3 (an unterminated template name) needed a middle tier
     /// this view-layer property used to skip entirely.
     private var worktreeCreationLaunchTemplate: AgentTemplate? {
+        Self.worktreeCreationLaunchTemplate(project: currentProject, store: store, parse: effectiveCommandParse)
+    }
+
+    /// Round-4 review: the argument assembly extracted out of the private
+    /// property above — same precedent as `resolveTypedBranch` a few
+    /// screens up (`typedBranchResolution`/`resolveTypedBranch`, itself a
+    /// round-6 extraction): a prior review claimed "no testable seam" here,
+    /// which is wrong by that same precedent — hoisting the wiring into an
+    /// `internal static` (not `private`) lets a test drive the REAL
+    /// production scoping (`SessionTemplateResolver.templates(for:store:)`,
+    /// round-3 finding 2's fix) against a real `Project`/`WorkspaceStore`,
+    /// instead of only the pure resolver's logic with a hand-built template
+    /// list a test could accidentally get right for the wrong reason.
+    static func worktreeCreationLaunchTemplate(
+        project: Project?,
+        store: WorkspaceStore,
+        parse: SessionComposerCommandParser.ParseResult
+    ) -> AgentTemplate? {
         SessionComposerCommandParser.resolveWorktreeCreationLaunchTemplate(
-            resolvedTemplateId: effectiveCommandParse.resolvedTemplateId,
-            remainderTokens: effectiveCommandParse.remainderTokens,
-            templates: currentProject.map { SessionTemplateResolver.templates(for: $0, store: store) } ?? []
+            resolvedTemplateId: parse.resolvedTemplateId,
+            remainderTokens: parse.remainderTokens,
+            templates: project.map { SessionTemplateResolver.templates(for: $0, store: store) } ?? []
         )
     }
 
