@@ -1,44 +1,66 @@
 # Ghostties — Backlog
 
-## 2026-08-27 — composer field: 4 design calls ruled, parser bug found, layout unverified
+## 2026-08-27 — composer field: card-fit + ghost snapshots fixed and verified; parser, worktree-launch, placement still open
 
-Branch `feat/composer-ghost-and-well` @ `13011dffa`, 6 commits off `main` @ `89e6dfb94`, pushed.
-NOT merged, no PR. Suite 982 at `c9c166724`; not re-run since.
+`main` is at `5dd1db462`. `composer-ghost-and-well-s2` @ `92ea7b601` is unmerged, no PR — nothing
+from this session is on `main`. Suite baseline 975 in a clean worktree, 986 with the
+create-worktree branch's 11 new tests; sole recurring failure is the documented
+`GitWorktreeCreationTests` race flake (20/20 in isolation). Totals vary by environment — verify
+by diffing test IDENTIFIER sets, not by comparing totals.
 
-Shipped and verified: ghost 0.50 both fields in lockstep (`5846251fd`, measured 3.07:1 light /
-4.05:1 dark — deliberately below AA, documented as such); brand accent `composerSelectionAccent`
-`#5B8DEF` (`def5e9cd4`); `>` now lands on the branch position (`c9c166724`) — Sean confirmed the
-"Create worktree for …" row appears and the worktree gets made.
+**Closed this session:**
+- Card-fills-window is FIXED and verified. `13011dffa`'s `.background`→`.overlay` change was the
+  real fix, proven by `ComposerCardFitTests` (`2d2c82486`), mutation-verified: card measures
+  256.5pt at both a 900pt and a 1400pt window (delta 0.0pt) with the fix; 883.5pt / 1383.5pt
+  without it, growing 1:1 with the window. The window-independence assertion is the load-bearing
+  one — the companion `cardHugsLastRow` did NOT catch the mutation.
+- Snapshot harness blindness is fixed for the card: `renderPNG`/`renderPNGWithExtraLayoutPass`
+  still mount rigidly (unchanged, other tests depend on it), but `ComposerCardFitTests` mounts
+  unconstrained via its own helper.
+- Three ghost-band snapshot tests broke as a consequence of `13011dffa` and are retuned in
+  `92ea7b601`. Root cause was NOT a layout regression: the ghost still renders at
+  `rgb(147,147,147)`, it moved 88pt down because a card that finally hugs now centres inside the
+  harness's rigid 420pt frame. Scope is now derived from the card's own top edge, mutant-verified
+  at 0.03 opacity. The `137-157` band remains a hardcoded literal by deliberate choice — deriving
+  it would need the card's dynamic material colour, a second guess; it is commented with the two
+  production symbols it tracks.
+- Sean's idiom is now under invariant test: `151898bbd` on `test/composer-idiom-invariant`,
+  4 tests over `repo cco -n "thread name"` / `repo ccp`. Mutation-verified by making the parser
+  claim `-n`. Mutating it also broke 5 pre-existing tests that use `-n` in fixtures.
 
-- [ ] **CARRIED — card fills window, WIP committed UNVERIFIED** (`13011dffa`). Root cause IS
-  found: `.background(GeometryReader)` proposes the container's incoming size, so height read
-  **0 on every delivery** — the `.frame(height:)` cap from `3512a500a` was NEVER applied, in
-  tests or production. `.overlay` reports real values (93pt/2 rows, 189pt/7, 769pt/25). Owed:
-  render evidence + snapshot retune + suite run. Agent was stopped mid-verification.
-- [ ] **CARRIED — snapshot harness cannot measure height.** `renderPNG`/`renderPNGWithExtraLayoutPass`
-  mount as `content.frame(width:height:)`, forcing the palette to fill. Every height claim taken
-  through it is measuring the harness. Fix before trusting any layout evidence.
-- [ ] **CARRIED — create-worktree stops after creating.** Enter creates the worktree, then: no
-  session launches, composer stays open, row stays on offer, second Enter surfaces raw
-  `fatal: ... already exists`. **Strawman:** create, then launch immediately using whatever
-  template/command is already in the field; if none, keep the composer open with the branch
-  resolved and the template list focused. Apply or redline — do not re-ask.
+- [ ] **CARRIED — `-n` invariant runs LOCALLY ONLY.** CI runs `build-for-testing` for macOS, so
+  the 986 app-hosted tests never execute there; only `swift test` over `cli/` runs. Making it
+  real needs the parser in `GhosttiesCore`, blocked by `Project.ghostCharacter` pulling in
+  SwiftUI transitively. Recommended route is a protocol seam (`ComposerProjectLike`/
+  `ComposerTemplateLike`) rather than moving `Codable` model types that persistence and the
+  sidebar depend on. NOT scoped, NOT started — needs Sean's call.
+- [ ] **CARRIED — create-worktree launch-on-success.** Built on
+  `feat/composer-create-worktree-launch` @ `ac7f5ab20`. Round 1 review returned seven confirmed
+  defects; round 2 reworked it by inverting control flow so the palette's own `commit(template:)`
+  performs the launch instead of the store calling `precommit`. Round 3 review is in flight.
+  NOT merged, no PR.
 - [ ] **CARRIED — composer placement should follow entry point.** `+ New Session` → popover
-  anchored below the button; `Cmd+T` → centered card. Sean's ruling; supersedes the old
-  "should `.anchored` have inherited the new list" question. Unstarted.
+  anchored below the button; `Cmd+T` → centered card. `.centered` is hardcoded at
+  `WorkspaceViewContainer.swift:1556`; `.anchored` already works at
+  `ProjectDisclosureRow.swift:466`. Sean's ruling; unstarted.
+- [ ] **NEW — cross-project + typed-branch commit is rejected.** Found while building the
+  wrong-project test, not fixed, orthogonal to the above. `commit(template:)`'s
+  `selectedProjectId` write triggers `cascadeProjectChange`, which synchronously wipes
+  `worktrees`/`worktreesProjectId`/`selectedWorktreePath`. `commit`'s later read of
+  `typedBranchResolution` then sees `worktreesProjectId == nil`, `resolveTypedBranch` returns
+  `.pending`, and the commit is rejected with "Still checking branches for this project — try
+  again in a moment" instead of launching. Only affects a cross-project command that also types
+  a branch segment. Round 3 review has been asked to confirm it predates the current work.
 - [ ] **CARRIED — model B typed-to-ghost gap** (~1.5-2pt). Never fixed, misdiagnosed twice
   (side-bearing, then `firstRect` rounding). Sean re-reported it 2026-08-26. Model B is ON for
   him (`ghostties.composerModelBField = 1`).
-- [ ] **NEW — automate what this session caught by hand.** Sean: "self verifying success."
-  Rule written to `agent-quality.md` § Self-Verifying Success. Order: (1) harness fix makes
-  layout assertable; (2) invariant tests over the real branch list — his 95% idiom is
-  `repo cco -n "thread name"` / `repo ccp`, so **`-n` must stay cco's flag, never claimed by the
-  composer**; (3) extract `rowsToOffer(state)` out of the View body so composer rules are
-  testable at all; (4) move parser/resolution logic into GhosttiesCore — CI runs
-  `build-for-testing` only, so the 982 app-hosted tests **never execute in CI**.
-- [ ] **DECIDE — merge or PR.** 6 commits unreviewed on origin. Recommendation: merge the parser
-  + ghost + accent work, hold the two well commits until `13011dffa` is verified.
-- [ ] **beta.24 still HELD.** Nothing tagged. Slice B ships in it regardless.
+- [ ] **DECIDE — merge or PR.** Nothing from this session is on `main` (`5dd1db462`).
+  `composer-ghost-and-well-s2` @ `92ea7b601` (card-fit fix, ghost-band retune) unmerged, no PR.
+  `test/composer-idiom-invariant` @ `151898bbd` (the `-n` idiom tests) unmerged, no PR.
+  `feat/composer-create-worktree-launch` @ `ac7f5ab20` (launch-on-create, round 3 review in
+  flight) unmerged, no PR. All three build on the `composer-ghost-and-well-s2` line. Merging is
+  Sean's call.
+- [ ] **beta.24 still HELD.** Nothing tagged.
 
 
 Parked items that survive context resets. Prune at `/wrap`.
