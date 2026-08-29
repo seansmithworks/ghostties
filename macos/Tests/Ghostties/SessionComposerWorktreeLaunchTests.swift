@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Coverage for the worktree-launch ruling (2026-08-27) and its control-flow
@@ -80,7 +81,7 @@ struct SessionComposerWorktreeLaunchTests {
     private static func waitUntil(timeout: TimeInterval, _ condition: @escaping () -> Bool) async {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition(), Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(20))
+            try? await _Concurrency.Task.sleep(for: .milliseconds(20))
         }
     }
 
@@ -439,7 +440,7 @@ struct SessionComposerWorktreeLaunchTests {
         // unconditionally, is what makes deleting either guard alone
         // observable under normal timing — under a repeated retry chain
         // (see above) this can still miss.
-        try? await Task.sleep(for: .seconds(Self.refreshWorktreesSetupTimeout))
+        try? await _Concurrency.Task.sleep(for: .seconds(Self.refreshWorktreesSetupTimeout))
 
         #expect(successCount == 0, "a creation superseded by cancel() must never fire its onSuccess into the new (reset) context")
         #expect(store.selectedWorktreePath == nil, "cancel()'s reset must not be silently overwritten by the stale creation's own success handler")
@@ -795,7 +796,7 @@ struct SessionComposerWorktreeLaunchTests {
         await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) {
             FileManager.default.fileExists(atPath: expectedPath)
         }
-        try? await Task.sleep(for: .seconds(Self.refreshWorktreesSetupTimeout))
+        try? await _Concurrency.Task.sleep(for: .seconds(Self.refreshWorktreesSetupTimeout))
 
         #expect(successCount == 0, "a creation superseded by a project switch must never fire its onSuccess into the new project's context")
         #expect(store.selectedWorktreePath == nil, "the project switch's reset must not be silently overwritten by the stale creation's own success handler")
