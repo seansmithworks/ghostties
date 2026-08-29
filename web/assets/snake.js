@@ -273,13 +273,19 @@
       cascadeH = window.innerHeight;
       cascadeCanvas.width = Math.round(cascadeW * dpr);
       cascadeCanvas.height = Math.round(cascadeH * dpr);
-      if (cascadeCtx) cascadeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (cascadeCtx) {
+        cascadeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cascadeCtx.imageSmoothingEnabled = false;
+      }
       // Glow layer shares the exact same bitmap geometry so the two
       // canvases stay pixel-aligned — any mismatch would show as the
       // bloom drifting off the core it's supposed to be haloing.
       cascadeGlowCanvas.width = Math.round(cascadeW * dpr);
       cascadeGlowCanvas.height = Math.round(cascadeH * dpr);
-      if (cascadeGlowCtx) cascadeGlowCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (cascadeGlowCtx) {
+        cascadeGlowCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cascadeGlowCtx.imageSmoothingEnabled = false;
+      }
     }
 
     function px(c) {
@@ -718,6 +724,10 @@
     // constant, not per-ghost data), so it's repeated here rather than
     // widening that accessor for two hex values.
     var CASCADE_EYE_COLOR = "#0d0b12";
+    // Lit highlight cell color — matches LIT_COLOR in ghost-field.js.
+    // Same "not exposed on ghostMeta()" reasoning as CASCADE_EYE_COLOR
+    // above: repeated here rather than widening that accessor.
+    var CASCADE_LIT_COLOR = "#fffbe8";
     var CASCADE_SPRITE_PX = 3; // raw px per grid cell when rasterized
 
     // Ghost metadata + a prerasterized sprite per ghost, built once on
@@ -777,6 +787,19 @@
           octx.fillRect(
             c2 * CASCADE_SPRITE_PX,
             r2 * CASCADE_SPRITE_PX,
+            CASCADE_SPRITE_PX,
+            CASCADE_SPRITE_PX,
+          );
+        }
+      }
+      octx.fillStyle = CASCADE_LIT_COLOR;
+      for (var r3 = 0; r3 < rows; r3++) {
+        var row3 = meta.pixels[r3];
+        for (var c3 = 0; c3 < cols; c3++) {
+          if (row3[c3] !== "l") continue;
+          octx.fillRect(
+            c3 * CASCADE_SPRITE_PX,
+            r3 * CASCADE_SPRITE_PX,
             CASCADE_SPRITE_PX,
             CASCADE_SPRITE_PX,
           );

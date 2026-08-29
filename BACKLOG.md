@@ -1838,3 +1838,51 @@ Branch `feat/composer-branch-segment` @ `948ad5fa8`, pushed, suite 871/0/1, tree
 **Accepted risks, stated rather than solved:** no macOS 13 coverage (a VM is disproportionate);
 keyboard behavior gated on Sean's manual pass — subagents may screen-capture but must NEVER drive
 synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
+
+## 2026-08-29 — cascade Round 4 review, two design defects LEFT OPEN for Sean
+
+Branch `feat/web-ghost-cascade`. Round 4's smoothing (R1) and 'l'-cell (R2) rendering bugs are
+**fixed and verified** (before/after Playwright evidence, `snake.js`). The following real
+defects from that same review carry design decisions and are deliberately unfixed:
+
+- [ ] **Ghosts land 4–7px from the viewport bottom and are buried.** All 40 sprite draws land at
+  y ≈ 894.5 on a 900px viewport; 37/40 quads extend past the canvas bottom, and still-falling
+  pieces keep stamping over that strip. The nine-ghost roster celebration is currently an
+  unreadable sliver at the bottom edge. Two separable causes: draw at `p.y - spriteSize/2` (sit
+  *on* the floor, not centered on it — `snake.js` tickCascade), and redraw settled sprites in a
+  final pass after the last piece settles. **Design call for Sean.**
+- [ ] **Sprites draw at arbitrary rotation and 40 distinct non-integer scales** (`:886-887,
+  968-978`). One measured draw was -61.3° at 0.89x from a 36px source — materially worse at DPR 1
+  (~55% of rows lost) than DPR 2 (~11%). Comment calls it a "gentle tumble," may be intentional —
+  **needs Sean**. Mechanical fix if wanted: rasterize 1px/cell, draw at an integer multiple, snap
+  rotation to 90° on settle.
+- [ ] **`width/height: 100%` decouples the cascade bitmap from the viewport** (`v3.css:694-695`).
+  Bitmap sized from `innerWidth/innerHeight`, box from the initial containing block. Reasoned
+  iOS-Safari failure: URL bar showing, `innerHeight` 730 vs ICB 800 → cascade stretched 10% and
+  floor pushed behind browser chrome. **Mechanism verified by forcing a mismatch; the mobile case
+  itself is UNPROVEN.** Fix is restoring the two `style.width`/`style.height` assignments — does
+  NOT reintroduce the R2 bug (that was about `.width`/`.height`, which clears the bitmap; `.style.*`
+  does not).
+- [ ] **The white hot pixel is erased one frame after it is drawn** (`:946-956`). Next frame's
+  `stampTrailBlocks` re-covers that cell at full opacity. 13,500 drawn, 40 survive (99.7% wasted);
+  zero near-white pixels in the settled frame. The effect does not exist. Changes the look —
+  **Sean's call**.
+- [ ] **`stampTrailBlocks`'s `alpha` parameter is effectively dead** (`:854-868`). Cells saturate
+  to opaque within a frame or two on a never-cleared canvas; 25.1% of inked glow pixels sit at
+  alpha ≥ 250. Matters because any future attempt to tune the glow via that number will appear to
+  do nothing.
+- [ ] **The settled cascade permanently covers the page** (`v3.css:696` `z-index: 999`). Pointer
+  routing is clean (`pointer-events: none` hit-tested), but the blur roughly triples covered area
+  and washes out the `ESC / EXIT` chip named in the live-region announcement. A visitor who wins
+  has one working exit and no legible sign of it.
+- [ ] **Latent:** `tickCascade` can die before the last piece launches if `TARGET_TOKENS`, the
+  `i * 40` stagger, or `GRAVITY` are ever retuned (`:984-988`); `teardown()` (`:1098`) doesn't
+  call `clearCascade()`; the `CASCADE_BLOCK_PX = 4` comment claims it's "a clean multiple" of
+  `CASCADE_SPRITE_PX = 3`, which is false.
+- [ ] **Untested anywhere:** real mobile, classic desktop scrollbars, a real low-end GPU,
+  fractional DPR.
+
+**Corrected perf fact:** the cascade runs at ~120fps on GPU; toggling blur + `plus-lighter` off
+changes it by 0.4fps, so the glow layer is free. The earlier "~27fps" figure was measured under
+SwiftShader with no hardware compositing, where the page idles at 57fps before the cascade even
+starts.
