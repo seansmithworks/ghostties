@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// The two top-level views the sidebar can display.
 ///

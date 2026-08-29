@@ -3,6 +3,7 @@
 // See .github/workflows/test-ghostties.yml — macos-app job is build-only due to
 // XCTest host app hang in headless GH Actions runners.
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for U7 Graveyard inline expansion state logic (SEA-163).

@@ -5,9 +5,13 @@ import Foundation
 /// `SessionComposerCommandParser.resolveCommitWorktreePathForCommit` and
 /// `SessionComposerStore.resolveLaunchTemplate`, so both commit-time
 /// validation seams return the same shape instead of each inventing one.
-struct SessionComposerCommitError: Error, CustomStringConvertible, Equatable {
-    let message: String
-    var description: String { message }
+public struct SessionComposerCommitError: Error, CustomStringConvertible, Equatable {
+    public let message: String
+    public var description: String { message }
+
+    public init(message: String) {
+        self.message = message
+    }
 }
 
 /// Pure, testable command-grammar parsing for the session composer's
@@ -21,7 +25,7 @@ struct SessionComposerCommitError: Error, CustomStringConvertible, Equatable {
 /// blanket-executing the remainder as a shell command (that would break
 /// `ghostties orchestrator`, which must still reach the Orchestrator
 /// template via the ordinary template-matching path).
-enum SessionComposerCommandParser {
+public enum SessionComposerCommandParser {
 
     /// The fixed identity of the composer's synthesized "Run" row.
     /// `ComposerOption.id` is injectable specifically to avoid UUID churn on
@@ -29,28 +33,28 @@ enum SessionComposerCommandParser {
     /// row's underlying command changes on every keystroke by design, so a
     /// stable sentinel id (rather than deriving one from the command text)
     /// is what keeps hover/scroll state settled while the label updates.
-    static let runRowId = UUID(uuidString: "89FA0000-0000-0000-0000-000000000001")!
+    public static let runRowId = UUID(uuidString: "89FA0000-0000-0000-0000-000000000001")!
 
     /// The fixed identity of the composer's synthesized "Create worktree
     /// for <branch>" row — Sean's decision 1: a typed branch that matches a
     /// known branch with no worktree gets an offered row to create it,
     /// mirroring `runRowId`'s stable-sentinel reasoning above (the label
     /// changes on every keystroke; the id must not).
-    static let createWorktreeRowId = UUID(uuidString: "89FA0000-0000-0000-0000-000000000002")!
+    public static let createWorktreeRowId = UUID(uuidString: "89FA0000-0000-0000-0000-000000000002")!
 
     /// Result of tokenizing a composer query against the known project
     /// list. `projectId == nil` means "no command was recognized" — every
     /// caller must fall through to the existing whole-string filter,
     /// byte-identical, in that case.
-    struct ParseResult: Equatable {
-        let projectId: UUID?
-        let remainderTokens: [String]
+    public struct ParseResult: Equatable {
+        public let projectId: UUID?
+        public let remainderTokens: [String]
         /// Slice B (composer breadcrumb spec): the branch segment's raw
         /// token, present only when an explicit `>` introduced it (see
         /// the disambiguation rule on `parse(query:)`). `nil` for every
         /// slice-1 shape — explicit default keeps every existing
         /// construction site (including `.none` below) byte-identical.
-        let branchToken: String?
+        public let branchToken: String?
         /// Round-3 review, Blocker 1: the template a chevron/space-terminated
         /// operator token resolved to (`Segment.Resolution.template`),
         /// carried through so callers can rank/launch it directly instead of
@@ -65,9 +69,9 @@ enum SessionComposerCommandParser {
         /// named. `nil` for every slice-1/Slice-B shape and whenever no
         /// operator segment resolved to a real template — explicit default
         /// keeps every existing construction site byte-identical.
-        let resolvedTemplateId: UUID?
+        public let resolvedTemplateId: UUID?
 
-        init(projectId: UUID?, remainderTokens: [String], branchToken: String? = nil, resolvedTemplateId: UUID? = nil) {
+        public init(projectId: UUID?, remainderTokens: [String], branchToken: String? = nil, resolvedTemplateId: UUID? = nil) {
             self.projectId = projectId
             self.remainderTokens = remainderTokens
             self.branchToken = branchToken
@@ -79,11 +83,11 @@ enum SessionComposerCommandParser {
         /// template filter. Quote marks used only to keep a multi-word
         /// argument as one token are not reconstructed — display never
         /// needs to round-trip back into a query string.
-        var remainderText: String {
+        public var remainderText: String {
             remainderTokens.joined(separator: " ")
         }
 
-        static let none = ParseResult(projectId: nil, remainderTokens: [])
+        public static let none = ParseResult(projectId: nil, remainderTokens: [])
     }
 
     /// Straight `"` plus the curly quotes macOS's "Use smart quotes and
@@ -110,7 +114,7 @@ enum SessionComposerCommandParser {
     /// tokens; so is a `>` acting as a separator. `separatorsIncludeChevron`
     /// defaults to `false` so every existing caller stays byte-identical —
     /// `>` is only ever a separator where a caller opts in.
-    static func tokenize(_ input: String, separatorsIncludeChevron: Bool = false) -> [String] {
+    public static func tokenize(_ input: String, separatorsIncludeChevron: Bool = false) -> [String] {
         var tokens: [String] = []
         var current = ""
         var hasCurrent = false
@@ -172,21 +176,21 @@ enum SessionComposerCommandParser {
     /// The four segment positions the grammar can fill, in walk order.
     /// `operation` because `operator` is a Swift keyword — the grammar's
     /// word for it is still "operator" everywhere it's user-facing.
-    enum SegmentKind: Int, Comparable, CaseIterable {
+    public enum SegmentKind: Int, Comparable, CaseIterable {
         case project = 0, branch = 1, operation = 2, thread = 3
-        static func < (l: Self, r: Self) -> Bool { l.rawValue < r.rawValue }
+        public static func < (l: Self, r: Self) -> Bool { l.rawValue < r.rawValue }
     }
 
     /// A single resolved (settled) segment of a `PathParse`.
-    struct Segment: Equatable {
-        let kind: SegmentKind
+    public struct Segment: Equatable {
+        public let kind: SegmentKind
         /// UTF-16 offsets into `PathParse.source` — never a `Range<String.Index>`:
         /// an index from a different string is undefined behavior, whereas a
         /// stale `NSRange` is merely out of bounds and guardable.
-        let range: NSRange
-        let resolved: Resolution
+        public let range: NSRange
+        public let resolved: Resolution
 
-        enum Resolution: Equatable {
+        public enum Resolution: Equatable {
             case project(UUID)
             case branch(String)      // token only; worktree lookup stays in the view
             case template(UUID)      // operator matched a known template
@@ -208,7 +212,7 @@ enum SessionComposerCommandParser {
         /// produced against (`PathParse.source`, verbatim) — this matters
         /// more once D11 hands these same ranges to `NSTextStorage`, where
         /// the same silent-wrong-text failure mode applies.
-        func text(in source: String) -> String {
+        public func text(in source: String) -> String {
             guard let r = Range(range, in: source) else { return "" }
             return String(source[r])
         }
@@ -221,22 +225,22 @@ enum SessionComposerCommandParser {
     /// ends — still absorbing keystrokes, not yet closed by a `>` — is
     /// exposed separately via `remainderRange`/`activeKind` rather than
     /// added to `segments`, since it isn't a settled fact yet.
-    struct PathParse: Equatable {
+    public struct PathParse: Equatable {
         /// The exact RAW string every `Segment.range` indexes — never trimmed.
-        let source: String
-        let segments: [Segment]
+        public let source: String
+        public let segments: [Segment]
         /// The still-being-typed tail: not terminated, never resolved. `nil`
         /// once a free-text run has been opened (its content, terminated or
         /// not, belongs to the run instead — see rule 1) or when the query
         /// ends in a terminator or is empty.
-        let trailingTermRange: NSRange?
+        public let trailingTermRange: NSRange?
         /// The type the trailing term (or the next keystroke) would be
         /// tried against — the first unfilled type, or `.operation`/
         /// `.thread` once matching has stopped.
-        let activeKind: SegmentKind?
+        public let activeKind: SegmentKind?
         /// The currently-open, not-yet-closed free-text run, if any.
-        let remainderRange: NSRange?
-        let projectId: UUID?
+        public let remainderRange: NSRange?
+        public let projectId: UUID?
         /// Whether the currently-open run (`remainderRange`, if non-nil) is
         /// genuinely a THREAD run — set directly from `openRunKind` at the
         /// point the walk ends, never derived from `activeKind`. `activeKind`
@@ -251,9 +255,21 @@ enum SessionComposerCommandParser {
         /// the run opened by the trailing `"te"` is genuinely `.thread`).
         /// Fix 2 (round-2 review): this field is what callers needing "is
         /// the open run a thread run" must read instead.
-        let openRunIsThreadRun: Bool
+        public let openRunIsThreadRun: Bool
 
-        static let none = PathParse(source: "", segments: [], trailingTermRange: nil,
+        public init(source: String, segments: [Segment], trailingTermRange: NSRange?,
+                    activeKind: SegmentKind?, remainderRange: NSRange?, projectId: UUID?,
+                    openRunIsThreadRun: Bool) {
+            self.source = source
+            self.segments = segments
+            self.trailingTermRange = trailingTermRange
+            self.activeKind = activeKind
+            self.remainderRange = remainderRange
+            self.projectId = projectId
+            self.openRunIsThreadRun = openRunIsThreadRun
+        }
+
+        public static let none = PathParse(source: "", segments: [], trailingTermRange: nil,
                                     activeKind: nil, remainderRange: nil, projectId: nil,
                                     openRunIsThreadRun: false)
     }
@@ -348,7 +364,7 @@ enum SessionComposerCommandParser {
     ///   (`"cco"`, no trailing space) can still open a run immediately
     ///   instead of being withheld by rule 1's bare-first-token exception,
     ///   which exists only to protect an as-yet-unresolved PROJECT name.
-    static func parsePath(
+    public static func parsePath(
         rawQuery: String,
         projects: [Project],
         templates: [AgentTemplate],
@@ -677,7 +693,7 @@ enum SessionComposerCommandParser {
     /// the term verbatim; a token-rejoin version would silently normalize
     /// the tail. Returns `parse.source` unchanged if there is no trailing
     /// term to complete.
-    static func completing(parse: PathParse, with value: String) -> String {
+    public static func completing(parse: PathParse, with value: String) -> String {
         guard let range = parse.trailingTermRange, let bounds = Range(range, in: parse.source) else {
             return parse.source
         }
@@ -724,7 +740,7 @@ enum SessionComposerCommandParser {
     /// covers the quoted form; `testFlatFormRedirectTruncatesAtChevron`
     /// pins the unquoted truncation itself so a later "fix" can't silently
     /// walk it back).
-    static func parse(
+    public static func parse(
         query: String,
         projects: [Project],
         knownBranchNames: [String] = [],
@@ -862,7 +878,7 @@ enum SessionComposerCommandParser {
     /// Left in place deliberately: correct behavior if the raw/trimmed
     /// contract at that call site ever changes back, not dead code to
     /// delete.
-    static func effectiveParse(
+    public static func effectiveParse(
         rawQuery: String,
         directParse: ParseResult,
         impliedProject: Project?,
@@ -915,7 +931,7 @@ enum SessionComposerCommandParser {
     /// function stays: `stickyChipProjectId` below still calls it to find
     /// the project-token boundary, engine-side, unrelated to how the field
     /// renders.
-    static func splitOnFirstToken(
+    public static func splitOnFirstToken(
         _ rawQuery: String,
         separatorsIncludeChevron: Bool = false
     ) -> (prefix: String, remainder: String)? {
@@ -977,7 +993,7 @@ enum SessionComposerCommandParser {
     /// one token, no command. Keeping the chip resolved through the
     /// empty-remainder state (this function) means backspacing to nothing
     /// and retyping stays inside the same two-token shape the whole time.
-    static func stickyChipProjectId(rawQuery: String, projects: [Project], isLocked: Bool) -> UUID? {
+    public static func stickyChipProjectId(rawQuery: String, projects: [Project], isLocked: Bool) -> UUID? {
         guard !isLocked else { return nil }
         // Chevron-aware so `ghostties>` (Slice B's typable `>`) triggers
         // the sticky chip exactly like `ghostties ` already does — `>` is a
@@ -1029,7 +1045,7 @@ enum SessionComposerCommandParser {
     /// token after it becomes `agent.additionalFlags`, the only
     /// per-token-escaped carrier — splitting this way is what keeps
     /// `cco -n test` from collapsing into one unrunnable argv word.
-    static func makeAdHocTemplate(remainderTokens: [String]) -> AgentTemplate? {
+    public static func makeAdHocTemplate(remainderTokens: [String]) -> AgentTemplate? {
         guard let first = remainderTokens.first else { return nil }
         let rest = Array(remainderTokens.dropFirst())
 
@@ -1065,7 +1081,7 @@ enum SessionComposerCommandParser {
     /// project A, commits into project B" blocker — `SessionComposerPalette`
     /// itself has no testable seam for this (a SwiftUI `View` reading
     /// `@EnvironmentObject` state), so this is the seam.
-    static func resolveCommitProjectId(commandProjectId: UUID?, selectedProjectId: UUID?) -> UUID? {
+    public static func resolveCommitProjectId(commandProjectId: UUID?, selectedProjectId: UUID?) -> UUID? {
         commandProjectId ?? selectedProjectId
     }
 
@@ -1091,7 +1107,7 @@ enum SessionComposerCommandParser {
     /// `ParseResult.branchToken` against the cached worktree list; this
     /// function only expresses the precedence, the same seam
     /// `resolveCommitProjectId` provides for the project segment.
-    static func resolveCommitWorktreePath(typedWorktreePath: String?, selectedWorktreePath: String?) -> String? {
+    public static func resolveCommitWorktreePath(typedWorktreePath: String?, selectedWorktreePath: String?) -> String? {
         typedWorktreePath ?? selectedWorktreePath
     }
 
@@ -1105,7 +1121,7 @@ enum SessionComposerCommandParser {
     /// typed branch that resolves to nothing must fail loudly instead
     /// (blocker 2). This type is what makes the three real cases
     /// distinguishable at the call site.
-    enum TypedBranchResolution: Equatable {
+    public enum TypedBranchResolution: Equatable {
         /// No branch segment was typed (`commandParse.branchToken == nil`) —
         /// defers entirely to the picker's own pick.
         case notTyped
@@ -1159,7 +1175,7 @@ enum SessionComposerCommandParser {
     /// returns `.pending` rather than trusting `worktrees`/
     /// `currentBranchAtProjectRoot` against a project they were never
     /// fetched for.
-    static func resolveTypedBranch(
+    public static func resolveTypedBranch(
         branchToken: String?,
         worktrees: [GitWorktreeEnumerator.Worktree],
         currentBranchAtProjectRoot: String?,
@@ -1184,7 +1200,7 @@ enum SessionComposerCommandParser {
     /// returns `.failure` with a message meant for `writeError` directly;
     /// every other case resolves the same way `resolveCommitWorktreePath`
     /// already did.
-    static func resolveCommitWorktreePathForCommit(
+    public static func resolveCommitWorktreePathForCommit(
         typedBranch: TypedBranchResolution,
         selectedWorktreePath: String?
     ) -> Result<String?, SessionComposerCommitError> {
@@ -1216,18 +1232,26 @@ enum SessionComposerCommandParser {
     /// usual view-test-harness gap). Now consumed by
     /// `SessionComposerPalette.ghostPlaceholder` (Step 3) and
     /// `trailingControlVisibility` (Step 5) instead of a rendered line.
-    struct ResolutionLineSegments: Equatable {
-        let projectLabel: String
-        let isProjectClickable: Bool
+    public struct ResolutionLineSegments: Equatable {
+        public let projectLabel: String
+        public let isProjectClickable: Bool
         /// `nil` when the branch segment shouldn't render at all — a
         /// non-git project (mirrors the deleted branch chip's own
         /// "no chip, not a disabled one" rule).
-        let branchLabel: String?
+        public let branchLabel: String?
         /// Whether `branchLabel` should render in the error color — a
         /// typed branch that doesn't resolve to anything. Always `false`
         /// when `branchLabel == nil`.
-        let branchIsError: Bool
-        let templateLabel: String
+        public let branchIsError: Bool
+        public let templateLabel: String
+
+        public init(projectLabel: String, isProjectClickable: Bool, branchLabel: String?, branchIsError: Bool, templateLabel: String) {
+            self.projectLabel = projectLabel
+            self.isProjectClickable = isProjectClickable
+            self.branchLabel = branchLabel
+            self.branchIsError = branchIsError
+            self.templateLabel = templateLabel
+        }
     }
 
     /// Computes `ResolutionLineSegments` from the composer's current
@@ -1244,7 +1268,7 @@ enum SessionComposerCommandParser {
     /// - `templateTitle`: the currently-selected result row's title
     ///   (`selectedOption?.title`), or `nil` if nothing is selected (an
     ///   empty results list).
-    static func resolutionLineSegments(
+    public static func resolutionLineSegments(
         projectName: String?,
         isProjectLocked: Bool,
         isBranchSegmentEligible: Bool,
@@ -1309,7 +1333,7 @@ enum SessionComposerCommandParser {
     /// 3. `!projectsExist` — the zero-project first-run lifeline (G-F7).
     /// 4. Otherwise — the field never states a destination Return will not
     ///    go to.
-    static func ghostPlaceholder(
+    public static func ghostPlaceholder(
         segments: ResolutionLineSegments,
         hasSelection: Bool,
         projectsExist: Bool
@@ -1342,7 +1366,7 @@ enum SessionComposerCommandParser {
     /// found message (`TypedBranchResolution.unresolved`, plan §4 row 5);
     /// `nil` renders nothing, so the happy-path card matches the board
     /// exactly with no strip at all.
-    static func statusStripMessage(
+    public static func statusStripMessage(
         writeError: String?,
         typedBranchResolution: TypedBranchResolution
     ) -> String? {
@@ -1358,7 +1382,7 @@ enum SessionComposerCommandParser {
     /// composer must never render a dead-end "No matches" against an empty
     /// project list; the caller pairs this copy with a clickable row when
     /// `isProjectsEmpty` is true, plain text otherwise.
-    static func emptyResultsCopy(isProjectsEmpty: Bool) -> String {
+    public static func emptyResultsCopy(isProjectsEmpty: Bool) -> String {
         isProjectsEmpty ? "Add project…" : "No matches"
     }
 
@@ -1369,22 +1393,22 @@ enum SessionComposerCommandParser {
     /// table, rows "mouse route into project/branch picker"). A single
     /// pure function so the view and this test suite read the exact same
     /// decision — never two independently-written copies that can diverge.
-    struct TrailingControlVisibility: Equatable {
+    public struct TrailingControlVisibility: Equatable {
         /// `isBranchSegmentEligible` — a non-git project shows no branch
         /// control at all, not a disabled one (mirrors the deleted branch
         /// segment's own rule).
-        let showBranchControl: Bool
+        public let showBranchControl: Bool
         /// `nil` means "no news": default branch. The word "Default" is
         /// never restated outside the rest-state ghost path. Always `nil`
         /// when `showBranchControl` is `false`.
-        let branchControlLabel: String?
+        public let branchControlLabel: String?
         /// Hidden (not disabled) when the project is `.locked` — the
         /// locked rule survives verbatim (DESIGN.md: a locked composer
         /// must never expose a live picker affordance).
-        let showProjectControl: Bool
+        public let showProjectControl: Bool
     }
 
-    static func trailingControlVisibility(
+    public static func trailingControlVisibility(
         isProjectLocked: Bool,
         isBranchSegmentEligible: Bool,
         isCreatingWorktree: Bool,

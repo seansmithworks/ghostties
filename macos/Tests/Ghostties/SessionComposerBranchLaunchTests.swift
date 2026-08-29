@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Coverage for finding 18 (Slice B review round 1): "the feature itself has

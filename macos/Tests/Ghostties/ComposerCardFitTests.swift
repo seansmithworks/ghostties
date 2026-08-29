@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// COMMITTED invariant test for the composer card-fit regression fixed by

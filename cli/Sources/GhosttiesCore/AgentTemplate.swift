@@ -6,36 +6,36 @@ import OSLog
 /// Every session is an "agent" — Shell is just an agent with no AI config.
 /// Replaces SessionTemplate with support for Claude Code agent configuration
 /// (system prompt, model, permissions) that rebuilds from template on every relaunch.
-struct AgentTemplate: Identifiable, Codable, Hashable {
-    let id: UUID
-    var name: String
-    var kind: Kind
-    var isDefault: Bool
-    var isGlobal: Bool
-    var projectId: UUID?
+public struct AgentTemplate: Identifiable, Codable, Hashable {
+    public let id: UUID
+    public var name: String
+    public var kind: Kind
+    public var isDefault: Bool
+    public var isGlobal: Bool
+    public var projectId: UUID?
 
     /// Short description shown in the template picker subtitle.
-    var templateDescription: String?
+    public var templateDescription: String?
 
     /// SF Symbol name for the picker icon (e.g. "star", "building.2").
-    var icon: String?
+    public var icon: String?
 
     /// Display label for the preset's access level (e.g. "read-only", "full").
-    var accessLabel: String?
+    public var accessLabel: String?
 
     // Terminal config
-    var command: String?
-    var environmentVariables: [String: String]
-    var workingDirectory: String?
+    public var command: String?
+    public var environmentVariables: [String: String]
+    public var workingDirectory: String?
 
     // Agent config (nil for .shell)
-    var agent: AgentConfig?
+    public var agent: AgentConfig?
 
     /// Path to a Claude MCP config file (`--mcp-config`), injected at launch.
     ///
     /// Set by folder-format presets that bundle an `mcp-servers.json`. nil for
     /// built-in and flat-file presets.
-    var mcpConfigPath: String?
+    public var mcpConfigPath: String?
 
     // MARK: - Kind
 
@@ -44,7 +44,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     /// Uses String raw values for safe Codable persistence.
     /// Custom `init(from:)` decodes as raw String and falls back to `.shell`
     /// on unknown values — never throws, never wipes state.
-    enum Kind: String, Codable, Hashable {
+    public enum Kind: String, Codable, Hashable {
         case shell
         case claudeCode
         case custom
@@ -52,7 +52,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
 
         // Safe decoder: decode as raw String, construct with init(rawValue:),
         // fall back to .shell on unknown values. Never throws, never wipes state.
-        init(from decoder: Decoder) throws {
+        public init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             let rawValue = try container.decode(String.self)
             self = Kind(rawValue: rawValue) ?? .shell
@@ -64,20 +64,38 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     /// Configuration for Claude Code agent sessions.
     ///
     /// All fields are optional — a minimal agent template needs only a command.
-    struct AgentConfig: Codable, Hashable {
-        var systemPromptFile: String?
+    public struct AgentConfig: Codable, Hashable {
+        public var systemPromptFile: String?
         /// Inline system prompt content (used by presets instead of a file reference).
-        var systemPrompt: String?
-        var model: String?
-        var permissionMode: String?
-        var effort: String?
-        var allowedTools: [String]?
-        var additionalFlags: [String]?
+        public var systemPrompt: String?
+        public var model: String?
+        public var permissionMode: String?
+        public var effort: String?
+        public var allowedTools: [String]?
+        public var additionalFlags: [String]?
+
+        public init(
+            systemPromptFile: String? = nil,
+            systemPrompt: String? = nil,
+            model: String? = nil,
+            permissionMode: String? = nil,
+            effort: String? = nil,
+            allowedTools: [String]? = nil,
+            additionalFlags: [String]? = nil
+        ) {
+            self.systemPromptFile = systemPromptFile
+            self.systemPrompt = systemPrompt
+            self.model = model
+            self.permissionMode = permissionMode
+            self.effort = effort
+            self.allowedTools = allowedTools
+            self.additionalFlags = additionalFlags
+        }
     }
 
     // MARK: - Initializer
 
-    init(
+    public init(
         id: UUID = UUID(),
         name: String,
         kind: Kind,
@@ -112,7 +130,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     // MARK: - Built-in Templates (deterministic UUIDs)
 
     /// Default shell session — uses the user's login shell.
-    static let shell = AgentTemplate(
+    public static let shell = AgentTemplate(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
         name: "Shell",
         kind: .shell,
@@ -121,7 +139,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     )
 
     /// Claude Code agent session.
-    static let claudeCode = AgentTemplate(
+    public static let claudeCode = AgentTemplate(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
         name: "Claude Code",
         kind: .claudeCode,
@@ -131,7 +149,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     )
 
     /// Orchestrator agent — Claude Code with system prompt and opus model.
-    static let orchestrator = AgentTemplate(
+    public static let orchestrator = AgentTemplate(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
         name: "Orchestrator",
         kind: .claudeCode,
@@ -145,7 +163,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     )
 
     /// Embedded Chromium browser session.
-    static let browser = AgentTemplate(
+    public static let browser = AgentTemplate(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
         name: "Browser",
         kind: .browser,
@@ -161,7 +179,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     /// in the PR that introduced this template. `agent` (Claude-CLI-specific
     /// flags: system prompt, model, permissions, `--mcp-config`) is intentionally
     /// nil; those flags don't map to the `codex` CLI.
-    static let codex = AgentTemplate(
+    public static let codex = AgentTemplate(
         id: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
         name: "Codex",
         kind: .custom,
@@ -172,7 +190,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     )
 
     /// All built-in templates, in display order.
-    static let defaults: [AgentTemplate] = [shell, claudeCode, codex, orchestrator, browser]
+    public static let defaults: [AgentTemplate] = [shell, claudeCode, codex, orchestrator, browser]
 
     // MARK: - CLI Construction
 
@@ -197,7 +215,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     ///
     /// Creates `~/.ghostties/cache/prompts/<template-id>.prompt.md` with 0o700 directory
     /// permissions. Returns nil if the write fails.
-    static func writePromptCacheFile(templateId: UUID, content: String) -> String? {
+    public static func writePromptCacheFile(templateId: UUID, content: String) -> String? {
         let fm = FileManager.default
         let dirPath = promptCacheDir
 
@@ -229,7 +247,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     /// agent config flags. All values are shell-escaped with single quotes.
     /// Prompt files are referenced via `--append-system-prompt-file`; inline
     /// prompts are written to cache files first. File size capped at 1 MB.
-    func buildCommand() -> String {
+    public func buildCommand() -> String {
         var parts: [String] = []
 
         if let command {
@@ -304,7 +322,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     ///
     /// Renders as a terracotta (#C97350) background bar with white bold text
     /// and a ghost icon, matching the Ghostties brand.
-    var launchBanner: String? {
+    public var launchBanner: String? {
         guard let agent else { return nil }
         var parts: [String] = [name]
         if let model = agent.model { parts.append(model) }
@@ -322,7 +340,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     /// Environment variable keys that should be stripped from loaded templates.
     ///
     /// Shared constant — used by WorkspacePersistence and any other validation sites.
-    static let dangerousEnvKeys: Set<String> = [
+    public static let dangerousEnvKeys: Set<String> = [
         "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH",
         "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_FALLBACK_FRAMEWORK_PATH",
         "LD_PRELOAD", "LD_LIBRARY_PATH",
@@ -336,7 +354,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     ///
     /// Preserves all other fields. Safer than manual field-by-field copy
     /// because new fields are automatically included.
-    func withoutAgent() -> AgentTemplate {
+    public func withoutAgent() -> AgentTemplate {
         var copy = self
         copy.agent = nil
         return copy
@@ -359,7 +377,7 @@ struct AgentTemplate: Identifiable, Codable, Hashable {
     /// 2. Old SessionTemplate format: flat command/envVars, no kind/agent
     ///
     /// Migration: command == nil -> .shell, command == "claude" -> .claudeCode, else -> .custom
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         self.id = try container.decode(UUID.self, forKey: .id)

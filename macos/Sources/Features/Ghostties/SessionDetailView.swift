@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// A single session row: name + ghost character status indicator.
 ///

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Step 7 (Composer UI 11 plan §5/§7) — model B spike tests.

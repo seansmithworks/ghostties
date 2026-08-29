@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import GhosttiesCore
 
 /// Central state manager for workspace projects, sessions, and templates.
 ///
@@ -1257,7 +1258,7 @@ final class WorkspaceStore: ObservableObject {
 
     /// Debounced persistence — coalesces rapid mutations into a single disk write
     /// on a background thread to avoid blocking the main actor.
-    private var persistTask: Task<Void, Never>?
+    private var persistTask: _Concurrency.Task<Void, Never>?
 
     #if DEBUG
     /// Test-only invocation counter — increments on every `persist()` call
@@ -1274,9 +1275,9 @@ final class WorkspaceStore: ObservableObject {
         #endif
         guard !persistenceDisabled else { return }
         persistTask?.cancel()
-        persistTask = Task { [projects, sessions, templates, sidebarMode, lastSelectedProjectId, hasShownPinMigrationNotice, hasDismissedPinMigrationNotice] in
-            try? await Task.sleep(for: .milliseconds(100))
-            guard !Task.isCancelled else { return }
+        persistTask = _Concurrency.Task { [projects, sessions, templates, sidebarMode, lastSelectedProjectId, hasShownPinMigrationNotice, hasDismissedPinMigrationNotice] in
+            try? await _Concurrency.Task.sleep(for: .milliseconds(100))
+            guard !_Concurrency.Task.isCancelled else { return }
             let customTemplates = templates.filter { !$0.isDefault }
             // Overlay is transient — persist as closed so next launch starts closed.
             let persistedMode: SidebarMode = sidebarMode == .overlay ? .closed : sidebarMode
@@ -1289,7 +1290,7 @@ final class WorkspaceStore: ObservableObject {
                 hasShownPinMigrationNotice: hasShownPinMigrationNotice,
                 hasDismissedPinMigrationNotice: hasDismissedPinMigrationNotice
             )
-            await Task.detached(priority: .utility) {
+            await _Concurrency.Task.detached(priority: .utility) {
                 WorkspacePersistence.save(state)
             }.value
         }

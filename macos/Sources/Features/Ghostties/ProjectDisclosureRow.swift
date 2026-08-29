@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// A project row in the disclosure list that expands to show sessions inline.
 ///
@@ -478,7 +479,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         if NSEvent.modifierFlags.contains(.option),
            let defaultId = project.defaultTemplateId,
            let template = store.templates.first(where: { $0.id == defaultId }) {
-            Task {
+            _Concurrency.Task {
                 await coordinator.createQuickSession(for: project, template: template)
             }
         } else {
@@ -496,7 +497,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         // No pre-check needed — SessionCoordinator.createSession() calls
         // buildCommand() itself and handles missing prompt files gracefully.
         coordinator.clearRuntime(id: session.id)
-        Task {
+        _Concurrency.Task {
             await coordinator.createSession(session: session, template: template, project: project)
         }
     }

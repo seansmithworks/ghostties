@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for per-session/per-project ghost assignment:

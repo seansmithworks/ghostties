@@ -1,4 +1,5 @@
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for the composer's text-forward command grammar (slice 1). Pure
@@ -1792,4 +1793,10 @@ final class SessionComposerCommandParserTests: XCTestCase {
         let operatorSegment = result.segments.first { $0.kind == .operation }
         XCTAssertEqual(operatorSegment?.resolved, .template(template.id))
     }
+
+    // The real-usage idiom invariant (`repo cco -n "thread name"` / `repo
+    // ccp`, four tests from commit `151898bbd`) moved to
+    // `cli/Tests/GhosttiesCoreTests/SessionComposerCommandParserIdiomTests.swift`
+    // alongside `SessionComposerCommandParser`'s move into `GhosttiesCore` —
+    // `swift test` in `cli/` runs there in CI; this app-hosted target does not.
 }

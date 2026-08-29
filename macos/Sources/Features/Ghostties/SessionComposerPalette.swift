@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import GhosttiesCore
 
 /// The session composer, presented in the existing sidebar popover (Phase 2
 /// of session-creation-unified — fixes D3/D11). A forked COPY of
@@ -109,7 +110,7 @@ struct SessionComposerPalette: View {
     /// and replaced on every `commandProject` change so a fast typist who
     /// flips through several project names before settling only ever fires
     /// the LAST one, never one refresh per keystroke.
-    @State private var commandProjectRefreshTask: Task<Void, Never>?
+    @State private var commandProjectRefreshTask: _Concurrency.Task<Void, Never>?
     @State private var isAddingTemplate = false
     @State private var newTemplateName = ""
     @State private var newTemplateToEdit: AgentTemplate?
@@ -1180,9 +1181,9 @@ struct SessionComposerPalette: View {
                 // still flip it more than once before settling.
                 commandProjectRefreshTask?.cancel()
                 if let project = commandProject {
-                    commandProjectRefreshTask = Task {
-                        try? await Task.sleep(for: .milliseconds(300))
-                        guard !Task.isCancelled else { return }
+                    commandProjectRefreshTask = _Concurrency.Task {
+                        try? await _Concurrency.Task.sleep(for: .milliseconds(300))
+                        guard !_Concurrency.Task.isCancelled else { return }
                         await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id)
                     }
                 } else {
@@ -1202,9 +1203,9 @@ struct SessionComposerPalette: View {
                     // fast-typing burst to coalesce here — this is the one
                     // moment the resolved project just disappeared.
                     if let project = currentProject {
-                        Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
+                        _Concurrency.Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
                     } else {
-                        Task { await composerStore.refreshWorktrees(for: nil, projectId: nil) }
+                        _Concurrency.Task { await composerStore.refreshWorktrees(for: nil, projectId: nil) }
                     }
                 }
             }
@@ -1561,7 +1562,7 @@ struct SessionComposerPalette: View {
         // actually drives it, not the click itself.
         .onChange(of: isBranchPickerOpen) { isOpen in
             guard isOpen, let project = currentProject else { return }
-            Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
+            _Concurrency.Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
         }
     }
 

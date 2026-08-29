@@ -1,6 +1,7 @@
 // IDE-ONLY: not currently exercised in CI macos job (build-only).
 // Run via Xcode Cmd+U or xcodebuild test locally.
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for the fallback branch at the end of the `.running` case in

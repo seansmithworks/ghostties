@@ -3,6 +3,7 @@ import Cocoa
 import SwiftUI
 import Combine
 import GhosttyKit
+import GhosttiesCore
 
 /// A classic, tabbed terminal experience.
 class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Controller {

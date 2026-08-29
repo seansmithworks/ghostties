@@ -1,4 +1,5 @@
 import CoreGraphics
+import GhosttiesCore
 
 // No SwiftUI imports — pure CoreGraphics math.
 

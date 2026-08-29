@@ -1,6 +1,7 @@
 import XCTest
 import CoreGraphics
 import SwiftUI
+import GhosttiesCore
 @testable import Ghostty
 
 final class EmptyStatePhysicsTests: XCTestCase {

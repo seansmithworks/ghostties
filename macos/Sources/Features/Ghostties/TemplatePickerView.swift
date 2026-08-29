@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import GhosttiesCore
 
 /// A popover presenting available session templates for a project.
 ///
@@ -367,7 +368,7 @@ struct TemplatePickerView: View {
     }
 
     private func createSession(from template: AgentTemplate) {
-        Task {
+        _Concurrency.Task {
             await coordinator.createQuickSession(for: project, template: template)
         }
         dismiss()

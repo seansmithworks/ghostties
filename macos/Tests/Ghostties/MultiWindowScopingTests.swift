@@ -8,6 +8,7 @@
 //   P1-001   — spawn fires only in the window that owns the clicked coordinator
 //
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for D9 / P1-001 multi-window scoping in the row-click flow.

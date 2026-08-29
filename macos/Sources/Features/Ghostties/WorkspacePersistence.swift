@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import GhosttiesCore
 
 /// Reads and writes workspace state (projects) to a JSON file
 /// at ~/Library/Application Support/Ghostties/workspace.json (release) or

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Coverage for `GitWorktreeEnumerator.branchExists`/`add(branch:directory:repoPath:)`
@@ -275,8 +276,8 @@ struct GitWorktreeCreationTests {
     /// `task.value` directly (no independent race) would hang this test
     /// instead of failing it fast.
     @Test func raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes() async {
-        let neverFinishes: Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never> = Task {
-            try? await Task.sleep(for: .seconds(3600))
+        let neverFinishes: _Concurrency.Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never> = _Concurrency.Task {
+            try? await _Concurrency.Task.sleep(for: .seconds(3600))
             return .success("unreachable")
         }
         defer { neverFinishes.cancel() }
@@ -411,7 +412,7 @@ struct GitWorktreeCreationTests {
     }
 
     @Test func raceReturnsCompletedWhenTheUnderlyingTaskFinishesBeforeTheDeadline() async {
-        let fastTask: Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never> = Task {
+        let fastTask: _Concurrency.Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never> = _Concurrency.Task {
             .success("/fast/path")
         }
 

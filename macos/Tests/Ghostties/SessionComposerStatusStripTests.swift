@@ -1,4 +1,5 @@
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Step 4 (Composer UI 11 plan §3): status strip priority and the
