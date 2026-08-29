@@ -98,26 +98,32 @@ struct SessionComposerWorktreeLaunchTests {
     /// against, not a round number picked for comfort.
     private static let createWorktreeCompletionTimeout: TimeInterval = 12
 
-    /// A poll used both for the plain setup wait it was first written for,
-    /// and for the post-creation poll further down that waits on the SAME
-    /// call's retry landing (`refreshWorktrees` is invoked internally there
-    /// too, just not directly by the test) — needs its OWN,
-    /// separately-derived budget from `createWorktreeCompletionTimeout`
-    /// above, which is timed against a different, longer-running call
-    /// (`createWorktree`'s 10s git-shell-out ceiling). `refreshWorktrees`
-    /// races its own 2-second deadline
-    /// (`Store.swift`'s `raceAny(listTask, timeoutSeconds: 2)`) and, on a
-    /// timeout, schedules a retry after ANOTHER 2-second sleep that
-    /// RE-ENTERS `refreshWorktrees` itself (`Store.swift:389-393`) — and
-    /// that re-entrant call bumps `worktreeRefreshToken` at its own entry
-    /// (`:263`), so the retry guard at `:391` keeps passing and the chain
-    /// stays live: ONE retry per timeout, re-entering recursively, not one
-    /// retry total. There is NO bound on this while the token holds —
-    /// production's own comment (`Store.swift:384-388`) says the composer
-    /// "keeps retrying on its own every ~4s while it stays open on this
-    /// project." `8` covers exactly ONE retry cycle (2s first race + 2s
-    /// retry sleep + 2s retry's own race = 6s, +2s margin) — it is NOT a
-    /// worst case. A SECOND consecutive timeout on the same call will
+    /// A shared budget used everywhere this file waits on
+    /// `refreshWorktrees` settling — the setup poll (`:272`), the
+    /// post-creation poll (`:302`), and two unconditional `Task.sleep`s
+    /// (`:433`, `:787`) — needs its OWN, separately-derived budget from
+    /// `createWorktreeCompletionTimeout` above, which is timed against a
+    /// different, longer-running call (`createWorktree`'s 10s
+    /// git-shell-out ceiling). `refreshWorktrees` races its own 2-second
+    /// deadline (`SessionComposerStore.swift`'s `raceAny(listTask,
+    /// timeoutSeconds: 2)`) and, on a timeout, schedules a retry after
+    /// ANOTHER 2-second sleep that RE-ENTERS `refreshWorktrees` itself
+    /// (`SessionComposerStore.swift:389-393`). That re-entrant call bumps
+    /// `worktreeRefreshToken` at its own entry AND re-captures it
+    /// (`SessionComposerStore.swift:263-264`) before racing again, so it
+    /// never invalidates itself — the chain only dies when an OUTSIDE
+    /// caller (`open()`, `cancel()`, `changeProjectChip`) bumps the token
+    /// first. There is NO bound on this while the token holds —
+    /// production's own comment (`SessionComposerStore.swift:384-388`)
+    /// says the composer "keeps retrying on its own every ~4s while it
+    /// stays open on this project." Measured from when a poll here starts
+    /// (not from when `refreshWorktrees` was first called — the setup
+    /// site `await`s the initial call to completion before its poll
+    /// begins, and the post-creation poll starts right at the timeout
+    /// instant): retry 1 resolves by +4s, retry 2 by +8s. So `8` covers
+    /// TWO retry cycles from the poll's own start, with the second
+    /// landing exactly on the deadline — it is a settle window sized to
+    /// the common case, not a ceiling. A THIRD consecutive timeout will
     /// exceed it, so a red at the post-creation poll below may be a
     /// contention flake rather than proof of a defect.
     private static let refreshWorktreesSetupTimeout: TimeInterval = 8
@@ -419,17 +425,20 @@ struct SessionComposerWorktreeLaunchTests {
         }
         // Directory-exists proves `git worktree add` itself finished, NOT
         // that the outer `Task`'s `.completed(.success)` case has run —
-        // that case still `await`s a full `refreshWorktrees` (up to its own
-        // worst-case 6s chain, see `refreshWorktreesSetupTimeout`'s doc
-        // comment) AFTER the directory already exists, before it would ever
-        // reach `onSuccess?(path)`. An earlier draft asserted immediately
-        // after the file-exists poll and stayed GREEN even with BOTH token
-        // guards deleted (`Store.swift:1163`/`1200`) — not because the
+        // that case still `await`s a full `refreshWorktrees`, which can
+        // still be mid-retry-chain (see `refreshWorktreesSetupTimeout`'s
+        // doc comment — the 8s budget is a settle window sized to the
+        // common case, not a ceiling) AFTER the directory already exists,
+        // before it would ever reach `onSuccess?(path)`. An earlier draft
+        // asserted immediately after the file-exists poll and stayed GREEN
+        // even with BOTH token guards deleted
+        // (`SessionComposerStore.swift:1163`/`1200`) — not because the
         // guards didn't matter, but because the assertion ran before the
         // stale Task could possibly have reached them either way, a false
-        // negative in the TEST. Waiting the SAME worst-case budget here,
+        // negative in the TEST. Waiting the SAME settle budget here,
         // unconditionally, is what makes deleting either guard alone
-        // observable.
+        // observable under normal timing — under a repeated retry chain
+        // (see above) this can still miss.
         try? await Task.sleep(for: .seconds(Self.refreshWorktreesSetupTimeout))
 
         #expect(successCount == 0, "a creation superseded by cancel() must never fire its onSuccess into the new (reset) context")
@@ -756,9 +765,11 @@ struct SessionComposerWorktreeLaunchTests {
     /// Same synchronous-race guarantee as test 5 above: `selectedProjectId`'s
     /// write happens right after `createWorktree` returns, no `await`
     /// between them, so the Task cannot have started before the cascade
-    /// runs — same 8s settle budget for the same reason (see that test's
-    /// doc comment for why a shorter wait produced a false negative here
-    /// during this file's own review).
+    /// runs — same 8s settle budget for the same reason (see
+    /// `refreshWorktreesSetupTimeout`'s doc comment for why a shorter wait
+    /// produced a false negative here during this file's own review, and
+    /// for why that budget is a settle window rather than a worst-case
+    /// bound).
     @Test func projectSwitchMidCreationInvalidatesTheStaleCreation() async {
         let repoA = Self.makeThrowawayRepo()
         let repoB = Self.makeThrowawayRepo()
