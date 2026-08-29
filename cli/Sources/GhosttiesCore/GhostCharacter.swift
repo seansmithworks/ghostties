@@ -1,12 +1,13 @@
-import SwiftUI
+import Foundation
 
 /// One of 24 pixel-art ghost characters assignable to a project.
 ///
 /// Each case owns a 12×12 boolean grid that defines its silhouette.
-/// `drawPath(in:)` renders the grid as filled rectangles within a SwiftUI
-/// `Path`, producing crisp vector art at any size. At a 20pt render size
-/// each "pixel" is ~1.67pt — sharp at @2x Retina.
-enum GhostCharacter: String, CaseIterable, Codable {
+/// `drawPath(in:)` (see `GhostCharacter+Drawing.swift`) renders the grid as
+/// filled rectangles within a SwiftUI `Path`, producing crisp vector art at
+/// any size. At a 20pt render size each "pixel" is ~1.67pt — sharp at @2x
+/// Retina.
+public enum GhostCharacter: String, CaseIterable, Codable {
     case blinky
     case pinky
     case inky
@@ -34,7 +35,7 @@ enum GhostCharacter: String, CaseIterable, Codable {
 
     /// 12×12 boolean grid defining the ghost's silhouette.
     /// `true` = filled pixel, `false` = transparent.
-    var pixelGrid: [[Bool]] { Self.grids[self]! }
+    public var pixelGrid: [[Bool]] { Self.grids[self]! }
 
     /// Pre-computed grids for all characters (parsed once from compact string data).
     private static let grids: [GhostCharacter: [[Bool]]] = {
@@ -385,51 +386,6 @@ enum GhostCharacter: String, CaseIterable, Codable {
         }
     }
 
-    /// Render the pixel grid as a SwiftUI `Path` within the given rectangle.
-    ///
-    /// Builds the path from a cached unit-square (1×1) path via
-    /// `CGAffineTransform` scaling — benchmarked at the real 14×14 render size
-    /// with the real `.blinky` grid (108 filled cells): building the path from
-    /// scratch every call costs 7.862 µs vs `Circle()`'s 0.030 µs (264×).
-    /// Reusing a cached unit path and scaling it is ~9.5× cheaper and has no
-    /// behavior change — same filled cells, same crisp-at-any-size rendering.
-    func drawPath(in rect: CGRect) -> Path {
-        guard rect.width > 0, rect.height > 0 else { return Path() }
-        let unit = Self.unitPaths[self] ?? Path()
-        let transform = CGAffineTransform(translationX: rect.minX, y: rect.minY)
-            .scaledBy(x: rect.width, y: rect.height)
-        return unit.applying(transform)
-    }
-
-    /// One 1×1 (unit square) `Path` per character, built once from `grids` —
-    /// the basis `drawPath(in:)` scales via `CGAffineTransform` on every call
-    /// instead of rebuilding ~108 `addRect` calls from scratch each time.
-    private static let unitPaths: [GhostCharacter: Path] = {
-        var paths: [GhostCharacter: Path] = [:]
-        for character in GhostCharacter.allCases {
-            let grid = character.pixelGrid
-            let rows = grid.count
-            let cols = grid.first?.count ?? 0
-            guard rows > 0, cols > 0 else {
-                paths[character] = Path()
-                continue
-            }
-            let cellW = 1.0 / CGFloat(cols)
-            let cellH = 1.0 / CGFloat(rows)
-            var path = Path()
-            for row in 0..<rows {
-                for col in 0..<cols {
-                    guard grid[row][col] else { continue }
-                    let x = CGFloat(col) * cellW
-                    let y = CGFloat(row) * cellH
-                    path.addRect(CGRect(x: x, y: y, width: cellW, height: cellH))
-                }
-            }
-            paths[character] = path
-        }
-        return paths
-    }()
-
     /// Pick a random ghost not present in `used`. Once all 24 are already in
     /// use, degrades to a deterministic least-used round-robin (ties broken by
     /// `allCases` order) instead of a uniform random pick — a uniform pick
@@ -439,7 +395,7 @@ enum GhostCharacter: String, CaseIterable, Codable {
     /// `used` is a multiset (duplicates preserved), not a `Set` — the
     /// duplicate counts are exactly what the round-robin fallback needs to
     /// find the least-used ghost once every ghost is taken at least once.
-    static func randomUnused(excluding used: [GhostCharacter]) -> GhostCharacter {
+    public static func randomUnused(excluding used: [GhostCharacter]) -> GhostCharacter {
         let usedSet = Set(used)
         let available = allCases.filter { !usedSet.contains($0) }
         if let pick = available.randomElement() {

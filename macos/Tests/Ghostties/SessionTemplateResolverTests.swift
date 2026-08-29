@@ -1,4 +1,5 @@
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for `SessionTemplateResolver` — the single template scoping +

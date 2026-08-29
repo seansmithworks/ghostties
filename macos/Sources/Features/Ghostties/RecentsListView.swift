@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// The Sessions tab content: a flat, time-sorted list of all sessions across projects.
 ///
@@ -293,7 +294,7 @@ struct RecentsListView: View {
         // No pre-check needed — SessionCoordinator.createSession() calls
         // buildCommand() itself and handles missing prompt files gracefully.
         coordinator.clearRuntime(id: session.id)
-        Task {
+        _Concurrency.Task {
             await coordinator.createSession(session: session, template: template, project: project)
         }
     }

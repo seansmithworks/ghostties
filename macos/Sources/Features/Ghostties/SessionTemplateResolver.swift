@@ -1,4 +1,5 @@
 import Foundation
+import GhosttiesCore
 
 /// The single source of truth for "which templates are available to a
 /// project, in what order" for the session-creation surfaces (the New

@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// Whether the ghost is rendered filled or as an outline stroke.
 enum GhostStyle {

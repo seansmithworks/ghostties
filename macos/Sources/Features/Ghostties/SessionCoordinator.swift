@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 import GhosttyKit
+import GhosttiesCore
 
 /// Bridges the SwiftUI sidebar to Ghostty's terminal surface system.
 ///
@@ -192,7 +193,7 @@ final class SessionCoordinator: ObservableObject {
         let resolvedCommand: String? = await {
             guard template.command != nil else { return nil }
 
-            let buildAndResolveTask = Task.detached(priority: .userInitiated) { () -> String? in
+            let buildAndResolveTask = _Concurrency.Task.detached(priority: .userInitiated) { () -> String? in
                 // Build the full command string (includes agent flags, prompt file references).
                 let built = template.buildCommand()
                 guard !built.isEmpty else { return nil }
@@ -207,8 +208,8 @@ final class SessionCoordinator: ObservableObject {
                 }
                 return built
             }
-            let timeoutTask = Task {
-                try await Task.sleep(for: .seconds(3))
+            let timeoutTask = _Concurrency.Task {
+                try await _Concurrency.Task.sleep(for: .seconds(3))
                 buildAndResolveTask.cancel()
             }
             let result = await buildAndResolveTask.value

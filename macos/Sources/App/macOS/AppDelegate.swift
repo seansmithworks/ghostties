@@ -5,6 +5,7 @@ import OSLog
 import MetricKit
 import Sparkle
 import GhosttyKit
+import GhosttiesCore
 
 class AppDelegate: NSObject,
                     ObservableObject,
@@ -1153,7 +1154,7 @@ class AppDelegate: NSObject,
     /// Silent no-op when no row is focused or the file URL cannot be resolved.
     @objc private func openFocusedTaskNotes(_ sender: Any?) {
         // Menu actions arrive on the main thread; hop to MainActor for RowFocusStore.
-        Task { @MainActor in
+        _Concurrency.Task { @MainActor in
             guard let task = RowFocusStore.shared.focusedTask,
                   let taskStore = RowFocusStore.shared.focusedTaskStore,
                   let url = taskStore.fileURL(for: task) else { return }
@@ -1172,7 +1173,7 @@ class AppDelegate: NSObject,
             return
         }
         // Menu actions arrive on the main thread; hop to MainActor for RowFocusStore.
-        Task { @MainActor in
+        _Concurrency.Task { @MainActor in
         guard let task = RowFocusStore.shared.focusedTask else { return }
         // SessionCoordinator and WorkspaceStore are window-scoped; look them up
         // from the key window's TerminalController via the notification-based
@@ -1487,7 +1488,7 @@ class AppDelegate: NSObject,
     }
 
     private func updateAppIcon(from config: Ghostty.Config) {
-        Task.detached {
+        _Concurrency.Task.detached {
             await self.appIconUpdater.update(icon: AppIcon(config: config))
         }
     }
@@ -1899,7 +1900,7 @@ extension AppDelegate {
     @IBAction func setAsDefaultTerminal(_ sender: NSMenuItem) {
         NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpen: .unixExecutable) { error in
             guard let error else { return }
-            Task { @MainActor in
+            _Concurrency.Task { @MainActor in
                 let alert = NSAlert()
                 alert.messageText = "Failed to Set Default Terminal"
                 alert.informativeText = """

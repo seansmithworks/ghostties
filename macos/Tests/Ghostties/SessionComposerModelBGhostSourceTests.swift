@@ -1,4 +1,5 @@
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Model B's ghost source (Spotlight-inline-completion + Raycast-Tab-drill

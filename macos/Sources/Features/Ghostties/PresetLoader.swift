@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import OSLog
+import GhosttiesCore
 
 /// Loads agent presets from `~/.ghostties/presets/` as `.md` files with YAML frontmatter.
 ///

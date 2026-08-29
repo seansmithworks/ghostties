@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import GhosttiesCore
 
 /// Handler stubs for the five R1 click lanes.
 ///

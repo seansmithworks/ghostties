@@ -1,4 +1,5 @@
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for the two pure, testable pieces of the session composer's

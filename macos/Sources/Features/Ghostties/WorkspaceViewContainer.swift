@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import GhosttiesCore
 
 /// Observable width holder for the sidebar's SwiftUI `.frame(width:)` pin.
 /// Owned by `WorkspaceViewContainer` and updated by the drag handler on every
@@ -912,7 +913,7 @@ class WorkspaceViewContainer: NSView {
                 // docs/plans/session-creation-unified.html).
                 // Create a new browser session — this will call showBrowserContent,
                 // which embeds into the side panel and animates it open.
-                Task { @MainActor in
+                _Concurrency.Task { @MainActor in
                     await coordinator.createQuickSession(for: project, template: .browser)
                 }
             }
@@ -1772,7 +1773,7 @@ class WorkspaceViewContainer: NSView {
             userInfo: ["projectId": project.id]
         )
 
-        Task {
+        _Concurrency.Task {
             await coordinator.createQuickSession(for: project, template: template)
         }
     }

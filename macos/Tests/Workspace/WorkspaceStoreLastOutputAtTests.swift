@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Coverage for `lastOutputAt` — the field split out of `lastActiveAt` so

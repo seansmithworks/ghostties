@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for Unit 4 of the sidebar smart-sections plan:

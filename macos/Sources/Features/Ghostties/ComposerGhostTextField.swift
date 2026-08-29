@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import GhosttiesCore
 
 // MARK: - UNVERIFIED — read before touching this file
 

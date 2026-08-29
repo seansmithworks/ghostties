@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// The Step 2 snapshot harness (Composer UI 11 plan §3, evidence contract

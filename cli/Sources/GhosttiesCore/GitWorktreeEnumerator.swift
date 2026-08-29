@@ -8,14 +8,20 @@ import Foundation
 /// `nonisolated` because both entry points are meant to run off the main
 /// actor (called from a `Task.detached` in `SessionComposerStore`), mirroring
 /// `SessionDraftStore.currentGitBranch(atCwd:)`.
-nonisolated enum GitWorktreeEnumerator {
+public nonisolated enum GitWorktreeEnumerator {
 
     /// One `git worktree list --porcelain` stanza, filtered to the ones the
     /// branch chip can offer: real, non-bare, non-detached worktrees.
-    struct Worktree: Equatable {
-        let path: String
-        let branch: String?
-        let isLocked: Bool
+    public struct Worktree: Equatable {
+        public let path: String
+        public let branch: String?
+        public let isLocked: Bool
+
+        public init(path: String, branch: String?, isLocked: Bool) {
+            self.path = path
+            self.branch = branch
+            self.isLocked = isLocked
+        }
     }
 
     /// Parses `git worktree list --porcelain` output into `Worktree` values.
@@ -41,7 +47,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// `bare`, `detached`, and `prunable` stanzas are dropped entirely.
     /// `locked` stanzas are kept with `isLocked = true` (a locked worktree is
     /// still a valid pick, just one Sean has pinned against pruning).
-    static func parsePorcelain(_ output: String) -> [Worktree] {
+    public static func parsePorcelain(_ output: String) -> [Worktree] {
         var results: [Worktree] = []
 
         var currentPath: String?
@@ -108,7 +114,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// Git resolves worktree enumeration from ANY worktree of a repo to the
     /// full set, so `repoPath` does not need to be the repo's primary
     /// checkout — a linked worktree works identically.
-    static func list(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> [Worktree] {
+    public static func list(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> [Worktree] {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let task = Process()
@@ -168,7 +174,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// BOTH: exit 0 (repo exists at all — exit 128 means "fatal: not a git
     /// repository") AND stdout trims to exactly `"true"` (a real, non-bare
     /// worktree).
-    static func isInsideWorkTree(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> Bool {
+    public static func isInsideWorkTree(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> Bool {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let task = Process()
@@ -202,7 +208,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// unchanged if it doesn't exist (matches `realpath(3)`'s own
     /// "resolution requires the path to exist" behavior; a nonexistent path
     /// can't be a git repo anyway).
-    static func canonicalPath(_ path: String) -> String {
+    public static func canonicalPath(_ path: String) -> String {
         // Nit fix (Slice B review round 3): should-fix 11 (round 1) moved
         // this call off the main actor specifically to keep the blocking
         // `realpath(3)` syscall away from it — this assertion is what makes
@@ -239,7 +245,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// checkout. Reading the porcelain output directly needs no version
     /// check and has no such fallthrough — the first `worktree` line IS the
     /// main worktree path, unconditionally.
-    static func mainWorktreePath(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> String? {
+    public static func mainWorktreePath(repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> String? {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let task = Process()
@@ -288,7 +294,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// already has this precomputed by the time it calls here. `nil`
     /// (default) preserves the original self-contained behavior for any
     /// other caller.
-    static func branchesWithoutWorktree(
+    public static func branchesWithoutWorktree(
         repoPath: String,
         claimedBranches: Set<String>? = nil,
         onProcessStarted: ((Process) -> Void)? = nil
@@ -342,12 +348,16 @@ nonisolated enum GitWorktreeEnumerator {
     /// `Result<String, GitWorktreeCreationError>` — `String` itself doesn't
     /// conform to `Error`. `.message` is git's stderr first line, verbatim;
     /// nothing paraphrases it between here and `SessionComposerStore.writeError`.
-    struct GitWorktreeCreationError: Error, CustomStringConvertible {
-        let message: String
-        var description: String { message }
+    public struct GitWorktreeCreationError: Error, CustomStringConvertible {
+        public let message: String
+        public var description: String { message }
+
+        public init(message: String) {
+            self.message = message
+        }
     }
 
-    static func branchExists(_ name: String, repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> Bool {
+    public static func branchExists(_ name: String, repoPath: String, onProcessStarted: ((Process) -> Void)? = nil) -> Bool {
         dispatchPrecondition(condition: .notOnQueue(.main))
 
         let task = Process()
@@ -400,7 +410,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// (branch already checked out elsewhere, destination exists and is
     /// non-empty, invalid ref name, unwritable destination) reaches the
     /// user without a paraphrase in between.
-    static func add(
+    public static func add(
         branch: String,
         directory: String,
         repoPath: String,
@@ -463,7 +473,7 @@ nonisolated enum GitWorktreeEnumerator {
     /// starting with `fatal:` and falls back to the literal first line only
     /// if git's output ever omits one (a case not observed, but not worth
     /// returning nothing over).
-    static func firstMeaningfulLine(ofStderr stderrText: String) -> String {
+    public static func firstMeaningfulLine(ofStderr stderrText: String) -> String {
         let lines = stderrText.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
         if let fatalLine = lines.first(where: { $0.hasPrefix("fatal:") }) {
             return fatalLine

@@ -1,4 +1,5 @@
 import SwiftUI
+import GhosttiesCore
 
 /// Phase C carrier role for a ghost body.
 ///

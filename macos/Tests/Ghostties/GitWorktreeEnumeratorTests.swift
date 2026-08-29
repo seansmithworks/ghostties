@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Coverage for `GitWorktreeEnumerator.parsePorcelain` (composer breadcrumb

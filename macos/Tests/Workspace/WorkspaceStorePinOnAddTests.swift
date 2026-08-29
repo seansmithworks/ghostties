@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import GhosttiesCore
 @testable import Ghostty
 
 /// Tests for Session Composer Phase 5: `WorkspaceStore.addProject(at:pinned:)`
