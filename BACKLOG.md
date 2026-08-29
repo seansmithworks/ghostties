@@ -1390,25 +1390,6 @@ Sean hit this testing a real build: **can't paste into the URL bar, and none of 
 
 ### Open
 
-- [ ] **Token game — pixel-art neon glow is UNVERIFIED on `feat/web-ghost-cascade`.**
-  *carried 2026-08-29.* Branch: `18dea71d4` (geometry fix, fully verified) → `a773fd6c1`
-  (ghost-cast cascade, verified) → WIP commit (glow pass, **NOT verified — agent killed
-  mid-verification**). Sean rejected `a773fd6c1`'s look: *"I don't want a flat matt ribbon.
-  I want pixel art neon glow."* Density stays **maximal** (his call).
-  - Technique briefed: trail = discrete grid-snapped pixel blocks matched to the sprite
-    pixel scale, `imageSmoothingEnabled = false`; glow = a **second stacked canvas** with a
-    CSS `filter: blur()` + `plus-lighter`, NOT canvas `shadowBlur` (pathologically slow) and
-    NOT a wider translucent stroke (that is what produced the flat ribbon).
-  - **Why the last round passed while looking wrong:** the acceptance criterion was "distinct
-    hues survive" (734 hue buckets), which a flat matte ribbon passes. Glow must be tested by
-    sampling **perpendicular** to a trail — luminance falling off gradually over ~8px, not
-    cliff-edging to black in 1-2px.
-  - Also fixed in the WIP: sprite stamped at every frame position produced a serrated
-    caterpillar edge. Sprite goes at the **head only**.
-  - Must not regress: both resize guards, the viewport→canvas spawn scaling, no
-    `style.width`/`.height` on the canvas, `clearCascade()` clearing **both** canvases.
-  | design | carried
-
 - [ ] **Round 4 review of the whole cascade stack — never run.** *carried 2026-08-29.*
   Covers `18dea71d4` + `a773fd6c1` + the glow WIP together; they touch the same functions,
   so reviewing them separately wastes a pass. Non-optional: this repo is seven-for-seven on
