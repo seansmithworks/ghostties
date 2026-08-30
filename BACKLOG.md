@@ -1390,11 +1390,10 @@ Sean hit this testing a real build: **can't paste into the URL bar, and none of 
 
 ### Open
 
-- [ ] **Round 4 review of the whole cascade stack — never run.** *carried 2026-08-29.*
-  Covers `18dea71d4` + `a773fd6c1` + the glow WIP together; they touch the same functions,
-  so reviewing them separately wastes a pass. Non-optional: this repo is seven-for-seven on
-  fix commits introducing the next round's defect, and the glow work rewires the coordinate
-  space the whole cascade draws in. | quality | carried
+- [x] **Round 4 review of the whole cascade stack — DONE 2026-08-30.** Ran over
+  `18dea71d4` + `a773fd6c1` + `b5b08eeaa` together. 4 confirmed defects + 4 should-fix.
+  Two design-neutral bugs fixed in `02276a1e8`; the six remaining are design calls, listed
+  in the 2026-08-29 entry below. | quality | done
 
 
 - [ ] **Token game — full-screen focus mode.** Sean's direction 2026-08-29, verbatim:
