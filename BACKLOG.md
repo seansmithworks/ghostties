@@ -1,5 +1,57 @@
 # Ghostties — Backlog
 
+## 2026-08-30 (later) — all four PRs merged, `main` broke and was fixed, worktrees reclaimed
+
+`main` @ `a2a28870b`, compiling. #146/#147/#148 merged, then **#141 merged** (`529662a1c`)
+which BROKE `main`: it added `import GhosttiesCore` to `AppDelegate.swift`, and
+`GhosttiesCore`'s public `struct Task` shadowed `_Concurrency.Task` at two call sites
+(`:277`, `:578`). Fixed in `a2a28870b` by qualifying both. #141's CI was green against a
+base predating the other merges — **green CI on a stale base says nothing about the merge
+result**; this repo does not require branches be up to date before merge.
+
+- [ ] **beta.24 pre-tag, remaining.** (a) Full unfiltered suite on `a2a28870b` — NOT yet run;
+  two known flakes are `GitWorktreeCreationTests.raceReturnsTimedOut…` and
+  `SessionComposerWorktreeLaunchTests.creationFullyResolvesWithNoOnSuccessProvided`, anything
+  else is real. (b) **CHANGELOG has no beta.24 entry for #141** — #146 was written before it
+  merged. (c) Sean's Mac checks: type-first feel, composer smoke test, Sparkle update from DMG.
+  (d) Tag, then paste the appcast description (prepared in #146's commit message), then fill
+  the GitHub release body by hand.
+
+- [ ] **NEW — both distribution surfaces are pinned to beta.22.** Homebrew:
+  `dist/ghostties/homebrew/ghostties.rb` says `version "0.1.0-beta.22"`; the `homebrew-cask`
+  job is gated `if: vars.HOMEBREW_TAP_REPO != ''` and the repo has NO variables set, so it
+  **skipped** on the beta.23 run (verified, run `32009394844`) rather than failing. npm:
+  `dist/ghostties/npm/ghostties-install/bin/ghostties-install.js:24-27` hardcodes
+  `tag: "v0.1.0-beta.22"` plus a sha256 — every release needs a manual edit and `npm publish`,
+  which is blocked by a global deny rule and needs Sean at a real terminal. Decision open:
+  fix the pattern (dynamic latest-release resolution + set the two Homebrew repo settings) or
+  hand-bump both each release.
+
+- [ ] **NEW — composer surface redesign, 7 directions drawn, awaiting Sean's pick.** The
+  trailing branch dropdown inside the field is to be REMOVED (Sean's call, 2026-08-30);
+  text input stays clean. Variant sheet at
+  `<scratchpad>/composer-variants.html`. A scope pills · B pure prediction · C absolute
+  minimum (**closest to what ships today**) · D grouped section headers (**Spotlight**) ·
+  E field-as-destination ghost text · F operator footer (**Raycast action bar**) ·
+  G = D+F (**Raycast**). Effort sized from source: D is ~30 lines — `ComposerResultsTable`
+  already takes four named lanes (`Recent`/`Templates`/`Projects`/`Command`,
+  `SessionComposerPalette.swift:1387`) and Composer UI 11 Step 2 deliberately REMOVED the
+  visible `title` field, keeping only `accessibilityLabel` (`:2532`). F needs a stage→
+  operators map in `SessionComposerCommandParser` plus a three-way precedence rule for the
+  strip slot (`:1450`) it shares with errors and the new-template naming field. Both shift
+  row positions, so **snapshot tests will need retuning**. Note G reverses the `V02Quieted222`
+  decision to quiet those headers.
+
+- [x] **DONE — worktrees reclaimed.** `.claude/worktrees/` 28G → 3.0G, disk free 66G → 117G.
+  21 trees removed, all branches intact. Kept `session-2` (uncommitted docs under
+  `docs/design/web-redesign/` and `docs/plans/composer-ui-11/evidence/`), `session-19`,
+  `session-3`, `backlog-migrate-ghostties`, `ds-site-plan`. 15 merged origin branches remain
+  deletable via `git push origin --delete` (NOT `feat/web-redesign-round4`, NOT
+  `claude/happy-morse-62ea22`).
+
+- [ ] **NEW — 282 stray `ghostties.phase3review.test.*.plist` files** in `~/Library/Preferences`,
+  one per test run, no teardown. Harmless litter; needs a cleanup plus a teardown in the suite.
+
 ## 2026-08-30 — beta.24 merges landed; new feature idea captured
 
 `main` @ `c465f3346`. PRs #146 (CHANGELOG beta.23 + beta.24), #147 (typed-branch worktree
