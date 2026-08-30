@@ -274,7 +274,7 @@ class AppDelegate: NSObject,
         // → `ClaudeStateStore.shared` before the 1Hz activity timer's first
         // tick. `ClaudeStateStore` is `@MainActor`; hop explicitly rather
         // than relying on this delegate callback's (unannotated) isolation.
-        Task { @MainActor in
+        _Concurrency.Task { @MainActor in
             _ = ClaudeStateStore.shared
         }
 
@@ -575,7 +575,7 @@ class AppDelegate: NSObject,
         // `TerminalController.newWindow`/`newTab` call below schedules its
         // presentation via `DispatchQueue.main.async` — main-queue FIFO then
         // guarantees the store is warm before the first sidebar paint.
-        Task { @MainActor in
+        _Concurrency.Task { @MainActor in
             _ = ClaudeStateStore.shared
         }
 
