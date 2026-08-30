@@ -1074,6 +1074,52 @@ public enum SessionComposerCommandParser {
         )
     }
 
+    // MARK: - Worktree-launch ruling (review round 2, finding 3)
+
+    /// What "the composer field already resolves to something launchable"
+    /// means for worktree-creation launch — pure, no `View`/`Store` needed,
+    /// specifically so this can be unit-tested directly (the prior shape
+    /// lived as a private `SessionComposerPalette` computed property with
+    /// zero coverage; a reviewer found two real defects it could not have
+    /// caught).
+    ///
+    /// Tried in order:
+    /// 1. `resolvedTemplateId` — a TERMINATED operator segment the grammar
+    ///    already matched by exact name (`matchesTemplate`, above).
+    /// 2. The remainder's first token matched by exact name against
+    ///    `templates` — finding 3's fix. An UNTERMINATED template name
+    ///    (`ghostties feat-x cco`, no trailing separator) never reaches
+    ///    `resolvedTemplateId`: the grammar treats "cco" as still being
+    ///    typed, so it fell straight to `makeAdHocTemplate` below and
+    ///    synthesized a shell template whose `command` is the literal
+    ///    string `"cco"` — a zsh FUNCTION, not a binary, which fails
+    ///    silently in a detached `Task` after the composer has already
+    ///    closed. Checking the first remainder token against real template
+    ///    names first mirrors what the TERMINATED case (`ghostties feat-x
+    ///    cco ` or `ghostties feat-x cco >`) already does via
+    ///    `matchesTemplate` — not a new ambiguity, just extending the same
+    ///    rule to the unterminated case the ranking-based selection
+    ///    (`SessionComposerRanking.bestMatchIndex`) already resolves the
+    ///    same way for the NON-worktree-creation Return path.
+    /// 3. `makeAdHocTemplate` — a genuine shell command with no matching
+    ///    template name.
+    /// `nil` when none of the three apply (nothing typed).
+    public static func resolveWorktreeCreationLaunchTemplate(
+        resolvedTemplateId: UUID?,
+        remainderTokens: [String],
+        templates: [AgentTemplate]
+    ) -> AgentTemplate? {
+        if let resolvedTemplateId,
+           let template = templates.first(where: { $0.id == resolvedTemplateId }) {
+            return template
+        }
+        if let firstRemainderToken = remainderTokens.first,
+           let matched = templates.first(where: { matchesTemplate($0, token: firstRemainderToken) }) {
+            return matched
+        }
+        return makeAdHocTemplate(remainderTokens: remainderTokens)
+    }
+
     /// Resolves which project a commit should land in: a resolved command
     /// project (typed `<project> <remainder>`) takes precedence over
     /// whatever project is currently selected in the dropdown. Pure/testable
