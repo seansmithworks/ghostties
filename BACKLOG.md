@@ -1,5 +1,18 @@
 # Ghostties — Backlog
 
+## 2026-08-30 — beta.24 merges landed; new feature idea captured
+
+`main` @ `c465f3346`. PRs #146 (CHANGELOG beta.23 + beta.24), #147 (typed-branch worktree
+creation launches the session — the third objective leg), #148 (backlog) all merged. Debug
+build succeeded and launched for a dev smoke test. Suite NOT yet run on the merge result.
+
+- [ ] **NEW (Sean, 2026-08-30) — add projects to the sidebar by drag and drop.** Today the
+  only route to register a project is the picker (`ghostties.lastProjectPickerDirectory`).
+  Dropping a folder onto the sidebar should add it as a project. Unscoped — needs a design
+  pass on the drop target (whole sidebar vs. the Projects section vs. a dedicated drop
+  affordance), the empty-state case, and what happens when the dropped folder is already a
+  project or is not a git repo. Off-objective for beta.24; captured, not started.
+
 ## 2026-08-29 — three composer branches MERGED; two of three objective legs on `main`
 
 `main` @ `1a679c62d`. PRs #142 (card fit + ghost-band snapshot retune), #144 (backlog), #143
