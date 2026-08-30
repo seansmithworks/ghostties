@@ -162,6 +162,20 @@ Parked items that survive context resets. Prune at `/wrap`.
 
 > Reconciled 2026-07-29: the tracked `main` copy (07-17→07-22) and the untracked working-tree copy (07-26→07-28) had diverged. This file is the union. Only closed items were dropped (PR #48 merged as `3d2cefc57`).
 
+## 2026-08-26 — Session-row status
+
+- [x] Phase 0 + Phase 1 built, 3 review rounds, on `feat/session-row-status` (585b0bb93…833e8f30c), 971 tests / 0 new failures, gate evidence in docs/plans/session-row-status/gate-evidence.md | app | done
+- [ ] Phase 2 (ClaudeStateStore → indicatorState, both caches, 30-min false-orange fix) | app | next
+- [ ] Phase 3 (Sessions row second line) — BLOCKED on the source decision below | app | open
+- [ ] Phase 4 (Approve + guard; identity = preceding PreToolUse.tool_use_id) | app | open
+- [ ] Phase 5 (Projects badge; no floor needed per E2 rate) | app | open
+- [x] DECIDE — hook registered in `~/.claude/settings.json`? Answered 2026-08-27: yes (installed). | app | done
+- [x] DECIDE — second line replaces `projectName`? Answered 2026-08-27: yes. | app | done
+- [x] DECIDE — plain number if glyph gate fails? Answered 2026-08-27: yes. | app | done
+- [ ] **DECIDE — Phase 3 second-line source.** Main thread has no TodoWrite/Task* tool in 2.1.248; candidates (a) subagent TodoWrite via hook, (b) Stop.last_assistant_message, (c) Stop.background_tasks, (d) re-enable the harness task list (~/.claude/tasks). Evidence: gate-evidence.md §E1. | design | needs-Sean
+- [ ] Global permissions: `ask: Bash(gh pr create:*)` is swallowed by `allow: Bash(*)` — observed 2026-08-27, never prompts. Sean's config, not app code. | ops | needs-Sean
+- [ ] Phase 2 review: sleep/wake can re-arm the false `.longRunning` for one turn (`ContinuousClock` advances across system sleep), self-healing at the next `Stop`; needs previous-state tracking this phase doesn't have. | app | open
+
 ## 2026-08-25 — composer UI 11.1/11.2 BUILT overnight, on `feat/composer-ui-11`
 
 Branch `feat/composer-ui-11` @ `d4bd0afde`, 24 commits off `a1daa6608`, +4,290/-268 across

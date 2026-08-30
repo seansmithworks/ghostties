@@ -102,7 +102,25 @@ final class SessionCoordinator: ObservableObject {
     /// an isolated `WorkspaceStore` instead of `WorkspaceStore.shared` (which
     /// persists to the real `workspace.json`). nil in production.
     var agentKindLookupStoreForTesting: WorkspaceStore?
+
+    /// Test-only override for `claudeStateStore`, so tests can point this
+    /// coordinator at a temp-directory `ClaudeStateStore` instead of
+    /// `.shared` (which reads/writes the real `~/.ghostties/state/`, where
+    /// live sessions are writing right now). nil in production.
+    var claudeStateStoreForTesting: ClaudeStateStore?
 #endif
+
+    /// The `ClaudeStateStore` this coordinator reads/writes. Always
+    /// `.shared` in production; overridable in DEBUG builds via
+    /// `claudeStateStoreForTesting` so tests never touch the real
+    /// `~/.ghostties/state/`.
+    private var claudeStateStore: ClaudeStateStore {
+#if DEBUG
+        claudeStateStoreForTesting ?? .shared
+#else
+        .shared
+#endif
+    }
 
     /// Per-session Combine subscription for Claude Code → sidebar name sync.
     /// Subscribes directly to `surface.$title` (see `subscribeNameSync`) —
@@ -247,17 +265,13 @@ final class SessionCoordinator: ObservableObject {
         var config = Ghostty.SurfaceConfiguration()
         config.workingDirectory = template.workingDirectory ?? project.rootPath
         config.command = finalCommand
-        config.environmentVariables = template.environmentVariables
-        if let taskFilePath = sourceTaskFilePath {
-            config.environmentVariables["GHOSTTIES_TASK_FILE"] = taskFilePath
-        }
-        if let taskId = sourceTaskId {
-            config.environmentVariables["GHOSTTIES_TASK_ID"] = taskId
-        }
-        // Overlay any per-call env vars (e.g. GHOSTTIES_TEMPLATE for review sessions).
-        for (key, value) in extraEnvironment {
-            config.environmentVariables[key] = value
-        }
+        config.environmentVariables = Self.spawnEnvironment(
+            template: template,
+            taskFilePath: sourceTaskFilePath,
+            taskId: sourceTaskId,
+            extra: extraEnvironment,
+            sessionId: session.id
+        )
 
         let newView = Ghostty.SurfaceView(ghosttyApp, baseConfig: config)
         let newTree = SplitTree(view: newView)
@@ -1000,6 +1014,32 @@ final class SessionCoordinator: ObservableObject {
         try? FileManager.default.removeItem(atPath: path)
     }
 
+    /// Assemble the environment for a spawned session: the template's own
+    /// vars, the task-context overlays, the `GHOSTTIES_SESSION_ID` stamp
+    /// (every template, including plain shell), and finally any per-call
+    /// overrides so a caller can still win.
+    nonisolated static func spawnEnvironment(
+        template: AgentTemplate,
+        taskFilePath: String?,
+        taskId: String?,
+        extra: [String: String],
+        sessionId: UUID
+    ) -> [String: String] {
+        var result = template.environmentVariables
+        if let taskFilePath {
+            result["GHOSTTIES_TASK_FILE"] = taskFilePath
+        }
+        if let taskId {
+            result["GHOSTTIES_TASK_ID"] = taskId
+        }
+        result["GHOSTTIES_SESSION_ID"] = sessionId.uuidString
+        // Overlay any per-call env vars (e.g. GHOSTTIES_TEMPLATE for review sessions).
+        for (key, value) in extra {
+            result[key] = value
+        }
+        return result
+    }
+
     /// Sweep `~/.ghostties/cache/launchers` on app launch for `*.sh` scripts
     /// older than 24h, catching any left behind by a crash or force-quit that
     /// skipped `closeSession`'s per-session cleanup. Scoped to exactly this
@@ -1278,6 +1318,15 @@ final class SessionCoordinator: ObservableObject {
     /// (by the real timer, or synchronously by tests) without waiting on a
     /// `Timer` fire.
     private func performActivityTick() {
+        // Clear any stale `processingStartTimes` entry for a session whose
+        // latest Claude hook event is `idle` (a `Stop`). This is the
+        // 30-minute false-orange fix: `processingStartTimes` is set on
+        // first output and, before this, cleared in exactly one place
+        // (`promptDidBecomeReady`, on OSC 133) which Claude's TUI never
+        // emits — so every Claude session promoted to `.longRunning` 30
+        // minutes after its first output and stayed there forever.
+        reconcileClaudeState()
+
         // Only fire objectWillChange if there are running sessions that could transition.
         let hasRunning = self.statuses.values.contains { $0.isAlive }
         if hasRunning {
@@ -1321,10 +1370,24 @@ final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// Clear `processingStartTimes` for any alive session whose latest
+    /// Claude hook state is `idle` — the same mutation `promptDidBecomeReady`
+    /// performs on OSC 133. Mutation lives here (called once per 1Hz tick),
+    /// never inside `indicatorState(for:)`, which must stay a pure read
+    /// since it is called directly from SwiftUI `body`.
+    private func reconcileClaudeState() {
+        for id in statuses.keys where statuses[id]?.isAlive == true {
+            if claudeStateStore.state(for: id)?.state == .idle {
+                processingStartTimes.removeValue(forKey: id)
+            }
+        }
+    }
+
     /// Compute the view-layer indicator state for a session.
     ///
     /// Combines lifecycle status, output recency, and shell prompt signals into
     /// one of seven visual states. For running sessions:
+    /// - A Claude hook state (if present, not ended, not stale) wins outright
     /// - Recent output → processing (or long-running if 30+ min continuous)
     /// - No recent output + at shell prompt → idle
     /// - No recent output + NOT at prompt + likely prompting → needsAttention
@@ -1344,6 +1407,29 @@ final class SessionCoordinator: ObservableObject {
 
         switch status {
         case .running:
+            // Pure in-memory dictionary lookup, steady-state — no filesystem
+            // access from this render-path call. (The *first* access of
+            // `ClaudeStateStore.shared` does touch the filesystem via its
+            // `init`; `AppDelegate` warms it at launch so that happens before
+            // any render, not here.) `ClaudeStateStore.state(for:)` already
+            // filters out `.ended` and stale entries, so `.ended` never
+            // reaches this switch; the case exists only for exhaustiveness.
+            if let claudeState = claudeStateStore.state(for: sessionId) {
+                switch claudeState.state {
+                case .busy:
+                    if let start = processingStartTimes[sessionId],
+                       ContinuousClock.now - start > Self.longRunningThreshold {
+                        return .longRunning
+                    }
+                    return .processing
+                case .idle:
+                    return .idle
+                case .needsInput, .needsPermission:
+                    return .needsAttention
+                case .ended:
+                    break
+                }
+            }
             // Check if the session has produced output recently.
             if let lastOutput = lastOutputTimestamps[sessionId],
                ContinuousClock.now - lastOutput < Self.activityThreshold {
@@ -1469,6 +1555,7 @@ final class SessionCoordinator: ObservableObject {
         case .completed, .exited, .killed:
             cachedIndicatorStates?.removeValue(forKey: id)
             WorkspaceStore.shared.removeIndicatorState(id: id)
+            claudeStateStore.removeState(for: id)
         case .error:
             cachedIndicatorStates?[id] = .error
             WorkspaceStore.shared.updateIndicatorState(id: id, state: .error)

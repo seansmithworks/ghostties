@@ -264,6 +264,18 @@ class AppDelegate: NSObject,
         // script can carry session context, so they shouldn't accumulate.
         DispatchQueue.global(qos: .utility).async {
             SessionCoordinator.sweepStaleLauncherScripts()
+            ClaudeStateStore.sweepStale()
+        }
+
+        // Warm `ClaudeStateStore.shared` here, at launch, so its filesystem
+        // setup (mkdir/stat/chmod) and `DispatchSource` creation happen
+        // before any render — not on the first sidebar paint, which calls
+        // `ProjectDisclosureRow` → `SessionCoordinator.indicatorState(for:)`
+        // → `ClaudeStateStore.shared` before the 1Hz activity timer's first
+        // tick. `ClaudeStateStore` is `@MainActor`; hop explicitly rather
+        // than relying on this delegate callback's (unannotated) isolation.
+        Task { @MainActor in
+            _ = ClaudeStateStore.shared
         }
 
         // Check if secure input was enabled when we last quit.
@@ -556,6 +568,17 @@ class AppDelegate: NSObject,
     }
 
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+        // AppKit can invoke this callback (e.g. opening a file at launch)
+        // before `applicationDidFinishLaunching` runs, so that function's
+        // `ClaudeStateStore.shared` warm Task hasn't been enqueued yet.
+        // Enqueue ours here, before any
+        // `TerminalController.newWindow`/`newTab` call below schedules its
+        // presentation via `DispatchQueue.main.async` — main-queue FIFO then
+        // guarantees the store is warm before the first sidebar paint.
+        Task { @MainActor in
+            _ = ClaudeStateStore.shared
+        }
+
         // Ghostty will validate as well but we can avoid creating an entirely new
         // surface by doing our own validation here. We can also show a useful error
         // this way.

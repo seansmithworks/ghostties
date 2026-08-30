@@ -83,11 +83,13 @@ final class TaskFileWatcher {
             self.scheduleDebouncedFire()
         }
 
-        src.setCancelHandler { [weak self] in
-            guard let self = self else { return }
-            if self.fd >= 0 {
-                close(self.fd)
-                self.fd = -1
+        src.setCancelHandler { [descriptor] in
+            // Capture the fd by value, not `[weak self]`: `deinit` ->
+            // `stopInternal()` -> `src.cancel()` runs while `self` is already
+            // deallocating, so a weak lookup here would find nil and leak
+            // the descriptor.
+            if descriptor >= 0 {
+                close(descriptor)
             }
         }
 
@@ -124,13 +126,35 @@ final class TaskFileWatcher {
         pendingReload = nil
         retryItem?.cancel()
         retryItem = nil
+        // Invariant: exactly one path ever closes `fd`, and `fd` is cleared
+        // the moment ownership of the close passes elsewhere. `src.cancel()`
+        // hands the close to the cancel handler (which captured the
+        // descriptor by value), so we must clear `fd` here too -- otherwise
+        // a later `stopInternal()` call (source == nil, stale fd) closes the
+        // same descriptor a second time after the OS has already reissued
+        // it to something unrelated. Do not remove this without re-reading
+        // the cancel handler's capture semantics above.
         if let src = source {
             src.cancel()
             source = nil
+            fd = -1
         } else if fd >= 0 {
             close(fd)
             fd = -1
         }
         isRunning = false
     }
+
+#if DEBUG
+    /// Test-only: drains the watcher's serial queue (twice, to also flush
+    /// anything a just-completed block enqueued, e.g. a source's cancel
+    /// handler) and returns the resulting `fd`. Exists so tests can prove
+    /// the single-owner-close invariant in `stopInternal()` without
+    /// guessing at fd-reuse timing.
+    func debugDrainAndReadFD() -> Int32 {
+        queue.sync {}
+        queue.sync {}
+        return queue.sync { fd }
+    }
+#endif
 }
