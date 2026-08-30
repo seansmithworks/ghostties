@@ -11,33 +11,34 @@ flake (passes class-filtered in isolation at 0.91s against a 2.0s threshold). `s
 Objective legs: card fits ✅ · `-n` invariant runs in CI ✅ · **create-worktree finishes the
 job ⬜ — still not on `main`.**
 
-- [ ] **carried — round 4 on `feat/composer-create-worktree-launch`** (`c27843a51`, unmerged,
-  no PR). This is the third objective leg. Round 3 found 1 blocker + 6 should-fix; the fix
-  commit landed 4 of them but **2 of the 4 have no discriminating test**: (a) the blocker
-  deletion (`branchesWithoutWorktree.removeAll`) can only be exercised by forcing
-  `refreshWorktrees` past its hardcoded 2s deadline, and there is no timing-injection seam;
-  (b) the template-scoping fix touches a `private`/`@EnvironmentObject`-bound call site no
-  test can reach — the added test proves the mechanism but never touches the changed line.
-  Review the fix commit as NEW code, seeded with what round 3 cleared. Three round-3 findings
-  were deliberately left unfixed and are Sean's call: finding 4 (hoist `processHandle`/
-  `gitTask` onto the store so `cancel()`/`open()` can terminate an in-flight `git worktree
-  add` — today Esc leaves it unkillable and the next Return fires a second concurrent add),
-  finding 5 (a test labelled mutant-catching that re-implements the fix in its own closure),
-  finding 6 (tier 2's doc comment justifies itself with a claim `makeAdHocTemplate`'s own
-  comment nine lines above contradicts).
+- [ ] **PR OPEN, awaiting merge — round 4 on `feat/composer-create-worktree-launch`.** Now
+  **PR #147**, branch at `4f8cbf162`, four commits: the three round-4 code items plus three
+  further review rounds. This is the third objective leg. Round 3 found 1 blocker + 6
+  should-fix; the fix commit landed 4 of them, and the two that shipped without a
+  discriminating test — (a) the blocker deletion (`branchesWithoutWorktree.removeAll`),
+  which can only be exercised by forcing `refreshWorktrees` past its hardcoded 2s deadline
+  with no timing-injection seam; (b) the template-scoping fix touching a `private`/
+  `@EnvironmentObject`-bound call site no test can reach — were addressed across the three
+  further review rounds baked into `4f8cbf162`. Three round-3 findings remain deliberately
+  unfixed and are Sean's call: finding 4 (hoist `processHandle`/`gitTask` onto the store so
+  `cancel()`/`open()` can terminate an in-flight `git worktree add` — today Esc leaves it
+  unkillable and the next Return fires a second concurrent add), finding 5 (a test labelled
+  mutant-catching that re-implements the fix in its own closure), finding 6 (tier 2's doc
+  comment justifies itself with a claim `makeAdHocTemplate`'s own comment nine lines above
+  contradicts). Merge is Sean's.
 
-- [ ] **carried — CHANGELOG for beta.23 AND beta.24, then the appcast copy.** `CHANGELOG.md`
-  is topped at beta.22; beta.23 shipped with no entry, so this tag owes two write-ups. Then
-  copy the section into `web/appcast-beta.xml`'s `<description><![CDATA[…]]></description>`.
-  Pre-tag, no decisions in it, fully delegable.
+- [ ] **PR OPEN, awaiting merge — CHANGELOG for beta.23 AND beta.24, then the appcast
+  copy.** Now **PR #146** (`docs/changelog-beta-23-24`), green, mergeable, docs-only.
+  `CHANGELOG.md` was topped at beta.22; beta.23 shipped with no entry, so the PR covers
+  both write-ups plus the mirrored copy into `web/appcast-beta.xml`'s
+  `<description><![CDATA[…]]></description>`. Pre-tag, no decisions in it. Merge is Sean's.
 
-- [ ] **new — BACKLOG's own beta.24 entry is STALE and contradicts reality.** `BACKLOG.md:111`
-  still calls landing `feat/composer-branch-segment` "the ONLY thing gating beta.24." That
-  branch (`a1daa6608`) merged into `main` under PR #138, riding in beneath
-  `feat/composer-ui-11`. The same entry's "`main` still carries the chips" is also false —
-  what remains are residual identifiers (`stickyChipProjectId`, `closeChipPickerOrDismiss`,
-  `pendingChipUndo`), not the rejected chip UI. **Beta.24 has no code gate left.** Correct
-  both claims in place.
+- [x] **CLOSED 2026-08-29 — BACKLOG's own beta.24 entry was STALE and contradicted
+  reality.** The 2026-08-24 section's "the ONLY thing gating beta.24" and "`main` still
+  carries the chips" claims are corrected in place (see that section below). Beta.24 has
+  no code gate left. Remaining before the tag: merge PR #146, then three checks needing
+  Sean's Mac (type-first feel, composer smoke test, Sparkle update from the DMG), then the
+  tag itself.
 
 - [ ] **new — `MEMORY.md` is silently truncated at load.** 26,129 chars against a 20,000-char
   cap and a 24.4KB read limit, so entries at the end are already invisible every boot. Route
@@ -47,6 +48,32 @@ job ⬜ — still not on `main`.**
   the disk hit 253Mi free mid-session and failed a dispatch with `No space left on device`.
   All seven branches are pushed and removing a worktree never deletes its branch, so this is
   free space. Needs Sean's nod on which `session-*` trees are dead.
+
+- [ ] **new — a second contention flake, previously unrecorded.**
+  `SessionComposerWorktreeLaunchTests.creationFullyResolvesWithNoOnSuccessProvided` fails
+  under full-suite parallel load (`selectedWorktreePath` still nil when its 12s poll
+  expires) and passes 14/14 in isolation. Measured 2026-08-29. Until now only
+  `GitWorktreeCreationTests.raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes` was
+  documented as the flake — anyone seeing two failures in a run would think something
+  broke. Same timing-fragility class as the round-4 poll fix. Worth a pass to make these
+  deterministic.
+
+- [ ] **new — tier 2 discards typed flags when a same-named project template exists.**
+  If a project owns a template literally named `cco`, typing `repo cco -n "thread name"`
+  resolves the template as a terminated operator segment and the typed `-n "thread name"`
+  is **discarded** — `commit(template:)` → `precommit(template:)` launches the template
+  verbatim. Collides directly with Sean's 95% idiom (`repo cco -n "thread name"`).
+  Pre-existing behavior introduced by round 3's fix, surfaced during PR #147 review,
+  deliberately left out of scope for that PR. `SessionComposerCommandParser`'s "never
+  claim `-n`" invariant covers the ad-hoc path but not this one.
+
+- [ ] **new — `CLAUDE.md` is wrong about CEF being optional.** The root Build section
+  presents `scripts/download-cef.sh` as "optional, needed for embedded browser," but the
+  Xcode target links `cef_dll_wrapper` **unconditionally** — a worktree missing
+  `vendor/cef` + `vendor/cef-build` fails at LINK (`ld: library 'cef_dll_wrapper' not
+  found`), not at runtime. Cost a full build cycle 2026-08-29. The existing "a fresh
+  worktree can't build" note lists the gitignored inputs to stage but doesn't call out
+  that CEF is mandatory. Docs fix — needs someone to edit `CLAUDE.md` directly.
 
 - [ ] **parked (off-objective) — composer entry-point placement.** `+ New Session` is
   hardcoded `.centered` at `WorkspaceViewContainer.swift:1556`; `.anchored` works at
@@ -220,13 +247,20 @@ gitignored — regenerate with the `design` skill's `seed-canvas.mjs`.
 
 ## 2026-08-24 — beta.24 is gated on ONE branch: land type-first composer first
 
+**STALE — corrected 2026-08-29: `feat/composer-branch-segment` merged into `main` under
+PR #138. `main` no longer carries the rejected chip UI — what remains is residual
+identifiers only (`stickyChipProjectId`, `closeChipPickerOrDismiss`, `pendingChipUndo`),
+not the chip design itself. Beta.24 has no code gate left; see the 2026-08-29 section
+above for what actually remains before the tag.** Original (now-false) framing kept below
+for history:
+
 **The composer on `main` is the chip design Sean rejected.** `377ae4b2c` (Sean's own
 commit, 2026-08-23) deletes the breadcrumb chips and rebuilds the field type-first —
 and it is **not on `main`**. It lives only on `feat/composer-branch-segment`. `main`
 still carries the chips (7 refs in `SessionComposerPalette.swift`). Cutting beta.24
 from `main` today ships a UX that was already tested and reversed.
 
-- [ ] **carried — the ONLY thing gating beta.24.** Land `feat/composer-branch-segment`
+- [x] **CLOSED 2026-08-29 — was "the ONLY thing gating beta.24."** Land `feat/composer-branch-segment`
   on `main`. 22 commits, +5,288/−378 across 11 files, carrying the type-first rebuild
   **plus** Slice B (branch→worktree). They cannot be separated — `377ae4b2c` sits on
   top of the B1–B4 commits. `main` has not moved since the fork point (`07abc440a`
