@@ -105,4 +105,38 @@ struct SessionComposerLaneOrderingTests {
 
         #expect(newIndex == nil)
     }
+
+    // MARK: - Composer variant G: rest-state lane cap
+
+    /// Blank query caps a lane at `restStateLaneCap` (3), keeping the FIRST
+    /// three of whatever ordering the caller already applied — proof this
+    /// caps AFTER ordering, not before, since `applyRestStateCap` never
+    /// reorders its input.
+    ///
+    /// Mutant-verified directly against the production symbol: with
+    /// `applyRestStateCap`'s body temporarily replaced with `return
+    /// options` (the cap deleted), `#expect(capped.count == 3)` failed —
+    /// the uncapped 6-option array passed through untouched. The mutation
+    /// was then reverted; production `applyRestStateCap` is unchanged from
+    /// what's committed here.
+    @Test func applyRestStateCapKeepsOnlyTheFirstThreeAtBlankQuery() {
+        let options = (0..<6).map { makeOption(name: "Option \($0)") }
+
+        let capped = SessionComposerPalette.applyRestStateCap(to: options, query: "")
+
+        #expect(capped.count == 3)
+        #expect(capped.map(\.id) == Array(options.prefix(3)).map(\.id))
+    }
+
+    /// A non-blank query is never capped — hiding a filtered match would
+    /// defeat the point of searching for it. Proves a 4th+ match still
+    /// appears once the user types.
+    @Test func applyRestStateCapPassesThroughUnchangedWhenQueryIsNonBlank() {
+        let options = (0..<6).map { makeOption(name: "Option \($0)") }
+
+        let uncapped = SessionComposerPalette.applyRestStateCap(to: options, query: "opt")
+
+        #expect(uncapped.count == 6)
+        #expect(uncapped.map(\.id) == options.map(\.id))
+    }
 }

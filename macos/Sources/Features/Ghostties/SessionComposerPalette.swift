@@ -1060,13 +1060,33 @@ struct SessionComposerPalette: View {
         return pinned + recentMinusPinned
     }
 
+    /// Rest-state cap for the TEMPLATES and PROJECTS lanes (Sean, 2026-08-30):
+    /// a blank query showed 1 recent + 6 templates + 6 projects, scrolling
+    /// past the fold. Matches the precedent already set by
+    /// `SessionComposerStore.maxRecents`, which has always capped RECENT at
+    /// 3 — this just extends the same number to the other two lanes.
+    /// Rest-state only: a non-blank query is never capped, since hiding a
+    /// filtered match defeats the point of searching for it.
+    private static let restStateLaneCap = 3
+
+    /// Pure seam behind the rest-state cap — extracted (this file's
+    /// established pattern, e.g. `composeLane1`) so "cap applies only at a
+    /// blank query, after ordering" is directly testable without a SwiftUI
+    /// view-test harness. Callers pass their lane's already-ordered options;
+    /// a non-blank `query` returns them unchanged.
+    static func applyRestStateCap(to options: [ComposerOption], query: String) -> [ComposerOption] {
+        guard query.isEmpty else { return options }
+        return Array(options.prefix(restStateLaneCap))
+    }
+
     /// Lane 2 (board 11.2): remaining templates minus anything already
     /// surfaced in lane 1 (recent OR pinned) — `filteredTemplateOptions`
     /// already excludes recents; this additionally excludes pins so a
     /// pinned-but-not-recent template doesn't render twice.
     private var lane2Options: [ComposerOption] {
         let pinnedIds = Set(pinnedOptions.map { $0.id })
-        return filteredTemplateOptions.filter { !pinnedIds.contains($0.id) }
+        let options = filteredTemplateOptions.filter { !pinnedIds.contains($0.id) }
+        return Self.applyRestStateCap(to: options, query: query)
     }
 
     /// Query-matching projects (S2, locked decision: "the search field
@@ -1114,7 +1134,7 @@ struct SessionComposerPalette: View {
                 cascadePick: currentProject?.id,
                 recentProjectIds: recentIds
             )
-            return ordered.map(makeOption)
+            return Self.applyRestStateCap(to: ordered.map(makeOption), query: query)
         }
 
         let options = store.projects.map(makeOption)

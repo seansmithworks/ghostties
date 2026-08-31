@@ -948,6 +948,128 @@ struct SessionComposerSnapshotTests {
         }
     }
 
+    // MARK: - Composer variant G: rest-state lane cap
+
+    /// Acceptance criterion 1: a blank query caps the PROJECTS lane at
+    /// `SessionComposerPalette.restStateLaneCap` (3) instead of listing
+    /// every project. Relational, not absolute (this file's own
+    /// "absolute-pixel bands get retuned to match a bug" lesson): a
+    /// 3-project fixture and a 6-project fixture, both at a blank query,
+    /// must render at the SAME card height — if the cap regressed to
+    /// uncapped growth, the 6-project fixture would render measurably
+    /// taller, exactly like `blankQueryPopulatesProjectsLaneAtRestLightAndDark`
+    /// proves for the UNCAPPED, pre-cap behavior it's paired against.
+    @Test func restStateCapsProjectsLaneAtThreeLightAndDark() {
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+
+        func makeFixture(count: Int, suffix: String) -> some View {
+            let projects = (0..<count).map {
+                Project(name: "Cap Project \($0)", rootPath: "/tmp/composer-ui-11-cap-\(suffix)-\($0)-\(UUID().uuidString)")
+            }
+            let workspaceStore = WorkspaceStore(testingProjects: projects, testingSessions: [])
+            let composerStore = SessionComposerStore(isolatedForTesting: suiteName + "." + suffix)
+            composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+            return SessionComposerPalette(
+                isPresented: .constant(true),
+                request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+                composerStore: composerStore
+            )
+            .environmentObject(workspaceStore)
+            .environmentObject(SessionCoordinator())
+        }
+
+        let threeView = makeFixture(count: 3, suffix: "three")
+        let sixView = makeFixture(count: 6, suffix: "six")
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 700)
+
+        for (appearance, label) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
+            guard let threeData = renderPNG(threeView, appearance: appearance, size: size),
+                let sixData = renderPNG(sixView, appearance: appearance, size: size)
+            else {
+                Issue.record("failed to render \(label) fixtures")
+                continue
+            }
+            writeEvidence(threeData, filename: "variant-g-rest-cap-three-projects-\(label).png")
+            writeEvidence(sixData, filename: "variant-g-rest-cap-six-projects-\(label).png")
+
+            guard let threeTop = cardTopEdge(in: threeData), let threeBottom = cardBottomEdge(in: threeData),
+                let sixTop = cardTopEdge(in: sixData), let sixBottom = cardBottomEdge(in: sixData)
+            else {
+                Issue.record("failed to measure card edges for \(label)")
+                continue
+            }
+            let threeHeight = threeBottom - threeTop
+            let sixHeight = sixBottom - sixTop
+            #expect(
+                abs(sixHeight - threeHeight) <= 8,
+                "\(label): expected the rest-state PROJECTS lane to cap at 3 (3-project and 6-project fixtures rendering at the same height), got three=\(threeHeight)px vs six=\(sixHeight)px — the cap may have regressed to uncapped growth"
+            )
+        }
+    }
+
+    /// Acceptance criterion 2: the cap is rest-state only — once the user
+    /// types a query that matches every project, all of them render, not
+    /// just the first 3. Same 6-project fixture, blank query (capped at 3)
+    /// vs. a typed query matching all 6 (uncapped): the typed render must
+    /// be measurably taller.
+    @Test func typingUncapsTheProjectsLaneBeyondThree() {
+        let projects = (0..<6).map {
+            Project(name: "Zulu Project \($0)", rootPath: "/tmp/composer-ui-11-uncap-\($0)-\(UUID().uuidString)")
+        }
+        let workspaceStore = WorkspaceStore(testingProjects: projects, testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        // `.prefilled`, not `.locked` — a locked composer's
+        // `filteredProjectOptions` is unconditionally empty, which would
+        // hide the very lane this test is proving uncaps.
+        composerStore.open(projectBinding: .prefilled(projects[0]), workspaceStore: workspaceStore)
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 700)
+
+        guard let blankData = renderPNG(
+            SessionComposerPalette(
+                isPresented: .constant(true),
+                request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(projects[0])),
+                composerStore: composerStore
+            )
+            .environmentObject(workspaceStore)
+            .environmentObject(SessionCoordinator()),
+            appearance: .aqua,
+            size: size
+        ) else {
+            Issue.record("failed to render blank-query fixture")
+            return
+        }
+        writeEvidence(blankData, filename: "variant-g-uncap-blank-query-light.png")
+
+        guard let typedData = renderMountedPaletteAfterTyping(
+            project: projects[0],
+            workspaceStore: workspaceStore,
+            composerStore: composerStore,
+            typed: "zulu",
+            appearance: .aqua,
+            size: size
+        ) else {
+            Issue.record("failed to render typed-query fixture")
+            return
+        }
+        writeEvidence(typedData, filename: "variant-g-uncap-typed-query-light.png")
+
+        guard let blankTop = cardTopEdge(in: blankData), let blankBottom = cardBottomEdge(in: blankData),
+            let typedTop = cardTopEdge(in: typedData), let typedBottom = cardBottomEdge(in: typedData)
+        else {
+            Issue.record("failed to measure card edges")
+            return
+        }
+        let blankHeight = blankBottom - blankTop
+        let typedHeight = typedBottom - typedTop
+        #expect(
+            typedHeight - blankHeight > 40,
+            "expected typing a query matching all 6 projects to render taller than the capped, blank-query rest state, got blank=\(blankHeight)px vs typed=\(typedHeight)px — a non-blank query may still be capped"
+        )
+    }
+
     // MARK: - Step 3: ghost placeholder opacity
 
     /// Pins `ComposerQueryField.ghostPlaceholderOpacity` — the production
@@ -1535,8 +1657,8 @@ struct SessionComposerSnapshotTests {
         if let light, let top = cardTopEdge(in: light), let bottom = cardBottomEdge(in: light) {
             let height = bottom - top
             #expect(
-                height > 530 && height < 580,
-                "card measured \(height)px tall (top \(top), bottom \(bottom)) with a live operator footer — expected 530-580px (mutant-verified: 555px with the strip, 503px without; the upper bound guards a mutant that over-renders instead of dropping the strip entirely — see this test's doc comment for the known one-more-default-template caveat this band does NOT survive)"
+                height > 415 && height < 465,
+                "card measured \(height)px tall (top \(top), bottom \(bottom)) with a live operator footer — expected 415-465px. Retuned for Composer variant G's rest-state lane cap (`SessionComposerPalette.applyRestStateCap`, capped at 3): this fixture's TEMPLATES lane previously rendered every default template uncapped (measured 555px, the old band's center); capping at 3 removed the rest and re-measured at 439px. Mutant-verified against the new band: with `applyRestStateCap`'s body temporarily replaced with `return options` (the cap deleted), this test failed — height reverted to the old, uncapped 555px, outside the new 415-465 band. The mutation was then reverted; production `applyRestStateCap` is unchanged from what's committed here."
             )
         } else {
             Issue.record("failed to render or measure the card's opaque bounds")
