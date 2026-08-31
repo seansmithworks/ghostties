@@ -18,8 +18,11 @@ import GhosttiesCore
 ///   used to sit beneath it with an in-field GHOST PLACEHOLDER
 ///   (`ghostPlaceholder`, `.centered` only) showing the exact path Return
 ///   would currently commit, a STATUS STRIP for pre/post-Return errors, and
-///   two trailing controls (`projectControl`/`branchControl`) as the only
-///   mouse entry point left into the project/branch pickers.
+///   a trailing `projectControl` as the only mouse entry point left into the
+///   project picker. Variant G (Pass A, locked 2026-08-30) removed the
+///   sibling branch chevron control that used to sit beside it inside the
+///   field; the branch stage still opens by typing `>` — no mouse route
+///   was added back.
 /// - Prefix-first relevance ranking (`SessionComposerRanking`) instead of
 ///   boolean-match + color scoring.
 /// - Focus-loss auto-dismiss removed: the project dropdown and
@@ -92,9 +95,9 @@ struct SessionComposerPalette: View {
     /// segment, before that the project chip's own click target, Slice
     /// A/A2). Drives an expansion INSIDE the card, not a `.popover`.
     @State private var isProjectPickerOpen = false
-    /// Whether the inline branch picker is expanded — opened from
-    /// `branchControl` (Step 5; used to be the resolution line's branch
-    /// segment, before that the branch chip's click target, Slice B/B3).
+    /// Whether the inline branch picker is expanded — Step 5 opened this from
+    /// a since-removed `branchControl` (Variant G Pass A deleted the
+    /// in-field mouse route); now opened only via the keyboard `>` grammar.
     /// Mutually exclusive with
     /// `isProjectPickerOpen` BY CONSTRUCTION — every site that flips one to
     /// `true` flips the other to `false` in the same statement — never
@@ -1379,16 +1382,15 @@ struct SessionComposerPalette: View {
             Divider()
 
             ComposerResultsTable(
-                // Headerless (Step 2 board `V02Quieted222.dc.html`): no
-                // visible section title renders, but each lane still carries
-                // an `accessibilityLabel` so VoiceOver retains grouping.
-                // PROJECTS/COMMAND keep their existing content, just without
-                // the rendered header.
+                // Variant G (Pass A): visible section headers restored —
+                // RECENT/TEMPLATES/PROJECTS/COMMAND, uppercased, rendered
+                // only for non-empty lanes. `accessibilityLabel` is
+                // unchanged from the Step 2 headerless build.
                 sections: [
-                    (accessibilityLabel: "Recent", options: lane1Options),
-                    (accessibilityLabel: "Templates", options: lane2Options),
-                    (accessibilityLabel: "Projects", options: filteredProjectOptions),
-                    (accessibilityLabel: "Command", options: commandOptions)
+                    (title: "Recent", accessibilityLabel: "Recent", options: lane1Options),
+                    (title: "Templates", accessibilityLabel: "Templates", options: lane2Options),
+                    (title: "Projects", accessibilityLabel: "Projects", options: filteredProjectOptions),
+                    (title: "Command", accessibilityLabel: "Command", options: commandOptions)
                 ],
                 query: query,
                 selectedIndex: $selectedIndex,
@@ -1591,9 +1593,6 @@ struct SessionComposerPalette: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                if trailingControlVisibility.showBranchControl {
-                    branchControl(label: trailingControlVisibility.branchControlLabel)
-                }
                 if trailingControlVisibility.showProjectControl {
                     projectControl
                 }
@@ -1672,57 +1671,6 @@ struct SessionComposerPalette: View {
         .accessibilityLabel(Self.accessibilityProjectControlLabel)
         .accessibilityValue(currentProject?.name ?? "No project selected")
         .accessibilityHint("Opens project picker")
-    }
-
-    /// Step 5: the branch picker's mouse route (plan §4 table). Shown only
-    /// when `isBranchSegmentEligible` — a non-git project shows no branch
-    /// control at all, not a disabled one (mirrors the deleted branch
-    /// segment's own rule). Carries a text label beside the glyph only
-    /// "when it has news" — `label` is the override branch name, or
-    /// `Creating…` while a `git worktree add` is in flight
-    /// (`trailingControlVisibility`); `nil` means default branch, and the
-    /// word "Default" is never restated outside the rest-state ghost path.
-    private func branchControl(label: String?) -> some View {
-        Button {
-            isProjectPickerOpen = false
-            isBranchPickerOpen.toggle()
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: subtitleFontSize))
-                    .foregroundStyle(.tertiary)
-                if let label {
-                    // Fix 4 (review): no width cap next to the greedy
-                    // `ComposerQueryField.frame(maxWidth: .infinity)`
-                    // sibling — a long branch name could starve the field.
-                    // Per `reference_swiftui-frame-maxwidth-is-greedy`, the
-                    // fix is `.truncationMode(.tail)` alongside the existing
-                    // `.lineLimit(1)`, NOT an added `.frame(maxWidth:)`
-                    // (that shipped wrong three times on this exact line
-                    // class already): the HStack's own space division
-                    // already bounds it once the sibling can't be squeezed
-                    // below its truncated minimum.
-                    Text(label)
-                        .font(.system(size: subtitleFontSize))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-            }
-            .frame(minWidth: 16, minHeight: 16)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        // Fix 6 (review): `.accessibilityLabel` on a Button REPLACES its
-        // auto-generated combined label — the branch name / `Creating…`
-        // text inside this Button's own HStack was suppressed for
-        // VoiceOver exactly when it carried news. `accessibilityValue`
-        // restores it (mirroring `projectControl`'s split); `nil` reads as
-        // "Default", matching what the absence of the on-screen label
-        // already means.
-        .accessibilityLabel(Self.accessibilityBranchControlLabel)
-        .accessibilityValue(label ?? Self.accessibilityBranchControlDefaultValue)
-        .accessibilityHint("Opens branch picker")
     }
 
     /// `ProjectDropdownView`'s list content, reused verbatim, but presented
@@ -2530,10 +2478,13 @@ struct ComposerQueryField: View {
 // MARK: - Results table
 
 /// Forked from `CommandTable`. Step 2 (Composer UI 11) made it headerless —
-/// boards `V02Quieted22.dc.html`/`V02Quieted222.dc.html` render no section
-/// titles, lanes separated only by whitespace — so `sections` no longer
-/// carries a visible `title`, only an `accessibilityLabel` VoiceOver reads
-/// per lane so the grouping isn't lost with the header text. Uses a plain
+/// boards `V02Quieted22.dc.html`/`V02Quieted222.dc.html` rendered no section
+/// titles, lanes separated only by whitespace, and `sections` carried only
+/// an `accessibilityLabel`. Variant G (Pass A) restores a visible `title`
+/// per lane — RECENT/TEMPLATES/PROJECTS/COMMAND, uppercased — rendered only
+/// for lanes with at least one option; `accessibilityLabel` is unchanged and
+/// still carries the VoiceOver grouping independent of the visible title.
+/// Uses a plain
 /// `VStack`, never `LazyVStack` — this repo has a known bug class where
 /// `LazyVStack` never re-invokes `ForEach`'s content closure when an element
 /// changes but its `id` does not, which froze sidebar rows at first
@@ -2550,7 +2501,7 @@ private struct ComposerResultsHeightPreferenceKey: PreferenceKey {
 }
 
 private struct ComposerResultsTable: View {
-    var sections: [(accessibilityLabel: String, options: [ComposerOption])]
+    var sections: [(title: String, accessibilityLabel: String, options: [ComposerOption])]
     var query: String
     @Binding var selectedIndex: UInt?
     @Binding var hoveredOptionID: UUID?
@@ -2626,6 +2577,14 @@ private struct ComposerResultsTable: View {
                     ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
                         if !section.options.isEmpty {
                             VStack(alignment: .leading, spacing: 1) {
+                                Text(section.title.uppercased())
+                                    .font(.system(size: 10, weight: .bold))
+                                    .tracking(0.6)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 6)
+                                    .padding(.leading, 14)
+                                    .padding(.bottom, 4)
+
                                 ForEach(section.options) { option in
                                     ComposerRow(
                                         option: option,

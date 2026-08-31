@@ -2015,3 +2015,9 @@ Branch `feat/composer-branch-segment` @ `948ad5fa8`, pushed, suite 871/0/1, tree
 **Accepted risks, stated rather than solved:** no macOS 13 coverage (a VM is disproportionate);
 keyboard behavior gated on Sean's manual pass — subagents may screen-capture but must NEVER drive
 synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
+
+## 2026-08-30 — Composer variant G
+
+- [ ] Composer variant G — Pass A: section headers + remove in-field branch control
+- [ ] Composer variant G — Pass B: contextual operator footer strip
+- [ ] Composer variant G — independent review of the complete diff

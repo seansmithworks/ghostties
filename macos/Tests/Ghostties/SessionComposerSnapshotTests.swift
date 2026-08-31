@@ -257,6 +257,26 @@ struct SessionComposerSnapshotTests {
         return nil
     }
 
+    /// Variant G Pass A: `cardTopEdge`'s mirror, scanning from the image's
+    /// bottom row upward for the first opaque pixel — the card's own bottom
+    /// edge, same technique/rationale as `cardTopEdge` above. Paired with it
+    /// to measure a fixture's total card height
+    /// (`emptyLanesRenderNoHeaderOrExtraSpace` below) — a spurious header
+    /// rendered for an empty lane (the guard this test exists to catch)
+    /// adds real height between top and bottom edge, so no text-recognition
+    /// is needed to detect it.
+    private func cardBottomEdge(in data: Data) -> Int? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        for y in stride(from: rep.pixelsHigh - 1, through: 0, by: -1) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+                if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 {
+                    return y
+                }
+            }
+        }
+        return nil
+    }
+
     /// Fix 7 (review), step 3 specifically: counts pixels in the exact gray
     /// band the 11.1 ghost placeholder renders at rest — was
     /// `Color(nsColor: .labelColor).opacity(0.49)` over the card's
@@ -661,6 +681,59 @@ struct SessionComposerSnapshotTests {
         writeEvidence(dark, filename: "step4-zero-project-dark.png")
         #expect(dark != nil)
         if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the 'Add project…' empty-state row to render, got a near-blank card") }
+    }
+
+    // MARK: - Variant G Pass A: section headers, empty-lane guard
+
+    /// `ComposerResultsTable` (Variant G Pass A) renders a visible header
+    /// for each of the four lanes (RECENT/TEMPLATES/PROJECTS/COMMAND) but
+    /// ONLY when that lane has at least one option — the guard is
+    /// `if !section.options.isEmpty` around BOTH the header `Text` and the
+    /// row `ForEach`, one shared code path for all four lanes. This reuses
+    /// the zero-project fixture (`step4ZeroProjectEmptyStateRendersLightAndDark`'s
+    /// setup): with no projects anywhere, ALL FOUR lanes are structurally
+    /// empty (`lane1Options`/`lane2Options`/`filteredProjectOptions`/
+    /// `commandOptions` all `[]`), so a correct guard renders zero headers
+    /// and the card's total measured height (`cardTopEdge`...`cardBottomEdge`)
+    /// stays small — just the field, divider, and the single "Add
+    /// project…" empty-state row.
+    ///
+    /// Mutant-verified (measured directly, this exact fixture/size):
+    /// deleting the `!section.options.isEmpty` guard (replacing it with
+    /// `if true`, so all 4 lanes render a header with zero rows beneath it)
+    /// grew the measured card height from 223 to 415 backing px. This
+    /// test's threshold (300) sits with ~90px of margin above the correct
+    /// build's 223 and ~115px below the mutant's 415, so it fails loudly
+    /// under the mutation and passes cleanly on the guarded implementation.
+    @Test func emptyLanesRenderNoHeaderOrExtraSpace() {
+        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-empty-lanes-no-header-light.png")
+        #expect(light != nil)
+        guard let light,
+              let top = cardTopEdge(in: light),
+              let bottom = cardBottomEdge(in: light)
+        else {
+            Issue.record("failed to render or measure the card's opaque bounds")
+            return
+        }
+        let height = bottom - top
+        #expect(
+            height < 300,
+            "card measured \(height)px tall (top \(top), bottom \(bottom)) with zero populated lanes — expected under 300px (field + divider + one empty-state row); a spuriously rendered header for an empty lane pushes this well past 300"
+        )
     }
 
     // MARK: - Step 7: model B ghost field (UNVERIFIED-INTERACTION)

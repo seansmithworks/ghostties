@@ -1,6 +1,7 @@
 // IDE-ONLY: not currently exercised in CI macos job (build-only).
 // Run via Xcode Cmd+U or xcodebuild test locally.
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Phase 0 of the session-row-status plan: every spawned session's
