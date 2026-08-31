@@ -774,17 +774,33 @@ struct SessionComposerPalette: View {
         )
     }
 
-    /// Decision 1: the typed branch token, if it names a KNOWN branch that
-    /// simply has no worktree yet (`composerStore.branchesWithoutWorktree`)
-    /// — the case `commandOptions` offers a "Create worktree" row for
-    /// instead of `typedBranchResolution`'s plain `.unresolved` dead end.
-    /// `nil` for every other shape (nothing typed, already resolved, or
-    /// genuinely nonexistent).
+    /// Composer variant G (Sean's ruling, 2026-08-31): the typed token in an
+    /// armed branch position (`> <token>`), whenever it doesn't already
+    /// resolve — `commandOptions` offers a create row for it, EITHER shape:
+    /// a KNOWN branch with no worktree yet (`composerStore
+    /// .branchesWithoutWorktree`, the pre-existing case — "Create worktree
+    /// for X") or a token that matches no branch at all (the new case —
+    /// "Create branch X", since creating it also creates its worktree; see
+    /// `isTypedBranchCreateOfferForKnownBranch` below for which copy
+    /// applies). This used to gate on `branchesWithoutWorktree.contains`
+    /// alone, which is exactly what left an unknown token with no offer at
+    /// all — the gap that silently exec'd it as a shell command (or, before
+    /// `b5286319b`, dead-ended on "No worktree found"). `nil` for every
+    /// other shape (nothing typed, already resolved).
     private var typedBranchCreateOffer: String? {
-        guard case .unresolved(let token) = typedBranchResolution,
-              composerStore.branchesWithoutWorktree.contains(token)
-        else { return nil }
+        guard case .unresolved(let token) = typedBranchResolution else { return nil }
         return token
+    }
+
+    /// Distinguishes the two `typedBranchCreateOffer` cases for COPY only —
+    /// the create action itself (`composerStore.createWorktree`) is
+    /// identical either way; `GitWorktreeEnumerator.add` already calls
+    /// `branchExists` and runs `git worktree add -b <branch> <dir>` only
+    /// when the branch doesn't exist yet, so no new git plumbing is needed
+    /// here. `false` (the default) is safe for `token == nil` callers —
+    /// they never render.
+    private func isTypedBranchCreateOfferForKnownBranch(_ token: String) -> Bool {
+        composerStore.branchesWithoutWorktree.contains(token)
     }
 
     /// Worktree-launch ruling (2026-08-27, control-flow inversion — review
@@ -919,7 +935,10 @@ struct SessionComposerPalette: View {
             options.append(
                 ComposerOption(
                     id: SessionComposerCommandParser.createWorktreeRowId,
-                    title: "Create worktree for \"\(token)\"",
+                    title: SessionComposerCommandParser.createBranchOfferTitle(
+                        token: token,
+                        isKnownBranchWithoutWorktree: isTypedBranchCreateOfferForKnownBranch(token)
+                    ),
                     subtitle: currentProject.name,
                     leadingIcon: "arrow.triangle.branch",
                     action: {
@@ -932,14 +951,29 @@ struct SessionComposerPalette: View {
             )
         }
 
+        // Composer variant G: when an armed branch token consumed a word
+        // that could equally have been read as the start of a command
+        // (`typedBranchCreateOffer`), the parser's own remainder no longer
+        // includes it — `parsePath` now always resolves an armed,
+        // non-matching token as a (failed) branch lookup, never a
+        // fall-through (see `parsePath`'s `branchArmed` handling). Prepending
+        // the token back here is what keeps BOTH readings visible: the
+        // create-branch row above, and this Run row showing exactly what
+        // Sean's dominant no-branch idiom (`ghostties cco -n "thread name"`)
+        // would have launched had the leading `>` never been typed at all —
+        // `Run "cco -n thread name"`, not just `Run "-n thread name"` with
+        // the verb silently dropped.
+        let runRemainderTokens = typedBranchCreateOffer.map { [$0] + effectiveCommandParse.remainderTokens }
+            ?? effectiveCommandParse.remainderTokens
+
         guard let currentProject,
-              let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: effectiveCommandParse.remainderTokens)
+              let template = SessionComposerCommandParser.makeAdHocTemplate(remainderTokens: runRemainderTokens)
         else { return options }
 
         options.append(
             ComposerOption(
                 id: SessionComposerCommandParser.runRowId,
-                title: "Run \"\(effectiveCommandParse.remainderText)\"",
+                title: "Run \"\(runRemainderTokens.joined(separator: " "))\"",
                 subtitle: currentProject.name,
                 leadingIcon: "terminal",
                 action: { commit(template: template) }
@@ -1212,6 +1246,21 @@ struct SessionComposerPalette: View {
     /// untiered — keep index 0, i.e. current section order, so unambiguous
     /// queries and the empty-query default are unchanged.
     private func bestSelectionIndex(in options: [ComposerOption]) -> UInt {
+        // Composer variant G (Sean's ruling, 2026-08-31): a typed `>` is the
+        // deliberate, formal way to declare a branch — once the field offers
+        // a create-branch/create-worktree row for it (`typedBranchCreateOffer`),
+        // that row leads the list outright, ahead of the `Run "X"` row
+        // sitting right next to it and ahead of text ranking. Checked BEFORE
+        // the resolved-operator-template override below: an armed, unresolved
+        // branch position can never coexist with a resolved operator segment
+        // in the same parse (the operator position isn't reachable until
+        // branch is filled — see `parsePath`'s `filled` bookkeeping), so
+        // there's no real ordering conflict between the two checks, only a
+        // defensive one.
+        if typedBranchCreateOffer != nil,
+           let index = options.firstIndex(where: { $0.id == SessionComposerCommandParser.createWorktreeRowId }) {
+            return UInt(index)
+        }
         // Blocker 1 (round-3 review): a resolved operator template
         // (`effectiveCommandParse.resolvedTemplateId`) wins outright over
         // text ranking — the moment an operator resolves, its remainder is

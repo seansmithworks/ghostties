@@ -87,16 +87,29 @@ final class SessionComposerCommandParserIdiomTests: XCTestCase {
         XCTAssertNil(result.resolvedTemplateId, "-n must not resolve as an operator/template segment")
     }
 
-    // MARK: - Defect 2: a single typed `>` must not force the next token
-    // into an unresolvable branch slot when it plainly reads as the
-    // command (Sean's dominant shape has no branch at all).
+    // MARK: - Composer variant G (Sean's ruling, 2026-08-31): a single typed
+    // `>` no longer forces a special "read this as the command" carve-out —
+    // a typed `>` is Sean's deliberate, formal way to declare a branch, so a
+    // non-matching token in that armed position ALWAYS resolves as a
+    // (failed) branch lookup now, at every chevron count. This reverses
+    // defect 2's decision (`b5286319b`/`4560d9b5c`): the dead end that
+    // fall-through used to avoid (`No worktree found for branch "cco"` with
+    // no escape hatch) no longer exists — `SessionComposerPalette
+    // .commandOptions` now offers a "Create branch" row for exactly this
+    // case (`typedBranchCreateOffer`, no longer gated on
+    // `branchesWithoutWorktree`), AND still surfaces the `Run "X"` ad-hoc
+    // reading as a separate, independently selectable row (the view layer
+    // re-prepends the consumed token — see `SessionComposerPalette
+    // .commandOptions`'s `runRemainderTokens`). Both interpretations are
+    // offered; neither is guessed by the parser.
 
-    /// The exact repro from Sean's report: `atlas > cco -n "test"` used to
-    /// resolve `branchToken == "cco"`, which `resolveTypedBranch` then
-    /// failed with `No worktree found for branch "cco"` before the commit
-    /// ever reached the command. `cco` must land in `remainderTokens`
-    /// instead, with no branch captured at all.
-    func testChevronThenAdHocCommandResolvesAsCommandNotUnresolvedBranch() {
+    /// The exact repro from Sean's original report: `atlas > cco -n "test"`
+    /// resolves `branchToken == "cco"` — an unresolved (failed) branch
+    /// lookup, not a command reading. `cco` no longer lands in
+    /// `remainderTokens`; only what follows it does (the view layer, not
+    /// the parser, re-attaches the branch token for the `Run` row's text —
+    /// see `SessionComposerPalette.commandOptions`).
+    func testChevronThenNonMatchingTokenResolvesAsUnresolvedBranchNotCommand() {
         let project = makeProject(name: "atlas", rootPath: "/Users/example/Code/atlas")
         let result = SessionComposerCommandParser.parse(
             query: #"atlas > cco -n "test""#,
@@ -104,14 +117,13 @@ final class SessionComposerCommandParserIdiomTests: XCTestCase {
             isLocked: false
         )
         XCTAssertEqual(result.projectId, project.id)
-        XCTAssertNil(result.branchToken, "\"cco\" matches no known branch and must not be captured as one")
-        XCTAssertEqual(result.remainderTokens, ["cco", "-n", "test"])
+        XCTAssertEqual(result.branchToken, "cco", "an armed branch position always resolves as a (failed) branch lookup now, regardless of chevron count")
+        XCTAssertEqual(result.remainderTokens, ["-n", "test"], "only the text AFTER the consumed branch token remains in the parser's own remainder")
     }
 
-    /// Same shape, the other half of the 95% idiom (`repo ccp`) — with an
-    /// explicit `>` this time, since that's the one-chevron shape the
-    /// defect actually hit.
-    func testChevronThenBareCommandResolvesAsCommandNotUnresolvedBranch() {
+    /// Same shape, the other half of the 95% idiom (`repo ccp`) — a single
+    /// word after one chevron, nothing else typed.
+    func testChevronThenBareNonMatchingTokenResolvesAsUnresolvedBranchNotCommand() {
         let project = makeProject(name: "atlas", rootPath: "/Users/example/Code/atlas")
         let result = SessionComposerCommandParser.parse(
             query: "atlas > ccp",
@@ -119,8 +131,8 @@ final class SessionComposerCommandParserIdiomTests: XCTestCase {
             isLocked: false
         )
         XCTAssertEqual(result.projectId, project.id)
-        XCTAssertNil(result.branchToken)
-        XCTAssertEqual(result.remainderTokens, ["ccp"])
+        XCTAssertEqual(result.branchToken, "ccp")
+        XCTAssertEqual(result.remainderTokens, [], "the whole token is consumed as the (failed) branch lookup — nothing follows it")
     }
 
     /// Guard against breaking the real branch case while fixing the above:
@@ -158,17 +170,110 @@ final class SessionComposerCommandParserIdiomTests: XCTestCase {
 
     /// Finding 2 (review round 2): the defect-3 copy ("Retype the branch or
     /// delete it") described actions that cannot fix the dominant reachable
-    /// case — a real branch with no worktree yet, where a
-    /// `Create worktree for "X"` row (`typedBranchCreateOffer`) is already
-    /// sitting in the result list. Retyping the SAME correct branch name
-    /// reproduces the identical error. The reworded message must name that
-    /// suggestion so the copy stops contradicting the row next to it.
+    /// case — a real branch with no worktree yet, where a create-offer row
+    /// (`typedBranchCreateOffer`) is already sitting in the result list.
+    /// Retyping the SAME correct branch name reproduces the identical error.
+    /// The reworded message must name that suggestion so the copy stops
+    /// contradicting the row next to it.
     func testUnresolvedBranchMessageNamesTheCreateWorktreeSuggestion() {
         let message = SessionComposerCommandParser.unresolvedBranchMessage(token: "cco")
         XCTAssertTrue(
             message.lowercased().contains("create") && message.lowercased().contains("worktree"),
-            "must name the create-worktree action that actually resolves the dominant reachable case"
+            "must name the create-branch/create-worktree action that actually resolves the dominant reachable case"
         )
+        XCTAssertTrue(message.contains("above"), "must point in the direction the row actually renders — see testUnresolvedBranchMessagePointsAboveNotBelow")
+    }
+
+    /// Stranded-copy fix (composer variant G): the create-offer row is
+    /// appended near the start of `SessionComposerPalette.commandOptions`
+    /// and now ranks FIRST in `bestSelectionIndex` whenever it's offered —
+    /// it always renders ABOVE this status-strip message, never below. The
+    /// old copy said "below", which was wrong even before this task (the row
+    /// was already above) and doubly wrong for the unknown-token class this
+    /// task adds (no row existed for it at all before now).
+    func testUnresolvedBranchMessagePointsAboveNotBelow() {
+        let message = SessionComposerCommandParser.unresolvedBranchMessage(token: "cco")
+        XCTAssertTrue(message.lowercased().contains("above"))
+        XCTAssertFalse(message.lowercased().contains("below"), "the create-offer row renders above this message, never below it")
+    }
+
+    // MARK: - Coupled-literal guard (composer variant G): `unresolvedBranchMessage`
+    // and `createBranchOfferTitle` are two independent functions that both
+    // describe the SAME row — this pins that the message never hardcodes
+    // either of the row's two possible titles verbatim, which is what would
+    // let one drift out of sync with the other silently (the drift class the
+    // original defect-3 consolidation existed to prevent).
+
+    func testUnresolvedBranchMessageNeverHardcodesEitherCreateOfferTitleVerbatim() {
+        let token = "cco"
+        let message = SessionComposerCommandParser.unresolvedBranchMessage(token: token)
+        let knownBranchTitle = SessionComposerCommandParser.createBranchOfferTitle(token: token, isKnownBranchWithoutWorktree: true)
+        let unknownTokenTitle = SessionComposerCommandParser.createBranchOfferTitle(token: token, isKnownBranchWithoutWorktree: false)
+        XCTAssertFalse(message.contains(knownBranchTitle), "the message must not quote the known-branch row title verbatim — it can't tell the two create-offer classes apart (see createBranchOfferTitle's doc comment)")
+        XCTAssertFalse(message.contains(unknownTokenTitle), "the message must not quote the unknown-token row title verbatim either, for the same reason")
+    }
+
+    /// The known-branch case keeps its pre-existing copy.
+    func testCreateBranchOfferTitleForKnownBranchWithoutWorktree() {
+        XCTAssertEqual(
+            SessionComposerCommandParser.createBranchOfferTitle(token: "backlog/migrate-ghostties", isKnownBranchWithoutWorktree: true),
+            "Create worktree for \"backlog/migrate-ghostties\""
+        )
+    }
+
+    /// The new unknown-token case gets distinct copy — creating it also
+    /// creates its worktree (`GitWorktreeEnumerator.add`'s `-b` branch), but
+    /// the branch is the part the user is actually deciding about.
+    func testCreateBranchOfferTitleForUnknownToken() {
+        XCTAssertEqual(
+            SessionComposerCommandParser.createBranchOfferTitle(token: "mybrnach", isKnownBranchWithoutWorktree: false),
+            "Create branch \"mybrnach\""
+        )
+    }
+
+    // MARK: - Composer variant G, decision 4: an armed branch token offers a
+    // create row (never a shell command) at every chevron count.
+
+    /// The exact single-chevron example from the brief: `ghostties >
+    /// mybrnach` must offer to create "mybrnach", never resolve it as a
+    /// shell command — `branchToken` is set (an unresolved branch lookup)
+    /// and `remainderTokens` is empty, so no ad-hoc `Run` template could ever
+    /// synthesize from the parser's own remainder alone.
+    func testSingleChevronUnmatchedTokenOffersCreateBranchNotCommand() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(query: "ghostties > mybrnach", projects: [project], isLocked: false)
+        XCTAssertEqual(result.branchToken, "mybrnach", "an armed, non-matching branch token must resolve as a (failed) branch lookup")
+        XCTAssertTrue(result.remainderTokens.isEmpty, "nothing should be left over to read as a shell command")
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: result.branchToken,
+            worktrees: [],
+            currentBranchAtProjectRoot: "main"
+        )
+        XCTAssertEqual(resolution, .unresolved(token: "mybrnach"), "unresolved is what SessionComposerPalette.typedBranchCreateOffer reads to show the create row")
+        XCTAssertEqual(
+            SessionComposerCommandParser.createBranchOfferTitle(token: "mybrnach", isKnownBranchWithoutWorktree: false),
+            "Create branch \"mybrnach\""
+        )
+    }
+
+    /// The two-chevron example from the brief: `ghostties > mybrnach > cco`
+    /// must ALSO offer to create "mybrnach" — the second `>` advances past
+    /// the unresolved branch to the operator position, so "cco" survives as
+    /// the operator remainder, never absorbed into the branch's own failed
+    /// lookup.
+    func testTwoChevronUnmatchedTokenAlsoOffersCreateBranchNotCommand() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(query: "ghostties > mybrnach > cco", projects: [project], isLocked: false)
+        XCTAssertEqual(result.branchToken, "mybrnach")
+        XCTAssertEqual(result.remainderTokens, ["cco"])
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: result.branchToken,
+            worktrees: [],
+            currentBranchAtProjectRoot: "main"
+        )
+        XCTAssertEqual(resolution, .unresolved(token: "mybrnach"))
     }
 
     /// `resolveCommitWorktreePathForCommit`'s `.unresolved` failure message

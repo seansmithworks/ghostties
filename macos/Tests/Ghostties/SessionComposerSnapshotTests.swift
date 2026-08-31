@@ -2402,4 +2402,138 @@ struct SessionComposerSnapshotTests {
         )
     }
 
+    // MARK: - Composer variant G (Sean's ruling, 2026-08-31): an armed `>`
+    // whose token matches no known branch offers a "Create branch" row.
+
+    /// A real, minimal throwaway git repo — `typedBranchCreateOffer` gates
+    /// on `SessionComposerCommandParser.resolveTypedBranch`'s
+    /// `cachedProjectId == resolvingForProjectId` check, which only ever
+    /// settles via a genuine `SessionComposerStore.refreshWorktrees` shell-out
+    /// against a real repo (a synthetic, non-existent `rootPath` never
+    /// becomes a git repo, so `worktreesProjectId` would stay `nil`/`.pending`
+    /// forever and the row this test exists to evidence would never render).
+    /// Same fixture shape as `SessionComposerWorktreeLaunchTests
+    /// .makeThrowawayRepo` — kept local to this file rather than shared,
+    /// matching every other fixture helper already private to this file.
+    private static func makeThrowawayRepoForSnapshot() -> String {
+        let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-composer-snapshot-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+
+        func run(_ args: [String]) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = args
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+            task.waitUntilExit()
+        }
+
+        run(["git", "-C", path, "init", "-q", "-b", "main"])
+        run(["git", "-C", path, "-c", "user.email=test@ghostties.test", "-c", "user.name=Ghostties Test",
+             "commit", "-q", "--allow-empty", "-m", "init"])
+        return path
+    }
+
+    /// Evidence for acceptance criterion 4: rendered pixels showing the
+    /// create-branch row for an UNKNOWN token (`mybrnach` matches no branch
+    /// in the throwaway repo) — the class this task adds, distinct from the
+    /// pre-existing known-branch-without-worktree case
+    /// (`branchNoLongerAppearsAsACreateOfferAfterASuccessfulCreation` in
+    /// `SessionComposerWorktreeLaunchTests` already covers that class at the
+    /// store level). `selectionHighlightPixelCount` doubles as evidence for
+    /// decision 3 (the create-branch row ranks first after a typed `>`) —
+    /// row 0 in `commandOptions` is the ONLY thing that could be highlighted
+    /// here, since `searchText` starts a fresh query with no RECENT/pinned
+    /// state seeded.
+    @Test func typedUnknownBranchTokenRendersCreateBranchRowFirst() async {
+        let repo = Self.makeThrowawayRepoForSnapshot()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+
+        let project = Project(name: "atlas", rootPath: repo)
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        // Settles `.onAppear` — mounting the view is what calls
+        // `composerStore.open(...)` in production (`renderMountedPaletteAfterTyping`'s
+        // own precedent, above); calling `open()` a second time BEFORE mount
+        // would have its `searchText = ""` reset undone by THIS one anyway,
+        // so open() is only ever called the once, via mount.
+        hosting.layoutSubtreeIfNeeded()
+
+        // `open()` kicks `refreshWorktrees` off an unstructured `Task` on the
+        // SAME `@MainActor` executor this async test body runs on — `await
+        // Task.sleep` actually yields the executor (unlike `RunLoop.main
+        // .run(until:)`, which does not reliably pump Swift Concurrency's
+        // MainActor queue here), same pattern
+        // `SessionComposerWorktreeLaunchTests.waitUntil` already uses. 20s,
+        // not that file's 8-12s budgets: this polls the FIRST refresh from a
+        // cold `open()`, which can itself retry every ~4s on its own 2s
+        // internal race (`SessionComposerStore.refreshWorktrees`'s doc
+        // comment) — under the full unfiltered suite's parallel git
+        // contention this joins that file's own documented load-flake class
+        // (`SessionComposerWorktreeLaunchTests`, `GitWorktreeCreationTests
+        // .raceReturnsTimedOut`) rather than eliminating it; a real 12s+
+        // shell-out under load is a false negative in THIS poll's budget,
+        // not evidence the row itself is broken (confirmed green in
+        // isolation, see the PR report).
+        let deadline = Date().addingTimeInterval(20)
+        while composerStore.worktreesProjectId != project.id, Date() < deadline {
+            try? await _Concurrency.Task.sleep(for: .milliseconds(20))
+        }
+        #expect(composerStore.worktreesProjectId == project.id, "setup failed: worktrees never settled for this project — the row this test evidences can never render without it")
+
+        // Same state transition a real keystroke produces (matches
+        // `renderMountedPaletteAfterTyping`'s own precedent), typed AFTER
+        // mount/settle — setting it before mount would have been wiped by
+        // `.onAppear`'s own `open()` call resetting `searchText = ""`. No
+        // "atlas " project prefix: `.locked(project)` already fixes the
+        // project position (`projectPositionIsFixed` in `parsePath`), so a
+        // typed leading word would itself become the branch-armed content
+        // instead of a project token — the field's OWN placeholder for a
+        // locked composer never shows the project name either (Model A).
+        composerStore.noteSearchTextEditedByTyping()
+        composerStore.searchText = "> mybrnach"
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the create-branch-row fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        let light = rep.representation(using: .png, properties: [:])
+        writeEvidence(light, filename: "variant-g-create-branch-row-light.png")
+        #expect(light != nil)
+        guard let light else { return }
+        #expect(containsRenderedContent(in: light, isDark: false), "expected the create-branch row to render, got a near-blank card")
+        let highlightCount = selectionHighlightPixelCount(in: light)
+        #expect(highlightCount > 100, "expected the create-branch row to be selected/highlighted first (bestSelectionIndex ranks it first after a typed >), found \(highlightCount) accent-tinted pixels")
+    }
+
 }
