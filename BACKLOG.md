@@ -2018,6 +2018,6 @@ synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
 
 ## 2026-08-30 — Composer variant G
 
-- [ ] Composer variant G — Pass A: section headers + remove in-field branch control
+- [x] Composer variant G — Pass A: section headers + remove in-field branch control
 - [ ] Composer variant G — Pass B: contextual operator footer strip
 - [ ] Composer variant G — independent review of the complete diff
