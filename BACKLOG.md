@@ -2,26 +2,61 @@
 
 ## 2026-08-31 — Composer variant G session (carried)
 
-- [x] Composer variant G — centered-modal type-scale conformance. Three sites in
-  `SessionComposerPalette.swift` hardcoded mockup values instead of routing through the
-  existing `.centered` scale constants (`DESIGN.md` §3, "Centered modal — a third surface
-  class"): section headers (was 10pt `.bold`, now `subtitleFontSize` `.medium`; `.tracking(0.6)`
-  left as-is, a taste call not covered by DESIGN.md), the footer hint row (was 10.5pt
-  SF Mono `.semibold`/`.regular`, now `subtitleFontSize` SF Pro `.medium`/`.regular` — SF Mono
-  is terminal-content-only per §3's "one font family per surface" rule). **Correction (review
-  round 2, finding 3):** the claim above overstated DESIGN.md's coverage — its centered-modal
-  type-scale table (§4) specifies Query field / Row title / Row subtitle only; it has no entry
-  for a section header or a footer hint. Mapping those two surfaces onto `subtitleFontSize` was
-  a reasonable interpretation, not literal DESIGN.md conformance. Separately, routing the change
-  through `subtitleFontSize` (presentation-dependent) also restyled `.anchored`, the sidebar
-  popover both DESIGN.md and this file's own doc comment say must stay unstyled — `.anchored`
-  restored to its exact pre-`786f4d56f` values (10pt `.bold` header; 10.5pt SF Mono
-  `.semibold`/`.regular` footer) via new `sectionHeaderFont`/`footerGlyphFont`/`footerLabelFont`
-  properties; `.centered` keeps the `subtitleFontSize`-routed values from this entry.
-  `subtitleFontSize`/`rowFontSize`/`fontSize` themselves (lines 210-226) were already correct
-  and untouched.
+- [x] Composer variant G — centered-modal type-scale conformance. `.centered` section headers
+  and footer hint now route through `subtitleFontSize`; `.anchored` (sidebar popover) restored
+  to its exact pre-`786f4d56f` values via new `sectionHeaderFont`/`footerGlyphFont`/
+  `footerLabelFont` properties. **Correction (round 2):** the original entry overstated
+  DESIGN.md's coverage — §4's centered-modal type-scale table has no entry for a section header
+  or footer hint, so the mapping is a reasonable interpretation, not literal conformance.
 - [x] `ThrottleTrailingEdgeHypothesisTests.swift` — already deleted from the main tree; carried
   item closed.
+
+**Composer review findings — open:**
+
+- [x] `armedBranchTokenIsCommand`'s dead-API status — resolved by `8f899fc24`, which gave it the
+  `isLastChevron` parameter and a real call site. Closed, round 1.
+- [x] Dead `.unresolved` segment paths and their doc comments (round 1 findings 6/8) — round 2
+  re-checked and found the three named sites are now correct and reachable. Closed, round 2.
+- [ ] `SessionComposerSnapshotTests/mountedModelBGhostTracksHighlightedRowAcrossProjects` fails
+  ~25-50% of runs on unmodified code, serially — not parallel load. Root cause is a one-shot
+  render race: `ComposerGhostTextField.applyStyles()` bails out when
+  `firstRect(forCharacterRange:)` returns `.zero` before TextKit lays out the range, and nothing
+  re-fires it. Suspected user-visible symptom (PLAUSIBLE, unverified in the app): arrow-keying
+  between rows changes `ghostFullPath` and fires exactly one `applyStyles`; if that one bails
+  the ghost stays blank until the next keystroke. Fix direction: make the test drive
+  `applyStyles` deterministically with a bounded retry, or assert against
+  `textView.currentGhostText` (set before every bail-out) rather than pixels.
+- [ ] The unresolved-branch error says `use the "Create worktree" suggestion below`, but the
+  status strip is the last child of `composerCard`'s VStack while `commandOptions`' create row
+  is the fourth section of the results table — always **above** the message, never below. And
+  for the non-final-branch-slot class that `8f899fc24` revived, `typedBranchCreateOffer` gates
+  on `branchesWithoutWorktree.contains(token)`, so no create row is generated at all. Pixel
+  evidence: `docs/plans/composer-ui-11/evidence/variant-g-adding-template-after-error-light.png`.
+- [ ] `SessionComposerCommandParser.swift:607-615` — the round-3 Fix-5 doc comment claims
+  `ghostties > orchestrator > mythread` and `ghostties orchestrator > mythread` "resolve
+  identically". Measured against the real parser they do not: the chevron form yields branch
+  `.unresolved("orchestrator")` with no template at all. Its guard test was rewritten on
+  2026-08-26 to a double-chevron form that cannot see the regression, so it stays green while
+  the comment is false.
+- [ ] `SessionComposerCommandParser.swift:774-778` — `parse()`'s "Behavior note" claims
+  `ghostties > main` resolves as ad-hoc remainder `main`, not a branch. Measured with the
+  `knownBranchNames: ["main"]` that production always supplies, it yields
+  `branchToken == "main"`, `remainderTokens == []`. Pre-existing, untouched by these commits.
+- [ ] `SessionComposerCommandParserIdiomTests.swift:166-172` — the new message test's
+  `contains("worktree")` is already satisfied by the message's own `"No worktree found for
+  branch"` prefix, so the effective assertion is only `contains("create")`. Also, nothing ties
+  the message's quoted `"Create worktree"` to `commandOptions`' actual row-title literal at
+  `SessionComposerPalette.swift:922` — a new pair of coupled literals across the Core/AppKit
+  boundary with no test holding them together, which is the drift class the original
+  consolidation existed to prevent.
+- [ ] **Open decision for Sean, do not act on it:** `8f899fc24` fixed the dropped-command bug
+  at the grammar layer, so the single-chevron ruling now holds for exactly one chevron.
+  Measured: `ghostties > cco -n "test" > thread` claims `cco` as an unresolved branch and
+  hard-fails, and the ad-hoc segment becomes `-n "test"` with the binary name gone. Round 2's
+  argument is that the actual bug was `parse()`'s remainder precedence at `:857-858`
+  (`closedAdHocRange ?? …`), and fixing it there would have preserved the ruling at every
+  chevron count without touching the grammar. Sean decides whether to keep the grammar fix or
+  move it to the adapter.
 
 ## 2026-08-30 (later) — all four PRs merged, `main` broke and was fixed, worktrees reclaimed
 
