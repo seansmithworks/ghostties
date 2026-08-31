@@ -2027,3 +2027,4 @@ synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
 - [x] Composer variant G — round 7: ViewThatFits, no truncation
 - [x] Composer variant G — projects in results at rest, chevron removed
 - [x] Composer variant G — cap TEMPLATES/PROJECTS at 3 in rest state
+- [x] Composer variant G — one-Tab-per-segment, no-branch command shape, stale error copy

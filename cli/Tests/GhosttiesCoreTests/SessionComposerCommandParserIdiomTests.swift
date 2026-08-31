@@ -86,4 +86,88 @@ final class SessionComposerCommandParserIdiomTests: XCTestCase {
         XCTAssertNil(result.branchToken, "-n must not be captured as a branch/name segment")
         XCTAssertNil(result.resolvedTemplateId, "-n must not resolve as an operator/template segment")
     }
+
+    // MARK: - Defect 2: a single typed `>` must not force the next token
+    // into an unresolvable branch slot when it plainly reads as the
+    // command (Sean's dominant shape has no branch at all).
+
+    /// The exact repro from Sean's report: `atlas > cco -n "test"` used to
+    /// resolve `branchToken == "cco"`, which `resolveTypedBranch` then
+    /// failed with `No worktree found for branch "cco"` before the commit
+    /// ever reached the command. `cco` must land in `remainderTokens`
+    /// instead, with no branch captured at all.
+    func testChevronThenAdHocCommandResolvesAsCommandNotUnresolvedBranch() {
+        let project = makeProject(name: "atlas", rootPath: "/Users/example/Code/atlas")
+        let result = SessionComposerCommandParser.parse(
+            query: #"atlas > cco -n "test""#,
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertNil(result.branchToken, "\"cco\" matches no known branch and must not be captured as one")
+        XCTAssertEqual(result.remainderTokens, ["cco", "-n", "test"])
+    }
+
+    /// Same shape, the other half of the 95% idiom (`repo ccp`) — with an
+    /// explicit `>` this time, since that's the one-chevron shape the
+    /// defect actually hit.
+    func testChevronThenBareCommandResolvesAsCommandNotUnresolvedBranch() {
+        let project = makeProject(name: "atlas", rootPath: "/Users/example/Code/atlas")
+        let result = SessionComposerCommandParser.parse(
+            query: "atlas > ccp",
+            projects: [project],
+            isLocked: false
+        )
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertNil(result.branchToken)
+        XCTAssertEqual(result.remainderTokens, ["ccp"])
+    }
+
+    /// Guard against breaking the real branch case while fixing the above:
+    /// a token that DOES match a known branch must still resolve as the
+    /// branch, and the command after it must still land in
+    /// `remainderTokens` untouched.
+    func testChevronThenKnownBranchStillResolvesAsBranch() {
+        let project = makeProject(name: "atlas", rootPath: "/Users/example/Code/atlas")
+        let result = SessionComposerCommandParser.parse(
+            query: "atlas > some-real-branch > cco",
+            projects: [project],
+            knownBranchNames: ["some-real-branch"],
+            isLocked: false
+        )
+        XCTAssertEqual(result.projectId, project.id)
+        XCTAssertEqual(result.branchToken, "some-real-branch")
+        XCTAssertEqual(result.remainderTokens, ["cco"])
+    }
+
+    // MARK: - Defect 3: unresolved-branch error copy no longer points at
+    // a deleted control
+
+    /// The old copy ("Pick one from the branch picker or clear the typed
+    /// branch") named a mouse control (`branchControl`) that was deleted
+    /// earlier on this branch. The new copy must describe an action that
+    /// still exists — typing/deleting the token — and must never mention a
+    /// picker/dropdown/chevron control.
+    func testUnresolvedBranchMessageNeverReferencesTheDeletedPicker() {
+        let message = SessionComposerCommandParser.unresolvedBranchMessage(token: "cco")
+        XCTAssertTrue(message.contains("\"cco\""))
+        XCTAssertFalse(message.lowercased().contains("picker"), "must not instruct the user to use a control that no longer exists")
+        XCTAssertFalse(message.lowercased().contains("dropdown"))
+        XCTAssertFalse(message.lowercased().contains("chevron"))
+    }
+
+    /// `resolveCommitWorktreePathForCommit`'s `.unresolved` failure message
+    /// must be the SAME string `unresolvedBranchMessage` produces — a
+    /// single source, not two literals that can drift.
+    func testResolveCommitWorktreePathForCommitUsesTheSharedUnresolvedBranchMessage() {
+        let result = SessionComposerCommandParser.resolveCommitWorktreePathForCommit(
+            typedBranch: .unresolved(token: "cco"),
+            selectedWorktreePath: nil
+        )
+        guard case .failure(let error) = result else {
+            XCTFail("an unresolved typed branch must fail the commit")
+            return
+        }
+        XCTAssertEqual(error.message, SessionComposerCommandParser.unresolvedBranchMessage(token: "cco"))
+    }
 }

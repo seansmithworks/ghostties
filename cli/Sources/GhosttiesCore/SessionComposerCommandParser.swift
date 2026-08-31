@@ -469,20 +469,33 @@ public enum SessionComposerCommandParser {
                 if openRunKind == nil {
                     if branchArmed {
                         // An explicit `>` armed the branch position (rule
-                        // 4, case 1 below) — this token resolves (or
-                        // fails) as the branch UNCONDITIONALLY, regardless
-                        // of `terminated`. It must never fall through to
-                        // rule 3 and become ad-hoc/thread content: that's
-                        // the exact defect this fix closes (a typed branch
-                        // silently exec'd as a shell command).
+                        // 4, case 1 below) — a token that matches a known
+                        // branch resolves as the branch UNCONDITIONALLY,
+                        // regardless of `terminated`. It must never fall
+                        // through to rule 3 and become ad-hoc/thread
+                        // content: that's the exact defect this fix
+                        // closes (a typed branch silently exec'd as a
+                        // shell command).
                         branchArmed = false
                         if let canonical = knownBranchNames.first(where: { $0.caseInsensitiveCompare(matchText) == .orderedSame }) {
                             segments.append(Segment(kind: .branch, range: range, resolved: .branch(canonical)))
-                        } else {
-                            segments.append(Segment(kind: .branch, range: range, resolved: .unresolved))
+                            filled.insert(.branch)
+                            continue
                         }
-                        filled.insert(.branch)
-                        continue
+                        // Defect 2 fix: a non-matching armed-branch token
+                        // reads as the COMMAND, not a failed branch lookup
+                        // (`armedBranchTokenIsCommand`) — leave branch
+                        // unfilled and fall through (no `continue`) into
+                        // the ordinary project/branch/operation matching
+                        // chain below, exactly as if no `>` had armed
+                        // anything. `resolveTypedBranch` then sees
+                        // `branchToken == nil` (`.notTyped`), matching
+                        // Sean's dominant no-branch usage instead of
+                        // failing the commit. (Reaching this branch
+                        // already implies `armedBranchTokenIsCommand`
+                        // would return `true` for `matchText` — the
+                        // `knownBranchNames` lookup just above is that
+                        // same check, inlined for the match binding.)
                     }
                     if !terminated {
                         // B1 fix: this must be set regardless of whether we
@@ -1208,6 +1221,31 @@ public enum SessionComposerCommandParser {
         case pending
     }
 
+    /// Defect 2 fix: whether a token typed in an ARMED branch position
+    /// (immediately after a single `>`, with branch not yet resolved)
+    /// should be read as the COMMAND instead of a failed branch lookup.
+    /// Sean's dominant usage has no branch segment at all
+    /// (`ghostties cco -n "thread name"`, `repo ccp`) — a single typed `>`
+    /// must not force whatever follows into a branch slot it can never
+    /// fill. Only a token that matches a KNOWN branch name is ever the
+    /// branch; every other token — a template name, or free text like
+    /// `cco` — reads as the start of the command. `parsePath` calls this
+    /// at the one site that used to unconditionally resolve an armed
+    /// branch token as `.unresolved`, and on `true` leaves branch unfilled
+    /// entirely (falling through to the ordinary project/branch/operation
+    /// matching chain) rather than appending an unresolved-branch segment —
+    /// that segment is what made `resolveTypedBranch` report `.unresolved`
+    /// and fail the commit with "No worktree found for branch \"cco\""
+    /// even though "cco" was never meant as a branch.
+    ///
+    /// A real branch stays unaffected: `ghostties > some-real-branch > cco`
+    /// matches `some-real-branch` against `knownBranchNames` here and
+    /// returns `false`, so the existing `.branch` resolution path (above
+    /// this function's call site) still wins.
+    public static func armedBranchTokenIsCommand(token: String, knownBranchNames: [String]) -> Bool {
+        !knownBranchNames.contains(where: { $0.caseInsensitiveCompare(token) == .orderedSame })
+    }
+
     /// Resolves a typed branch token (if any) against the cached worktree
     /// list and the project's own root branch. Pure — no disk access; the
     /// caller passes in the already-fetched `worktrees`/
@@ -1239,6 +1277,22 @@ public enum SessionComposerCommandParser {
         return .unresolved(token: token)
     }
 
+    /// Defect 3 fix: the single source for the "unresolved typed branch"
+    /// message. `branchControl`/`projectControl` (the in-field mouse
+    /// picker) were both deleted earlier on this branch — the old copy
+    /// ("Pick one from the branch picker...") pointed at a control that no
+    /// longer exists. The only routes that actually work are typing a
+    /// branch that resolves, or editing/deleting the typed branch token in
+    /// the field — this message describes those. Shared by
+    /// `resolveCommitWorktreePathForCommit` below (the `GhosttiesCore` write
+    /// path) and `SessionComposerStore.rejectUnresolvedBranch(token:)` (the
+    /// macOS call site that reaches the same message on the SAME rejection
+    /// without routing through `resolveCommitWorktreePathForCommit`) so the
+    /// two can never drift into two different literals again.
+    public static func unresolvedBranchMessage(token: String) -> String {
+        "No worktree found for branch \"\(token)\". Retype the branch or delete it from what you typed."
+    }
+
     /// The COMMIT-time counterpart to `resolveCommitWorktreePath` above —
     /// used ONLY at the write path (`SessionComposerPalette.commit(template:)`),
     /// never for the "is this chip value already shown" comparison
@@ -1258,7 +1312,7 @@ public enum SessionComposerCommandParser {
         case .isDefaultBranch:
             return .success(nil)
         case .unresolved(let token):
-            return .failure(SessionComposerCommitError(message: "No worktree found for branch \"\(token)\". Pick one from the branch picker or clear the typed branch."))
+            return .failure(SessionComposerCommitError(message: unresolvedBranchMessage(token: token)))
         case .pending:
             return .failure(SessionComposerCommitError(message: "Still checking branches for this project — try again in a moment."))
         }

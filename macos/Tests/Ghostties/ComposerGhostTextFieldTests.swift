@@ -277,6 +277,45 @@ struct ComposerGhostTextFieldTests {
         #expect(textView.currentGhostText == "")
     }
 
+    /// Acceptance criterion 1 (composer variant G): walks Sean's own
+    /// verbatim reported sequence — `gho` Tab, `br` Tab, `cco` — and pins
+    /// the field's exact contents after each Tab. One Tab per segment,
+    /// never a second Tab spent purely on inserting `" > "`.
+    @Test func tabAcceptsOneSegmentPerPressForSeansExactReportedSequence() {
+        let queryBox = Box("")
+        let focusBox = Box(false)
+        let field = ComposerGhostTextField(
+            query: Binding(get: { queryBox.value }, set: { queryBox.value = $0 }),
+            fontSize: 15,
+            rowHeight: 38,
+            focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
+            hasSelection: true,
+            isPickerOpen: false,
+            ghostFullPath: "ghostties > branch name > cco"
+        ) { _ in }
+        let coordinator = field.makeCoordinator()
+        let textView = makeTextView()
+        coordinator.textView = textView
+        coordinator.installGhostLabel(in: textView)
+
+        textView.string = "gho"
+        coordinator.applyStyles()
+        _ = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(textView.string == "ghostties > ")
+
+        textView.string += "br"
+        coordinator.applyStyles()
+        _ = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(textView.string == "ghostties > branch name > ")
+
+        textView.string += "cco"
+        // Sean's sequence ends on Return, not a third Tab — nothing left
+        // for Tab to add once "cco" matches the full path's final segment.
+        coordinator.applyStyles()
+        #expect(textView.currentGhostText == "")
+        #expect(textView.string == "ghostties > branch name > cco")
+    }
+
     // MARK: - Remainder ghost (pure function, previously `activeSegmentGhost`)
 
     @Test func remainderGhostReturnsWholePathWhenTypedIsEmpty() {

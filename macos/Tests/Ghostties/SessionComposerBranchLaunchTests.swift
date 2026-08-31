@@ -367,6 +367,18 @@ struct SessionComposerBranchLaunchTests {
         #expect(mismatched == .pending)
     }
 
+    // MARK: - Defect 3: `rejectUnresolvedBranch(token:)` shares its copy
+    // with `SessionComposerCommandParser.unresolvedBranchMessage` (not a
+    // second, independently-drifting literal)
+
+    @MainActor
+    @Test func rejectUnresolvedBranchTokenWritesTheSharedUnresolvedBranchMessage() {
+        let store = SessionComposerStore(isolatedForTesting: ())
+        store.rejectUnresolvedBranch(token: "cco")
+        #expect(store.writeError == SessionComposerCommandParser.unresolvedBranchMessage(token: "cco"))
+        #expect(store.writeError?.lowercased().contains("picker") == false, "must not reference the deleted branch picker control")
+    }
+
     // MARK: - Finding 9: proving `precommit` actually CALLS `resolveLaunchTemplate`
 
     /// THE mutant-catching test finding 9 asks for: `resolveLaunchTemplate`
