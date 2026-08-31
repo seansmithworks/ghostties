@@ -8,7 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [0.1.0-beta.24] — Unreleased
 
-The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into. Under the hood, every session Ghostties launches now carries an identity Claude Code can report status against, laying the groundwork for sidebar status that reflects what a session is actually doing instead of guessing from terminal text.
+The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into. Sidebar status now reads what Claude Code is actually doing rather than guessing at it from terminal text.
 
 ### Added
 
@@ -16,8 +16,6 @@ The session composer's field row gets trailing project/branch controls in place 
 - **An "Add project…" row** where the composer used to just say "No matches" if you have no projects yet.
 - **Experimental ghost-text composer field**, opt-in from View → Experimental Composer Field (off by default). As you type a session name, it previews the full destination — project, branch, template — as greyed-out ghost text, and Tab accepts one segment at a time instead of committing the whole thing at once.
 - **Typing `>` to target any branch in the repo now works**, not just branches that already have a worktree — Ghostties offers to create one on the spot if it doesn't.
-- **Every session now gets a unique Ghostties ID passed into its terminal environment.** This is the plumbing behind more accurate sidebar status: it gives Claude Code a way to say which of your open sessions it's reporting on.
-- **A status-reporting script for Claude Code, seeded to `~/.ghostties/hooks/`.** Ghostties drops this script on disk automatically but does not touch your Claude Code configuration on its own — to turn it on, you register it yourself in Claude Code's global config file (`~/.claude/settings.json`), following the setup snippet included with the script. Once registered, the script writes each session's real state — typing, running a tool, waiting on a permission prompt, idle, or done — to a small status file Ghostties reads. Nothing is sent anywhere; it's a local file written on your own machine, and it stays off until you opt in.
 
 ### Changed
 
@@ -26,6 +24,7 @@ The session composer's field row gets trailing project/branch controls in place 
 
 ### Fixed
 
+- **Sidebar status now reflects what Claude Code is actually doing,** instead of inferring it from terminal output — a session sitting idle stops reading as if it needs you. Requires a one-time hook setup in `~/.claude/settings.json`; the snippet ships in `~/.ghostties/hooks/ghostties-status.sh`.
 - **The composer's results list no longer opens with dead space below a short list**, and stops growing past its cap on a long one.
 - **The composer card now resizes cleanly to fit its content at every window width**, instead of clipping or leaving extra space.
 
