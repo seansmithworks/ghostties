@@ -2024,3 +2024,4 @@ synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
 - [x] Composer variant G — review round 2 fixes
 - [x] Composer variant G — review round 4 fixes
 - [x] Composer variant G — review round 6 fixes (revert glyph-only over-correction)
+- [x] Composer variant G — round 7: ViewThatFits, no truncation

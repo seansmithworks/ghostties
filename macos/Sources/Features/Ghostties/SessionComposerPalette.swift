@@ -1817,22 +1817,16 @@ struct SessionComposerPalette: View {
         )
     }
 
-    /// Review round 5: round 4's "~190pt required vs ~168pt available, 22pt
-    /// over" was wrong on both sides — it counted three 14pt inter-operator
-    /// gaps for three operators (there are only two), and it measured
-    /// `.anchored`'s available width against the strip's PRE-P3 18pt
-    /// padding instead of the `footerHorizontalPadding` value this same
-    /// commit introduced (16pt in `.anchored`). Measured at the strip's
-    /// real fonts (10.5pt monospaced semibold glyph / regular label): three
-    /// operators WITH labels need 176.14pt at the original 14pt
-    /// inter-operator spacing, against 172pt actually available — 4.14pt
-    /// over, real but small, and only in the transient three-operator state
-    /// (`⌘Z undo` clears on the next keystroke). Closed below by tightening
-    /// that spacing to 11pt (176.14 → 170.14pt, 1.86pt to spare) rather than
-    /// dropping labels — glyph-only was an over-correction built on the bad
-    /// numbers above. See `operatorFooterStrip`'s `HStack(spacing: 11)` and
-    /// `anchoredThreeOperatorFooterFitsWithoutTruncation` for the
-    /// mutation-proved bound.
+    /// Round 7: rounds 3/5/6 each computed an analytic width model for this
+    /// strip and each disagreed with what the renderer actually does — round
+    /// 6's "170.14pt vs 172pt, fits" was rendered and still truncated
+    /// (`docs/plans/composer-ui-11/evidence/variant-g-anchored-three-operators-light.png`).
+    /// No further arithmetic is trusted here. `operatorFooterStrip` now uses
+    /// `ViewThatFits` (macOS 13.0+, at deployment target) to let SwiftUI
+    /// itself pick the widest child that actually fits the proposed width —
+    /// labeled when there's room, glyph-only when there isn't. Spacing is
+    /// back to 14pt (the approved Pass B value); the 11pt tightening in
+    /// round 6 was a failed fix for a problem this now solves structurally.
 
     /// Review round 4, P3: the results VStack's own `.padding(8)`
     /// (`ComposerResultsTable.body`) plus `rowHorizontalPadding` is the
@@ -1866,25 +1860,15 @@ struct SessionComposerPalette: View {
     func operatorFooterStrip(
         _ operators: [SessionComposerCommandParser.FooterOperatorHint]
     ) -> some View {
-        // Review round 5: 11pt (was 14pt) — closes the real 4.14pt overflow
-        // in `.anchored`'s worst case (three labeled operators, 176.14pt
-        // required at 14pt spacing vs 172pt available) without dropping
-        // labels. See the doc comment above `footerHorizontalPadding` for
-        // the corrected arithmetic.
-        HStack(spacing: 11) {
-            ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
-                HStack(spacing: 4) {
-                    Text(op.glyph)
-                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                        .foregroundColor(Color(nsColor: .labelColor))
-                        .lineLimit(1)
-                    Text(op.label)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 0)
+        // Round 7: `ViewThatFits` replaces the fixed-spacing + analytic-
+        // width approach (rounds 3/5/6, all wrong per the doc comment
+        // above). It renders the first child whose ideal size fits the
+        // proposed width — labeled strip when there's room, glyph-only
+        // strip when there isn't — so no width number here needs to be
+        // right. Spacing restored to 14pt (Pass B's approved value).
+        ViewThatFits(in: .horizontal) {
+            operatorRow(operators, showLabels: true, spacing: 14)
+            operatorRow(operators, showLabels: false, spacing: 14)
         }
         // Review round 4, P3: was a hardcoded 18pt, believed to match the
         // row/header left edge — it did not (`.anchored`'s real row edge is
@@ -1904,6 +1888,34 @@ struct SessionComposerPalette: View {
         // Accessibility label announces glyph AND label together, matching
         // what's drawn in both presentations.
         .accessibilityLabel(operators.map { "\($0.glyph) \($0.label)" }.joined(separator: ", "))
+    }
+
+    /// One candidate strip for `ViewThatFits` — glyph-only or glyph+label,
+    /// same fonts/colors either way. `internal` for the same reason
+    /// `operatorFooterStrip` is: `SessionComposerSnapshotTests` calls
+    /// production view helpers directly rather than re-implementing them.
+    func operatorRow(
+        _ operators: [SessionComposerCommandParser.FooterOperatorHint],
+        showLabels: Bool,
+        spacing: CGFloat
+    ) -> some View {
+        HStack(spacing: spacing) {
+            ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
+                HStack(spacing: 4) {
+                    Text(op.glyph)
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .foregroundColor(Color(nsColor: .labelColor))
+                        .lineLimit(1)
+                    if showLabels {
+                        Text(op.label)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                            .lineLimit(1)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
     }
 
     // MARK: - Footer: naming a new template
