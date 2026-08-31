@@ -17,12 +17,15 @@ import GhosttiesCore
 ///   Composer UI 11 (plan §3 Step 3/4/5) replaced the resolution line that
 ///   used to sit beneath it with an in-field GHOST PLACEHOLDER
 ///   (`ghostPlaceholder`, `.centered` only) showing the exact path Return
-///   would currently commit, a STATUS STRIP for pre/post-Return errors, and
-///   a trailing `projectControl` as the only mouse entry point left into the
-///   project picker. Variant G (Pass A, locked 2026-08-30) removed the
-///   sibling branch chevron control that used to sit beside it inside the
-///   field; the branch stage still opens by typing `>` — no mouse route
-///   was added back.
+///   would currently commit and a STATUS STRIP for pre/post-Return errors.
+///   Variant G (Pass A, locked 2026-08-30) removed the sibling branch
+///   chevron control that used to sit beside the field; Pass C
+///   (2026-08-30) removed the last one, `projectControl`, on Sean's call
+///   that projects belong IN the results list, not behind a chevron — a
+///   blank query now populates the PROJECTS lane with every project
+///   instead of hiding it (`filteredProjectOptions`). The field's trailing
+///   edge is a plain caret; the branch stage still opens by typing `>`, no
+///   mouse route was ever added back for it.
 /// - Prefix-first relevance ranking (`SessionComposerRanking`) instead of
 ///   boolean-match + color scoring.
 /// - Focus-loss auto-dismiss removed: the project dropdown and
@@ -90,20 +93,15 @@ struct SessionComposerPalette: View {
         self._isAddingTemplate = State(initialValue: initialIsAddingTemplateForTesting)
     }
 
-    /// DEFECT 4 fix (Composer UI 11 review round 2): named production
-    /// symbol for `projectControl`'s `.accessibilityLabel` — see
-    /// `AccessibilityTests` for why a re-declared local literal doesn't
-    /// guard anything. `branchControl`'s own equivalent label/default-value
-    /// pair was removed in Variant G Pass B — `branchControl` itself was
-    /// deleted in Pass A, leaving that pair as its only remaining trace.
-    static let accessibilityProjectControlLabel: String = "Select project"
-
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
-    /// Whether the inline project picker is expanded — opened from
+    /// Whether the inline project picker is expanded. Used to open from
     /// `projectControl` (Step 5; used to be the resolution line's project
     /// segment, before that the project chip's own click target, Slice
-    /// A/A2). Drives an expansion INSIDE the card, not a `.popover`.
+    /// A/A2) — Variant G Pass C deleted `projectControl`, which was the
+    /// ONLY site that ever set this `true`, so `inlineProjectPicker` is now
+    /// unreachable by mouse; see that view's own doc comment. Drives an
+    /// expansion INSIDE the card, not a `.popover`.
     @State private var isProjectPickerOpen = false
     /// Whether the inline branch picker is expanded — Step 5 opened this from
     /// a since-removed `branchControl` (Variant G Pass A deleted the
@@ -1072,15 +1070,22 @@ struct SessionComposerPalette: View {
     }
 
     /// Query-matching projects (S2, locked decision: "the search field
-    /// filters BOTH templates and projects"). Empty when the query is
-    /// blank — the trailing dropdown already covers browsing every project
-    /// unfiltered. Selecting a row here sets the composer's selected
+    /// filters BOTH templates and projects"). Variant G (Pass C, 2026-08-30):
+    /// Sean removed `projectControl` — the trailing chevron that used to be
+    /// the only way to browse every project unfiltered — on the premise
+    /// that "the projects were going to be in the search / input results."
+    /// A blank query now populates this lane with every project instead of
+    /// returning empty, so browsing moved INTO the results well rather than
+    /// disappearing. Selecting a row here sets the composer's selected
     /// project; it does not start a session.
     private var filteredProjectOptions: [ComposerOption] {
         // N3: `.locked` fixes the project at the write path (`commit()`
         // resolves from the bound project, never `selectedProjectId`), so
         // letting a project row re-scope the list here would show project B
-        // while `commit()` still creates in locked project A.
+        // while `commit()` still creates in locked project A. This guard
+        // stays even though the empty-query guard next to it is gone —
+        // locked composers never show a PROJECTS lane at all, blank query
+        // or not.
         //
         // A resolved command does NOT suppress this section (reverted —
         // that suppression was never in the brief and made a multi-word
@@ -1090,7 +1095,28 @@ struct SessionComposerPalette: View {
         // `Run "web"` — the project being named disappears from the list.
         // A mis-parse must stay recoverable, so PROJECTS keeps ranking
         // against the raw `query` exactly as it does with no command typed.
-        guard !isProjectLocked, !query.isEmpty else { return [] }
+        guard !isProjectLocked else { return [] }
+
+        guard !query.isEmpty else {
+            // Blank query: `SessionComposerRanking.sorted` returns `items`
+            // unfiltered AND unreordered on a blank query (see its own doc
+            // comment), which would just be `store.projects`' raw storage
+            // order — not a defensible rest-state order. `ProjectDropdownView`
+            // (the inline picker this lane replaces as the browse route)
+            // already solved "order every project with no query" via
+            // `SessionComposerProjectOrdering.order`: cascade pick first,
+            // then most-recently-used, then alphabetical. Reused verbatim
+            // here rather than inventing a second ordering for the same
+            // "browse everything" job.
+            let recentIds = SessionComposerStore.shared.recentProjectIds
+            let ordered = SessionComposerProjectOrdering.order(
+                projects: store.projects,
+                cascadePick: currentProject?.id,
+                recentProjectIds: recentIds
+            )
+            return ordered.map(makeOption)
+        }
+
         let options = store.projects.map(makeOption)
         return SessionComposerRanking.sorted(options, query: query, title: { $0.title })
     }
@@ -1522,34 +1548,31 @@ struct SessionComposerPalette: View {
         .modifier(ShakeEffect(animatableData: shakeTrigger))
     }
 
-    // MARK: - Query row (type-first field + trailing picker controls, model
-    // A rebuild)
+    // MARK: - Query row (type-first field, model A rebuild)
     //
     // Replaces Slice A/B's project/branch chips with plain text entry: the
     // field holds `composerStore.searchText` verbatim (`searchTextBinding`).
     // The resolution line that used to sit beneath it is deleted (Composer
     // UI 11 plan §3 Step 5, §4 table) — its six labels and two mouse routes
-    // were each given a named successor: the ghost placeholder (Step 3),
-    // the status strip (Step 4), and the two trailing controls below
-    // (`projectControl`/`branchControl`), the field row's only mouse entry
-    // point left into the project/branch pickers. Changing a segment still
+    // were each given a named successor: the ghost placeholder (Step 3) and
+    // the status strip (Step 4). The two trailing controls Step 5 built as
+    // the third successor (`projectControl`/`branchControl`) are BOTH gone
+    // now — `branchControl` in Variant G Pass A, `projectControl` in Pass C
+    // (2026-08-30) — so the field's right edge is a plain caret with no
+    // mouse entry point left into either picker; the project picker opens
+    // via `inlineProjectPicker`'s state alone, which no control sets `true`
+    // anymore (see `isProjectPickerOpen`'s doc comment), and the branch
+    // picker still opens only by typing `>`. Changing a segment still
     // expands the SAME inline pickers Slice A/B built
     // (`inlineProjectPicker`/`inlineBranchPicker`, both unchanged) — never a
     // `.popover`, for the same nested-popover reason Slice A originally
     // recorded (a child popover taking key can dismiss the parent
     // composer).
-
-    /// Step 5: visibility + content for `projectControl`/`branchControl`,
-    /// one pure read so the view and `SessionComposerTrailingControlTests`
-    /// see the exact same decision.
-    private var trailingControlVisibility: SessionComposerCommandParser.TrailingControlVisibility {
-        SessionComposerCommandParser.trailingControlVisibility(
-            isProjectLocked: isProjectLocked,
-            isBranchSegmentEligible: isBranchSegmentEligible,
-            isCreatingWorktree: composerStore.isCreatingWorktree,
-            currentBranchLabel: currentBranchLabel
-        )
-    }
+    //
+    // `SessionComposerCommandParser.trailingControlVisibility` (the pure
+    // decision function both deleted controls used to read) is left intact
+    // in GhosttiesCore, still covered by `SessionComposerTrailingControlTests`
+    // directly — nothing in this view calls it anymore.
 
     private var queryRow: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1632,10 +1655,6 @@ struct SessionComposerPalette: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-                if trailingControlVisibility.showProjectControl {
-                    projectControl
-                }
             }
             .frame(height: fieldHeight)
             .padding(.horizontal, 10)
@@ -1683,36 +1702,6 @@ struct SessionComposerPalette: View {
         }
     }
 
-    /// Step 5: the project picker's mouse route, now that the deleted
-    /// resolution line's clickable project segment is gone (plan §4 table).
-    /// `chevron.down`, `.tertiary`, subtitle scale, 16pt hit target. Hidden
-    /// (not disabled) when `isProjectLocked` — the locked rule survives
-    /// verbatim (DESIGN.md: a locked composer must never expose a live
-    /// picker affordance).
-    private var projectControl: some View {
-        Button {
-            isBranchPickerOpen = false
-            isProjectPickerOpen.toggle()
-        } label: {
-            Image(systemName: "chevron.down")
-                .font(.system(size: subtitleFontSize))
-                .foregroundStyle(.tertiary)
-                .frame(width: 16, height: 16)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        // Fix 6 (review): `.accessibilityLabel` REPLACES the Button's
-        // auto-generated label (which would otherwise combine the glyph
-        // with nothing, since there's no text child) — naming only the
-        // action leaves VoiceOver with no way to learn WHICH project is
-        // current without opening the picker. `accessibilityValue` carries
-        // that alongside the action, the same label/value split a system
-        // Picker uses.
-        .accessibilityLabel(Self.accessibilityProjectControlLabel)
-        .accessibilityValue(currentProject?.name ?? "No project selected")
-        .accessibilityHint("Opens project picker")
-    }
-
     /// `ProjectDropdownView`'s list content, reused verbatim, but presented
     /// as an expansion inline inside the composer card instead of via
     /// `.popover` — see the type's own doc comment for why that was
@@ -1722,6 +1711,19 @@ struct SessionComposerPalette: View {
     /// fixes the checkmark-vs-label disagreement that existed whenever a
     /// typed command resolved a DIFFERENT project than `selectedProjectId`
     /// still read.
+    ///
+    /// UNREACHABLE BY MOUSE as of Variant G Pass C (2026-08-30):
+    /// `isProjectPickerOpen` (the flag that mounts this view, `if
+    /// isProjectPickerOpen` above) had exactly one site that ever set it
+    /// `true` — `projectControl`'s tap handler — and that control is now
+    /// deleted. Every remaining reference to `isProjectPickerOpen` only sets
+    /// it `false` (dismiss paths) or reads it. Left working and un-deleted
+    /// per this pass's scope — it is entangled with `isBranchPickerOpen`
+    /// (mutual-exclusion invariant, see that state's doc comment) and with
+    /// `ComposerQueryField.isPickerOpen` / `ComposerGhostTextField.isPickerOpen`,
+    /// which gate the field's own ↑/↓/Return keyboard handlers; unwinding
+    /// that on a branch this long is a separate, riskier change than this
+    /// pass's brief covers.
     private var inlineProjectPicker: some View {
         ProjectDropdownView(selectedProjectId: currentProject?.id) { project in
             changeProjectChip(to: project)
@@ -2454,9 +2456,11 @@ struct ComposerQueryField: View {
     /// list).
     var hasSelection: Bool
     /// D6: whether the inline project/branch picker is currently open
-    /// (opened by clicking `projectControl`/`branchControl`, Step 5 — used
-    /// to be the resolution line's segment click target, before that the
-    /// breadcrumb chip's own click target). While
+    /// (Step 5's `projectControl`/`branchControl` used to be the mouse
+    /// route in — used to be the resolution line's segment click target
+    /// before that, the breadcrumb chip's own click target before that;
+    /// both controls are now deleted, see `isProjectPickerOpen`'s doc
+    /// comment for how this flag still gets driven). While
     /// `true`, this field's own ↑/↓/Return handlers go quiet — the picker
     /// (`ProjectDropdownView.keyboardCaptureLayer`) becomes the only live
     /// ↑/↓/Return handler on screen. Clicking a control to open the picker
@@ -2889,9 +2893,10 @@ private struct ComposerResultsTable: View {
 
     /// Step 4's zero-project empty-state row (G-F7) — reaches the same
     /// `addProjectViaPanel` flow the inline project picker's own
-    /// `+ Add project…` row and Step 5's `projectControl` chevron reach.
-    /// Row-styled to match `newTemplateRow` above it, not a plain text
-    /// dead end.
+    /// `+ Add project…` row reaches (Step 5's `projectControl` chevron
+    /// used to reach it too; that control is deleted as of Variant G
+    /// Pass C). Row-styled to match `newTemplateRow` above it, not a
+    /// plain text dead end.
     private var addProjectRow: some View {
         Button(action: onAddProject) {
             HStack(spacing: 8) {

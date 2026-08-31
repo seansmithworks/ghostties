@@ -239,25 +239,12 @@ final class AccessibilityTests: XCTestCase {
             "Composer query field must have a non-empty VoiceOver label")
     }
 
-    func testComposerTrailingControlsCarryTheirCurrentValue() {
-        // DEFECT 4 fix (Composer UI 11 review round 2): round 1 asserted
-        // local literals against themselves, which named no production
-        // symbol. Now asserts against
-        // `SessionComposerPalette.accessibilityProjectControlLabel`, the
-        // literal symbol `projectControl` actually renders
-        // `.accessibilityLabel` with.
-        //
-        // `branchControl`'s own label/default-value constant pair was
-        // deleted in Variant G Pass B (Variant G Pass A had already
-        // deleted `branchControl` itself; that pair was its last
-        // remaining trace).
-        //
-        // NOT established: whether `.accessibilityValue` actually reaches
-        // VoiceOver's `AXValue` for a SwiftUI `Button` at runtime — see the
-        // sibling test's note above; this asserts the constant only.
-        XCTAssertEqual(SessionComposerPalette.accessibilityProjectControlLabel, "Select project")
-        XCTAssertFalse(SessionComposerPalette.accessibilityProjectControlLabel.isEmpty)
-    }
+    // `testComposerTrailingControlsCarryTheirCurrentValue` (asserted
+    // `SessionComposerPalette.accessibilityProjectControlLabel`) removed:
+    // Variant G Pass C (2026-08-30) deleted `projectControl` — the trailing
+    // chevron the label belonged to, the last of the two trailing picker
+    // controls (`branchControl` went in Pass A) — so the constant is
+    // unused and gone; nothing in production renders it anymore.
 
     // MARK: - Graveyard expansion chevron labels (FYI-2)
 

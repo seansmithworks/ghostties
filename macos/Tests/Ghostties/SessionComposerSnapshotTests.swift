@@ -573,15 +573,18 @@ struct SessionComposerSnapshotTests {
         if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the long-path ghost/card content to render, got a near-blank card") }
     }
 
-    // MARK: - Step 5: resolution line deleted, trailing controls shown
+    // MARK: - Step 5: resolution line deleted (trailing controls since removed, Variant G)
 
-    /// An UNLOCKED project (`.open`, not `.locked`) so `projectControl`
-    /// renders — `trailingControlVisibility`'s locked-hides-projectControl
-    /// branch is covered structurally by `SessionComposerTrailingControlTests`,
-    /// not a second screenshot. Proves the resolution line is gone (field +
-    /// hairline + rows only) and the trailing controls are the field row's
-    /// mouse route now.
-    @Test func step5LineDeletedShowsTrailingControlsLightAndDark() {
+    /// An UNLOCKED project (`.open`, not `.locked`). Originally proved the
+    /// resolution line was gone AND that `projectControl` rendered as its
+    /// mouse-route successor — Variant G Pass C (2026-08-30) deleted
+    /// `projectControl` too, so this now only proves the resolution line
+    /// stays gone (field + hairline + rows only, row 0 still selectable).
+    /// The "no chevron" claim has its own test below
+    /// (`fieldTrailingEdgeHasNoChevronLightAndDark`), which is a real
+    /// pixel/structural check rather than folded into this one's generic
+    /// content threshold.
+    @Test func step5LineDeletedShowsRowsLightAndDark() {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
@@ -607,7 +610,342 @@ struct SessionComposerSnapshotTests {
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step5-line-deleted-dark.png")
         #expect(dark != nil)
-        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the field/hairline/rows/trailing controls to render, got a near-blank card") }
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the field/hairline/rows to render, got a near-blank card") }
+    }
+
+    // MARK: - Variant G Pass C: chevron removed, projects live in results at rest
+
+    /// Change 2's acceptance check: the field's trailing edge carries no
+    /// `projectControl` chevron anymore. A rendered-content diff, not a
+    /// glyph-recognition check — `projectControl` was a
+    /// `chevron.down`-glyph `Button` sitting to the RIGHT of the text
+    /// field, inside the query row's fixed-height `HStack`
+    /// (`SessionComposerPalette.queryRow`). Scoped to that row's own
+    /// vertical band, relative to the card's own top edge (`cardTopEdge`,
+    /// same technique the ghost-band checks above use) so this survives
+    /// the card's total height changing for unrelated reasons: the LAST
+    /// ~24pt-wide column of that band must be empty (alpha 0 or a color
+    /// indistinguishable from the card's own `.regularMaterial`
+    /// background) now that nothing renders there.
+    ///
+    /// Mutant-proved: re-adding a bare `Image(systemName: "chevron.down")`
+    /// at the query row's trailing edge (this repo's forbidden regression)
+    /// flips this from pass to fail — see the mutation note in the PR
+    /// description for the exact diff exercised.
+    @Test func fieldTrailingEdgeHasNoChevronLightAndDark() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        for (appearance, label) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
+            guard let data = renderPNG(view, appearance: appearance, size: size) else {
+                Issue.record("failed to render \(label) fixture")
+                continue
+            }
+            writeEvidence(data, filename: "variant-g-no-chevron-\(label).png")
+            guard let rep = NSBitmapImageRep(data: data), let cardTop = cardTopEdge(in: data) else {
+                Issue.record("failed to decode \(label) PNG or find the card's top edge")
+                continue
+            }
+            // Query row only: `fieldHeight` is 38pt (centered scale) — 76
+            // backing px at this render's 2x scale — followed immediately
+            // by a `Divider()` and then the first results row
+            // (`composerCard`'s `VStack(spacing: 0)`). Scoped to 68 backing
+            // px (34pt), safely inside the field's own height and short of
+            // both the divider and the first row: an earlier, looser 100px
+            // bound reached into row 0, whose selection-highlight fill
+            // (`Color.accentColor.opacity(0.2)`) tints the WHOLE row width
+            // including its trailing edge, false-failing this check against
+            // real, unrelated content — not a chevron.
+            let rowBottom = min(cardTop + 68, rep.pixelsHigh)
+            // `WorkspaceLayout.terminalCornerRadius` (12pt, 24 backing px
+            // at 2x) applies to this card too (`DESIGN.md` §7) — the top
+            // corners curve inward for roughly that many px below
+            // `cardTop`, so the card's TRUE right edge (measured within the
+            // curve) reads narrower than its real straight-edge width there.
+            // Both the right-edge measurement AND the ink scan below start
+            // 28 backing px (14pt) under `cardTop` — past the 24px curve
+            // with margin — so neither reads the curve's own antialiasing
+            // as "the edge" or as "ink." An earlier version measured from
+            // `cardTop` directly and intermittently false-failed against
+            // that curve under heavier system load (more antialiasing
+            // blend at some renders than others).
+            let safeTop = min(cardTop + 28, rowBottom)
+            // The CARD's own right edge, not the image canvas edge — the
+            // card sits inset within an 8pt shake-clearance gutter
+            // (`anchoredThreeOperatorFooterNeverTruncates` above measures
+            // the same edge the same way). An earlier version of this scan
+            // used `rep.pixelsWide - 48` directly and caught the rounded
+            // card corner's own antialiasing (the border curve blends
+            // through a range of luminances right at the canvas edge),
+            // false-failing against the card's OWN border, not a chevron.
+            var cardRightEdge: Int?
+            for x in stride(from: rep.pixelsWide - 1, through: 0, by: -1) {
+                var found = false
+                for y in stride(from: safeTop, to: rowBottom, by: 2) {
+                    if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 {
+                        found = true
+                        break
+                    }
+                }
+                if found {
+                    cardRightEdge = x
+                    break
+                }
+            }
+            guard let cardRightEdge else {
+                Issue.record("failed to find the card's right edge for \(label)")
+                continue
+            }
+            // 48 backing px (24pt at 2x), inset 16 backing px (8pt) from
+            // the card's own right edge to clear its border stroke — wide
+            // enough to catch the whole 16pt hit target `projectControl`
+            // used plus its trailing padding, narrow enough to not catch
+            // the text field's own glyphs, which sit well to the left of
+            // the card's right edge in every fixture this file renders.
+            let scanEnd = max(0, cardRightEdge - 16)
+            let scanStart = max(0, scanEnd - 48)
+            // Self-calibrating background instead of a hardcoded luminance
+            // threshold — an earlier version guessed light/dark background
+            // luminance directly (`> 235`/`> 200`) and was wrong for dark
+            // mode's actual `.regularMaterial` value, false-failing on the
+            // card's OWN background (1920 of ~1900 scanned pixels flagged
+            // as "ink"). A 48×40px window with no chevron in it is
+            // overwhelmingly ONE color (the card background, give or take
+            // antialiasing noise); with one it's still a majority
+            // background with a compact 16×16 outlier blob. Buckets each
+            // pixel to its nearest-16 RGB cell, takes the most POPULAR
+            // bucket as "the background" for THIS render, and counts
+            // pixels outside it — no light/dark-specific guess needed.
+            var bucketCounts: [String: Int] = [:]
+            var pixels: [(r: Int, g: Int, b: Int)] = []
+            for x in stride(from: scanStart, to: scanEnd, by: 1) {
+                for y in stride(from: safeTop, to: rowBottom, by: 1) {
+                    guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                    let r = Int((color.redComponent * 255).rounded())
+                    let g = Int((color.greenComponent * 255).rounded())
+                    let b = Int((color.blueComponent * 255).rounded())
+                    pixels.append((r, g, b))
+                    bucketCounts["\(r / 16)-\(g / 16)-\(b / 16)", default: 0] += 1
+                }
+            }
+            let backgroundBucket = bucketCounts.max { $0.value < $1.value }?.key
+            let opaqueChevronBandPixels = pixels.filter { "\($0.r / 16)-\($0.g / 16)-\($0.b / 16)" != backgroundBucket }.count
+            #expect(
+                opaqueChevronBandPixels < 30,
+                "\(label): expected no glyph ink in the query row's trailing 24pt column (plain caret only), found \(opaqueChevronBandPixels) non-background pixels of \(pixels.count) scanned — a chevron or other trailing control may have regressed back in"
+            )
+        }
+    }
+
+    /// Change 1's acceptance check: a blank query populates PROJECTS with
+    /// every project instead of hiding the lane. Relational, not absolute —
+    /// compares the SAME fixture (same store, same template lane) with 1
+    /// vs. 3 projects; only the PROJECTS lane's row count differs between
+    /// them, so a taller card on the 3-project fixture is only explainable
+    /// by the extra rows rendering. `> 40` backing px (`20pt` at 2x) is
+    /// comfortably less than even one extra row's height (Composer UI 11's
+    /// row metrics: 8pt vertical padding + row content, `DESIGN.md` §4) —
+    /// two extra rows should clear it with margin.
+    @Test func blankQueryPopulatesProjectsLaneAtRestLightAndDark() {
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+
+        let oneProject = makeProject()
+        let oneProjectStore = WorkspaceStore(testingProjects: [oneProject], testingSessions: [])
+        let oneComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".one")
+        oneComposerStore.open(projectBinding: .open, workspaceStore: oneProjectStore)
+        let oneView = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: oneComposerStore
+        )
+        .environmentObject(oneProjectStore)
+        .environmentObject(SessionCoordinator())
+
+        let threeProjects = [makeProject(), makeProject(), makeProject()]
+        let threeProjectStore = WorkspaceStore(testingProjects: threeProjects, testingSessions: [])
+        let threeComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".three")
+        threeComposerStore.open(projectBinding: .open, workspaceStore: threeProjectStore)
+        let threeView = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: threeComposerStore
+        )
+        .environmentObject(threeProjectStore)
+        .environmentObject(SessionCoordinator())
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 700)
+
+        for (appearance, label) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
+            guard let oneData = renderPNG(oneView, appearance: appearance, size: size),
+                let threeData = renderPNG(threeView, appearance: appearance, size: size)
+            else {
+                Issue.record("failed to render \(label) fixtures")
+                continue
+            }
+            writeEvidence(oneData, filename: "variant-g-projects-lane-one-project-\(label).png")
+            writeEvidence(threeData, filename: "variant-g-projects-lane-three-projects-\(label).png")
+
+            guard let oneTop = cardTopEdge(in: oneData), let oneBottom = cardBottomEdge(in: oneData),
+                let threeTop = cardTopEdge(in: threeData), let threeBottom = cardBottomEdge(in: threeData)
+            else {
+                Issue.record("failed to measure card edges for \(label)")
+                continue
+            }
+            let oneHeight = oneBottom - oneTop
+            let threeHeight = threeBottom - threeTop
+            #expect(
+                threeHeight - oneHeight > 40,
+                "\(label): expected the 3-project fixture's PROJECTS lane to add real height over the 1-project fixture (blank query should populate every project), got \(oneHeight)px vs \(threeHeight)px"
+            )
+        }
+    }
+
+    /// N3's acceptance check: `isProjectLocked` still yields an empty
+    /// PROJECTS lane even at a blank query, naming the real production
+    /// path (`SessionComposerRequest(projectBinding: .locked(...))` →
+    /// `SessionComposerPalette.isProjectLocked` →
+    /// `filteredProjectOptions`'s locked guard). Relational, and BOTH sides
+    /// are `.locked` — comparing a locked fixture against an `.open` one
+    /// (an earlier draft of this test did) confounds two different
+    /// changes at once, since Change 1 also makes `.open` grow at blank
+    /// query now. Isolates the ONE variable that matters: a `.locked`
+    /// fixture with 3 OTHER projects sitting in the SAME store must render
+    /// at the SAME height as a `.locked` fixture whose store has no other
+    /// projects to leak — if the locked guard regressed, the "many" side
+    /// would grow with 3 extra rows the "alone" side never has the chance
+    /// to show.
+    @Test func lockedProjectStillYieldsEmptyProjectsLaneAtBlankQuery() {
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+
+        let lockedProject = makeProject()
+        let otherProjects = [makeProject(), makeProject(), makeProject()]
+        let manyStore = WorkspaceStore(testingProjects: [lockedProject] + otherProjects, testingSessions: [])
+        let manyComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".many")
+        manyComposerStore.open(projectBinding: .locked(lockedProject), workspaceStore: manyStore)
+        let manyView = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(lockedProject)),
+            composerStore: manyComposerStore
+        )
+        .environmentObject(manyStore)
+        .environmentObject(SessionCoordinator())
+
+        let aloneStore = WorkspaceStore(testingProjects: [lockedProject], testingSessions: [])
+        let aloneComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".alone")
+        aloneComposerStore.open(projectBinding: .locked(lockedProject), workspaceStore: aloneStore)
+        let aloneView = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(lockedProject)),
+            composerStore: aloneComposerStore
+        )
+        .environmentObject(aloneStore)
+        .environmentObject(SessionCoordinator())
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 700)
+
+        guard let manyData = renderPNG(manyView, appearance: .aqua, size: size),
+            let aloneData = renderPNG(aloneView, appearance: .aqua, size: size)
+        else {
+            Issue.record("failed to render fixtures")
+            return
+        }
+        writeEvidence(manyData, filename: "variant-g-locked-projects-lane-light.png")
+
+        guard let manyTop = cardTopEdge(in: manyData), let manyBottom = cardBottomEdge(in: manyData),
+            let aloneTop = cardTopEdge(in: aloneData), let aloneBottom = cardBottomEdge(in: aloneData)
+        else {
+            Issue.record("failed to measure card edges")
+            return
+        }
+        let manyHeight = manyBottom - manyTop
+        let aloneHeight = aloneBottom - aloneTop
+        #expect(
+            abs(manyHeight - aloneHeight) <= 8,
+            "expected a locked composer's card height to stay the same regardless of how many OTHER projects exist in the store (locked always hides PROJECTS), got many=\(manyHeight)px vs alone=\(aloneHeight)px"
+        )
+    }
+
+    /// Acceptance criterion 2: 27 projects (Sean's real Release-workspace
+    /// count) scroll cleanly inside the results well instead of blowing out
+    /// the card, in BOTH presentations. Relational, not an absolute height
+    /// assertion (per this file's own "absolute-pixel bands get retuned to
+    /// match a bug" lesson): compares a 10-project fixture against a
+    /// 27-project one. `ComposerResultsTable` caps the well at
+    /// `resultsWellMaxHeight` (220pt `.anchored` / 440pt `.centered`) and
+    /// scrolls past it — per that constant's own doc comment, ~14 rows
+    /// already fills the centered well, so BOTH 10 and 27 projects (plus
+    /// this fixture's lane1/lane2 rows) should already be pinned at the
+    /// same capped height. If the cap regressed to uncapped growth, 27
+    /// projects would render measurably taller than 10.
+    @Test func twentySevenProjectsScrollCleanlyBothPresentations() {
+        func makeProjects(_ count: Int, prefix: String) -> [Project] {
+            (0..<count).map {
+                Project(name: "\(prefix) \($0)", rootPath: "/tmp/composer-ui-11-scale-\(prefix)-\($0)-\(UUID().uuidString)")
+            }
+        }
+
+        for presentation: SessionComposerRequest.Presentation in [.anchored, .centered] {
+            let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+
+            let tenProjects = makeProjects(10, prefix: "Ten")
+            let tenStore = WorkspaceStore(testingProjects: tenProjects, testingSessions: [])
+            let tenComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".ten")
+            tenComposerStore.open(projectBinding: .open, workspaceStore: tenStore)
+            let tenView = SessionComposerPalette(
+                isPresented: .constant(true),
+                request: SessionComposerRequest(presentation: presentation, projectBinding: .open),
+                composerStore: tenComposerStore
+            )
+            .environmentObject(tenStore)
+            .environmentObject(SessionCoordinator())
+
+            let twentySevenProjects = makeProjects(27, prefix: "TwentySeven")
+            let twentySevenStore = WorkspaceStore(testingProjects: twentySevenProjects, testingSessions: [])
+            let twentySevenComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".twentyseven")
+            twentySevenComposerStore.open(projectBinding: .open, workspaceStore: twentySevenStore)
+            let twentySevenView = SessionComposerPalette(
+                isPresented: .constant(true),
+                request: SessionComposerRequest(presentation: presentation, projectBinding: .open),
+                composerStore: twentySevenComposerStore
+            )
+            .environmentObject(twentySevenStore)
+            .environmentObject(SessionCoordinator())
+
+            let width = presentation == .anchored ? WorkspaceLayout.sidebarWidth : WorkspaceLayout.composerOverlayWidth + 16
+            let size = NSSize(width: width, height: 900)
+
+            guard let tenData = renderPNG(tenView, appearance: .aqua, size: size),
+                let twentySevenData = renderPNG(twentySevenView, appearance: .aqua, size: size)
+            else {
+                Issue.record("failed to render \(presentation) fixtures")
+                continue
+            }
+            writeEvidence(twentySevenData, filename: "variant-g-27-projects-\(presentation).png")
+
+            guard let tenTop = cardTopEdge(in: tenData), let tenBottom = cardBottomEdge(in: tenData),
+                let twentySevenTop = cardTopEdge(in: twentySevenData), let twentySevenBottom = cardBottomEdge(in: twentySevenData)
+            else {
+                Issue.record("failed to measure card edges for \(presentation)")
+                continue
+            }
+            let tenHeight = tenBottom - tenTop
+            let twentySevenHeight = twentySevenBottom - twentySevenTop
+            #expect(
+                abs(twentySevenHeight - tenHeight) <= 8,
+                "\(presentation): expected the results well to cap and scroll (10- and 27-project fixtures pinned at the same height), got ten=\(tenHeight)px vs twentySeven=\(twentySevenHeight)px — the well may have stopped capping and grown unbounded"
+            )
+        }
     }
 
     // MARK: - Step 3: ghost placeholder opacity
