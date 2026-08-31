@@ -2022,3 +2022,4 @@ synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
 - [x] Composer variant G — Pass B: contextual operator footer strip
 - [ ] Composer variant G — independent review of the complete diff
 - [x] Composer variant G — review round 2 fixes
+- [x] Composer variant G — review round 4 fixes

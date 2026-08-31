@@ -69,14 +69,25 @@ struct SessionComposerPalette: View {
     /// without this the harness would have no way to avoid mutating the
     /// developer's real, persisted UserDefaults (pins, recents) on every
     /// test run.
+    /// Review round 4, P2 test seam: `initialIsAddingTemplateForTesting`
+    /// seeds `isAddingTemplate` before mount — `@State` is a live view
+    /// identity's own storage, unreachable from outside once mounted, so a
+    /// test that needs to start from "already naming a new template" (to
+    /// then prove an arriving `writeError` evicts it, see
+    /// `SessionComposerSnapshotTests
+    /// .isAddingTemplateClearsWhenAWriteErrorArrives`) has no other route
+    /// in. Defaults `false`, matching every production call site
+    /// unchanged.
     init(
         isPresented: Binding<Bool>,
         request: SessionComposerRequest,
-        composerStore: SessionComposerStore = .shared
+        composerStore: SessionComposerStore = .shared,
+        initialIsAddingTemplateForTesting: Bool = false
     ) {
         self._isPresented = isPresented
         self.request = request
         self.composerStore = composerStore
+        self._isAddingTemplate = State(initialValue: initialIsAddingTemplateForTesting)
     }
 
     /// DEFECT 4 fix (Composer UI 11 review round 2): named production
@@ -1206,6 +1217,23 @@ struct SessionComposerPalette: View {
                 composerStore.cancel()
                 commandProjectRefreshTask?.cancel()
             }
+            // Review round 4, P2 fix: an async worktree create can time out
+            // or fail well after the user has moved on to "+ New
+            // template…" (`isAddingTemplate = true`, which — correctly,
+            // per the round-2 precedence fix — now wins the footer slot
+            // over `writeError`). Left alone, that error was never shown:
+            // `isAddingTemplate` stayed true until the user committed or
+            // cancelled the template, silently swallowing a failed/timed-
+            // out worktree creation (session would launch at the project
+            // root instead, wrong cwd, zero surfaced error). Clearing
+            // `isAddingTemplate` the instant a `writeError` arrives lets
+            // the error win the footer slot without reverting the
+            // precedence swap itself.
+            .onChange(of: composerStore.writeError) { error in
+                if error != nil {
+                    isAddingTemplate = false
+                }
+            }
             // Round-4 review, Blocker: was `.onChange(of: query)`. `query`
             // is the TRIMMED search text, so a typed trailing space (the
             // exact keystroke that resolves an implied project — see
@@ -1457,7 +1485,7 @@ struct SessionComposerPalette: View {
                 Text(message)
                     .font(.system(size: subtitleFontSize))
                     .foregroundStyle(Color(nsColor: .systemRed))
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, footerHorizontalPadding)
                     .padding(.top, 6)
             case .newTemplateName:
                 newTemplateRow
@@ -1785,7 +1813,41 @@ struct SessionComposerPalette: View {
         )
     }
 
-    private func operatorFooterStrip(
+    /// Review round 4, P1-a: measured at the strip's real fonts (10.5pt
+    /// monospaced), three operators WITH labels need ~190pt against
+    /// `.anchored`'s ~168pt of available footer width — 22pt over, and
+    /// `.lineLimit(1)` (round 2's fix) only converted the overflow from a
+    /// wrap into an invisible ellipsis truncation; it never made the
+    /// content fit. Glyphs alone measure ~47pt of content + gaps, ≈89pt —
+    /// comfortably inside 168pt. `.centered`'s card is wide enough that
+    /// glyph+label was never the problem there, so only `.anchored` drops
+    /// the label.
+    private var footerStripShowsLabels: Bool {
+        request.presentation == .centered
+    }
+
+    /// Review round 4, P3: the results VStack's own `.padding(8)`
+    /// (`ComposerResultsTable.body`) plus `rowHorizontalPadding` is the
+    /// full inset a row title sits at from the card's left edge — no
+    /// enclosing padding wraps this strip (or the error/naming-field
+    /// footer occupants below), so this value must be applied directly
+    /// as their own horizontal padding to land on that same edge.
+    private var footerHorizontalPadding: CGFloat {
+        8 + rowHorizontalPadding
+    }
+
+    /// Review round 4, P2 test fix: no longer `private` — the round-2/3
+    /// `fourOperatorFooterStripDoesNotWrapAtAnchoredWidth` test copied this
+    /// entire `HStack` (including `.lineLimit(1)`) into the test body,
+    /// re-implementing the exact thing under test rather than exercising
+    /// it — a tautology that stayed green even after deleting `.lineLimit(1)`
+    /// from production. `internal` visibility lets
+    /// `SessionComposerSnapshotTests` call the real production function
+    /// directly (this repo's established precedent for testing a private-
+    /// turned-internal View helper — see `ComposerCardFitTests`), against
+    /// synthetic operator counts the live composer can't otherwise reach in
+    /// `.anchored` (4 operators; `⇥ accept` is gated to `.centered`).
+    func operatorFooterStrip(
         _ operators: [SessionComposerCommandParser.FooterOperatorHint]
     ) -> some View {
         HStack(spacing: 14) {
@@ -1795,31 +1857,29 @@ struct SessionComposerPalette: View {
                         .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                         .foregroundColor(Color(nsColor: .labelColor))
                         .lineLimit(1)
-                    // Review round 2: `.anchored` (204pt card, ~168pt of
-                    // footer content width after this strip's own 18pt×2
-                    // padding) has no headroom for 3+ operators at this
-                    // spacing/font — without `.lineLimit(1)`, a label like
-                    // "navigate" WRAPS onto a second line inside the fixed
-                    // 26pt-tall strip, corrupting the whole footer's
-                    // layout (measured/screenshotted directly — see
-                    // `SessionComposerSnapshotTests
-                    // .anchoredThreeOperatorFooterFitsWithoutTruncation`).
-                    // `.lineLimit(1)` forces single-line truncation instead
-                    // — the strip's own token values (font/spacing/padding)
-                    // are Sean's call and untouched here.
-                    Text(op.label)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                        .lineLimit(1)
+                    // Review round 4, P1-a: `.anchored` renders the glyph
+                    // ONLY — see `footerStripShowsLabels` above. `.lineLimit(1)`
+                    // stays on both `Text`s regardless of presentation; it
+                    // no longer needs to hide an overflow in `.anchored`
+                    // (glyphs alone fit with room to spare) but is cheap
+                    // insurance against any future width squeeze.
+                    if footerStripShowsLabels {
+                        Text(op.label)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                            .lineLimit(1)
+                    }
                 }
             }
             Spacer(minLength: 0)
         }
-        // Review round 2: 18pt to match the row titles'/section headers'
-        // own 18pt left edge (was 14pt). No enclosing VStack padding wraps
-        // this strip (unlike the results content above), so this value IS
-        // the full inset from the card's left edge.
-        .padding(.horizontal, 18)
+        // Review round 4, P3: was a hardcoded 18pt, believed to match the
+        // row/header left edge — it did not (`.anchored`'s real row edge is
+        // 16pt; see `footerHorizontalPadding`'s doc comment and the header
+        // padding fix in `ComposerResultsTable.body`). No enclosing VStack
+        // padding wraps this strip, so this value IS the full inset from
+        // the card's left edge.
+        .padding(.horizontal, footerHorizontalPadding)
         .frame(height: 26)
         .overlay(alignment: .top) {
             Rectangle()
@@ -1828,6 +1888,10 @@ struct SessionComposerPalette: View {
         }
         .background(Color.secondary.opacity(0.08))
         .accessibilityElement(children: .combine)
+        // Accessibility label always announces glyph AND label together,
+        // even in `.anchored` where the label isn't drawn — VoiceOver users
+        // shouldn't lose "navigate"/"undo"/etc. to a layout constraint that
+        // only exists for sighted rendering.
         .accessibilityLabel(operators.map { "\($0.glyph) \($0.label)" }.joined(separator: ", "))
     }
 
@@ -1853,7 +1917,7 @@ struct SessionComposerPalette: View {
                     .onSubmit { commitNewTemplate() }
                     .onExitCommand { cancelNewTemplate() }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, footerHorizontalPadding)
             .padding(.vertical, 6)
             .onAppear {
                 DispatchQueue.main.async { newTemplateNameFocused = true }
@@ -2680,17 +2744,21 @@ private struct ComposerResultsTable: View {
                                     .tracking(0.6)
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 6)
-                                    // Review round 2: 10pt here + the
-                                    // enclosing results `VStack`'s own 8pt
-                                    // `.padding(8)` (`body`, below) = 18pt
-                                    // from the card's left edge — the same
-                                    // edge `ComposerRow` titles sit at (8pt
-                                    // `rowHorizontalPadding` inset from that
-                                    // same 8pt VStack padding is wrong — see
-                                    // that computed property; rows use 10pt
-                                    // in `.centered`, giving the same 18pt).
-                                    // Was 14pt (22pt total) before this fix.
-                                    .padding(.leading, 10)
+                                    // Review round 4, P3 fix: this used to
+                                    // hardcode 10pt here, which read as
+                                    // matching row titles' left edge only in
+                                    // `.centered` (8pt outer `.padding(8)`
+                                    // + 10pt `rowHorizontalPadding` = 18pt,
+                                    // same as rows there) — in `.anchored`,
+                                    // rows sit at 8 + 8 = 16pt while this
+                                    // stayed at 8 + 10 = 18pt, 2pt off. Now
+                                    // reads `rowHorizontalPadding` directly
+                                    // (already in scope, used two lines
+                                    // below by `ComposerRow`), so this
+                                    // header sits at the SAME edge as row
+                                    // titles in both presentations, not just
+                                    // `.centered`.
+                                    .padding(.leading, rowHorizontalPadding)
                                     .padding(.bottom, 4)
                                     // The enclosing `VStack` already carries
                                     // `.accessibilityLabel(section.accessibilityLabel)`

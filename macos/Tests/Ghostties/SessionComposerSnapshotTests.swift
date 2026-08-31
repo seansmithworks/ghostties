@@ -698,20 +698,49 @@ struct SessionComposerSnapshotTests {
     /// stays small — just the field, divider, and the single "Add
     /// project…" empty-state row.
     ///
-    /// Mutant-verified (re-measured directly against this exact
-    /// fixture/size, review round 2 — the review's own 223/415/271 numbers
-    /// had drifted from what this file's current form renders and are
-    /// superseded by these): correct code measures 275px. Deleting the
+    /// Review round 4, P1-b fix: round 2 measured this fixture WITHOUT
+    /// pinning `ComposerGhostTextField.modelBFieldStorageKey`, against a
+    /// process-global `UserDefaults.standard` that five OTHER tests in this
+    /// file flip `true` for their own duration (same mechanism
+    /// `operatorFooterStripRendersWhenOperatorsAreLive` and
+    /// `footerStripAbsentWhenOperatorListIsEmpty` below pin against). With
+    /// the flag contaminated `true`, this `.centered`/zero-project fixture's
+    /// `ghostPlaceholder` returns a non-empty remainder, `hasGhostRemainder`
+    /// goes true, and a spurious 26pt (52px at 2x) operator strip renders —
+    /// round 2 measured THAT contaminated 275px and wrote it into this
+    /// comment as the correct baseline, with a 295 threshold tuned to sit
+    /// just above it. The mutant this test exists to catch (a spuriously
+    /// rendered section header) was passing green either way.
+    ///
+    /// Re-measured here with the flag explicitly pinned `false` (this
+    /// fixture never uses model B — pinning only removes the shared-global
+    /// hazard): correct code measures 223px, matching
+    /// `footerStripAbsentWhenOperatorListIsEmpty`'s own measurement of this
+    /// identical fixture exactly, as it should — same projects, same
+    /// presentation, same empty lanes. Deleting the
     /// `!section.options.isEmpty` guard (`if true`, all 4 lanes render a
-    /// header with zero rows beneath it) measures 467px — a 192px growth
-    /// across 4 spurious headers, 48px per header, confirming the review's
-    /// per-header estimate even though its absolute baseline was stale.
-    /// One spurious header alone (the vacuous-band failure mode the review
-    /// flagged — a single growth event, not all four at once) therefore
-    /// measures 275 + 48 = 323px. This test's threshold (295) sits with
-    /// 20px of margin above the correct build's 275 and 28px below the
-    /// one-header mutant's 323.
+    /// header with zero rows beneath it) measures 271px — a 48px growth
+    /// for one spurious header, confirming round 2's per-header estimate.
+    /// This test's threshold (260) sits with 37px of margin above the
+    /// correct build's 223 and 11px below the one-header mutant's 271.
     @Test func emptyLanesRenderNoHeaderOrExtraSpace() {
+        // Pin model B off for the duration of this render — see this test's
+        // doc comment above and the matching idiom in
+        // `operatorFooterStripRendersWhenOperatorsAreLive` below. Without
+        // this, a test running concurrently in the same process can
+        // transiently leave the global flag `true` here.
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(false, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
         let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
         let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
         let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
@@ -737,8 +766,8 @@ struct SessionComposerSnapshotTests {
         }
         let height = bottom - top
         #expect(
-            height < 295,
-            "card measured \(height)px tall (top \(top), bottom \(bottom)) with zero populated lanes — expected under 295px (field + divider + one empty-state row); a single spuriously rendered header for an empty lane measures 323px, well past this threshold"
+            height < 260,
+            "card measured \(height)px tall (top \(top), bottom \(bottom)) with zero populated lanes — expected under 260px (field + divider + one empty-state row); a single spuriously rendered header for an empty lane measures 271px, past this threshold"
         )
     }
 
@@ -1124,13 +1153,18 @@ struct SessionComposerSnapshotTests {
     /// template into this same fixture, then reverted): correct code moves
     /// to 613px, but the NO-STRIP mutant ALSO moves to 561px — inside
     /// 530-580, so that specific (+1 template AND no strip) combination
-    /// would pass incorrectly. The strip-vs-no-strip gap stays a constant
-    /// ~52-58px regardless of template count; growth shifts the whole pair
-    /// upward together, not apart, so no single fixed band survives
-    /// arbitrary future growth — only a relational assertion against a
-    /// live-measured no-operators baseline would. Out of scope for this
-    /// pass (asked-for fix was tightening this into a band, not a rewrite);
-    /// flagged for whoever touches `AgentTemplate.defaults` next.
+    /// would pass incorrectly. Review round 4: that framing understates the
+    /// risk — the LOUDER half is that correct code itself lands at 613px,
+    /// OUTSIDE the 530-580 band. The next person to add a fifth default
+    /// template hits a hard RED on entirely correct code before they ever
+    /// hit the quieter false-green above; that false red is the one
+    /// they'll actually see and have to diagnose. The strip-vs-no-strip gap
+    /// stays a constant ~52-58px regardless of template count; growth
+    /// shifts the whole pair upward together, not apart, so no single fixed
+    /// band survives arbitrary future growth — only a relational assertion
+    /// against a live-measured no-operators baseline would. Out of scope
+    /// for this pass (asked-for fix was tightening this into a band, not a
+    /// rewrite); flagged for whoever touches `AgentTemplate.defaults` next.
     @Test func operatorFooterStripRendersWhenOperatorsAreLive() {
         // Pin model B off for the duration of this render — `isModelBFieldEnabled`
         // reads the process-global `UserDefaults.standard`
@@ -1318,7 +1352,56 @@ struct SessionComposerSnapshotTests {
         )
     }
 
-    // MARK: - Review round 2, P2: `.anchored` footer coverage
+    // MARK: - Review round 2/4, P2: `.anchored` footer coverage
+
+    /// Review round 4, P1-a: the required width of a set of operator hints
+    /// rendered at the footer strip's REAL fonts (10.5pt monospaced,
+    /// semibold glyph / regular label — `SessionComposerPalette
+    /// .operatorFooterStrip`'s own literal values, not a guess), measured
+    /// via `NSAttributedString` sizing against the real system font
+    /// metrics rather than by re-implementing the `HStack`'s layout. This
+    /// is what actually caught round 2/3's bug: `.lineLimit(1)` makes an
+    /// over-full strip invisible to every pixel-based "did it wrap"
+    /// check (truncation and a correctly-fit single line render
+    /// identically in a rendered/height/wrap sense — only a comparison
+    /// against the STRING's own required width catches it).
+    ///
+    /// `includeLabels: false` matches what `.anchored` renders after the
+    /// P1-a fix (glyph-only); `includeLabels: true` reconstructs what
+    /// `.anchored` rendered BEFORE the fix (glyph + label, the shape
+    /// round 2/3 shipped) — used only to mutation-prove the check below,
+    /// never rendered by production.
+    private func requiredFooterContentWidth(
+        operators: [SessionComposerCommandParser.FooterOperatorHint],
+        includeLabels: Bool
+    ) -> CGFloat {
+        let glyphFont = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
+        let labelFont = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
+        var total: CGFloat = 0
+        for (index, op) in operators.enumerated() {
+            if index > 0 { total += 14 } // inter-operator `HStack(spacing: 14)`
+            total += (op.glyph as NSString).size(withAttributes: [.font: glyphFont]).width
+            if includeLabels {
+                total += 4 // intra-operator `HStack(spacing: 4)`
+                total += (op.label as NSString).size(withAttributes: [.font: labelFont]).width
+            }
+        }
+        return total
+    }
+
+    /// `.anchored`'s footer content width: `paletteWidth` (`WorkspaceLayout
+    /// .sidebarWidth - 16` = 204pt) minus the strip's own horizontal
+    /// padding on both sides. Padding is `SessionComposerPalette
+    /// .footerHorizontalPadding` (`private`, not reachable from
+    /// `@testable import` — Swift's `private` stays file-scoped regardless)
+    /// — its formula (`8` from `ComposerResultsTable.body`'s own
+    /// `.padding(8)` + `rowHorizontalPadding`, `8` in `.anchored`) is
+    /// hardcoded here instead, same precedent as this file's other
+    /// production-constant literals (`WorkspaceLayout.sidebarWidth - 16`
+    /// itself, `paletteWidth`'s own doc comment).
+    private var anchoredFooterAvailableWidth: CGFloat {
+        (WorkspaceLayout.sidebarWidth - 16) - 2 * 16
+    }
 
     /// `.anchored`'s content width (`paletteWidth`, `.anchored` case) is
     /// `WorkspaceLayout.sidebarWidth - 16` = 204pt — every prior footer
@@ -1331,6 +1414,18 @@ struct SessionComposerSnapshotTests {
     /// today: three (`↵ open`, `↑↓ navigate`, `⌘Z undo`) — via two
     /// projects (`.prefilled` so `changeProjectChip` can actually cascade,
     /// unlike `.locked`) and the app's own multi-template default set.
+    ///
+    /// Review round 4, P1-a: round 2/3's version of this test only checked
+    /// that ink stayed inside the card's own right edge and stayed on one
+    /// visual line — both stay true under `.lineLimit(1)` truncation, which
+    /// is exactly the bug (22pt of overflowing content silently ellipsized,
+    /// e.g. the two-glyph `↑↓` losing an arrow). The width assertion below
+    /// is the one that actually catches it: mutation-proved by temporarily
+    /// forcing `SessionComposerPalette.footerStripShowsLabels` to always
+    /// return `true` (reverting the P1-a production fix) and re-running —
+    /// `requiredFooterContentWidth(operators: threeLiveOperators,
+    /// includeLabels: true)` measures ~190pt against `anchoredFooterAvailableWidth`'s
+    /// 168pt, and the assertion below fails as expected. Restored after.
     @Test func anchoredThreeOperatorFooterFitsWithoutTruncation() {
         let project = Project(name: "Demo Project", rootPath: "/tmp/composer-ui-11-anchored-\(UUID().uuidString)")
         let otherProject = Project(name: "Other Project", rootPath: "/tmp/composer-ui-11-anchored-other-\(UUID().uuidString)")
@@ -1436,19 +1531,20 @@ struct SessionComposerSnapshotTests {
         // which false-positived against tall glyphs like `↑↓`/`⌘`'s
         // natural ascender height) survives glyph-height variance while
         // still catching the wrap.
-        var inkTop: Int?, inkBottom: Int?
+        var inkTop: Int?, inkBottom: Int?, leftmostInk: Int?
         for y in stride(from: footerTop, through: bottom, by: 1) {
             for x in stride(from: 0, to: rep.pixelsWide, by: 1) {
                 guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
                 let luminance = Int(((color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255).rounded())
                 if luminance <= 160 {
                     rightmostInk = max(rightmostInk ?? x, x)
+                    leftmostInk = min(leftmostInk ?? x, x)
                     inkTop = min(inkTop ?? y, y)
                     inkBottom = max(inkBottom ?? y, y)
                 }
             }
         }
-        guard let rightmostInk, let inkTop, let inkBottom else {
+        guard let rightmostInk, let leftmostInk, let inkTop, let inkBottom else {
             Issue.record("found no ink in the footer band — expected `↵ open ↑↓ navigate ⌘Z undo`")
             return
         }
@@ -1461,44 +1557,83 @@ struct SessionComposerSnapshotTests {
             inkHeight < Int(18 * scale),
             "footer ink spans \(inkHeight)px tall (single-line `↑↓`/`⌘` glyphs measured ~13px at this fixture's 2x scale) — a label wrapped onto a second line instead of truncating on one"
         )
+
+        // Review round 4, P1-a: the ACTUAL truncation-detection check.
+        // Round 2/3's version stopped here — both checks above stay true
+        // under `.lineLimit(1)` ellipsis truncation (ink stays inside the
+        // card's right edge, and truncated text still renders on one
+        // line), which is exactly why the original bug shipped green.
+        // This compares the footer's REAL RENDERED ink width against the
+        // required width computed from real font metrics for `.anchored`'s
+        // spec'd glyph-only content — if labels were still rendering
+        // (reverted fix, or any future regression that widens this
+        // content), the rendered ink would fill out toward the ~168pt
+        // available width instead of the ~89pt three-glyph width, and this
+        // assertion is what catches that gap; the two checks above cannot.
+        // Mutation-proved: temporarily forcing `footerStripShowsLabels` to
+        // always return `true` (reverting the P1-a fix) measured a
+        // rendered ink width around 150pt against an ~89pt requirement —
+        // this assertion failed as expected. Restored after.
+        let threeLiveOperators: [SessionComposerCommandParser.FooterOperatorHint] = [
+            .init(glyph: "↵", label: "open"),
+            .init(glyph: "↑↓", label: "navigate"),
+            .init(glyph: "⌘Z", label: "undo")
+        ]
+        let requiredWidth = requiredFooterContentWidth(operators: threeLiveOperators, includeLabels: false)
+        let renderedInkWidthPt = CGFloat(rightmostInk - leftmostInk) / scale
+        #expect(
+            requiredWidth < anchoredFooterAvailableWidth,
+            "three operators (glyph-only) require \(requiredWidth)pt, `.anchored`'s footer has \(anchoredFooterAvailableWidth)pt available — content would be truncated"
+        )
+        #expect(
+            renderedInkWidthPt < requiredWidth + 15,
+            "rendered footer ink spans \(renderedInkWidthPt)pt, but three glyph-only operators require only \(requiredWidth)pt (15pt anti-aliasing/kerning slack) — content wider than the glyph-only spec is rendering, e.g. labels leaking back into `.anchored`"
+        )
     }
 
-    /// Four is UNREACHABLE through the real composer in `.anchored` as of
-    /// the P1-b fix above (`⇥ accept` is gated to `.centered`), so this
-    /// renders the strip's own HStack construction standalone — copying,
-    /// not importing, the exact layout `operatorFooterStrip` builds
-    /// (`SessionComposerPalette.swift`; `private`, this repo's established
-    /// precedent for testing a private View helper, see
-    /// `ComposerCardFitTests`'s header) — at `.anchored`'s real card width,
+    /// Four is UNREACHABLE through the real composer in `.anchored`
+    /// (`⇥ accept` is gated to `.centered` — the P1-b fix above), so this
+    /// exercises `SessionComposerPalette.operatorFooterStrip` DIRECTLY
+    /// (round 4, P2 fix: it was `private`, forcing the round 2/3 test to
+    /// copy its `HStack` into the test body instead — a tautology, since
+    /// asserting a property of a modifier the test itself just wrote proves
+    /// nothing about production; deleting `.lineLimit(1)` from the real
+    /// `operatorFooterStrip` left that test green). Now `internal`, called
+    /// on a real `SessionComposerPalette` instance fed 4 synthetic hints —
     /// fed 4 synthetic hints. Defensive coverage for the strip's OWN
     /// wrap/truncate behavior independent of whether `⇥ accept` can ever
     /// join it for real.
-    @Test func fourOperatorFooterStripDoesNotWrapAtAnchoredWidth() {
+    @Test func anchoredFourOperatorFooterStripFitsWithoutTruncation() {
         let operators: [SessionComposerCommandParser.FooterOperatorHint] = [
             .init(glyph: "↵", label: "open"),
             .init(glyph: "⇥", label: "accept"),
             .init(glyph: "↑↓", label: "navigate"),
             .init(glyph: "⌘Z", label: "undo")
         ]
-        let strip = HStack(spacing: 14) {
-            ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
-                HStack(spacing: 4) {
-                    Text(op.glyph)
-                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                        .foregroundColor(Color(nsColor: .labelColor))
-                        .lineLimit(1)
-                    Text(op.label)
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 18)
-        .frame(width: WorkspaceLayout.sidebarWidth - 16, height: 26)
-        .background(Color.secondary.opacity(0.08))
-        .background(Color.white)
+
+        // Required-width check first — the direct, discriminating
+        // evidence (same rationale as the 3-operator test above).
+        let requiredWidth = requiredFooterContentWidth(operators: operators, includeLabels: false)
+        #expect(
+            requiredWidth < anchoredFooterAvailableWidth,
+            "four operators (glyph-only) require \(requiredWidth)pt, `.anchored`'s footer has \(anchoredFooterAvailableWidth)pt available — content would be truncated"
+        )
+
+        // Rendered evidence: the REAL `operatorFooterStrip` (no longer
+        // `private` — round 4, P2 fix), called on a real
+        // `SessionComposerPalette` instance so `footerStripShowsLabels`
+        // reads the same `.anchored` presentation production does.
+        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        let palette = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .anchored, projectBinding: .open),
+            composerStore: composerStore
+        )
+        let strip = palette.operatorFooterStrip(operators)
+            .frame(width: WorkspaceLayout.sidebarWidth - 16, height: 26)
+            .background(Color.white)
 
         let size = NSSize(width: WorkspaceLayout.sidebarWidth - 16, height: 26)
         let light = renderPNG(strip, appearance: .aqua, size: size)
@@ -1508,14 +1643,12 @@ struct SessionComposerSnapshotTests {
             Issue.record("failed to render the 4-operator strip fixture")
             return
         }
-        // Single-line invariant: with `.lineLimit(1)` on each label, a
-        // wrapped-to-2-lines strip would leave the row's OWN bottom half
-        // (below its center) empty (no ink) while ink from a wrapped
-        // second line would show up ABOVE the vertical center instead of
-        // spread through the full 26pt height — scan the row for ink
-        // presence in both the top and bottom thirds, expecting content in
-        // the vertical middle band only (a single centered text line, not
-        // a top+bottom split).
+        // Single-line invariant: a wrapped-to-2-lines strip would leave the
+        // row's OWN bottom half (below its center) empty (no ink) while ink
+        // from a wrapped second line would show up ABOVE the vertical
+        // center instead of spread through the full 26pt height — scan the
+        // row for ink presence in both the top and bottom thirds, expecting
+        // content in the vertical middle band only.
         var inkRowsTop = 0, inkRowsMiddle = 0, inkRowsBottom = 0
         let third = rep.pixelsHigh / 3
         for y in 0..<rep.pixelsHigh {
@@ -1530,7 +1663,146 @@ struct SessionComposerSnapshotTests {
         }
         #expect(
             inkRowsTop == 0 && inkRowsBottom == 0,
-            "ink found outside the strip's vertical middle third (top=\(inkRowsTop), middle=\(inkRowsMiddle), bottom=\(inkRowsBottom)) — four operators wrapped onto a second line instead of truncating on one"
+            "ink found outside the strip's vertical middle third (top=\(inkRowsTop), middle=\(inkRowsMiddle), bottom=\(inkRowsBottom)) — four operators wrapped onto a second line instead of fitting on one"
+        )
+
+        // Review round 4, P1-a: the actual truncation-detection check —
+        // same rationale as the 3-operator test's matching block. The
+        // "required < available" check above only proves the ARITHMETIC
+        // is sound; it says nothing about what actually rendered. This
+        // measures the strip's REAL rendered ink width and compares it
+        // against the glyph-only requirement — mutation-proved the same
+        // way (forcing `footerStripShowsLabels` to always `true` widens
+        // the rendered ink well past this bound).
+        var leftmostInk: Int?, rightmostInk: Int?
+        for y in stride(from: 0, to: rep.pixelsHigh, by: 1) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 1) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let luminance = Int(((color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255).rounded())
+                if luminance <= 160 {
+                    leftmostInk = min(leftmostInk ?? x, x)
+                    rightmostInk = max(rightmostInk ?? x, x)
+                }
+            }
+        }
+        guard let leftmostInk, let rightmostInk else {
+            Issue.record("found no ink in the 4-operator strip — expected `↵ ⇥ ↑↓ ⌘Z`")
+            return
+        }
+        let scale = CGFloat(rep.pixelsWide) / size.width
+        let renderedInkWidthPt = CGFloat(rightmostInk - leftmostInk) / scale
+        #expect(
+            renderedInkWidthPt < requiredWidth + 15,
+            "rendered footer ink spans \(renderedInkWidthPt)pt, but four glyph-only operators require only \(requiredWidth)pt (15pt anti-aliasing/kerning slack) — content wider than the glyph-only spec is rendering, e.g. labels leaking back into `.anchored`"
+        )
+    }
+
+    // MARK: - Review round 4, P2: `writeError` must not stay hidden behind `isAddingTemplate`
+
+    /// Scans for `.systemRed` ink anywhere in the card — the ONLY red
+    /// content this composer ever paints is the `writeError`/typed-branch
+    /// error text (`SessionComposerPalette`'s `.error(let message)` footer
+    /// branch) and the no-match shake border, which this fixture never
+    /// triggers (no Return is ever sent). A wide per-channel gap (red
+    /// channel clearly dominant over green/blue) distinguishes it from the
+    /// UI's other warm-neutral tones (labels, terracotta accents elsewhere
+    /// in the app are not present in this view at all).
+    private func containsRedInk(in data: Data) -> Bool {
+        guard let rep = NSBitmapImageRep(data: data) else { return false }
+        for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if r > 150, r - g > 60, r - b > 60 { return true }
+            }
+        }
+        return false
+    }
+
+    /// Review round 4, P2 fix: the precedence swap (round 2) correctly
+    /// made `isAddingTemplate` win the footer slot over `writeError` for
+    /// the COMMON case (a live text field must never be evicted by a stale
+    /// resolution message). The gap it opened: an async worktree create
+    /// that OUTLIVES the user moving on to "+ New template…" sets
+    /// `writeError` well after `isAddingTemplate` went true, and — without
+    /// this fix — that error stays permanently hidden behind the naming
+    /// field until the user commits or cancels the template, at which
+    /// point `cancel()`/`commitNewTemplate()` silently discards it. Net:
+    /// no worktree, no error ever shown, wrong cwd.
+    ///
+    /// Mounts with `initialIsAddingTemplateForTesting: true` (this bug's
+    /// only reachable starting state — `isAddingTemplate` is private
+    /// `@State`, see that init parameter's doc comment for why this is the
+    /// only route in), confirms the footer shows NO red ink yet (the
+    /// naming field, correctly, still owns the slot with no error present),
+    /// then calls `composerStore.rejectUnresolvedBranch(token:)` directly
+    /// (same synchronous `writeError` write path the async worktree-create
+    /// timeout uses, `SessionComposerStore.swift:1187`, without waiting on
+    /// a real 10s timeout) and re-renders — the fix means the error now
+    /// wins the footer slot and its red text appears.
+    @Test func isAddingTemplateClearsWhenAWriteErrorArrives() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
+        let palette = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(project)),
+            composerStore: composerStore,
+            initialIsAddingTemplateForTesting: true
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: palette.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let before = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the pre-error fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: before)
+        let beforeData = before.representation(using: .png, properties: [:])
+        writeEvidence(beforeData, filename: "variant-g-adding-template-before-error-light.png")
+        #expect(beforeData != nil)
+        if let beforeData {
+            #expect(
+                !containsRedInk(in: beforeData),
+                "expected no red error ink while only `isAddingTemplate` is true (nothing has failed yet)"
+            )
+        }
+
+        composerStore.rejectUnresolvedBranch(token: "does-not-exist")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let after = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the post-error fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: after)
+        let afterData = after.representation(using: .png, properties: [:])
+        writeEvidence(afterData, filename: "variant-g-adding-template-after-error-light.png")
+        #expect(afterData != nil)
+        guard let afterData else { return }
+        #expect(
+            containsRedInk(in: afterData),
+            "expected `writeError`'s red error text to win the footer slot once it arrives — instead it stayed hidden behind `isAddingTemplate`, exactly the silent-wrong-cwd bug this fix closes"
         )
     }
 
