@@ -1925,12 +1925,12 @@ struct SessionComposerPalette: View {
             ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
                 HStack(spacing: 4) {
                     Text(op.glyph)
-                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .font(.system(size: subtitleFontSize, weight: .medium))
                         .foregroundColor(Color(nsColor: .labelColor))
                         .lineLimit(1)
                     if showLabels {
                         Text(op.label)
-                            .font(.system(size: 10.5, design: .monospaced))
+                            .font(.system(size: subtitleFontSize))
                             .foregroundColor(Color(nsColor: .secondaryLabelColor))
                             .lineLimit(1)
                     }
@@ -2790,7 +2790,7 @@ private struct ComposerResultsTable: View {
                         if !section.options.isEmpty {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(section.title.uppercased())
-                                    .font(.system(size: 10, weight: .bold))
+                                    .font(.system(size: subtitleFontSize, weight: .medium))
                                     .tracking(0.6)
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 6)

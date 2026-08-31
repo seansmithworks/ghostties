@@ -1,5 +1,19 @@
 # Ghostties — Backlog
 
+## 2026-08-31 — Composer variant G session (carried)
+
+- [x] Composer variant G — centered-modal type-scale conformance. Three sites in
+  `SessionComposerPalette.swift` hardcoded mockup values instead of routing through the
+  existing `.centered` scale constants (`DESIGN.md` §3, "Centered modal — a third surface
+  class"): section headers (was 10pt `.bold`, now `subtitleFontSize` `.medium`; `.tracking(0.6)`
+  left as-is, a taste call not covered by DESIGN.md), the footer hint row (was 10.5pt
+  SF Mono `.semibold`/`.regular`, now `subtitleFontSize` SF Pro `.medium`/`.regular` — SF Mono
+  is terminal-content-only per §3's "one font family per surface" rule). Resolved to
+  DESIGN.md's scale, not the mockup's. `subtitleFontSize`/`rowFontSize`/`fontSize` themselves
+  (lines 210-226) were already correct and untouched.
+- [x] `ThrottleTrailingEdgeHypothesisTests.swift` — already deleted from the main tree; carried
+  item closed.
+
 ## 2026-08-30 (later) — all four PRs merged, `main` broke and was fixed, worktrees reclaimed
 
 `main` @ `a2a28870b`, compiling. #146/#147/#148 merged, then **#141 merged** (`529662a1c`)
