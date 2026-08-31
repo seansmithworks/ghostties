@@ -1485,7 +1485,11 @@ struct SessionComposerPalette: View {
                 Text(message)
                     .font(.system(size: subtitleFontSize))
                     .foregroundStyle(Color(nsColor: .systemRed))
-                    .padding(.horizontal, footerHorizontalPadding)
+                    // Review round 5: reverted to 10pt — round 4's move to
+                    // `footerHorizontalPadding` (16/18pt) gave the error
+                    // text a third left edge, off both `queryRow`'s 10pt
+                    // and the naming field's matching 10pt below.
+                    .padding(.horizontal, 10)
                     .padding(.top, 6)
             case .newTemplateName:
                 newTemplateRow
@@ -1813,25 +1817,33 @@ struct SessionComposerPalette: View {
         )
     }
 
-    /// Review round 4, P1-a: measured at the strip's real fonts (10.5pt
-    /// monospaced), three operators WITH labels need ~190pt against
-    /// `.anchored`'s ~168pt of available footer width — 22pt over, and
-    /// `.lineLimit(1)` (round 2's fix) only converted the overflow from a
-    /// wrap into an invisible ellipsis truncation; it never made the
-    /// content fit. Glyphs alone measure ~47pt of content + gaps, ≈89pt —
-    /// comfortably inside 168pt. `.centered`'s card is wide enough that
-    /// glyph+label was never the problem there, so only `.anchored` drops
-    /// the label.
-    private var footerStripShowsLabels: Bool {
-        request.presentation == .centered
-    }
+    /// Review round 5: round 4's "~190pt required vs ~168pt available, 22pt
+    /// over" was wrong on both sides — it counted three 14pt inter-operator
+    /// gaps for three operators (there are only two), and it measured
+    /// `.anchored`'s available width against the strip's PRE-P3 18pt
+    /// padding instead of the `footerHorizontalPadding` value this same
+    /// commit introduced (16pt in `.anchored`). Measured at the strip's
+    /// real fonts (10.5pt monospaced semibold glyph / regular label): three
+    /// operators WITH labels need 176.14pt at the original 14pt
+    /// inter-operator spacing, against 172pt actually available — 4.14pt
+    /// over, real but small, and only in the transient three-operator state
+    /// (`⌘Z undo` clears on the next keystroke). Closed below by tightening
+    /// that spacing to 11pt (176.14 → 170.14pt, 1.86pt to spare) rather than
+    /// dropping labels — glyph-only was an over-correction built on the bad
+    /// numbers above. See `operatorFooterStrip`'s `HStack(spacing: 11)` and
+    /// `anchoredThreeOperatorFooterFitsWithoutTruncation` for the
+    /// mutation-proved bound.
 
     /// Review round 4, P3: the results VStack's own `.padding(8)`
     /// (`ComposerResultsTable.body`) plus `rowHorizontalPadding` is the
     /// full inset a row title sits at from the card's left edge — no
-    /// enclosing padding wraps this strip (or the error/naming-field
-    /// footer occupants below), so this value must be applied directly
-    /// as their own horizontal padding to land on that same edge.
+    /// enclosing padding wraps this strip, so this value must be applied
+    /// directly as its own horizontal padding to land on that same edge.
+    /// Review round 5: this is the operator strip's padding ONLY. Round 4
+    /// also moved the error text and naming field onto this value, which
+    /// gave them a third left edge distinct from `queryRow`'s — both were
+    /// reverted to the hardcoded 10pt they share with `queryRow` (see the
+    /// `.error` case and `newTemplateRow`, both below).
     private var footerHorizontalPadding: CGFloat {
         8 + rowHorizontalPadding
     }
@@ -1844,31 +1856,32 @@ struct SessionComposerPalette: View {
     /// from production. `internal` visibility lets
     /// `SessionComposerSnapshotTests` call the real production function
     /// directly (this repo's established precedent for testing a private-
-    /// turned-internal View helper — see `ComposerCardFitTests`), against
-    /// synthetic operator counts the live composer can't otherwise reach in
-    /// `.anchored` (4 operators; `⇥ accept` is gated to `.centered`).
+    /// turned-internal View helper — see `ComposerCardFitTests`). Round 5:
+    /// no test calls this directly with a synthetic 4th operator anymore —
+    /// `anchoredCannotReachFourOperators` tests the structural guard
+    /// (`usesModelBFieldForTesting`) instead, since 4 labeled operators
+    /// genuinely don't fit `.anchored`'s width and the guard, not this
+    /// function's layout, is what prevents that. Visibility left `internal`
+    /// regardless — no reason to re-narrow it.
     func operatorFooterStrip(
         _ operators: [SessionComposerCommandParser.FooterOperatorHint]
     ) -> some View {
-        HStack(spacing: 14) {
+        // Review round 5: 11pt (was 14pt) — closes the real 4.14pt overflow
+        // in `.anchored`'s worst case (three labeled operators, 176.14pt
+        // required at 14pt spacing vs 172pt available) without dropping
+        // labels. See the doc comment above `footerHorizontalPadding` for
+        // the corrected arithmetic.
+        HStack(spacing: 11) {
             ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
                 HStack(spacing: 4) {
                     Text(op.glyph)
                         .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                         .foregroundColor(Color(nsColor: .labelColor))
                         .lineLimit(1)
-                    // Review round 4, P1-a: `.anchored` renders the glyph
-                    // ONLY — see `footerStripShowsLabels` above. `.lineLimit(1)`
-                    // stays on both `Text`s regardless of presentation; it
-                    // no longer needs to hide an overflow in `.anchored`
-                    // (glyphs alone fit with room to spare) but is cheap
-                    // insurance against any future width squeeze.
-                    if footerStripShowsLabels {
-                        Text(op.label)
-                            .font(.system(size: 10.5, design: .monospaced))
-                            .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                            .lineLimit(1)
-                    }
+                    Text(op.label)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                        .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -1888,10 +1901,8 @@ struct SessionComposerPalette: View {
         }
         .background(Color.secondary.opacity(0.08))
         .accessibilityElement(children: .combine)
-        // Accessibility label always announces glyph AND label together,
-        // even in `.anchored` where the label isn't drawn — VoiceOver users
-        // shouldn't lose "navigate"/"undo"/etc. to a layout constraint that
-        // only exists for sighted rendering.
+        // Accessibility label announces glyph AND label together, matching
+        // what's drawn in both presentations.
         .accessibilityLabel(operators.map { "\($0.glyph) \($0.label)" }.joined(separator: ", "))
     }
 
@@ -1917,7 +1928,10 @@ struct SessionComposerPalette: View {
                     .onSubmit { commitNewTemplate() }
                     .onExitCommand { cancelNewTemplate() }
             }
-            .padding(.horizontal, footerHorizontalPadding)
+            // Review round 5: reverted to 10pt, same reasoning as the
+            // error text above — this is the composer's second text
+            // input and must align with `queryRow`'s edge, its first.
+            .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .onAppear {
                 DispatchQueue.main.async { newTemplateNameFocused = true }

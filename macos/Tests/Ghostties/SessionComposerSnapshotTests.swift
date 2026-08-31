@@ -1354,22 +1354,21 @@ struct SessionComposerSnapshotTests {
 
     // MARK: - Review round 2/4, P2: `.anchored` footer coverage
 
-    /// Review round 4, P1-a: the required width of a set of operator hints
-    /// rendered at the footer strip's REAL fonts (10.5pt monospaced,
-    /// semibold glyph / regular label — `SessionComposerPalette
-    /// .operatorFooterStrip`'s own literal values, not a guess), measured
-    /// via `NSAttributedString` sizing against the real system font
-    /// metrics rather than by re-implementing the `HStack`'s layout. This
-    /// is what actually caught round 2/3's bug: `.lineLimit(1)` makes an
-    /// over-full strip invisible to every pixel-based "did it wrap"
-    /// check (truncation and a correctly-fit single line render
-    /// identically in a rendered/height/wrap sense — only a comparison
-    /// against the STRING's own required width catches it).
+    /// The required width of a set of operator hints rendered at the
+    /// footer strip's REAL fonts (10.5pt monospaced, semibold glyph /
+    /// regular label — `SessionComposerPalette.operatorFooterStrip`'s own
+    /// literal values, not a guess), measured via `NSAttributedString`
+    /// sizing against the real system font metrics rather than by
+    /// re-implementing the `HStack`'s layout. This is what actually caught
+    /// round 2/3's bug: `.lineLimit(1)` makes an over-full strip invisible
+    /// to every pixel-based "did it wrap" check (truncation and a
+    /// correctly-fit single line render identically in a
+    /// rendered/height/wrap sense — only a comparison against the STRING's
+    /// own required width catches it).
     ///
-    /// `includeLabels: false` matches what `.anchored` renders after the
-    /// P1-a fix (glyph-only); `includeLabels: true` reconstructs what
-    /// `.anchored` rendered BEFORE the fix (glyph + label, the shape
-    /// round 2/3 shipped) — used only to mutation-prove the check below,
+    /// `includeLabels: true` matches production in both presentations
+    /// (round 5 removed the `.anchored`-only glyph-only gate); `includeLabels:
+    /// false` is kept only to mutation-prove the lower-bound checks below —
     /// never rendered by production.
     private func requiredFooterContentWidth(
         operators: [SessionComposerCommandParser.FooterOperatorHint],
@@ -1379,7 +1378,7 @@ struct SessionComposerSnapshotTests {
         let labelFont = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
         var total: CGFloat = 0
         for (index, op) in operators.enumerated() {
-            if index > 0 { total += 14 } // inter-operator `HStack(spacing: 14)`
+            if index > 0 { total += 11 } // inter-operator `HStack(spacing: 11)` (round 5, was 14)
             total += (op.glyph as NSString).size(withAttributes: [.font: glyphFont]).width
             if includeLabels {
                 total += 4 // intra-operator `HStack(spacing: 4)`
@@ -1407,25 +1406,34 @@ struct SessionComposerSnapshotTests {
     /// `WorkspaceLayout.sidebarWidth - 16` = 204pt — every prior footer
     /// snapshot fixture in this file is `.centered` (`composerOverlayWidth`,
     /// much wider), so this is the first fixture to actually render the
-    /// operator strip at sidebar width. `⇥ accept` is now STRUCTURALLY
-    /// UNREACHABLE in `.anchored` after the P1-b fix above
-    /// (`usesModelBFieldForTesting` gates it to `.centered`), so this
-    /// fixture reaches the maximum REAL operator count in `.anchored`
-    /// today: three (`↵ open`, `↑↓ navigate`, `⌘Z undo`) — via two
-    /// projects (`.prefilled` so `changeProjectChip` can actually cascade,
-    /// unlike `.locked`) and the app's own multi-template default set.
+    /// operator strip at sidebar width. `⇥ accept` is STRUCTURALLY
+    /// UNREACHABLE in `.anchored` (`usesModelBFieldForTesting` gates it to
+    /// `.centered`), so this fixture reaches the maximum REAL operator
+    /// count in `.anchored` today: three (`↵ open`, `↑↓ navigate`, `⌘Z
+    /// undo`) — via two projects (`.prefilled` so `changeProjectChip` can
+    /// actually cascade, unlike `.locked`) and the app's own multi-template
+    /// default set.
     ///
-    /// Review round 4, P1-a: round 2/3's version of this test only checked
-    /// that ink stayed inside the card's own right edge and stayed on one
-    /// visual line — both stay true under `.lineLimit(1)` truncation, which
-    /// is exactly the bug (22pt of overflowing content silently ellipsized,
-    /// e.g. the two-glyph `↑↓` losing an arrow). The width assertion below
-    /// is the one that actually catches it: mutation-proved by temporarily
-    /// forcing `SessionComposerPalette.footerStripShowsLabels` to always
-    /// return `true` (reverting the P1-a production fix) and re-running —
-    /// `requiredFooterContentWidth(operators: threeLiveOperators,
-    /// includeLabels: true)` measures ~190pt against `anchoredFooterAvailableWidth`'s
-    /// 168pt, and the assertion below fails as expected. Restored after.
+    /// Review round 5: round 4's "22pt over"/"~190pt required"/"~168pt
+    /// available" were all wrong — the first counted three 14pt
+    /// inter-operator gaps for three operators (only two exist); the
+    /// second and third didn't account for round 4's own
+    /// `footerHorizontalPadding` change (16pt in `.anchored`, not the
+    /// pre-existing 18pt). Correct: three labeled operators require
+    /// 176.14pt at the original 14pt spacing against 172pt actually
+    /// available — 4.14pt over, real but small. Round 5 closes it by
+    /// tightening `operatorFooterStrip`'s spacing to 11pt (176.14 →
+    /// 170.14pt) rather than dropping labels.
+    ///
+    /// The lower-bound assertion below is mutation-proved by rendering ONE
+    /// FEWER operator than what `pendingChipUndo`'s arming actually
+    /// produces — temporarily skipping the `changeProjectChip` call below
+    /// leaves the strip at two operators (`↵ open`, `↑↓ navigate`) instead
+    /// of three, and `renderedInkWidthPt > requiredWidth - 15` (computed
+    /// against the real three-operator `requiredWidth`) failed as
+    /// expected, catching the case where `pendingChipUndo` silently stops
+    /// arming and the test would otherwise still measure ink and pass
+    /// green against a strip that's missing an operator. Restored after.
     @Test func anchoredThreeOperatorFooterFitsWithoutTruncation() {
         let project = Project(name: "Demo Project", rootPath: "/tmp/composer-ui-11-anchored-\(UUID().uuidString)")
         let otherProject = Project(name: "Other Project", rootPath: "/tmp/composer-ui-11-anchored-other-\(UUID().uuidString)")
@@ -1562,68 +1570,59 @@ struct SessionComposerSnapshotTests {
         // Round 2/3's version stopped here — both checks above stay true
         // under `.lineLimit(1)` ellipsis truncation (ink stays inside the
         // card's right edge, and truncated text still renders on one
-        // line), which is exactly why the original bug shipped green.
-        // This compares the footer's REAL RENDERED ink width against the
-        // required width computed from real font metrics for `.anchored`'s
-        // spec'd glyph-only content — if labels were still rendering
-        // (reverted fix, or any future regression that widens this
-        // content), the rendered ink would fill out toward the ~168pt
-        // available width instead of the ~89pt three-glyph width, and this
-        // assertion is what catches that gap; the two checks above cannot.
-        // Mutation-proved: temporarily forcing `footerStripShowsLabels` to
-        // always return `true` (reverting the P1-a fix) measured a
-        // rendered ink width around 150pt against an ~89pt requirement —
-        // this assertion failed as expected. Restored after.
+        // line), which is exactly why the original bug shipped green. This
+        // compares the footer's REAL RENDERED ink width against the
+        // required width computed from real font metrics for the three
+        // labeled operators `.anchored` actually renders (round 5:
+        // glyph+label in both presentations, tightened spacing) — an
+        // upper bound catches a regression that widens the content (e.g.
+        // spacing reverting to 14pt), and a lower bound catches a
+        // regression that shrinks it (e.g. a dropped operator, or labels
+        // silently disappearing again).
         let threeLiveOperators: [SessionComposerCommandParser.FooterOperatorHint] = [
             .init(glyph: "↵", label: "open"),
             .init(glyph: "↑↓", label: "navigate"),
             .init(glyph: "⌘Z", label: "undo")
         ]
-        let requiredWidth = requiredFooterContentWidth(operators: threeLiveOperators, includeLabels: false)
+        let requiredWidth = requiredFooterContentWidth(operators: threeLiveOperators, includeLabels: true)
         let renderedInkWidthPt = CGFloat(rightmostInk - leftmostInk) / scale
         #expect(
             requiredWidth < anchoredFooterAvailableWidth,
-            "three operators (glyph-only) require \(requiredWidth)pt, `.anchored`'s footer has \(anchoredFooterAvailableWidth)pt available — content would be truncated"
+            "three labeled operators require \(requiredWidth)pt, `.anchored`'s footer has \(anchoredFooterAvailableWidth)pt available — content would be truncated"
         )
         #expect(
             renderedInkWidthPt < requiredWidth + 15,
-            "rendered footer ink spans \(renderedInkWidthPt)pt, but three glyph-only operators require only \(requiredWidth)pt (15pt anti-aliasing/kerning slack) — content wider than the glyph-only spec is rendering, e.g. labels leaking back into `.anchored`"
+            "rendered footer ink spans \(renderedInkWidthPt)pt, but three labeled operators require only \(requiredWidth)pt (15pt anti-aliasing/kerning slack) — content wider than spec is rendering"
+        )
+        #expect(
+            renderedInkWidthPt > requiredWidth - 15,
+            "rendered footer ink spans \(renderedInkWidthPt)pt, but three labeled operators require \(requiredWidth)pt (15pt anti-aliasing/kerning slack) — content narrower than spec is rendering, e.g. a dropped operator or labels missing"
         )
     }
 
-    /// Four is UNREACHABLE through the real composer in `.anchored`
-    /// (`⇥ accept` is gated to `.centered` — the P1-b fix above), so this
-    /// exercises `SessionComposerPalette.operatorFooterStrip` DIRECTLY
-    /// (round 4, P2 fix: it was `private`, forcing the round 2/3 test to
-    /// copy its `HStack` into the test body instead — a tautology, since
-    /// asserting a property of a modifier the test itself just wrote proves
-    /// nothing about production; deleting `.lineLimit(1)` from the real
-    /// `operatorFooterStrip` left that test green). Now `internal`, called
-    /// on a real `SessionComposerPalette` instance fed 4 synthetic hints —
-    /// fed 4 synthetic hints. Defensive coverage for the strip's OWN
-    /// wrap/truncate behavior independent of whether `⇥ accept` can ever
-    /// join it for real.
-    @Test func anchoredFourOperatorFooterStripFitsWithoutTruncation() {
-        let operators: [SessionComposerCommandParser.FooterOperatorHint] = [
-            .init(glyph: "↵", label: "open"),
-            .init(glyph: "⇥", label: "accept"),
-            .init(glyph: "↑↓", label: "navigate"),
-            .init(glyph: "⌘Z", label: "undo")
-        ]
+    /// Review round 5: round 4's version of this test asserted that four
+    /// operators (glyph-only) fit `.anchored`'s footer width. That premise
+    /// is gone — round 5 removed the glyph-only gate, so `.anchored` now
+    /// always renders glyph+label, and four LABELED operators genuinely do
+    /// not fit (230.4pt required against 172pt available, even at the
+    /// tightened 11pt spacing). That's fine specifically because four is
+    /// provably unreachable: `⇥ accept` requires `usesModelBFieldForTesting`,
+    /// which is hardcoded to `.centered` only
+    /// (`SessionComposerPalette.usesModelBFieldForTesting`) — no
+    /// `AppStorage` flag or state can make it true in `.anchored`. This
+    /// test now asserts THAT structural guarantee directly, on a real
+    /// `SessionComposerPalette(request:.anchored)` instance, with the flag
+    /// forced on to prove the presentation check (not the flag) is what's
+    /// gating it.
+    @Test func anchoredCannotReachFourOperators() {
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(true, forKey: key) // force the flag ON — proves `.anchored` alone blocks it
+        defer {
+            if let previous { defaults.set(previous, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
 
-        // Required-width check first — the direct, discriminating
-        // evidence (same rationale as the 3-operator test above).
-        let requiredWidth = requiredFooterContentWidth(operators: operators, includeLabels: false)
-        #expect(
-            requiredWidth < anchoredFooterAvailableWidth,
-            "four operators (glyph-only) require \(requiredWidth)pt, `.anchored`'s footer has \(anchoredFooterAvailableWidth)pt available — content would be truncated"
-        )
-
-        // Rendered evidence: the REAL `operatorFooterStrip` (no longer
-        // `private` — round 4, P2 fix), called on a real
-        // `SessionComposerPalette` instance so `footerStripShowsLabels`
-        // reads the same `.anchored` presentation production does.
-        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
         let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
         let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
         let palette = SessionComposerPalette(
@@ -1631,69 +1630,25 @@ struct SessionComposerSnapshotTests {
             request: SessionComposerRequest(presentation: .anchored, projectBinding: .open),
             composerStore: composerStore
         )
-        let strip = palette.operatorFooterStrip(operators)
-            .frame(width: WorkspaceLayout.sidebarWidth - 16, height: 26)
-            .background(Color.white)
-
-        let size = NSSize(width: WorkspaceLayout.sidebarWidth - 16, height: 26)
-        let light = renderPNG(strip, appearance: .aqua, size: size)
-        writeEvidence(light, filename: "variant-g-anchored-four-operators-light.png")
-        #expect(light != nil)
-        guard let light, let rep = NSBitmapImageRep(data: light) else {
-            Issue.record("failed to render the 4-operator strip fixture")
-            return
-        }
-        // Single-line invariant: a wrapped-to-2-lines strip would leave the
-        // row's OWN bottom half (below its center) empty (no ink) while ink
-        // from a wrapped second line would show up ABOVE the vertical
-        // center instead of spread through the full 26pt height — scan the
-        // row for ink presence in both the top and bottom thirds, expecting
-        // content in the vertical middle band only.
-        var inkRowsTop = 0, inkRowsMiddle = 0, inkRowsBottom = 0
-        let third = rep.pixelsHigh / 3
-        for y in 0..<rep.pixelsHigh {
-            var hasInk = false
-            for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
-                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
-                let luminance = Int(((color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255).rounded())
-                if luminance <= 160 { hasInk = true; break }
-            }
-            guard hasInk else { continue }
-            if y < third { inkRowsTop += 1 } else if y < 2 * third { inkRowsMiddle += 1 } else { inkRowsBottom += 1 }
-        }
         #expect(
-            inkRowsTop == 0 && inkRowsBottom == 0,
-            "ink found outside the strip's vertical middle third (top=\(inkRowsTop), middle=\(inkRowsMiddle), bottom=\(inkRowsBottom)) — four operators wrapped onto a second line instead of fitting on one"
+            !palette.usesModelBFieldForTesting,
+            "`.anchored` must never mount the model-B field, or `⇥ accept` becomes a 4th footer operator and the strip (172pt available, 230pt required at 4 labeled operators) overflows — see the doc comment above"
         )
 
-        // Review round 4, P1-a: the actual truncation-detection check —
-        // same rationale as the 3-operator test's matching block. The
-        // "required < available" check above only proves the ARITHMETIC
-        // is sound; it says nothing about what actually rendered. This
-        // measures the strip's REAL rendered ink width and compares it
-        // against the glyph-only requirement — mutation-proved the same
-        // way (forcing `footerStripShowsLabels` to always `true` widens
-        // the rendered ink well past this bound).
-        var leftmostInk: Int?, rightmostInk: Int?
-        for y in stride(from: 0, to: rep.pixelsHigh, by: 1) {
-            for x in stride(from: 0, to: rep.pixelsWide, by: 1) {
-                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
-                let luminance = Int(((color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255).rounded())
-                if luminance <= 160 {
-                    leftmostInk = min(leftmostInk ?? x, x)
-                    rightmostInk = max(rightmostInk ?? x, x)
-                }
-            }
-        }
-        guard let leftmostInk, let rightmostInk else {
-            Issue.record("found no ink in the 4-operator strip — expected `↵ ⇥ ↑↓ ⌘Z`")
-            return
-        }
-        let scale = CGFloat(rep.pixelsWide) / size.width
-        let renderedInkWidthPt = CGFloat(rightmostInk - leftmostInk) / scale
+        // Corroborating evidence: even if the structural guard above were
+        // ever removed, the arithmetic itself makes 4 labeled operators
+        // provably not fit — documents WHY the guard matters, not a claim
+        // production defends against it by layout.
+        let fourOperators: [SessionComposerCommandParser.FooterOperatorHint] = [
+            .init(glyph: "↵", label: "open"),
+            .init(glyph: "⇥", label: "accept"),
+            .init(glyph: "↑↓", label: "navigate"),
+            .init(glyph: "⌘Z", label: "undo")
+        ]
+        let requiredWidth = requiredFooterContentWidth(operators: fourOperators, includeLabels: true)
         #expect(
-            renderedInkWidthPt < requiredWidth + 15,
-            "rendered footer ink spans \(renderedInkWidthPt)pt, but four glyph-only operators require only \(requiredWidth)pt (15pt anti-aliasing/kerning slack) — content wider than the glyph-only spec is rendering, e.g. labels leaking back into `.anchored`"
+            requiredWidth > anchoredFooterAvailableWidth,
+            "four labeled operators measure \(requiredWidth)pt against `.anchored`'s \(anchoredFooterAvailableWidth)pt available — expected this to overflow (confirming the structural guard above is load-bearing, not redundant)"
         )
     }
 

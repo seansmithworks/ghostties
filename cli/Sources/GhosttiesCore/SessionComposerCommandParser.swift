@@ -1543,11 +1543,18 @@ public enum SessionComposerCommandParser {
     /// The one footer occupant that renders, of the three competing for
     /// that single position — a `switch`-total enum rather than three
     /// independent booleans the view could accidentally satisfy at once.
-    /// Highest precedence first: the new-template naming field always wins
-    /// (a live text entry the user is mid-typing into must never be
-    /// evicted by a stale resolution message); a `writeError`/typed-branch
-    /// error is next; the operator strip is last, and only rendered
-    /// non-empty.
+    /// This pure function's OWN precedence, by static arg order, is
+    /// `isAddingTemplate` first, then `errorMessage`, then `operators` —
+    /// but the view overrides that at runtime: `SessionComposerPalette`'s
+    /// `.onChange(of: composerStore.writeError)` clears `isAddingTemplate`
+    /// the instant a write error arrives specifically so the error CAN
+    /// evict a live naming field, closing a silent-wrong-cwd bug where an
+    /// async worktree-create failure landed after the user had already
+    /// moved on to "+ New template…" and was never shown. This function
+    /// therefore never itself picks `.newTemplateName` over a real
+    /// `errorMessage` in production — by the time both are non-nil, the
+    /// view has already zeroed `isAddingTemplate`. Read the two together;
+    /// neither states the real precedence alone.
     public enum FooterSlot: Equatable {
         case error(String)
         case newTemplateName
