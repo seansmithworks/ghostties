@@ -1,5 +1,32 @@
 # Ghostties — Backlog
 
+## 2026-08-31 — hook-based session status is built but unreachable
+
+PR #141 (`529662a1c`) wired `SessionCoordinator.swift:1417` to read
+`ClaudeStateStore.state(for: sessionId)` and prefer it over the old inference path when hook
+state exists. Nothing registers the hook: `HookInstaller.swift` only seeds the script to
+`~/.ghostties/hooks/`; registering it requires hand-adding seven entries (UserPromptSubmit,
+PreToolUse, PostToolUse/`TodoWrite`, Stop, Notification, PermissionRequest, SessionEnd) to
+`~/.claude/settings.json`, and the only copy of that snippet lives in the header comment of
+`macos/Resources/hooks/ghostties-status.sh` (~lines 16-40). No code in `macos/Sources` or
+`macos/Resources` writes `settings.json`.
+
+- [ ] **Setup is undiscoverable.** The registration snippet exists only as shell-script
+  comments — no README section, no `docs/` page, no in-app affordance. Anyone but Sean who
+  installs beta.24 silently gets the old inferred status with no way to learn the better path
+  exists. beta.24's CHANGELOG (PR #150) now points at
+  `~/.ghostties/hooks/ghostties-status.sh` as the place the snippet ships, so that reference
+  needs a real destination. Decide where instructions live (README section vs. `docs/` page
+  vs. in-app), then write them.
+
+- [ ] **`HookInstaller` should actually register the hooks**, not just seed the script. Merge
+  the seven entries into `~/.claude/settings.json` idempotently, behind a visible opt-in —
+  never silent. Must preserve unrelated existing keys, must be safe to run repeatedly without
+  duplicating entries, must survive the user already having their own hooks registered for the
+  same events, and must be reversible. `HookInstaller.seedVersion` already exists as the
+  re-seed mechanism and would need a parallel notion for registration. Worth a headline entry
+  in a future release once built.
+
 ## 2026-08-30 (later) — all four PRs merged, `main` broke and was fixed, worktrees reclaimed
 
 `main` @ `a2a28870b`, compiling. #146/#147/#148 merged, then **#141 merged** (`529662a1c`)
