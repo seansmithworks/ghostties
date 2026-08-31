@@ -8,7 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [0.1.0-beta.24] — Unreleased
 
-The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into.
+The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into. Sidebar status now reads what Claude Code is actually doing rather than guessing at it from terminal text.
 
 ### Added
 
@@ -24,6 +24,7 @@ The session composer's field row gets trailing project/branch controls in place 
 
 ### Fixed
 
+- **Sidebar status now reflects what Claude Code is actually doing,** instead of inferring it from terminal output — an idle session stops reading as if it needs you. Requires a one-time hook setup in `~/.claude/settings.json`; the snippet ships in `~/.ghostties/hooks/ghostties-status.sh`.
 - **The composer's results list no longer opens with dead space below a short list**, and stops growing past its cap on a long one.
 - **The composer card now resizes cleanly to fit its content at every window width**, instead of clipping or leaving extra space.
 
