@@ -1083,4 +1083,150 @@ struct SessionComposerSnapshotTests {
         }
     }
 
+    // MARK: - Variant G Pass B: contextual operator footer strip
+
+    /// The operators-live fixture: a locked project with the app's own
+    /// built-in template set (`makePlainComposer`) seeds `onAppear`'s
+    /// selection at row 0 (`hasSelection`) against more than one option
+    /// (`hasMultipleOptions`) — `footerOperators` resolves to `[↵ open,
+    /// ↑↓ navigate]`, `⇥`/`⌘Z` absent (model B off by default, no chip
+    /// cascade pending). Evidences acceptance criteria 6 (footer renders
+    /// at spec) directly; criterion 4 (precedence) is proven at the pure-
+    /// function level by `SessionComposerFooterSlotTests` above — no error
+    /// and no in-flight template naming compete for the position in this
+    /// fixture, so the operator branch is what's under test here.
+    ///
+    /// Asserts by measured card height (`cardTopEdge`...`cardBottomEdge`),
+    /// NOT a divider-line pixel search — an earlier draft of this test
+    /// tried scanning for the strip's 1pt `.separatorColor` line by
+    /// "near-full-width, near-uniform row," and that signature turned out
+    /// to also match blank card background between rows (mutant-verified:
+    /// forcing the `.operators` case to render `EmptyView()` still found a
+    /// "divider" and still passed). Height is the reliable signal —
+    /// mutant-verified directly against THIS fixture: correct code
+    /// measures 555px, forcing `.operators` to `EmptyView()` (no strip at
+    /// all) measures 503px, a clean 52px (26pt at this render's 2x backing
+    /// scale) gap matching the footer's own spec height exactly. 530 sits
+    /// with 25px of margin on both sides.
+    @Test func operatorFooterStripRendersWhenOperatorsAreLive() {
+        // Pin model B off for the duration of this render — `isModelBFieldEnabled`
+        // reads the process-global `UserDefaults.standard`
+        // (`ComposerGhostTextField.modelBFieldStorageKey`), which this file's
+        // OTHER model-B tests flip `true` for their own duration (same
+        // save/restore idiom, `mountedModelBGhostTracksHighlightedRowAcrossProjects`
+        // above) — without this, a test running concurrently in the same
+        // process can transiently see `⇥ accept` join the operator set here.
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(false, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore)
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-pass-b-footer-live-light.png")
+        #expect(light != nil)
+        if let light, let top = cardTopEdge(in: light), let bottom = cardBottomEdge(in: light) {
+            let height = bottom - top
+            #expect(
+                height > 530,
+                "card measured \(height)px tall (top \(top), bottom \(bottom)) with a live operator footer — expected over 530px (mutant-verified: 555px with the strip, 503px without)"
+            )
+        } else {
+            Issue.record("failed to render or measure the card's opaque bounds")
+        }
+
+        let dark = renderPNG(view, appearance: .darkAqua, size: size)
+        writeEvidence(dark, filename: "variant-g-pass-b-footer-live-dark.png")
+        #expect(dark != nil)
+        if let dark {
+            #expect(containsRenderedContent(in: dark, isDark: true), "expected the field/rows/footer strip to render, got a near-blank card")
+        }
+    }
+
+    /// Zero projects anywhere (`step4ZeroProjectEmptyStateRendersLightAndDark`'s
+    /// fixture, reused): `flattenedOptions` is empty, so `selectedOption`
+    /// is `nil` (`hasSelection` false) and there is nothing to navigate
+    /// between (`hasMultipleOptions` false) — `footerOperators` resolves
+    /// to `[]`, and `footerSlot` maps that to `.none`. No divider line
+    /// should render at all; the card's total measured height should stay
+    /// exactly what `emptyLanesRenderNoHeaderOrExtraSpace` (Pass A) already
+    /// pins for this same fixture (field + divider + one empty-state row,
+    /// under 300px) — a real 26pt strip rendered here would add height
+    /// that test doesn't budget for, which is exactly why that test's
+    /// still-green status after this pass is itself corroborating
+    /// evidence, not just this test.
+    @Test func footerStripAbsentWhenOperatorListIsEmpty() {
+        // See `operatorFooterStripRendersWhenOperatorsAreLive`'s matching
+        // comment — pin model B off so a concurrently-running model-B test
+        // can't transiently add `⇥ accept` to this fixture's empty list.
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(false, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-pass-b-footer-empty-light.png")
+        #expect(light != nil)
+        // Same measured-height technique as
+        // `operatorFooterStripRendersWhenOperatorsAreLive` above and Pass
+        // A's `emptyLanesRenderNoHeaderOrExtraSpace` — NOT a divider-line
+        // pixel search: a blank card region and the strip's own tinted
+        // background both render as uniform, full-width bands, so "no
+        // uniform band near the bottom" is not a reliable negative signal
+        // here (an earlier draft of this test relied on exactly that and
+        // was mutant-verified vacuous — see the sibling test's doc
+        // comment). Mutant-verified directly against THIS fixture: correct
+        // code measures 223px (matches Pass A's own measurement of this
+        // same fixture exactly); forcing the `.none` case to render a
+        // one-operator strip anyway measures 275px, a 52px (26pt) gap.
+        // 250 sits with 27px of margin on both sides — tighter than Pass
+        // A's own 300 threshold, which was calibrated against a much
+        // larger mutant (a spurious whole SECTION HEADER, not a 26pt
+        // strip) and doesn't have enough margin to catch this one.
+        guard let light,
+              let top = cardTopEdge(in: light),
+              let bottom = cardBottomEdge(in: light)
+        else {
+            Issue.record("failed to render or measure the card's opaque bounds")
+            return
+        }
+        let height = bottom - top
+        #expect(
+            height < 250,
+            "card measured \(height)px tall with an empty operator list (top \(top), bottom \(bottom)) — expected under 250px (mutant-verified: 223px correct, 275px with a spurious strip)"
+        )
+    }
+
 }

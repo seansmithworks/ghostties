@@ -80,13 +80,12 @@ struct SessionComposerPalette: View {
     }
 
     /// DEFECT 4 fix (Composer UI 11 review round 2): named production
-    /// symbols for `projectControl`/`branchControl`'s `.accessibilityLabel`
-    /// and `branchControl`'s no-override `.accessibilityValue` fallback —
-    /// see `AccessibilityTests` for why a re-declared local literal doesn't
-    /// guard anything.
+    /// symbol for `projectControl`'s `.accessibilityLabel` — see
+    /// `AccessibilityTests` for why a re-declared local literal doesn't
+    /// guard anything. `branchControl`'s own equivalent label/default-value
+    /// pair was removed in Variant G Pass B — `branchControl` itself was
+    /// deleted in Pass A, leaving that pair as its only remaining trace.
     static let accessibilityProjectControlLabel: String = "Select project"
-    static let accessibilityBranchControlLabel: String = "Select branch"
-    static let accessibilityBranchControlDefaultValue: String = "Default"
 
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
@@ -1449,15 +1448,24 @@ struct SessionComposerPalette: View {
                 option.action()
             }
 
-            if let statusStripMessage {
-                Text(statusStripMessage)
+            // Variant G Pass B: three things compete for this one footer
+            // position. `footerSlot` is a `switch`-total pure decision
+            // (`SessionComposerCommandParser.footerSlot`) — never more than
+            // one case renders, structurally, not merely by convention.
+            switch footerSlot {
+            case .error(let message):
+                Text(message)
                     .font(.system(size: subtitleFontSize))
                     .foregroundStyle(Color(nsColor: .systemRed))
                     .padding(.horizontal, 10)
                     .padding(.top, 6)
+            case .newTemplateName:
+                newTemplateRow
+            case .operators(let operators):
+                operatorFooterStrip(operators)
+            case .none:
+                EmptyView()
             }
-
-            newTemplateRow
         }
         .frame(width: paletteWidth)
         .background(
@@ -1731,6 +1739,88 @@ struct SessionComposerPalette: View {
                 }
             }
         )
+    }
+
+    // MARK: - Footer: contextual operator strip (Variant G Pass B, "F" half)
+    //
+    // Renders the operators live right now — never the approved mockup's
+    // static four-chord row. `⌥↵ new worktree` does not exist anywhere in
+    // the composer (see `SessionComposerCommandParser.FooterOperatorHint`'s
+    // doc comment) and is never in `operators` below.
+
+    /// Model B's ghost remainder text, computed the same way
+    /// `ComposerGhostTextField.acceptGhost` derives what Tab would consume —
+    /// reusing that type's own pure `remainderGhost(typed:fullPath:)`
+    /// rather than re-deriving a second copy. Empty whenever the
+    /// experimental model-B field isn't the one mounted (`⇥` genuinely does
+    /// nothing against model A's plain `TextField`, which has no Tab
+    /// interception at all), matching this footer's "only what's live"
+    /// premise.
+    private var modelBGhostRemainder: String {
+        guard isModelBFieldEnabled else { return "" }
+        return ComposerGhostTextField.remainderGhost(typed: query, fullPath: ghostFullPathForModelB)
+    }
+
+    /// Best-effort `SegmentKind` for `footerOperators`'s `stage` parameter.
+    /// As documented on `footerOperators` itself, none of today's four
+    /// operators branch on this — every liveness call below is fully
+    /// determined by the four booleans alone — so an approximate mapping
+    /// off `commandParse`'s already-resolved fields is sufficient; there is
+    /// no dedicated "current segment" production value to read instead (see
+    /// `ComposerGhostTextField`'s own note on the same gap).
+    private var footerOperatorStage: SessionComposerCommandParser.SegmentKind {
+        if commandParse.projectId == nil { return .project }
+        if commandParse.branchToken == nil, commandParse.resolvedTemplateId == nil,
+           commandParse.remainderTokens.isEmpty {
+            return .branch
+        }
+        if commandParse.resolvedTemplateId == nil { return .operation }
+        return .thread
+    }
+
+    /// The three-way footer precedence, read from the one pure decision
+    /// (`SessionComposerCommandParser.footerSlot`) rather than three
+    /// independent `if`s the view body could satisfy at once.
+    private var footerSlot: SessionComposerCommandParser.FooterSlot {
+        SessionComposerCommandParser.footerSlot(
+            errorMessage: statusStripMessage,
+            isAddingTemplate: isAddingTemplate,
+            operators: SessionComposerCommandParser.footerOperators(
+                stage: footerOperatorStage,
+                hasSelection: selectedOption != nil,
+                hasGhostRemainder: !modelBGhostRemainder.isEmpty,
+                hasMultipleOptions: flattenedOptions.count > 1,
+                hasPendingChipUndo: composerStore.pendingChipUndo != nil
+            )
+        )
+    }
+
+    private func operatorFooterStrip(
+        _ operators: [SessionComposerCommandParser.FooterOperatorHint]
+    ) -> some View {
+        HStack(spacing: 14) {
+            ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
+                HStack(spacing: 4) {
+                    Text(op.glyph)
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .foregroundColor(Color(nsColor: .labelColor))
+                    Text(op.label)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 26)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
+        }
+        .background(Color.secondary.opacity(0.08))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(operators.map { "\($0.glyph) \($0.label)" }.joined(separator: ", "))
     }
 
     // MARK: - Footer: naming a new template

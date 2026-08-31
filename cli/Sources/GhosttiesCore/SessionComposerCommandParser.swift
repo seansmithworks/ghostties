@@ -1468,4 +1468,120 @@ public enum SessionComposerCommandParser {
             showProjectControl: !isProjectLocked
         )
     }
+
+    // MARK: - Contextual operator footer (Variant G Pass B, "F" half)
+
+    /// One glyph+label pair rendered in the footer strip — a key chord the
+    /// composer will honor RIGHT NOW, never an aspirational one. `⌥↵ new
+    /// worktree` is deliberately absent from every caller of
+    /// `footerOperators` below: worktree creation is reached through a
+    /// selectable row (`"Create worktree for \"<token>\""`,
+    /// `SessionComposerPalette.commandOptions`) committed with plain
+    /// Return like any other row — there is no Option-Return chord
+    /// anywhere in the composer to advertise.
+    public struct FooterOperatorHint: Equatable {
+        /// The key chord glyph itself — rendered emphasized (semibold,
+        /// primary label color) against its dimmer `label`.
+        public let glyph: String
+        /// The lowercase verb describing what the chord does.
+        public let label: String
+
+        public init(glyph: String, label: String) {
+            self.glyph = glyph
+            self.label = label
+        }
+    }
+
+    /// The ordered set of operators live right now, replacing the
+    /// approved mockup's static four-chord row with only the chords that
+    /// actually do something against the current composer state — a pure
+    /// function so the view and its tests read the one decision, never two
+    /// independently-written copies that can diverge (the pattern
+    /// `statusStripMessage`/`trailingControlVisibility` above already
+    /// establish).
+    ///
+    /// `stage` is accepted, not merely `_`-discarded, for symmetry with
+    /// its sibling functions above and because a future stage may need to
+    /// hide or add a chord the other three functions above don't touch —
+    /// but as of Pass B every one of the four real chords
+    /// (`↵`/`⇥`/`↑↓`/`⌘Z`) is fully determined by the liveness booleans
+    /// alone, verified against the real call sites named below; none of
+    /// them branches on `stage` today. `SessionComposerCommandParserFooterOperatorsTests`
+    /// pins that invariant explicitly (same booleans → same result across
+    /// all four `SegmentKind` cases) rather than leaving it implicit.
+    ///
+    /// Order is fixed — primary action first, then completion, then list
+    /// navigation, then undo — matching the approved mockup's left-to-right
+    /// reading order. An operator whose liveness condition is `false` is
+    /// simply absent; it is never rendered disabled.
+    public static func footerOperators(
+        stage: SegmentKind,
+        // ↵ `open`: `.onSubmit`/`onKeyPress(.return)` — live whenever
+        // there is a current selection to commit
+        // (`SessionComposerPalette.selectedOption != nil`).
+        hasSelection: Bool,
+        // ⇥ `accept`: `ComposerGhostTextField.insertTab` → `acceptGhost`
+        // — live only when the ghost remainder text is non-empty; Tab
+        // no-ops (falls through to ordinary focus traversal) against an
+        // empty remainder, including whenever the experimental model-B
+        // field isn't the one mounted.
+        hasGhostRemainder: Bool,
+        // ↑↓ `navigate`: the four hidden `.keyboardShortcut(.upArrow/
+        // .downArrow)` buttons — live only when more than one option is
+        // on screen to move a selection between.
+        hasMultipleOptions: Bool,
+        // ⌘Z `undo`: the hidden `.keyboardShortcut("z", modifiers:
+        // [.command])` button, mounted only while
+        // `SessionComposerStore.pendingChipUndo != nil`.
+        hasPendingChipUndo: Bool
+    ) -> [FooterOperatorHint] {
+        var operators: [FooterOperatorHint] = []
+        if hasSelection {
+            operators.append(FooterOperatorHint(glyph: "↵", label: "open"))
+        }
+        if hasGhostRemainder {
+            operators.append(FooterOperatorHint(glyph: "⇥", label: "accept"))
+        }
+        if hasMultipleOptions {
+            operators.append(FooterOperatorHint(glyph: "↑↓", label: "navigate"))
+        }
+        if hasPendingChipUndo {
+            operators.append(FooterOperatorHint(glyph: "⌘Z", label: "undo"))
+        }
+        return operators
+    }
+
+    /// The one footer occupant that renders, of the three competing for
+    /// that single position — a `switch`-total enum rather than three
+    /// independent booleans the view could accidentally satisfy at once.
+    /// Highest precedence first: a `writeError`/typed-branch error always
+    /// wins (it must stay visible over anything else); the new-template
+    /// naming field is next (a live text entry the user is mid-typing
+    /// into); the operator strip is last, and only rendered non-empty.
+    public enum FooterSlot: Equatable {
+        case error(String)
+        case newTemplateName
+        /// Never constructed with an empty array — `footerSlot(...)` maps
+        /// an empty `operators` to `.none` instead, matching "an empty
+        /// operator list renders no strip at all, not an empty 26pt bar".
+        case operators([FooterOperatorHint])
+        case none
+    }
+
+    /// `errorMessage` is whatever `statusStripMessage` above currently
+    /// returns; `operators` is whatever `footerOperators` above currently
+    /// returns. A pure combinator over those two functions' outputs plus
+    /// `isAddingTemplate`, so the three-way precedence is one decision the
+    /// view and its tests read identically, never three independently
+    /// written `if`s that could double up.
+    public static func footerSlot(
+        errorMessage: String?,
+        isAddingTemplate: Bool,
+        operators: [FooterOperatorHint]
+    ) -> FooterSlot {
+        if let errorMessage { return .error(errorMessage) }
+        if isAddingTemplate { return .newTemplateName }
+        if operators.isEmpty { return .none }
+        return .operators(operators)
+    }
 }

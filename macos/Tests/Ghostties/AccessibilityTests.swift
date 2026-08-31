@@ -240,33 +240,23 @@ final class AccessibilityTests: XCTestCase {
     }
 
     func testComposerTrailingControlsCarryTheirCurrentValue() {
-        // DEFECT 4 fix (Composer UI 11 review round 2): same shape as
-        // `testComposerQueryFieldHasLabelAndValueSeparateFromEachOther`
-        // above — round 1 asserted local literals against themselves, which
-        // named no production symbol. Now asserts against
-        // `SessionComposerPalette.accessibilityProjectControlLabel`/
-        // `accessibilityBranchControlLabel`/
-        // `accessibilityBranchControlDefaultValue`, the literal symbols
-        // `projectControl`/`branchControl` actually render
-        // `.accessibilityLabel`/`.accessibilityValue` with.
+        // DEFECT 4 fix (Composer UI 11 review round 2): round 1 asserted
+        // local literals against themselves, which named no production
+        // symbol. Now asserts against
+        // `SessionComposerPalette.accessibilityProjectControlLabel`, the
+        // literal symbol `projectControl` actually renders
+        // `.accessibilityLabel` with.
         //
-        // Fix 6 (round 1, still the underlying rationale): `.accessibilityLabel`
-        // alone REPLACES a Button's auto-generated label — on `branchControl`
-        // that suppressed the branch name / `Creating…` text rendered inside
-        // its own HStack exactly when it carried news. Both now split label
-        // (the action) from `.accessibilityValue` (the current state), the
-        // same pattern a system Picker uses.
+        // `branchControl`'s own label/default-value constant pair was
+        // deleted in Variant G Pass B (Variant G Pass A had already
+        // deleted `branchControl` itself; that pair was its last
+        // remaining trace).
         //
         // NOT established: whether `.accessibilityValue` actually reaches
         // VoiceOver's `AXValue` for a SwiftUI `Button` at runtime — see the
-        // sibling test's note above; this asserts the constants only.
+        // sibling test's note above; this asserts the constant only.
         XCTAssertEqual(SessionComposerPalette.accessibilityProjectControlLabel, "Select project")
-        XCTAssertEqual(SessionComposerPalette.accessibilityBranchControlLabel, "Select branch")
-        XCTAssertEqual(SessionComposerPalette.accessibilityBranchControlDefaultValue, "Default")
         XCTAssertFalse(SessionComposerPalette.accessibilityProjectControlLabel.isEmpty)
-        XCTAssertFalse(SessionComposerPalette.accessibilityBranchControlLabel.isEmpty)
-        XCTAssertFalse(SessionComposerPalette.accessibilityBranchControlDefaultValue.isEmpty,
-            "branchControl's accessibilityValue must read 'Default' rather than announcing nothing when no override is active")
     }
 
     // MARK: - Graveyard expansion chevron labels (FYI-2)
