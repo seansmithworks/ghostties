@@ -156,6 +156,21 @@ final class SessionComposerCommandParserIdiomTests: XCTestCase {
         XCTAssertFalse(message.lowercased().contains("chevron"))
     }
 
+    /// Finding 2 (review round 2): the defect-3 copy ("Retype the branch or
+    /// delete it") described actions that cannot fix the dominant reachable
+    /// case — a real branch with no worktree yet, where a
+    /// `Create worktree for "X"` row (`typedBranchCreateOffer`) is already
+    /// sitting in the result list. Retyping the SAME correct branch name
+    /// reproduces the identical error. The reworded message must name that
+    /// suggestion so the copy stops contradicting the row next to it.
+    func testUnresolvedBranchMessageNamesTheCreateWorktreeSuggestion() {
+        let message = SessionComposerCommandParser.unresolvedBranchMessage(token: "cco")
+        XCTAssertTrue(
+            message.lowercased().contains("create") && message.lowercased().contains("worktree"),
+            "must name the create-worktree action that actually resolves the dominant reachable case"
+        )
+    }
+
     /// `resolveCommitWorktreePathForCommit`'s `.unresolved` failure message
     /// must be the SAME string `unresolvedBranchMessage` produces — a
     /// single source, not two literals that can drift.

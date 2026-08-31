@@ -226,6 +226,42 @@ struct SessionComposerPalette: View {
         }
     }
 
+    // MARK: - Finding 3 fix (review round 2): `.anchored` restored to
+    // byte-identical pre-`786f4d56f` rendering
+    //
+    // `786f4d56f` routed the results-table section header and the footer
+    // operator hint's glyph/label through `subtitleFontSize` — that's
+    // presentation-dependent, so it also restyled `.anchored`, the sidebar
+    // popover DESIGN.md and `SessionComposerPalette.swift:198` both say
+    // must stay unstyled. DESIGN.md's centered-modal type-scale table
+    // (§4) only specifies Query field / Row title / Row subtitle — it has
+    // no entry for a section header or footer hint, so mapping those two
+    // surfaces to the subtitle token at `.centered` was a reasonable
+    // interpretation, not literal DESIGN.md conformance. These three
+    // properties keep `.centered` on that interpretation while giving
+    // `.anchored` back its exact pre-fix literals (10pt `.bold` header;
+    // 10.5pt SF Mono `.semibold`/`.regular` footer glyph/label).
+    private var sectionHeaderFont: Font {
+        switch request.presentation {
+        case .anchored: return .system(size: 10, weight: .bold)
+        case .centered: return .system(size: subtitleFontSize, weight: .medium)
+        }
+    }
+
+    private var footerGlyphFont: Font {
+        switch request.presentation {
+        case .anchored: return .system(size: 10.5, weight: .semibold, design: .monospaced)
+        case .centered: return .system(size: subtitleFontSize, weight: .medium)
+        }
+    }
+
+    private var footerLabelFont: Font {
+        switch request.presentation {
+        case .anchored: return .system(size: 10.5, design: .monospaced)
+        case .centered: return .system(size: subtitleFontSize)
+        }
+    }
+
     /// Row vertical padding — `ComposerRow`'s existing 5pt (Phase 2,
     /// `.anchored` only) predates the 4pt spacing scale; left as-is since
     /// restyling the popover is out of scope. `.centered` adopts the board's
@@ -1470,6 +1506,7 @@ struct SessionComposerPalette: View {
                 hoveredOptionID: $hoveredOptionID,
                 rowFontSize: rowFontSize,
                 subtitleFontSize: subtitleFontSize,
+                sectionHeaderFont: sectionHeaderFont,
                 rowVerticalPadding: rowVerticalPadding,
                 rowHorizontalPadding: rowHorizontalPadding,
                 rowCornerRadius: rowCornerRadius,
@@ -1925,12 +1962,12 @@ struct SessionComposerPalette: View {
             ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
                 HStack(spacing: 4) {
                     Text(op.glyph)
-                        .font(.system(size: subtitleFontSize, weight: .medium))
+                        .font(footerGlyphFont)
                         .foregroundColor(Color(nsColor: .labelColor))
                         .lineLimit(1)
                     if showLabels {
                         Text(op.label)
-                            .font(.system(size: subtitleFontSize))
+                            .font(footerLabelFont)
                             .foregroundColor(Color(nsColor: .secondaryLabelColor))
                             .lineLimit(1)
                     }
@@ -2719,6 +2756,13 @@ private struct ComposerResultsTable: View {
     @Binding var hoveredOptionID: UUID?
     var rowFontSize: CGFloat
     var subtitleFontSize: CGFloat
+    /// Finding 3 fix (review round 2): the section header's own font,
+    /// supplied by the caller rather than derived here from
+    /// `subtitleFontSize` — `.anchored` keeps its unstyled pre-`786f4d56f`
+    /// 10pt `.bold`, distinct from `subtitleFontSize`'s 10pt (no weight),
+    /// which is `.centered`-only-correct. See
+    /// `SessionComposerPalette.sectionHeaderFont`'s doc comment.
+    var sectionHeaderFont: Font
     var rowVerticalPadding: CGFloat
     var rowHorizontalPadding: CGFloat
     var rowCornerRadius: CGFloat
@@ -2790,7 +2834,7 @@ private struct ComposerResultsTable: View {
                         if !section.options.isEmpty {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(section.title.uppercased())
-                                    .font(.system(size: subtitleFontSize, weight: .medium))
+                                    .font(sectionHeaderFont)
                                     .tracking(0.6)
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 6)

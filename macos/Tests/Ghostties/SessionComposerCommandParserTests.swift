@@ -453,18 +453,22 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(result.remainderTokens, ["main"])
     }
 
-    /// Defect 2 (composer variant G) rewrite: with no known branches passed,
-    /// "main" no longer resolves as an UNRESOLVED branch (the 2026-08-26
-    /// bug fix's original behavior, which this test used to pin) — it
-    /// falls through as `armedBranchTokenIsCommand` and becomes the FIRST
-    /// content of the ad-hoc operator run instead. No `.branch` segment
-    /// exists at all now. The second `>` (operator run open) closes it and
-    /// opens a thread run; "npm run build" then extends that thread run
-    /// (Rule 4 case 3, literal `>` inside a thread run swallows the third
-    /// `>` too) all the way through "log.txt". Renamed from
-    /// `testParsePathChevronAdvancesThroughBranchThenClosesAdHocThenOpensThread`
-    /// since branch is no longer part of this shape at all.
-    func testParsePathChevronWithNonMatchingTokenClosesAdHocThenOpensThread() {
+    /// Finding 1 fix (review round 2), superseding the defect-2 (composer
+    /// variant G) rewrite this test previously pinned: with no known
+    /// branches passed, "main" no longer falls through as
+    /// `armedBranchTokenIsCommand` — this query has THREE chevrons, so the
+    /// arming `>` (the first one) is not the LAST chevron in the query, and
+    /// the two-or-more-chevron rule applies (the branch slot is unambiguous
+    /// by position). "main" resolves as an `.unresolved` `.branch` segment,
+    /// exactly as it did before `b5286319b` first introduced the
+    /// fall-through. The SECOND `>` then finds branch already filled and
+    /// opens the operator run instead (rule 4's final `else`); "npm run
+    /// build" fills it, and the THIRD `>` closes it as a settled ad-hoc
+    /// segment and opens the thread run that "log.txt" becomes. Renamed
+    /// from `testParsePathChevronAdvancesThroughBranchThenClosesAdHocThenOpensThread`
+    /// (pre-defect-2) via `testParsePathChevronWithNonMatchingTokenClosesAdHocThenOpensThread`
+    /// (defect-2, now superseded).
+    func testParsePathChevronWithNonMatchingTokenResolvesUnresolvedBranchThenClosesAdHocThenOpensThread() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parsePath(
             rawQuery: "ghostties > main > npm run build > log.txt",
@@ -473,19 +477,27 @@ final class SessionComposerCommandParserTests: XCTestCase {
             isLocked: false
         )
         XCTAssertEqual(result.projectId, project.id)
-        XCTAssertNil(result.segments.first { $0.kind == .branch }, "no known branch was typed — no branch segment should exist")
+        XCTAssertEqual(
+            result.segments.first { $0.kind == .branch }.map { ($0.resolved, $0.text(in: result.source)) }?.1,
+            "main",
+            "a non-matching token in a non-final branch slot must still resolve as a (failed) branch lookup"
+        )
+        XCTAssertEqual(result.segments.first { $0.kind == .branch }?.resolved, .unresolved)
         let adHocSegments = result.segments.filter { $0.kind == .operation && $0.resolved == .adHoc }
-        XCTAssertEqual(adHocSegments.map { $0.text(in: result.source) }, ["main"])
+        XCTAssertEqual(adHocSegments.map { $0.text(in: result.source) }, ["npm run build"])
         XCTAssertEqual(result.activeKind, .thread)
-        XCTAssertEqual(text(result.remainderRange, in: result.source), "npm run build > log.txt")
+        XCTAssertEqual(text(result.remainderRange, in: result.source), "log.txt")
     }
 
     /// The "literal `>` inside an open thread run" half, re-derived for
-    /// defect 2's shifted grammar (see the test above): both `>`s after the
-    /// ad-hoc "main" segment closes are swallowed as literal thread-run
-    /// content, since neither ever finds an unfilled slot to advance into.
-    /// Renamed from `testParsePathChevronLiteralInsideThreadRun`.
-    func testParsePathChevronLiteralInsideThreadRunAfterNonMatchingToken() {
+    /// finding 1's corrected grammar (see the test above): once "main"
+    /// resolves as the unresolved branch and "npm build" settles as the
+    /// closed ad-hoc operator, both remaining `>`s are swallowed as literal
+    /// thread-run content, since neither ever finds an unfilled slot to
+    /// advance into. Renamed from `testParsePathChevronLiteralInsideThreadRun`
+    /// (pre-defect-2) via `testParsePathChevronLiteralInsideThreadRunAfterNonMatchingToken`
+    /// (defect-2, now superseded).
+    func testParsePathChevronLiteralInsideThreadRunAfterUnresolvedBranch() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parsePath(
             rawQuery: "ghostties > main > npm build > log.txt > extra",
@@ -493,8 +505,11 @@ final class SessionComposerCommandParserTests: XCTestCase {
             templates: [],
             isLocked: false
         )
+        XCTAssertEqual(result.segments.first { $0.kind == .branch }?.resolved, .unresolved)
+        let adHocSegments = result.segments.filter { $0.kind == .operation && $0.resolved == .adHoc }
+        XCTAssertEqual(adHocSegments.map { $0.text(in: result.source) }, ["npm build"])
         XCTAssertEqual(result.activeKind, .thread)
-        XCTAssertEqual(text(result.remainderRange, in: result.source), "npm build > log.txt > extra")
+        XCTAssertEqual(text(result.remainderRange, in: result.source), "log.txt > extra")
     }
 
     /// Sean's decision 2 (2026-08-26): each `>` advances exactly one slot,
@@ -681,21 +696,28 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(resolution, .notTyped)
     }
 
-    /// A SECOND chevron after a non-matching armed-branch token
-    /// (`ghostties > totally-made-up-branch > cco`): "totally-made-up-branch"
-    /// still isn't in `knownBranchNames`, so it falls through and closes as
-    /// a settled ad-hoc operator segment (defect 2's rule applies uniformly
-    /// — see the test above) BEFORE "cco" is ever seen. This hits a
-    /// pre-existing, separately-documented limitation of `parse()`'s flat
-    /// `ParseResult` — a CLOSED ad-hoc segment always wins the single
-    /// remainder slot over whatever thread content follows it (see
-    /// `parse()`'s own "Redirect-truncation note" / two-source comment
-    /// above `closedAdHocRange`) — so "cco" is dropped here exactly as it
-    /// already was for other closed-ad-hoc-then-more-content shapes before
-    /// this fix. Not Sean's reported shape (`ghostties > cco -n "test"` has
-    /// no SECOND `>`, see the test above) — pinned so a future change to
-    /// this edge doesn't silently drift.
-    func testParseChevronThenNonMatchingTokenThenChevronDropsContentPastTheClosedAdHocSegment() {
+    /// Finding 1 fix (review round 2): a SECOND chevron after a
+    /// non-matching armed-branch token (`ghostties > totally-made-up-branch
+    /// > cco`) is a genuinely different shape from the single-chevron test
+    /// above, and `armedBranchTokenIsCommand`'s `isLastChevron` check now
+    /// tells them apart — the arming `>` here is NOT the last chevron in
+    /// the query (a second one follows, right before "cco"), so the
+    /// two-or-more-chevron rule applies: the first branch slot is
+    /// unambiguous by position, and "totally-made-up-branch" resolves
+    /// `.unresolved` (a real failed branch lookup) exactly as it did
+    /// before `b5286319b` — it is NOT read as the command. This is the
+    /// corrected replacement for this test's own prior assertion
+    /// (`branchToken == nil`, `remainderTokens == ["totally-made-up-
+    /// branch"]`) which pinned the exact bug finding 1 reported: the
+    /// unscoped fall-through let a non-matching token in a non-final
+    /// branch slot swallow the SECOND `>` as a closed ad-hoc segment,
+    /// discarding "cco" entirely. With branch correctly claimed here
+    /// instead, "cco" is never absorbed into an ad-hoc segment at all —
+    /// it survives as the still-open operator remainder. Renamed to match
+    /// the name `testParseSingleChevronNonMatchingTokenResolvesAsCommand-
+    /// NotBranch`'s doc comment (above) already cited for "the
+    /// still-truthful two-chevron shape."
+    func testParseTwoChevronsWithNonMatchingBranchStillFailsAsUnresolvedBranch() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parse(
             query: "ghostties > totally-made-up-branch > cco",
@@ -703,8 +725,15 @@ final class SessionComposerCommandParserTests: XCTestCase {
             knownBranchNames: ["main", "feature-x"],
             isLocked: false
         )
-        XCTAssertNil(result.branchToken)
-        XCTAssertEqual(result.remainderTokens, ["totally-made-up-branch"])
+        XCTAssertEqual(result.branchToken, "totally-made-up-branch", "a non-final branch slot is unambiguous by position — it must still resolve as a (failed) branch lookup, not fall through as a command")
+        XCTAssertEqual(result.remainderTokens, ["cco"], "cco must survive as the operator remainder, not be discarded past a closed ad-hoc segment that no longer exists here")
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: result.branchToken,
+            worktrees: [],
+            currentBranchAtProjectRoot: "main"
+        )
+        XCTAssertEqual(resolution, .unresolved(token: "totally-made-up-branch"))
     }
 
     /// Case-sensitivity fix: `resolveTypedBranch` compares the token

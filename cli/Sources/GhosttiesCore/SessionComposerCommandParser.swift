@@ -461,7 +461,22 @@ public enum SessionComposerCommandParser {
             filled.contains(.operation) ? .thread : .operation
         }
 
-        for token in rawTokens {
+        // Finding 1 fix (review round 2): the index of the LAST chevron
+        // token in the whole query, used to scope `armedBranchTokenIsCommand`
+        // below to the single-chevron shape it was written for. At two or
+        // more chevrons the first branch slot is unambiguous by position —
+        // Sean's `ghostties > cco` ruling (Tab-completion always inserts
+        // exactly one `" > "`) never applies there.
+        let lastChevronIndex = rawTokens.lastIndex(where: {
+            if case .chevron = $0 { return true }
+            return false
+        })
+        // The index (into `rawTokens`) of the `>` that most recently set
+        // `branchArmed`, so the word-case handler below can tell whether
+        // ITS arming chevron was the last one in the query.
+        var armingChevronIndex: Int?
+
+        for (tokenIndex, token) in rawTokens.enumerated() {
             let isFirstToken = !hasProcessedAnyToken
             hasProcessedAnyToken = true
             switch token {
@@ -482,20 +497,38 @@ public enum SessionComposerCommandParser {
                             filled.insert(.branch)
                             continue
                         }
-                        // Defect 2 fix: a non-matching armed-branch token
-                        // reads as the COMMAND, not a failed branch lookup
-                        // (`armedBranchTokenIsCommand`) — leave branch
-                        // unfilled and fall through (no `continue`) into
-                        // the ordinary project/branch/operation matching
-                        // chain below, exactly as if no `>` had armed
-                        // anything. `resolveTypedBranch` then sees
-                        // `branchToken == nil` (`.notTyped`), matching
-                        // Sean's dominant no-branch usage instead of
-                        // failing the commit. (Reaching this branch
-                        // already implies `armedBranchTokenIsCommand`
-                        // would return `true` for `matchText` — the
-                        // `knownBranchNames` lookup just above is that
-                        // same check, inlined for the match binding.)
+                        // Finding 1 fix (review round 2, scoping the
+                        // defect-2 fall-through): `armedBranchTokenIsCommand`
+                        // now owns BOTH halves of the rule — "does this
+                        // token match a known branch" (checked above, so it
+                        // always reads `true` by the time we get here) and
+                        // "is this even the shape the fall-through applies
+                        // to" (the arming `>` must be the LAST chevron in
+                        // the query). At one chevron this is Sean's
+                        // `ghostties > cco` ruling: reads as the COMMAND,
+                        // not a failed branch lookup — leave branch unfilled
+                        // and fall through (no `continue`) into the
+                        // ordinary project/branch/operation matching chain
+                        // below, exactly as if no `>` had armed anything.
+                        // `resolveTypedBranch` then sees `branchToken ==
+                        // nil` (`.notTyped`), matching Sean's dominant
+                        // no-branch usage instead of failing the commit.
+                        // At two or more chevrons, this branch slot is
+                        // unambiguous by position — a non-matching token
+                        // there is a genuine failed branch lookup, so it
+                        // resolves `.unresolved` exactly as it did before
+                        // `b5286319b` (falls to the `else` below).
+                        if armedBranchTokenIsCommand(
+                            token: matchText,
+                            knownBranchNames: knownBranchNames,
+                            isLastChevron: armingChevronIndex == lastChevronIndex
+                        ) {
+                            // fall through, no `continue`
+                        } else {
+                            segments.append(Segment(kind: .branch, range: range, resolved: .unresolved))
+                            filled.insert(.branch)
+                            continue
+                        }
                     }
                     if !terminated {
                         // B1 fix: this must be set regardless of whether we
@@ -655,6 +688,7 @@ public enum SessionComposerCommandParser {
                     // branch instead of opening the thread run rule 4
                     // otherwise would.
                     branchArmed = true
+                    armingChevronIndex = tokenIndex
                 } else {
                     // Rule 4, case 1: matching was still live (branch
                     // already filled, or a second `>` with branch still
@@ -663,6 +697,7 @@ public enum SessionComposerCommandParser {
                     // good and open a run at the next free-text position.
                     // No content yet (lazy start, as above).
                     branchArmed = false
+                    armingChevronIndex = nil
                     openRunKind = nextFreeTextKind()
                     openRunStart = nil
                     openRunEnd = nil
@@ -1221,29 +1256,43 @@ public enum SessionComposerCommandParser {
         case pending
     }
 
-    /// Defect 2 fix: whether a token typed in an ARMED branch position
-    /// (immediately after a single `>`, with branch not yet resolved)
-    /// should be read as the COMMAND instead of a failed branch lookup.
-    /// Sean's dominant usage has no branch segment at all
-    /// (`ghostties cco -n "thread name"`, `repo ccp`) — a single typed `>`
-    /// must not force whatever follows into a branch slot it can never
-    /// fill. Only a token that matches a KNOWN branch name is ever the
-    /// branch; every other token — a template name, or free text like
-    /// `cco` — reads as the start of the command. `parsePath` calls this
-    /// at the one site that used to unconditionally resolve an armed
-    /// branch token as `.unresolved`, and on `true` leaves branch unfilled
-    /// entirely (falling through to the ordinary project/branch/operation
-    /// matching chain) rather than appending an unresolved-branch segment —
-    /// that segment is what made `resolveTypedBranch` report `.unresolved`
-    /// and fail the commit with "No worktree found for branch \"cco\""
-    /// even though "cco" was never meant as a branch.
+    /// Defect 2 fix, scoped by finding 1 (review round 2): whether a token
+    /// typed in an ARMED branch position (immediately after a `>`, with
+    /// branch not yet resolved) should be read as the COMMAND instead of a
+    /// failed branch lookup. `parsePath` is this function's only real call
+    /// site, and it now owns the WHOLE rule — both halves of it — so a
+    /// caller can't independently re-derive one half and drift from the
+    /// other:
     ///
-    /// A real branch stays unaffected: `ghostties > some-real-branch > cco`
-    /// matches `some-real-branch` against `knownBranchNames` here and
-    /// returns `false`, so the existing `.branch` resolution path (above
-    /// this function's call site) still wins.
-    public static func armedBranchTokenIsCommand(token: String, knownBranchNames: [String]) -> Bool {
-        !knownBranchNames.contains(where: { $0.caseInsensitiveCompare(token) == .orderedSame })
+    /// 1. The token must not match a KNOWN branch name — a template name,
+    ///    or free text like `cco`, reads as the start of the command; only
+    ///    an actual known branch is ever the branch.
+    /// 2. `isLastChevron` must be `true` — the arming `>` must be the LAST
+    ///    chevron in the whole query. Sean's dominant usage has no branch
+    ///    segment at all (`ghostties cco -n "thread name"`, `repo ccp`), and
+    ///    `ghostties > cco` (exactly what `Tab`-completion produces, one
+    ///    inserted `" > "`) must keep launching `cco` as a command — that
+    ///    ruling only covers the single-chevron shape. At two or more
+    ///    chevrons the first branch slot is unambiguous by position: a
+    ///    non-matching token there is a genuine failed branch lookup, not a
+    ///    command guess, and must resolve `.unresolved` instead (exactly as
+    ///    it did before `b5286319b` first introduced the fall-through).
+    ///
+    /// On `true`, `parsePath` leaves branch unfilled entirely (falling
+    /// through to the ordinary project/branch/operation matching chain)
+    /// rather than appending an unresolved-branch segment — that segment is
+    /// what made `resolveTypedBranch` report `.unresolved` and fail the
+    /// commit with "No worktree found for branch \"cco\"" even though "cco"
+    /// was never meant as a branch. `resolveTypedBranch` then sees
+    /// `branchToken == nil` (`.notTyped`), matching Sean's dominant
+    /// no-branch usage instead of failing the commit.
+    ///
+    /// A real branch stays unaffected regardless of chevron count:
+    /// `ghostties > some-real-branch > cco` matches `some-real-branch`
+    /// against `knownBranchNames` at the call site (before this function is
+    /// even reached) and takes the existing `.branch` resolution path.
+    public static func armedBranchTokenIsCommand(token: String, knownBranchNames: [String], isLastChevron: Bool) -> Bool {
+        isLastChevron && !knownBranchNames.contains(where: { $0.caseInsensitiveCompare(token) == .orderedSame })
     }
 
     /// Resolves a typed branch token (if any) against the cached worktree
@@ -1277,20 +1326,38 @@ public enum SessionComposerCommandParser {
         return .unresolved(token: token)
     }
 
-    /// Defect 3 fix: the single source for the "unresolved typed branch"
-    /// message. `branchControl`/`projectControl` (the in-field mouse
-    /// picker) were both deleted earlier on this branch — the old copy
-    /// ("Pick one from the branch picker...") pointed at a control that no
-    /// longer exists. The only routes that actually work are typing a
-    /// branch that resolves, or editing/deleting the typed branch token in
-    /// the field — this message describes those. Shared by
-    /// `resolveCommitWorktreePathForCommit` below (the `GhosttiesCore` write
-    /// path) and `SessionComposerStore.rejectUnresolvedBranch(token:)` (the
-    /// macOS call site that reaches the same message on the SAME rejection
-    /// without routing through `resolveCommitWorktreePathForCommit`) so the
-    /// two can never drift into two different literals again.
+    /// Defect 3 fix, reworded per finding 2 (review round 2): the single
+    /// source for the "unresolved typed branch" message. `branchControl`/
+    /// `projectControl` (the in-field mouse picker) were both deleted
+    /// earlier on this branch — the OLD-old copy ("Pick one from the branch
+    /// picker...") pointed at a control that no longer exists; the
+    /// defect-3 rewrite ("Retype the branch or delete it") replaced that,
+    /// but describes an action that reproduces the identical error for the
+    /// dominant case reachable after `b5286319b`: a REAL branch that simply
+    /// has no worktree yet, where `typedBranchCreateOffer`
+    /// (`SessionComposerPalette.swift`) sits in the same result list as a
+    /// `Create worktree for "X"` row. Retyping the same correct branch name
+    /// changes nothing.
+    ///
+    /// Finding 1's fix (`armedBranchTokenIsCommand`, above) revives a
+    /// SECOND, narrower class this message also has to cover truthfully: a
+    /// non-matching token in a non-final branch slot (two or more
+    /// chevrons) that isn't a known branch at all, so no create-worktree
+    /// row exists for it — there, retyping/deleting genuinely is the only
+    /// available fix.
+    ///
+    /// Not branched into two literals: both call sites
+    /// (`resolveCommitWorktreePathForCommit` below, the pure `GhosttiesCore`
+    /// write path, and `SessionComposerStore.rejectUnresolvedBranch(token:)`)
+    /// only ever have the bare token — neither has the
+    /// `branchesWithoutWorktree` context needed to tell the two classes
+    /// apart, and threading that through both would break the single-source
+    /// consolidation defect 3 introduced. One wording that's honest for
+    /// both classes instead: it names the create-worktree suggestion
+    /// CONDITIONALLY ("if it's a real branch") rather than asserting it
+    /// always applies, so it never lies to either class.
     public static func unresolvedBranchMessage(token: String) -> String {
-        "No worktree found for branch \"\(token)\". Retype the branch or delete it from what you typed."
+        "No worktree found for branch \"\(token)\". If it's a real branch, use the \"Create worktree\" suggestion below; otherwise retype or delete it."
     }
 
     /// The COMMIT-time counterpart to `resolveCommitWorktreePath` above —

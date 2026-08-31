@@ -8,9 +8,18 @@
   class"): section headers (was 10pt `.bold`, now `subtitleFontSize` `.medium`; `.tracking(0.6)`
   left as-is, a taste call not covered by DESIGN.md), the footer hint row (was 10.5pt
   SF Mono `.semibold`/`.regular`, now `subtitleFontSize` SF Pro `.medium`/`.regular` — SF Mono
-  is terminal-content-only per §3's "one font family per surface" rule). Resolved to
-  DESIGN.md's scale, not the mockup's. `subtitleFontSize`/`rowFontSize`/`fontSize` themselves
-  (lines 210-226) were already correct and untouched.
+  is terminal-content-only per §3's "one font family per surface" rule). **Correction (review
+  round 2, finding 3):** the claim above overstated DESIGN.md's coverage — its centered-modal
+  type-scale table (§4) specifies Query field / Row title / Row subtitle only; it has no entry
+  for a section header or a footer hint. Mapping those two surfaces onto `subtitleFontSize` was
+  a reasonable interpretation, not literal DESIGN.md conformance. Separately, routing the change
+  through `subtitleFontSize` (presentation-dependent) also restyled `.anchored`, the sidebar
+  popover both DESIGN.md and this file's own doc comment say must stay unstyled — `.anchored`
+  restored to its exact pre-`786f4d56f` values (10pt `.bold` header; 10.5pt SF Mono
+  `.semibold`/`.regular` footer) via new `sectionHeaderFont`/`footerGlyphFont`/`footerLabelFont`
+  properties; `.centered` keeps the `subtitleFontSize`-routed values from this entry.
+  `subtitleFontSize`/`rowFontSize`/`fontSize` themselves (lines 210-226) were already correct
+  and untouched.
 - [x] `ThrottleTrailingEdgeHypothesisTests.swift` — already deleted from the main tree; carried
   item closed.
 
