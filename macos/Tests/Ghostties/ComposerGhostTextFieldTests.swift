@@ -57,6 +57,41 @@ struct ComposerGhostTextFieldTests {
         #expect(palette.usesModelBFieldForTesting == false)
     }
 
+    /// Review round 2, P1-b: `.anchored` never mounts model B
+    /// (`usesModelBFieldForTesting == false`) even with the flag on — the
+    /// predicate `modelBGhostRemainder`'s guard must read. The footer-level
+    /// consequence (`⇥ accept` never advertised in `.anchored`) is proven by
+    /// rendering, in `SessionComposerSnapshotTests
+    /// .anchoredNeverAdvertisesAcceptEvenWithModelBFlagOn`, since that
+    /// requires the real `@EnvironmentObject`s a bare `SessionComposerPalette`
+    /// construction doesn't have.
+    @Test func anchoredNeverUsesModelBFieldEvenWithFlagOn() {
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(true, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let project = Project(name: "Demo", rootPath: "/tmp/composer-ui-11-modelb-anchored-\(UUID().uuidString)")
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .locked(project), workspaceStore: workspaceStore)
+
+        let palette = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .anchored, projectBinding: .locked(project)),
+            composerStore: composerStore
+        )
+        #expect(palette.usesModelBFieldForTesting == false)
+    }
+
     // MARK: - Selector routing (acceptance criterion 4, see header note)
 
     private final class Box<T> {

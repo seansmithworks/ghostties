@@ -1,6 +1,5 @@
 import Testing
 import GhosttiesCore
-@testable import Ghostty
 
 /// Variant G Pass B: `footerOperators`'s matrix — the pure decision the
 /// contextual operator footer strip reads, tested directly. Each test
@@ -10,7 +9,6 @@ struct SessionComposerFooterOperatorsTests {
     private typealias Hint = SessionComposerCommandParser.FooterOperatorHint
 
     private static let allLive = SessionComposerCommandParser.footerOperators(
-        stage: .project,
         hasSelection: true,
         hasGhostRemainder: true,
         hasMultipleOptions: true,
@@ -18,7 +16,6 @@ struct SessionComposerFooterOperatorsTests {
     )
 
     private static let noneLive = SessionComposerCommandParser.footerOperators(
-        stage: .project,
         hasSelection: false,
         hasGhostRemainder: false,
         hasMultipleOptions: false,
@@ -35,13 +32,13 @@ struct SessionComposerFooterOperatorsTests {
 
     @Test func openPresentOnlyWhenSelectionExists() {
         let with = SessionComposerCommandParser.footerOperators(
-            stage: .project, hasSelection: true, hasGhostRemainder: false,
+            hasSelection: true, hasGhostRemainder: false,
             hasMultipleOptions: false, hasPendingChipUndo: false
         )
         #expect(with.contains(Hint(glyph: "↵", label: "open")))
 
         let without = SessionComposerCommandParser.footerOperators(
-            stage: .project, hasSelection: false, hasGhostRemainder: false,
+            hasSelection: false, hasGhostRemainder: false,
             hasMultipleOptions: false, hasPendingChipUndo: false
         )
         #expect(!without.contains(Hint(glyph: "↵", label: "open")))
@@ -49,13 +46,13 @@ struct SessionComposerFooterOperatorsTests {
 
     @Test func acceptPresentOnlyWhenGhostRemainderNonEmpty() {
         let with = SessionComposerCommandParser.footerOperators(
-            stage: .branch, hasSelection: false, hasGhostRemainder: true,
+            hasSelection: false, hasGhostRemainder: true,
             hasMultipleOptions: false, hasPendingChipUndo: false
         )
         #expect(with.contains(Hint(glyph: "⇥", label: "accept")))
 
         let without = SessionComposerCommandParser.footerOperators(
-            stage: .branch, hasSelection: false, hasGhostRemainder: false,
+            hasSelection: false, hasGhostRemainder: false,
             hasMultipleOptions: false, hasPendingChipUndo: false
         )
         #expect(!without.contains(Hint(glyph: "⇥", label: "accept")))
@@ -63,13 +60,13 @@ struct SessionComposerFooterOperatorsTests {
 
     @Test func navigatePresentOnlyWhenMoreThanOneOption() {
         let with = SessionComposerCommandParser.footerOperators(
-            stage: .operation, hasSelection: false, hasGhostRemainder: false,
+            hasSelection: false, hasGhostRemainder: false,
             hasMultipleOptions: true, hasPendingChipUndo: false
         )
         #expect(with.contains(Hint(glyph: "↑↓", label: "navigate")))
 
         let without = SessionComposerCommandParser.footerOperators(
-            stage: .operation, hasSelection: false, hasGhostRemainder: false,
+            hasSelection: false, hasGhostRemainder: false,
             hasMultipleOptions: false, hasPendingChipUndo: false
         )
         #expect(!without.contains(Hint(glyph: "↑↓", label: "navigate")))
@@ -77,13 +74,13 @@ struct SessionComposerFooterOperatorsTests {
 
     @Test func undoPresentOnlyWhenChipUndoPending() {
         let with = SessionComposerCommandParser.footerOperators(
-            stage: .thread, hasSelection: false, hasGhostRemainder: false,
+            hasSelection: false, hasGhostRemainder: false,
             hasMultipleOptions: false, hasPendingChipUndo: true
         )
         #expect(with.contains(Hint(glyph: "⌘Z", label: "undo")))
 
         let without = SessionComposerCommandParser.footerOperators(
-            stage: .thread, hasSelection: false, hasGhostRemainder: false,
+            hasSelection: false, hasGhostRemainder: false,
             hasMultipleOptions: false, hasPendingChipUndo: false
         )
         #expect(!without.contains(Hint(glyph: "⌘Z", label: "undo")))
@@ -109,22 +106,6 @@ struct SessionComposerFooterOperatorsTests {
         }
     }
 
-    // MARK: - stage does not branch the result (Pass B invariant, see the
-    // doc comment on `footerOperators`) — same booleans, every SegmentKind,
-    // same operators.
-
-    @Test func stageDoesNotAffectResultForIdenticalLiveness() {
-        for stage in SessionComposerCommandParser.SegmentKind.allCases {
-            let result = SessionComposerCommandParser.footerOperators(
-                stage: stage,
-                hasSelection: true,
-                hasGhostRemainder: true,
-                hasMultipleOptions: true,
-                hasPendingChipUndo: true
-            )
-            #expect(result == Self.allLive)
-        }
-    }
 }
 
 /// `footerSlot`'s three-way precedence matrix — the pure decision the
@@ -137,22 +118,22 @@ struct SessionComposerFooterSlotTests {
 
     private static let sampleOperators = [Hint(glyph: "↵", label: "open")]
 
-    @Test func errorWinsOverEverything() {
+    @Test func newTemplateNameWinsOverAnActiveError() {
         let slot = SessionComposerCommandParser.footerSlot(
             errorMessage: "branch \"x\" not found",
             isAddingTemplate: true,
             operators: Self.sampleOperators
         )
-        #expect(slot == .error("branch \"x\" not found"))
+        #expect(slot == .newTemplateName)
     }
 
-    @Test func newTemplateNameWinsOverOperatorsWhenNoError() {
+    @Test func errorWinsOverOperatorsWhenNotAddingTemplate() {
         let slot = SessionComposerCommandParser.footerSlot(
-            errorMessage: nil,
-            isAddingTemplate: true,
+            errorMessage: "branch \"x\" not found",
+            isAddingTemplate: false,
             operators: Self.sampleOperators
         )
-        #expect(slot == .newTemplateName)
+        #expect(slot == .error("branch \"x\" not found"))
     }
 
     @Test func operatorsRenderOnlyWhenNeitherErrorNorNaming() {

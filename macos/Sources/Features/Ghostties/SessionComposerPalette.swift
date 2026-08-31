@@ -1757,25 +1757,21 @@ struct SessionComposerPalette: View {
     /// interception at all), matching this footer's "only what's live"
     /// premise.
     private var modelBGhostRemainder: String {
-        guard isModelBFieldEnabled else { return "" }
-        return ComposerGhostTextField.remainderGhost(typed: query, fullPath: ghostFullPathForModelB)
+        guard usesModelBFieldForTesting else { return "" }
+        return ComposerGhostTextField.remainderGhost(typed: composerStore.searchText, fullPath: ghostFullPathForModelB)
     }
 
-    /// Best-effort `SegmentKind` for `footerOperators`'s `stage` parameter.
-    /// As documented on `footerOperators` itself, none of today's four
-    /// operators branch on this — every liveness call below is fully
-    /// determined by the four booleans alone — so an approximate mapping
-    /// off `commandParse`'s already-resolved fields is sufficient; there is
-    /// no dedicated "current segment" production value to read instead (see
-    /// `ComposerGhostTextField`'s own note on the same gap).
-    private var footerOperatorStage: SessionComposerCommandParser.SegmentKind {
-        if commandParse.projectId == nil { return .project }
-        if commandParse.branchToken == nil, commandParse.resolvedTemplateId == nil,
-           commandParse.remainderTokens.isEmpty {
-            return .branch
-        }
-        if commandParse.resolvedTemplateId == nil { return .operation }
-        return .thread
+    /// The operators live right now — factored out of `footerSlot` below
+    /// purely to keep that combinator's body a single call, not a testing
+    /// seam (reading it still requires the real `@EnvironmentObject`s a
+    /// hosted render provides; see `SessionComposerSnapshotTests`).
+    private var liveFooterOperators: [SessionComposerCommandParser.FooterOperatorHint] {
+        SessionComposerCommandParser.footerOperators(
+            hasSelection: selectedOption != nil,
+            hasGhostRemainder: !modelBGhostRemainder.isEmpty,
+            hasMultipleOptions: flattenedOptions.count > 1,
+            hasPendingChipUndo: composerStore.pendingChipUndo != nil
+        )
     }
 
     /// The three-way footer precedence, read from the one pure decision
@@ -1785,13 +1781,7 @@ struct SessionComposerPalette: View {
         SessionComposerCommandParser.footerSlot(
             errorMessage: statusStripMessage,
             isAddingTemplate: isAddingTemplate,
-            operators: SessionComposerCommandParser.footerOperators(
-                stage: footerOperatorStage,
-                hasSelection: selectedOption != nil,
-                hasGhostRemainder: !modelBGhostRemainder.isEmpty,
-                hasMultipleOptions: flattenedOptions.count > 1,
-                hasPendingChipUndo: composerStore.pendingChipUndo != nil
-            )
+            operators: liveFooterOperators
         )
     }
 
@@ -1804,14 +1794,32 @@ struct SessionComposerPalette: View {
                     Text(op.glyph)
                         .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                         .foregroundColor(Color(nsColor: .labelColor))
+                        .lineLimit(1)
+                    // Review round 2: `.anchored` (204pt card, ~168pt of
+                    // footer content width after this strip's own 18pt×2
+                    // padding) has no headroom for 3+ operators at this
+                    // spacing/font — without `.lineLimit(1)`, a label like
+                    // "navigate" WRAPS onto a second line inside the fixed
+                    // 26pt-tall strip, corrupting the whole footer's
+                    // layout (measured/screenshotted directly — see
+                    // `SessionComposerSnapshotTests
+                    // .anchoredThreeOperatorFooterFitsWithoutTruncation`).
+                    // `.lineLimit(1)` forces single-line truncation instead
+                    // — the strip's own token values (font/spacing/padding)
+                    // are Sean's call and untouched here.
                     Text(op.label)
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                        .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
+        // Review round 2: 18pt to match the row titles'/section headers'
+        // own 18pt left edge (was 14pt). No enclosing VStack padding wraps
+        // this strip (unlike the results content above), so this value IS
+        // the full inset from the card's left edge.
+        .padding(.horizontal, 18)
         .frame(height: 26)
         .overlay(alignment: .top) {
             Rectangle()
@@ -2672,8 +2680,25 @@ private struct ComposerResultsTable: View {
                                     .tracking(0.6)
                                     .foregroundStyle(.secondary)
                                     .padding(.top, 6)
-                                    .padding(.leading, 14)
+                                    // Review round 2: 10pt here + the
+                                    // enclosing results `VStack`'s own 8pt
+                                    // `.padding(8)` (`body`, below) = 18pt
+                                    // from the card's left edge — the same
+                                    // edge `ComposerRow` titles sit at (8pt
+                                    // `rowHorizontalPadding` inset from that
+                                    // same 8pt VStack padding is wrong — see
+                                    // that computed property; rows use 10pt
+                                    // in `.centered`, giving the same 18pt).
+                                    // Was 14pt (22pt total) before this fix.
+                                    .padding(.leading, 10)
                                     .padding(.bottom, 4)
+                                    // The enclosing `VStack` already carries
+                                    // `.accessibilityLabel(section.accessibilityLabel)`
+                                    // as a combined element — without this,
+                                    // VoiceOver announces this header Text a
+                                    // SECOND time as its own unhidden child
+                                    // ("Recent, group" then "RECENT").
+                                    .accessibilityHidden(true)
 
                                 ForEach(section.options) { option in
                                     ComposerRow(

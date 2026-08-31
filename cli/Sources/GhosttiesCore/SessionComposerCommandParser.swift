@@ -1500,22 +1500,11 @@ public enum SessionComposerCommandParser {
     /// `statusStripMessage`/`trailingControlVisibility` above already
     /// establish).
     ///
-    /// `stage` is accepted, not merely `_`-discarded, for symmetry with
-    /// its sibling functions above and because a future stage may need to
-    /// hide or add a chord the other three functions above don't touch —
-    /// but as of Pass B every one of the four real chords
-    /// (`↵`/`⇥`/`↑↓`/`⌘Z`) is fully determined by the liveness booleans
-    /// alone, verified against the real call sites named below; none of
-    /// them branches on `stage` today. `SessionComposerCommandParserFooterOperatorsTests`
-    /// pins that invariant explicitly (same booleans → same result across
-    /// all four `SegmentKind` cases) rather than leaving it implicit.
-    ///
     /// Order is fixed — primary action first, then completion, then list
     /// navigation, then undo — matching the approved mockup's left-to-right
     /// reading order. An operator whose liveness condition is `false` is
     /// simply absent; it is never rendered disabled.
     public static func footerOperators(
-        stage: SegmentKind,
         // ↵ `open`: `.onSubmit`/`onKeyPress(.return)` — live whenever
         // there is a current selection to commit
         // (`SessionComposerPalette.selectedOption != nil`).
@@ -1554,10 +1543,11 @@ public enum SessionComposerCommandParser {
     /// The one footer occupant that renders, of the three competing for
     /// that single position — a `switch`-total enum rather than three
     /// independent booleans the view could accidentally satisfy at once.
-    /// Highest precedence first: a `writeError`/typed-branch error always
-    /// wins (it must stay visible over anything else); the new-template
-    /// naming field is next (a live text entry the user is mid-typing
-    /// into); the operator strip is last, and only rendered non-empty.
+    /// Highest precedence first: the new-template naming field always wins
+    /// (a live text entry the user is mid-typing into must never be
+    /// evicted by a stale resolution message); a `writeError`/typed-branch
+    /// error is next; the operator strip is last, and only rendered
+    /// non-empty.
     public enum FooterSlot: Equatable {
         case error(String)
         case newTemplateName
@@ -1579,8 +1569,8 @@ public enum SessionComposerCommandParser {
         isAddingTemplate: Bool,
         operators: [FooterOperatorHint]
     ) -> FooterSlot {
-        if let errorMessage { return .error(errorMessage) }
         if isAddingTemplate { return .newTemplateName }
+        if let errorMessage { return .error(errorMessage) }
         if operators.isEmpty { return .none }
         return .operators(operators)
     }

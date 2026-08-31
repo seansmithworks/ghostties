@@ -698,13 +698,19 @@ struct SessionComposerSnapshotTests {
     /// stays small — just the field, divider, and the single "Add
     /// project…" empty-state row.
     ///
-    /// Mutant-verified (measured directly, this exact fixture/size):
-    /// deleting the `!section.options.isEmpty` guard (replacing it with
-    /// `if true`, so all 4 lanes render a header with zero rows beneath it)
-    /// grew the measured card height from 223 to 415 backing px. This
-    /// test's threshold (300) sits with ~90px of margin above the correct
-    /// build's 223 and ~115px below the mutant's 415, so it fails loudly
-    /// under the mutation and passes cleanly on the guarded implementation.
+    /// Mutant-verified (re-measured directly against this exact
+    /// fixture/size, review round 2 — the review's own 223/415/271 numbers
+    /// had drifted from what this file's current form renders and are
+    /// superseded by these): correct code measures 275px. Deleting the
+    /// `!section.options.isEmpty` guard (`if true`, all 4 lanes render a
+    /// header with zero rows beneath it) measures 467px — a 192px growth
+    /// across 4 spurious headers, 48px per header, confirming the review's
+    /// per-header estimate even though its absolute baseline was stale.
+    /// One spurious header alone (the vacuous-band failure mode the review
+    /// flagged — a single growth event, not all four at once) therefore
+    /// measures 275 + 48 = 323px. This test's threshold (295) sits with
+    /// 20px of margin above the correct build's 275 and 28px below the
+    /// one-header mutant's 323.
     @Test func emptyLanesRenderNoHeaderOrExtraSpace() {
         let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
         let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
@@ -731,8 +737,8 @@ struct SessionComposerSnapshotTests {
         }
         let height = bottom - top
         #expect(
-            height < 300,
-            "card measured \(height)px tall (top \(top), bottom \(bottom)) with zero populated lanes — expected under 300px (field + divider + one empty-state row); a spuriously rendered header for an empty lane pushes this well past 300"
+            height < 295,
+            "card measured \(height)px tall (top \(top), bottom \(bottom)) with zero populated lanes — expected under 295px (field + divider + one empty-state row); a single spuriously rendered header for an empty lane measures 323px, well past this threshold"
         )
     }
 
@@ -1106,8 +1112,25 @@ struct SessionComposerSnapshotTests {
     /// mutant-verified directly against THIS fixture: correct code
     /// measures 555px, forcing `.operators` to `EmptyView()` (no strip at
     /// all) measures 503px, a clean 52px (26pt at this render's 2x backing
-    /// scale) gap matching the footer's own spec height exactly. 530 sits
-    /// with 25px of margin on both sides.
+    /// scale) gap matching the footer's own spec height exactly — matches
+    /// review round 2's numbers exactly, re-measured, not just trusted.
+    /// Upper-bounded at 580 (25px margin below 555) so a mutant that
+    /// over-renders (e.g. a doubled strip) doesn't slip past a lower-bound-
+    /// only check.
+    ///
+    /// KNOWN CAVEAT, re-derived and NOT what review round 2 estimated:
+    /// `AgentTemplate.defaults` growing by exactly one row does not survive
+    /// this band. Measured directly (temporarily seeding one extra custom
+    /// template into this same fixture, then reverted): correct code moves
+    /// to 613px, but the NO-STRIP mutant ALSO moves to 561px — inside
+    /// 530-580, so that specific (+1 template AND no strip) combination
+    /// would pass incorrectly. The strip-vs-no-strip gap stays a constant
+    /// ~52-58px regardless of template count; growth shifts the whole pair
+    /// upward together, not apart, so no single fixed band survives
+    /// arbitrary future growth — only a relational assertion against a
+    /// live-measured no-operators baseline would. Out of scope for this
+    /// pass (asked-for fix was tightening this into a band, not a rewrite);
+    /// flagged for whoever touches `AgentTemplate.defaults` next.
     @Test func operatorFooterStripRendersWhenOperatorsAreLive() {
         // Pin model B off for the duration of this render — `isModelBFieldEnabled`
         // reads the process-global `UserDefaults.standard`
@@ -1140,8 +1163,8 @@ struct SessionComposerSnapshotTests {
         if let light, let top = cardTopEdge(in: light), let bottom = cardBottomEdge(in: light) {
             let height = bottom - top
             #expect(
-                height > 530,
-                "card measured \(height)px tall (top \(top), bottom \(bottom)) with a live operator footer — expected over 530px (mutant-verified: 555px with the strip, 503px without)"
+                height > 530 && height < 580,
+                "card measured \(height)px tall (top \(top), bottom \(bottom)) with a live operator footer — expected 530-580px (mutant-verified: 555px with the strip, 503px without; the upper bound guards a mutant that over-renders instead of dropping the strip entirely — see this test's doc comment for the known one-more-default-template caveat this band does NOT survive)"
             )
         } else {
             Issue.record("failed to render or measure the card's opaque bounds")
@@ -1226,6 +1249,288 @@ struct SessionComposerSnapshotTests {
         #expect(
             height < 250,
             "card measured \(height)px tall with an empty operator list (top \(top), bottom \(bottom)) — expected under 250px (mutant-verified: 223px correct, 275px with a spurious strip)"
+        )
+    }
+
+    /// Review round 2, P1-b regression test: `modelBGhostRemainder`'s guard
+    /// used to read `isModelBFieldEnabled` alone, which stays `true` in
+    /// `.anchored` even though `.anchored` never mounts model B
+    /// (`usesModelBFieldForTesting` — gated to `.centered`, G-F28). With no
+    /// projects anywhere, `hasSelection`/`hasMultipleOptions`/
+    /// `hasPendingChipUndo` are all false (same fixture as
+    /// `footerStripAbsentWhenOperatorListIsEmpty` above), so `⇥ accept` is
+    /// the ONLY operator that could ever populate the footer here — and
+    /// `.anchored`'s own `ghostPlaceholder` fallback ("Type a project,
+    /// branch, and command…") is non-empty regardless of project count, so
+    /// the buggy guard produced a non-empty ghost remainder and rendered a
+    /// footer strip even in this empty-everything fixture. This can only be
+    /// exercised by a real hosted render (`@EnvironmentObject` access
+    /// crashes a bare `SessionComposerPalette` construction — see
+    /// `ComposerGhostTextFieldTests
+    /// .anchoredNeverUsesModelBFieldEvenWithFlagOn`'s doc comment).
+    ///
+    /// Mutant-verified directly against THIS fixture: correct code measures
+    /// 195px; reverting `modelBGhostRemainder`'s guard to
+    /// `isModelBFieldEnabled` alone measures 247px, a 52px (26pt at this
+    /// render's 2x backing scale) gap — the footer strip's own spec height,
+    /// exactly matching the signature the sibling `.centered` tests above
+    /// use. 220 sits with 25px of margin on both sides.
+    @Test func anchoredNeverAdvertisesAcceptEvenWithModelBFlagOn() {
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(true, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .anchored, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.sidebarWidth, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-anchored-no-accept-light.png")
+        #expect(light != nil)
+        guard let light,
+              let top = cardTopEdge(in: light),
+              let bottom = cardBottomEdge(in: light)
+        else {
+            Issue.record("failed to render or measure the card's opaque bounds")
+            return
+        }
+        let height = bottom - top
+        #expect(
+            height < 220,
+            "card measured \(height)px tall in `.anchored` with the model B flag on and zero projects (top \(top), bottom \(bottom)) — expected under 220px (mutant-verified: 195px correct, 247px with `⇥ accept` wrongly advertised)"
+        )
+    }
+
+    // MARK: - Review round 2, P2: `.anchored` footer coverage
+
+    /// `.anchored`'s content width (`paletteWidth`, `.anchored` case) is
+    /// `WorkspaceLayout.sidebarWidth - 16` = 204pt — every prior footer
+    /// snapshot fixture in this file is `.centered` (`composerOverlayWidth`,
+    /// much wider), so this is the first fixture to actually render the
+    /// operator strip at sidebar width. `⇥ accept` is now STRUCTURALLY
+    /// UNREACHABLE in `.anchored` after the P1-b fix above
+    /// (`usesModelBFieldForTesting` gates it to `.centered`), so this
+    /// fixture reaches the maximum REAL operator count in `.anchored`
+    /// today: three (`↵ open`, `↑↓ navigate`, `⌘Z undo`) — via two
+    /// projects (`.prefilled` so `changeProjectChip` can actually cascade,
+    /// unlike `.locked`) and the app's own multi-template default set.
+    @Test func anchoredThreeOperatorFooterFitsWithoutTruncation() {
+        let project = Project(name: "Demo Project", rootPath: "/tmp/composer-ui-11-anchored-\(UUID().uuidString)")
+        let otherProject = Project(name: "Other Project", rootPath: "/tmp/composer-ui-11-anchored-other-\(UUID().uuidString)")
+        let workspaceStore = WorkspaceStore(testingProjects: [project, otherProject], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .anchored, projectBinding: .prefilled(project)),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.sidebarWidth, height: 420)
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        // Settles `.onAppear` — `SessionComposerPalette.onAppear` calls
+        // `composerStore.open(...)` itself, which resets `pendingChipUndo`
+        // to `nil` (`open(projectBinding:workspaceStore:)`'s own reset) —
+        // arming the chip-undo BEFORE this mount, as an earlier draft of
+        // this test did, gets silently wiped the instant the view appears.
+        // `hasSelection`/`hasMultipleOptions` come for free from this same
+        // `.onAppear` (row-0 seed against >1 built-in template).
+        hosting.layoutSubtreeIfNeeded()
+        composerStore.changeProjectChip(to: otherProject.id, currentlyShown: project.id)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let rep0 = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render `.anchored` three-operator fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep0)
+        let light = rep0.representation(using: .png, properties: [:])
+        writeEvidence(light, filename: "variant-g-anchored-three-operators-light.png")
+        #expect(light != nil)
+        guard let light else {
+            Issue.record("failed to render `.anchored` three-operator fixture")
+            return
+        }
+        // The strip has NO `.lineLimit`/`.truncationMode` (flagged as a
+        // real gap by the review) — if the three chords overflow
+        // `paletteWidth`, SwiftUI's default behavior for an HStack of
+        // fixed-size `Text` children with a trailing `Spacer(minLength: 0)`
+        // is to let the LAST child (the `Spacer`) collapse to 0 and the
+        // overflowing content EXTEND PAST the card's own right edge rather
+        // than wrap or clip — a right-edge opacity check catches that:
+        // scans the footer's own 26pt band (bottom of the card) for opaque
+        // content beyond `paletteWidth`'s right edge, which would only be
+        // possible if the strip's content pushed past its parent's bounds.
+        guard let bottom = cardBottomEdge(in: light) else {
+            Issue.record("failed to measure card bottom edge")
+            return
+        }
+        guard let rep = NSBitmapImageRep(data: light) else {
+            Issue.record("failed to decode PNG")
+            return
+        }
+        // The card's own right edge (opaque `.regularMaterial` background),
+        // NOT the render canvas edge — the card sits inset within an 8pt
+        // shake-clearance gutter on each side (`paletteWidth`'s doc
+        // comment), so a naive "did ink reach the canvas edge" check would
+        // never trip even with real overflow.
+        var cardRightEdge: Int?
+        for x in stride(from: rep.pixelsWide - 1, through: 0, by: -1) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 2) {
+                if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 {
+                    cardRightEdge = x
+                    break
+                }
+            }
+            if cardRightEdge != nil { break }
+        }
+        guard let cardRightEdge else {
+            Issue.record("failed to measure the card's right edge")
+            return
+        }
+        let scale = CGFloat(rep.pixelsWide) / size.width
+        let footerHeightPx = Int(26 * scale)
+        let footerTop = max(0, bottom - footerHeightPx + 2)
+        var rightmostInk: Int?
+        // A wrapped-to-2-lines strip (this test's original draft caught
+        // this ONLY by screenshot, not by the rightmost-ink-stays-inside-
+        // the-card check below, which stays true even while wrapped:
+        // wrapping keeps ink horizontally inside the card, it just
+        // corrupts the strip vertically) spans roughly double a single
+        // 10.5pt line's own ink height — measuring the ink's own
+        // topmost-to-bottommost extent (not a fixed third-band split,
+        // which false-positived against tall glyphs like `↑↓`/`⌘`'s
+        // natural ascender height) survives glyph-height variance while
+        // still catching the wrap.
+        var inkTop: Int?, inkBottom: Int?
+        for y in stride(from: footerTop, through: bottom, by: 1) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 1) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let luminance = Int(((color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255).rounded())
+                if luminance <= 160 {
+                    rightmostInk = max(rightmostInk ?? x, x)
+                    inkTop = min(inkTop ?? y, y)
+                    inkBottom = max(inkBottom ?? y, y)
+                }
+            }
+        }
+        guard let rightmostInk, let inkTop, let inkBottom else {
+            Issue.record("found no ink in the footer band — expected `↵ open ↑↓ navigate ⌘Z undo`")
+            return
+        }
+        #expect(
+            rightmostInk < cardRightEdge,
+            "rightmost footer ink at backing x=\(rightmostInk), card's own right edge at x=\(cardRightEdge) — three operators overflowed the card's own right edge (paletteWidth has no lineLimit/truncationMode to contain it)"
+        )
+        let inkHeight = inkBottom - inkTop
+        #expect(
+            inkHeight < Int(18 * scale),
+            "footer ink spans \(inkHeight)px tall (single-line `↑↓`/`⌘` glyphs measured ~13px at this fixture's 2x scale) — a label wrapped onto a second line instead of truncating on one"
+        )
+    }
+
+    /// Four is UNREACHABLE through the real composer in `.anchored` as of
+    /// the P1-b fix above (`⇥ accept` is gated to `.centered`), so this
+    /// renders the strip's own HStack construction standalone — copying,
+    /// not importing, the exact layout `operatorFooterStrip` builds
+    /// (`SessionComposerPalette.swift`; `private`, this repo's established
+    /// precedent for testing a private View helper, see
+    /// `ComposerCardFitTests`'s header) — at `.anchored`'s real card width,
+    /// fed 4 synthetic hints. Defensive coverage for the strip's OWN
+    /// wrap/truncate behavior independent of whether `⇥ accept` can ever
+    /// join it for real.
+    @Test func fourOperatorFooterStripDoesNotWrapAtAnchoredWidth() {
+        let operators: [SessionComposerCommandParser.FooterOperatorHint] = [
+            .init(glyph: "↵", label: "open"),
+            .init(glyph: "⇥", label: "accept"),
+            .init(glyph: "↑↓", label: "navigate"),
+            .init(glyph: "⌘Z", label: "undo")
+        ]
+        let strip = HStack(spacing: 14) {
+            ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
+                HStack(spacing: 4) {
+                    Text(op.glyph)
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .foregroundColor(Color(nsColor: .labelColor))
+                        .lineLimit(1)
+                    Text(op.label)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .frame(width: WorkspaceLayout.sidebarWidth - 16, height: 26)
+        .background(Color.secondary.opacity(0.08))
+        .background(Color.white)
+
+        let size = NSSize(width: WorkspaceLayout.sidebarWidth - 16, height: 26)
+        let light = renderPNG(strip, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-anchored-four-operators-light.png")
+        #expect(light != nil)
+        guard let light, let rep = NSBitmapImageRep(data: light) else {
+            Issue.record("failed to render the 4-operator strip fixture")
+            return
+        }
+        // Single-line invariant: with `.lineLimit(1)` on each label, a
+        // wrapped-to-2-lines strip would leave the row's OWN bottom half
+        // (below its center) empty (no ink) while ink from a wrapped
+        // second line would show up ABOVE the vertical center instead of
+        // spread through the full 26pt height — scan the row for ink
+        // presence in both the top and bottom thirds, expecting content in
+        // the vertical middle band only (a single centered text line, not
+        // a top+bottom split).
+        var inkRowsTop = 0, inkRowsMiddle = 0, inkRowsBottom = 0
+        let third = rep.pixelsHigh / 3
+        for y in 0..<rep.pixelsHigh {
+            var hasInk = false
+            for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let luminance = Int(((color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255).rounded())
+                if luminance <= 160 { hasInk = true; break }
+            }
+            guard hasInk else { continue }
+            if y < third { inkRowsTop += 1 } else if y < 2 * third { inkRowsMiddle += 1 } else { inkRowsBottom += 1 }
+        }
+        #expect(
+            inkRowsTop == 0 && inkRowsBottom == 0,
+            "ink found outside the strip's vertical middle third (top=\(inkRowsTop), middle=\(inkRowsMiddle), bottom=\(inkRowsBottom)) — four operators wrapped onto a second line instead of truncating on one"
         )
     }
 
