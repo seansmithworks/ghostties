@@ -6,6 +6,8 @@
 #import <SystemConfiguration/SystemConfiguration.h>
 #include <unistd.h>
 #include <signal.h>
+#include <execinfo.h>
+#include <stdlib.h>
 #endif
 
 #if __has_include("include/cef_app.h")
@@ -129,6 +131,57 @@ static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
           ([lockHostname isEqualToString:posixHostname] ||
            [lockHostname isEqualToString:bonjourLocalHostName]) ? @"YES" : @"NO");
 }
+
+/// Logs a symbolized backtrace tagged [CEFDiag], one frame per line so it
+/// survives the unified log. Called from both the atexit handler and the
+/// signal handlers below — the goal is naming whatever calls exit() (or
+/// crashes) beneath AppKit during the browser-open shutdown.
+static void GhosttiesLogBacktrace(const char *reason) {
+    void *frames[64];
+    int count = backtrace(frames, 64);
+    char **symbols = backtrace_symbols(frames, count);
+    NSLog(@"[CEFDiag] %s — backtrace (%d frames):", reason, count);
+    if (symbols) {
+        for (int i = 0; i < count; i++) {
+            NSLog(@"[CEFDiag]   #%d %s", i, symbols[i]);
+        }
+        free(symbols);
+    } else {
+        NSLog(@"[CEFDiag]   (backtrace_symbols failed, errno=%d %s)", errno, strerror(errno));
+    }
+}
+
+/// Fires on any exit() (including implicit exit at the end of main, which
+/// won't apply here, and any explicit exit()/abort() call reachable through
+/// libc's atexit machinery). Does NOT fire for _exit()/_Exit(), which is why
+/// the signal handlers below exist as a second net.
+static void GhosttiesAtExitHandler(void) {
+    GhosttiesLogBacktrace("atexit fired");
+}
+
+/// Logs a backtrace then restores default disposition and re-raises, so the
+/// crash still produces its normal report/termination — this only adds a
+/// log line ahead of it, it does not change what happens to the process.
+static void GhosttiesSignalHandler(int signo) {
+    // NSLog and backtrace_symbols are not async-signal-safe. This is a
+    // Debug-only diagnostic build where "some evidence, maybe corrupted" beats
+    // "no evidence" — acceptable tradeoff here, not for shipping code.
+    GhosttiesLogBacktrace("signal handler fired");
+    signal(signo, SIG_DFL);
+    raise(signo);
+}
+
+/// Installs both nets as early as possible — see +load below, which runs at
+/// image-load time, before CEF (or anything else in this process) is touched.
+static void GhosttiesInstallExitDiagnostics(void) {
+    atexit(GhosttiesAtExitHandler);
+    signal(SIGABRT, GhosttiesSignalHandler);
+    signal(SIGSEGV, GhosttiesSignalHandler);
+    signal(SIGILL, GhosttiesSignalHandler);
+    signal(SIGBUS, GhosttiesSignalHandler);
+    signal(SIGTRAP, GhosttiesSignalHandler);
+    NSLog(@"[CEFDiag] Exit diagnostics installed (atexit + signal handlers).");
+}
 #endif // DEBUG
 
 @interface CEFBridgeManager ()
@@ -141,6 +194,18 @@ static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
 // ---------------------------------------------------------------------------
 
 @implementation CEFBridgeManager
+
+#pragma mark - Diagnostics installation
+
++ (void)load {
+    // +load runs at image-load time, before main() — before AppDelegate,
+    // before CEF, before anything else in this process. This is the
+    // earliest hook available for installing the exit/crash diagnostics
+    // below.
+#if DEBUG
+    GhosttiesInstallExitDiagnostics();
+#endif
+}
 
 #pragma mark - Properties
 
