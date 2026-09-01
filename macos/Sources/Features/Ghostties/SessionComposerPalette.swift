@@ -17,9 +17,11 @@ import GhosttiesCore
 ///   Composer UI 11 (plan §3 Step 3/4/5) replaced the resolution line that
 ///   used to sit beneath it with an in-field GHOST PLACEHOLDER
 ///   (`ghostPlaceholder`, `.centered` only) showing the exact path Return
-///   would currently commit, a STATUS STRIP for pre/post-Return errors, and
-///   two trailing controls (`projectControl`/`branchControl`) as the only
-///   mouse entry point left into the project/branch pickers.
+///   would currently commit and a STATUS STRIP for pre/post-Return errors.
+///   The ultra-minimal direction (Sean, 2026-08-30) removed the trailing
+///   `projectControl`/`branchControl` buttons entirely — the results list
+///   below the field is the only way to browse projects now; there is no
+///   remaining mouse entry point into a branch/project picker.
 /// - Prefix-first relevance ranking (`SessionComposerRanking`) instead of
 ///   boolean-match + color scoring.
 /// - Focus-loss auto-dismiss removed: the project dropdown and
@@ -114,6 +116,12 @@ struct SessionComposerPalette: View {
     @State private var isAddingTemplate = false
     @State private var newTemplateName = ""
     @State private var newTemplateToEdit: AgentTemplate?
+    /// Whether `newTemplateToEdit`'s sheet is presenting a template just
+    /// created (empty, unconfigured) versus an existing one opened via the
+    /// "Edit" context menu action — see `TemplateEditForm.isNewlyCreated`'s
+    /// doc comment for why this distinction is what fixes the persisted
+    /// junk-template bug (root cause: `commitNewTemplate` below).
+    @State private var newTemplateToEditIsFresh = false
     @State private var showDeleteConfirmation = false
     @State private var templateToDelete: AgentTemplate?
     @FocusState private var newTemplateNameFocused: Bool
@@ -1319,7 +1327,7 @@ struct SessionComposerPalette: View {
                 clampSelectedIndex()
             }
             .sheet(item: $newTemplateToEdit) { template in
-                TemplateEditForm(template: template)
+                TemplateEditForm(template: template, isNewlyCreated: newTemplateToEditIsFresh)
             }
             .alert(
                 "Delete Template?",
@@ -1399,10 +1407,20 @@ struct SessionComposerPalette: View {
                 rowHorizontalPadding: rowHorizontalPadding,
                 rowCornerRadius: rowCornerRadius,
                 maxHeight: resultsWellMaxHeight,
-                onEditTemplate: { newTemplateToEdit = $0 },
+                onEditTemplate: {
+                    newTemplateToEditIsFresh = false
+                    newTemplateToEdit = $0
+                },
                 onDuplicateTemplate: { _ = store.duplicateTemplate(id: $0.id) },
                 onDuplicateAndEditTemplate: {
-                    if let copy = store.duplicateTemplate(id: $0.id) { newTemplateToEdit = copy }
+                    if let copy = store.duplicateTemplate(id: $0.id) {
+                        // A duplicate carries its source's real command/agent
+                        // config forward, so abandoning this sheet leaves a
+                        // configured template behind, not an empty one —
+                        // `isNewlyCreated` stays false.
+                        newTemplateToEditIsFresh = false
+                        newTemplateToEdit = copy
+                    }
                 },
                 onEditPresetFile: { openPresetInEditor($0) },
                 onRequestDeleteTemplate: {
@@ -1590,13 +1608,6 @@ struct SessionComposerPalette: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-                if trailingControlVisibility.showBranchControl {
-                    branchControl(label: trailingControlVisibility.branchControlLabel)
-                }
-                if trailingControlVisibility.showProjectControl {
-                    projectControl
-                }
             }
             .frame(height: fieldHeight)
             .padding(.horizontal, 10)
@@ -1822,6 +1833,7 @@ struct SessionComposerPalette: View {
         newTemplateName = ""
         guard !trimmed.isEmpty else { return }
         let template = store.addTemplate(AgentTemplate(name: trimmed, kind: .custom))
+        newTemplateToEditIsFresh = true
         newTemplateToEdit = template
     }
 

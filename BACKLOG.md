@@ -89,20 +89,18 @@ result**; this repo does not require branches be up to date before merge.
   fix the pattern (dynamic latest-release resolution + set the two Homebrew repo settings) or
   hand-bump both each release.
 
-- [ ] **NEW — composer surface redesign, 7 directions drawn, awaiting Sean's pick.** The
-  trailing branch dropdown inside the field is to be REMOVED (Sean's call, 2026-08-30);
-  text input stays clean. Variant sheet at
-  `<scratchpad>/composer-variants.html`. A scope pills · B pure prediction · C absolute
-  minimum (**closest to what ships today**) · D grouped section headers (**Spotlight**) ·
-  E field-as-destination ghost text · F operator footer (**Raycast action bar**) ·
-  G = D+F (**Raycast**). Effort sized from source: D is ~30 lines — `ComposerResultsTable`
-  already takes four named lanes (`Recent`/`Templates`/`Projects`/`Command`,
-  `SessionComposerPalette.swift:1387`) and Composer UI 11 Step 2 deliberately REMOVED the
-  visible `title` field, keeping only `accessibilityLabel` (`:2532`). F needs a stage→
-  operators map in `SessionComposerCommandParser` plus a three-way precedence rule for the
-  strip slot (`:1450`) it shares with errors and the new-template naming field. Both shift
-  row positions, so **snapshot tests will need retuning**. Note G reverses the `V02Quieted222`
-  decision to quiet those headers.
+- [x] **DONE — composer surface redesign resolved: variant C, ultra-minimal, shipped in
+  PR #TBD.** Sean picked C (absolute minimum, closest to what shipped before this change) —
+  the trailing `projectControl`/`branchControl` buttons are removed from the query row
+  entirely; the results list is the only remaining mouse route into projects/templates.
+  Variants A (scope pills), B (pure prediction), D (grouped section headers/Spotlight), E
+  (field-as-destination ghost text), F (operator footer/Raycast action bar), and G (D+F) were
+  NOT built. Same PR also fixed the persisted "New Template" junk-row bug (root cause:
+  `TemplatePickerView.swift`'s `TemplateEditForm` added the template to the store before the
+  user configured it, and dismissing the follow-up edit sheet without saving left an empty,
+  `command: nil` template behind forever — fixed with an `onDisappear` cleanup gated on
+  `isNewlyCreated`/`didSave`). The 3 junk rows already in Sean's `workspace.json` are historical
+  data from before this fix; they are NOT auto-purged — see the PR for manual removal steps.
 
 - [x] **DONE — worktrees reclaimed.** `.claude/worktrees/` 28G → 3.0G, disk free 66G → 117G.
   21 trees removed, all branches intact. Kept `session-2` (uncommitted docs under

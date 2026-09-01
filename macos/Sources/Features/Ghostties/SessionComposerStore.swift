@@ -1040,7 +1040,7 @@ final class SessionComposerStore: ObservableObject {
     /// `precommit` never runs and nothing else about the composer's state
     /// changes.
     func rejectUnresolvedBranch(token: String) {
-        writeError = "No worktree found for branch \"\(token)\". Pick one from the branch picker or clear the typed branch."
+        writeError = "No worktree found for branch \"\(token)\". Type an existing branch name or clear it."
     }
 
     /// Same write, pre-formatted message variant — used by the defensive

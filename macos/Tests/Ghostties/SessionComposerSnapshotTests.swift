@@ -553,15 +553,18 @@ struct SessionComposerSnapshotTests {
         if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the long-path ghost/card content to render, got a near-blank card") }
     }
 
-    // MARK: - Step 5: resolution line deleted, trailing controls shown
+    // MARK: - Step 5 / ultra-minimal: resolution line AND trailing controls gone
 
-    /// An UNLOCKED project (`.open`, not `.locked`) so `projectControl`
-    /// renders — `trailingControlVisibility`'s locked-hides-projectControl
-    /// branch is covered structurally by `SessionComposerTrailingControlTests`,
-    /// not a second screenshot. Proves the resolution line is gone (field +
-    /// hairline + rows only) and the trailing controls are the field row's
-    /// mouse route now.
-    @Test func step5LineDeletedShowsTrailingControlsLightAndDark() {
+    /// An UNLOCKED project (`.open`, not `.locked`) — the project-lock state
+    /// no longer changes what renders in the field row at all now that
+    /// `projectControl`/`branchControl` are gone (Sean's ultra-minimal call,
+    /// 2026-08-30); kept unlocked only so this fixture matches
+    /// `SessionComposerTrailingControlTests`' other cases. Proves the
+    /// resolution line stays gone (field + hairline + rows only) and that
+    /// removing the trailing controls didn't take the rows down with it —
+    /// the results list is the only remaining mouse route into
+    /// projects/templates now.
+    @Test func step5LineAndTrailingControlsDeletedLightAndDark() {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
