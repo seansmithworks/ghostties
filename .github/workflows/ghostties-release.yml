@@ -590,12 +590,43 @@ jobs:
           # so the meta line on /download stays in sync with the binary.
           python3 scripts/update-web-version.py "$TAG_NAME" "$DMG_SIZE_BYTES"
 
-          git add web/appcast-beta.xml web/appcast-stable.xml scripts/update-web-version.py web/index.html web/download.html
+          # Regenerate web/changelog.html from main's CHANGELOG.md so it never
+          # drifts from the source of truth.
+          python3 scripts/generate-changelog-page.py
+
+          git add web/appcast-beta.xml web/appcast-stable.xml scripts/update-web-version.py web/index.html web/download.html web/changelog.html
           if git diff --cached --quiet; then
             echo "No appcast changes to commit."
           else
             git commit -m "chore(appcast): update from ${GITHUB_REF_NAME} [skip ci]"
-            git push origin main
+
+            # main can advance while the ~40min build runs (Sean often has
+            # several parallel sessions). A rejected push here must not sink
+            # the whole release — release job needs this job to succeed, and
+            # the DMG is already signed and notarized by this point. Retry a
+            # bounded number of times: fetch, rebase onto the new tip, push
+            # again. A real rebase conflict (someone else touched the same
+            # web files) aborts and fails loudly rather than guessing at a
+            # resolution.
+            PUSH_OK=false
+            for attempt in 1 2 3 4 5; do
+              if git push origin main; then
+                PUSH_OK=true
+                break
+              fi
+              echo "Push rejected (attempt ${attempt}/5) — main advanced. Rebasing…"
+              git fetch origin main
+              if ! git rebase origin/main; then
+                echo "::error::Rebase onto origin/main failed — likely a real conflict on the appcast/web files. Aborting rather than guessing at a resolution."
+                git rebase --abort
+                exit 1
+              fi
+              sleep 5
+            done
+            if [[ "$PUSH_OK" != "true" ]]; then
+              echo "::error::Failed to push to main after 5 attempts."
+              exit 1
+            fi
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -616,6 +647,12 @@ jobs:
       IS_BETA: ${{ needs.setup.outputs.is_beta }}
       GHOSTTIES_VERSION: ${{ needs.setup.outputs.version }}
     steps:
+      # Checkout must come before the artifact downloads below — actions/checkout
+      # defaults to `clean: true` and runs `git clean -ffdx`, which would wipe
+      # the downloaded DMG/appcast files if it ran after them.
+      - name: Checkout code
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
       - name: Download macOS artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -625,6 +662,9 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: appcasts
+
+      - name: Extract release notes
+        run: python3 scripts/extract-release-notes.py "$GHOSTTIES_VERSION" > release-notes.md
 
       - name: Create GitHub Release
         env:
@@ -640,7 +680,7 @@ jobs:
             $PRERELEASE_FLAG \
             --repo "$REPOSITORY" \
             --title "Ghostties v${GHOSTTIES_VERSION}" \
-            --notes "Ghostties v${GHOSTTIES_VERSION}" \
+            --notes-file release-notes.md \
             Ghostties.dmg \
             ghostties-macos-arm64.zip \
             appcast-stable.xml \
@@ -725,3 +765,164 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ env.HOMEBREW_TAP_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # verify-release: Assert every live distribution surface actually reports the
+  # released version — not that the steps that publish it merely ran. This is
+  # the check that would have caught beta.24 shipping with a stale changelog
+  # page, an empty release body, etc: those steps all reported success while
+  # doing nothing. Runs last; failing here does NOT unpublish anything (the
+  # release already exists by this point) — the value is a visible red X
+  # instead of silent drift.
+  # ---------------------------------------------------------------------------
+  verify-release:
+    needs: [setup, release]
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GHOSTTIES_VERSION: ${{ needs.setup.outputs.version }}
+      TAG: ${{ needs.setup.outputs.tag }}
+      REPOSITORY: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: Verify live release surfaces
+        run: |
+          VERSION="$GHOSTTIES_VERSION"
+          FAIL=0
+          ROWS=()
+
+          row() {
+            # $1=surface $2=expected $3=actual $4=PASS|FAIL|NOT VERIFIED
+            ROWS+=("$1|$2|$3|$4")
+            if [[ "$4" == "FAIL" ]]; then FAIL=1; fi
+          }
+
+          # Retries $* up to $attempts times, $delay seconds apart. The appcast
+          # commit triggers a Vercel deploy that isn't instant, so the web
+          # checks below need to tolerate a short propagation window rather
+          # than failing on the first cold read.
+          poll() {
+            local attempts="$1" delay="$2"
+            shift 2
+            local i=1
+            while (( i <= attempts )); do
+              if "$@"; then
+                return 0
+              fi
+              echo "  attempt ${i}/${attempts} not current yet, retrying in ${delay}s…"
+              sleep "$delay"
+              i=$((i + 1))
+            done
+            return 1
+          }
+
+          # --- 1. Sparkle beta appcast ---
+          check_appcast() {
+            local xml
+            xml=$(curl -fsS "https://ghostties.org/appcast-beta.xml") || return 1
+            ACTUAL=$(echo "$xml" | grep -o 'sparkle:shortVersionString>[^<]*' | head -1 | cut -d'>' -f2)
+            [[ "$ACTUAL" == "$VERSION" ]]
+          }
+          ACTUAL="<unreachable>"
+          if poll 10 30 check_appcast; then
+            row "Sparkle appcast (beta)" "$VERSION" "$ACTUAL" "PASS"
+          else
+            row "Sparkle appcast (beta)" "$VERSION" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 2. Homepage ---
+          # Every semver-shaped token on the page must equal this release's
+          # version — that catches both "not updated" and "updated but an
+          # older beta.N is still visible somewhere else on the page."
+          check_homepage() {
+            local html found
+            html=$(curl -fsS "https://ghostties.org/") || return 1
+            found=$(echo "$html" | grep -oE '0\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?' | sort -u | tr '\n' ',' | sed 's/,$//')
+            ACTUAL="$found"
+            [[ "$found" == "$VERSION" ]]
+          }
+          ACTUAL="<unreachable>"
+          if poll 10 30 check_homepage; then
+            row "Homepage (ghostties.org)" "$VERSION" "$ACTUAL" "PASS"
+          else
+            row "Homepage (ghostties.org)" "$VERSION" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 3. Changelog page ---
+          check_changelog() {
+            local html
+            html=$(curl -fsS "https://ghostties.org/changelog") || return 1
+            if echo "$html" | grep -q "v${VERSION}"; then
+              ACTUAL="present"
+              return 0
+            fi
+            ACTUAL="missing"
+            return 1
+          }
+          ACTUAL="<unreachable>"
+          if poll 10 30 check_changelog; then
+            row "Changelog page" "v${VERSION} present" "$ACTUAL" "PASS"
+          else
+            row "Changelog page" "v${VERSION} present" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 4. GitHub Release ---
+          # No polling needed — this is the authoritative record the release
+          # job just wrote to, not a downstream mirror with propagation lag.
+          check_release() {
+            local assets
+            assets=$(gh release view "$TAG" --repo "$REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null) || return 1
+            ACTUAL=$(echo "$assets" | tr '\n' ',' | sed 's/,$//')
+            echo "$assets" | grep -qx "Ghostties.dmg" && echo "$assets" | grep -qx "ghostties-macos-arm64.zip"
+          }
+          ACTUAL="<not found>"
+          if check_release; then
+            row "GitHub Release ${TAG}" "Ghostties.dmg + ghostties-macos-arm64.zip" "$ACTUAL" "PASS"
+          else
+            row "GitHub Release ${TAG}" "Ghostties.dmg + ghostties-macos-arm64.zip" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 5. Homebrew tap cask ---
+          # Conditional: the tap repo only exists once Sean sets HOMEBREW_TAP_REPO
+          # (see the homebrew-cask job above). Silently skipping this surface is
+          # exactly the drift class this job exists to catch, so an unset
+          # variable is a loud NOT VERIFIED row, never a quiet pass.
+          if [[ -z "$HOMEBREW_TAP_REPO" ]]; then
+            echo "::warning::HOMEBREW_TAP_REPO is not set — Homebrew tap cask NOT VERIFIED."
+            row "Homebrew tap cask" "$VERSION" "HOMEBREW_TAP_REPO unset" "NOT VERIFIED"
+          else
+            check_tap() {
+              local rb
+              rb=$(GH_TOKEN="$HOMEBREW_TAP_TOKEN" gh api "repos/${HOMEBREW_TAP_REPO}/contents/Casks/ghostties.rb" --jq '.content' 2>/dev/null | base64 -d) || return 1
+              ACTUAL=$(echo "$rb" | grep -oE 'version "[^"]+"' | head -1 | cut -d'"' -f2)
+              [[ "$ACTUAL" == "$VERSION" ]]
+            }
+            ACTUAL="<unreadable>"
+            if check_tap; then
+              row "Homebrew tap cask" "$VERSION" "$ACTUAL" "PASS"
+            else
+              row "Homebrew tap cask" "$VERSION" "$ACTUAL" "FAIL"
+            fi
+          fi
+
+          # --- Summary ---
+          {
+            echo "## Release verification — v${VERSION}"
+            echo ""
+            echo "| Surface | Expected | Actual | Status |"
+            echo "|---|---|---|---|"
+            for r in "${ROWS[@]}"; do
+              IFS='|' read -r surface expected actual status <<< "$r"
+              echo "| ${surface} | ${expected} | ${actual} | ${status} |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$FAIL" == "1" ]]; then
+            echo "::error::One or more release surfaces are behind v${VERSION} (or unverifiable). See the job summary."
+            exit 1
+          fi
+          echo "All verified surfaces report v${VERSION}."
