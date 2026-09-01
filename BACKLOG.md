@@ -1,5 +1,40 @@
 # Ghostties — Backlog
 
+## 2026-09-01 — open items after the beta.24 release and pipeline work
+
+**Waiting on Sean (both one-time):**
+
+- [ ] `npm publish` for `ghostties-install@0.2.0` from a real terminal — the local
+  `Bash(npm publish*)` deny rule no-ops silently. After this publish the installer resolves the
+  newest release at run time and never needs a version bump again. Command:
+  `cd ~/Code/ghostties/dist/ghostties/npm/ghostties-install && npm publish`
+- [ ] Homebrew auto-bump PAT — set `HOMEBREW_TAP_TOKEN` (secret) **before**
+  `HOMEBREW_TAP_REPO` (variable), or the next release goes red at its final job. Fine-grained
+  PAT needs `contents: write` + `pull_requests: write` on `SeanSmithWorks/homebrew-tap`. Until
+  then the tap is a manual bump and `verify-release` reports it NOT VERIFIED.
+
+**Deferred from the PR #154 review** (found by an adversarial review, deliberately not fixed):
+
+- [ ] `verify-release`'s homepage check sweeps the whole page for semver-shaped tokens and
+  requires every one to equal the release version. Any unrelated copy edit mentioning an older
+  version (or a CDN `@0.x.y` script tag) turns a good release red. Anchor it to the specific
+  strings `update-web-version.py` writes instead.
+- [ ] `verify-release` does not check `/download` (which takes four replacements — more than
+  `index.html`) or `appcast-stable.xml` (unverified for the first stable release).
+- [ ] `scripts/extract-release-notes.py` trims a trailing `---` positionally, so the
+  **oldest** changelog entry absorbs the link-reference block. Only ever affects the last
+  entry; cosmetic today.
+
+**Repo hygiene:**
+
+- [ ] `BACKLOG.md` is 203KB / 2,065 lines, well past the open-items-only rule. Needs an
+  archive pass into `BACKLOG-log.md`, same as the last time it grew into a changelog.
+
+**Verification note:** PR #154's assembled behavior is unproven — every piece is
+unit-verified against live surfaces, but the wired-together run only happens on the next real
+release (beta.25). It is designed so the worst case is a cosmetic release body or a spurious
+red X on the final job, never a broken release. Watch the beta.25 run.
+
 ## 2026-08-31 — hook-based session status is built but unreachable
 
 PR #141 (`529662a1c`) wired `SessionCoordinator.swift:1417` to read
