@@ -129,15 +129,15 @@
         <h2>v0.1.0-beta.24</h2>
         <span class="date">August 31, 2026</span>
       </div>
-      <p class="release-summary">The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into. Sidebar status now reads what Claude Code is actually doing rather than guessing at it from terminal text.</p>
+      <p class="release-summary">The session composer’s field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into. Sidebar status now reads what Claude Code is actually doing rather than guessing at it from terminal text.</p>
 
       <div class="release-section">
         <h3>Added</h3>
         <ul>
           <li><strong>Pin templates in the composer.</strong> Right-click a template row for Pin/Unpin — pinned templates stay at the top of the list, ahead of your recents.</li>
-          <li><strong>An "Add project…" row</strong> where the composer used to just say "No matches" if you have no projects yet.</li>
+          <li><strong>An “Add project…” row</strong> where the composer used to just say “No matches” if you have no projects yet.</li>
           <li><strong>Experimental ghost-text composer field</strong>, opt-in from View → Experimental Composer Field (off by default). As you type a session name, it previews the full destination — project, branch, template — as greyed-out ghost text, and Tab accepts one segment at a time instead of committing the whole thing at once.</li>
-          <li><strong>Typing <code>&gt;</code> to target any branch in the repo now works</strong>, not just branches that already have a worktree — Ghostties offers to create one on the spot if it doesn't.</li>
+          <li><strong>Typing <code>&gt;</code> to target any branch in the repo now works</strong>, not just branches that already have a worktree — Ghostties offers to create one on the spot if it doesn’t.</li>
         </ul>
       </div>
 
@@ -145,7 +145,7 @@
         <h3>Changed</h3>
         <ul>
           <li><strong>The composer field row drops its resolution-line text</strong> in favor of two small trailing buttons — a chevron for the project picker, a branch glyph for the branch picker — shown inline instead of underneath the field.</li>
-          <li><strong>Template rows in the composer are single-line now</strong>, with the pin glyph or "recent" label trailing instead of a subtitle underneath.</li>
+          <li><strong>Template rows in the composer are single-line now</strong>, with the pin glyph or “recent” label trailing instead of a subtitle underneath.</li>
         </ul>
       </div>
 
@@ -153,7 +153,7 @@
         <h3>Fixed</h3>
         <ul>
           <li><strong>Sidebar status now reflects what Claude Code is actually doing,</strong> instead of inferring it from terminal output — an idle session stops reading as if it needs you. Requires a one-time hook setup in <code>~/.claude/settings.json</code>; the snippet ships in <code>~/.ghostties/hooks/ghostties-status.sh</code>.</li>
-          <li><strong>The composer's results list no longer opens with dead space below a short list</strong>, and stops growing past its cap on a long one.</li>
+          <li><strong>The composer’s results list no longer opens with dead space below a short list</strong>, and stops growing past its cap on a long one.</li>
           <li><strong>The composer card now resizes cleanly to fit its content at every window width</strong>, instead of clipping or leaving extra space.</li>
         </ul>
       </div>
@@ -170,10 +170,10 @@
       <div class="release-section">
         <h3>Fixed</h3>
         <ul>
-          <li><strong>Idle Claude Code sessions no longer show up as needing your attention.</strong> Claude Code's terminal never emits the shell-prompt marker Ghostties used to detect "waiting for input," so every session went quiet and immediately looked like it needed you. Silence with no other evidence now reads as idle for agent sessions; plain shell sessions are unaffected.</li>
-          <li><strong>Session names fully shed the leading status glyph.</strong> A prior fix stripped it from new names, but a title shaped like "repo | ✳ Claude Code" — the actual production shape — could still leak the glyph in the second segment, and already-stored names with a glyph baked in weren't cleaned up. Both are fixed now, including self-healing existing names on their next sync.</li>
-          <li><strong>The Sessions tab shows a session's current name and status without needing a tab toggle first.</strong> Renaming or a terminal title change could sit stale on screen until you switched away and back.</li>
-          <li><strong>Guarded against a rare case where a window's terminal or browser shadow could disappear.</strong> Unverified against a live repro, but a code-level gap (shadow path rebuilding from empty bounds) is now closed defensively.</li>
+          <li><strong>Idle Claude Code sessions no longer show up as needing your attention.</strong> Claude Code’s terminal never emits the shell-prompt marker Ghostties used to detect “waiting for input,” so every session went quiet and immediately looked like it needed you. Silence with no other evidence now reads as idle for agent sessions; plain shell sessions are unaffected.</li>
+          <li><strong>Session names fully shed the leading status glyph.</strong> A prior fix stripped it from new names, but a title shaped like “repo | ✳ Claude Code” — the actual production shape — could still leak the glyph in the second segment, and already-stored names with a glyph baked in weren’t cleaned up. Both are fixed now, including self-healing existing names on their next sync.</li>
+          <li><strong>The Sessions tab shows a session’s current name and status without needing a tab toggle first.</strong> Renaming or a terminal title change could sit stale on screen until you switched away and back.</li>
+          <li><strong>Guarded against a rare case where a window’s terminal or browser shadow could disappear.</strong> Unverified against a live repro, but a code-level gap (shadow path rebuilding from empty bounds) is now closed defensively.</li>
         </ul>
       </div>
     </div>
@@ -189,8 +189,8 @@
       <div class="release-section">
         <h3>Added</h3>
         <ul>
-          <li><strong>Active, Inactive, and Archive zones in the Sessions tab.</strong> A session you've stopped now lands in its own Inactive zone instead of Archive, so "still running," "stopped this launch," and "from a while ago" read as three different things instead of one crowded list.</li>
-          <li><strong>Keyboard navigation for sessions.</strong> <code>Cmd+T</code> opens a new session, <code>Cmd+W</code> closes the current one (confirming first if it's still active, and closing the window if nothing's left running), and <code>Cmd+1</code> through <code>Cmd+9</code> jump straight to a session by its position in the sidebar.</li>
+          <li><strong>Active, Inactive, and Archive zones in the Sessions tab.</strong> A session you’ve stopped now lands in its own Inactive zone instead of Archive, so “still running,” “stopped this launch,” and “from a while ago” read as three different things instead of one crowded list.</li>
+          <li><strong>Keyboard navigation for sessions.</strong> <code>Cmd+T</code> opens a new session, <code>Cmd+W</code> closes the current one (confirming first if it’s still active, and closing the window if nothing’s left running), and <code>Cmd+1</code> through <code>Cmd+9</code> jump straight to a session by its position in the sidebar.</li>
           <li><strong>A built-in Codex template</strong> alongside Shell and Claude Code in the New Session picker.</li>
           <li><strong>Terminal install options.</strong> Install without the DMG: <code>brew install --cask seansmithworks/tap/ghostties</code> or <code>npx ghostties-install</code>.</li>
         </ul>
@@ -199,27 +199,27 @@
       <div class="release-section">
         <h3>Changed</h3>
         <ul>
-          <li><strong>One "+ New" button per tab.</strong> Projects and Sessions each get a single labelled button for starting something new, replacing the old icon-only button and full-width row.</li>
+          <li><strong>One “+ New” button per tab.</strong> Projects and Sessions each get a single labelled button for starting something new, replacing the old icon-only button and full-width row.</li>
           <li><strong>The overlay sidebar floats like the others now.</strong> In overlay/hover mode the terminal card had lost its inset, rounded corners, and shadow; it now matches the pinned and closed modes.</li>
           <li><strong>Tasks removed from the Sidebar View menu.</strong> Projects and Sessions remain.</li>
-          <li><strong>The session context menu's "Remove" is now "Delete."</strong> It permanently deletes the session with no undo — the old label read like it moved the session to Archive instead.</li>
+          <li><strong>The session context menu’s “Remove” is now “Delete.”</strong> It permanently deletes the session with no undo — the old label read like it moved the session to Archive instead.</li>
         </ul>
       </div>
 
       <div class="release-section">
         <h3>Fixed</h3>
         <ul>
-          <li><strong>The window titlebar now matches your actual terminal theme.</strong> It was drawing from a fixed color instead of your theme's real background, so it could look mismatched against the terminal below it. It now always tracks the same background your terminal renders.</li>
-          <li><strong><code>Cmd+Shift+[</code> and <code>Cmd+Shift+]</code> cycle sessions in the order you actually see them</strong> when the Sessions tab is open, instead of the Projects tab's order.</li>
+          <li><strong>The window titlebar now matches your actual terminal theme.</strong> It was drawing from a fixed color instead of your theme’s real background, so it could look mismatched against the terminal below it. It now always tracks the same background your terminal renders.</li>
+          <li><strong><code>Cmd+Shift+[</code> and <code>Cmd+Shift+]</code> cycle sessions in the order you actually see them</strong> when the Sessions tab is open, instead of the Projects tab’s order.</li>
           <li><strong>Stopped sessions land in Inactive instead of vanishing.</strong> They were being swept straight into Archive as soon as they stopped.</li>
           <li><strong>Stopping one session no longer disturbs other running sessions.</strong> A stale internal cache could hold back status updates for sessions that were still running, whenever a different session had just stopped.</li>
-          <li><strong>Archive stays collapsed when there's nothing active</strong>, instead of forcing itself back open every time you close it.</li>
+          <li><strong>Archive stays collapsed when there’s nothing active</strong>, instead of forcing itself back open every time you close it.</li>
           <li><strong>Archive sorts by when a session was last active</strong>, not by the order it happened to be added.</li>
-          <li><strong>Session names no longer echo just the repo name plus boilerplate</strong> — a title like "my-project | Claude Code" duplicating the row's own subtitle.</li>
-          <li><strong>Session names no longer flicker through spinner characters, bare directory names, or truncated paths.</strong> Claude Code's terminal title changes rapidly while it's working; Ghostties now filters those out and keeps only genuinely informative titles.</li>
-          <li><strong>Pressing Esc while renaming a session reverts it</strong>, instead of committing whatever you'd typed so far.</li>
+          <li><strong>Session names no longer echo just the repo name plus boilerplate</strong> — a title like “my-project | Claude Code” duplicating the row’s own subtitle.</li>
+          <li><strong>Session names no longer flicker through spinner characters, bare directory names, or truncated paths.</strong> Claude Code’s terminal title changes rapidly while it’s working; Ghostties now filters those out and keeps only genuinely informative titles.</li>
+          <li><strong>Pressing Esc while renaming a session reverts it</strong>, instead of committing whatever you’d typed so far.</li>
           <li><strong>The sidebar re-clamps its width correctly when you shrink the window</strong>, so it can no longer end up wider than the window itself.</li>
-          <li><strong>Next Project and Previous Project grey out in the menu when there's nothing to cycle to</strong>, instead of sitting there as if they'd do something.</li>
+          <li><strong>Next Project and Previous Project grey out in the menu when there’s nothing to cycle to</strong>, instead of sitting there as if they’d do something.</li>
         </ul>
       </div>
     </div>
@@ -235,7 +235,7 @@
       <div class="release-section">
         <h3>Added</h3>
         <ul>
-          <li><strong>Session names that keep themselves current.</strong> A session's name in the sidebar now follows the title Claude Code sets, so a row tells you what that agent is actually working on instead of showing a generic label. Rename a session yourself and your name wins — Ghostties stops syncing that one. Right-click and choose <strong>Sync name automatically</strong> to hand it back.</li>
+          <li><strong>Session names that keep themselves current.</strong> A session’s name in the sidebar now follows the title Claude Code sets, so a row tells you what that agent is actually working on instead of showing a generic label. Rename a session yourself and your name wins — Ghostties stops syncing that one. Right-click and choose <strong>Sync name automatically</strong> to hand it back.</li>
           <li><strong>A ghost for every session.</strong> Each session in the Sessions tab now has its own ghost character, tinted by status, in place of the plain dot. A session keeps its ghost across relaunches.</li>
           <li><strong>Collapsible Active and Archive sections.</strong> The Sessions tab splits into Active and Archive, and each one folds away. Ghostties remembers which you left open.</li>
         </ul>
@@ -260,7 +260,7 @@
         <h3>Security</h3>
         <ul>
           <li><strong>Updated Sparkle to 2.9.4</strong>, which fixes two vulnerabilities in the update framework (CVE-2026-47121 and CVE-2026-47122).</li>
-          <li><strong>MCP server discovery now reads only your own configuration.</strong> Ghostties also used to look for MCP configuration inside the project folder you opened, so opening someone else's repository could offer to launch a program that repository shipped. It now reads from <code>~/.ghostties/</code> only.</li>
+          <li><strong>MCP server discovery now reads only your own configuration.</strong> Ghostties also used to look for MCP configuration inside the project folder you opened, so opening someone else’s repository could offer to launch a program that repository shipped. It now reads from <code>~/.ghostties/</code> only.</li>
           <li><strong>Narrowed what the app is permitted to do.</strong> The shipping build no longer requests two hardened-runtime exceptions it never needed.</li>
           <li><strong>Session launcher scripts are cleaned up</strong> when a session ends, and anything left behind for more than a day is swept away at launch.</li>
           <li><strong>Fixed a path-handling flaw in <code>gt done</code></strong> that let a crafted task name reach files outside the task directory.</li>
@@ -279,7 +279,7 @@
       <div class="release-section">
         <h3>Added</h3>
         <ul>
-          <li><strong>Drag to resize the sidebar.</strong> Grab the sidebar's trailing edge and drag to make it wider or narrower. Ghostties remembers your width separately for the Sessions and Tasks views, so each stays how you left it.</li>
+          <li><strong>Drag to resize the sidebar.</strong> Grab the sidebar’s trailing edge and drag to make it wider or narrower. Ghostties remembers your width separately for the Sessions and Tasks views, so each stays how you left it.</li>
           <li><strong>Rename, stop, and relaunch sessions from the Sessions tab.</strong> Right-click any row in the Sessions tab for a menu matching the project view — Rename, Stop, Relaunch, Remove. Renaming happens inline, right on the row.</li>
           <li><strong>Cycle through live agents from the keyboard.</strong> <code>Cmd+Shift+]</code> / <code>Cmd+Shift+[</code> now step through your running sessions in sidebar order (or through task zones in Tasks view). Project cycling moved to <code>Cmd+Ctrl+]</code> / <code>Cmd+Ctrl+[</code>.</li>
         </ul>
@@ -288,7 +288,7 @@
       <div class="release-section">
         <h3>Changed</h3>
         <ul>
-          <li><strong>The Sessions list trims itself at launch.</strong> It used to keep every agent session you ever started. It now keeps everything from the last 30 days plus each project's 15 most recent, so the list stays tidy without touching any of your actual work.</li>
+          <li><strong>The Sessions list trims itself at launch.</strong> It used to keep every agent session you ever started. It now keeps everything from the last 30 days plus each project’s 15 most recent, so the list stays tidy without touching any of your actual work.</li>
         </ul>
       </div>
     </div>
@@ -336,7 +336,7 @@
       <div class="release-section">
         <h3>Fixed</h3>
         <ul>
-          <li><strong>Auto-updates now work.</strong> "Check for Updates" was silently doing nothing in beta.16 — a permission-request wedge stalled Sparkle, and the in-app update notification never rendered in the workspace window. Ghostties now checks for updates in the background and shows a notification pill when a new version is ready. <em>One catch: because the updater itself was broken in beta.16 and earlier, you'll need to install this build manually — but updates after this one will arrive on their own.</em></li>
+          <li><strong>Auto-updates now work.</strong> “Check for Updates” was silently doing nothing in beta.16 — a permission-request wedge stalled Sparkle, and the in-app update notification never rendered in the workspace window. Ghostties now checks for updates in the background and shows a notification pill when a new version is ready. <em>One catch: because the updater itself was broken in beta.16 and earlier, you’ll need to install this build manually — but updates after this one will arrive on their own.</em></li>
           <li><strong>Sidebar no longer freezes the app.</strong> Opening the project sidebar could peg the CPU and beachball the window. Fixed.</li>
         </ul>
       </div>
@@ -354,7 +354,7 @@
         <h3>Added</h3>
         <ul>
           <li><strong>Six-zone task sidebar</strong> — Inbox, Backlog, Running, Needs You, Review, and Graveyard lanes are all live. Done tasks no longer appear in Inbox.</li>
-          <li><strong>Linear Sync preset</strong> — a "Linear Sync" template in the New Session picker pre-configures the MCP server with your Linear workspace. Source dots show indigo for Linear-sourced tasks, sage for shell tasks.</li>
+          <li><strong>Linear Sync preset</strong> — a “Linear Sync” template in the New Session picker pre-configures the MCP server with your Linear workspace. Source dots show indigo for Linear-sourced tasks, sage for shell tasks.</li>
           <li><strong><code>set_task_fields</code> MCP tool</strong> — agents can write back worktree path, PR URL, branch name, and PR state directly into task files.</li>
           <li><strong>Sessions tab</strong> — sidebar now has a recents tab showing recent terminal sessions alongside tasks.</li>
           <li><strong>New Session template picker</strong> — flyout menu now shows available agent templates when starting a new session.</li>
@@ -369,7 +369,7 @@
       <div class="release-section">
         <h3>Fixed</h3>
         <ul>
-          <li><strong>"Check for Updates" visibility</strong> — progress and result messages now appear correctly in hidden-titlebar and tabbed windows (previously only showed in standard windows).</li>
+          <li><strong>“Check for Updates” visibility</strong> — progress and result messages now appear correctly in hidden-titlebar and tabbed windows (previously only showed in standard windows).</li>
           <li><strong>Auto-update channel</strong> — channel is now user-controllable via <code>defaults write com.seansmithdesign.ghostties ghostties.autoUpdateChannel beta</code> (or <code>stable</code> / <code>tip</code>). Previously hardcoded.</li>
           <li><strong><code>gt done</code> speed</strong> — done command is noticeably faster with cleaner progress output.</li>
         </ul>
@@ -378,7 +378,7 @@
       <div class="release-section">
         <h3>Performance</h3>
         <ul>
-          <li>Suppressed 1Hz sidebar re-render when session states haven't changed — reduces CPU overhead while Claude is running.</li>
+          <li>Suppressed 1Hz sidebar re-render when session states haven’t changed — reduces CPU overhead while Claude is running.</li>
         </ul>
       </div>
     </div>
@@ -422,10 +422,10 @@
         <h3>Added</h3>
         <ul>
           <li>New production app icon</li>
-          <li>Debug builds use a distinct blueprint-style icon so it's easy to tell Dev from Release at a glance</li>
+          <li>Debug builds use a distinct blueprint-style icon so it’s easy to tell Dev from Release at a glance</li>
           <li>Onboarding sheet appears on first launch — includes welcome copy, links to send feedback, and a version footer</li>
-          <li>Tasks panel now shows a "preview" callout card instead of an inline alert</li>
-          <li>Honest placeholder copy in places that aren't fully wired up yet</li>
+          <li>Tasks panel now shows a “preview” callout card instead of an inline alert</li>
+          <li>Honest placeholder copy in places that aren’t fully wired up yet</li>
         </ul>
       </div>
 

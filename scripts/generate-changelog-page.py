@@ -161,14 +161,49 @@ PAGE_FOOT = """  </div>
 VERSION_HEADING_RE = re.compile(r"^## \[(.+?)\] — (\d{4}-\d{2}-\d{2})\s*$")
 SUBSECTION_RE = re.compile(r"^### (.+?)\s*$")
 REFERENCE_LINK_RE = re.compile(r"^\[[^\]]+\]:\s+https?://\S+\s*$")
+CODE_SPAN_RE = re.compile(r"`([^`]*)`")
+
+
+def smart_quotes(text: str) -> str:
+    """Convert straight quotes/apostrophes in prose to typographic
+    equivalents. Only ever call this on prose text — never on code-span
+    contents, and never after HTML markup (e.g. href="...") has been
+    generated, or it will mangle straight quotes that must stay literal."""
+    # Contraction/possessive apostrophes: between two word characters
+    # (session's, doesn't), including one before a trailing "s".
+    text = re.sub(r"(\w)'(\w)", "\\1\u2019\\2", text)
+    # Leading apostrophe eliding a letter at the start of a word ('til).
+    text = re.sub(r"(^|\s)'(\w)", "\\1\u2019\\2", text)
+    # Double quotes: alternate opening "/closing " for each pair encountered.
+    if '"' in text:
+        parts = text.split('"')
+        rebuilt = parts[0]
+        for i, part in enumerate(parts[1:]):
+            mark = "\u201c" if i % 2 == 0 else "\u201d"
+            rebuilt += mark + part
+        text = rebuilt
+    return text
 
 
 def format_inline(text: str) -> str:
     """Escape HTML, then render the inline markdown CHANGELOG.md uses:
     `code`, [text](url), **bold**, *italic* — in that order, so code spans
-    are protected before link/emphasis markers inside them are touched."""
+    are protected before link/emphasis markers inside them are touched.
+    Smart-quotes prose (not code-span contents) before any markup with
+    literal quote characters (links) is generated."""
     text = html.escape(text, quote=False)
-    text = re.sub(r"`(.+?)`", r"<code>\1</code>", text)
+
+    # CODE_SPAN_RE.split alternates prose, code, prose, code, ... (odd
+    # indices are the captured code-span contents). Smart-quote only the
+    # prose pieces, then wrap the code pieces in <code> untouched.
+    pieces = CODE_SPAN_RE.split(text)
+    for idx in range(len(pieces)):
+        if idx % 2 == 0:
+            pieces[idx] = smart_quotes(pieces[idx])
+        else:
+            pieces[idx] = f"<code>{pieces[idx]}</code>"
+    text = "".join(pieces)
+
     text = re.sub(r"\[(.+?)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
