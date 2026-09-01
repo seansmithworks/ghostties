@@ -1,6 +1,9 @@
 #import "CEFBrowserView.h"
 #import "CEFBridge.h"
 #import <AppKit/AppKit.h>
+#if DEBUG
+#import <os/log.h>
+#endif
 
 // CEF headers are only available after running scripts/download-cef.sh.
 // When absent, the view compiles in stub mode — all methods are no-ops.
@@ -484,9 +487,14 @@ private:
 #if DEBUG
     // Diagnostic 4: the view's window state at the exact moment CreateBrowser
     // is called. Now guaranteed non-nil by the -viewDidMoveToWindow guard.
-    NSLog(@"[CEFDiag] Pre-CreateBrowser window state: window=%@ superview=%@ frame=%@",
-          self.window, self.superview, NSStringFromRect(self.frame));
-    NSLog(@"[CEFDiag] Calling CefBrowserHost::CreateBrowser (async) for url=%@", urlStr);
+    // NSLog does not honor `{public}` (that annotation only means something
+    // to os_log()/os_trace() — clang warns on the NSLog call site, and the
+    // unified log corrupts the argument decode instead of un-redacting it).
+    // os_log() is the mechanism that actually makes these values visible.
+    os_log(OS_LOG_DEFAULT,
+           "[CEFDiag] Pre-CreateBrowser window state: window=%{public}@ superview=%{public}@ frame=%{public}@",
+           self.window, self.superview, NSStringFromRect(self.frame));
+    os_log(OS_LOG_DEFAULT, "[CEFDiag] Calling CefBrowserHost::CreateBrowser (async) for url=%{public}@", urlStr);
 #endif
     CefBrowserHost::CreateBrowser(windowInfo, _client, cefURL, settings,
                                   nullptr, nullptr);
@@ -502,15 +510,16 @@ private:
                        dispatch_get_main_queue(), ^{
             CEFBrowserView *strongSelf = diagWeakSelf;
             if (!strongSelf) {
-                NSLog(@"[CEFDiag] CreateBrowser watchdog (%@s): view deallocated",
-                      delaySeconds);
+                os_log(OS_LOG_DEFAULT, "[CEFDiag] CreateBrowser watchdog (%{public}@s): view deallocated",
+                       delaySeconds);
                 return;
             }
-            NSLog(@"[CEFDiag] CreateBrowser watchdog (%@s): OnAfterCreated fired=%@ "
-                  @"window=%@ superview=%@ frame=%@",
-                  delaySeconds, strongSelf.diagAfterCreatedFired ? @"YES" : @"NO",
-                  strongSelf.window, strongSelf.superview,
-                  NSStringFromRect(strongSelf.frame));
+            os_log(OS_LOG_DEFAULT,
+                   "[CEFDiag] CreateBrowser watchdog (%{public}@s): OnAfterCreated fired=%{public}@ "
+                   "window=%{public}@ superview=%{public}@ frame=%{public}@",
+                   delaySeconds, strongSelf.diagAfterCreatedFired ? @"YES" : @"NO",
+                   strongSelf.window, strongSelf.superview,
+                   NSStringFromRect(strongSelf.frame));
         });
     }
 #endif

@@ -610,7 +610,32 @@ class WorkspaceViewContainer: NSView {
         if window.isKeyWindow {
             WorkspaceStore.shared.freezeSnapshot()
         }
+
+        // Debug-only automated CEF browser crash repro (see scripts/debug/cef-repro.sh).
+        // Fires `toggleBrowser()` — the exact same entry point the globe button's
+        // `#selector(toggleBrowser)` action uses — once the window and view
+        // hierarchy are established, so the repro is unattended but otherwise
+        // identical to a real click. Never compiled into Release.
+#if DEBUG
+        WorkspaceViewContainer.triggerDebugAutoOpenBrowserIfNeeded(on: self)
+#endif
     }
+
+#if DEBUG
+    /// Fires exactly once per process, guarded by `GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER=1`.
+    private static var didFireDebugAutoOpenBrowser = false
+    private static func triggerDebugAutoOpenBrowserIfNeeded(on container: WorkspaceViewContainer) {
+        guard !didFireDebugAutoOpenBrowser else { return }
+        guard ProcessInfo.processInfo.environment["GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER"] == "1" else { return }
+        didFireDebugAutoOpenBrowser = true
+        NSLog("[CEFDiag] GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER set — auto-triggering toggleBrowser() via the globe button's own action.")
+        // Dispatch to the next runloop turn so the window is fully key/on-screen
+        // before we drive the same path the globe button drives.
+        DispatchQueue.main.async { [weak container] in
+            container?.toggleBrowser()
+        }
+    }
+#endif
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()

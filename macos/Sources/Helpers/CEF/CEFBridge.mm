@@ -4,6 +4,7 @@
 
 #if DEBUG
 #import <SystemConfiguration/SystemConfiguration.h>
+#import <os/log.h>
 #include <unistd.h>
 #include <signal.h>
 #include <execinfo.h>
@@ -101,9 +102,15 @@ static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
     char linkTarget[PATH_MAX] = {0};
     ssize_t linkLen = readlink(cLockPath, linkTarget, sizeof(linkTarget) - 1);
     if (linkLen < 0) {
-        NSLog(@"[CEFDiag] SingletonLock: absent or not a symlink at %@ (errno=%d %s). "
-              @"posixHostname=%@ bonjourLocalHostName=%@",
-              lockPath, errno, strerror(errno), posixHostname, bonjourLocalHostName);
+        // NSLog does not honor the `{public}` privacy annotation (it is only
+        // meaningful to os_log()/os_trace() — clang warns on this at the
+        // NSLog call site, and the unified log silently corrupts the
+        // argument decode rather than un-redacting it). os_log() is the
+        // mechanism that actually makes these values visible.
+        os_log(OS_LOG_DEFAULT,
+               "[CEFDiag] SingletonLock: absent or not a symlink at %{public}@ (errno=%d %{public}s). "
+               "posixHostname=%{public}@ bonjourLocalHostName=%{public}@",
+               lockPath, errno, strerror(errno), posixHostname, bonjourLocalHostName);
         return;
     }
     linkTarget[linkLen] = '\0';
@@ -124,12 +131,13 @@ static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
         pidAlive = (kill(lockPid, 0) == 0);
     }
 
-    NSLog(@"[CEFDiag] SingletonLock target=%@ (lockHostname=%@ lockPid=%d pidAlive=%@) "
-          @"posixHostname=%@ bonjourLocalHostName=%@ hostnameMatch=%@",
-          target, lockHostname, lockPid, pidAlive ? @"YES" : @"NO",
-          posixHostname, bonjourLocalHostName,
-          ([lockHostname isEqualToString:posixHostname] ||
-           [lockHostname isEqualToString:bonjourLocalHostName]) ? @"YES" : @"NO");
+    os_log(OS_LOG_DEFAULT,
+           "[CEFDiag] SingletonLock target=%{public}@ (lockHostname=%{public}@ lockPid=%d pidAlive=%{public}@) "
+           "posixHostname=%{public}@ bonjourLocalHostName=%{public}@ hostnameMatch=%{public}@",
+           target, lockHostname, lockPid, pidAlive ? @"YES" : @"NO",
+           posixHostname, bonjourLocalHostName,
+           ([lockHostname isEqualToString:posixHostname] ||
+            [lockHostname isEqualToString:bonjourLocalHostName]) ? @"YES" : @"NO");
 }
 
 /// Logs a symbolized backtrace tagged [CEFDiag], one frame per line so it
@@ -140,14 +148,14 @@ static void GhosttiesLogBacktrace(const char *reason) {
     void *frames[64];
     int count = backtrace(frames, 64);
     char **symbols = backtrace_symbols(frames, count);
-    NSLog(@"[CEFDiag] %s — backtrace (%d frames):", reason, count);
+    os_log(OS_LOG_DEFAULT, "[CEFDiag] %{public}s — backtrace (%d frames):", reason, count);
     if (symbols) {
         for (int i = 0; i < count; i++) {
-            NSLog(@"[CEFDiag]   #%d %s", i, symbols[i]);
+            os_log(OS_LOG_DEFAULT, "[CEFDiag]   #%d %{public}s", i, symbols[i]);
         }
         free(symbols);
     } else {
-        NSLog(@"[CEFDiag]   (backtrace_symbols failed, errno=%d %s)", errno, strerror(errno));
+        os_log(OS_LOG_DEFAULT, "[CEFDiag]   (backtrace_symbols failed, errno=%d %{public}s)", errno, strerror(errno));
     }
 }
 
@@ -163,7 +171,7 @@ static void GhosttiesAtExitHandler(void) {
 /// crash still produces its normal report/termination — this only adds a
 /// log line ahead of it, it does not change what happens to the process.
 static void GhosttiesSignalHandler(int signo) {
-    // NSLog and backtrace_symbols are not async-signal-safe. This is a
+    // os_log() and backtrace_symbols are not async-signal-safe. This is a
     // Debug-only diagnostic build where "some evidence, maybe corrupted" beats
     // "no evidence" — acceptable tradeoff here, not for shipping code.
     GhosttiesLogBacktrace("signal handler fired");
@@ -305,7 +313,7 @@ static void GhosttiesInstallExitDiagnostics(void) {
     CefRefPtr<GhosttiesApp> app(new GhosttiesApp());
     bool success = CefInitialize(mainArgs, settings, app, nullptr);
 #if DEBUG
-    NSLog(@"[CEFDiag] CefInitialize returned %@", success ? @"true" : @"false");
+    os_log(OS_LOG_DEFAULT, "[CEFDiag] CefInitialize returned %{public}@", success ? @"true" : @"false");
 #endif
     if (!success) {
         NSLog(@"[CEFBridge] CefInitialize failed.");
@@ -367,8 +375,8 @@ static void GhosttiesInstallExitDiagnostics(void) {
 
 + (void)_appWillTerminate:(NSNotification *)note {
 #if DEBUG
-    NSLog(@"[CEFDiag] NSApplicationWillTerminateNotification fired at %@",
-          [NSDate date]);
+    os_log(OS_LOG_DEFAULT, "[CEFDiag] NSApplicationWillTerminateNotification fired at %{public}@",
+           [NSDate date]);
 #endif
     [self shutdown];
 }
