@@ -332,38 +332,73 @@ function sha256File(filePath) {
 // ---------------------------------------------------------------------------
 
 function verifyCodeSignature(appPath) {
-  // codesign writes its -dv/--verbose output to stderr regardless of
-  // success or failure, so both streams have to be captured explicitly —
-  // execFileSync only returns stdout on success.
-  const result = spawnSync("codesign", ["-dv", "--verbose=4", appPath], {
-    encoding: "utf8",
-  });
+  // Two separate codesign calls are required here, not one — they check
+  // different things and neither substitutes for the other:
+  //   `-dv --verbose=4` DISPLAYS signing info (who signed it) but does not
+  //   validate the signature against what's actually on disk; a bundle
+  //   tampered with after signing will still print a readable
+  //   TeamIdentifier and exit 0 under `-dv` alone.
+  //   `--verify --deep --strict` VALIDATES the signature against the
+  //   bundle's current bytes, but doesn't print the identity.
+  // Run --verify first and fail fast: an invalid signature makes the
+  // identity from -dv meaningless, so there's no point reading it.
+  //
+  // codesign writes its output to stderr for both invocations regardless
+  // of success or failure, so both streams have to be captured explicitly
+  // — execFileSync only returns stdout on success.
+  const verifyResult = spawnSync(
+    "codesign",
+    ["--verify", "--deep", "--strict", appPath],
+    { encoding: "utf8" },
+  );
 
-  if (result.error) {
+  if (verifyResult.error) {
     throw new InstallError(
-      `Could not run codesign to verify ${appPath}: ${result.error.message}`,
+      `Could not run codesign to verify ${appPath}: ${verifyResult.error.message}`,
     );
   }
 
-  const output = `${result.stdout || ""}${result.stderr || ""}`;
+  const verifyOutput = `${verifyResult.stdout || ""}${verifyResult.stderr || ""}`;
 
-  if (result.status !== 0) {
+  if (verifyResult.status !== 0) {
     throw new InstallError(
       "Code signature verification FAILED.\n" +
-        `codesign could not verify ${appPath}:\n${output || `exit code ${result.status}`}\n` +
+        `codesign reports the signature on ${appPath} does not match its contents:\n` +
+        `${verifyOutput || `exit code ${verifyResult.status}`}\n` +
+        "The bundle may have been altered after signing. Not installing.",
+    );
+  }
+
+  const displayResult = spawnSync("codesign", ["-dv", "--verbose=4", appPath], {
+    encoding: "utf8",
+  });
+
+  if (displayResult.error) {
+    throw new InstallError(
+      `Could not run codesign to read the signing identity of ${appPath}: ${displayResult.error.message}`,
+    );
+  }
+
+  const displayOutput = `${displayResult.stdout || ""}${displayResult.stderr || ""}`;
+
+  if (displayResult.status !== 0) {
+    throw new InstallError(
+      "Code signature verification FAILED.\n" +
+        `codesign could not read signing info for ${appPath}:\n` +
+        `${displayOutput || `exit code ${displayResult.status}`}\n` +
         "This build will not be installed — it may be corrupted or tampered with.",
     );
   }
 
-  const match = output.match(/TeamIdentifier=([A-Z0-9]+)/);
+  const match = displayOutput.match(/TeamIdentifier=([A-Z0-9]+)/);
   const teamId = match ? match[1] : null;
   if (teamId !== EXPECTED_TEAM_ID) {
     throw new InstallError(
       "Code signature verification FAILED.\n" +
         `  expected team identifier: ${EXPECTED_TEAM_ID}\n` +
         `  actual:                   ${teamId || "(not found)"}\n` +
-        "The app bundle is not signed by the identity Ghostties releases are signed with. " +
-        "Not installing.",
+        "The signature is valid but signed by an identity other than the one Ghostties " +
+        "releases are signed with. Not installing.",
     );
   }
 }
