@@ -14,6 +14,19 @@ public struct SessionComposerCommitError: Error, CustomStringConvertible, Equata
     }
 }
 
+/// The single copy of the "typed branch has no worktree" message — shared by
+/// `SessionComposerCommandParser.resolveCommitWorktreePathForCommit` (the
+/// commit-time path) and `SessionComposerStore.rejectUnresolvedBranch(token:)`
+/// (the live-typing path), so the two call sites cannot drift into two
+/// different strings again. The branch/project picker this used to point at
+/// no longer exists (ultra-minimal variant C) — the message only tells the
+/// user what to do with the text field they still have.
+public enum SessionComposerCopy {
+    public static func unresolvedBranchMessage(token: String) -> String {
+        "No worktree found for branch \"\(token)\". Type an existing branch name or clear it."
+    }
+}
+
 /// Pure, testable command-grammar parsing for the session composer's
 /// text-forward command entry (command grammar slice 1). Neither type here
 /// touches SwiftUI or `@MainActor` state — see `SessionComposerRanking.swift`
@@ -1258,7 +1271,7 @@ public enum SessionComposerCommandParser {
         case .isDefaultBranch:
             return .success(nil)
         case .unresolved(let token):
-            return .failure(SessionComposerCommitError(message: "No worktree found for branch \"\(token)\". Pick one from the branch picker or clear the typed branch."))
+            return .failure(SessionComposerCommitError(message: SessionComposerCopy.unresolvedBranchMessage(token: token)))
         case .pending:
             return .failure(SessionComposerCommitError(message: "Still checking branches for this project — try again in a moment."))
         }

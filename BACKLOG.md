@@ -1,5 +1,38 @@
 # Ghostties — Backlog
 
+## 2026-09-01 — PR #155 review follow-ups (ultra-minimal composer variant C)
+
+**Not fixed, deliberately — found by review, deferred:**
+
+- [ ] A junk `command: nil` template is still producible via **Save**, not just abandon.
+  `TemplatePickerView.save()` passes `command: trimmedCommand.isEmpty ? nil : trimmedCommand`,
+  and `WorkspaceStore.updateTemplate` treats `nil` as "leave unchanged." Create a template,
+  leave Command blank, press Save → persisted `.custom` template with `command: nil`,
+  byte-identical to the three junk rows already in Sean's workspace. The abandon path
+  (`TemplateEditForm.onDisappear`) is fixed; this one is not.
+- [ ] Dead surface intentionally left in place after the trailing-control removal:
+  `trailingControlVisibility` (`SessionComposerPalette.swift:1521`), `projectControl`
+  (`:1663`), `branchControl` (`:1696`), `inlineProjectPicker` (`:1749`), `inlineBranchPicker`
+  (`:1765`), `ProjectDropdownView` (`:2907`), `WorktreeDropdownView` (`:3061`, ~500 lines with
+  keyboard-capture layers), the `.onChange(of: isBranchPickerOpen)` `refreshWorktrees` trigger
+  (`:1652`), and three accessibility label constants (`:86-88`). Tests now asserting
+  unreachable behaviour: all 8 in `SessionComposerTrailingControlTests.swift`, plus
+  `AccessibilityTests.swift:263-268`. Nothing sets `isProjectPickerOpen`/`isBranchPickerOpen`
+  to `true` any more. Sean has not decided whether to delete any of this.
+- [ ] `isNewlyCreated` correctness rests on an unenforced invariant across two independent
+  `@State` vars (`newTemplateToEdit` + `newTemplateToEditIsFresh`). Correct today at all three
+  assignment sites; carrying the flag inside the sheet item as a two-field struct would make
+  desync unrepresentable.
+- [ ] `TemplatePickerView` has zero instantiation sites but its doc comment (`:5-9`) still
+  claims it is "Shown when the user clicks 'New Session' in the detail panel."
+- [ ] A doc comment names the wrong file for the root cause of the junk-template bug: the
+  `isNewlyCreated` doc comment on `TemplateEditForm` (`TemplatePickerView.swift`, ~line 435)
+  and this same backlog entry's own historical phrasing both point at the old
+  `TemplatePickerView.addCustomTemplate()` flow; the actual current culprit is
+  `SessionComposerPalette.commitNewTemplate()` (`:1835` at review time), which adds the
+  template to the store before `TemplateEditForm` ever runs. Correct the doc comment to name
+  `commitNewTemplate()` directly.
+
 ## 2026-09-01 — open items after the beta.24 release and pipeline work
 
 **Waiting on Sean (both one-time):**
@@ -89,20 +122,18 @@ result**; this repo does not require branches be up to date before merge.
   fix the pattern (dynamic latest-release resolution + set the two Homebrew repo settings) or
   hand-bump both each release.
 
-- [ ] **NEW — composer surface redesign, 7 directions drawn, awaiting Sean's pick.** The
-  trailing branch dropdown inside the field is to be REMOVED (Sean's call, 2026-08-30);
-  text input stays clean. Variant sheet at
-  `<scratchpad>/composer-variants.html`. A scope pills · B pure prediction · C absolute
-  minimum (**closest to what ships today**) · D grouped section headers (**Spotlight**) ·
-  E field-as-destination ghost text · F operator footer (**Raycast action bar**) ·
-  G = D+F (**Raycast**). Effort sized from source: D is ~30 lines — `ComposerResultsTable`
-  already takes four named lanes (`Recent`/`Templates`/`Projects`/`Command`,
-  `SessionComposerPalette.swift:1387`) and Composer UI 11 Step 2 deliberately REMOVED the
-  visible `title` field, keeping only `accessibilityLabel` (`:2532`). F needs a stage→
-  operators map in `SessionComposerCommandParser` plus a three-way precedence rule for the
-  strip slot (`:1450`) it shares with errors and the new-template naming field. Both shift
-  row positions, so **snapshot tests will need retuning**. Note G reverses the `V02Quieted222`
-  decision to quiet those headers.
+- [x] **DONE — composer surface redesign resolved: variant C, ultra-minimal, shipped in
+  PR #155.** Sean picked C (absolute minimum, closest to what shipped before this change) —
+  the trailing `projectControl`/`branchControl` buttons are removed from the query row
+  entirely; the results list is the only remaining mouse route into projects/templates.
+  Variants A (scope pills), B (pure prediction), D (grouped section headers/Spotlight), E
+  (field-as-destination ghost text), F (operator footer/Raycast action bar), and G (D+F) were
+  NOT built. Same PR also fixed the persisted "New Template" junk-row bug (root cause:
+  `TemplatePickerView.swift`'s `TemplateEditForm` added the template to the store before the
+  user configured it, and dismissing the follow-up edit sheet without saving left an empty,
+  `command: nil` template behind forever — fixed with an `onDisappear` cleanup gated on
+  `isNewlyCreated`/`didSave`). The 3 junk rows already in Sean's `workspace.json` are historical
+  data from before this fix; they are NOT auto-purged — see the PR for manual removal steps.
 
 - [x] **DONE — worktrees reclaimed.** `.claude/worktrees/` 28G → 3.0G, disk free 66G → 117G.
   21 trees removed, all branches intact. Kept `session-2` (uncommitted docs under
@@ -2098,3 +2129,7 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [ ] CHANGELOG entry for #141
 - [ ] Tag beta.24; unpin both distribution surfaces from beta.22
 - [ ] Re-run full suite on a QUIET machine — last 3 runs each showed 6 failures in `SessionComposerWorktreeLaunchTests`/`GitWorktreeCreationTests`, clean in isolation every time (parallel-agent load).
+
+## 2026-09-01 — PR #155 review round 2
+
+- [ ] **The macOS test target is never executed in CI.** `.github/workflows/test-ghostties.yml:151-155` runs `xcodebuild build-for-testing` only — compiled, never run. The `swift test` job covers `cli/` alone. Every macOS test in this repo rests on a local run by whoever last touched it. This is why fail-open assertions and unpinned globals matter more here than they would elsewhere. | quality | new

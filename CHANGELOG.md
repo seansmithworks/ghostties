@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **The composer field row drops its trailing project/branch buttons too** — the results list below the field is now the only way to browse projects and templates. No mouse route into a branch or project picker remains on the field row itself.
+
+### Fixed
+
+- **Abandoning a just-created template's edit sheet no longer leaves a junk, unconfigured template behind.** Opening "New template" and then dismissing without saving (Cancel, Esc, or clicking outside) used to persist an empty `command: nil` row forever.
+
+---
+
 ## [0.1.0-beta.24] — 2026-08-31
 
 The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into. Sidebar status now reads what Claude Code is actually doing rather than guessing at it from terminal text.

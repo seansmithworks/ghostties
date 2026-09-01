@@ -221,6 +221,43 @@ struct SessionComposerSnapshotTests {
         return count
     }
 
+    /// Fix 2 (review, PR #155): the field row itself — where
+    /// `projectControl`/`branchControl` used to render a trailing
+    /// `chevron.down` — is invisible to every other helper in this file:
+    /// `selectionHighlightPixelCount` only looks at the results ROWS, and
+    /// `containsRenderedContent` is a whole-image "not blank" check. Diffing
+    /// this fixture's own evidence PNG before/after the trailing-control
+    /// removal (`docs/plans/composer-ui-11/evidence/step5-line-deleted-light.png`
+    /// pre- vs. post-removal, pixel-for-pixel) located the chevron at
+    /// backing `x` 691-709, `y` 225-235 — this band (card-relative right
+    /// ~77px, `cardTop+8..<cardTop+70`, clear of both the card's own top
+    /// border and the hairline at `cardTop+76`) contains it with margin.
+    /// The upper `x` bound stops short of the card's own rounded top-right
+    /// corner — its antialiasing alone contributes a handful of
+    /// near-background pixels right at the edge (measured directly: 9 such
+    /// pixels once `x` runs all the way to `pixelsWide - 17`, 0 once
+    /// trimmed to `pixelsWide - 25`).
+    /// Counts pixels darker than the card's near-white background;
+    /// mutant-verified against the pre-removal capture (17 such pixels at
+    /// this stride) vs. the current render (0).
+    private func fieldRowTrailingPixelCount(in data: Data) -> Int {
+        guard let rep = NSBitmapImageRep(data: data) else { return -1 }
+        guard let cardTop = cardTopEdge(in: data) else { return -1 }
+        var count = 0
+        let minX = max(0, rep.pixelsWide - 102)
+        let maxX = max(minX, rep.pixelsWide - 25)
+        for x in stride(from: minX, to: maxX, by: 2) {
+            for y in stride(from: cardTop + 8, to: min(cardTop + 70, rep.pixelsHigh), by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if r < 250 || g < 250 || b < 250 { count += 1 }
+            }
+        }
+        return count
+    }
+
     /// Card-relative scope anchor for `ghostGrayBandPixelCount`/
     /// `ghostGrayBandYSpan` below. Finds the topmost row containing any
     /// opaque pixel (alpha `> 0.5`) — the card's own top edge, since the
@@ -553,15 +590,44 @@ struct SessionComposerSnapshotTests {
         if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the long-path ghost/card content to render, got a near-blank card") }
     }
 
-    // MARK: - Step 5: resolution line deleted, trailing controls shown
+    // MARK: - Step 5 / ultra-minimal: resolution line AND trailing controls gone
 
-    /// An UNLOCKED project (`.open`, not `.locked`) so `projectControl`
-    /// renders — `trailingControlVisibility`'s locked-hides-projectControl
-    /// branch is covered structurally by `SessionComposerTrailingControlTests`,
-    /// not a second screenshot. Proves the resolution line is gone (field +
-    /// hairline + rows only) and the trailing controls are the field row's
-    /// mouse route now.
-    @Test func step5LineDeletedShowsTrailingControlsLightAndDark() {
+    /// An UNLOCKED project (`.open`, not `.locked`) — the project-lock state
+    /// no longer changes what renders in the field row at all now that
+    /// `projectControl`/`branchControl` are gone (Sean's ultra-minimal call,
+    /// 2026-08-30); kept unlocked only so this fixture matches
+    /// `SessionComposerTrailingControlTests`' other cases. Proves three
+    /// things, one assertion each: the results rows survived the
+    /// resolution-line deletion (`selectionHighlightPixelCount`), the field
+    /// row's own trailing edge is empty — no stranded chevron
+    /// (`fieldRowTrailingPixelCount`) — and dark mode still renders
+    /// something, not a blank card (`containsRenderedContent`).
+    ///
+    /// Fix 3 (review round 2, PR #155): `isModelBFieldEnabled` is
+    /// `@AppStorage(ComposerGhostTextField.modelBFieldStorageKey)` on
+    /// process-global `UserDefaults.standard`.
+    /// `mountedModelBGhostTracksHighlightedRowAcrossProjects` below sets
+    /// it `true` and pumps a re-entrant `RunLoop.main.run(until:)`, four
+    /// times over its parameterized cases; any `@MainActor` test scheduled
+    /// in one of those windows would otherwise render
+    /// `ComposerGhostTextField` here instead of `ComposerQueryField` and
+    /// silently pass regardless of which field actually renders. Pinned
+    /// `false` with the same defer-restore shape used at this file's own
+    /// `:1007`, `ComposerFieldToggleTests.swift:26`, and
+    /// `ComposerGhostTextFieldTests.swift:29`.
+    @Test func step5LineAndTrailingControlsDeletedLightAndDark() {
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(false, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
@@ -582,12 +648,14 @@ struct SessionComposerSnapshotTests {
         if let light {
             let highlightCount = selectionHighlightPixelCount(in: light)
             #expect(highlightCount > 100, "expected a selected row 0 (rows survived the resolution-line deletion), found \(highlightCount) accent-tinted pixels")
+            let trailingCount = fieldRowTrailingPixelCount(in: light)
+            #expect(trailingCount == 0, "expected the field row's trailing edge to be empty (no stranded chevron), found \(trailingCount) non-background pixels")
         }
 
         let dark = renderPNG(view, appearance: .darkAqua, size: size)
         writeEvidence(dark, filename: "step5-line-deleted-dark.png")
         #expect(dark != nil)
-        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the field/hairline/rows/trailing controls to render, got a near-blank card") }
+        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the field/hairline/rows to render, got a near-blank card") }
     }
 
     // MARK: - Step 3: ghost placeholder opacity
