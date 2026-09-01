@@ -92,6 +92,24 @@ jobs:
             echo "is_beta=false" >> $GITHUB_OUTPUT
           fi
 
+      # Gate on an undocumented release BEFORE anything is built or published —
+      # 30 seconds in, nothing to unwind. Moving this same check downstream
+      # (inside the release job) is what beta.23 would have broken: its tag
+      # predates its own CHANGELOG.md entry (the changelog is maintained on
+      # main and can legitimately be updated after a tag is cut), so the
+      # check has to read main's CHANGELOG.md, never the tag's. Skipped on
+      # workflow_dispatch — its synthesized "0.0.0-dryrun.<sha>" version has
+      # no changelog section by construction and isn't a real release.
+      - name: Verify changelog entry exists (gate — before any build)
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.extract.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git show origin/main:CHANGELOG.md > changelog-main.md
+          python3 scripts/extract-release-notes.py "$VERSION" changelog-main.md >/dev/null
+
   # ---------------------------------------------------------------------------
   # build-macos: Build, sign, notarize, and package the Ghostties app
   # ---------------------------------------------------------------------------
@@ -590,12 +608,71 @@ jobs:
           # so the meta line on /download stays in sync with the binary.
           python3 scripts/update-web-version.py "$TAG_NAME" "$DMG_SIZE_BYTES"
 
-          git add web/appcast-beta.xml web/appcast-stable.xml scripts/update-web-version.py web/index.html web/download.html
+          # Regenerate web/changelog.html from main's CHANGELOG.md so it never
+          # drifts from the source of truth.
+          python3 scripts/generate-changelog-page.py
+
+          git add web/appcast-beta.xml web/appcast-stable.xml scripts/update-web-version.py web/index.html web/download.html web/changelog.html
           if git diff --cached --quiet; then
             echo "No appcast changes to commit."
           else
             git commit -m "chore(appcast): update from ${GITHUB_REF_NAME} [skip ci]"
-            git push origin main
+
+            # main can advance while the ~40min build runs (Sean often has
+            # several parallel sessions). A rejected push here must not sink
+            # the whole release — release job needs this job to succeed, and
+            # the DMG is already signed and notarized by this point. Retry a
+            # bounded number of times: fetch, rebase onto the new tip, push
+            # again. A real rebase conflict (someone else touched the same
+            # web files) aborts and fails loudly rather than guessing at a
+            # resolution.
+            PUSH_OK=false
+            for attempt in 1 2 3 4 5; do
+              if git push origin main; then
+                PUSH_OK=true
+                break
+              fi
+              echo "Push rejected (attempt ${attempt}/5) — main advanced. Rebasing…"
+
+              # Guarded explicitly (not left to the default `bash -e`): a
+              # transient network fetch failure must consume a retry, not
+              # kill the step that exists to survive transients.
+              if ! git fetch origin main; then
+                echo "Fetch failed (attempt ${attempt}/5) — network flake, retrying…"
+                sleep 5
+                continue
+              fi
+
+              if ! git rebase origin/main; then
+                GIT_DIR="$(git rev-parse --git-dir)"
+                if [[ -d "$GIT_DIR/rebase-merge" || -d "$GIT_DIR/rebase-apply" ]]; then
+                  echo "::error::Rebase onto origin/main hit a real conflict on the appcast/web files. Aborting rather than guessing at a resolution."
+                  git rebase --abort
+                else
+                  echo "::error::Rebase onto origin/main could not even start (dirty working tree) — not a conflict."
+                fi
+                exit 1
+              fi
+
+              # A parallel session (Sean routinely runs 2-7) may have landed
+              # its own CHANGELOG.md change during this rebase. The rebase
+              # can succeed cleanly even though CHANGELOG.md moved — no
+              # conflict, different file — leaving web/changelog.html stale
+              # relative to the CHANGELOG.md now underneath it. Regenerate
+              # from the freshly-rebased source and fold it into the same
+              # commit before retrying the push.
+              python3 scripts/generate-changelog-page.py
+              git add web/changelog.html
+              if ! git diff --cached --quiet; then
+                git commit --amend --no-edit
+              fi
+
+              sleep 5
+            done
+            if [[ "$PUSH_OK" != "true" ]]; then
+              echo "::error::Failed to push to main after 5 attempts."
+              exit 1
+            fi
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -616,6 +693,12 @@ jobs:
       IS_BETA: ${{ needs.setup.outputs.is_beta }}
       GHOSTTIES_VERSION: ${{ needs.setup.outputs.version }}
     steps:
+      # Checkout must come before the artifact downloads below — actions/checkout
+      # defaults to `clean: true` and runs `git clean -ffdx`, which would wipe
+      # the downloaded DMG/appcast files if it ran after them.
+      - name: Checkout code
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
       - name: Download macOS artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -625,6 +708,26 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: appcasts
+
+      # Non-fatal by design: the DMG is already signed, notarized, and
+      # public as a CI artifact by this point, and appcast has already
+      # pushed the version bump to main. This step must never be what kills
+      # a release whose artifacts are already out — fall back to a minimal
+      # body instead of failing. The real gate lives in `setup`, before
+      # anything was built. CHANGELOG.md is read from main (not this job's
+      # tag checkout) because the changelog can legitimately be updated
+      # after its tag was cut — see beta.23, whose entry postdates its tag.
+      - name: Extract release notes
+        run: |
+          set -uo pipefail
+          git fetch origin main
+          git show origin/main:CHANGELOG.md > changelog-main.md
+          if ! python3 scripts/extract-release-notes.py "$GHOSTTIES_VERSION" changelog-main.md > release-notes.md; then
+            echo "::warning::No changelog section for v${GHOSTTIES_VERSION} — falling back to a minimal release body."
+          fi
+          if [[ ! -s release-notes.md ]]; then
+            echo "Ghostties v${GHOSTTIES_VERSION}" > release-notes.md
+          fi
 
       - name: Create GitHub Release
         env:
@@ -640,7 +743,7 @@ jobs:
             $PRERELEASE_FLAG \
             --repo "$REPOSITORY" \
             --title "Ghostties v${GHOSTTIES_VERSION}" \
-            --notes "Ghostties v${GHOSTTIES_VERSION}" \
+            --notes-file release-notes.md \
             Ghostties.dmg \
             ghostties-macos-arm64.zip \
             appcast-stable.xml \
@@ -725,3 +828,282 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ env.HOMEBREW_TAP_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # verify-release: Assert every live distribution surface actually reports the
+  # released version — not that the steps that publish it merely ran. This is
+  # the check that would have caught beta.24 shipping with a stale changelog
+  # page, an empty release body, etc: those steps all reported success while
+  # doing nothing. Runs last; failing here does NOT unpublish anything (the
+  # release already exists by this point) — the value is a visible red X
+  # instead of silent drift.
+  # ---------------------------------------------------------------------------
+  verify-release:
+    needs: [setup, release]
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GHOSTTIES_VERSION: ${{ needs.setup.outputs.version }}
+      TAG: ${{ needs.setup.outputs.tag }}
+      REPOSITORY: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    timeout-minutes: 25
+    steps:
+      - name: Verify live release surfaces
+        run: |
+          VERSION="$GHOSTTIES_VERSION"
+          FAIL=0
+          ROWS=()
+
+          row() {
+            # $1=surface $2=expected $3=actual $4=PASS|FAIL|PENDING|NOT VERIFIED
+            ROWS+=("$1|$2|$3|$4")
+            if [[ "$4" == "FAIL" ]]; then FAIL=1; fi
+          }
+
+          # Retries $* up to $attempts times, $delay seconds apart. The appcast
+          # commit triggers a Vercel deploy that isn't instant, so the web
+          # checks below need to tolerate a short propagation window rather
+          # than failing on the first cold read.
+          poll() {
+            local attempts="$1" delay="$2"
+            shift 2
+            local i=1
+            while (( i <= attempts )); do
+              if "$@"; then
+                return 0
+              fi
+              echo "  attempt ${i}/${attempts} not current yet (status: ${STATUS:-unknown}), retrying in ${delay}s…"
+              sleep "$delay"
+              i=$((i + 1))
+            done
+            return 1
+          }
+
+          # Fetches $2 into $1, always capturing the HTTP status separately
+          # from curl's own exit code — a redirect, 4xx, or 5xx must never
+          # be read as "the page loaded and the version is wrong" (FAIL);
+          # it means we couldn't verify at all (NOT VERIFIED). No -f/-L:
+          # ghostties.org serves these pages directly with no redirect, so
+          # a 3xx here is itself a signal something's off, not something to
+          # silently follow.
+          curl_get() {
+            local outfile="$1" url="$2"
+            HTTP_CODE=$(curl -sS --max-time 20 --retry 2 --retry-delay 2 \
+              -o "$outfile" -w '%{http_code}' "$url" 2>/tmp/curl-stderr.log)
+            return $?
+          }
+
+          # Anchors a version match so "0.1.0" cannot match inside
+          # "0.1.0-beta.24" — a plain substring grep would pass vacuously
+          # the moment a stable release ships alongside its own betas.
+          version_present() {
+            local file="$1" esc
+            esc=$(printf '%s' "$VERSION" | sed 's/[.]/\\./g')
+            grep -Pq "v${esc}(?![0-9.])" "$file"
+          }
+
+          # --- 1. Sparkle beta appcast ---
+          check_appcast() {
+            if ! curl_get /tmp/appcast.xml "https://ghostties.org/appcast-beta.xml"; then
+              STATUS="unreachable"; ACTUAL="<curl error, see log>"; return 1
+            fi
+            if [[ "$HTTP_CODE" != "200" ]]; then
+              STATUS="unreachable"; ACTUAL="HTTP ${HTTP_CODE}"; return 1
+            fi
+            ACTUAL=$(grep -o 'sparkle:shortVersionString>[^<]*' /tmp/appcast.xml | head -1 | cut -d'>' -f2)
+            if [[ "$ACTUAL" == "$VERSION" ]]; then
+              STATUS="ok"; return 0
+            fi
+            STATUS="stale"; return 1
+          }
+          if poll 10 30 check_appcast; then
+            row "Sparkle appcast (beta)" "$VERSION" "$ACTUAL" "PASS"
+          elif [[ "$STATUS" == "unreachable" ]]; then
+            row "Sparkle appcast (beta)" "$VERSION" "$ACTUAL" "NOT VERIFIED"
+          else
+            row "Sparkle appcast (beta)" "$VERSION" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 2. Appcast enclosure URL actually resolves ---
+          # The whole beta.24 failure class was "a surface points at
+          # something that isn't there" — this is the one check that would
+          # have caught a DMG URL the appcast advertises but that 404s.
+          # Range request (`-r 0-0`) so this doesn't pull down the full DMG.
+          check_dmg_url() {
+            if ! curl_get /tmp/appcast-dmg.xml "https://ghostties.org/appcast-beta.xml"; then
+              STATUS="unreachable"; ACTUAL="<curl error fetching appcast>"; return 1
+            fi
+            if [[ "$HTTP_CODE" != "200" ]]; then
+              STATUS="unreachable"; ACTUAL="HTTP ${HTTP_CODE} (appcast)"; return 1
+            fi
+            local url code
+            url=$(grep -o 'url="[^"]*Ghostties\.dmg"' /tmp/appcast-dmg.xml | head -1 | sed -e 's/^url="//' -e 's/"$//')
+            if [[ -z "$url" ]]; then
+              STATUS="unreachable"; ACTUAL="<no enclosure url in appcast>"; return 1
+            fi
+            code=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -L -r 0-0 "$url" 2>/tmp/curl-stderr.log)
+            ACTUAL="${url} (HTTP ${code})"
+            if [[ "$code" == "200" || "$code" == "206" ]]; then
+              STATUS="ok"; return 0
+            fi
+            STATUS="stale"; return 1
+          }
+          if poll 6 20 check_dmg_url; then
+            row "Appcast DMG URL resolves" "200/206" "$ACTUAL" "PASS"
+          elif [[ "$STATUS" == "unreachable" ]]; then
+            row "Appcast DMG URL resolves" "200/206" "$ACTUAL" "NOT VERIFIED"
+          else
+            row "Appcast DMG URL resolves" "200/206" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 3. Homepage ---
+          # Every semver-shaped token on the page must equal this release's
+          # version — that catches both "not updated" and "updated but an
+          # older beta.N is still visible somewhere else on the page."
+          check_homepage() {
+            if ! curl_get /tmp/homepage.html "https://ghostties.org/"; then
+              STATUS="unreachable"; ACTUAL="<curl error, see log>"; return 1
+            fi
+            if [[ "$HTTP_CODE" != "200" ]]; then
+              STATUS="unreachable"; ACTUAL="HTTP ${HTTP_CODE}"; return 1
+            fi
+            local found
+            found=$(grep -oE '0\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?' /tmp/homepage.html | sort -u | tr '\n' ',' | sed 's/,$//')
+            ACTUAL="$found"
+            if [[ "$found" == "$VERSION" ]]; then
+              STATUS="ok"; return 0
+            fi
+            STATUS="stale"; return 1
+          }
+          if poll 10 30 check_homepage; then
+            row "Homepage (ghostties.org)" "$VERSION" "$ACTUAL" "PASS"
+          elif [[ "$STATUS" == "unreachable" ]]; then
+            row "Homepage (ghostties.org)" "$VERSION" "$ACTUAL" "NOT VERIFIED"
+          else
+            row "Homepage (ghostties.org)" "$VERSION" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 4. Changelog page ---
+          check_changelog() {
+            if ! curl_get /tmp/changelog.html "https://ghostties.org/changelog"; then
+              STATUS="unreachable"; ACTUAL="<curl error, see log>"; return 1
+            fi
+            if [[ "$HTTP_CODE" != "200" ]]; then
+              STATUS="unreachable"; ACTUAL="HTTP ${HTTP_CODE}"; return 1
+            fi
+            if version_present /tmp/changelog.html; then
+              ACTUAL="present"; STATUS="ok"; return 0
+            fi
+            ACTUAL="missing"; STATUS="stale"; return 1
+          }
+          if poll 10 30 check_changelog; then
+            row "Changelog page" "v${VERSION} present" "$ACTUAL" "PASS"
+          elif [[ "$STATUS" == "unreachable" ]]; then
+            row "Changelog page" "v${VERSION} present" "$ACTUAL" "NOT VERIFIED"
+          else
+            row "Changelog page" "v${VERSION} present" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 5. GitHub Release ---
+          # No polling needed — this is the authoritative record the release
+          # job just wrote to, not a downstream mirror with propagation lag.
+          check_release() {
+            local assets body esc
+            assets=$(gh release view "$TAG" --repo "$REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null) || return 1
+            body=$(gh release view "$TAG" --repo "$REPOSITORY" --json body --jq '.body' 2>/dev/null) || return 1
+            ACTUAL=$(echo "$assets" | tr '\n' ',' | sed 's/,$//')
+            if [[ -z "$body" ]]; then
+              ACTUAL="${ACTUAL} | body: <empty>"
+              return 1
+            fi
+            esc=$(printf '%s' "$VERSION" | sed 's/[.]/\\./g')
+            if ! echo "$body" | grep -Pq "v${esc}(?![0-9.])"; then
+              ACTUAL="${ACTUAL} | body: present but missing v${VERSION}"
+              return 1
+            fi
+            echo "$assets" | grep -qx "Ghostties.dmg" && echo "$assets" | grep -qx "ghostties-macos-arm64.zip"
+          }
+          ACTUAL="<not found>"
+          if check_release; then
+            row "GitHub Release ${TAG}" "assets + non-empty notes with v${VERSION}" "$ACTUAL" "PASS"
+          else
+            row "GitHub Release ${TAG}" "assets + non-empty notes with v${VERSION}" "$ACTUAL" "FAIL"
+          fi
+
+          # --- 6. Homebrew tap cask ---
+          # Conditional: the tap repo only exists once Sean sets HOMEBREW_TAP_REPO
+          # (see the homebrew-cask job above). Silently skipping this surface is
+          # exactly the drift class this job exists to catch, so an unset
+          # variable is a loud NOT VERIFIED row, never a quiet pass. The
+          # homebrew-cask job only ever opens a PR against the tap — it never
+          # merges — so a behind cask with an open update PR is a pending,
+          # human-in-the-loop state, not a pipeline failure.
+          if [[ -z "$HOMEBREW_TAP_REPO" ]]; then
+            echo "::warning::HOMEBREW_TAP_REPO is not set — Homebrew tap cask NOT VERIFIED."
+            row "Homebrew tap cask" "$VERSION" "HOMEBREW_TAP_REPO unset" "NOT VERIFIED"
+          else
+            check_tap() {
+              if [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]]; then
+                STATUS="unreachable"; ACTUAL="HOMEBREW_TAP_TOKEN unset"; return 1
+              fi
+              local b64 content tap_version
+              # gh's own exit status is checked explicitly — piping straight
+              # into `base64 -d` under a non-pipefail shell would otherwise
+              # let a 404/403/5xx render as an empty, "stale" cask instead
+              # of the unreachable/unauthenticated state it actually is.
+              b64=$(GH_TOKEN="$HOMEBREW_TAP_TOKEN" gh api "repos/${HOMEBREW_TAP_REPO}/contents/Casks/ghostties.rb" --jq '.content' 2>/tmp/tap-err.log)
+              if [[ $? -ne 0 || -z "$b64" ]]; then
+                STATUS="unreachable"; ACTUAL="API error: $(tail -c 200 /tmp/tap-err.log)"; return 1
+              fi
+              content=$(printf '%s' "$b64" | base64 -d 2>/dev/null)
+              if [[ -z "$content" ]]; then
+                STATUS="unreachable"; ACTUAL="<empty cask content>"; return 1
+              fi
+              tap_version=$(echo "$content" | grep -oE 'version "[^"]+"' | head -1 | cut -d'"' -f2)
+              if [[ -z "$tap_version" ]]; then
+                STATUS="unreachable"; ACTUAL="<version not found in cask>"; return 1
+              fi
+              ACTUAL="$tap_version"
+              if [[ "$tap_version" == "$VERSION" ]]; then
+                STATUS="ok"; return 0
+              fi
+              STATUS="stale"; return 1
+            }
+            if poll 3 15 check_tap; then
+              row "Homebrew tap cask" "$VERSION" "$ACTUAL" "PASS"
+            elif [[ "$STATUS" == "unreachable" ]]; then
+              echo "::warning::Homebrew tap cask unreachable/unauthenticated — NOT VERIFIED."
+              row "Homebrew tap cask" "$VERSION" "$ACTUAL" "NOT VERIFIED"
+            else
+              PR_COUNT=$(GH_TOKEN="$HOMEBREW_TAP_TOKEN" gh pr list --repo "$HOMEBREW_TAP_REPO" \
+                --head "update-ghostties-${TAG}" --state open --json number --jq '. | length' 2>/dev/null || echo 0)
+              if [[ "${PR_COUNT:-0}" -gt 0 ]]; then
+                row "Homebrew tap cask" "$VERSION" "${ACTUAL} (update PR open, pending merge)" "PENDING"
+              else
+                row "Homebrew tap cask" "$VERSION" "$ACTUAL" "FAIL"
+              fi
+            fi
+          fi
+
+          # --- Summary ---
+          {
+            echo "## Release verification — v${VERSION}"
+            echo ""
+            echo "| Surface | Expected | Actual | Status |"
+            echo "|---|---|---|---|"
+            for r in "${ROWS[@]}"; do
+              IFS='|' read -r surface expected actual status <<< "$r"
+              echo "| ${surface} | ${expected} | ${actual} | ${status} |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$FAIL" == "1" ]]; then
+            echo "::error::One or more release surfaces are behind v${VERSION}. See the job summary."
+            exit 1
+          fi
+          echo "All checkable surfaces report v${VERSION}."
