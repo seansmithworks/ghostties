@@ -30,7 +30,7 @@ sha256 from GitHub and rewrites `version` + `sha256` in this file. Run it by
 hand after cutting a release:
 
 ```
-bash scripts/update-cask-version.sh v0.1.0-beta.22
+bash scripts/update-cask-version.sh v0.1.0-beta.24
 ```
 
 It's idempotent and fails loudly if the release or the DMG asset is missing.
@@ -79,7 +79,7 @@ you need the in-repo copy to reflect the latest release, run the script
 yourself:
 
 ```
-bash scripts/update-cask-version.sh v0.1.0-beta.22
+bash scripts/update-cask-version.sh v0.1.0-beta.24
 ```
 
 ## `brew audit` results

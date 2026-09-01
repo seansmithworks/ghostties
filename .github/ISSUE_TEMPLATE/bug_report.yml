@@ -34,7 +34,7 @@ body:
     attributes:
       label: Ghostties version
       description: About Ghostties in the menu bar, or `gt --version`.
-      placeholder: v0.1.0-beta.21
+      placeholder: v0.1.0-beta.24
     validations:
       required: true
 

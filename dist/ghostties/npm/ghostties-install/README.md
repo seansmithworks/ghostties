@@ -1,11 +1,11 @@
 # ghostties-install
 
-A zero-dependency installer shim for [Ghostties](https://ghostties.org). Downloads a
-pinned, checksum-verified build of `Ghostties.app` and places it on your Mac.
+A zero-dependency installer shim for [Ghostties](https://ghostties.org). Downloads the
+newest published build of `Ghostties.app`, verifies it, and places it on your Mac.
 
-**Published to npm.** `npx ghostties-install` downloads the pinned,
-checksum-verified `Ghostties.app` build and installs it — no separate `npm
-install` step needed.
+**Published to npm.** `npx ghostties-install` resolves the newest release,
+downloads it, verifies it, and installs it — no separate `npm install` step
+needed.
 
 **Recommended install path:** `brew install --cask seansmithworks/tap/ghostties`
 (see [`../../homebrew/README.md`](../../homebrew/README.md)). This npm shim exists
@@ -45,19 +45,25 @@ npx ghostties-install --target ~/Applications
 
 1. Checks that you're on macOS/arm64. Hard-fails with a clear message otherwise —
    Ghostties has no Linux, Windows, or Intel build.
-2. Refuses to overwrite an existing install at the target unless you pass `--force`.
+2. Resolves the newest published release from the GitHub API at run time. Every
+   Ghostties release so far is a GitHub prerelease, so this reads the release list
+   (not the "latest" endpoint, which excludes prereleases) and takes the newest entry.
+3. Refuses to overwrite an existing install at the target unless you pass `--force`.
    Ghostties self-updates via Sparkle, so an existing install may already be newer
-   than the version this installer is pinned to.
-3. Downloads the pinned release zip from GitHub Releases, with progress output
+   than the release this installer just resolved.
+4. Downloads that release's zip from GitHub Releases, with progress output
    (it's ~154 MB).
-4. Verifies the download's SHA-256 against a pinned checksum before touching the
-   archive contents. On mismatch it deletes the download and exits non-zero —
-   it will never extract or install an unverified binary.
-5. Extracts with `ditto -x -k` (not `unzip`), which preserves extended attributes,
+5. Verifies the download's SHA-256 against the digest GitHub published for that
+   asset before touching the archive contents. On mismatch it deletes the download
+   and exits non-zero — it will never extract or install an unverified binary.
+6. Extracts with `ditto -x -k` (not `unzip`), which preserves extended attributes,
    symlinks, and code-signature integrity on `.app` bundles.
-6. Stages the app under a temp name inside the target directory and renames it
+7. Verifies the extracted app bundle's code signature with `codesign` and confirms
+   it's signed by Ghostties' Developer ID team identifier. This check doesn't depend
+   on any version, so it keeps working the same way release after release.
+8. Stages the app under a temp name inside the target directory and renames it
    into place, so a failure mid-install never leaves a half-written app behind.
-7. Cleans up its temp download/extraction directory on both success and failure.
+9. Cleans up its temp download/extraction directory on both success and failure.
 
 It does **not** strip the `com.apple.quarantine` extended attribute. Ghostties is
 signed with a Developer ID certificate and notarized, so Gatekeeper clears it on
@@ -67,20 +73,19 @@ project won't do.
 After install, Ghostties updates itself in place via Sparkle. You do not need to
 re-run this installer for future versions.
 
-## Pinned version
+## Always installs the newest release
 
-This package pins an exact release tag and asset checksum rather than resolving
-"latest" at install time — a pinned checksum is the supply-chain-safe design, and
-because the app self-updates via Sparkle on first launch, a slightly-stale pin
-self-heals immediately after install.
+This package resolves the newest published release from the GitHub API at
+install time rather than pinning a version — a pinned version goes stale the
+moment the next release ships, and this installer has no CI automation to bump
+a pin on every release. Nothing in `bin/ghostties-install.js` needs to be
+edited when a new version ships.
 
-**Bumping the pin is currently a manual step**, not automated in CI. The
-Homebrew cask's version bump is automated by a separate CI workflow in this repo;
-the npm package's is not, because publishing from CI would need an npm
-automation token that isn't configured. If you're bumping
-this by hand: update `RELEASE.tag`, `RELEASE.assetName` (should stay the same name),
-and `RELEASE.sha256` in `bin/ghostties-install.js`, using the sha256 GitHub reports
-for the release asset.
+Integrity is verified two ways instead: the download's SHA-256 is checked
+against the digest GitHub publishes for that exact asset, and the extracted
+app bundle's code signature is checked against Ghostties' Developer ID team
+identifier. The signature check is the stronger guarantee — it holds for every
+future release, not just the one a checksum happened to be pinned to.
 
 ## Zero dependencies
 
