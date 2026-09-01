@@ -16,12 +16,16 @@ import sys
 from datetime import datetime
 
 
+failures = []
+
+
 def replace(path: str, pattern: str, repl: str, label: str) -> None:
     """Replace `pattern` with `repl` in `path`. Logs whether it matched."""
     src = open(path).read()
     new, n = re.subn(pattern, repl, src)
     if n == 0:
         print(f"  ! {label}: pattern did not match in {path}")
+        failures.append(label)
     else:
         open(path, "w").write(new)
         print(f"  ✓ {label}: {n} replacement(s) in {path}")
@@ -95,25 +99,25 @@ replace(
     "download.html last-updated footer",
 )
 
-# 5. index.html — terminal line-3 version string.
-#    Matches every occurrence of "<+ or %> v<version>": the desktop span
-#    ("+ ghostties % v..."), the mobile-short span ("+ v..." — no "%",
-#    "ghostties" is dropped there too, to fit the mobile character budget),
-#    the CSS comment above the desktop keyframe, the CSS comment above the
-#    mobile-override keyframe, the illustrative example in the mobile
-#    budget-math comment, and the HTML markup comment. The lookbehind
-#    requires a literal "+ " or "% " immediately before "v" so it can't
-#    also match the unrelated "v<version>" inside the DMG URL (handled by
-#    rule 1 above), which is preceded by "/" instead. (The char-count
-#    numbers in those comments aren't touched here: like the rest of this
-#    script, a version bump is assumed not to change the string's length.
-#    If a beta number crosses a digit boundary — e.g. beta.9 → beta.10 —
-#    recheck the *ch counts by hand.)
+# 5. index.html — DMG install-cell trailing label ("...Ghostties.dmg</a><br>v0.1.0-beta.X")
 replace(
     "web/index.html",
-    r"(?<=[+%] )v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
+    r"(?<=</a><br>)v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
     version,
-    "index.html terminal line-3 (all occurrences)",
+    "index.html DMG install-cell label",
 )
+
+# 6. index.html — channels-note current-release text
+#    "Current release is <strong>v0.1.0-beta.X</strong> on the beta channel."
+replace(
+    "web/index.html",
+    r"(?<=Current release is <strong>)v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?(?=</strong>)",
+    version,
+    "index.html channels-note current release",
+)
+
+if failures:
+    print(f"\n{len(failures)} pattern(s) failed to match. Aborting.", file=sys.stderr)
+    sys.exit(1)
 
 print("Done.")
