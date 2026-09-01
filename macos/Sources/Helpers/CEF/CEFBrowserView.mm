@@ -48,7 +48,10 @@ static bool GhosttiesIsAllowedSchemeCef(const CefString &url) {
 - (void)_didChangeURL:(NSString *)url;
 - (void)_didChangeTitle:(NSString *)title;
 - (void)_didChangeLoadingState:(BOOL)loading canGoBack:(BOOL)back canGoForward:(BOOL)forward;
+- (void)_notifyCreationFailed;
 #if GHOSTTIES_CEF_AVAILABLE
+- (void)_createBrowserNow;
+- (void)_startCreationWatchdog;
 - (void)_browserDidCreate:(CefRefPtr<CefBrowser>)browser;
 - (void)_browserDidClose;
 #endif
@@ -223,8 +226,18 @@ private:
 @property (nonatomic, readwrite) BOOL canGoForward;
 @property (nonatomic, readwrite, nullable) NSString *currentURL;
 @property (nonatomic, readwrite, nullable) NSString *currentTitle;
-@property (nonatomic) BOOL browserCreated;
+@property (nonatomic, readwrite) BOOL browserCreated;
+@property (nonatomic, readwrite) NSInteger creationAttemptCount;
+@property (nonatomic, readwrite) BOOL creationFailed;
 @property (nonatomic, readwrite) BOOL isDevToolsOpen;
+/// Pending URL captured at init time; consumed the moment creation is
+/// actually attempted (deferred until the view is in a window).
+@property (nonatomic, copy, nullable) NSString *pendingURL;
+/// One-shot timer started right after `CreateBrowser` is called. If
+/// `OnAfterCreated` hasn't fired by the time it elapses, creation is
+/// treated as failed. Ships in Release — this is a behavioral safety net,
+/// not a diagnostic.
+@property (nonatomic, strong, nullable) NSTimer *creationWatchdogTimer;
 
 @end
 
@@ -245,70 +258,43 @@ private:
     self.wantsLayer = YES;
     self.browserCreated = NO;
 
+    self.pendingURL = url ?: @"about:blank";
+
 #if GHOSTTIES_CEF_AVAILABLE
     [CEFBridgeManager initializeIfNeeded];
     if (![CEFBridgeManager isInitialized]) {
-        return self;  // CEF failed to init — return stub view
+        // CEF failed to init — stub view. Notify the failure asynchronously
+        // so the delegate (assigned by the caller right after this
+        // initializer returns) is in place by the time it fires.
+        self.creationFailed = YES;
+        __weak CEFBrowserView *weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf _notifyCreationFailed];
+        });
+        return self;
     }
 
     _client = new GhosttiesCefClient(self);
 
-    // Create browser immediately — Chromium's ProfileManager expects a browser
-    // window shortly after CefInitialize or it shuts down the process.
-    CefWindowInfo windowInfo;
-    CefRect cefRect(0, 0, (int)initialFrame.size.width, (int)initialFrame.size.height);
-    windowInfo.SetAsChild((__bridge CefWindowHandle)self, cefRect);
-
-    CefBrowserSettings settings;
-    NSString *urlStr = url ?: @"about:blank";
-    CefString cefURL([urlStr UTF8String]);
-
-#if DEBUG
-    // Diagnostic 4: the view's window state at the exact moment CreateBrowser
-    // is called. CreateBrowser is invoked from initWithFrame:, where the view
-    // cannot yet be in a window — this confirms or refutes that directly,
-    // without restructuring the call.
-    NSLog(@"[CEFDiag] Pre-CreateBrowser window state: window=%@ superview=%@ frame=%@",
-          self.window, self.superview, NSStringFromRect(self.frame));
-    NSLog(@"[CEFDiag] Calling CefBrowserHost::CreateBrowser (async) for url=%@", urlStr);
-#endif
-    CefBrowserHost::CreateBrowser(windowInfo, _client, cefURL, settings,
-                                  nullptr, nullptr);
-    self.browserCreated = YES;
-
-#if DEBUG
-    // Diagnostic 3: browser-creation watchdog. Log-only — does not alter
-    // when or how CreateBrowser is called. Reports whether OnAfterCreated
-    // has fired yet, plus the view's window hierarchy state at each tick, so
-    // we can tell whether the view was ever attached to a window before the
-    // process exited.
-    __weak CEFBrowserView *diagWeakSelf = self;
-    for (NSNumber *delaySeconds in @[@2.0, @5.0]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
-                                      (int64_t)(delaySeconds.doubleValue * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            CEFBrowserView *strongSelf = diagWeakSelf;
-            if (!strongSelf) {
-                NSLog(@"[CEFDiag] CreateBrowser watchdog (%@s): view deallocated",
-                      delaySeconds);
-                return;
-            }
-            NSLog(@"[CEFDiag] CreateBrowser watchdog (%@s): OnAfterCreated fired=%@ "
-                  @"window=%@ superview=%@ frame=%@",
-                  delaySeconds, strongSelf.diagAfterCreatedFired ? @"YES" : @"NO",
-                  strongSelf.window, strongSelf.superview,
-                  NSStringFromRect(strongSelf.frame));
-        });
-    }
-#endif
+    // Creation is deferred to -viewDidMoveToWindow — see that method.
+    // `SetAsChild` requires a view that is already in a window; calling it
+    // here, before the view has ever been added to a superview, guarantees
+    // CreateBrowser fails.
 #else
     NSLog(@"[CEFBrowserView] CEF headers not available — running in stub mode.");
+    self.creationFailed = YES;
+    __weak CEFBrowserView *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf _notifyCreationFailed];
+    });
 #endif
 
     return self;
 }
 
 - (void)dealloc {
+    [_creationWatchdogTimer invalidate];
+    _creationWatchdogTimer = nil;
 #if GHOSTTIES_CEF_AVAILABLE
     if (_browser) {
         _browser->GetHost()->CloseBrowser(true);
@@ -468,6 +454,112 @@ private:
     if (_browser && self.window) {
         _browser->GetHost()->WasResized();
     }
+    // Create the browser the first time this view lands in a real window.
+    // `browserCreated` guards against a second attempt if the view is later
+    // removed from its window and re-added (e.g. re-parented into a
+    // different panel) — it is only cleared by an explicit retry.
+    if (!self.browserCreated && self.window && _client) {
+        [self _createBrowserNow];
+    }
+#endif
+}
+
+#if GHOSTTIES_CEF_AVAILABLE
+/// Actually call `CefBrowserHost::CreateBrowser`. Only ever called from a
+/// path where `self.window != nil` (either -viewDidMoveToWindow, or
+/// -retryCreateBrowser when the view is already attached).
+- (void)_createBrowserNow {
+    if (self.browserCreated) return;
+    self.browserCreated = YES;
+    self.creationAttemptCount += 1;
+
+    CefWindowInfo windowInfo;
+    CefRect cefRect(0, 0, (int)self.frame.size.width, (int)self.frame.size.height);
+    windowInfo.SetAsChild((__bridge CefWindowHandle)self, cefRect);
+
+    CefBrowserSettings settings;
+    NSString *urlStr = self.pendingURL ?: @"about:blank";
+    CefString cefURL([urlStr UTF8String]);
+
+#if DEBUG
+    // Diagnostic 4: the view's window state at the exact moment CreateBrowser
+    // is called. Now guaranteed non-nil by the -viewDidMoveToWindow guard.
+    NSLog(@"[CEFDiag] Pre-CreateBrowser window state: window=%@ superview=%@ frame=%@",
+          self.window, self.superview, NSStringFromRect(self.frame));
+    NSLog(@"[CEFDiag] Calling CefBrowserHost::CreateBrowser (async) for url=%@", urlStr);
+#endif
+    CefBrowserHost::CreateBrowser(windowInfo, _client, cefURL, settings,
+                                  nullptr, nullptr);
+
+#if DEBUG
+    // Diagnostic 3: log-only watchdog, independent of the production one
+    // below. Reports whether OnAfterCreated has fired yet, plus the view's
+    // window hierarchy state at each tick.
+    __weak CEFBrowserView *diagWeakSelf = self;
+    for (NSNumber *delaySeconds in @[@2.0, @5.0]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                      (int64_t)(delaySeconds.doubleValue * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            CEFBrowserView *strongSelf = diagWeakSelf;
+            if (!strongSelf) {
+                NSLog(@"[CEFDiag] CreateBrowser watchdog (%@s): view deallocated",
+                      delaySeconds);
+                return;
+            }
+            NSLog(@"[CEFDiag] CreateBrowser watchdog (%@s): OnAfterCreated fired=%@ "
+                  @"window=%@ superview=%@ frame=%@",
+                  delaySeconds, strongSelf.diagAfterCreatedFired ? @"YES" : @"NO",
+                  strongSelf.window, strongSelf.superview,
+                  NSStringFromRect(strongSelf.frame));
+        });
+    }
+#endif
+
+    [self _startCreationWatchdog];
+}
+
+/// Ships in Release — this is the real safety net, not a diagnostic. If
+/// `OnAfterCreated` hasn't fired within 3s of calling `CreateBrowser`,
+/// treat creation as failed so nothing downstream waits on a browser that
+/// will never materialise.
+- (void)_startCreationWatchdog {
+    [self.creationWatchdogTimer invalidate];
+    self.creationFailed = NO;
+    __weak CEFBrowserView *weakSelf = self;
+    self.creationWatchdogTimer = [NSTimer scheduledTimerWithTimeInterval:3.0
+                                                                  repeats:NO
+                                                                    block:^(NSTimer *timer) {
+        CEFBrowserView *strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (strongSelf->_browser) return;  // already materialised
+#if DEBUG
+        NSLog(@"[CEFDiag] Creation watchdog: OnAfterCreated did not fire within "
+              @"3.0s — treating creation as failed.");
+#endif
+        [strongSelf _notifyCreationFailed];
+    }];
+}
+#endif // GHOSTTIES_CEF_AVAILABLE
+
+- (void)retryCreateBrowser {
+#if GHOSTTIES_CEF_AVAILABLE
+    if (_browser) return;  // already succeeded
+    [self.creationWatchdogTimer invalidate];
+    self.creationWatchdogTimer = nil;
+    self.browserCreated = NO;
+    self.creationFailed = NO;
+    if (self.window && _client) {
+        [self _createBrowserNow];
+    }
+    // Else: -viewDidMoveToWindow will pick it up once the view lands in a
+    // window again.
+#else
+    // No CEF headers at all — nothing to retry. Re-notify so the caller's
+    // failure UI stays consistent.
+    __weak CEFBrowserView *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf _notifyCreationFailed];
+    });
 #endif
 }
 
@@ -500,14 +592,27 @@ private:
     }
 }
 
+- (void)_notifyCreationFailed {
+    self.creationFailed = YES;
+    if ([self.delegate respondsToSelector:@selector(browserViewDidFailToCreate:)]) {
+        [self.delegate browserViewDidFailToCreate:self];
+    }
+}
+
 #if GHOSTTIES_CEF_AVAILABLE
 - (void)_browserDidCreate:(CefRefPtr<CefBrowser>)browser {
 #if DEBUG
     self.diagAfterCreatedFired = YES;
 #endif
+    [self.creationWatchdogTimer invalidate];
+    self.creationWatchdogTimer = nil;
+    self.creationFailed = NO;
     _browser = browser;
     // Sync CEF's internal child view and compositor to our current bounds.
     [self _syncCefChildBounds];
+    if ([self.delegate respondsToSelector:@selector(browserViewDidCreate:)]) {
+        [self.delegate browserViewDidCreate:self];
+    }
 }
 
 - (void)_browserDidClose {

@@ -1069,10 +1069,36 @@ class WorkspaceViewContainer: NSView {
             browserPanelView.contentArea.layoutSubtreeIfNeeded()
             if let cefView = browserView as? CEFBrowserView {
                 cefView.setFrameSize(browserPanelView.contentArea.bounds.size)
+                wireBrowserFailureState(for: cefView, bridge: bridge)
             }
         }
 
         _activeBrowserManager = manager
+    }
+
+    /// Wires a CEFBrowserView's creation-failure/success callbacks to the
+    /// panel's inline empty state, and reflects whatever state the view is
+    /// already in (it may have failed before this embed happened, e.g. the
+    /// CEF-unavailable stub case notifies asynchronously right after init).
+    private func wireBrowserFailureState(for cefView: CEFBrowserView, bridge: BrowserSessionBridge?) {
+        let panel = browserPanelView
+        bridge?.onCreationFailed = { [weak cefView, weak panel] in
+            panel?.failureStateView.show(
+                message: "The browser couldn't start. Retry, or run scripts/download-cef.sh if this keeps happening."
+            )
+            panel?.failureStateView.onRetry = { [weak cefView] in
+                cefView?.retryCreateBrowser()
+            }
+        }
+        bridge?.onCreationSucceeded = { [weak panel] in
+            panel?.failureStateView.hide()
+        }
+
+        if cefView.creationFailed {
+            bridge?.onCreationFailed?()
+        } else {
+            panel.failureStateView.hide()
+        }
     }
 
     // MARK: - Browser Session Content
