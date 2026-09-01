@@ -195,6 +195,8 @@ static void GhosttiesInstallExitDiagnostics(void) {
 @interface CEFBridgeManager ()
 + (void)_messageLoopTick:(NSTimer *)timer;
 + (void)_appWillTerminate:(NSNotification *)note;
++ (NSString *)_appSupportBundleDirectory;
++ (NSString *)_iso8601Timestamp;
 @end
 
 // ---------------------------------------------------------------------------
@@ -262,14 +264,7 @@ static void GhosttiesInstallExitDiagnostics(void) {
     // Cache directory — required by CEF for subprocess data exchange.
     // Use ~/Library/Application Support/<bundleIdentifier>/CEF/ so dev and
     // release builds don't share a cache (bundle IDs differ by `.dev` suffix).
-    NSArray<NSString *> *appSupportPaths = NSSearchPathForDirectoriesInDomains(
-        NSApplicationSupportDirectory, NSUserDomainMask, YES);
-    NSString *appSupportBase = appSupportPaths.firstObject
-        ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
-    NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier] ?: @"com.seansmithdesign.ghostties";
-    NSString *cacheDir = [[appSupportBase
-        stringByAppendingPathComponent:bundleId]
-        stringByAppendingPathComponent:@"CEF"];
+    NSString *cacheDir = [self cefProfileDirectoryPath];
     NSError *cacheDirError = nil;
     if (![[NSFileManager defaultManager] createDirectoryAtPath:cacheDir
                                   withIntermediateDirectories:YES
@@ -363,6 +358,109 @@ static void GhosttiesInstallExitDiagnostics(void) {
 #endif
 
     _isInitialized = NO;
+}
+
+#pragma mark - Browser-open sentinel (crash recovery)
+
+#if DEBUG
+static NSString *_testOverrideAppSupportBundleDirectory = nil;
+
++ (nullable NSString *)testOverrideAppSupportBundleDirectory {
+    return _testOverrideAppSupportBundleDirectory;
+}
+
++ (void)setTestOverrideAppSupportBundleDirectory:(nullable NSString *)path {
+    _testOverrideAppSupportBundleDirectory = [path copy];
+}
+#endif
+
++ (NSString *)_appSupportBundleDirectory {
+#if DEBUG
+    // See the header doc on `testOverrideAppSupportBundleDirectory` — this
+    // MUST be checked first so tests never touch Sean's real Dev CEF
+    // profile, which lives at this exact derived path.
+    if (_testOverrideAppSupportBundleDirectory) {
+        return _testOverrideAppSupportBundleDirectory;
+    }
+#endif
+    NSArray<NSString *> *appSupportPaths = NSSearchPathForDirectoriesInDomains(
+        NSApplicationSupportDirectory, NSUserDomainMask, YES);
+    NSString *appSupportBase = appSupportPaths.firstObject
+        ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
+    NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier] ?: @"com.seansmithdesign.ghostties";
+    return [appSupportBase stringByAppendingPathComponent:bundleId];
+}
+
++ (NSString *)_iso8601Timestamp {
+    static NSISO8601DateFormatter *formatter;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        formatter = [[NSISO8601DateFormatter alloc] init];
+    });
+    return [formatter stringFromDate:[NSDate date]];
+}
+
++ (NSString *)cefProfileDirectoryPath {
+    return [[self _appSupportBundleDirectory] stringByAppendingPathComponent:@"CEF"];
+}
+
++ (NSString *)browserOpenAttemptSentinelPath {
+    // A SIBLING of CEF/, not inside it — a profile reset (rename CEF/
+    // aside) must never also remove evidence that an attempt was in flight.
+    return [[self _appSupportBundleDirectory] stringByAppendingPathComponent:@"browser-open-attempt"];
+}
+
++ (void)recordBrowserOpenAttempt {
+    NSString *path = [self browserOpenAttemptSentinelPath];
+    NSString *parentDir = [path stringByDeletingLastPathComponent];
+    [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
+                               withIntermediateDirectories:YES
+                                                attributes:nil
+                                                     error:nil];
+    NSError *error = nil;
+    if (![[self _iso8601Timestamp] writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&error]) {
+        NSLog(@"[CEFBridge] Failed to write browser-open-attempt sentinel: %@", error.localizedDescription);
+    }
+}
+
++ (void)clearBrowserOpenAttempt {
+    NSString *path = [self browserOpenAttemptSentinelPath];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if ([fm fileExistsAtPath:path]) {
+        NSError *error = nil;
+        if (![fm removeItemAtPath:path error:&error]) {
+            NSLog(@"[CEFBridge] Failed to clear browser-open-attempt sentinel: %@", error.localizedDescription);
+        }
+    }
+}
+
++ (BOOL)hasUnclearedBrowserOpenAttempt {
+    return [[NSFileManager defaultManager] fileExistsAtPath:[self browserOpenAttemptSentinelPath]];
+}
+
++ (nullable NSString *)resetProfileDirectoryPreservingDataError:(NSError **)error {
+    NSString *profilePath = [self cefProfileDirectoryPath];
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    if (![fm fileExistsAtPath:profilePath]) {
+        // Nothing to move aside — just ensure a fresh directory exists.
+        [fm createDirectoryAtPath:profilePath withIntermediateDirectories:YES attributes:nil error:error];
+        return nil;
+    }
+
+    // Sanitize the timestamp for use in a path component (colons are legal
+    // on APFS but Finder mangles their display; avoid the confusion).
+    NSString *sanitizedTimestamp = [[self _iso8601Timestamp]
+        stringByReplacingOccurrencesOfString:@":" withString:@"-"];
+    NSString *movedPath = [[profilePath stringByDeletingLastPathComponent]
+        stringByAppendingPathComponent:[NSString stringWithFormat:@"CEF-broken-%@", sanitizedTimestamp]];
+
+    if (![fm moveItemAtPath:profilePath toPath:movedPath error:error]) {
+        return nil;
+    }
+
+    [fm createDirectoryAtPath:profilePath withIntermediateDirectories:YES attributes:nil error:error];
+    return movedPath;
 }
 
 #pragma mark - Private

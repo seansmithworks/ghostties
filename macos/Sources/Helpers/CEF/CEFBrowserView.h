@@ -41,6 +41,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// YES if the most recent creation attempt failed — either CEF is
 /// unavailable, or the creation watchdog timed out.
 @property (nonatomic, readonly) BOOL creationFailed;
+/// YES if the most recent creation failure was detected via the
+/// browser-open-attempt sentinel — i.e. a PRIOR launch's attempt left an
+/// uncleared sentinel, meaning it almost certainly killed the process
+/// before `OnAfterCreated` could fire. `-retryCreateBrowser` is unsafe to
+/// call blind in this state; offer `-resetProfileDataAndRetry:` instead.
+@property (nonatomic, readonly) BOOL creationFailedDueToPreviousCrash;
 
 - (instancetype)initWithFrame:(NSRect)frame url:(nullable NSString *)url;
 - (void)loadURL:(NSString *)url;
@@ -54,8 +60,18 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)closeDevTools;
 - (void)closeBrowser;
 /// Attempt browser creation again after a failure. No-op if a browser
-/// already exists or is already pending.
+/// already exists or is already pending. Unsafe to rely on alone when
+/// `creationFailedDueToPreviousCrash` is YES — it will simply re-detect the
+/// same uncleared sentinel and fail again without risking another crash,
+/// but it will not recover. Use `-resetProfileDataAndRetry:` in that case.
 - (void)retryCreateBrowser;
+
+/// Moves the CEF profile directory aside (never deletes — cookies/logins
+/// are preserved at the new path), clears the crash sentinel, then retries
+/// creation once. `completion` is called on the main thread with the path
+/// the old profile was moved to (nil if there was nothing to move) and any
+/// filesystem error, before the retry attempt is made.
+- (void)resetProfileDataAndRetry:(void (^_Nullable)(NSString * _Nullable movedToPath, NSError * _Nullable error))completion;
 
 @end
 

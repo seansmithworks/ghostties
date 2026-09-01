@@ -1108,11 +1108,38 @@ class WorkspaceViewContainer: NSView {
     private func wireBrowserFailureState(for cefView: CEFBrowserView, bridge: BrowserSessionBridge?) {
         let panel = browserPanelView
         bridge?.onCreationFailed = { [weak cefView, weak panel] in
-            panel?.failureStateView.show(
-                message: "The browser couldn't start. Retry, or run scripts/download-cef.sh if this keeps happening."
-            )
+            guard let cefView else { return }
+            if cefView.creationFailedDueToPreviousCrash {
+                // A prior launch's attempt never cleared the crash sentinel —
+                // it almost certainly killed the process before OnAfterCreated
+                // could fire. Retrying blind would just re-detect the same
+                // sentinel; offer resetting the profile instead.
+                panel?.failureStateView.show(
+                    message: "The browser didn't come back last time. Reset browser data to try again — cookies and logins are set aside, not deleted.",
+                    showResetAction: true
+                )
+            } else {
+                panel?.failureStateView.show(
+                    message: "The browser couldn't start. Retry, or run scripts/download-cef.sh if this keeps happening."
+                )
+            }
             panel?.failureStateView.onRetry = { [weak cefView] in
                 cefView?.retryCreateBrowser()
+            }
+            panel?.failureStateView.onResetProfileData = { [weak cefView, weak panel] in
+                cefView?.resetProfileDataAndRetry { movedToPath, error in
+                    if let error {
+                        panel?.failureStateView.show(
+                            message: "Couldn't reset browser data: \(error.localizedDescription)",
+                            showResetAction: true
+                        )
+                    } else if let movedToPath {
+                        panel?.failureStateView.show(
+                            message: "Old browser data moved to \(movedToPath). Retrying…",
+                            showResetAction: false
+                        )
+                    }
+                }
             }
         }
         bridge?.onCreationSucceeded = { [weak panel] in

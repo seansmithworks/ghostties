@@ -232,6 +232,7 @@ private:
 @property (nonatomic, readwrite) BOOL browserCreated;
 @property (nonatomic, readwrite) NSInteger creationAttemptCount;
 @property (nonatomic, readwrite) BOOL creationFailed;
+@property (nonatomic, readwrite) BOOL creationFailedDueToPreviousCrash;
 @property (nonatomic, readwrite) BOOL isDevToolsOpen;
 /// Pending URL captured at init time; consumed the moment creation is
 /// actually attempted (deferred until the view is in a window).
@@ -473,8 +474,29 @@ private:
 /// -retryCreateBrowser when the view is already attached).
 - (void)_createBrowserNow {
     if (self.browserCreated) return;
+
+    // Sentinel-based crash recovery: the CEF-profile-poisoning crash kills
+    // the process in ~400-650ms — far faster than the 3s creation watchdog
+    // below can ever catch, and nothing in-process survives to run recovery
+    // code. So this is checked here, on the NEXT launch, instead: if a
+    // prior attempt wrote the sentinel and never cleared it (OnAfterCreated
+    // never fired), that attempt almost certainly killed the process. Do
+    // NOT attempt creation again blind — surface the failure state and let
+    // the user choose to reset the profile.
+    if ([CEFBridgeManager hasUnclearedBrowserOpenAttempt]) {
+        self.browserCreated = YES;
+        self.creationFailedDueToPreviousCrash = YES;
+#if DEBUG
+        os_log(OS_LOG_DEFAULT, "[CEFDiag] Uncleared browser-open-attempt sentinel found — "
+               "skipping CreateBrowser, surfacing failure state instead.");
+#endif
+        [self _notifyCreationFailed];
+        return;
+    }
+
     self.browserCreated = YES;
     self.creationAttemptCount += 1;
+    [CEFBridgeManager recordBrowserOpenAttempt];
 
     CefWindowInfo windowInfo;
     CefRect cefRect(0, 0, (int)self.frame.size.width, (int)self.frame.size.height);
@@ -557,6 +579,7 @@ private:
     self.creationWatchdogTimer = nil;
     self.browserCreated = NO;
     self.creationFailed = NO;
+    self.creationFailedDueToPreviousCrash = NO;
     if (self.window && _client) {
         [self _createBrowserNow];
     }
@@ -565,6 +588,34 @@ private:
 #else
     // No CEF headers at all — nothing to retry. Re-notify so the caller's
     // failure UI stays consistent.
+    __weak CEFBrowserView *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf _notifyCreationFailed];
+    });
+#endif
+}
+
+- (void)resetProfileDataAndRetry:(void (^)(NSString * _Nullable movedToPath, NSError * _Nullable error))completion {
+#if GHOSTTIES_CEF_AVAILABLE
+    NSError *error = nil;
+    NSString *movedToPath = [CEFBridgeManager resetProfileDirectoryPreservingDataError:&error];
+    [CEFBridgeManager clearBrowserOpenAttempt];
+
+    [self.creationWatchdogTimer invalidate];
+    self.creationWatchdogTimer = nil;
+    self.browserCreated = NO;
+    self.creationFailed = NO;
+    self.creationFailedDueToPreviousCrash = NO;
+
+    if (completion) completion(movedToPath, error);
+
+    if (self.window && _client) {
+        [self _createBrowserNow];
+    }
+    // Else: -viewDidMoveToWindow will pick it up once the view lands in a
+    // window again.
+#else
+    if (completion) completion(nil, nil);
     __weak CEFBrowserView *weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
         [weakSelf _notifyCreationFailed];
@@ -616,6 +667,8 @@ private:
     [self.creationWatchdogTimer invalidate];
     self.creationWatchdogTimer = nil;
     self.creationFailed = NO;
+    self.creationFailedDueToPreviousCrash = NO;
+    [CEFBridgeManager clearBrowserOpenAttempt];
     _browser = browser;
     // Sync CEF's internal child view and compositor to our current bounds.
     [self _syncCefChildBounds];
