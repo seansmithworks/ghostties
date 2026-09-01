@@ -90,7 +90,7 @@ result**; this repo does not require branches be up to date before merge.
   hand-bump both each release.
 
 - [x] **DONE — composer surface redesign resolved: variant C, ultra-minimal, shipped in
-  PR #TBD.** Sean picked C (absolute minimum, closest to what shipped before this change) —
+  PR #155.** Sean picked C (absolute minimum, closest to what shipped before this change) —
   the trailing `projectControl`/`branchControl` buttons are removed from the query row
   entirely; the results list is the only remaining mouse route into projects/templates.
   Variants A (scope pills), B (pure prediction), D (grouped section headers/Spotlight), E
