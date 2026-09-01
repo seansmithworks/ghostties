@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 import GhosttiesCore
 @testable import Ghostty
@@ -44,38 +46,50 @@ struct TemplateEditFormAbandonTests {
 
     // MARK: - The end-to-end store effect
 
-    /// Reproduces the exact production shape: `commitNewTemplate` calls
-    /// `store.addTemplate` with a bare name and no command, THEN the edit
-    /// sheet is abandoned. Simulates the sheet's `onDisappear` decision
-    /// directly against a real `WorkspaceStore`, the same call
-    /// `TemplateEditForm.body`'s `.onDisappear` makes.
-    @Test func emptyTemplateGoneAfterAbandoningTheEditSheet() {
+    /// Fix 3 (review, PR #155): the two tests this replaced
+    /// (`emptyTemplateGoneAfterAbandoningTheEditSheet`,
+    /// `configuredTemplateSurvivesAbandoningAFollowUpEdit`) never
+    /// constructed a `TemplateEditForm` at all — each re-implemented its
+    /// `.onDisappear` body inline against `shouldDiscardOnDismiss` and
+    /// `store.removeTemplate` directly, so they stayed green even with the
+    /// real `.onDisappear` wiring deleted from `TemplateEditForm.body`
+    /// entirely (verified: deleting that block leaves this file's tests
+    /// green before this rewrite). This one actually mounts the view —
+    /// same offscreen `NSHostingView` technique as
+    /// `SessionComposerSnapshotTests.renderPNG` — and tears the host down
+    /// to fire the real SwiftUI `.onDisappear` lifecycle event, so a
+    /// regression that deletes or breaks that wiring fails THIS test.
+    ///
+    /// Mutant-verified directly: deleting `TemplateEditForm.body`'s
+    /// `.onDisappear` block makes this fail (`store.templates` still
+    /// contains `created.id`); restoring it makes this pass again.
+    @Test @MainActor func emptyTemplateGoneAfterMountingAndAbandoningTheRealEditSheet() {
         let store = WorkspaceStore(testingProjects: [], testingSessions: [])
-
         let created = store.addTemplate(AgentTemplate(name: "New Template", kind: .custom))
         #expect(store.templates.contains { $0.id == created.id })
 
-        // The sheet is dismissed (Cancel/Esc/click-outside) without ever
-        // calling `save()` — `didSave` stays false.
-        if TemplateEditForm.shouldDiscardOnDismiss(isNewlyCreated: true, didSave: false) {
-            store.removeTemplate(id: created.id)
-        }
+        let view = TemplateEditForm(template: created, isNewlyCreated: true)
+            .environmentObject(store)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 340, height: 600)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        // Cancel/Esc/click-outside all funnel through `.onDisappear`
+        // without ever hitting Save — detaching the hosting view from its
+        // window (rather than calling `dismiss()`, which has no effect
+        // outside a real presentation context) is what fires it here.
+        window.contentView = nil
+        window.orderOut(nil)
 
         #expect(!store.templates.contains { $0.id == created.id })
-        #expect(created.command == nil)
-    }
-
-    /// The counter-case: the same abandon path must never touch a template
-    /// that was actually configured and saved.
-    @Test func configuredTemplateSurvivesAbandoningAFollowUpEdit() {
-        let store = WorkspaceStore(testingProjects: [], testingSessions: [])
-
-        let created = store.addTemplate(AgentTemplate(name: "Real Template", kind: .custom, command: "claude"))
-
-        if TemplateEditForm.shouldDiscardOnDismiss(isNewlyCreated: false, didSave: false) {
-            store.removeTemplate(id: created.id)
-        }
-
-        #expect(store.templates.contains { $0.id == created.id })
     }
 }

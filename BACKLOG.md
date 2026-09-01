@@ -1,5 +1,38 @@
 # Ghostties — Backlog
 
+## 2026-09-01 — PR #155 review follow-ups (ultra-minimal composer variant C)
+
+**Not fixed, deliberately — found by review, deferred:**
+
+- [ ] A junk `command: nil` template is still producible via **Save**, not just abandon.
+  `TemplatePickerView.save()` passes `command: trimmedCommand.isEmpty ? nil : trimmedCommand`,
+  and `WorkspaceStore.updateTemplate` treats `nil` as "leave unchanged." Create a template,
+  leave Command blank, press Save → persisted `.custom` template with `command: nil`,
+  byte-identical to the three junk rows already in Sean's workspace. The abandon path
+  (`TemplateEditForm.onDisappear`) is fixed; this one is not.
+- [ ] Dead surface intentionally left in place after the trailing-control removal:
+  `trailingControlVisibility` (`SessionComposerPalette.swift:1521`), `projectControl`
+  (`:1663`), `branchControl` (`:1696`), `inlineProjectPicker` (`:1749`), `inlineBranchPicker`
+  (`:1765`), `ProjectDropdownView` (`:2907`), `WorktreeDropdownView` (`:3061`, ~500 lines with
+  keyboard-capture layers), the `.onChange(of: isBranchPickerOpen)` `refreshWorktrees` trigger
+  (`:1652`), and three accessibility label constants (`:86-88`). Tests now asserting
+  unreachable behaviour: all 8 in `SessionComposerTrailingControlTests.swift`, plus
+  `AccessibilityTests.swift:263-268`. Nothing sets `isProjectPickerOpen`/`isBranchPickerOpen`
+  to `true` any more. Sean has not decided whether to delete any of this.
+- [ ] `isNewlyCreated` correctness rests on an unenforced invariant across two independent
+  `@State` vars (`newTemplateToEdit` + `newTemplateToEditIsFresh`). Correct today at all three
+  assignment sites; carrying the flag inside the sheet item as a two-field struct would make
+  desync unrepresentable.
+- [ ] `TemplatePickerView` has zero instantiation sites but its doc comment (`:5-9`) still
+  claims it is "Shown when the user clicks 'New Session' in the detail panel."
+- [ ] A doc comment names the wrong file for the root cause of the junk-template bug: the
+  `isNewlyCreated` doc comment on `TemplateEditForm` (`TemplatePickerView.swift`, ~line 435)
+  and this same backlog entry's own historical phrasing both point at the old
+  `TemplatePickerView.addCustomTemplate()` flow; the actual current culprit is
+  `SessionComposerPalette.commitNewTemplate()` (`:1835` at review time), which adds the
+  template to the store before `TemplateEditForm` ever runs. Correct the doc comment to name
+  `commitNewTemplate()` directly.
+
 ## 2026-09-01 — open items after the beta.24 release and pipeline work
 
 **Waiting on Sean (both one-time):**

@@ -1498,26 +1498,27 @@ struct SessionComposerPalette: View {
         .modifier(ShakeEffect(animatableData: shakeTrigger))
     }
 
-    // MARK: - Query row (type-first field + trailing picker controls, model
-    // A rebuild)
+    // MARK: - Query row (type-first field, model A rebuild)
     //
     // Replaces Slice A/B's project/branch chips with plain text entry: the
     // field holds `composerStore.searchText` verbatim (`searchTextBinding`).
     // The resolution line that used to sit beneath it is deleted (Composer
     // UI 11 plan §3 Step 5, §4 table) — its six labels and two mouse routes
-    // were each given a named successor: the ghost placeholder (Step 3),
-    // the status strip (Step 4), and the two trailing controls below
-    // (`projectControl`/`branchControl`), the field row's only mouse entry
-    // point left into the project/branch pickers. Changing a segment still
-    // expands the SAME inline pickers Slice A/B built
-    // (`inlineProjectPicker`/`inlineBranchPicker`, both unchanged) — never a
-    // `.popover`, for the same nested-popover reason Slice A originally
-    // recorded (a child popover taking key can dismiss the parent
-    // composer).
+    // were each given a named successor: the ghost placeholder (Step 3) and
+    // the status strip (Step 4). The trailing `projectControl`/
+    // `branchControl` buttons that briefly stood in as the third successor
+    // are themselves gone (ultra-minimal variant C, 2026-08-30, PR #155,
+    // matching this file's own header comment above) — the results list
+    // below the field is the only remaining mouse route into
+    // projects/templates. `trailingControlVisibility`/`projectControl`/
+    // `branchControl`/`inlineProjectPicker`/`inlineBranchPicker` below still
+    // exist as unreachable dead code (Sean has not decided whether to
+    // delete them); nothing sets `isProjectPickerOpen`/`isBranchPickerOpen`
+    // any more.
 
-    /// Step 5: visibility + content for `projectControl`/`branchControl`,
-    /// one pure read so the view and `SessionComposerTrailingControlTests`
-    /// see the exact same decision.
+    /// Visibility + content for the now-unreachable `projectControl`/
+    /// `branchControl` (kept only so `SessionComposerTrailingControlTests`
+    /// still compiles against the pure decision — see the `MARK` above).
     private var trailingControlVisibility: SessionComposerCommandParser.TrailingControlVisibility {
         SessionComposerCommandParser.trailingControlVisibility(
             isProjectLocked: isProjectLocked,
