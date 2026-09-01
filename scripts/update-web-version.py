@@ -17,18 +17,21 @@ from datetime import datetime
 
 
 failures = []
+contents = {}  # path -> in-memory content, seeded from disk on first use
 
 
 def replace(path: str, pattern: str, repl: str, label: str) -> None:
-    """Replace `pattern` with `repl` in `path`. Logs whether it matched."""
-    src = open(path).read()
-    new, n = re.subn(pattern, repl, src)
+    """Replace `pattern` with `repl` in the in-memory content for `path`.
+    Logs whether it matched. Nothing is written to disk here."""
+    if path not in contents:
+        contents[path] = open(path).read()
+    new, n = re.subn(pattern, repl, contents[path])
     if n == 0:
-        print(f"  ! {label}: pattern did not match in {path}")
+        print(f"  ! {label}: pattern did not match in {path}", flush=True)
         failures.append(label)
     else:
-        open(path, "w").write(new)
-        print(f"  ✓ {label}: {n} replacement(s) in {path}")
+        contents[path] = new
+        print(f"  ✓ {label}: {n} replacement(s) in {path}", flush=True)
 
 
 if len(sys.argv) not in (2, 3):
@@ -48,7 +51,7 @@ if len(sys.argv) == 3:
     mb = round(bytes_ / (1024 * 1024))
     dmg_size_str = f"{mb} MB"
 
-print(f"Bumping site to {version} ({date_long})")
+print(f"Bumping site to {version} ({date_long})", flush=True)
 
 # 1. DMG download URL — both download.html and index.html hardcode one.
 #    (index.html's hero "download now" line links straight to the DMG, not
@@ -102,7 +105,7 @@ replace(
 # 5. index.html — DMG install-cell trailing label ("...Ghostties.dmg</a><br>v0.1.0-beta.X")
 replace(
     "web/index.html",
-    r"(?<=</a><br>)v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
+    r"(?<=Ghostties\.dmg</a><br>)v[\d]\.\d+\.\d+(?:-[a-z0-9.]+)?",
     version,
     "index.html DMG install-cell label",
 )
@@ -117,7 +120,11 @@ replace(
 )
 
 if failures:
+    sys.stdout.flush()
     print(f"\n{len(failures)} pattern(s) failed to match. Aborting.", file=sys.stderr)
     sys.exit(1)
+
+for path, new in contents.items():
+    open(path, "w").write(new)
 
 print("Done.")
