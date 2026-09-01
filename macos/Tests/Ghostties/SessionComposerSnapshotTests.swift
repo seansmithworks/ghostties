@@ -241,8 +241,8 @@ struct SessionComposerSnapshotTests {
     /// mutant-verified against the pre-removal capture (17 such pixels at
     /// this stride) vs. the current render (0).
     private func fieldRowTrailingPixelCount(in data: Data) -> Int {
-        guard let rep = NSBitmapImageRep(data: data) else { return 0 }
-        guard let cardTop = cardTopEdge(in: data) else { return 0 }
+        guard let rep = NSBitmapImageRep(data: data) else { return -1 }
+        guard let cardTop = cardTopEdge(in: data) else { return -1 }
         var count = 0
         let minX = max(0, rep.pixelsWide - 102)
         let maxX = max(minX, rep.pixelsWide - 25)
@@ -602,7 +602,32 @@ struct SessionComposerSnapshotTests {
     /// row's own trailing edge is empty — no stranded chevron
     /// (`fieldRowTrailingPixelCount`) — and dark mode still renders
     /// something, not a blank card (`containsRenderedContent`).
+    ///
+    /// Fix 3 (review round 2, PR #155): `isModelBFieldEnabled` is
+    /// `@AppStorage(ComposerGhostTextField.modelBFieldStorageKey)` on
+    /// process-global `UserDefaults.standard`.
+    /// `mountedModelBGhostTracksHighlightedRowAcrossProjects` below sets
+    /// it `true` and pumps a re-entrant `RunLoop.main.run(until:)`, four
+    /// times over its parameterized cases; any `@MainActor` test scheduled
+    /// in one of those windows would otherwise render
+    /// `ComposerGhostTextField` here instead of `ComposerQueryField` and
+    /// silently pass regardless of which field actually renders. Pinned
+    /// `false` with the same defer-restore shape used at this file's own
+    /// `:1007`, `ComposerFieldToggleTests.swift:26`, and
+    /// `ComposerGhostTextFieldTests.swift:29`.
     @Test func step5LineAndTrailingControlsDeletedLightAndDark() {
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(false, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"

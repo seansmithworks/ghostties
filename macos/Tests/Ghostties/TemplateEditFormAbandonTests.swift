@@ -76,6 +76,8 @@ struct TemplateEditFormAbandonTests {
             backing: .buffered,
             defer: false
         )
+        window.isOpaque = false
+        window.backgroundColor = .clear
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(x: 0, y: 0, width: 340, height: 600)
         window.contentView = hosting
@@ -91,5 +93,55 @@ struct TemplateEditFormAbandonTests {
         window.orderOut(nil)
 
         #expect(!store.templates.contains { $0.id == created.id })
+    }
+
+    /// Fix 1 (review round 2, PR #155): the counter-case to the test
+    /// above. `TemplateEditForm`'s one production call site
+    /// (`SessionComposerPalette.swift:1330`) passes `isNewlyCreated: false`
+    /// from the context menu's Edit action — the case the
+    /// `.onDisappear` guard at `TemplatePickerView.swift:556` exists to
+    /// protect: cancelling an edit of an already-configured template must
+    /// never delete it. The three pure-decision tests above only exercise
+    /// `shouldDiscardOnDismiss` directly, and the one mounted test above
+    /// uses `isNewlyCreated: true` (the case where discarding IS correct),
+    /// so neither would fail if that `guard` line were deleted — this test
+    /// closes that gap by mounting the real view with `isNewlyCreated:
+    /// false` and asserting the template SURVIVES the same abandon
+    /// sequence.
+    ///
+    /// Mutant-verified directly: deleting the `guard
+    /// Self.shouldDiscardOnDismiss(...) else { return }` line in
+    /// `TemplateEditForm.body`'s `.onDisappear` makes this FAIL (the
+    /// already-configured template is deleted); restoring it makes this
+    /// pass again.
+    @Test @MainActor func configuredTemplateSurvivesAbandoningTheRealEditSheet() {
+        let store = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let configured = store.addTemplate(
+            AgentTemplate(name: "Configured Template", kind: .custom, command: "claude")
+        )
+        #expect(store.templates.contains { $0.id == configured.id })
+
+        let view = TemplateEditForm(template: configured, isNewlyCreated: false)
+            .environmentObject(store)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 600),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 340, height: 600)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        // Cancel/Esc/click-outside, same as above — no Save.
+        window.contentView = nil
+        window.orderOut(nil)
+
+        #expect(store.templates.contains { $0.id == configured.id })
     }
 }

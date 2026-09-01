@@ -1514,11 +1514,15 @@ struct SessionComposerPalette: View {
     // `branchControl`/`inlineProjectPicker`/`inlineBranchPicker` below still
     // exist as unreachable dead code (Sean has not decided whether to
     // delete them); nothing sets `isProjectPickerOpen`/`isBranchPickerOpen`
-    // any more.
+    // to `true` any more.
 
     /// Visibility + content for the now-unreachable `projectControl`/
-    /// `branchControl` (kept only so `SessionComposerTrailingControlTests`
-    /// still compiles against the pure decision — see the `MARK` above).
+    /// `branchControl`. Unreferenced by any production call site — all 8
+    /// tests in `SessionComposerTrailingControlTests` call the
+    /// `GhosttiesCore` static `SessionComposerCommandParser
+    /// .trailingControlVisibility(...)` directly, not this property —
+    /// retained only pending Sean's decision on whether to delete it (see
+    /// the `MARK` above), not because anything still depends on it.
     private var trailingControlVisibility: SessionComposerCommandParser.TrailingControlVisibility {
         SessionComposerCommandParser.trailingControlVisibility(
             isProjectLocked: isProjectLocked,
