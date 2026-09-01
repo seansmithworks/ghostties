@@ -2,6 +2,12 @@
 #import <AppKit/AppKit.h>
 #include <atomic>
 
+#if DEBUG
+#import <SystemConfiguration/SystemConfiguration.h>
+#include <unistd.h>
+#include <signal.h>
+#endif
+
 #if __has_include("include/cef_app.h")
 #define GHOSTTIES_CEF_AVAILABLE 1
 #import "include/cef_app.h"
@@ -74,6 +80,56 @@ private:
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+#if DEBUG
+/// Logs the on-disk singleton-lock state relative to the current host, to
+/// distinguish a stale-lock-across-a-hostname-flip shutdown (see
+/// reference_dev-builds-share-a-bundle-id / hypothesis in the CEF shutdown
+/// investigation) from any other cause. Debug-only, [CEFDiag]-tagged.
+static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
+    NSString *lockPath = [cacheDir stringByAppendingPathComponent:@"SingletonLock"];
+
+    char hostnameBuf[256] = {0};
+    gethostname(hostnameBuf, sizeof(hostnameBuf));
+    NSString *posixHostname = [NSString stringWithUTF8String:hostnameBuf];
+
+    NSString *bonjourLocalHostName = (__bridge_transfer NSString *)SCDynamicStoreCopyLocalHostName(NULL);
+
+    const char *cLockPath = [lockPath fileSystemRepresentation];
+    char linkTarget[PATH_MAX] = {0};
+    ssize_t linkLen = readlink(cLockPath, linkTarget, sizeof(linkTarget) - 1);
+    if (linkLen < 0) {
+        NSLog(@"[CEFDiag] SingletonLock: absent or not a symlink at %@ (errno=%d %s). "
+              @"posixHostname=%@ bonjourLocalHostName=%@",
+              lockPath, errno, strerror(errno), posixHostname, bonjourLocalHostName);
+        return;
+    }
+    linkTarget[linkLen] = '\0';
+    NSString *target = [NSString stringWithUTF8String:linkTarget];
+
+    // Lock target format is "<hostname>-<pid>" — split on the last '-'.
+    NSRange dashRange = [target rangeOfString:@"-" options:NSBackwardsSearch];
+    NSString *lockHostname = (dashRange.location != NSNotFound)
+        ? [target substringToIndex:dashRange.location]
+        : nil;
+    NSString *lockPidString = (dashRange.location != NSNotFound)
+        ? [target substringFromIndex:dashRange.location + 1]
+        : nil;
+    pid_t lockPid = lockPidString ? (pid_t)[lockPidString integerValue] : 0;
+
+    BOOL pidAlive = NO;
+    if (lockPid > 0) {
+        pidAlive = (kill(lockPid, 0) == 0);
+    }
+
+    NSLog(@"[CEFDiag] SingletonLock target=%@ (lockHostname=%@ lockPid=%d pidAlive=%@) "
+          @"posixHostname=%@ bonjourLocalHostName=%@ hostnameMatch=%@",
+          target, lockHostname, lockPid, pidAlive ? @"YES" : @"NO",
+          posixHostname, bonjourLocalHostName,
+          ([lockHostname isEqualToString:posixHostname] ||
+           [lockHostname isEqualToString:bonjourLocalHostName]) ? @"YES" : @"NO");
+}
+#endif // DEBUG
 
 @interface CEFBridgeManager ()
 + (void)_messageLoopTick:(NSTimer *)timer;
@@ -156,7 +212,11 @@ private:
     // CEF's own log file — stored alongside the cache.
     NSString *logFile = [cacheDir stringByAppendingPathComponent:@"ghostties-cef-internal.log"];
     CefString(&settings.log_file) = [logFile UTF8String];
+#if DEBUG
+    settings.log_severity = LOGSEVERITY_VERBOSE;
+#else
     settings.log_severity = LOGSEVERITY_WARNING;
+#endif
 
     settings.remote_debugging_port = 0;
 
@@ -173,8 +233,15 @@ private:
     // GhosttiesApp provides the BrowserProcessHandler which implements
     // OnScheduleMessagePumpWork for external_message_pump integration.
 
+#if DEBUG
+    GhosttiesLogSingletonLockState(cacheDir);
+#endif
+
     CefRefPtr<GhosttiesApp> app(new GhosttiesApp());
     bool success = CefInitialize(mainArgs, settings, app, nullptr);
+#if DEBUG
+    NSLog(@"[CEFDiag] CefInitialize returned %@", success ? @"true" : @"false");
+#endif
     if (!success) {
         NSLog(@"[CEFBridge] CefInitialize failed.");
         return;
@@ -234,6 +301,10 @@ private:
 }
 
 + (void)_appWillTerminate:(NSNotification *)note {
+#if DEBUG
+    NSLog(@"[CEFDiag] NSApplicationWillTerminateNotification fired at %@",
+          [NSDate date]);
+#endif
     [self shutdown];
 }
 

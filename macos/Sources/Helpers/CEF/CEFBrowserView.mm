@@ -151,6 +151,9 @@ public:
 
     void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
         CEF_REQUIRE_UI_THREAD();
+#if DEBUG
+        NSLog(@"[CEFDiag] OnAfterCreated fired — browser materialised.");
+#endif
         CEFBrowserView *v = view_;
         if (v) {
             [v _browserDidCreate:browser];
@@ -254,6 +257,9 @@ private:
     NSString *urlStr = url ?: @"about:blank";
     CefString cefURL([urlStr UTF8String]);
 
+#if DEBUG
+    NSLog(@"[CEFDiag] Calling CefBrowserHost::CreateBrowser (async) for url=%@", urlStr);
+#endif
     CefBrowserHost::CreateBrowser(windowInfo, _client, cefURL, settings,
                                   nullptr, nullptr);
     self.browserCreated = YES;
