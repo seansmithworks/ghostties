@@ -2260,7 +2260,7 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 **Decisions open on Sean (carried 1×):**
 - [ ] Composer type scale — mockup values (header 10pt `.bold` + 0.6 tracking; footer 10.5pt `design: .monospaced`; strip `Color.secondary.opacity(0.08)`) vs `DESIGN.md`'s 15/13/11 scale + one font family. Note: no monospaced font carries `↵`/`⇥`, so the footer mixes families either way — weakens the mono case.
 - [ ] `macos/Tests/Ghostties/ThrottleTrailingEdgeHypothesisTests.swift` — delete or fix? Untracked, dated Aug 14, self-described "DIAGNOSTIC ONLY". Missing `import GhosttiesCore`; breaks local `xcodebuild test` for every session in this repo until resolved.
-- [ ] Tab-to-complete in the DEFAULT field — Tab filling the field from the highlighted row. Model-B only today. Its own change, not this branch.
+- [x] Tab-to-complete in the DEFAULT field — Tab filling the field from the highlighted row. Model-B only today. Its own change, not this branch. RESOLVED 2026-09-02: Sean made Model-B the default field for everyone instead of porting Tab into the old field.
 
 **Parked (off-objective):**
 - [ ] Template setup — bundled preset `macos/Presets/orchestrator.md` never seeds; `templates = presets + defaults + custom` has no dedupe (two "Orchestrator" rows if it does seed); Release `workspace.json` holds 3 junk "New Template" entries; presets sort ABOVE built-ins.
