@@ -1,5 +1,38 @@
 # Ghostties — Backlog
 
+## 2026-09-02 — CEF crash root-caused (Chromium 150→144 profile downgrade); overnight fix dispatched
+
+**Verdict (Fable 5.1):** Sean's Release CEF profile was written by Chromium 150; the Aug 1
+security pin (PR #60) fixed `vendor/cef` at 144, so every browser open since has been an
+unsupported profile downgrade — Chromium ends it with a deliberate `_exit` ~0.4s after
+`CefInitialize`, before the #159 sentinel is ever written. Full diagnosis and fix design:
+`docs/plans/cef-crash-strategy-2026-09-01.md`. A fresh overnight thread executes phases
+P0–P4 below unattended, T2 implementer + T1 reviewer per phase.
+
+- [ ] **P0 — Preconditions.** Prove the crash fixture is stable before touching anything:
+  capture the launchd/RunningBoard exit record for the last Release death, then reproduce
+  DIED 2/2 on the unfixed `main` lab build against a copy of the backed-up profile. Stop if
+  it survives — the fixture has decayed and needs re-deriving first.
+- [ ] **P1 — Observability + lab controls.** Add env-gated `[CEFBridge]`/`[CEFDiag]` logging
+  around `CefInitialize` (pre/post/alive-ticks), an app-support-dir override env var, and a
+  Release-mode auto-open-browser flag — all off by default, Release-safe. Accept: a lab
+  launch logs the new lines and `log show` confirms them; stop if Release still emits none.
+- [ ] **P2 — Experiments.** No source changes. Run the E0–E7 ladder from the plan's §2 on
+  copies of the backed-up profile to pin the exact death mechanism; report one arm-by-result
+  table with artefacts (backtrace, log excerpt, exit code). Stop and skip to P4 if the death
+  turns out to come from outside the process (signal, not a deliberate quit).
+- [ ] **P3 — Fix.** Add a pre-`CefInitialize` downgrade guard that moves a newer-version
+  profile aside and starts fresh, re-anchor the sentinel around `CefInitialize` instead of
+  `CreateBrowser`, and make the existing failure-state view actually render. Accept: fixed
+  lab build SURVIVES 3/3 against a fresh backup copy, a second launch on the same dir makes
+  no move, full unfiltered test suite passes. Stop on any DIED — no blind tuning.
+- [ ] **P4 — Ship.** Open a PR against `main` on `SeanSmithWorks/ghostties` carrying the
+  experiment table and P3 evidence, plus a screenshot proving a real (non-override) Release
+  build launches clean. Delete lab copies/worktrees and update `BACKLOG.md`.
+- [ ] **DECISION APPLIED BY DEFAULT (redline if wrong):** on downgrade, reset the profile
+  silently and show one inline notice line — no button (Fable's recommendation; the button
+  is a second failure surface, see the invisible-fallback item below).
+
 ## 2026-09-01 — composer ultra-minimal SHIPPED; CEF browser fix MERGED, Release profile still unverified
 
 `main` @ `bceb7a74a`. **PR #155 MERGED** — composer variant C (ultra-minimal): trailing
@@ -16,11 +49,11 @@ literal the round-1 fix had missed, round 3 found a comment the round-2 fix intr
   claim exactly; the failure is `GitWorktreeCreationTests/raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes()`,
   a `2.74 < 2.0` wall-clock flake unrelated to CEF), and all 6 `CEFBrowserSentinelTests` passed.
 
-- [ ] **OPEN, PRIMARY — the merged fix does NOT fix the crash. Reproduced on the Release
-  profile 2026-09-01 22:55.** Sean clicked the globe in a release-bundle-ID build carrying
-  the full #159 stack; `[CEFBridge] CEF initialized.` at `22:55:34.261`, last log line
-  `22:55:34.349`, process gone by `22:55:36`. No `.ips`, no signal, no further output.
-  **Next round: Fable 5.1 to analyse the flaw's source and the way past it.**
+- [x] **RESOLVED (root cause) — the merged fix does NOT fix the crash. Reproduced on the
+  Release profile 2026-09-01 22:55.** Sean clicked the globe in a release-bundle-ID build
+  carrying the full #159 stack; `[CEFBridge] CEF initialized.` at `22:55:34.261`, last log
+  line `22:55:34.349`, process gone by `22:55:36`. No `.ips`, no signal, no further output.
+  **Root cause and plan: see 2026-09-02 above.**
 
 - [ ] **OPEN — the sentinel is placed around the WRONG call, and the Dev bisection misled us.**
   `recordBrowserOpenAttempt` is called at `CEFBrowserView.mm:499`, before `CreateBrowser` at
