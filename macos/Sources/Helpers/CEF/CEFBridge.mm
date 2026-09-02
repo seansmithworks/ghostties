@@ -16,6 +16,7 @@
 #import "include/cef_app.h"
 #import "include/cef_browser.h"
 #import "include/cef_browser_process_handler.h"
+#import "include/cef_version.h"
 #import "include/wrapper/cef_helpers.h"
 #import "include/wrapper/cef_library_loader.h"
 #else
@@ -28,6 +29,7 @@
 
 static BOOL _isInitialized = NO;
 static NSTimer *_messageLoopTimer = nil;
+static BOOL _priorLaunchLeftUnclearedAttempt = NO;
 
 // ---------------------------------------------------------------------------
 // CefApp implementation for external message pump integration
@@ -219,6 +221,9 @@ static void GhosttiesInstallExitDiagnostics(void) {
 + (void)_appWillTerminate:(NSNotification *)note;
 + (NSString *)_appSupportBundleDirectory;
 + (NSString *)_iso8601Timestamp;
++ (nullable NSString *)_moveProfileAsideWithPrefix:(NSString *)prefix error:(NSError **)error;
++ (NSInteger)_recordedChromiumMajorVersionOrZero;
++ (void)_performDowngradeGuardIfNeeded;
 @end
 
 // ---------------------------------------------------------------------------
@@ -243,6 +248,10 @@ static void GhosttiesInstallExitDiagnostics(void) {
 
 + (BOOL)isInitialized {
     return _isInitialized;
+}
+
++ (BOOL)priorLaunchLeftUnclearedAttempt {
+    return _priorLaunchLeftUnclearedAttempt;
 }
 
 #pragma mark - Lifecycle
@@ -287,6 +296,11 @@ static void GhosttiesInstallExitDiagnostics(void) {
     // Use ~/Library/Application Support/<bundleIdentifier>/CEF/ so dev and
     // release builds don't share a cache (bundle IDs differ by `.dev` suffix).
     NSString *cacheDir = [self cefProfileDirectoryPath];
+
+    // Downgrade guard — must run before anything below touches cacheDir, so
+    // a poisoned profile is moved aside before CEF ever opens it.
+    [self _performDowngradeGuardIfNeeded];
+
     NSError *cacheDirError = nil;
     if (![[NSFileManager defaultManager] createDirectoryAtPath:cacheDir
                                   withIntermediateDirectories:YES
@@ -344,6 +358,17 @@ static void GhosttiesInstallExitDiagnostics(void) {
     os_log(OS_LOG_DEFAULT, "[CEFBridge] Pre-CefInitialize: cacheDir=%{public}@ logFile=%{public}@ verbose=%{public}@",
            cacheDir, logFile, cefLogVerbose ? @"YES" : @"NO");
     CefRefPtr<GhosttiesApp> app(new GhosttiesApp());
+
+    // Snapshot whether a PRIOR launch left the sentinel uncleared, before
+    // this launch overwrites it below. The sentinel is now written before
+    // CefInitialize (bracketing the whole init+create sequence, not just
+    // CreateBrowser) — so by the time browser creation checks it, the file
+    // would always exist as THIS launch's own in-flight attempt. Callers
+    // must consult this snapshot, not the live file, to ask "did the
+    // previous launch die".
+    _priorLaunchLeftUnclearedAttempt = [self hasUnclearedBrowserOpenAttempt];
+    [self recordBrowserOpenAttempt];
+
     bool success = CefInitialize(mainArgs, settings, app, nullptr);
     os_log(OS_LOG_DEFAULT, "[CEFBridge] CefInitialize returned %{public}@", success ? @"true" : @"false");
     if (!success) {
@@ -510,7 +535,7 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
     return [[NSFileManager defaultManager] fileExistsAtPath:[self browserOpenAttemptSentinelPath]];
 }
 
-+ (nullable NSString *)resetProfileDirectoryPreservingDataError:(NSError **)error {
++ (nullable NSString *)_moveProfileAsideWithPrefix:(NSString *)prefix error:(NSError **)error {
     NSString *profilePath = [self cefProfileDirectoryPath];
     NSFileManager *fm = [NSFileManager defaultManager];
 
@@ -525,7 +550,7 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
     NSString *sanitizedTimestamp = [[self _iso8601Timestamp]
         stringByReplacingOccurrencesOfString:@":" withString:@"-"];
     NSString *movedPath = [[profilePath stringByDeletingLastPathComponent]
-        stringByAppendingPathComponent:[NSString stringWithFormat:@"CEF-broken-%@", sanitizedTimestamp]];
+        stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-%@", prefix, sanitizedTimestamp]];
 
     if (![fm moveItemAtPath:profilePath toPath:movedPath error:error]) {
         return nil;
@@ -533,6 +558,114 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
 
     [fm createDirectoryAtPath:profilePath withIntermediateDirectories:YES attributes:nil error:error];
     return movedPath;
+}
+
++ (nullable NSString *)resetProfileDirectoryPreservingDataError:(NSError **)error {
+    return [self _moveProfileAsideWithPrefix:@"CEF-broken" error:error];
+}
+
+#pragma mark - Downgrade guard (Chromium major-version stamp)
+
++ (NSString *)chromiumVersionStampPath {
+    return [[self _appSupportBundleDirectory] stringByAppendingPathComponent:@"cef-profile-chromium-version"];
+}
+
++ (void)recordChromiumVersionStamp {
+#if GHOSTTIES_CEF_AVAILABLE
+    NSString *path = [self chromiumVersionStampPath];
+    NSString *parentDir = [path stringByDeletingLastPathComponent];
+    [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
+                               withIntermediateDirectories:YES
+                                                attributes:nil
+                                                     error:nil];
+    NSString *contents = [NSString stringWithFormat:@"%d", CHROME_VERSION_MAJOR];
+    NSError *error = nil;
+    if (![contents writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&error]) {
+        NSLog(@"[CEFBridge] Failed to write Chromium version stamp: %@", error.localizedDescription);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[CEFBridge] Wrote Chromium version stamp (%d) at %{public}@",
+               CHROME_VERSION_MAJOR, path);
+    }
+#endif
+}
+
++ (BOOL)isProfileDowngradeGivenRecordedMajor:(NSInteger)recordedMajor
+                                 runningMajor:(NSInteger)runningMajor {
+    // recordedMajor <= 0 means absent/unparseable — never a downgrade. Only
+    // a STRICTLY newer recorded major is a downgrade; equal or older is not.
+    if (recordedMajor <= 0) return NO;
+    return recordedMajor > runningMajor;
+}
+
+/// Determines the Chromium major version the on-disk profile was last
+/// written by. Stamp file first (our own record, written after a prior
+/// successful `OnAfterCreated`); falls back to the profile's own
+/// `Default/Preferences` → `extensions.last_chrome_version` for profiles
+/// that predate the stamp. Returns 0 if neither is present or parseable —
+/// 0 is never treated as a downgrade by `isProfileDowngradeGivenRecordedMajor:runningMajor:`.
++ (NSInteger)_recordedChromiumMajorVersionOrZero {
+    NSString *stampContents = [NSString stringWithContentsOfFile:[self chromiumVersionStampPath]
+                                                          encoding:NSUTF8StringEncoding
+                                                             error:nil];
+    if (stampContents.length > 0) {
+        NSInteger stampedMajor = [stampContents integerValue];
+        if (stampedMajor > 0) return stampedMajor;
+    }
+
+    // Fallback: profiles written before this guard existed have no stamp.
+    NSString *prefsPath = [[self cefProfileDirectoryPath] stringByAppendingPathComponent:@"Default/Preferences"];
+    NSData *prefsData = [NSData dataWithContentsOfFile:prefsPath];
+    if (!prefsData) return 0;
+
+    id prefsJSON = [NSJSONSerialization JSONObjectWithData:prefsData options:0 error:nil];
+    if (![prefsJSON isKindOfClass:[NSDictionary class]]) return 0;
+
+    NSDictionary *extensions = [(NSDictionary *)prefsJSON objectForKey:@"extensions"];
+    if (![extensions isKindOfClass:[NSDictionary class]]) return 0;
+
+    NSString *lastChromeVersion = [extensions objectForKey:@"last_chrome_version"];
+    if (![lastChromeVersion isKindOfClass:[NSString class]] || lastChromeVersion.length == 0) return 0;
+
+    NSString *majorString = [lastChromeVersion componentsSeparatedByString:@"."].firstObject;
+    if (majorString.length == 0) return 0;
+
+    // NSString's -integerValue returns 0 for garbage, which would be
+    // indistinguishable from "absent" — reject anything that isn't a clean
+    // run of digits so a malformed version string is correctly treated as
+    // unparseable rather than as major version 0.
+    NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+    if ([majorString rangeOfCharacterFromSet:nonDigits].location != NSNotFound) return 0;
+
+    return [majorString integerValue];
+}
+
+/// Runs before `CefInitialize`. See the header doc above
+/// `chromiumVersionStampPath` for why: opening a profile last written by a
+/// strictly newer Chromium major version than the one currently embedded is
+/// the confirmed cause of a deliberate post-init process quit. Moves the
+/// ENTIRE profile directory aside when detected (E3/E4 proved the poison is
+/// not confined to one file or key) and always logs exactly one line
+/// recording the decision, whether or not anything moved.
++ (void)_performDowngradeGuardIfNeeded {
+#if GHOSTTIES_CEF_AVAILABLE
+    NSInteger recordedMajor = [self _recordedChromiumMajorVersionOrZero];
+    NSInteger runningMajor = CHROME_VERSION_MAJOR;
+
+    if (![self isProfileDowngradeGivenRecordedMajor:recordedMajor runningMajor:runningMajor]) {
+        os_log(OS_LOG_DEFAULT,
+               "[CEFBridge] Downgrade guard: no action (recordedMajor=%ld runningMajor=%ld)",
+               (long)recordedMajor, (long)runningMajor);
+        return;
+    }
+
+    NSError *moveError = nil;
+    NSString *movedTo = [self _moveProfileAsideWithPrefix:@"CEF-downgraded" error:&moveError];
+    os_log(OS_LOG_DEFAULT,
+           "[CEFBridge] Downgrade guard: profile recordedMajor=%ld > runningMajor=%ld — moved aside to "
+           "%{public}@ (error=%{public}@)",
+           (long)recordedMajor, (long)runningMajor,
+           movedTo ?: @"(none)", moveError.localizedDescription ?: @"none");
+#endif
 }
 
 #pragma mark - Private
@@ -544,10 +677,10 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
 }
 
 + (void)_appWillTerminate:(NSNotification *)note {
-#if DEBUG
-    os_log(OS_LOG_DEFAULT, "[CEFDiag] NSApplicationWillTerminateNotification fired at %{public}@",
-           [NSDate date]);
-#endif
+    if (GhosttiesCEFDiagEnabled()) {
+        os_log(OS_LOG_DEFAULT, "[CEFDiag] NSApplicationWillTerminateNotification fired at %{public}@",
+               [NSDate date]);
+    }
     [self shutdown];
 }
 

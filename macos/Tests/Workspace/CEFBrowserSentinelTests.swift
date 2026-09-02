@@ -118,4 +118,32 @@ struct CEFBrowserSentinelTests {
             #expect(FileManager.default.fileExists(atPath: CEFBridgeManager.cefProfileDirectoryPath()))
         }
     }
+
+    // MARK: - Downgrade guard version comparison
+    //
+    // Calls the production symbol `CEFBridgeManager.isProfileDowngradeGivenRecordedMajor(_:runningMajor:)`
+    // directly — the same comparison `+_performDowngradeGuardIfNeeded` reduces
+    // to before moving a profile aside. Mutant-verified 2026-09-02: flipping
+    // the production `>` to `<` made `testNewerRecordedMajorIsADowngrade`
+    // and `testOlderRecordedMajorIsNotADowngrade` both fail; restoring the
+    // `>` made the full suite pass again. See feedback_vacuous-tests-pass-green
+    // — a test that never references a production symbol is not coverage.
+
+    @Test func testNewerRecordedMajorIsADowngrade() throws {
+        #expect(CEFBridgeManager.isProfileDowngrade(givenRecordedMajor: 150, runningMajor: 144) == true)
+    }
+
+    @Test func testOlderRecordedMajorIsNotADowngrade() throws {
+        #expect(CEFBridgeManager.isProfileDowngrade(givenRecordedMajor: 140, runningMajor: 144) == false)
+    }
+
+    @Test func testEqualMajorIsNotADowngrade() throws {
+        #expect(CEFBridgeManager.isProfileDowngrade(givenRecordedMajor: 144, runningMajor: 144) == false)
+    }
+
+    @Test func testAbsentRecordedMajorIsNotADowngrade() throws {
+        // 0 is the sentinel `_recordedChromiumMajorVersionOrZero` returns
+        // for an absent/unparseable version — must never trigger a move.
+        #expect(CEFBridgeManager.isProfileDowngrade(givenRecordedMajor: 0, runningMajor: 144) == false)
+    }
 }

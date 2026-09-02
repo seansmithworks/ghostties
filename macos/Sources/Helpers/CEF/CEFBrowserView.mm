@@ -479,15 +479,21 @@ private:
     // the process in ~400-650ms — far faster than the 3s creation watchdog
     // below can ever catch, and nothing in-process survives to run recovery
     // code. So this is checked here, on the NEXT launch, instead: if a
-    // prior attempt wrote the sentinel and never cleared it (OnAfterCreated
-    // never fired), that attempt almost certainly killed the process. Do
-    // NOT attempt creation again blind — surface the failure state and let
-    // the user choose to reset the profile.
-    if ([CEFBridgeManager hasUnclearedBrowserOpenAttempt]) {
+    // prior attempt wrote the sentinel and never cleared it (never survived
+    // 3s past CreateBrowser — see -_startCreationWatchdog), that attempt
+    // almost certainly killed the process. Do NOT attempt creation again
+    // blind — surface the failure state and let the user choose to reset
+    // the profile.
+    //
+    // This reads the SNAPSHOT captured by +[CEFBridgeManager
+    // initializeIfNeeded], not the live sentinel file: the sentinel is now
+    // written before CefInitialize, so by the time this method runs the
+    // file always exists as THIS launch's own in-flight attempt.
+    if ([CEFBridgeManager priorLaunchLeftUnclearedAttempt]) {
         self.browserCreated = YES;
         self.creationFailedDueToPreviousCrash = YES;
 #if DEBUG
-        os_log(OS_LOG_DEFAULT, "[CEFDiag] Uncleared browser-open-attempt sentinel found — "
+        os_log(OS_LOG_DEFAULT, "[CEFDiag] Prior launch left the browser-open-attempt sentinel uncleared — "
                "skipping CreateBrowser, surfacing failure state instead.");
 #endif
         [self _notifyCreationFailed];
@@ -496,7 +502,6 @@ private:
 
     self.browserCreated = YES;
     self.creationAttemptCount += 1;
-    [CEFBridgeManager recordBrowserOpenAttempt];
 
     CefWindowInfo windowInfo;
     CefRect cefRect(0, 0, (int)self.frame.size.width, (int)self.frame.size.height);
@@ -553,6 +558,12 @@ private:
 /// `OnAfterCreated` hasn't fired within 3s of calling `CreateBrowser`,
 /// treat creation as failed so nothing downstream waits on a browser that
 /// will never materialise.
+///
+/// ALSO owns clearing the browser-open-attempt sentinel (see
+/// CEFBridgeManager) once the browser HAS materialised. `OnAfterCreated`
+/// firing does not prove the process has survived the CEF profile-downgrade
+/// crash — it kills the process ~0.3-0.65s *after* `OnAfterCreated`, inside
+/// this same 3s window — so the clear happens here, at 3s, not there.
 - (void)_startCreationWatchdog {
     [self.creationWatchdogTimer invalidate];
     self.creationFailed = NO;
@@ -562,7 +573,15 @@ private:
                                                                     block:^(NSTimer *timer) {
         CEFBrowserView *strongSelf = weakSelf;
         if (!strongSelf) return;
-        if (strongSelf->_browser) return;  // already materialised
+        if (strongSelf->_browser) {
+            // Already materialised, and the process has now survived a
+            // further 3s past CreateBrowser — the earliest point we can be
+            // sure this launch is not the profile-downgrade crash. Clear
+            // the sentinel here, not at OnAfterCreated.
+            [CEFBridgeManager clearBrowserOpenAttempt];
+            strongSelf.creationWatchdogTimer = nil;
+            return;
+        }
 #if DEBUG
         NSLog(@"[CEFDiag] Creation watchdog: OnAfterCreated did not fire within "
               @"3.0s — treating creation as failed.");
@@ -664,12 +683,17 @@ private:
 #if DEBUG
     self.diagAfterCreatedFired = YES;
 #endif
-    [self.creationWatchdogTimer invalidate];
-    self.creationWatchdogTimer = nil;
+    // Deliberately do NOT invalidate the creation watchdog here, and do NOT
+    // clear the browser-open-attempt sentinel here — see the doc comment on
+    // -_startCreationWatchdog. The watchdog keeps running and clears the
+    // sentinel once the browser has survived a further 3s.
     self.creationFailed = NO;
     self.creationFailedDueToPreviousCrash = NO;
-    [CEFBridgeManager clearBrowserOpenAttempt];
     _browser = browser;
+    // Record which Chromium major version this profile was just opened
+    // successfully by, so the downgrade guard on the NEXT launch has a
+    // record even for profiles that predate it.
+    [CEFBridgeManager recordChromiumVersionStamp];
     // Sync CEF's internal child view and compositor to our current bounds.
     [self _syncCefChildBounds];
     if ([self.delegate respondsToSelector:@selector(browserViewDidCreate:)]) {

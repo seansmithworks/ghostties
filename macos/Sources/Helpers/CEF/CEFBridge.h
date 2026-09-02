@@ -9,6 +9,17 @@ NS_ASSUME_NONNULL_BEGIN
 /// Whether CEF has been initialized.
 @property (class, nonatomic, readonly) BOOL isInitialized;
 
+/// Whether the sentinel from a PRIOR launch was still uncleared at the
+/// moment THIS launch's `+initializeIfNeeded` ran — captured once, before
+/// this launch writes its own sentinel. The live sentinel file always
+/// exists by the time browser creation starts (it is now written before
+/// `CefInitialize`, not before `CreateBrowser`), so re-checking
+/// `hasUnclearedBrowserOpenAttempt` live at creation time would only ever
+/// find THIS launch's own in-flight attempt, not a prior one. Callers that
+/// want to know "did the previous launch die" must read this snapshot
+/// instead.
+@property (class, nonatomic, readonly) BOOL priorLaunchLeftUnclearedAttempt;
+
 /// Initialize CEF if not already done. Called lazily on first browser creation.
 /// Must be called on the main thread.
 + (void)initializeIfNeeded;
@@ -29,6 +40,14 @@ NS_ASSUME_NONNULL_BEGIN
 //
 // The sentinel lives OUTSIDE the CEF profile directory (`cefProfileDirectoryPath`)
 // so that resetting the profile (moving it aside) never removes it.
+//
+// CORRECTED (see project_cef-crash-dies-before-createbrowser): the sentinel
+// is written before `CefInitialize` (bracketing the whole init+create
+// sequence, not just `CreateBrowser`) and cleared only once the creation
+// watchdog observes the browser has survived a further 3s past
+// `CreateBrowser` — NOT at `OnAfterCreated`, which fires and clears too
+// early to catch this specific crash (it kills the process ~0.3-0.65s
+// *after* `OnAfterCreated`, inside that same window).
 
 /// Path to the CEF profile/cache directory (CefSettings.root_cache_path /
 /// cache_path).
@@ -59,6 +78,40 @@ NS_ASSUME_NONNULL_BEGIN
 /// (no prior profile existed) as well as failure. Tests need to observe
 /// both outcomes distinctly via the raw `error` out-parameter.
 + (nullable NSString *)resetProfileDirectoryPreservingDataError:(NSError * _Nullable * _Nullable)error NS_SWIFT_NOTHROW;
+
+#pragma mark - Downgrade guard (Chromium major-version stamp)
+
+// PR #60 pinned vendor/cef at a fixed Chromium major version. A profile
+// last written by a NEWER Chromium than the one currently embedded is an
+// unsupported downgrade that Chromium resolves by quietly quitting
+// ~0.4-0.65s after `CefInitialize` returns (see the CEF profile-poisoning
+// bisection — root cause is a Chromium 150→144 profile downgrade, not a
+// crash in the ordinary sense). This guard runs before `CefInitialize` on
+// every launch and moves such a profile aside before it is ever opened.
+//
+// E3/E4 (see docs/plans lab notes) proved the poison is not confined to one
+// preference key or file: the remediation below moves the ENTIRE `CEF/`
+// directory aside, never a targeted rewrite.
+
+/// Path to the Chromium-major-version stamp file. A SIBLING of
+/// `cefProfileDirectoryPath` — same reasoning as the sentinel above, a
+/// profile move-aside must never also remove the record of what wrote it.
++ (NSString *)chromiumVersionStampPath;
+
+/// Records the currently-running embedded Chromium's major version to the
+/// stamp file. Call only once a browser has actually materialised
+/// (`OnAfterCreated`) — a stamp written any earlier would claim a version
+/// ran successfully when it may not have.
++ (void)recordChromiumVersionStamp;
+
+/// The pure comparison the downgrade guard's decision reduces to: is a
+/// profile last written by `recordedMajor` an unsupported downgrade when
+/// opened by an embedded Chromium whose major version is `runningMajor`?
+/// `recordedMajor <= 0` means absent/unparseable and is never a downgrade.
+/// Exposed as its own symbol so it can be tested directly — see
+/// CEFBrowserSentinelTests.
++ (BOOL)isProfileDowngradeGivenRecordedMajor:(NSInteger)recordedMajor
+                                 runningMajor:(NSInteger)runningMajor;
 
 #if DEBUG
 /// TEST-ONLY. Overrides the base directory all sentinel/profile paths above
