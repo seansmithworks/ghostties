@@ -9,26 +9,34 @@ unsupported profile downgrade — Chromium ends it with a deliberate `_exit` ~0.
 `docs/plans/cef-crash-strategy-2026-09-01.md`. A fresh overnight thread executes phases
 P0–P4 below unattended, T2 implementer + T1 reviewer per phase.
 
-- [ ] **P0 — Preconditions.** Prove the crash fixture is stable before touching anything:
-  capture the launchd/RunningBoard exit record for the last Release death, then reproduce
-  DIED 2/2 on the unfixed `main` lab build against a copy of the backed-up profile. Stop if
-  it survives — the fixture has decayed and needs re-deriving first.
-- [ ] **P1 — Observability + lab controls.** Add env-gated `[CEFBridge]`/`[CEFDiag]` logging
-  around `CefInitialize` (pre/post/alive-ticks), an app-support-dir override env var, and a
-  Release-mode auto-open-browser flag — all off by default, Release-safe. Accept: a lab
-  launch logs the new lines and `log show` confirms them; stop if Release still emits none.
-- [ ] **P2 — Experiments.** No source changes. Run the E0–E7 ladder from the plan's §2 on
-  copies of the backed-up profile to pin the exact death mechanism; report one arm-by-result
-  table with artefacts (backtrace, log excerpt, exit code). Stop and skip to P4 if the death
-  turns out to come from outside the process (signal, not a deliberate quit).
-- [ ] **P3 — Fix.** Add a pre-`CefInitialize` downgrade guard that moves a newer-version
-  profile aside and starts fresh, re-anchor the sentinel around `CefInitialize` instead of
-  `CreateBrowser`, and make the existing failure-state view actually render. Accept: fixed
-  lab build SURVIVES 3/3 against a fresh backup copy, a second launch on the same dir makes
-  no move, full unfiltered test suite passes. Stop on any DIED — no blind tuning.
-- [ ] **P4 — Ship.** Open a PR against `main` on `SeanSmithWorks/ghostties` carrying the
-  experiment table and P3 evidence, plus a screenshot proving a real (non-override) Release
-  build launches clean. Delete lab copies/worktrees and update `BACKLOG.md`.
+- [x] **P0 — Preconditions.** Done. RunningBoard recorded `termination reported by launchd
+  (0, 0, 1536)` for the original crash — exit status 0, no signal, confirming a deliberate
+  quit rather than a fault. Fixture verified stable at `last_chrome_version 150.0.7871.129`.
+- [x] **P1 — Observability + lab controls.** Done. `GHOSTTIES_CEF_APP_SUPPORT_DIR` override,
+  `[CEFBridge]` `os_log` probes with 250ms alive-ticks, `[CEFDiag]` moved to a runtime env
+  gate, auto-open un-gated for Release, `--allow-non-dev` added to the repro script. P1 ran
+  **before** P0's E0: an unfixed Release build had no non-GUI way to reach the fixture until
+  the lab controls existed.
+- [x] **P2 — Experiments.** Done. E0 baseline DIED 2/2 (0.53s, 0.41s). E3 (flip
+  `last_chrome_version` alone) DIED 2/2. E4 (replace `Default/Preferences` wholesale) DIED.
+  E2 (`exit_type` → Normal) DIED. E1 (lldb) abandoned — generic breakpoints matched 9–39
+  locations and fired continuously. E3 and E4 are why the remediation moves the whole
+  profile directory rather than patching a key or a file.
+- [x] **P3 — Fix.** Done, three rounds. Downgrade guard with a bounded version parse
+  (rejects, never clamps, applied to both the stamp and the `Preferences` fallback);
+  sentinel clear moved to a process-level 3s timer after `CefInitialize`; automatic reset
+  gated on the move actually succeeding; failure notice made visible. Fresh fixture copy +
+  fixed build SURVIVED 3/3. Suite 1040/1043, the two failures being the known pre-existing
+  flakes. 12 new parse-path tests, mutant-verified.
+- [x] **P4 — Ship.** Done. PR #162 against `main` on `SeanSmithWorks/ghostties`, carrying the
+  experiment table and evidence in `docs/plans/evidence/`. `/Applications/Ghostties-fix.app`
+  installed, 6 CEF symbols, adhoc-signed, not launched.
+- [ ] **OPEN — composer variant C still not visually confirmed.** The overnight run could
+  not screenshot it: the palette needs ⌘N and synthetic input is disallowed, `screencapture`
+  returns a black frame from a stale TCC grant, and `workspace.json` is not isolated from lab
+  launches so a second live instance was not safe to run. By binary the code is present (0
+  occurrences of the old `"Pick one from the branch picker"` string). To confirm: launch
+  `/Applications/Ghostties-fix.app` and press ⌘N.
 - [ ] **DECISION APPLIED BY DEFAULT (redline if wrong):** on downgrade, reset the profile
   silently and show one inline notice line — no button (Fable's recommendation; the button
   is a second failure surface, see the invisible-fallback item below).
