@@ -118,4 +118,178 @@ struct CEFBrowserSentinelTests {
             #expect(FileManager.default.fileExists(atPath: CEFBridgeManager.cefProfileDirectoryPath()))
         }
     }
+
+    // MARK: - Downgrade guard version comparison
+    //
+    // Calls the production symbol `CEFBridgeManager.isProfileDowngradeGivenRecordedMajor(_:runningMajor:)`
+    // directly — the same comparison `+_performDowngradeGuardIfNeeded` reduces
+    // to before moving a profile aside. Mutant-verified 2026-09-02: flipping
+    // the production `>` to `<` made `testNewerRecordedMajorIsADowngrade`
+    // and `testOlderRecordedMajorIsNotADowngrade` both fail; restoring the
+    // `>` made the full suite pass again. See feedback_vacuous-tests-pass-green
+    // — a test that never references a production symbol is not coverage.
+
+    @Test func testNewerRecordedMajorIsADowngrade() throws {
+        #expect(CEFBridgeManager.isProfileDowngrade(givenRecordedMajor: 150, runningMajor: 144) == true)
+    }
+
+    @Test func testOlderRecordedMajorIsNotADowngrade() throws {
+        #expect(CEFBridgeManager.isProfileDowngrade(givenRecordedMajor: 140, runningMajor: 144) == false)
+    }
+
+    @Test func testEqualMajorIsNotADowngrade() throws {
+        #expect(CEFBridgeManager.isProfileDowngrade(givenRecordedMajor: 144, runningMajor: 144) == false)
+    }
+
+    @Test func testAbsentRecordedMajorIsNotADowngrade() throws {
+        // 0 is the sentinel `_recordedChromiumMajorVersionOrZero` returns
+        // for an absent/unparseable version — must never trigger a move.
+        #expect(CEFBridgeManager.isProfileDowngrade(givenRecordedMajor: 0, runningMajor: 144) == false)
+    }
+
+    // MARK: - Recorded-major parsing (_recordedChromiumMajorVersionOrZero)
+    //
+    // Calls the production symbol
+    // CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting(), a
+    // DEBUG-only wrapper that forwards directly to
+    // +_recordedChromiumMajorVersionOrZero — the exact parsing the downgrade
+    // guard runs before every CefInitialize. This is where the actual risk
+    // lives (see the review finding that motivated it): an unbounded,
+    // unvalidated parse of a truncated/corrupted `last_chrome_version` like
+    // "1440.1.2.3" would read as major 1440, compare as a downgrade against
+    // running major 144, and move aside a HEALTHY same-version profile.
+    //
+    // Mutant-verified 2026-09-02: temporarily removing the
+    // `value > kGhosttiesMaxPlausibleChromiumMajor` bound from
+    // +_sanitizedMajorVersionFromDigitString: made
+    // testOversizedPreferencesMajorIsUnparseable AND
+    // testOversizedStampIsUnparseable fail (both returned 1440 instead of
+    // 0); restoring the bound made the suite green again.
+
+    private func writePreferences(lastChromeVersion: String?, profilePath: String) throws {
+        let fm = FileManager.default
+        let defaultDir = (profilePath as NSString).appendingPathComponent("Default")
+        try fm.createDirectory(atPath: defaultDir, withIntermediateDirectories: true)
+        let prefsPath = (defaultDir as NSString).appendingPathComponent("Preferences")
+        var json: [String: Any] = [:]
+        if let lastChromeVersion {
+            json["extensions"] = ["last_chrome_version": lastChromeVersion]
+        }
+        let data = try JSONSerialization.data(withJSONObject: json)
+        try data.write(to: URL(fileURLWithPath: prefsPath))
+    }
+
+    @Test func testAbsentStampAndAbsentPreferencesIsZero() throws {
+        try withIsolatedAppSupportDirectory {
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 0)
+        }
+    }
+
+    @Test func testAbsentStampWithValidPreferencesReadsThePreferencesMajor() throws {
+        try withIsolatedAppSupportDirectory {
+            try writePreferences(
+                lastChromeVersion: "150.0.7871.129",
+                profilePath: CEFBridgeManager.cefProfileDirectoryPath()
+            )
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 150)
+        }
+    }
+
+    @Test func testMalformedNonJSONPreferencesIsZero() throws {
+        try withIsolatedAppSupportDirectory {
+            let fm = FileManager.default
+            let defaultDir = (CEFBridgeManager.cefProfileDirectoryPath() as NSString).appendingPathComponent("Default")
+            try fm.createDirectory(atPath: defaultDir, withIntermediateDirectories: true)
+            let prefsPath = (defaultDir as NSString).appendingPathComponent("Preferences")
+            try "not json at all { [ garbage".write(toFile: prefsPath, atomically: true, encoding: .utf8)
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 0)
+        }
+    }
+
+    @Test func testExtensionsPresentButLastChromeVersionMissingIsZero() throws {
+        try withIsolatedAppSupportDirectory {
+            let fm = FileManager.default
+            let defaultDir = (CEFBridgeManager.cefProfileDirectoryPath() as NSString).appendingPathComponent("Default")
+            try fm.createDirectory(atPath: defaultDir, withIntermediateDirectories: true)
+            let prefsPath = (defaultDir as NSString).appendingPathComponent("Preferences")
+            let json: [String: Any] = ["extensions": ["some_other_key": "value"]]
+            try JSONSerialization.data(withJSONObject: json).write(to: URL(fileURLWithPath: prefsPath))
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 0)
+        }
+    }
+
+    @Test func testEmptyLastChromeVersionStringIsZero() throws {
+        try withIsolatedAppSupportDirectory {
+            try writePreferences(lastChromeVersion: "", profilePath: CEFBridgeManager.cefProfileDirectoryPath())
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 0)
+        }
+    }
+
+    @Test func testNonDigitMajorIsZero() throws {
+        try withIsolatedAppSupportDirectory {
+            try writePreferences(lastChromeVersion: "abc.1.2", profilePath: CEFBridgeManager.cefProfileDirectoryPath())
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 0)
+        }
+    }
+
+    @Test func testOversizedPreferencesMajorIsUnparseable() throws {
+        try withIsolatedAppSupportDirectory {
+            // A truncated/corrupted version string that concatenates two
+            // components into one run of digits — the exact review finding
+            // this bound exists to catch.
+            try writePreferences(lastChromeVersion: "1440.1.2.3", profilePath: CEFBridgeManager.cefProfileDirectoryPath())
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 0)
+        }
+    }
+
+    @Test func testEqualVersionInPreferencesReadsExactly() throws {
+        try withIsolatedAppSupportDirectory {
+            try writePreferences(lastChromeVersion: "144.0.1.2", profilePath: CEFBridgeManager.cefProfileDirectoryPath())
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 144)
+        }
+    }
+
+    @Test func testOlderVersionInPreferencesReadsExactly() throws {
+        try withIsolatedAppSupportDirectory {
+            try writePreferences(lastChromeVersion: "100.0.5.6", profilePath: CEFBridgeManager.cefProfileDirectoryPath())
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 100)
+        }
+    }
+
+    private func writeStamp(_ contents: String) throws {
+        let stampPath = CEFBridgeManager.chromiumVersionStampPath()
+        try FileManager.default.createDirectory(
+            atPath: (stampPath as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true
+        )
+        try contents.write(toFile: stampPath, atomically: true, encoding: .utf8)
+    }
+
+    @Test func testValidStampIsPreferredOverPreferences() throws {
+        try withIsolatedAppSupportDirectory {
+            try writeStamp("150")
+            // A different (and otherwise valid) Preferences value must be
+            // ignored — the stamp wins when it parses.
+            try writePreferences(lastChromeVersion: "100.0.0.0", profilePath: CEFBridgeManager.cefProfileDirectoryPath())
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 150)
+        }
+    }
+
+    @Test func testMalformedStampFallsBackToPreferences() throws {
+        try withIsolatedAppSupportDirectory {
+            try writeStamp("150garbage")
+            try writePreferences(lastChromeVersion: "150.0.7871.129", profilePath: CEFBridgeManager.cefProfileDirectoryPath())
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 150)
+        }
+    }
+
+    @Test func testOversizedStampIsUnparseable() throws {
+        try withIsolatedAppSupportDirectory {
+            // Same corruption class as testOversizedPreferencesMajorIsUnparseable,
+            // but on the stamp path — item 1 required the SAME bound and
+            // digit validation apply to both.
+            try writeStamp("1440")
+            #expect(CEFBridgeManager.recordedChromiumMajorVersionOrZeroForTesting() == 0)
+        }
+    }
 }
