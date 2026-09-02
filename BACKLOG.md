@@ -1,5 +1,46 @@
 # Ghostties — Backlog
 
+## 2026-09-02 — CEF crash root-caused (Chromium 150→144 profile downgrade); overnight fix dispatched
+
+**Verdict (Fable 5.1):** Sean's Release CEF profile was written by Chromium 150; the Aug 1
+security pin (PR #60) fixed `vendor/cef` at 144, so every browser open since has been an
+unsupported profile downgrade — Chromium ends it with a deliberate `_exit` ~0.4s after
+`CefInitialize`, before the #159 sentinel is ever written. Full diagnosis and fix design:
+`docs/plans/cef-crash-strategy-2026-09-01.md`. A fresh overnight thread executes phases
+P0–P4 below unattended, T2 implementer + T1 reviewer per phase.
+
+- [x] **P0 — Preconditions.** Done. RunningBoard recorded `termination reported by launchd
+  (0, 0, 1536)` for the original crash — exit status 0, no signal, confirming a deliberate
+  quit rather than a fault. Fixture verified stable at `last_chrome_version 150.0.7871.129`.
+- [x] **P1 — Observability + lab controls.** Done. `GHOSTTIES_CEF_APP_SUPPORT_DIR` override,
+  `[CEFBridge]` `os_log` probes with 250ms alive-ticks, `[CEFDiag]` moved to a runtime env
+  gate, auto-open un-gated for Release, `--allow-non-dev` added to the repro script. P1 ran
+  **before** P0's E0: an unfixed Release build had no non-GUI way to reach the fixture until
+  the lab controls existed.
+- [x] **P2 — Experiments.** Done. E0 baseline DIED 2/2 (0.53s, 0.41s). E3 (flip
+  `last_chrome_version` alone) DIED 2/2. E4 (replace `Default/Preferences` wholesale) DIED.
+  E2 (`exit_type` → Normal) DIED. E1 (lldb) abandoned — generic breakpoints matched 9–39
+  locations and fired continuously. E3 and E4 are why the remediation moves the whole
+  profile directory rather than patching a key or a file.
+- [x] **P3 — Fix.** Done, three rounds. Downgrade guard with a bounded version parse
+  (rejects, never clamps, applied to both the stamp and the `Preferences` fallback);
+  sentinel clear moved to a process-level 3s timer after `CefInitialize`; automatic reset
+  gated on the move actually succeeding; failure notice made visible. Fresh fixture copy +
+  fixed build SURVIVED 3/3. Suite 1040/1043, the two failures being the known pre-existing
+  flakes. 12 new parse-path tests, mutant-verified.
+- [x] **P4 — Ship.** Done. PR #162 against `main` on `SeanSmithWorks/ghostties`, carrying the
+  experiment table and evidence in `docs/plans/evidence/`. `/Applications/Ghostties-fix.app`
+  installed, 6 CEF symbols, adhoc-signed, not launched.
+- [ ] **OPEN — composer variant C still not visually confirmed.** The overnight run could
+  not screenshot it: the palette needs ⌘N and synthetic input is disallowed, `screencapture`
+  returns a black frame from a stale TCC grant, and `workspace.json` is not isolated from lab
+  launches so a second live instance was not safe to run. By binary the code is present (0
+  occurrences of the old `"Pick one from the branch picker"` string). To confirm: launch
+  `/Applications/Ghostties-fix.app` and press ⌘N.
+- [ ] **DECISION APPLIED BY DEFAULT (redline if wrong):** on downgrade, reset the profile
+  silently and show one inline notice line — no button (Fable's recommendation; the button
+  is a second failure surface, see the invisible-fallback item below).
+
 ## 2026-09-01 — composer ultra-minimal SHIPPED; CEF browser fix MERGED, Release profile still unverified
 
 `main` @ `bceb7a74a`. **PR #155 MERGED** — composer variant C (ultra-minimal): trailing
@@ -16,16 +57,46 @@ literal the round-1 fix had missed, round 3 found a comment the round-2 fix intr
   claim exactly; the failure is `GitWorktreeCreationTests/raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes()`,
   a `2.74 < 2.0` wall-clock flake unrelated to CEF), and all 6 `CEFBrowserSentinelTests` passed.
 
-- [ ] **OPEN — the Release profile has never been exercised, so attribution is unresolved.**
-  `com.seansmithdesign.ghostties/CEF` is still 141M with `Local State` frozen at 2026-08-13.
-  The harness **cannot** reach it — `GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER` is `#if DEBUG`-gated,
-  so it only ever drives the Dev profile. Needs Sean clicking the globe in a Release build.
-  Note the sentinel's recovery path **never fired** during verification (no `CEF-broken-*`
-  anywhere, no leftover `browser-open-attempt`) — the browser simply worked, so what actually
-  fixed it is ambiguous between #157's window-attach fix and the Dev profile's state
-  decaying (it went 188M/dying → 130M/clean with no reset). Release profile backed up to
-  `com.seansmithdesign.ghostties/CEF-backup-2026-09-01` (141M) so the sentinel test is
-  zero-risk.
+- [x] **RESOLVED (root cause) — the merged fix does NOT fix the crash. Reproduced on the
+  Release profile 2026-09-01 22:55.** Sean clicked the globe in a release-bundle-ID build
+  carrying the full #159 stack; `[CEFBridge] CEF initialized.` at `22:55:34.261`, last log
+  line `22:55:34.349`, process gone by `22:55:36`. No `.ips`, no signal, no further output.
+  **Root cause and plan: see 2026-09-02 above.**
+
+- [ ] **OPEN — the sentinel is placed around the WRONG call, and the Dev bisection misled us.**
+  `recordBrowserOpenAttempt` is called at `CEFBrowserView.mm:499`, before `CreateBrowser` at
+  `:521`. After the crash above, **no `browser-open-attempt` file exists on disk** — so the
+  process died *before* line 499, i.e. during or just after `CefInitialize`, NOT at
+  `CreateBrowser`. The Dev-profile bisection's "dies ~460ms after `CreateBrowser`" does not
+  describe the Release-profile failure. Consequences: (a) the recovery UI never arms, because
+  its trigger is an uncleared sentinel that is never written; (b) the whole sentinel design
+  is anchored to the wrong point in the sequence. This reframes the fix rather than tuning it.
+
+- [ ] **OPEN — `[CEFDiag]` instrumentation is `#if DEBUG`-gated, so it emits nothing in a
+  release-bundle-ID build.** The only Release-visible line is the ungated
+  `[CEFBridge] CEF initialized.` NSLog. Pinning the exact death point needs that gating
+  relaxed, or an equivalent ungated probe.
+
+- [ ] **OPEN — `ReleaseLocal` can never produce a working browser (repo bug, independent of
+  the crash).** Its `HEADER_SEARCH_PATHS` omits `vendor/cef`, which Debug and Release both
+  carry. CEF availability is a compile-time `__has_include`, so the browser silently compiles
+  out to a no-op stub: **0 CEF symbols in the ReleaseLocal binary vs 4 in Release**, while the
+  288M framework still ships in the bundle. No error, no warning — the globe button just does
+  nothing. Anyone building that config to test the browser is testing a stub.
+
+- [ ] **OPEN — the graceful-fallback failure state is invisible.** On the failed opens,
+  `BrowserPanelView` / `BrowserTabBar` / `BrowserNavigationBar` / `BrowserFailureStateView`
+  were all constructed, AppKit logged four `Unable to simultaneously satisfy constraints`
+  conflicts naming `BrowserFailureStateView`, and Sean saw **nothing** on screen. The
+  fallback shipped in this stack does not communicate.
+
+- [x] **DONE — Release profile backed up** to `com.seansmithdesign.ghostties/CEF-backup-2026-09-01`
+  (141M, `Local State` preserved at Aug 13 15:31:26), so crash testing is zero-risk.
+
+- [ ] **CARRIED — Sean wants to visually confirm the composer** (variant C) in a working
+  build. By binary it IS current in every build made 2026-09-01 (0 occurrences of the old
+  `"Pick one from the branch picker"` string, 1 of the new shared constant; beta.24 still has
+  the old one). Not yet seen on screen in a build whose browser also works.
 
 - [ ] **CARRIED — Sean's 3 junk `New Template` rows still in `workspace.json`.** PR #155
   stops new ones; it does not purge existing. Delete in-app (right-click → Delete). All
