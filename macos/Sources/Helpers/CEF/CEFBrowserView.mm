@@ -301,6 +301,16 @@ private:
     _creationWatchdogTimer = nil;
 #if GHOSTTIES_CEF_AVAILABLE
     if (_browser) {
+        // Creation succeeded (OnAfterCreated fired, _browser is live) and
+        // this view is being torn down — e.g. the tab is closing inside the
+        // 3s watchdog window, before it would otherwise have cleared the
+        // sentinel itself. This IS a normal teardown, not the profile-
+        // downgrade crash (that kills the whole PROCESS; this deallocates
+        // one view while the process keeps running) — so clear the
+        // sentinel here too. Without this, the NEXT launch would find an
+        // uncleared sentinel from a session that actually succeeded, and
+        // treat a healthy profile as having crashed.
+        [CEFBridgeManager clearBrowserOpenAttempt];
         _browser->GetHost()->CloseBrowser(true);
         _browser = nullptr;
     }
@@ -619,6 +629,12 @@ private:
     NSError *error = nil;
     NSString *movedToPath = [CEFBridgeManager resetProfileDirectoryPreservingDataError:&error];
     [CEFBridgeManager clearBrowserOpenAttempt];
+    // The prior-crash sentinel has now been handled (profile moved aside,
+    // sentinel cleared) — acknowledge it so the -_createBrowserNow call a
+    // few lines below (same launch) doesn't re-read the ORIGINAL
+    // launch-time "prior launch crashed" snapshot and immediately re-fail,
+    // looping within this one process.
+    [CEFBridgeManager acknowledgePriorLaunchAttemptHandled];
 
     [self.creationWatchdogTimer invalidate];
     self.creationWatchdogTimer = nil;

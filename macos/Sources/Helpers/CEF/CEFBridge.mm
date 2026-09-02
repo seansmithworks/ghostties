@@ -222,6 +222,7 @@ static void GhosttiesInstallExitDiagnostics(void) {
 + (NSString *)_appSupportBundleDirectory;
 + (NSString *)_iso8601Timestamp;
 + (nullable NSString *)_moveProfileAsideWithPrefix:(NSString *)prefix error:(NSError **)error;
++ (NSInteger)_sanitizedMajorVersionFromDigitString:(NSString *)digitsCandidate;
 + (NSInteger)_recordedChromiumMajorVersionOrZero;
 + (void)_performDowngradeGuardIfNeeded;
 @end
@@ -252,6 +253,16 @@ static void GhosttiesInstallExitDiagnostics(void) {
 
 + (BOOL)priorLaunchLeftUnclearedAttempt {
     return _priorLaunchLeftUnclearedAttempt;
+}
+
++ (void)acknowledgePriorLaunchAttemptHandled {
+    // `_priorLaunchLeftUnclearedAttempt` is captured ONCE per process, at
+    // the top of `+initializeIfNeeded`. Recovery (resetProfileDataAndRetry)
+    // clears the on-disk sentinel and retries creation within the SAME
+    // process — without this reset, `-_createBrowserNow`'s check would keep
+    // reading the original launch-time snapshot (still YES) and treat the
+    // fresh, just-reset attempt as ANOTHER crash, looping within one launch.
+    _priorLaunchLeftUnclearedAttempt = NO;
 }
 
 #pragma mark - Lifecycle
@@ -597,6 +608,33 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
     return recordedMajor > runningMajor;
 }
 
+// Chromium majors have been 3 digits since M100 (2022) and, at the
+// historical release cadence (~10-14 majors/year), won't reach 4 digits for
+// decades. A parsed major above this bound is corruption — e.g. a truncated
+// or malformed `last_chrome_version` string that swallows a '.' and
+// concatenates two version components into one run of digits (a review
+// finding: "1440.1.2.3" parses to a bare 1440, which would otherwise compare
+// as a real downgrade and move aside a healthy same-version profile) — not a
+// genuine future Chromium. Treat it as unparseable (0), never as a downgrade.
+static const NSInteger kGhosttiesMaxPlausibleChromiumMajor = 999;
+
+/// Validates and parses a candidate major-version string: must be non-empty,
+/// entirely digits, and within `kGhosttiesMaxPlausibleChromiumMajor`.
+/// Returns 0 (== absent/unparseable to every caller) for anything else,
+/// including a 0 or negative parse. Shared by both the stamp path and the
+/// `Default/Preferences` fallback in `_recordedChromiumMajorVersionOrZero` —
+/// neither is trustworthy input (the stamp is plain text on disk, the
+/// preferences value came from a different Chromium major than the one
+/// reading it), so both get the same validation.
++ (NSInteger)_sanitizedMajorVersionFromDigitString:(NSString *)digitsCandidate {
+    if (digitsCandidate.length == 0) return 0;
+    NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+    if ([digitsCandidate rangeOfCharacterFromSet:nonDigits].location != NSNotFound) return 0;
+    NSInteger value = [digitsCandidate integerValue];
+    if (value <= 0 || value > kGhosttiesMaxPlausibleChromiumMajor) return 0;
+    return value;
+}
+
 /// Determines the Chromium major version the on-disk profile was last
 /// written by. Stamp file first (our own record, written after a prior
 /// successful `OnAfterCreated`); falls back to the profile's own
@@ -608,7 +646,7 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
                                                           encoding:NSUTF8StringEncoding
                                                              error:nil];
     if (stampContents.length > 0) {
-        NSInteger stampedMajor = [stampContents integerValue];
+        NSInteger stampedMajor = [self _sanitizedMajorVersionFromDigitString:stampContents];
         if (stampedMajor > 0) return stampedMajor;
     }
 
@@ -627,16 +665,7 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
     if (![lastChromeVersion isKindOfClass:[NSString class]] || lastChromeVersion.length == 0) return 0;
 
     NSString *majorString = [lastChromeVersion componentsSeparatedByString:@"."].firstObject;
-    if (majorString.length == 0) return 0;
-
-    // NSString's -integerValue returns 0 for garbage, which would be
-    // indistinguishable from "absent" — reject anything that isn't a clean
-    // run of digits so a malformed version string is correctly treated as
-    // unparseable rather than as major version 0.
-    NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
-    if ([majorString rangeOfCharacterFromSet:nonDigits].location != NSNotFound) return 0;
-
-    return [majorString integerValue];
+    return [self _sanitizedMajorVersionFromDigitString:majorString];
 }
 
 /// Runs before `CefInitialize`. See the header doc above
@@ -667,6 +696,12 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
            movedTo ?: @"(none)", moveError.localizedDescription ?: @"none");
 #endif
 }
+
+#if DEBUG
++ (NSInteger)recordedChromiumMajorVersionOrZeroForTesting {
+    return [self _recordedChromiumMajorVersionOrZero];
+}
+#endif
 
 #pragma mark - Private
 

@@ -12,12 +12,6 @@ import AppKit
 /// that it happened — it never asks the user to do anything.
 @MainActor
 final class BrowserFailureStateView: NSView {
-    /// Retained for source compatibility with existing callers
-    /// (WorkspaceViewContainer). Recovery is automatic, not user-triggered
-    /// here, so nothing in this view invokes these.
-    var onRetry: (() -> Void)?
-    var onResetProfileData: (() -> Void)?
-
     private let messageLabel: NSTextField = {
         let label = NSTextField(labelWithString: "")
         label.font = .systemFont(ofSize: 11)
@@ -53,10 +47,12 @@ final class BrowserFailureStateView: NSView {
         ])
     }
 
-    /// Show the notice with the given message. `showResetAction` is
-    /// accepted for source compatibility with existing callers but no
-    /// longer affects rendering — this view never presents a button.
-    func show(message: String, showResetAction: Bool = false) {
+    /// Show the notice with the given message. There is no button — retry
+    /// and profile reset both happen automatically upstream (the downgrade
+    /// guard and the sentinel-triggered reset in
+    /// `WorkspaceViewContainer.wireBrowserFailureState`); this view only
+    /// reports that they happened.
+    func show(message: String) {
         messageLabel.stringValue = message
         isHidden = false
     }

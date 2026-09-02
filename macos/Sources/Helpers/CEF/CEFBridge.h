@@ -20,6 +20,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// instead.
 @property (class, nonatomic, readonly) BOOL priorLaunchLeftUnclearedAttempt;
 
+/// Call once a detected prior-crash sentinel has been HANDLED — i.e. after
+/// `resetProfileDirectoryPreservingDataError:` + `clearBrowserOpenAttempt`
+/// have run in response to `priorLaunchLeftUnclearedAttempt` being YES.
+/// Without this, the snapshot above stays YES for the rest of the process:
+/// a same-launch retry right after a reset would read the ORIGINAL
+/// launch-time snapshot again, treat the freshly-reset attempt as ANOTHER
+/// crash, and loop within a single launch.
++ (void)acknowledgePriorLaunchAttemptHandled;
+
 /// Initialize CEF if not already done. Called lazily on first browser creation.
 /// Must be called on the main thread.
 + (void)initializeIfNeeded;
@@ -122,6 +131,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// without this override these methods would read/write Sean's real Dev
 /// CEF profile on disk. Debug-only; does not exist in Release builds.
 @property (class, nonatomic, copy, nullable) NSString *testOverrideAppSupportBundleDirectory;
+
+/// TEST-ONLY. Exposes the downgrade guard's version-parsing logic directly
+/// (stamp file first, falling back to `Default/Preferences` ->
+/// `extensions.last_chrome_version`, both validated and bounded — see
+/// `chromiumVersionStampPath` / `isProfileDowngradeGivenRecordedMajor:runningMajor:`)
+/// so tests can exercise every parse path without driving a full CEF init.
+/// Reads relative to whatever `testOverrideAppSupportBundleDirectory` points
+/// at. Debug-only; does not exist in Release builds.
++ (NSInteger)recordedChromiumMajorVersionOrZeroForTesting;
 #endif
 
 @end
