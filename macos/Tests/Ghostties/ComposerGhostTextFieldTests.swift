@@ -224,6 +224,16 @@ struct ComposerGhostTextFieldTests {
     /// `stties > ` yields `Ghostties > `, not the whole remaining ghost
     /// (`currentGhostText` holds the FULL remainder now, per
     /// `remainderGhost`, not just the current segment).
+    ///
+    /// Updated 2026-09-02 for the Tab-inserts-a-space ruling: the field
+    /// starts with no `>` typed, so every Tab here is UNARMED and must
+    /// never itself type the chevron — see
+    /// `tabInsertsAPlainSpaceInsteadOfAChevronForSeansIdiom` and
+    /// `tabNeverInsertsAChevronAcrossRepeatedUnarmedPresses` below for the
+    /// behavior this test used to assert (chevron-on-every-Tab) before that
+    /// ruling. This test now exists to prove the pure one-segment-at-a-time
+    /// slicing (`nextSegment`/`currentGhostText`) still holds independent
+    /// of what `acceptGhost` does with the chevron.
     @Test func tabAcceptsExactlyOneSegmentLeavingTheRestGhosted() {
         let events = Box<[String]>([])
         let queryBox = Box("")
@@ -250,37 +260,44 @@ struct ComposerGhostTextFieldTests {
 
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
         #expect(handled == true)
-        #expect(textView.string == "Ghostties > ")
-        #expect(queryBox.value == "Ghostties > ")
+        #expect(textView.string == "Ghostties ")
+        #expect(queryBox.value == "Ghostties ")
 
         // Second Tab: the ghost survived past the first accepted segment
         // (defect 2/3 — the old implementation dead-ended here, because
         // truncating the GHOST itself at the next separator meant a
         // post-accept remainder starting with " > " truncated to "").
         coordinator.applyStyles()
-        #expect(textView.currentGhostText == "Default > Orchestrator")
+        #expect(textView.currentGhostText == "> Default > Orchestrator")
         let secondHandled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
         #expect(secondHandled == true)
-        #expect(textView.string == "Ghostties > Default > ")
+        #expect(textView.string == "Ghostties Default ")
 
-        // Third Tab accepts the final segment — no trailing separator left
-        // to stop at, so the whole remainder is "one segment".
-        coordinator.applyStyles()
-        #expect(textView.currentGhostText == "Orchestrator")
-        let thirdHandled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
-        #expect(thirdHandled == true)
-        #expect(textView.string == "Ghostties > Default > Orchestrator")
-
-        // Ghost is gone once typed text equals the full path — nothing
-        // left for Tab or Return to add.
+        // Third Tab: typed text has diverged from `fullPath`'s literal
+        // `>` formatting (the unarmed Tabs above never typed one), so the
+        // ghost has nothing left to match against and Tab is a no-op —
+        // never a chevron leaking through as a side effect.
         coordinator.applyStyles()
         #expect(textView.currentGhostText == "")
+        let thirdHandled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(thirdHandled == true)
+        #expect(textView.string == "Ghostties Default ")
     }
 
     /// Acceptance criterion 1 (composer variant G): walks Sean's own
-    /// verbatim reported sequence — `gho` Tab, `br` Tab, `cco` — and pins
-    /// the field's exact contents after each Tab. One Tab per segment,
-    /// never a second Tab spent purely on inserting `" > "`.
+    /// verbatim reported sequence — `gho` Tab, then typing `br` and Tab
+    /// again — and pins the field's exact contents after each Tab.
+    ///
+    /// Updated 2026-09-02: Sean's own sequence never types `>`, so the
+    /// first Tab here is unarmed and must land a plain space, not a
+    /// chevron — this is now literally his 95% idiom
+    /// (`ghostties cco -n "thread name"`), not the formal path. Once that
+    /// unarmed Tab has typed `ghostties ` (not `ghostties > `), typing `br`
+    /// next no longer matches `fullPath`'s own `>`-formatted continuation
+    /// (`" > branch name > cco"`), so the ghost has already died and the
+    /// second Tab is correctly a no-op — nothing left to accept, exactly as
+    /// it should be once Sean starts typing his own ad-hoc command instead
+    /// of continuing to drill.
     @Test func tabAcceptsOneSegmentPerPressForSeansExactReportedSequence() {
         let queryBox = Box("")
         let focusBox = Box(false)
@@ -301,19 +318,69 @@ struct ComposerGhostTextFieldTests {
         textView.string = "gho"
         coordinator.applyStyles()
         _ = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
-        #expect(textView.string == "ghostties > ")
+        #expect(textView.string == "ghostties ")
 
         textView.string += "br"
         coordinator.applyStyles()
-        _ = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
-        #expect(textView.string == "ghostties > branch name > ")
-
-        textView.string += "cco"
-        // Sean's sequence ends on Return, not a third Tab — nothing left
-        // for Tab to add once "cco" matches the full path's final segment.
-        coordinator.applyStyles()
         #expect(textView.currentGhostText == "")
-        #expect(textView.string == "ghostties > branch name > cco")
+        _ = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(textView.string == "ghostties br")
+    }
+
+    // MARK: - Tab-inserts-a-space ruling (2026-09-02)
+
+    /// Sean's 95% idiom, as an invariant test — the FIRST test for this
+    /// change, per `feedback_composer-real-usage-idiom`. `ghostt` + Tab must
+    /// land `ghostties ` (trailing space, no chevron): with a chevron
+    /// instead, `cco` would parse as a branch token and dead-end with
+    /// "No worktree found for branch \"cco\"" —
+    /// `decision_composer-chevron-is-explicit-branch-declaration`.
+    @Test func tabInsertsAPlainSpaceInsteadOfAChevronForSeansIdiom() {
+        let segment = ComposerGhostTextField.nextSegment(
+            remainder: ComposerGhostTextField.remainderGhost(typed: "ghostt", fullPath: "ghostties > Default > Orchestrator")
+        )
+        let inserted = ComposerGhostTextField.tabInsertionSegment(segment: segment, currentText: "ghostt")
+        #expect("ghostt" + inserted == "ghostties ")
+    }
+
+    /// Acceptance criterion 4: once SEAN has typed a `>` himself, Tab keeps
+    /// drilling with the full `" > "` separator — structure mode is armed
+    /// by his own keystroke, never by Tab.
+    @Test func tabKeepsTheChevronOnceSeanHasTypedOne() {
+        let segment = ComposerGhostTextField.nextSegment(
+            remainder: ComposerGhostTextField.remainderGhost(typed: "ghostties > ", fullPath: "ghostties > main > Orchestrator")
+        )
+        let inserted = ComposerGhostTextField.tabInsertionSegment(segment: segment, currentText: "ghostties > ")
+        #expect("ghostties > " + inserted == "ghostties > main > ")
+
+        let secondSegment = ComposerGhostTextField.nextSegment(
+            remainder: ComposerGhostTextField.remainderGhost(typed: "ghostties > main > ", fullPath: "ghostties > main > Orchestrator")
+        )
+        let secondInserted = ComposerGhostTextField.tabInsertionSegment(segment: secondSegment, currentText: "ghostties > main > ")
+        #expect("ghostties > main > " + secondInserted == "ghostties > main > Orchestrator")
+    }
+
+    /// Acceptance criterion 5: an unarmed Tab must never leak a `>` into
+    /// the field, at ANY segment count — including the second unarmed
+    /// Tab, which is the case a naive "strip only the trailing separator"
+    /// fix misses (`nextSegment` lands mid-separator once a prior unarmed
+    /// Tab has already consumed the separator's leading space, so the next
+    /// segment starts with a bare `>` that a suffix-only strip would leave
+    /// in place — see `tabInsertionSegment`'s doc comment). Mutant-verified:
+    /// reverting to a suffix-only strip (`segment.hasSuffix(segmentSeparator)
+    /// ? String(segment.dropLast(3)) + " " : segment`) fails this test with
+    /// a `>` present after the second Tab.
+    @Test func tabNeverInsertsAChevronAcrossRepeatedUnarmedPresses() {
+        let fullPath = "Ghostties > Default > Orchestrator"
+        var typed = "Gho"
+        for _ in 0..<3 {
+            let ghost = ComposerGhostTextField.remainderGhost(typed: typed, fullPath: fullPath)
+            guard !ghost.isEmpty else { break }
+            let segment = ComposerGhostTextField.nextSegment(remainder: ghost)
+            let inserted = ComposerGhostTextField.tabInsertionSegment(segment: segment, currentText: typed)
+            #expect(!inserted.contains(">"), "unarmed Tab inserted a chevron: \"\(inserted)\" onto \"\(typed)\"")
+            typed += inserted
+        }
     }
 
     // MARK: - Remainder ghost (pure function, previously `activeSegmentGhost`)
