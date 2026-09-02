@@ -19,6 +19,7 @@
 		A53D0C952B53B4D800305CE6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A5B30538299BEAAB0047F10C /* Assets.xcassets */; };
 		A546F1142D7B68D7003B11A0 /* locale in Resources */ = {isa = PBXBuildFile; fileRef = A546F1132D7B68D7003B11A0 /* locale */; };
 		A56B880B2A840447007A0E29 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A56B880A2A840447007A0E29 /* Carbon.framework */; };
+		083C03B4502D0B9F35DC74C7 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 233E3897D5064B304B83512F /* SystemConfiguration.framework */; };
 		A571AB1D2A206FCF00248498 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5D495A1299BEC7E00DD1313 /* GhosttyKit.xcframework */; };
 		A586167C2B7703CC009BDB1D /* fish in Resources */ = {isa = PBXBuildFile; fileRef = A586167B2B7703CC009BDB1D /* fish */; };
 		A5985CE62C33060F00C57AD3 /* man in Resources */ = {isa = PBXBuildFile; fileRef = A5985CE52C33060F00C57AD3 /* man */; };
@@ -91,6 +92,7 @@
 		A54F45F32E1F047A0046BD5C /* GhosttyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GhosttyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A553F4122E06EB1600257779 /* Ghostties.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = Ghostties.icon; path = ../images/Ghostties.icon; sourceTree = SOURCE_ROOT; };
 		A56B880A2A840447007A0E29 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
+		233E3897D5064B304B83512F /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		A571AB1C2A206FC600248498 /* Ghostties-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Ghostties-Info.plist"; sourceTree = "<group>"; };
 		A586167B2B7703CC009BDB1D /* fish */ = {isa = PBXFileReference; lastKnownFileType = folder; name = fish; path = "../zig-out/share/fish"; sourceTree = "<group>"; };
 		A5985CE52C33060F00C57AD3 /* man */ = {isa = PBXFileReference; lastKnownFileType = folder; name = man; path = "../zig-out/share/man"; sourceTree = "<group>"; };
@@ -323,6 +325,7 @@
 				AA1BFC302B30F1B800E92F16 /* GhosttiesMCPClient in Frameworks */,
 				AA1BFC322B30F1B800E92F16 /* GhosttiesCore in Frameworks */,
 				A56B880B2A840447007A0E29 /* Carbon.framework in Frameworks */,
+				083C03B4502D0B9F35DC74C7 /* SystemConfiguration.framework in Frameworks */,
 				A571AB1D2A206FCF00248498 /* GhosttyKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -395,6 +398,7 @@
 			children = (
 				B0A55ADB2F7313F500018CBF /* Chromium Embedded Framework.framework */,
 				A56B880A2A840447007A0E29 /* Carbon.framework */,
+				233E3897D5064B304B83512F /* SystemConfiguration.framework */,
 				A5D495A1299BEC7E00DD1313 /* GhosttyKit.xcframework */,
 			);
 			name = Frameworks;

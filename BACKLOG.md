@@ -1,5 +1,56 @@
 # Ghostties — Backlog
 
+## 2026-09-01 — composer ultra-minimal SHIPPED; CEF browser crash root-caused, fix unverified
+
+`main` @ `d92b4fb38`. **PR #155 MERGED** — composer variant C (ultra-minimal): trailing
+branch/project controls removed, junk-template creation fixed, stranded copy collapsed to
+one `SessionComposerCopy` constant. Three review rounds; round 2 found a second stranded
+literal the round-1 fix had missed, round 3 found a comment the round-2 fix introduced.
+
+- [ ] **CARRIED — CEF browser fix is committed and pushed but NOT VERIFIED.** PR stack, four
+  deep, each based on the previous: **#156** (diagnostics) → **#157** (defer `CreateBrowser`
+  to `viewDidMoveToWindow` — a real bug, NOT the cause) → **#158** (unattended repro harness)
+  → **#159** (`fix/cef-profile-recovery` @ `8072de3e6`, launch sentinel + Reset browser data).
+  The #159 agent was stopped mid-report: it committed, pushed and opened the PR, and claimed
+  1027 total / 1025 passed / 1 known flake / 1 skipped — **but the harness survival proof
+  (its criterion 1) never ran.** Next thread must run `scripts/debug/cef-repro.sh --runs 3`
+  against a poisoned profile and confirm SURVIVED before trusting any of it. Merge order
+  matters: #156 → #157 → #158 → #159.
+
+- [ ] **CARRIED — Sean's two CEF profiles are still poisoned.** `~/Library/Application
+  Support/com.seansmithdesign.ghostties/CEF` (141M, `Local State` frozen 2026-08-13) and
+  `.dev/CEF` (188M, frozen 2026-08-23). Renaming them aside unblocks the browser
+  immediately; it is cache/cookies only, workspace state lives elsewhere. **Offered, Sean
+  has not answered — his call, it is his logged-in state.**
+
+- [ ] **CARRIED — Sean's 3 junk `New Template` rows still in `workspace.json`.** PR #155
+  stops new ones; it does not purge existing. Delete in-app (right-click → Delete). All
+  three are empty records, `command: null`.
+
+- [ ] **NEW — a junk `command: nil` template is still creatable via Save.** `TemplatePickerView.save()`
+  passes `command: nil` when the field is blank and `updateTemplate` treats nil as
+  "leave unchanged". The abandon path is fixed; the Save path is not.
+
+- [ ] **NEW — CI covers no documentation or copy consistency, and never runs the macOS suite.**
+  Six doc/copy defects across PR #155's three review rounds, all caught by reading, none by
+  tooling. `.github/workflows/test-ghostties.yml:151` runs `build-for-testing` only — ~1000
+  app-hosted tests never execute in CI. The deferral cites a headless app-host hang, but
+  memory records `xcodebuild test` running the suite locally in ~33s, so **the stated blocker
+  may be stale — worth one investigation.** Sean asked about this directly; answered no.
+
+- [ ] **NEW — dead composer surface retained pending Sean's decision.** `trailingControlVisibility`,
+  `projectControl`, `branchControl`, `inlineProjectPicker`, `inlineBranchPicker`,
+  `ProjectDropdownView`, `WorktreeDropdownView` (~500 lines), plus 8 tests in
+  `SessionComposerTrailingControlTests` and `AccessibilityTests:263-268` now assert
+  unreachable behaviour. Nothing sets `isProjectPickerOpen`/`isBranchPickerOpen` to `true`.
+
+- [ ] **PARKED — composer variants A/B/D/E/F/G were not built.** Sean chose C (ultra-minimal)
+  2026-09-01. Reopen only if he asks.
+
+- [ ] **NEW — harness leftovers to clean.** `/var/folders/lc/6kc11m9s4bb_hhkw_p07l03m0000gn/T/ghostties-cef-repro-*`
+  (~61MB, three dirs). A leftover Dev instance PID 79653 may still be running and will
+  swallow harness launches — Dev builds share a bundle ID.
+
 ## 2026-09-01 — PR #155 review follow-ups (ultra-minimal composer variant C)
 
 **Not fixed, deliberately — found by review, deferred:**

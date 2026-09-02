@@ -2,6 +2,15 @@
 #import <AppKit/AppKit.h>
 #include <atomic>
 
+#if DEBUG
+#import <SystemConfiguration/SystemConfiguration.h>
+#import <os/log.h>
+#include <unistd.h>
+#include <signal.h>
+#include <execinfo.h>
+#include <stdlib.h>
+#endif
+
 #if __has_include("include/cef_app.h")
 #define GHOSTTIES_CEF_AVAILABLE 1
 #import "include/cef_app.h"
@@ -75,9 +84,119 @@ private:
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+#if DEBUG
+/// Logs the on-disk singleton-lock state relative to the current host, to
+/// distinguish a stale-lock-across-a-hostname-flip shutdown (see
+/// reference_dev-builds-share-a-bundle-id / hypothesis in the CEF shutdown
+/// investigation) from any other cause. Debug-only, [CEFDiag]-tagged.
+static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
+    NSString *lockPath = [cacheDir stringByAppendingPathComponent:@"SingletonLock"];
+
+    char hostnameBuf[256] = {0};
+    gethostname(hostnameBuf, sizeof(hostnameBuf));
+    NSString *posixHostname = [NSString stringWithUTF8String:hostnameBuf];
+
+    NSString *bonjourLocalHostName = (__bridge_transfer NSString *)SCDynamicStoreCopyLocalHostName(NULL);
+
+    const char *cLockPath = [lockPath fileSystemRepresentation];
+    char linkTarget[PATH_MAX] = {0};
+    ssize_t linkLen = readlink(cLockPath, linkTarget, sizeof(linkTarget) - 1);
+    if (linkLen < 0) {
+        // NSLog does not honor the `{public}` privacy annotation (it is only
+        // meaningful to os_log()/os_trace() — clang warns on this at the
+        // NSLog call site, and the unified log silently corrupts the
+        // argument decode rather than un-redacting it). os_log() is the
+        // mechanism that actually makes these values visible.
+        os_log(OS_LOG_DEFAULT,
+               "[CEFDiag] SingletonLock: absent or not a symlink at %{public}@ (errno=%d %{public}s). "
+               "posixHostname=%{public}@ bonjourLocalHostName=%{public}@",
+               lockPath, errno, strerror(errno), posixHostname, bonjourLocalHostName);
+        return;
+    }
+    linkTarget[linkLen] = '\0';
+    NSString *target = [NSString stringWithUTF8String:linkTarget];
+
+    // Lock target format is "<hostname>-<pid>" — split on the last '-'.
+    NSRange dashRange = [target rangeOfString:@"-" options:NSBackwardsSearch];
+    NSString *lockHostname = (dashRange.location != NSNotFound)
+        ? [target substringToIndex:dashRange.location]
+        : nil;
+    NSString *lockPidString = (dashRange.location != NSNotFound)
+        ? [target substringFromIndex:dashRange.location + 1]
+        : nil;
+    pid_t lockPid = lockPidString ? (pid_t)[lockPidString integerValue] : 0;
+
+    BOOL pidAlive = NO;
+    if (lockPid > 0) {
+        pidAlive = (kill(lockPid, 0) == 0);
+    }
+
+    os_log(OS_LOG_DEFAULT,
+           "[CEFDiag] SingletonLock target=%{public}@ (lockHostname=%{public}@ lockPid=%d pidAlive=%{public}@) "
+           "posixHostname=%{public}@ bonjourLocalHostName=%{public}@ hostnameMatch=%{public}@",
+           target, lockHostname, lockPid, pidAlive ? @"YES" : @"NO",
+           posixHostname, bonjourLocalHostName,
+           ([lockHostname isEqualToString:posixHostname] ||
+            [lockHostname isEqualToString:bonjourLocalHostName]) ? @"YES" : @"NO");
+}
+
+/// Logs a symbolized backtrace tagged [CEFDiag], one frame per line so it
+/// survives the unified log. Called from both the atexit handler and the
+/// signal handlers below — the goal is naming whatever calls exit() (or
+/// crashes) beneath AppKit during the browser-open shutdown.
+static void GhosttiesLogBacktrace(const char *reason) {
+    void *frames[64];
+    int count = backtrace(frames, 64);
+    char **symbols = backtrace_symbols(frames, count);
+    os_log(OS_LOG_DEFAULT, "[CEFDiag] %{public}s — backtrace (%d frames):", reason, count);
+    if (symbols) {
+        for (int i = 0; i < count; i++) {
+            os_log(OS_LOG_DEFAULT, "[CEFDiag]   #%d %{public}s", i, symbols[i]);
+        }
+        free(symbols);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[CEFDiag]   (backtrace_symbols failed, errno=%d %{public}s)", errno, strerror(errno));
+    }
+}
+
+/// Fires on any exit() (including implicit exit at the end of main, which
+/// won't apply here, and any explicit exit()/abort() call reachable through
+/// libc's atexit machinery). Does NOT fire for _exit()/_Exit(), which is why
+/// the signal handlers below exist as a second net.
+static void GhosttiesAtExitHandler(void) {
+    GhosttiesLogBacktrace("atexit fired");
+}
+
+/// Logs a backtrace then restores default disposition and re-raises, so the
+/// crash still produces its normal report/termination — this only adds a
+/// log line ahead of it, it does not change what happens to the process.
+static void GhosttiesSignalHandler(int signo) {
+    // os_log() and backtrace_symbols are not async-signal-safe. This is a
+    // Debug-only diagnostic build where "some evidence, maybe corrupted" beats
+    // "no evidence" — acceptable tradeoff here, not for shipping code.
+    GhosttiesLogBacktrace("signal handler fired");
+    signal(signo, SIG_DFL);
+    raise(signo);
+}
+
+/// Installs both nets as early as possible — see +load below, which runs at
+/// image-load time, before CEF (or anything else in this process) is touched.
+static void GhosttiesInstallExitDiagnostics(void) {
+    atexit(GhosttiesAtExitHandler);
+    signal(SIGABRT, GhosttiesSignalHandler);
+    signal(SIGSEGV, GhosttiesSignalHandler);
+    signal(SIGILL, GhosttiesSignalHandler);
+    signal(SIGBUS, GhosttiesSignalHandler);
+    signal(SIGTRAP, GhosttiesSignalHandler);
+    NSLog(@"[CEFDiag] Exit diagnostics installed (atexit + signal handlers).");
+}
+#endif // DEBUG
+
 @interface CEFBridgeManager ()
 + (void)_messageLoopTick:(NSTimer *)timer;
 + (void)_appWillTerminate:(NSNotification *)note;
++ (NSString *)_appSupportBundleDirectory;
++ (NSString *)_iso8601Timestamp;
 @end
 
 // ---------------------------------------------------------------------------
@@ -85,6 +204,18 @@ private:
 // ---------------------------------------------------------------------------
 
 @implementation CEFBridgeManager
+
+#pragma mark - Diagnostics installation
+
++ (void)load {
+    // +load runs at image-load time, before main() — before AppDelegate,
+    // before CEF, before anything else in this process. This is the
+    // earliest hook available for installing the exit/crash diagnostics
+    // below.
+#if DEBUG
+    GhosttiesInstallExitDiagnostics();
+#endif
+}
 
 #pragma mark - Properties
 
@@ -133,14 +264,7 @@ private:
     // Cache directory — required by CEF for subprocess data exchange.
     // Use ~/Library/Application Support/<bundleIdentifier>/CEF/ so dev and
     // release builds don't share a cache (bundle IDs differ by `.dev` suffix).
-    NSArray<NSString *> *appSupportPaths = NSSearchPathForDirectoriesInDomains(
-        NSApplicationSupportDirectory, NSUserDomainMask, YES);
-    NSString *appSupportBase = appSupportPaths.firstObject
-        ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
-    NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier] ?: @"com.seansmithdesign.ghostties";
-    NSString *cacheDir = [[appSupportBase
-        stringByAppendingPathComponent:bundleId]
-        stringByAppendingPathComponent:@"CEF"];
+    NSString *cacheDir = [self cefProfileDirectoryPath];
     NSError *cacheDirError = nil;
     if (![[NSFileManager defaultManager] createDirectoryAtPath:cacheDir
                                   withIntermediateDirectories:YES
@@ -156,7 +280,11 @@ private:
     // CEF's own log file — stored alongside the cache.
     NSString *logFile = [cacheDir stringByAppendingPathComponent:@"ghostties-cef-internal.log"];
     CefString(&settings.log_file) = [logFile UTF8String];
+#if DEBUG
+    settings.log_severity = LOGSEVERITY_VERBOSE;
+#else
     settings.log_severity = LOGSEVERITY_WARNING;
+#endif
 
     settings.remote_debugging_port = 0;
 
@@ -173,8 +301,15 @@ private:
     // GhosttiesApp provides the BrowserProcessHandler which implements
     // OnScheduleMessagePumpWork for external_message_pump integration.
 
+#if DEBUG
+    GhosttiesLogSingletonLockState(cacheDir);
+#endif
+
     CefRefPtr<GhosttiesApp> app(new GhosttiesApp());
     bool success = CefInitialize(mainArgs, settings, app, nullptr);
+#if DEBUG
+    os_log(OS_LOG_DEFAULT, "[CEFDiag] CefInitialize returned %{public}@", success ? @"true" : @"false");
+#endif
     if (!success) {
         NSLog(@"[CEFBridge] CefInitialize failed.");
         return;
@@ -225,6 +360,109 @@ private:
     _isInitialized = NO;
 }
 
+#pragma mark - Browser-open sentinel (crash recovery)
+
+#if DEBUG
+static NSString *_testOverrideAppSupportBundleDirectory = nil;
+
++ (nullable NSString *)testOverrideAppSupportBundleDirectory {
+    return _testOverrideAppSupportBundleDirectory;
+}
+
++ (void)setTestOverrideAppSupportBundleDirectory:(nullable NSString *)path {
+    _testOverrideAppSupportBundleDirectory = [path copy];
+}
+#endif
+
++ (NSString *)_appSupportBundleDirectory {
+#if DEBUG
+    // See the header doc on `testOverrideAppSupportBundleDirectory` — this
+    // MUST be checked first so tests never touch Sean's real Dev CEF
+    // profile, which lives at this exact derived path.
+    if (_testOverrideAppSupportBundleDirectory) {
+        return _testOverrideAppSupportBundleDirectory;
+    }
+#endif
+    NSArray<NSString *> *appSupportPaths = NSSearchPathForDirectoriesInDomains(
+        NSApplicationSupportDirectory, NSUserDomainMask, YES);
+    NSString *appSupportBase = appSupportPaths.firstObject
+        ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
+    NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier] ?: @"com.seansmithdesign.ghostties";
+    return [appSupportBase stringByAppendingPathComponent:bundleId];
+}
+
++ (NSString *)_iso8601Timestamp {
+    static NSISO8601DateFormatter *formatter;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        formatter = [[NSISO8601DateFormatter alloc] init];
+    });
+    return [formatter stringFromDate:[NSDate date]];
+}
+
++ (NSString *)cefProfileDirectoryPath {
+    return [[self _appSupportBundleDirectory] stringByAppendingPathComponent:@"CEF"];
+}
+
++ (NSString *)browserOpenAttemptSentinelPath {
+    // A SIBLING of CEF/, not inside it — a profile reset (rename CEF/
+    // aside) must never also remove evidence that an attempt was in flight.
+    return [[self _appSupportBundleDirectory] stringByAppendingPathComponent:@"browser-open-attempt"];
+}
+
++ (void)recordBrowserOpenAttempt {
+    NSString *path = [self browserOpenAttemptSentinelPath];
+    NSString *parentDir = [path stringByDeletingLastPathComponent];
+    [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
+                               withIntermediateDirectories:YES
+                                                attributes:nil
+                                                     error:nil];
+    NSError *error = nil;
+    if (![[self _iso8601Timestamp] writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&error]) {
+        NSLog(@"[CEFBridge] Failed to write browser-open-attempt sentinel: %@", error.localizedDescription);
+    }
+}
+
++ (void)clearBrowserOpenAttempt {
+    NSString *path = [self browserOpenAttemptSentinelPath];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if ([fm fileExistsAtPath:path]) {
+        NSError *error = nil;
+        if (![fm removeItemAtPath:path error:&error]) {
+            NSLog(@"[CEFBridge] Failed to clear browser-open-attempt sentinel: %@", error.localizedDescription);
+        }
+    }
+}
+
++ (BOOL)hasUnclearedBrowserOpenAttempt {
+    return [[NSFileManager defaultManager] fileExistsAtPath:[self browserOpenAttemptSentinelPath]];
+}
+
++ (nullable NSString *)resetProfileDirectoryPreservingDataError:(NSError **)error {
+    NSString *profilePath = [self cefProfileDirectoryPath];
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    if (![fm fileExistsAtPath:profilePath]) {
+        // Nothing to move aside — just ensure a fresh directory exists.
+        [fm createDirectoryAtPath:profilePath withIntermediateDirectories:YES attributes:nil error:error];
+        return nil;
+    }
+
+    // Sanitize the timestamp for use in a path component (colons are legal
+    // on APFS but Finder mangles their display; avoid the confusion).
+    NSString *sanitizedTimestamp = [[self _iso8601Timestamp]
+        stringByReplacingOccurrencesOfString:@":" withString:@"-"];
+    NSString *movedPath = [[profilePath stringByDeletingLastPathComponent]
+        stringByAppendingPathComponent:[NSString stringWithFormat:@"CEF-broken-%@", sanitizedTimestamp]];
+
+    if (![fm moveItemAtPath:profilePath toPath:movedPath error:error]) {
+        return nil;
+    }
+
+    [fm createDirectoryAtPath:profilePath withIntermediateDirectories:YES attributes:nil error:error];
+    return movedPath;
+}
+
 #pragma mark - Private
 
 + (void)_messageLoopTick:(NSTimer *)timer {
@@ -234,6 +472,10 @@ private:
 }
 
 + (void)_appWillTerminate:(NSNotification *)note {
+#if DEBUG
+    os_log(OS_LOG_DEFAULT, "[CEFDiag] NSApplicationWillTerminateNotification fired at %{public}@",
+           [NSDate date]);
+#endif
     [self shutdown];
 }
 
