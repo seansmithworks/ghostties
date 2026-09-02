@@ -399,6 +399,24 @@ static void GhosttiesInstallExitDiagnostics(void) {
         });
     }
 
+    // Process-level sentinel clear, 3s after CefInitialize returns. This is
+    // the ONLY place the sentinel is cleared — it deliberately does not
+    // belong to any CEFBrowserView (a process can host several tabs at
+    // once via BrowserTabManager.browserViews, while the sentinel is
+    // process-global) and does not fire at OnAfterCreated (our own
+    // measurement shows the profile-downgrade crash kills the process
+    // ~0.33s AFTER OnAfterCreated fires, i.e. after a browser has already
+    // materialised — so OnAfterCreated firing does not prove survival).
+    // Surviving 3s past CefInitialize returning does: that window fully
+    // contains the ~0.4-0.65s death window regardless of how many browser
+    // views are created, torn down, or never created at all in the
+    // meantime. An uncleared sentinel therefore means exactly one thing:
+    // the process died within 3s of CefInitialize.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3000 * NSEC_PER_MSEC),
+                    dispatch_get_main_queue(), ^{
+        [self clearBrowserOpenAttempt];
+    });
+
     // ---- Backup timer (30 Hz) ------------------------------------------
     // The primary message pump is driven by OnScheduleMessagePumpWork above.
     // This timer is a safety net to ensure events are processed

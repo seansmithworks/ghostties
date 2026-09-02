@@ -43,20 +43,28 @@ NS_ASSUME_NONNULL_BEGIN
 // ~400-650ms — faster than any in-process watchdog can catch, and nothing
 // survives to run recovery code. Recovery is therefore sentinel-based,
 // detected on the NEXT launch: a sentinel file is written immediately
-// before `CefBrowserHost::CreateBrowser` and cleared only once
-// `OnAfterCreated` actually fires. If a later attempt finds an uncleared
+// before `CefInitialize` and cleared once the process has demonstrably
+// survived the death window. If a later attempt finds an uncleared
 // sentinel, the previous attempt almost certainly killed the process.
 //
 // The sentinel lives OUTSIDE the CEF profile directory (`cefProfileDirectoryPath`)
 // so that resetting the profile (moving it aside) never removes it.
 //
-// CORRECTED (see project_cef-crash-dies-before-createbrowser): the sentinel
-// is written before `CefInitialize` (bracketing the whole init+create
-// sequence, not just `CreateBrowser`) and cleared only once the creation
-// watchdog observes the browser has survived a further 3s past
-// `CreateBrowser` — NOT at `OnAfterCreated`, which fires and clears too
-// early to catch this specific crash (it kills the process ~0.3-0.65s
-// *after* `OnAfterCreated`, inside that same window).
+// CORRECTED TWICE (see project_cef-crash-dies-before-createbrowser and the
+// round-3 review that removed the CEFBrowserView-owned clear entirely):
+// clearing at `OnAfterCreated` is too early — our own measurement shows the
+// process dies ~0.33s AFTER `OnAfterCreated` fires (i.e. after a browser
+// has already materialised). Clearing from a per-VIEW watchdog (even a 3s
+// one) is the wrong SCOPE, not just the wrong timing: a process can host
+// several CEFBrowserView tabs at once (BrowserTabManager.browserViews),
+// while the sentinel is process-global, so one tab's lifecycle should
+// never be able to clear (or fail to clear) it on another tab's behalf.
+// The sentinel is therefore cleared EXCLUSIVELY by a process-level timer in
+// `+initializeIfNeeded`, started immediately after `CefInitialize` returns
+// and firing at the 3s mark — independent of whether any browser view ever
+// gets created, how many exist, or when any of them are torn down. An
+// uncleared sentinel means exactly one thing: the process died within 3s
+// of `CefInitialize` returning.
 
 /// Path to the CEF profile/cache directory (CefSettings.root_cache_path /
 /// cache_path).
@@ -69,8 +77,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// Writes the sentinel, recording that a browser-open attempt is starting.
 + (void)recordBrowserOpenAttempt;
 
-/// Clears the sentinel. Call only once the browser has actually
-/// materialised (`OnAfterCreated`).
+/// Clears the sentinel. Called ONLY from `+initializeIfNeeded`'s
+/// process-level 3s-after-`CefInitialize` timer — see the doc block above.
+/// Public (not private) so `+resetProfileDirectoryPreservingDataError:`
+/// callers and tests can still exercise it directly; production code
+/// outside `CEFBridge.mm` should not call this.
 + (void)clearBrowserOpenAttempt;
 
 /// YES if a sentinel from a PRIOR attempt is present and uncleared.

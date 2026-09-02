@@ -301,16 +301,18 @@ private:
     _creationWatchdogTimer = nil;
 #if GHOSTTIES_CEF_AVAILABLE
     if (_browser) {
-        // Creation succeeded (OnAfterCreated fired, _browser is live) and
-        // this view is being torn down — e.g. the tab is closing inside the
-        // 3s watchdog window, before it would otherwise have cleared the
-        // sentinel itself. This IS a normal teardown, not the profile-
-        // downgrade crash (that kills the whole PROCESS; this deallocates
-        // one view while the process keeps running) — so clear the
-        // sentinel here too. Without this, the NEXT launch would find an
-        // uncleared sentinel from a session that actually succeeded, and
-        // treat a healthy profile as having crashed.
-        [CEFBridgeManager clearBrowserOpenAttempt];
+        // NOTE: this view does NOT own the browser-open-attempt sentinel —
+        // see CEFBridgeManager. The sentinel is process-global (one CEF
+        // process can host several CEFBrowserView tabs at once, via
+        // BrowserTabManager.browserViews), but our own measurement shows
+        // the profile-downgrade crash kills the process ~0.33s AFTER
+        // OnAfterCreated fires (_browser goes live) — so a view reaching
+        // this branch and clearing a shared sentinel here would race that
+        // exact death window, and would also be wrong with multiple tabs
+        // open (one tab closing fast could clear the sentinel while
+        // another tab is still mid-creation). The sentinel is cleared
+        // solely by CEFBridgeManager's process-level timer, started right
+        // after CefInitialize returns.
         _browser->GetHost()->CloseBrowser(true);
         _browser = nullptr;
     }
@@ -489,8 +491,9 @@ private:
     // the process in ~400-650ms — far faster than the 3s creation watchdog
     // below can ever catch, and nothing in-process survives to run recovery
     // code. So this is checked here, on the NEXT launch, instead: if a
-    // prior attempt wrote the sentinel and never cleared it (never survived
-    // 3s past CreateBrowser — see -_startCreationWatchdog), that attempt
+    // prior attempt wrote the sentinel and never cleared it (the process
+    // never survived 3s past `CefInitialize` — see CEFBridgeManager's
+    // process-level clear timer, not this view's watchdog), that attempt
     // almost certainly killed the process. Do NOT attempt creation again
     // blind — surface the failure state and let the user choose to reset
     // the profile.
@@ -569,11 +572,16 @@ private:
 /// treat creation as failed so nothing downstream waits on a browser that
 /// will never materialise.
 ///
-/// ALSO owns clearing the browser-open-attempt sentinel (see
-/// CEFBridgeManager) once the browser HAS materialised. `OnAfterCreated`
-/// firing does not prove the process has survived the CEF profile-downgrade
-/// crash — it kills the process ~0.3-0.65s *after* `OnAfterCreated`, inside
-/// this same 3s window — so the clear happens here, at 3s, not there.
+/// Does NOT own the browser-open-attempt sentinel (see CEFBridgeManager) —
+/// that is process-global and cleared solely by CEFBridgeManager's own
+/// process-level timer, started right after `CefInitialize` returns. This
+/// watchdog is per-VIEW and per-tab-creation-attempt; several
+/// CEFBrowserViews can be alive at once (BrowserTabManager.browserViews),
+/// so a per-view clear here would be wrong the moment more than one tab is
+/// open, and would also race the profile-downgrade crash itself: our own
+/// measurement shows the process dies ~0.33s AFTER `OnAfterCreated` fires
+/// (i.e. after `_browser` goes live), so clearing on materialisation here
+/// — even at this 3s remove — was still scoped to the wrong lifetime.
 - (void)_startCreationWatchdog {
     [self.creationWatchdogTimer invalidate];
     self.creationFailed = NO;
@@ -584,11 +592,7 @@ private:
         CEFBrowserView *strongSelf = weakSelf;
         if (!strongSelf) return;
         if (strongSelf->_browser) {
-            // Already materialised, and the process has now survived a
-            // further 3s past CreateBrowser — the earliest point we can be
-            // sure this launch is not the profile-downgrade crash. Clear
-            // the sentinel here, not at OnAfterCreated.
-            [CEFBridgeManager clearBrowserOpenAttempt];
+            // Already materialised — nothing left for this watchdog to do.
             strongSelf.creationWatchdogTimer = nil;
             return;
         }
@@ -628,12 +632,26 @@ private:
 #if GHOSTTIES_CEF_AVAILABLE
     NSError *error = nil;
     NSString *movedToPath = [CEFBridgeManager resetProfileDirectoryPreservingDataError:&error];
-    [CEFBridgeManager clearBrowserOpenAttempt];
-    // The prior-crash sentinel has now been handled (profile moved aside,
-    // sentinel cleared) — acknowledge it so the -_createBrowserNow call a
-    // few lines below (same launch) doesn't re-read the ORIGINAL
-    // launch-time "prior launch crashed" snapshot and immediately re-fail,
-    // looping within this one process.
+
+    if (error) {
+        // The move failed (permissions, file busy, etc.) — the profile is
+        // STILL poisoned. Do NOT retry creation against it (that would just
+        // die again in ~0.4s, too fast for anyone to read the notice), do
+        // NOT acknowledge the prior-launch snapshot. Leaving the sentinel
+        // set is correct: the next launch will attempt this same reset
+        // again, which is safe because it never retries CreateBrowser
+        // against a profile it failed to move.
+        if (completion) completion(nil, error);
+        return;
+    }
+
+    // The move succeeded — the prior-crash snapshot has been handled.
+    // Acknowledge it so the -_createBrowserNow call a few lines below (same
+    // launch) doesn't re-read the ORIGINAL launch-time "prior launch
+    // crashed" snapshot and immediately re-fail, looping within this one
+    // process. NOTE: this does NOT clear the on-disk sentinel — that is
+    // now owned entirely by CEFBridgeManager's process-level 3s-after-
+    // CefInitialize timer (see CEFBridge.mm), not by this view.
     [CEFBridgeManager acknowledgePriorLaunchAttemptHandled];
 
     [self.creationWatchdogTimer invalidate];
@@ -642,7 +660,7 @@ private:
     self.creationFailed = NO;
     self.creationFailedDueToPreviousCrash = NO;
 
-    if (completion) completion(movedToPath, error);
+    if (completion) completion(movedToPath, nil);
 
     if (self.window && _client) {
         [self _createBrowserNow];
@@ -699,10 +717,12 @@ private:
 #if DEBUG
     self.diagAfterCreatedFired = YES;
 #endif
-    // Deliberately do NOT invalidate the creation watchdog here, and do NOT
-    // clear the browser-open-attempt sentinel here — see the doc comment on
-    // -_startCreationWatchdog. The watchdog keeps running and clears the
-    // sentinel once the browser has survived a further 3s.
+    // This view no longer owns the browser-open-attempt sentinel (see
+    // CEFBridgeManager and the doc comment on -_startCreationWatchdog), so
+    // there is nothing left for the watchdog to wait for once creation has
+    // materialised — invalidate it now.
+    [self.creationWatchdogTimer invalidate];
+    self.creationWatchdogTimer = nil;
     self.creationFailed = NO;
     self.creationFailedDueToPreviousCrash = NO;
     _browser = browser;
