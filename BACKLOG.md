@@ -41,6 +41,23 @@ P0–P4 below unattended, T2 implementer + T1 reviewer per phase.
   silently and show one inline notice line — no button (Fable's recommendation; the button
   is a second failure surface, see the invisible-fallback item below).
 
+## 2026-09-02 — repo hygiene: stale branches, worktree disk, stale `main` checkout
+
+- [ ] **OPEN — 64 merged local branches still present.** Every one is already merged into
+  `origin/main`. Safe to prune with `git branch -d`; recoverable if wrong since the commits
+  live in `main`. Not done unprompted because it touches state other sessions may be using.
+
+- [ ] **OPEN — 8 worktrees under `.claude/worktrees/` holding 15GB.** `composer-g` alone is
+  9.6GB; `session-2` and `session-5` are 2.5GB each. `composer-g`, `session-2`, and
+  `session-5` had uncommitted changes as of today, so they are not safe to remove blind.
+  `parked-worktrees.md` in project memory flags `claude/happy-morse-62ea22` as do-not-delete.
+
+- [ ] **OPEN — local `main` is checked out in the `session-5` worktree at a stale
+  `3653dfd13`**, three commits behind `origin/main`. Two consequences: `git checkout main`
+  fails in the primary tree with "already used by worktree", and anything built in
+  `session-5` is built against stale code. Fix is for that worktree to move off `main` or
+  be removed.
+
 ## 2026-09-01 — composer ultra-minimal SHIPPED; CEF browser fix MERGED, Release profile still unverified
 
 `main` @ `bceb7a74a`. **PR #155 MERGED** — composer variant C (ultra-minimal): trailing
