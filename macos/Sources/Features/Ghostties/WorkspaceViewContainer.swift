@@ -610,6 +610,32 @@ class WorkspaceViewContainer: NSView {
         if window.isKeyWindow {
             WorkspaceStore.shared.freezeSnapshot()
         }
+
+        // Automated CEF browser crash repro (see scripts/debug/cef-repro.sh).
+        // Fires `toggleBrowser()` — the exact same entry point the globe button's
+        // `#selector(toggleBrowser)` action uses — once the window and view
+        // hierarchy are established, so the repro is unattended but otherwise
+        // identical to a real click. Gated at runtime (not compile-time) so a
+        // Release-signed lab build can also be driven without GUI automation —
+        // this is the only way to reproduce against the Release CEF profile.
+        WorkspaceViewContainer.triggerDebugAutoOpenBrowserIfNeeded(on: self)
+    }
+
+    /// Fires exactly once per process, guarded by `GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER=1`.
+    /// Runtime-gated (was `#if DEBUG`) so it survives into Release builds;
+    /// the env var itself is the only thing standing between this and a
+    /// production launch triggering it.
+    private static var didFireDebugAutoOpenBrowser = false
+    private static func triggerDebugAutoOpenBrowserIfNeeded(on container: WorkspaceViewContainer) {
+        guard !didFireDebugAutoOpenBrowser else { return }
+        guard ProcessInfo.processInfo.environment["GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER"] == "1" else { return }
+        didFireDebugAutoOpenBrowser = true
+        NSLog("[CEFDiag] GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER set — auto-triggering toggleBrowser() via the globe button's own action.")
+        // Dispatch to the next runloop turn so the window is fully key/on-screen
+        // before we drive the same path the globe button drives.
+        DispatchQueue.main.async { [weak container] in
+            container?.toggleBrowser()
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -1069,10 +1095,64 @@ class WorkspaceViewContainer: NSView {
             browserPanelView.contentArea.layoutSubtreeIfNeeded()
             if let cefView = browserView as? CEFBrowserView {
                 cefView.setFrameSize(browserPanelView.contentArea.bounds.size)
+                wireBrowserFailureState(for: cefView, bridge: bridge)
             }
         }
 
         _activeBrowserManager = manager
+    }
+
+    /// Wires a CEFBrowserView's creation-failure/success callbacks to the
+    /// panel's inline empty state, and reflects whatever state the view is
+    /// already in (it may have failed before this embed happened, e.g. the
+    /// CEF-unavailable stub case notifies asynchronously right after init).
+    private func wireBrowserFailureState(for cefView: CEFBrowserView, bridge: BrowserSessionBridge?) {
+        let panel = browserPanelView
+        bridge?.onCreationFailed = { [weak cefView, weak panel] in
+            guard let cefView else { return }
+            if cefView.creationFailedDueToPreviousCrash {
+                // A prior launch's attempt never cleared the crash sentinel —
+                // it almost certainly killed the process before surviving the
+                // 3s creation watchdog. Recovery is automatic and one-shot
+                // (no button — that is Sean's decision, not a gap): the
+                // reset itself clears the sentinel AND acknowledges the
+                // launch-time snapshot (CEFBridgeManager
+                // .acknowledgePriorLaunchAttemptHandled, called inside
+                // -resetProfileDataAndRetry:), so this same-process retry
+                // reads as a fresh attempt, not another crash. This notice
+                // only reports what already happened.
+                panel?.failureStateView.show(
+                    message: "The browser didn't come back last time, so old browser data was reset automatically — cookies and logins were set aside, not deleted. Retrying…"
+                )
+                cefView.resetProfileDataAndRetry { [weak panel] movedToPath, error in
+                    if let error {
+                        panel?.failureStateView.show(
+                            message: "The browser didn't come back last time, and the automatic reset failed: \(error.localizedDescription)"
+                        )
+                    } else if let movedToPath {
+                        panel?.failureStateView.show(
+                            message: "The browser didn't come back last time, so old browser data was moved aside automatically to \(movedToPath). Retrying…"
+                        )
+                    }
+                    // No `movedToPath` and no `error` means there was
+                    // nothing to move — the sentinel-only case. Leave the
+                    // "reset automatically… Retrying…" message from above.
+                }
+            } else {
+                panel?.failureStateView.show(
+                    message: "The browser couldn't start. Run scripts/download-cef.sh if this keeps happening."
+                )
+            }
+        }
+        bridge?.onCreationSucceeded = { [weak panel] in
+            panel?.failureStateView.hide()
+        }
+
+        if cefView.creationFailed {
+            bridge?.onCreationFailed?()
+        } else {
+            panel.failureStateView.hide()
+        }
     }
 
     // MARK: - Browser Session Content

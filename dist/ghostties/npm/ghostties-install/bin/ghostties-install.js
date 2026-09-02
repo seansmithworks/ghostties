@@ -4,12 +4,14 @@
 /**
  * ghostties-install
  *
- * Downloads a pinned, checksum-verified release of Ghostties.app and places
- * it in /Applications (or --target). Zero runtime dependencies: only Node
- * built-ins and macOS system tools (`ditto`).
+ * Resolves the newest published release of Ghostties.app at run time,
+ * downloads it, verifies the download against GitHub's own asset digest,
+ * and verifies the extracted app bundle's code signature — then places it
+ * in /Applications (or --target). Zero runtime dependencies: only Node
+ * built-ins and macOS system tools (`ditto`, `codesign`).
  *
- * The version/sha256 below are pinned deliberately. See README.md for why,
- * and for how to bump them (it's a manual edit, not automated).
+ * There is no pinned version to bump. See README.md for how release
+ * resolution works and why it's safe to trust "newest" without a pin.
  */
 
 const fs = require("fs");
@@ -17,18 +19,25 @@ const os = require("os");
 const path = require("path");
 const https = require("https");
 const crypto = require("crypto");
-const { execFileSync } = require("child_process");
+const { execFileSync, spawnSync } = require("child_process");
 
 // ---------------------------------------------------------------------------
-// Pinned release. Bump manually when a new release ships. See README.md.
+// Release resolution
 // ---------------------------------------------------------------------------
-const RELEASE = {
-  tag: "v0.1.0-beta.22",
-  assetName: "ghostties-macos-arm64.zip",
-  sha256: "0542bd3db77ca60048e3f9aba5096c9779037139a52eee2bd82c6c3e1eea98fc",
-};
-const DOWNLOAD_URL = `https://github.com/SeanSmithWorks/ghostties/releases/download/${RELEASE.tag}/${RELEASE.assetName}`;
+const REPO = "SeanSmithWorks/ghostties";
+const ASSET_NAME = "ghostties-macos-arm64.zip";
 const APP_NAME = "Ghostties.app";
+// The identity every Ghostties release is signed with (Developer ID, Sean's
+// team). Verified after extraction, independent of any version pin.
+const EXPECTED_TEAM_ID = "5P7G79U672";
+
+// GitHub's `/releases/latest` endpoint excludes prereleases, and every
+// Ghostties release published so far is a prerelease — so it would find
+// nothing. Read the release list instead and take the newest entry
+// (the API returns releases newest-first), keeping prereleases in scope.
+// The Homebrew cask's `livecheck` block (dist/ghostties/homebrew/ghostties.rb)
+// works around the same GitHub behavior the same way.
+const RELEASES_API_URL = `https://api.github.com/repos/${REPO}/releases?per_page=10`;
 
 // ---------------------------------------------------------------------------
 // CLI plumbing
@@ -47,7 +56,10 @@ Options:
   --force           Overwrite an existing install at the target.
   -h, --help        Show this help.
 
-Pinned release: ${RELEASE.tag}
+Always installs the newest published release (GitHub API resolves it at run
+time — nothing is pinned). The download is verified against GitHub's own
+asset digest, and the extracted app bundle's code signature is verified
+against Sean's Developer ID team identifier before install.
 `);
 }
 
@@ -99,6 +111,134 @@ function checkPlatform(platform, arch) {
 }
 
 class InstallError extends Error {}
+
+// ---------------------------------------------------------------------------
+// GitHub API
+// ---------------------------------------------------------------------------
+
+function httpsGetJson(url, { redirectsLeft = 5 } = {}) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(
+      url,
+      {
+        headers: {
+          "User-Agent": "ghostties-install",
+          Accept: "application/vnd.github+json",
+        },
+      },
+      (res) => {
+        const { statusCode, headers } = res;
+
+        if (statusCode >= 300 && statusCode < 400 && headers.location) {
+          res.resume();
+          if (redirectsLeft <= 0) {
+            reject(
+              new InstallError(
+                "Too many redirects while querying the GitHub API.",
+              ),
+            );
+            return;
+          }
+          httpsGetJson(headers.location, {
+            redirectsLeft: redirectsLeft - 1,
+          }).then(resolve, reject);
+          return;
+        }
+
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => {
+          if (statusCode === 403 || statusCode === 429) {
+            reject(
+              new InstallError(
+                `GitHub API rate limit hit (HTTP ${statusCode}) while resolving the latest ` +
+                  "Ghostties release.\nTry again in a few minutes, or download a release " +
+                  `directly from https://github.com/${REPO}/releases.`,
+              ),
+            );
+            return;
+          }
+          if (statusCode !== 200) {
+            reject(
+              new InstallError(
+                `GitHub API request failed: HTTP ${statusCode} for ${url}.\n` +
+                  "GitHub may be down, or the repository may be unreachable.",
+              ),
+            );
+            return;
+          }
+          try {
+            resolve(JSON.parse(body));
+          } catch (err) {
+            reject(
+              new InstallError(
+                `GitHub API returned a response that could not be parsed as JSON: ${err.message}`,
+              ),
+            );
+          }
+        });
+        res.on("error", (err) => reject(err));
+      },
+    );
+
+    request.on("error", (err) => {
+      reject(
+        new InstallError(
+          `Network error while contacting the GitHub API at ${url}: ${err.message}`,
+        ),
+      );
+    });
+  });
+}
+
+async function resolveLatestRelease() {
+  let releases;
+  try {
+    releases = await httpsGetJson(RELEASES_API_URL);
+  } catch (err) {
+    if (err instanceof InstallError) throw err;
+    throw new InstallError(
+      `Could not resolve the latest Ghostties release: ${err.message}`,
+    );
+  }
+
+  if (!Array.isArray(releases) || releases.length === 0) {
+    throw new InstallError(
+      `No releases found for ${REPO}. This is unexpected — the project always has at ` +
+        "least one published release. GitHub's API may be having issues.",
+    );
+  }
+
+  // The API returns releases newest-first; drafts are never returned to
+  // unauthenticated requests, but skip them defensively anyway.
+  const release = releases.find((r) => !r.draft);
+  if (!release) {
+    throw new InstallError(
+      `No published (non-draft) releases found for ${REPO}.`,
+    );
+  }
+
+  const asset = (release.assets || []).find((a) => a.name === ASSET_NAME);
+  if (!asset) {
+    throw new InstallError(
+      `Release ${release.tag_name} has no "${ASSET_NAME}" asset.\n` +
+        `See https://github.com/${REPO}/releases/tag/${release.tag_name} for what it does have.`,
+    );
+  }
+
+  if (!asset.digest || !asset.digest.startsWith("sha256:")) {
+    throw new InstallError(
+      `Release ${release.tag_name}'s "${ASSET_NAME}" asset has no sha256 digest from GitHub.\n` +
+        "Refusing to install an asset that can't be integrity-checked.",
+    );
+  }
+
+  return {
+    tag: release.tag_name,
+    downloadUrl: asset.browser_download_url,
+    sha256: asset.digest.slice("sha256:".length),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Download with progress
@@ -188,6 +328,82 @@ function sha256File(filePath) {
 }
 
 // ---------------------------------------------------------------------------
+// Code signature
+// ---------------------------------------------------------------------------
+
+function verifyCodeSignature(appPath) {
+  // Two separate codesign calls are required here, not one — they check
+  // different things and neither substitutes for the other:
+  //   `-dv --verbose=4` DISPLAYS signing info (who signed it) but does not
+  //   validate the signature against what's actually on disk; a bundle
+  //   tampered with after signing will still print a readable
+  //   TeamIdentifier and exit 0 under `-dv` alone.
+  //   `--verify --deep --strict` VALIDATES the signature against the
+  //   bundle's current bytes, but doesn't print the identity.
+  // Run --verify first and fail fast: an invalid signature makes the
+  // identity from -dv meaningless, so there's no point reading it.
+  //
+  // codesign writes its output to stderr for both invocations regardless
+  // of success or failure, so both streams have to be captured explicitly
+  // — execFileSync only returns stdout on success.
+  const verifyResult = spawnSync(
+    "codesign",
+    ["--verify", "--deep", "--strict", appPath],
+    { encoding: "utf8" },
+  );
+
+  if (verifyResult.error) {
+    throw new InstallError(
+      `Could not run codesign to verify ${appPath}: ${verifyResult.error.message}`,
+    );
+  }
+
+  const verifyOutput = `${verifyResult.stdout || ""}${verifyResult.stderr || ""}`;
+
+  if (verifyResult.status !== 0) {
+    throw new InstallError(
+      "Code signature verification FAILED.\n" +
+        `codesign reports the signature on ${appPath} does not match its contents:\n` +
+        `${verifyOutput || `exit code ${verifyResult.status}`}\n` +
+        "The bundle may have been altered after signing. Not installing.",
+    );
+  }
+
+  const displayResult = spawnSync("codesign", ["-dv", "--verbose=4", appPath], {
+    encoding: "utf8",
+  });
+
+  if (displayResult.error) {
+    throw new InstallError(
+      `Could not run codesign to read the signing identity of ${appPath}: ${displayResult.error.message}`,
+    );
+  }
+
+  const displayOutput = `${displayResult.stdout || ""}${displayResult.stderr || ""}`;
+
+  if (displayResult.status !== 0) {
+    throw new InstallError(
+      "Code signature verification FAILED.\n" +
+        `codesign could not read signing info for ${appPath}:\n` +
+        `${displayOutput || `exit code ${displayResult.status}`}\n` +
+        "This build will not be installed — it may be corrupted or tampered with.",
+    );
+  }
+
+  const match = displayOutput.match(/TeamIdentifier=([A-Z0-9]+)/);
+  const teamId = match ? match[1] : null;
+  if (teamId !== EXPECTED_TEAM_ID) {
+    throw new InstallError(
+      "Code signature verification FAILED.\n" +
+        `  expected team identifier: ${EXPECTED_TEAM_ID}\n` +
+        `  actual:                   ${teamId || "(not found)"}\n` +
+        "The signature is valid but signed by an identity other than the one Ghostties " +
+        "releases are signed with. Not installing.",
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -203,6 +419,9 @@ async function main() {
 
     checkPlatform(process.platform, process.arch);
 
+    console.log("Resolving the latest Ghostties release…");
+    const release = await resolveLatestRelease();
+
     const target = path.resolve(args.target);
     const destAppPath = path.join(target, APP_NAME);
 
@@ -211,7 +430,7 @@ async function main() {
         throw new InstallError(
           `${destAppPath} already exists.\n` +
             "Ghostties self-updates via Sparkle, so the installed copy may already be newer " +
-            `than the ${RELEASE.tag} build this installer knows about. Refusing to overwrite it.\n` +
+            `than the ${release.tag} build this installer just resolved. Refusing to overwrite it.\n` +
             "Pass --force if you want this installer to replace it anyway.",
         );
       }
@@ -220,25 +439,25 @@ async function main() {
     fs.mkdirSync(target, { recursive: true });
 
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), "ghostties-install-"));
-    const zipPath = path.join(workDir, RELEASE.assetName);
+    const zipPath = path.join(workDir, ASSET_NAME);
     const extractDir = path.join(workDir, "extracted");
 
-    console.log(`Ghostties installer — ${RELEASE.tag}`);
+    console.log(`Ghostties installer — ${release.tag}`);
     console.log(`Target: ${destAppPath}`);
     console.log("");
-    console.log(`Downloading ${RELEASE.assetName} (~154 MB)…`);
+    console.log(`Downloading ${ASSET_NAME} (~154 MB)…`);
     downloadStarted = true;
-    await downloadWithProgress(DOWNLOAD_URL, zipPath);
+    await downloadWithProgress(release.downloadUrl, zipPath);
 
     console.log("Verifying checksum…");
     const actualSha256 = await sha256File(zipPath);
-    if (actualSha256 !== RELEASE.sha256) {
+    if (actualSha256 !== release.sha256) {
       throw new InstallError(
         "Checksum verification FAILED.\n" +
-          `  expected: ${RELEASE.sha256}\n` +
+          `  expected: ${release.sha256}\n` +
           `  actual:   ${actualSha256}\n` +
-          "The downloaded file does not match the pinned release and will be deleted. " +
-          "This could mean a corrupted download or a tampered asset — not installing.",
+          "The downloaded file does not match the digest GitHub published for this release " +
+          "and will be deleted. This could mean a corrupted download or a tampered asset — not installing.",
       );
     }
     console.log("Checksum OK.");
@@ -257,6 +476,10 @@ async function main() {
         `Could not find ${APP_NAME} inside the downloaded archive after extraction.`,
       );
     }
+
+    console.log("Verifying code signature…");
+    verifyCodeSignature(extractedAppPath);
+    console.log("Code signature OK.");
 
     console.log(`Installing to ${destAppPath}…`);
     // Stage into a temp name in the target directory, then rename into place
@@ -277,7 +500,7 @@ async function main() {
 
     console.log("");
     console.log(`Installed ${APP_NAME} to ${target}.`);
-    console.log(`Version: ${RELEASE.tag}`);
+    console.log(`Version: ${release.tag}`);
     console.log(
       "Ghostties updates itself from here on via Sparkle — no need to re-run this installer.",
     );

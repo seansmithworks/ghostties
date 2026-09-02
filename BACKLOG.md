@@ -58,6 +58,245 @@
   chevron count without touching the grammar. Sean decides whether to keep the grammar fix or
   move it to the adapter.
 
+## 2026-09-02 — CEF crash root-caused (Chromium 150→144 profile downgrade); overnight fix dispatched
+
+**Verdict (Fable 5.1):** Sean's Release CEF profile was written by Chromium 150; the Aug 1
+security pin (PR #60) fixed `vendor/cef` at 144, so every browser open since has been an
+unsupported profile downgrade — Chromium ends it with a deliberate `_exit` ~0.4s after
+`CefInitialize`, before the #159 sentinel is ever written. Full diagnosis and fix design:
+`docs/plans/cef-crash-strategy-2026-09-01.md`. A fresh overnight thread executes phases
+P0–P4 below unattended, T2 implementer + T1 reviewer per phase.
+
+- [x] **P0 — Preconditions.** Done. RunningBoard recorded `termination reported by launchd
+  (0, 0, 1536)` for the original crash — exit status 0, no signal, confirming a deliberate
+  quit rather than a fault. Fixture verified stable at `last_chrome_version 150.0.7871.129`.
+- [x] **P1 — Observability + lab controls.** Done. `GHOSTTIES_CEF_APP_SUPPORT_DIR` override,
+  `[CEFBridge]` `os_log` probes with 250ms alive-ticks, `[CEFDiag]` moved to a runtime env
+  gate, auto-open un-gated for Release, `--allow-non-dev` added to the repro script. P1 ran
+  **before** P0's E0: an unfixed Release build had no non-GUI way to reach the fixture until
+  the lab controls existed.
+- [x] **P2 — Experiments.** Done. E0 baseline DIED 2/2 (0.53s, 0.41s). E3 (flip
+  `last_chrome_version` alone) DIED 2/2. E4 (replace `Default/Preferences` wholesale) DIED.
+  E2 (`exit_type` → Normal) DIED. E1 (lldb) abandoned — generic breakpoints matched 9–39
+  locations and fired continuously. E3 and E4 are why the remediation moves the whole
+  profile directory rather than patching a key or a file.
+- [x] **P3 — Fix.** Done, three rounds. Downgrade guard with a bounded version parse
+  (rejects, never clamps, applied to both the stamp and the `Preferences` fallback);
+  sentinel clear moved to a process-level 3s timer after `CefInitialize`; automatic reset
+  gated on the move actually succeeding; failure notice made visible. Fresh fixture copy +
+  fixed build SURVIVED 3/3. Suite 1040/1043, the two failures being the known pre-existing
+  flakes. 12 new parse-path tests, mutant-verified.
+- [x] **P4 — Ship.** Done. PR #162 against `main` on `SeanSmithWorks/ghostties`, carrying the
+  experiment table and evidence in `docs/plans/evidence/`. `/Applications/Ghostties-fix.app`
+  installed, 6 CEF symbols, adhoc-signed, not launched.
+- [ ] **OPEN — composer variant C still not visually confirmed.** The overnight run could
+  not screenshot it: the palette needs ⌘N and synthetic input is disallowed, `screencapture`
+  returns a black frame from a stale TCC grant, and `workspace.json` is not isolated from lab
+  launches so a second live instance was not safe to run. By binary the code is present (0
+  occurrences of the old `"Pick one from the branch picker"` string). To confirm: launch
+  `/Applications/Ghostties-fix.app` and press ⌘N.
+- [ ] **DECISION APPLIED BY DEFAULT (redline if wrong):** on downgrade, reset the profile
+  silently and show one inline notice line — no button (Fable's recommendation; the button
+  is a second failure surface, see the invisible-fallback item below).
+
+## 2026-09-02 — repo hygiene: stale branches, worktree disk, stale `main` checkout
+
+- [ ] **OPEN — 64 merged local branches still present.** Every one is already merged into
+  `origin/main`. Safe to prune with `git branch -d`; recoverable if wrong since the commits
+  live in `main`. Not done unprompted because it touches state other sessions may be using.
+
+- [ ] **OPEN — 8 worktrees under `.claude/worktrees/` holding 15GB.** `composer-g` alone is
+  9.6GB; `session-2` and `session-5` are 2.5GB each. `composer-g`, `session-2`, and
+  `session-5` had uncommitted changes as of today, so they are not safe to remove blind.
+  `parked-worktrees.md` in project memory flags `claude/happy-morse-62ea22` as do-not-delete.
+
+- [ ] **OPEN — local `main` is checked out in the `session-5` worktree at a stale
+  `3653dfd13`**, three commits behind `origin/main`. Two consequences: `git checkout main`
+  fails in the primary tree with "already used by worktree", and anything built in
+  `session-5` is built against stale code. Fix is for that worktree to move off `main` or
+  be removed.
+
+## 2026-09-01 — composer ultra-minimal SHIPPED; CEF browser fix MERGED, Release profile still unverified
+
+`main` @ `bceb7a74a`. **PR #155 MERGED** — composer variant C (ultra-minimal): trailing
+branch/project controls removed, junk-template creation fixed, stranded copy collapsed to
+one `SessionComposerCopy` constant. Three review rounds; round 2 found a second stranded
+literal the round-1 fix had missed, round 3 found a comment the round-2 fix introduced.
+
+- [x] **DONE — CEF browser fix MERGED as `bceb7a74a` (PR #159, which carried #156–#158).**
+  #159's base was `main`, not #158, so its branch already contained all four commits; #156
+  auto-closed, #157/#158 closed as redundant with a note. Verified before merge: harness
+  **SURVIVED 3/3** against the real Dev profile (proved non-vacuous — the launch line sets no
+  `HOME`/cache override, and `Local State`/`Cookies`/`History`/`Preferences` mtimes all moved
+  to run time), suite **1027 / 1025 passed / 1 failed / 1 skipped** (matching the agent's
+  claim exactly; the failure is `GitWorktreeCreationTests/raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes()`,
+  a `2.74 < 2.0` wall-clock flake unrelated to CEF), and all 6 `CEFBrowserSentinelTests` passed.
+
+- [x] **RESOLVED (root cause) — the merged fix does NOT fix the crash. Reproduced on the
+  Release profile 2026-09-01 22:55.** Sean clicked the globe in a release-bundle-ID build
+  carrying the full #159 stack; `[CEFBridge] CEF initialized.` at `22:55:34.261`, last log
+  line `22:55:34.349`, process gone by `22:55:36`. No `.ips`, no signal, no further output.
+  **Root cause and plan: see 2026-09-02 above.**
+
+- [ ] **OPEN — the sentinel is placed around the WRONG call, and the Dev bisection misled us.**
+  `recordBrowserOpenAttempt` is called at `CEFBrowserView.mm:499`, before `CreateBrowser` at
+  `:521`. After the crash above, **no `browser-open-attempt` file exists on disk** — so the
+  process died *before* line 499, i.e. during or just after `CefInitialize`, NOT at
+  `CreateBrowser`. The Dev-profile bisection's "dies ~460ms after `CreateBrowser`" does not
+  describe the Release-profile failure. Consequences: (a) the recovery UI never arms, because
+  its trigger is an uncleared sentinel that is never written; (b) the whole sentinel design
+  is anchored to the wrong point in the sequence. This reframes the fix rather than tuning it.
+
+- [ ] **OPEN — `[CEFDiag]` instrumentation is `#if DEBUG`-gated, so it emits nothing in a
+  release-bundle-ID build.** The only Release-visible line is the ungated
+  `[CEFBridge] CEF initialized.` NSLog. Pinning the exact death point needs that gating
+  relaxed, or an equivalent ungated probe.
+
+- [ ] **OPEN — `ReleaseLocal` can never produce a working browser (repo bug, independent of
+  the crash).** Its `HEADER_SEARCH_PATHS` omits `vendor/cef`, which Debug and Release both
+  carry. CEF availability is a compile-time `__has_include`, so the browser silently compiles
+  out to a no-op stub: **0 CEF symbols in the ReleaseLocal binary vs 4 in Release**, while the
+  288M framework still ships in the bundle. No error, no warning — the globe button just does
+  nothing. Anyone building that config to test the browser is testing a stub.
+
+- [ ] **OPEN — the graceful-fallback failure state is invisible.** On the failed opens,
+  `BrowserPanelView` / `BrowserTabBar` / `BrowserNavigationBar` / `BrowserFailureStateView`
+  were all constructed, AppKit logged four `Unable to simultaneously satisfy constraints`
+  conflicts naming `BrowserFailureStateView`, and Sean saw **nothing** on screen. The
+  fallback shipped in this stack does not communicate.
+
+- [x] **DONE — Release profile backed up** to `com.seansmithdesign.ghostties/CEF-backup-2026-09-01`
+  (141M, `Local State` preserved at Aug 13 15:31:26), so crash testing is zero-risk.
+
+- [ ] **CARRIED — Sean wants to visually confirm the composer** (variant C) in a working
+  build. By binary it IS current in every build made 2026-09-01 (0 occurrences of the old
+  `"Pick one from the branch picker"` string, 1 of the new shared constant; beta.24 still has
+  the old one). Not yet seen on screen in a build whose browser also works.
+
+- [ ] **CARRIED — Sean's 3 junk `New Template` rows still in `workspace.json`.** PR #155
+  stops new ones; it does not purge existing. Delete in-app (right-click → Delete). All
+  three are empty records, `command: null`.
+
+- [ ] **NEW — a junk `command: nil` template is still creatable via Save.** `TemplatePickerView.save()`
+  passes `command: nil` when the field is blank and `updateTemplate` treats nil as
+  "leave unchanged". The abandon path is fixed; the Save path is not.
+
+- [ ] **NEW — CI covers no documentation or copy consistency, and never runs the macOS suite.**
+  Six doc/copy defects across PR #155's three review rounds, all caught by reading, none by
+  tooling. `.github/workflows/test-ghostties.yml:151` runs `build-for-testing` only — ~1000
+  app-hosted tests never execute in CI. The deferral cites a headless app-host hang, but
+  memory records `xcodebuild test` running the suite locally in ~33s, so **the stated blocker
+  may be stale — worth one investigation.** Sean asked about this directly; answered no.
+
+- [ ] **NEW — dead composer surface retained pending Sean's decision.** `trailingControlVisibility`,
+  `projectControl`, `branchControl`, `inlineProjectPicker`, `inlineBranchPicker`,
+  `ProjectDropdownView`, `WorktreeDropdownView` (~500 lines), plus 8 tests in
+  `SessionComposerTrailingControlTests` and `AccessibilityTests:263-268` now assert
+  unreachable behaviour. Nothing sets `isProjectPickerOpen`/`isBranchPickerOpen` to `true`.
+
+- [ ] **PARKED — composer variants A/B/D/E/F/G were not built.** Sean chose C (ultra-minimal)
+  2026-09-01. Reopen only if he asks.
+
+- [ ] **NEW — harness leftovers to clean.** `/var/folders/lc/6kc11m9s4bb_hhkw_p07l03m0000gn/T/ghostties-cef-repro-*`
+  (~61MB, three dirs) plus `~/Library/Application Support/ghostties-cef-repro-scratch`
+  (44MB, three PID-named profile copies from the 16:02 bisection). Dev PID 79653 is
+  confirmed gone — no Ghostties or Dev instance was running at verification time.
+
+## 2026-09-01 — PR #155 review follow-ups (ultra-minimal composer variant C)
+
+**Not fixed, deliberately — found by review, deferred:**
+
+- [ ] A junk `command: nil` template is still producible via **Save**, not just abandon.
+  `TemplatePickerView.save()` passes `command: trimmedCommand.isEmpty ? nil : trimmedCommand`,
+  and `WorkspaceStore.updateTemplate` treats `nil` as "leave unchanged." Create a template,
+  leave Command blank, press Save → persisted `.custom` template with `command: nil`,
+  byte-identical to the three junk rows already in Sean's workspace. The abandon path
+  (`TemplateEditForm.onDisappear`) is fixed; this one is not.
+- [ ] Dead surface intentionally left in place after the trailing-control removal:
+  `trailingControlVisibility` (`SessionComposerPalette.swift:1521`), `projectControl`
+  (`:1663`), `branchControl` (`:1696`), `inlineProjectPicker` (`:1749`), `inlineBranchPicker`
+  (`:1765`), `ProjectDropdownView` (`:2907`), `WorktreeDropdownView` (`:3061`, ~500 lines with
+  keyboard-capture layers), the `.onChange(of: isBranchPickerOpen)` `refreshWorktrees` trigger
+  (`:1652`), and three accessibility label constants (`:86-88`). Tests now asserting
+  unreachable behaviour: all 8 in `SessionComposerTrailingControlTests.swift`, plus
+  `AccessibilityTests.swift:263-268`. Nothing sets `isProjectPickerOpen`/`isBranchPickerOpen`
+  to `true` any more. Sean has not decided whether to delete any of this.
+- [ ] `isNewlyCreated` correctness rests on an unenforced invariant across two independent
+  `@State` vars (`newTemplateToEdit` + `newTemplateToEditIsFresh`). Correct today at all three
+  assignment sites; carrying the flag inside the sheet item as a two-field struct would make
+  desync unrepresentable.
+- [ ] `TemplatePickerView` has zero instantiation sites but its doc comment (`:5-9`) still
+  claims it is "Shown when the user clicks 'New Session' in the detail panel."
+- [ ] A doc comment names the wrong file for the root cause of the junk-template bug: the
+  `isNewlyCreated` doc comment on `TemplateEditForm` (`TemplatePickerView.swift`, ~line 435)
+  and this same backlog entry's own historical phrasing both point at the old
+  `TemplatePickerView.addCustomTemplate()` flow; the actual current culprit is
+  `SessionComposerPalette.commitNewTemplate()` (`:1835` at review time), which adds the
+  template to the store before `TemplateEditForm` ever runs. Correct the doc comment to name
+  `commitNewTemplate()` directly.
+
+## 2026-09-01 — open items after the beta.24 release and pipeline work
+
+**Waiting on Sean (both one-time):**
+
+- [ ] `npm publish` for `ghostties-install@0.2.0` from a real terminal — the local
+  `Bash(npm publish*)` deny rule no-ops silently. After this publish the installer resolves the
+  newest release at run time and never needs a version bump again. Command:
+  `cd ~/Code/ghostties/dist/ghostties/npm/ghostties-install && npm publish`
+- [ ] Homebrew auto-bump PAT — set `HOMEBREW_TAP_TOKEN` (secret) **before**
+  `HOMEBREW_TAP_REPO` (variable), or the next release goes red at its final job. Fine-grained
+  PAT needs `contents: write` + `pull_requests: write` on `SeanSmithWorks/homebrew-tap`. Until
+  then the tap is a manual bump and `verify-release` reports it NOT VERIFIED.
+
+**Deferred from the PR #154 review** (found by an adversarial review, deliberately not fixed):
+
+- [ ] `verify-release`'s homepage check sweeps the whole page for semver-shaped tokens and
+  requires every one to equal the release version. Any unrelated copy edit mentioning an older
+  version (or a CDN `@0.x.y` script tag) turns a good release red. Anchor it to the specific
+  strings `update-web-version.py` writes instead.
+- [ ] `verify-release` does not check `/download` (which takes four replacements — more than
+  `index.html`) or `appcast-stable.xml` (unverified for the first stable release).
+- [ ] `scripts/extract-release-notes.py` trims a trailing `---` positionally, so the
+  **oldest** changelog entry absorbs the link-reference block. Only ever affects the last
+  entry; cosmetic today.
+
+**Repo hygiene:**
+
+- [ ] `BACKLOG.md` is 203KB / 2,065 lines, well past the open-items-only rule. Needs an
+  archive pass into `BACKLOG-log.md`, same as the last time it grew into a changelog.
+
+**Verification note:** PR #154's assembled behavior is unproven — every piece is
+unit-verified against live surfaces, but the wired-together run only happens on the next real
+release (beta.25). It is designed so the worst case is a cosmetic release body or a spurious
+red X on the final job, never a broken release. Watch the beta.25 run.
+
+## 2026-08-31 — hook-based session status is built but unreachable
+
+PR #141 (`529662a1c`) wired `SessionCoordinator.swift:1417` to read
+`ClaudeStateStore.state(for: sessionId)` and prefer it over the old inference path when hook
+state exists. Nothing registers the hook: `HookInstaller.swift` only seeds the script to
+`~/.ghostties/hooks/`; registering it requires hand-adding seven entries (UserPromptSubmit,
+PreToolUse, PostToolUse/`TodoWrite`, Stop, Notification, PermissionRequest, SessionEnd) to
+`~/.claude/settings.json`, and the only copy of that snippet lives in the header comment of
+`macos/Resources/hooks/ghostties-status.sh` (~lines 16-40). No code in `macos/Sources` or
+`macos/Resources` writes `settings.json`.
+
+- [ ] **Setup is undiscoverable.** The registration snippet exists only as shell-script
+  comments — no README section, no `docs/` page, no in-app affordance. Anyone but Sean who
+  installs beta.24 silently gets the old inferred status with no way to learn the better path
+  exists. beta.24's CHANGELOG (PR #150) now points at
+  `~/.ghostties/hooks/ghostties-status.sh` as the place the snippet ships, so that reference
+  needs a real destination. Decide where instructions live (README section vs. `docs/` page
+  vs. in-app), then write them.
+
+- [ ] **`HookInstaller` should actually register the hooks**, not just seed the script. Merge
+  the seven entries into `~/.claude/settings.json` idempotently, behind a visible opt-in —
+  never silent. Must preserve unrelated existing keys, must be safe to run repeatedly without
+  duplicating entries, must survive the user already having their own hooks registered for the
+  same events, and must be reversible. `HookInstaller.seedVersion` already exists as the
+  re-seed mechanism and would need a parallel notion for registration. Worth a headline entry
+  in a future release once built.
+
 ## 2026-08-30 (later) — all four PRs merged, `main` broke and was fixed, worktrees reclaimed
 
 `main` @ `a2a28870b`, compiling. #146/#147/#148 merged, then **#141 merged** (`529662a1c`)
@@ -85,20 +324,18 @@ result**; this repo does not require branches be up to date before merge.
   fix the pattern (dynamic latest-release resolution + set the two Homebrew repo settings) or
   hand-bump both each release.
 
-- [ ] **NEW — composer surface redesign, 7 directions drawn, awaiting Sean's pick.** The
-  trailing branch dropdown inside the field is to be REMOVED (Sean's call, 2026-08-30);
-  text input stays clean. Variant sheet at
-  `<scratchpad>/composer-variants.html`. A scope pills · B pure prediction · C absolute
-  minimum (**closest to what ships today**) · D grouped section headers (**Spotlight**) ·
-  E field-as-destination ghost text · F operator footer (**Raycast action bar**) ·
-  G = D+F (**Raycast**). Effort sized from source: D is ~30 lines — `ComposerResultsTable`
-  already takes four named lanes (`Recent`/`Templates`/`Projects`/`Command`,
-  `SessionComposerPalette.swift:1387`) and Composer UI 11 Step 2 deliberately REMOVED the
-  visible `title` field, keeping only `accessibilityLabel` (`:2532`). F needs a stage→
-  operators map in `SessionComposerCommandParser` plus a three-way precedence rule for the
-  strip slot (`:1450`) it shares with errors and the new-template naming field. Both shift
-  row positions, so **snapshot tests will need retuning**. Note G reverses the `V02Quieted222`
-  decision to quiet those headers.
+- [x] **DONE — composer surface redesign resolved: variant C, ultra-minimal, shipped in
+  PR #155.** Sean picked C (absolute minimum, closest to what shipped before this change) —
+  the trailing `projectControl`/`branchControl` buttons are removed from the query row
+  entirely; the results list is the only remaining mouse route into projects/templates.
+  Variants A (scope pills), B (pure prediction), D (grouped section headers/Spotlight), E
+  (field-as-destination ghost text), F (operator footer/Raycast action bar), and G (D+F) were
+  NOT built. Same PR also fixed the persisted "New Template" junk-row bug (root cause:
+  `TemplatePickerView.swift`'s `TemplateEditForm` added the template to the store before the
+  user configured it, and dismissing the follow-up edit sheet without saving left an empty,
+  `command: nil` template behind forever — fixed with an `onDisappear` cleanup gated on
+  `isNewlyCreated`/`didSave`). The 3 junk rows already in Sean's `workspace.json` are historical
+  data from before this fix; they are NOT auto-purged — see the PR for manual removal steps.
 
 - [x] **DONE — worktrees reclaimed.** `.claude/worktrees/` 28G → 3.0G, disk free 66G → 117G.
   21 trees removed, all branches intact. Kept `session-2` (uncommitted docs under
@@ -1169,6 +1406,7 @@ merged after six weeks; repo hygiene wave.
 ## 2026-08-11 — Repo hygiene wave (worktrees, branches, stale PRs)
 
 Worktrees 21 → 3, local branches 60 → 13, origin branches 11 → 5, disk 34 GB → 2.5 GB. Merged
+
 #116 `3ea42d69d`, #105 `45c834929`, #119 `7ec311a57`. Recovered an unpushed commit (`059d5ef38`,
 website session notes) from an abandoned worktree before pruning would have destroyed it.
 
@@ -1242,6 +1480,7 @@ Left open:
 
 `v0.1.0-beta.22` tagged at `3979c7025`, release CI green, appcast live (build 16655, verified in
 the deployed XML). Merged tonight: #110 (title-sanitizer leaks), #113 (`Remove`→`Delete`),
+
 #115 (changelog), #117 (npm pin). Sean passed all three runtime gates (#57, #58, #92) on a build
 proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fail / 1 skip** via
 `xcrun xcresulttool get test-results summary` at the merged tip.
@@ -2087,12 +2326,15 @@ synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
 - [x] Composer variant G — cap TEMPLATES/PROJECTS at 3 in rest state
 - [x] Composer variant G — one-Tab-per-segment, no-branch command shape, stale error copy
 
+## 2026-08-31 — Composer variant G session (carried)
+
 Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 
 **Decisions open on Sean (carried 1×):**
 - [ ] Composer type scale — mockup values (header 10pt `.bold` + 0.6 tracking; footer 10.5pt `design: .monospaced`; strip `Color.secondary.opacity(0.08)`) vs `DESIGN.md`'s 15/13/11 scale + one font family. Note: no monospaced font carries `↵`/`⇥`, so the footer mixes families either way — weakens the mono case.
 - [ ] `macos/Tests/Ghostties/ThrottleTrailingEdgeHypothesisTests.swift` — delete or fix? Untracked, dated Aug 14, self-described "DIAGNOSTIC ONLY". Missing `import GhosttiesCore`; breaks local `xcodebuild test` for every session in this repo until resolved.
 - [x] Tab-to-complete in the DEFAULT field — Tab filling the field from the highlighted row. Model-B only today. Its own change, not this branch. RESOLVED 2026-09-02: Sean made Model-B the default field for everyone instead of porting Tab into the old field.
+- [ ] Tab-to-complete in the DEFAULT field — Tab filling the field from the highlighted row. Model-B only today. Its own change, not this branch.
 
 **Parked (off-objective):**
 - [ ] Template setup — bundled preset `macos/Presets/orchestrator.md` never seeds; `templates = presets + defaults + custom` has no dedupe (two "Orchestrator" rows if it does seed); Release `workspace.json` holds 3 junk "New Template" entries; presets sort ABOVE built-ins.

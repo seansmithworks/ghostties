@@ -429,8 +429,34 @@ struct TemplatePickerView: View {
 struct TemplateEditForm: View {
     let template: AgentTemplate
 
+    /// True only for a template that was just created empty (name-only,
+    /// `command: nil`, no agent config) and opened straight into this form
+    /// to be configured — never for editing an already-configured template
+    /// via the context menu's "Edit" action. Root cause of the persisted
+    /// junk "New Template" rows found in production `workspace.json`
+    /// (`docs/plans/session-creation-unified.html` finding D4, old
+    /// `TemplatePickerView.addCustomTemplate()` flow): the record was
+    /// added to the store BEFORE this form ran, so dismissing without
+    /// ever hitting Save left an empty, unconfigured template behind
+    /// forever. `didSave` + `onDisappear` below deletes it if abandoned —
+    /// covers Cancel, Esc, and click-outside dismissal, not just the
+    /// Cancel button.
+    var isNewlyCreated: Bool = false
+
     @EnvironmentObject private var store: WorkspaceStore
     @Environment(\.dismiss) private var dismiss
+
+    @State private var didSave = false
+
+    /// Pure decision, factored out so it's unit-testable without driving a
+    /// real SwiftUI `.onDisappear` lifecycle event (this repo has no
+    /// ViewInspector). True exactly when a freshly-created, still-empty
+    /// template is being abandoned — Cancel, Esc, or a click outside the
+    /// sheet all end up here via `onDisappear`, since `.dismiss()` alone
+    /// can't distinguish "the user cancelled" from "the user saved".
+    static func shouldDiscardOnDismiss(isNewlyCreated: Bool, didSave: Bool) -> Bool {
+        isNewlyCreated && !didSave
+    }
 
     // Basic fields
     @State private var name: String = ""
@@ -525,6 +551,10 @@ struct TemplateEditForm: View {
                 agentAllowedTools = agent.allowedTools?.joined(separator: ",") ?? ""
                 agentAdditionalFlags = agent.additionalFlags?.joined(separator: " ") ?? ""
             }
+        }
+        .onDisappear {
+            guard Self.shouldDiscardOnDismiss(isNewlyCreated: isNewlyCreated, didSave: didSave) else { return }
+            store.removeTemplate(id: template.id)
         }
     }
 
@@ -687,6 +717,7 @@ struct TemplateEditForm: View {
             environmentVariables: envVars,
             agent: agentConfig
         )
+        didSave = true
         dismiss()
     }
 

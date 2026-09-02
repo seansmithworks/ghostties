@@ -1,12 +1,22 @@
 #import "CEFBridge.h"
 #import <AppKit/AppKit.h>
 #include <atomic>
+#import <os/log.h>
+#import <SystemConfiguration/SystemConfiguration.h>
+#include <unistd.h>
+#include <signal.h>
+#include <stdlib.h>
+
+#if DEBUG
+#include <execinfo.h>
+#endif
 
 #if __has_include("include/cef_app.h")
 #define GHOSTTIES_CEF_AVAILABLE 1
 #import "include/cef_app.h"
 #import "include/cef_browser.h"
 #import "include/cef_browser_process_handler.h"
+#import "include/cef_version.h"
 #import "include/wrapper/cef_helpers.h"
 #import "include/wrapper/cef_library_loader.h"
 #else
@@ -19,6 +29,7 @@
 
 static BOOL _isInitialized = NO;
 static NSTimer *_messageLoopTimer = nil;
+static BOOL _priorLaunchLeftUnclearedAttempt = NO;
 
 // ---------------------------------------------------------------------------
 // CefApp implementation for external message pump integration
@@ -75,9 +86,145 @@ private:
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/// Runtime gate for `[CEFDiag]` probes. Was `#if DEBUG`; moved to a runtime
+/// check so these probes can be turned on in a Release build (via
+/// `GHOSTTIES_CEF_DIAG=1`) without a recompile. The `atexit`/signal-handler
+/// diagnostics below stay compile-time Debug-only — those are not safe to
+/// ship into Release (see GhosttiesInstallExitDiagnostics).
+static BOOL GhosttiesCEFDiagEnabled(void) {
+    const char *value = getenv("GHOSTTIES_CEF_DIAG");
+    return value != NULL && value[0] == '1' && value[1] == '\0';
+}
+
+/// Runtime gate for `GHOSTTIES_CEF_LOG_VERBOSE=1`.
+static BOOL GhosttiesCEFLogVerboseEnabled(void) {
+    const char *value = getenv("GHOSTTIES_CEF_LOG_VERBOSE");
+    return value != NULL && value[0] == '1' && value[1] == '\0';
+}
+
+/// Logs the on-disk singleton-lock state relative to the current host, to
+/// distinguish a stale-lock-across-a-hostname-flip shutdown (see
+/// reference_dev-builds-share-a-bundle-id / hypothesis in the CEF shutdown
+/// investigation) from any other cause. `[CEFDiag]`-tagged, gated on
+/// `GhosttiesCEFDiagEnabled()` so it survives into Release behind the env
+/// var.
+static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
+    if (!GhosttiesCEFDiagEnabled()) return;
+
+    NSString *lockPath = [cacheDir stringByAppendingPathComponent:@"SingletonLock"];
+
+    char hostnameBuf[256] = {0};
+    gethostname(hostnameBuf, sizeof(hostnameBuf));
+    NSString *posixHostname = [NSString stringWithUTF8String:hostnameBuf];
+
+    NSString *bonjourLocalHostName = (__bridge_transfer NSString *)SCDynamicStoreCopyLocalHostName(NULL);
+
+    const char *cLockPath = [lockPath fileSystemRepresentation];
+    char linkTarget[PATH_MAX] = {0};
+    ssize_t linkLen = readlink(cLockPath, linkTarget, sizeof(linkTarget) - 1);
+    if (linkLen < 0) {
+        // NSLog does not honor the `{public}` privacy annotation (it is only
+        // meaningful to os_log()/os_trace() — clang warns on this at the
+        // NSLog call site, and the unified log silently corrupts the
+        // argument decode rather than un-redacting it). os_log() is the
+        // mechanism that actually makes these values visible.
+        os_log(OS_LOG_DEFAULT,
+               "[CEFDiag] SingletonLock: absent or not a symlink at %{public}@ (errno=%d %{public}s). "
+               "posixHostname=%{public}@ bonjourLocalHostName=%{public}@",
+               lockPath, errno, strerror(errno), posixHostname, bonjourLocalHostName);
+        return;
+    }
+    linkTarget[linkLen] = '\0';
+    NSString *target = [NSString stringWithUTF8String:linkTarget];
+
+    // Lock target format is "<hostname>-<pid>" — split on the last '-'.
+    NSRange dashRange = [target rangeOfString:@"-" options:NSBackwardsSearch];
+    NSString *lockHostname = (dashRange.location != NSNotFound)
+        ? [target substringToIndex:dashRange.location]
+        : nil;
+    NSString *lockPidString = (dashRange.location != NSNotFound)
+        ? [target substringFromIndex:dashRange.location + 1]
+        : nil;
+    pid_t lockPid = lockPidString ? (pid_t)[lockPidString integerValue] : 0;
+
+    BOOL pidAlive = NO;
+    if (lockPid > 0) {
+        pidAlive = (kill(lockPid, 0) == 0);
+    }
+
+    os_log(OS_LOG_DEFAULT,
+           "[CEFDiag] SingletonLock target=%{public}@ (lockHostname=%{public}@ lockPid=%d pidAlive=%{public}@) "
+           "posixHostname=%{public}@ bonjourLocalHostName=%{public}@ hostnameMatch=%{public}@",
+           target, lockHostname, lockPid, pidAlive ? @"YES" : @"NO",
+           posixHostname, bonjourLocalHostName,
+           ([lockHostname isEqualToString:posixHostname] ||
+            [lockHostname isEqualToString:bonjourLocalHostName]) ? @"YES" : @"NO");
+}
+
+#if DEBUG
+/// Logs a symbolized backtrace tagged [CEFDiag], one frame per line so it
+/// survives the unified log. Called from both the atexit handler and the
+/// signal handlers below — the goal is naming whatever calls exit() (or
+/// crashes) beneath AppKit during the browser-open shutdown. Debug-only:
+/// these handlers install atexit()/signal() hooks that stay compile-time
+/// gated even though the [CEFDiag] logging above is now runtime-gated.
+static void GhosttiesLogBacktrace(const char *reason) {
+    void *frames[64];
+    int count = backtrace(frames, 64);
+    char **symbols = backtrace_symbols(frames, count);
+    os_log(OS_LOG_DEFAULT, "[CEFDiag] %{public}s — backtrace (%d frames):", reason, count);
+    if (symbols) {
+        for (int i = 0; i < count; i++) {
+            os_log(OS_LOG_DEFAULT, "[CEFDiag]   #%d %{public}s", i, symbols[i]);
+        }
+        free(symbols);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[CEFDiag]   (backtrace_symbols failed, errno=%d %{public}s)", errno, strerror(errno));
+    }
+}
+
+/// Fires on any exit() (including implicit exit at the end of main, which
+/// won't apply here, and any explicit exit()/abort() call reachable through
+/// libc's atexit machinery). Does NOT fire for _exit()/_Exit(), which is why
+/// the signal handlers below exist as a second net.
+static void GhosttiesAtExitHandler(void) {
+    GhosttiesLogBacktrace("atexit fired");
+}
+
+/// Logs a backtrace then restores default disposition and re-raises, so the
+/// crash still produces its normal report/termination — this only adds a
+/// log line ahead of it, it does not change what happens to the process.
+static void GhosttiesSignalHandler(int signo) {
+    // os_log() and backtrace_symbols are not async-signal-safe. This is a
+    // Debug-only diagnostic build where "some evidence, maybe corrupted" beats
+    // "no evidence" — acceptable tradeoff here, not for shipping code.
+    GhosttiesLogBacktrace("signal handler fired");
+    signal(signo, SIG_DFL);
+    raise(signo);
+}
+
+/// Installs both nets as early as possible — see +load below, which runs at
+/// image-load time, before CEF (or anything else in this process) is touched.
+static void GhosttiesInstallExitDiagnostics(void) {
+    atexit(GhosttiesAtExitHandler);
+    signal(SIGABRT, GhosttiesSignalHandler);
+    signal(SIGSEGV, GhosttiesSignalHandler);
+    signal(SIGILL, GhosttiesSignalHandler);
+    signal(SIGBUS, GhosttiesSignalHandler);
+    signal(SIGTRAP, GhosttiesSignalHandler);
+    NSLog(@"[CEFDiag] Exit diagnostics installed (atexit + signal handlers).");
+}
+#endif // DEBUG
+
 @interface CEFBridgeManager ()
 + (void)_messageLoopTick:(NSTimer *)timer;
 + (void)_appWillTerminate:(NSNotification *)note;
++ (NSString *)_appSupportBundleDirectory;
++ (NSString *)_iso8601Timestamp;
++ (nullable NSString *)_moveProfileAsideWithPrefix:(NSString *)prefix error:(NSError **)error;
++ (NSInteger)_sanitizedMajorVersionFromDigitString:(NSString *)digitsCandidate;
++ (NSInteger)_recordedChromiumMajorVersionOrZero;
++ (void)_performDowngradeGuardIfNeeded;
 @end
 
 // ---------------------------------------------------------------------------
@@ -86,10 +233,36 @@ private:
 
 @implementation CEFBridgeManager
 
+#pragma mark - Diagnostics installation
+
++ (void)load {
+    // +load runs at image-load time, before main() — before AppDelegate,
+    // before CEF, before anything else in this process. This is the
+    // earliest hook available for installing the exit/crash diagnostics
+    // below.
+#if DEBUG
+    GhosttiesInstallExitDiagnostics();
+#endif
+}
+
 #pragma mark - Properties
 
 + (BOOL)isInitialized {
     return _isInitialized;
+}
+
++ (BOOL)priorLaunchLeftUnclearedAttempt {
+    return _priorLaunchLeftUnclearedAttempt;
+}
+
++ (void)acknowledgePriorLaunchAttemptHandled {
+    // `_priorLaunchLeftUnclearedAttempt` is captured ONCE per process, at
+    // the top of `+initializeIfNeeded`. Recovery (resetProfileDataAndRetry)
+    // clears the on-disk sentinel and retries creation within the SAME
+    // process — without this reset, `-_createBrowserNow`'s check would keep
+    // reading the original launch-time snapshot (still YES) and treat the
+    // fresh, just-reset attempt as ANOTHER crash, looping within one launch.
+    _priorLaunchLeftUnclearedAttempt = NO;
 }
 
 #pragma mark - Lifecycle
@@ -133,14 +306,12 @@ private:
     // Cache directory — required by CEF for subprocess data exchange.
     // Use ~/Library/Application Support/<bundleIdentifier>/CEF/ so dev and
     // release builds don't share a cache (bundle IDs differ by `.dev` suffix).
-    NSArray<NSString *> *appSupportPaths = NSSearchPathForDirectoriesInDomains(
-        NSApplicationSupportDirectory, NSUserDomainMask, YES);
-    NSString *appSupportBase = appSupportPaths.firstObject
-        ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
-    NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier] ?: @"com.seansmithdesign.ghostties";
-    NSString *cacheDir = [[appSupportBase
-        stringByAppendingPathComponent:bundleId]
-        stringByAppendingPathComponent:@"CEF"];
+    NSString *cacheDir = [self cefProfileDirectoryPath];
+
+    // Downgrade guard — must run before anything below touches cacheDir, so
+    // a poisoned profile is moved aside before CEF ever opens it.
+    [self _performDowngradeGuardIfNeeded];
+
     NSError *cacheDirError = nil;
     if (![[NSFileManager defaultManager] createDirectoryAtPath:cacheDir
                                   withIntermediateDirectories:YES
@@ -156,29 +327,95 @@ private:
     // CEF's own log file — stored alongside the cache.
     NSString *logFile = [cacheDir stringByAppendingPathComponent:@"ghostties-cef-internal.log"];
     CefString(&settings.log_file) = [logFile UTF8String];
+#if DEBUG
+    settings.log_severity = LOGSEVERITY_VERBOSE;
+#else
     settings.log_severity = LOGSEVERITY_WARNING;
+#endif
+
+    // GHOSTTIES_CEF_LOG_VERBOSE=1 forces verbose CEF/Chromium logging plus
+    // targeted vmodule tracing for the shutdown/keep-alive paths implicated
+    // in the profile-downgrade crash, independent of build configuration.
+    BOOL cefLogVerbose = GhosttiesCEFLogVerboseEnabled();
+    if (cefLogVerbose) {
+        settings.log_severity = LOGSEVERITY_VERBOSE;
+    }
 
     settings.remote_debugging_port = 0;
 
     // ---- Main args ------------------------------------------------------
 
-    static const char *fakeArgv[] = {
+    static const char *fakeArgvBase[] = {
         "Ghostties",
         "--use-mock-keychain",
         nullptr
     };
-    CefMainArgs mainArgs(2, const_cast<char**>(fakeArgv));
+    static const char *fakeArgvVerbose[] = {
+        "Ghostties",
+        "--use-mock-keychain",
+        "--vmodule=browser_shutdown=2,keep_alive_registry=2,browser_process_impl=2",
+        nullptr
+    };
+    const char **fakeArgv = cefLogVerbose ? fakeArgvVerbose : fakeArgvBase;
+    int fakeArgc = cefLogVerbose ? 3 : 2;
+    CefMainArgs mainArgs(fakeArgc, const_cast<char**>(fakeArgv));
 
     // ---- Initialize with our CefApp ------------------------------------
     // GhosttiesApp provides the BrowserProcessHandler which implements
     // OnScheduleMessagePumpWork for external_message_pump integration.
 
+    GhosttiesLogSingletonLockState(cacheDir);
+
+    os_log(OS_LOG_DEFAULT, "[CEFBridge] Pre-CefInitialize: cacheDir=%{public}@ logFile=%{public}@ verbose=%{public}@",
+           cacheDir, logFile, cefLogVerbose ? @"YES" : @"NO");
     CefRefPtr<GhosttiesApp> app(new GhosttiesApp());
+
+    // Snapshot whether a PRIOR launch left the sentinel uncleared, before
+    // this launch overwrites it below. The sentinel is now written before
+    // CefInitialize (bracketing the whole init+create sequence, not just
+    // CreateBrowser) — so by the time browser creation checks it, the file
+    // would always exist as THIS launch's own in-flight attempt. Callers
+    // must consult this snapshot, not the live file, to ask "did the
+    // previous launch die".
+    _priorLaunchLeftUnclearedAttempt = [self hasUnclearedBrowserOpenAttempt];
+    [self recordBrowserOpenAttempt];
+
     bool success = CefInitialize(mainArgs, settings, app, nullptr);
+    os_log(OS_LOG_DEFAULT, "[CEFBridge] CefInitialize returned %{public}@", success ? @"true" : @"false");
     if (!success) {
         NSLog(@"[CEFBridge] CefInitialize failed.");
         return;
     }
+
+    // Alive-tick probes: log every 250ms for 3s after CefInitialize returns.
+    // Each tick that actually runs is, by construction, proof the process
+    // survived to that point — this is the window the profile-downgrade
+    // crash (a deliberate ~0.4-0.65s post-init quit) falls inside.
+    for (int tick = 1; tick <= 12; tick++) {
+        int64_t delayMs = tick * 250;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayMs * NSEC_PER_MSEC),
+                        dispatch_get_main_queue(), ^{
+            os_log(OS_LOG_DEFAULT, "[CEFBridge] alive-tick t+%{public}lldms", (long long)delayMs);
+        });
+    }
+
+    // Process-level sentinel clear, 3s after CefInitialize returns. This is
+    // the ONLY place the sentinel is cleared — it deliberately does not
+    // belong to any CEFBrowserView (a process can host several tabs at
+    // once via BrowserTabManager.browserViews, while the sentinel is
+    // process-global) and does not fire at OnAfterCreated (our own
+    // measurement shows the profile-downgrade crash kills the process
+    // ~0.33s AFTER OnAfterCreated fires, i.e. after a browser has already
+    // materialised — so OnAfterCreated firing does not prove survival).
+    // Surviving 3s past CefInitialize returning does: that window fully
+    // contains the ~0.4-0.65s death window regardless of how many browser
+    // views are created, torn down, or never created at all in the
+    // meantime. An uncleared sentinel therefore means exactly one thing:
+    // the process died within 3s of CefInitialize.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3000 * NSEC_PER_MSEC),
+                    dispatch_get_main_queue(), ^{
+        [self clearBrowserOpenAttempt];
+    });
 
     // ---- Backup timer (30 Hz) ------------------------------------------
     // The primary message pump is driven by OnScheduleMessagePumpWork above.
@@ -225,6 +462,265 @@ private:
     _isInitialized = NO;
 }
 
+#pragma mark - Browser-open sentinel (crash recovery)
+
+#if DEBUG
+static NSString *_testOverrideAppSupportBundleDirectory = nil;
+
++ (nullable NSString *)testOverrideAppSupportBundleDirectory {
+    return _testOverrideAppSupportBundleDirectory;
+}
+
++ (void)setTestOverrideAppSupportBundleDirectory:(nullable NSString *)path {
+    _testOverrideAppSupportBundleDirectory = [path copy];
+}
+#endif
+
++ (NSString *)_appSupportBundleDirectory {
+#if DEBUG
+    // See the header doc on `testOverrideAppSupportBundleDirectory` — this
+    // MUST be checked first so tests never touch Sean's real Dev CEF
+    // profile, which lives at this exact derived path.
+    if (_testOverrideAppSupportBundleDirectory) {
+        return _testOverrideAppSupportBundleDirectory;
+    }
+#endif
+    // GHOSTTIES_CEF_APP_SUPPORT_DIR is a lab hatch, not a behavior change:
+    // the CEF profile dir, the browser-open-attempt sentinel, and any future
+    // stamp file all derive from this one path, so overriding it here moves
+    // them together. Unset, this must resolve byte-identically to the
+    // original derivation below.
+    NSString *resolvedPath;
+    const char *envOverride = getenv("GHOSTTIES_CEF_APP_SUPPORT_DIR");
+    if (envOverride != NULL && envOverride[0] != '\0') {
+        resolvedPath = [NSString stringWithUTF8String:envOverride];
+    } else {
+        NSArray<NSString *> *appSupportPaths = NSSearchPathForDirectoriesInDomains(
+            NSApplicationSupportDirectory, NSUserDomainMask, YES);
+        NSString *appSupportBase = appSupportPaths.firstObject
+            ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
+        NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier] ?: @"com.seansmithdesign.ghostties";
+        resolvedPath = [appSupportBase stringByAppendingPathComponent:bundleId];
+    }
+
+    // Log once per distinct resolved value — this is called from several
+    // paths (profile dir, sentinel path, reset) and would otherwise spam.
+    static NSString *loggedPath = nil;
+    if (![loggedPath isEqualToString:resolvedPath]) {
+        loggedPath = resolvedPath;
+        os_log(OS_LOG_DEFAULT, "[CEFBridge] Resolved app-support base directory: %{public}@", resolvedPath);
+    }
+    return resolvedPath;
+}
+
++ (NSString *)_iso8601Timestamp {
+    static NSISO8601DateFormatter *formatter;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        formatter = [[NSISO8601DateFormatter alloc] init];
+    });
+    return [formatter stringFromDate:[NSDate date]];
+}
+
++ (NSString *)cefProfileDirectoryPath {
+    return [[self _appSupportBundleDirectory] stringByAppendingPathComponent:@"CEF"];
+}
+
++ (NSString *)browserOpenAttemptSentinelPath {
+    // A SIBLING of CEF/, not inside it — a profile reset (rename CEF/
+    // aside) must never also remove evidence that an attempt was in flight.
+    return [[self _appSupportBundleDirectory] stringByAppendingPathComponent:@"browser-open-attempt"];
+}
+
++ (void)recordBrowserOpenAttempt {
+    NSString *path = [self browserOpenAttemptSentinelPath];
+    NSString *parentDir = [path stringByDeletingLastPathComponent];
+    [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
+                               withIntermediateDirectories:YES
+                                                attributes:nil
+                                                     error:nil];
+    NSError *error = nil;
+    if (![[self _iso8601Timestamp] writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&error]) {
+        NSLog(@"[CEFBridge] Failed to write browser-open-attempt sentinel: %@", error.localizedDescription);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[CEFBridge] Wrote browser-open-attempt sentinel at %{public}@", path);
+    }
+}
+
++ (void)clearBrowserOpenAttempt {
+    NSString *path = [self browserOpenAttemptSentinelPath];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if ([fm fileExistsAtPath:path]) {
+        NSError *error = nil;
+        if (![fm removeItemAtPath:path error:&error]) {
+            NSLog(@"[CEFBridge] Failed to clear browser-open-attempt sentinel: %@", error.localizedDescription);
+        } else {
+            os_log(OS_LOG_DEFAULT, "[CEFBridge] Cleared browser-open-attempt sentinel at %{public}@", path);
+        }
+    }
+}
+
++ (BOOL)hasUnclearedBrowserOpenAttempt {
+    return [[NSFileManager defaultManager] fileExistsAtPath:[self browserOpenAttemptSentinelPath]];
+}
+
++ (nullable NSString *)_moveProfileAsideWithPrefix:(NSString *)prefix error:(NSError **)error {
+    NSString *profilePath = [self cefProfileDirectoryPath];
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    if (![fm fileExistsAtPath:profilePath]) {
+        // Nothing to move aside — just ensure a fresh directory exists.
+        [fm createDirectoryAtPath:profilePath withIntermediateDirectories:YES attributes:nil error:error];
+        return nil;
+    }
+
+    // Sanitize the timestamp for use in a path component (colons are legal
+    // on APFS but Finder mangles their display; avoid the confusion).
+    NSString *sanitizedTimestamp = [[self _iso8601Timestamp]
+        stringByReplacingOccurrencesOfString:@":" withString:@"-"];
+    NSString *movedPath = [[profilePath stringByDeletingLastPathComponent]
+        stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-%@", prefix, sanitizedTimestamp]];
+
+    if (![fm moveItemAtPath:profilePath toPath:movedPath error:error]) {
+        return nil;
+    }
+
+    [fm createDirectoryAtPath:profilePath withIntermediateDirectories:YES attributes:nil error:error];
+    return movedPath;
+}
+
++ (nullable NSString *)resetProfileDirectoryPreservingDataError:(NSError **)error {
+    return [self _moveProfileAsideWithPrefix:@"CEF-broken" error:error];
+}
+
+#pragma mark - Downgrade guard (Chromium major-version stamp)
+
++ (NSString *)chromiumVersionStampPath {
+    return [[self _appSupportBundleDirectory] stringByAppendingPathComponent:@"cef-profile-chromium-version"];
+}
+
++ (void)recordChromiumVersionStamp {
+#if GHOSTTIES_CEF_AVAILABLE
+    NSString *path = [self chromiumVersionStampPath];
+    NSString *parentDir = [path stringByDeletingLastPathComponent];
+    [[NSFileManager defaultManager] createDirectoryAtPath:parentDir
+                               withIntermediateDirectories:YES
+                                                attributes:nil
+                                                     error:nil];
+    NSString *contents = [NSString stringWithFormat:@"%d", CHROME_VERSION_MAJOR];
+    NSError *error = nil;
+    if (![contents writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&error]) {
+        NSLog(@"[CEFBridge] Failed to write Chromium version stamp: %@", error.localizedDescription);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[CEFBridge] Wrote Chromium version stamp (%d) at %{public}@",
+               CHROME_VERSION_MAJOR, path);
+    }
+#endif
+}
+
++ (BOOL)isProfileDowngradeGivenRecordedMajor:(NSInteger)recordedMajor
+                                 runningMajor:(NSInteger)runningMajor {
+    // recordedMajor <= 0 means absent/unparseable — never a downgrade. Only
+    // a STRICTLY newer recorded major is a downgrade; equal or older is not.
+    if (recordedMajor <= 0) return NO;
+    return recordedMajor > runningMajor;
+}
+
+// Chromium majors have been 3 digits since M100 (2022) and, at the
+// historical release cadence (~10-14 majors/year), won't reach 4 digits for
+// decades. A parsed major above this bound is corruption — e.g. a truncated
+// or malformed `last_chrome_version` string that swallows a '.' and
+// concatenates two version components into one run of digits (a review
+// finding: "1440.1.2.3" parses to a bare 1440, which would otherwise compare
+// as a real downgrade and move aside a healthy same-version profile) — not a
+// genuine future Chromium. Treat it as unparseable (0), never as a downgrade.
+static const NSInteger kGhosttiesMaxPlausibleChromiumMajor = 999;
+
+/// Validates and parses a candidate major-version string: must be non-empty,
+/// entirely digits, and within `kGhosttiesMaxPlausibleChromiumMajor`.
+/// Returns 0 (== absent/unparseable to every caller) for anything else,
+/// including a 0 or negative parse. Shared by both the stamp path and the
+/// `Default/Preferences` fallback in `_recordedChromiumMajorVersionOrZero` —
+/// neither is trustworthy input (the stamp is plain text on disk, the
+/// preferences value came from a different Chromium major than the one
+/// reading it), so both get the same validation.
++ (NSInteger)_sanitizedMajorVersionFromDigitString:(NSString *)digitsCandidate {
+    if (digitsCandidate.length == 0) return 0;
+    NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+    if ([digitsCandidate rangeOfCharacterFromSet:nonDigits].location != NSNotFound) return 0;
+    NSInteger value = [digitsCandidate integerValue];
+    if (value <= 0 || value > kGhosttiesMaxPlausibleChromiumMajor) return 0;
+    return value;
+}
+
+/// Determines the Chromium major version the on-disk profile was last
+/// written by. Stamp file first (our own record, written after a prior
+/// successful `OnAfterCreated`); falls back to the profile's own
+/// `Default/Preferences` → `extensions.last_chrome_version` for profiles
+/// that predate the stamp. Returns 0 if neither is present or parseable —
+/// 0 is never treated as a downgrade by `isProfileDowngradeGivenRecordedMajor:runningMajor:`.
++ (NSInteger)_recordedChromiumMajorVersionOrZero {
+    NSString *stampContents = [NSString stringWithContentsOfFile:[self chromiumVersionStampPath]
+                                                          encoding:NSUTF8StringEncoding
+                                                             error:nil];
+    if (stampContents.length > 0) {
+        NSInteger stampedMajor = [self _sanitizedMajorVersionFromDigitString:stampContents];
+        if (stampedMajor > 0) return stampedMajor;
+    }
+
+    // Fallback: profiles written before this guard existed have no stamp.
+    NSString *prefsPath = [[self cefProfileDirectoryPath] stringByAppendingPathComponent:@"Default/Preferences"];
+    NSData *prefsData = [NSData dataWithContentsOfFile:prefsPath];
+    if (!prefsData) return 0;
+
+    id prefsJSON = [NSJSONSerialization JSONObjectWithData:prefsData options:0 error:nil];
+    if (![prefsJSON isKindOfClass:[NSDictionary class]]) return 0;
+
+    NSDictionary *extensions = [(NSDictionary *)prefsJSON objectForKey:@"extensions"];
+    if (![extensions isKindOfClass:[NSDictionary class]]) return 0;
+
+    NSString *lastChromeVersion = [extensions objectForKey:@"last_chrome_version"];
+    if (![lastChromeVersion isKindOfClass:[NSString class]] || lastChromeVersion.length == 0) return 0;
+
+    NSString *majorString = [lastChromeVersion componentsSeparatedByString:@"."].firstObject;
+    return [self _sanitizedMajorVersionFromDigitString:majorString];
+}
+
+/// Runs before `CefInitialize`. See the header doc above
+/// `chromiumVersionStampPath` for why: opening a profile last written by a
+/// strictly newer Chromium major version than the one currently embedded is
+/// the confirmed cause of a deliberate post-init process quit. Moves the
+/// ENTIRE profile directory aside when detected (E3/E4 proved the poison is
+/// not confined to one file or key) and always logs exactly one line
+/// recording the decision, whether or not anything moved.
++ (void)_performDowngradeGuardIfNeeded {
+#if GHOSTTIES_CEF_AVAILABLE
+    NSInteger recordedMajor = [self _recordedChromiumMajorVersionOrZero];
+    NSInteger runningMajor = CHROME_VERSION_MAJOR;
+
+    if (![self isProfileDowngradeGivenRecordedMajor:recordedMajor runningMajor:runningMajor]) {
+        os_log(OS_LOG_DEFAULT,
+               "[CEFBridge] Downgrade guard: no action (recordedMajor=%ld runningMajor=%ld)",
+               (long)recordedMajor, (long)runningMajor);
+        return;
+    }
+
+    NSError *moveError = nil;
+    NSString *movedTo = [self _moveProfileAsideWithPrefix:@"CEF-downgraded" error:&moveError];
+    os_log(OS_LOG_DEFAULT,
+           "[CEFBridge] Downgrade guard: profile recordedMajor=%ld > runningMajor=%ld — moved aside to "
+           "%{public}@ (error=%{public}@)",
+           (long)recordedMajor, (long)runningMajor,
+           movedTo ?: @"(none)", moveError.localizedDescription ?: @"none");
+#endif
+}
+
+#if DEBUG
++ (NSInteger)recordedChromiumMajorVersionOrZeroForTesting {
+    return [self _recordedChromiumMajorVersionOrZero];
+}
+#endif
+
 #pragma mark - Private
 
 + (void)_messageLoopTick:(NSTimer *)timer {
@@ -234,6 +730,10 @@ private:
 }
 
 + (void)_appWillTerminate:(NSNotification *)note {
+    if (GhosttiesCEFDiagEnabled()) {
+        os_log(OS_LOG_DEFAULT, "[CEFDiag] NSApplicationWillTerminateNotification fired at %{public}@",
+               [NSDate date]);
+    }
     [self shutdown];
 }
 

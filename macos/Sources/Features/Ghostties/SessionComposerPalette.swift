@@ -125,6 +125,12 @@ struct SessionComposerPalette: View {
     @State private var isAddingTemplate = false
     @State private var newTemplateName = ""
     @State private var newTemplateToEdit: AgentTemplate?
+    /// Whether `newTemplateToEdit`'s sheet is presenting a template just
+    /// created (empty, unconfigured) versus an existing one opened via the
+    /// "Edit" context menu action — see `TemplateEditForm.isNewlyCreated`'s
+    /// doc comment for why this distinction is what fixes the persisted
+    /// junk-template bug (root cause: `commitNewTemplate` below).
+    @State private var newTemplateToEditIsFresh = false
     @State private var showDeleteConfirmation = false
     @State private var templateToDelete: AgentTemplate?
     @FocusState private var newTemplateNameFocused: Bool
@@ -1480,7 +1486,7 @@ struct SessionComposerPalette: View {
                 clampSelectedIndex()
             }
             .sheet(item: $newTemplateToEdit) { template in
-                TemplateEditForm(template: template)
+                TemplateEditForm(template: template, isNewlyCreated: newTemplateToEditIsFresh)
             }
             .alert(
                 "Delete Template?",
@@ -1560,10 +1566,20 @@ struct SessionComposerPalette: View {
                 rowHorizontalPadding: rowHorizontalPadding,
                 rowCornerRadius: rowCornerRadius,
                 maxHeight: resultsWellMaxHeight,
-                onEditTemplate: { newTemplateToEdit = $0 },
+                onEditTemplate: {
+                    newTemplateToEditIsFresh = false
+                    newTemplateToEdit = $0
+                },
                 onDuplicateTemplate: { _ = store.duplicateTemplate(id: $0.id) },
                 onDuplicateAndEditTemplate: {
-                    if let copy = store.duplicateTemplate(id: $0.id) { newTemplateToEdit = copy }
+                    if let copy = store.duplicateTemplate(id: $0.id) {
+                        // A duplicate carries its source's real command/agent
+                        // config forward, so abandoning this sheet leaves a
+                        // configured template behind, not an empty one —
+                        // `isNewlyCreated` stays false.
+                        newTemplateToEditIsFresh = false
+                        newTemplateToEdit = copy
+                    }
                 },
                 onEditPresetFile: { openPresetInEditor($0) },
                 onRequestDeleteTemplate: {
@@ -1661,24 +1677,32 @@ struct SessionComposerPalette: View {
     // The resolution line that used to sit beneath it is deleted (Composer
     // UI 11 plan §3 Step 5, §4 table) — its six labels and two mouse routes
     // were each given a named successor: the ghost placeholder (Step 3) and
-    // the status strip (Step 4). The two trailing controls Step 5 built as
-    // the third successor (`projectControl`/`branchControl`) are BOTH gone
-    // now — `branchControl` in Variant G Pass A, `projectControl` in Pass C
-    // (2026-08-30) — so the field's right edge is a plain caret with no
-    // mouse entry point left into either picker; the project picker opens
-    // via `inlineProjectPicker`'s state alone, which no control sets `true`
-    // anymore (see `isProjectPickerOpen`'s doc comment), and the branch
-    // picker still opens only by typing `>`. Changing a segment still
-    // expands the SAME inline pickers Slice A/B built
-    // (`inlineProjectPicker`/`inlineBranchPicker`, both unchanged) — never a
-    // `.popover`, for the same nested-popover reason Slice A originally
-    // recorded (a child popover taking key can dismiss the parent
-    // composer).
-    //
-    // `SessionComposerCommandParser.trailingControlVisibility` (the pure
-    // decision function both deleted controls used to read) is left intact
-    // in GhosttiesCore, still covered by `SessionComposerTrailingControlTests`
-    // directly — nothing in this view calls it anymore.
+    // the status strip (Step 4). The trailing `projectControl`/
+    // `branchControl` buttons that briefly stood in as the third successor
+    // are themselves gone (ultra-minimal variant C, 2026-08-30, PR #155,
+    // matching this file's own header comment above) — the results list
+    // below the field is the only remaining mouse route into
+    // projects/templates. `trailingControlVisibility`/`projectControl`/
+    // `branchControl`/`inlineProjectPicker`/`inlineBranchPicker` below still
+    // exist as unreachable dead code (Sean has not decided whether to
+    // delete them); nothing sets `isProjectPickerOpen`/`isBranchPickerOpen`
+    // to `true` any more.
+
+    /// Visibility + content for the now-unreachable `projectControl`/
+    /// `branchControl`. Unreferenced by any production call site — all 8
+    /// tests in `SessionComposerTrailingControlTests` call the
+    /// `GhosttiesCore` static `SessionComposerCommandParser
+    /// .trailingControlVisibility(...)` directly, not this property —
+    /// retained only pending Sean's decision on whether to delete it (see
+    /// the `MARK` above), not because anything still depends on it.
+    private var trailingControlVisibility: SessionComposerCommandParser.TrailingControlVisibility {
+        SessionComposerCommandParser.trailingControlVisibility(
+            isProjectLocked: isProjectLocked,
+            isBranchSegmentEligible: isBranchSegmentEligible,
+            isCreatingWorktree: composerStore.isCreatingWorktree,
+            currentBranchLabel: currentBranchLabel
+        )
+    }
 
     private var queryRow: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2066,6 +2090,7 @@ struct SessionComposerPalette: View {
         newTemplateName = ""
         guard !trimmed.isEmpty else { return }
         let template = store.addTemplate(AgentTemplate(name: trimmed, kind: .custom))
+        newTemplateToEditIsFresh = true
         newTemplateToEdit = template
     }
 

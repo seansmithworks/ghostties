@@ -14,6 +14,13 @@ final class BrowserSessionBridge: NSObject, CEFBrowserViewDelegate {
     /// The tab ID currently associated with this bridge's CEFBrowserView.
     var activeTabId: UUID?
 
+    /// Forwarded to the panel's inline failure state — set by
+    /// `WorkspaceViewContainer` when embedding the browser view.
+    var onCreationFailed: (() -> Void)?
+    /// Forwarded so the panel can dismiss its inline failure state once the
+    /// browser materialises (including after a retry).
+    var onCreationSucceeded: (() -> Void)?
+
     init(sessionId: UUID, tabManager: BrowserTabManager) {
         self.sessionId = sessionId
         self.tabManager = tabManager
@@ -50,5 +57,13 @@ final class BrowserSessionBridge: NSObject, CEFBrowserViewDelegate {
                 accessibilityDescription: "Reload"
             )
         }
+    }
+
+    func browserViewDidFail(toCreate view: CEFBrowserView) {
+        onCreationFailed?()
+    }
+
+    func browserViewDidCreate(_ view: CEFBrowserView) {
+        onCreationSucceeded?()
     }
 }

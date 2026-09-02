@@ -14,6 +14,19 @@ public struct SessionComposerCommitError: Error, CustomStringConvertible, Equata
     }
 }
 
+/// The single copy of the "typed branch has no worktree" message — shared by
+/// `SessionComposerCommandParser.resolveCommitWorktreePathForCommit` (the
+/// commit-time path) and `SessionComposerStore.rejectUnresolvedBranch(token:)`
+/// (the live-typing path), so the two call sites cannot drift into two
+/// different strings again. The branch/project picker this used to point at
+/// no longer exists (ultra-minimal variant C) — the message only tells the
+/// user what to do with the text field they still have.
+public enum SessionComposerCopy {
+    public static func unresolvedBranchMessage(token: String) -> String {
+        SessionComposerCopy.unresolvedBranchMessage(token: token)
+    }
+}
+
 /// Pure, testable command-grammar parsing for the session composer's
 /// text-forward command entry (command grammar slice 1). Neither type here
 /// touches SwiftUI or `@MainActor` state — see `SessionComposerRanking.swift`
@@ -1286,8 +1299,14 @@ public enum SessionComposerCommandParser {
     /// (before the `Run "X"` row) and now ranks FIRST in `bestSelectionIndex`
     /// whenever it's offered — it renders ABOVE this message's own status
     /// strip, never below.
+    ///
+    /// Merge note (main's PR #155 consolidated the message text into
+    /// `SessionComposerCopy.unresolvedBranchMessage` as the single source
+    /// for both call sites): this delegates rather than duplicating the
+    /// string, so `SessionComposerCopy`'s text — the one this doc comment
+    /// describes — is the only copy that can ever drift.
     public static func unresolvedBranchMessage(token: String) -> String {
-        "No worktree found for branch \"\(token)\". Use the create-branch suggestion above, or retype/delete it."
+        SessionComposerCopy.unresolvedBranchMessage(token: token)
     }
 
     /// Composer variant G (Sean's ruling, 2026-08-31): the create-offer
@@ -1329,7 +1348,7 @@ public enum SessionComposerCommandParser {
         case .isDefaultBranch:
             return .success(nil)
         case .unresolved(let token):
-            return .failure(SessionComposerCommitError(message: unresolvedBranchMessage(token: token)))
+            return .failure(SessionComposerCommitError(message: SessionComposerCopy.unresolvedBranchMessage(token: token)))
         case .pending:
             return .failure(SessionComposerCommitError(message: "Still checking branches for this project — try again in a moment."))
         }

@@ -1040,7 +1040,7 @@ final class SessionComposerStore: ObservableObject {
     /// `precommit` never runs and nothing else about the composer's state
     /// changes.
     func rejectUnresolvedBranch(token: String) {
-        writeError = SessionComposerCommandParser.unresolvedBranchMessage(token: token)
+        writeError = SessionComposerCopy.unresolvedBranchMessage(token: token)
     }
 
     /// Same write, pre-formatted message variant — used by the defensive

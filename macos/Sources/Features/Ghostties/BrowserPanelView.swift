@@ -15,6 +15,10 @@ final class BrowserPanelView: NSView {
         return view
     }()
 
+    /// Inline empty state shown over `contentArea` when the browser could
+    /// not start (watchdog timeout, or CEF unavailable). Hidden by default.
+    let failureStateView = BrowserFailureStateView()
+
     /// Container for inline DevTools. Hidden by default; shown when the user
     /// toggles DevTools inline. Splits the content area vertically.
     let devToolsArea: NSView = {
@@ -58,10 +62,12 @@ final class BrowserPanelView: NSView {
         addSubview(navigationBar)
         addSubview(tabBar)
         addSubview(contentArea)
+        addSubview(failureStateView)
         addSubview(devToolsArea)
 
         navigationBar.translatesAutoresizingMaskIntoConstraints = false
         tabBar.translatesAutoresizingMaskIntoConstraints = false
+        failureStateView.translatesAutoresizingMaskIntoConstraints = false
 
         // Tab bar starts hidden (alphaValue 0) and shows automatically when >1 tab.
         tabBar.alphaValue = 0
@@ -92,6 +98,12 @@ final class BrowserPanelView: NSView {
             contentArea.topAnchor.constraint(equalTo: tabBar.bottomAnchor),
             contentArea.leadingAnchor.constraint(equalTo: leadingAnchor),
             contentArea.trailingAnchor.constraint(equalTo: trailingAnchor),
+
+            // Failure state overlays the content area exactly.
+            failureStateView.topAnchor.constraint(equalTo: contentArea.topAnchor),
+            failureStateView.leadingAnchor.constraint(equalTo: contentArea.leadingAnchor),
+            failureStateView.trailingAnchor.constraint(equalTo: contentArea.trailingAnchor),
+            failureStateView.bottomAnchor.constraint(equalTo: contentArea.bottomAnchor),
 
             // DevTools area (anchored to bottom)
             devToolsArea.leadingAnchor.constraint(equalTo: leadingAnchor),

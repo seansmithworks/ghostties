@@ -6,9 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
-## [0.1.0-beta.24] — Unreleased
+## [Unreleased]
 
-The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into.
+### Changed
+
+- **The composer field row drops its trailing project/branch buttons too** — the results list below the field is now the only way to browse projects and templates. No mouse route into a branch or project picker remains on the field row itself.
+
+### Fixed
+
+- **Abandoning a just-created template's edit sheet no longer leaves a junk, unconfigured template behind.** Opening "New template" and then dismissing without saving (Cancel, Esc, or clicking outside) used to persist an empty `command: nil` row forever.
+
+---
+
+## [0.1.0-beta.24] — 2026-08-31
+
+The session composer's field row gets trailing project/branch controls in place of the old resolution line, template pinning, and an experimental ghost-text autocomplete field you can opt into. Sidebar status now reads what Claude Code is actually doing rather than guessing at it from terminal text.
 
 ### Added
 
@@ -24,6 +36,7 @@ The session composer's field row gets trailing project/branch controls in place 
 
 ### Fixed
 
+- **Sidebar status now reflects what Claude Code is actually doing,** instead of inferring it from terminal output — an idle session stops reading as if it needs you. Requires a one-time hook setup in `~/.claude/settings.json`; the snippet ships in `~/.ghostties/hooks/ghostties-status.sh`.
 - **The composer's results list no longer opens with dead space below a short list**, and stops growing past its cap on a long one.
 - **The composer card now resizes cleanly to fit its content at every window width**, instead of clipping or leaving extra space.
 

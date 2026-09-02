@@ -2,7 +2,7 @@
 # update-cask-version.sh — Bump dist/ghostties/homebrew/ghostties.rb to a new release.
 #
 # Usage: bash scripts/update-cask-version.sh <tag>
-#   e.g. bash scripts/update-cask-version.sh v0.1.0-beta.22
+#   e.g. bash scripts/update-cask-version.sh v0.1.0-beta.24
 #
 # Resolves the sha256 of that release's Ghostties.dmg from GitHub (never
 # hand-typed) and rewrites `version` + `sha256` in the cask. Idempotent —
@@ -22,7 +22,7 @@ ASSET="Ghostties.dmg"
 
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 <tag>" >&2
-    echo "  e.g. $0 v0.1.0-beta.22" >&2
+    echo "  e.g. $0 v0.1.0-beta.24" >&2
     exit 1
 fi
 
