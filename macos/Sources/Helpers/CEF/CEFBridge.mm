@@ -1,14 +1,14 @@
 #import "CEFBridge.h"
 #import <AppKit/AppKit.h>
 #include <atomic>
-
-#if DEBUG
-#import <SystemConfiguration/SystemConfiguration.h>
 #import <os/log.h>
+#import <SystemConfiguration/SystemConfiguration.h>
 #include <unistd.h>
 #include <signal.h>
-#include <execinfo.h>
 #include <stdlib.h>
+
+#if DEBUG
+#include <execinfo.h>
 #endif
 
 #if __has_include("include/cef_app.h")
@@ -84,12 +84,31 @@ private:
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-#if DEBUG
+/// Runtime gate for `[CEFDiag]` probes. Was `#if DEBUG`; moved to a runtime
+/// check so these probes can be turned on in a Release build (via
+/// `GHOSTTIES_CEF_DIAG=1`) without a recompile. The `atexit`/signal-handler
+/// diagnostics below stay compile-time Debug-only — those are not safe to
+/// ship into Release (see GhosttiesInstallExitDiagnostics).
+static BOOL GhosttiesCEFDiagEnabled(void) {
+    const char *value = getenv("GHOSTTIES_CEF_DIAG");
+    return value != NULL && value[0] == '1' && value[1] == '\0';
+}
+
+/// Runtime gate for `GHOSTTIES_CEF_LOG_VERBOSE=1`.
+static BOOL GhosttiesCEFLogVerboseEnabled(void) {
+    const char *value = getenv("GHOSTTIES_CEF_LOG_VERBOSE");
+    return value != NULL && value[0] == '1' && value[1] == '\0';
+}
+
 /// Logs the on-disk singleton-lock state relative to the current host, to
 /// distinguish a stale-lock-across-a-hostname-flip shutdown (see
 /// reference_dev-builds-share-a-bundle-id / hypothesis in the CEF shutdown
-/// investigation) from any other cause. Debug-only, [CEFDiag]-tagged.
+/// investigation) from any other cause. `[CEFDiag]`-tagged, gated on
+/// `GhosttiesCEFDiagEnabled()` so it survives into Release behind the env
+/// var.
 static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
+    if (!GhosttiesCEFDiagEnabled()) return;
+
     NSString *lockPath = [cacheDir stringByAppendingPathComponent:@"SingletonLock"];
 
     char hostnameBuf[256] = {0};
@@ -140,10 +159,13 @@ static void GhosttiesLogSingletonLockState(NSString *cacheDir) {
             [lockHostname isEqualToString:bonjourLocalHostName]) ? @"YES" : @"NO");
 }
 
+#if DEBUG
 /// Logs a symbolized backtrace tagged [CEFDiag], one frame per line so it
 /// survives the unified log. Called from both the atexit handler and the
 /// signal handlers below — the goal is naming whatever calls exit() (or
-/// crashes) beneath AppKit during the browser-open shutdown.
+/// crashes) beneath AppKit during the browser-open shutdown. Debug-only:
+/// these handlers install atexit()/signal() hooks that stay compile-time
+/// gated even though the [CEFDiag] logging above is now runtime-gated.
 static void GhosttiesLogBacktrace(const char *reason) {
     void *frames[64];
     int count = backtrace(frames, 64);
@@ -286,33 +308,59 @@ static void GhosttiesInstallExitDiagnostics(void) {
     settings.log_severity = LOGSEVERITY_WARNING;
 #endif
 
+    // GHOSTTIES_CEF_LOG_VERBOSE=1 forces verbose CEF/Chromium logging plus
+    // targeted vmodule tracing for the shutdown/keep-alive paths implicated
+    // in the profile-downgrade crash, independent of build configuration.
+    BOOL cefLogVerbose = GhosttiesCEFLogVerboseEnabled();
+    if (cefLogVerbose) {
+        settings.log_severity = LOGSEVERITY_VERBOSE;
+    }
+
     settings.remote_debugging_port = 0;
 
     // ---- Main args ------------------------------------------------------
 
-    static const char *fakeArgv[] = {
+    static const char *fakeArgvBase[] = {
         "Ghostties",
         "--use-mock-keychain",
         nullptr
     };
-    CefMainArgs mainArgs(2, const_cast<char**>(fakeArgv));
+    static const char *fakeArgvVerbose[] = {
+        "Ghostties",
+        "--use-mock-keychain",
+        "--vmodule=browser_shutdown=2,keep_alive_registry=2,browser_process_impl=2",
+        nullptr
+    };
+    const char **fakeArgv = cefLogVerbose ? fakeArgvVerbose : fakeArgvBase;
+    int fakeArgc = cefLogVerbose ? 3 : 2;
+    CefMainArgs mainArgs(fakeArgc, const_cast<char**>(fakeArgv));
 
     // ---- Initialize with our CefApp ------------------------------------
     // GhosttiesApp provides the BrowserProcessHandler which implements
     // OnScheduleMessagePumpWork for external_message_pump integration.
 
-#if DEBUG
     GhosttiesLogSingletonLockState(cacheDir);
-#endif
 
+    os_log(OS_LOG_DEFAULT, "[CEFBridge] Pre-CefInitialize: cacheDir=%{public}@ logFile=%{public}@ verbose=%{public}@",
+           cacheDir, logFile, cefLogVerbose ? @"YES" : @"NO");
     CefRefPtr<GhosttiesApp> app(new GhosttiesApp());
     bool success = CefInitialize(mainArgs, settings, app, nullptr);
-#if DEBUG
-    os_log(OS_LOG_DEFAULT, "[CEFDiag] CefInitialize returned %{public}@", success ? @"true" : @"false");
-#endif
+    os_log(OS_LOG_DEFAULT, "[CEFBridge] CefInitialize returned %{public}@", success ? @"true" : @"false");
     if (!success) {
         NSLog(@"[CEFBridge] CefInitialize failed.");
         return;
+    }
+
+    // Alive-tick probes: log every 250ms for 3s after CefInitialize returns.
+    // Each tick that actually runs is, by construction, proof the process
+    // survived to that point — this is the window the profile-downgrade
+    // crash (a deliberate ~0.4-0.65s post-init quit) falls inside.
+    for (int tick = 1; tick <= 12; tick++) {
+        int64_t delayMs = tick * 250;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delayMs * NSEC_PER_MSEC),
+                        dispatch_get_main_queue(), ^{
+            os_log(OS_LOG_DEFAULT, "[CEFBridge] alive-tick t+%{public}lldms", (long long)delayMs);
+        });
     }
 
     // ---- Backup timer (30 Hz) ------------------------------------------
@@ -383,12 +431,32 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
         return _testOverrideAppSupportBundleDirectory;
     }
 #endif
-    NSArray<NSString *> *appSupportPaths = NSSearchPathForDirectoriesInDomains(
-        NSApplicationSupportDirectory, NSUserDomainMask, YES);
-    NSString *appSupportBase = appSupportPaths.firstObject
-        ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
-    NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier] ?: @"com.seansmithdesign.ghostties";
-    return [appSupportBase stringByAppendingPathComponent:bundleId];
+    // GHOSTTIES_CEF_APP_SUPPORT_DIR is a lab hatch, not a behavior change:
+    // the CEF profile dir, the browser-open-attempt sentinel, and any future
+    // stamp file all derive from this one path, so overriding it here moves
+    // them together. Unset, this must resolve byte-identically to the
+    // original derivation below.
+    NSString *resolvedPath;
+    const char *envOverride = getenv("GHOSTTIES_CEF_APP_SUPPORT_DIR");
+    if (envOverride != NULL && envOverride[0] != '\0') {
+        resolvedPath = [NSString stringWithUTF8String:envOverride];
+    } else {
+        NSArray<NSString *> *appSupportPaths = NSSearchPathForDirectoriesInDomains(
+            NSApplicationSupportDirectory, NSUserDomainMask, YES);
+        NSString *appSupportBase = appSupportPaths.firstObject
+            ?: [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support"];
+        NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier] ?: @"com.seansmithdesign.ghostties";
+        resolvedPath = [appSupportBase stringByAppendingPathComponent:bundleId];
+    }
+
+    // Log once per distinct resolved value — this is called from several
+    // paths (profile dir, sentinel path, reset) and would otherwise spam.
+    static NSString *loggedPath = nil;
+    if (![loggedPath isEqualToString:resolvedPath]) {
+        loggedPath = resolvedPath;
+        os_log(OS_LOG_DEFAULT, "[CEFBridge] Resolved app-support base directory: %{public}@", resolvedPath);
+    }
+    return resolvedPath;
 }
 
 + (NSString *)_iso8601Timestamp {
@@ -420,6 +488,8 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
     NSError *error = nil;
     if (![[self _iso8601Timestamp] writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:&error]) {
         NSLog(@"[CEFBridge] Failed to write browser-open-attempt sentinel: %@", error.localizedDescription);
+    } else {
+        os_log(OS_LOG_DEFAULT, "[CEFBridge] Wrote browser-open-attempt sentinel at %{public}@", path);
     }
 }
 
@@ -430,6 +500,8 @@ static NSString *_testOverrideAppSupportBundleDirectory = nil;
         NSError *error = nil;
         if (![fm removeItemAtPath:path error:&error]) {
             NSLog(@"[CEFBridge] Failed to clear browser-open-attempt sentinel: %@", error.localizedDescription);
+        } else {
+            os_log(OS_LOG_DEFAULT, "[CEFBridge] Cleared browser-open-attempt sentinel at %{public}@", path);
         }
     }
 }

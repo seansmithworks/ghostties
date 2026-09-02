@@ -8,7 +8,7 @@
 # exists in Debug builds — no synthetic keystrokes, no accessibility driving.
 #
 # Usage:
-#   scripts/debug/cef-repro.sh [--runs N] [--timeout SECONDS] [--app PATH]
+#   scripts/debug/cef-repro.sh [--runs N] [--timeout SECONDS] [--app PATH] [--allow-non-dev]
 #
 # Exit code: 0 if the LAST run SURVIVED, 1 if it DIED (or on a setup error).
 # With --runs > 1, the exit code reflects the last run only; the printed
@@ -26,14 +26,20 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP_PATH="${GHOSTTIES_DEV_APP:-$REPO_ROOT/macos/build/Build/Products/Debug/Ghostties Dev.app}"
 TIMEOUT_SECONDS=30
 RUNS=1
+ALLOW_NON_DEV=0
 
 usage() {
   cat <<'EOF'
-Usage: cef-repro.sh [--runs N] [--timeout SECONDS] [--app PATH]
+Usage: cef-repro.sh [--runs N] [--timeout SECONDS] [--app PATH] [--allow-non-dev]
 
-  --runs N        Repeat the reproduction N times and report a tally (default 1).
-  --timeout SEC   Seconds to wait for DIED/SURVIVED per run (default 30).
-  --app PATH      Path to "Ghostties Dev.app" (default: macos/build/Build/Products/Debug).
+  --runs N          Repeat the reproduction N times and report a tally (default 1).
+  --timeout SEC     Seconds to wait for DIED/SURVIVED per run (default 30).
+  --app PATH        Path to the app bundle (default: macos/build/Build/Products/Debug/"Ghostties Dev.app").
+  --allow-non-dev   Skip the Debug/".dev"-bundle-id refusal so a Release-signed
+                    lab copy (built per reference_releaselocal-compiles-cef-out.md,
+                    with GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER un-gated for Release)
+                    can be driven by this harness too. The strings(1) symbol
+                    check below still runs regardless.
 
 Exit code 0 if the last run SURVIVED, 1 if it DIED, 2 on a setup/preflight error.
 EOF
@@ -47,6 +53,8 @@ while [[ $# -gt 0 ]]; do
       TIMEOUT_SECONDS="$2"; shift 2 ;;
     --app)
       APP_PATH="$2"; shift 2 ;;
+    --allow-non-dev)
+      ALLOW_NON_DEV=1; shift ;;
     -h|--help)
       usage; exit 0 ;;
     *)
@@ -80,19 +88,23 @@ if [[ -z "$BUNDLE_ID" ]]; then
   exit 2
 fi
 
-# Refuse to run against a non-Debug build. Debug Dev builds carry the
-# ".dev" bundle-id suffix (see CEFBridge.mm's cache-dir comment); Release
-# does not build the auto-open trigger at all (it's `#if DEBUG`-gated), so
-# this bundle-id check is the cheap first gate and the strings(1) check
-# below is the real one.
-case "$BUNDLE_ID" in
-  *.dev) ;;
-  *)
-    echo "ERROR: refusing to run against a non-Debug build (bundle id: $BUNDLE_ID)." >&2
-    echo "This harness only works against a Debug 'Ghostties Dev.app' build." >&2
-    exit 2
-    ;;
-esac
+# Refuse to run against a non-Debug build unless --allow-non-dev is passed.
+# Debug Dev builds carry the ".dev" bundle-id suffix (see CEFBridge.mm's
+# cache-dir comment). GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER is no longer
+# compile-time Debug-only (see WorkspaceViewContainer.swift), so a
+# Release-signed lab copy can legitimately be driven by this harness too —
+# --allow-non-dev opts into that. Either way, the strings(1) check below is
+# the real gate: it fails closed if the symbol just isn't in the binary.
+if [[ "$ALLOW_NON_DEV" -eq 0 ]]; then
+  case "$BUNDLE_ID" in
+    *.dev) ;;
+    *)
+      echo "ERROR: refusing to run against a non-Debug build (bundle id: $BUNDLE_ID)." >&2
+      echo "Pass --allow-non-dev to drive a Release-signed lab copy instead." >&2
+      exit 2
+      ;;
+  esac
+fi
 
 # The trigger's string literal lives in the Swift debug dylib
 # (ghostty.debug.dylib), not the thin launcher executable, on a Debug build

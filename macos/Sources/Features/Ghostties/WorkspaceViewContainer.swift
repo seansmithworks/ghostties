@@ -611,18 +611,20 @@ class WorkspaceViewContainer: NSView {
             WorkspaceStore.shared.freezeSnapshot()
         }
 
-        // Debug-only automated CEF browser crash repro (see scripts/debug/cef-repro.sh).
+        // Automated CEF browser crash repro (see scripts/debug/cef-repro.sh).
         // Fires `toggleBrowser()` — the exact same entry point the globe button's
         // `#selector(toggleBrowser)` action uses — once the window and view
         // hierarchy are established, so the repro is unattended but otherwise
-        // identical to a real click. Never compiled into Release.
-#if DEBUG
+        // identical to a real click. Gated at runtime (not compile-time) so a
+        // Release-signed lab build can also be driven without GUI automation —
+        // this is the only way to reproduce against the Release CEF profile.
         WorkspaceViewContainer.triggerDebugAutoOpenBrowserIfNeeded(on: self)
-#endif
     }
 
-#if DEBUG
     /// Fires exactly once per process, guarded by `GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER=1`.
+    /// Runtime-gated (was `#if DEBUG`) so it survives into Release builds;
+    /// the env var itself is the only thing standing between this and a
+    /// production launch triggering it.
     private static var didFireDebugAutoOpenBrowser = false
     private static func triggerDebugAutoOpenBrowserIfNeeded(on container: WorkspaceViewContainer) {
         guard !didFireDebugAutoOpenBrowser else { return }
@@ -635,7 +637,6 @@ class WorkspaceViewContainer: NSView {
             container?.toggleBrowser()
         }
     }
-#endif
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
