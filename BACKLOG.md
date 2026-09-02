@@ -1,27 +1,31 @@
 # Ghostties — Backlog
 
-## 2026-09-01 — composer ultra-minimal SHIPPED; CEF browser crash root-caused, fix unverified
+## 2026-09-01 — composer ultra-minimal SHIPPED; CEF browser fix MERGED, Release profile still unverified
 
-`main` @ `d92b4fb38`. **PR #155 MERGED** — composer variant C (ultra-minimal): trailing
+`main` @ `bceb7a74a`. **PR #155 MERGED** — composer variant C (ultra-minimal): trailing
 branch/project controls removed, junk-template creation fixed, stranded copy collapsed to
 one `SessionComposerCopy` constant. Three review rounds; round 2 found a second stranded
 literal the round-1 fix had missed, round 3 found a comment the round-2 fix introduced.
 
-- [ ] **CARRIED — CEF browser fix is committed and pushed but NOT VERIFIED.** PR stack, four
-  deep, each based on the previous: **#156** (diagnostics) → **#157** (defer `CreateBrowser`
-  to `viewDidMoveToWindow` — a real bug, NOT the cause) → **#158** (unattended repro harness)
-  → **#159** (`fix/cef-profile-recovery` @ `8072de3e6`, launch sentinel + Reset browser data).
-  The #159 agent was stopped mid-report: it committed, pushed and opened the PR, and claimed
-  1027 total / 1025 passed / 1 known flake / 1 skipped — **but the harness survival proof
-  (its criterion 1) never ran.** Next thread must run `scripts/debug/cef-repro.sh --runs 3`
-  against a poisoned profile and confirm SURVIVED before trusting any of it. Merge order
-  matters: #156 → #157 → #158 → #159.
+- [x] **DONE — CEF browser fix MERGED as `bceb7a74a` (PR #159, which carried #156–#158).**
+  #159's base was `main`, not #158, so its branch already contained all four commits; #156
+  auto-closed, #157/#158 closed as redundant with a note. Verified before merge: harness
+  **SURVIVED 3/3** against the real Dev profile (proved non-vacuous — the launch line sets no
+  `HOME`/cache override, and `Local State`/`Cookies`/`History`/`Preferences` mtimes all moved
+  to run time), suite **1027 / 1025 passed / 1 failed / 1 skipped** (matching the agent's
+  claim exactly; the failure is `GitWorktreeCreationTests/raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes()`,
+  a `2.74 < 2.0` wall-clock flake unrelated to CEF), and all 6 `CEFBrowserSentinelTests` passed.
 
-- [ ] **CARRIED — Sean's two CEF profiles are still poisoned.** `~/Library/Application
-  Support/com.seansmithdesign.ghostties/CEF` (141M, `Local State` frozen 2026-08-13) and
-  `.dev/CEF` (188M, frozen 2026-08-23). Renaming them aside unblocks the browser
-  immediately; it is cache/cookies only, workspace state lives elsewhere. **Offered, Sean
-  has not answered — his call, it is his logged-in state.**
+- [ ] **OPEN — the Release profile has never been exercised, so attribution is unresolved.**
+  `com.seansmithdesign.ghostties/CEF` is still 141M with `Local State` frozen at 2026-08-13.
+  The harness **cannot** reach it — `GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER` is `#if DEBUG`-gated,
+  so it only ever drives the Dev profile. Needs Sean clicking the globe in a Release build.
+  Note the sentinel's recovery path **never fired** during verification (no `CEF-broken-*`
+  anywhere, no leftover `browser-open-attempt`) — the browser simply worked, so what actually
+  fixed it is ambiguous between #157's window-attach fix and the Dev profile's state
+  decaying (it went 188M/dying → 130M/clean with no reset). Release profile backed up to
+  `com.seansmithdesign.ghostties/CEF-backup-2026-09-01` (141M) so the sentinel test is
+  zero-risk.
 
 - [ ] **CARRIED — Sean's 3 junk `New Template` rows still in `workspace.json`.** PR #155
   stops new ones; it does not purge existing. Delete in-app (right-click → Delete). All
@@ -48,8 +52,9 @@ literal the round-1 fix had missed, round 3 found a comment the round-2 fix intr
   2026-09-01. Reopen only if he asks.
 
 - [ ] **NEW — harness leftovers to clean.** `/var/folders/lc/6kc11m9s4bb_hhkw_p07l03m0000gn/T/ghostties-cef-repro-*`
-  (~61MB, three dirs). A leftover Dev instance PID 79653 may still be running and will
-  swallow harness launches — Dev builds share a bundle ID.
+  (~61MB, three dirs) plus `~/Library/Application Support/ghostties-cef-repro-scratch`
+  (44MB, three PID-named profile copies from the 16:02 bisection). Dev PID 79653 is
+  confirmed gone — no Ghostties or Dev instance was running at verification time.
 
 ## 2026-09-01 — PR #155 review follow-ups (ultra-minimal composer variant C)
 
