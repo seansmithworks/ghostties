@@ -2086,3 +2086,26 @@ synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
 - [x] Composer variant G — projects in results at rest, chevron removed
 - [x] Composer variant G — cap TEMPLATES/PROJECTS at 3 in rest state
 - [x] Composer variant G — one-Tab-per-segment, no-branch command shape, stale error copy
+
+Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
+
+**Decisions open on Sean (carried 1×):**
+- [ ] Composer type scale — mockup values (header 10pt `.bold` + 0.6 tracking; footer 10.5pt `design: .monospaced`; strip `Color.secondary.opacity(0.08)`) vs `DESIGN.md`'s 15/13/11 scale + one font family. Note: no monospaced font carries `↵`/`⇥`, so the footer mixes families either way — weakens the mono case.
+- [ ] `macos/Tests/Ghostties/ThrottleTrailingEdgeHypothesisTests.swift` — delete or fix? Untracked, dated Aug 14, self-described "DIAGNOSTIC ONLY". Missing `import GhosttiesCore`; breaks local `xcodebuild test` for every session in this repo until resolved.
+- [x] Tab-to-complete in the DEFAULT field — Tab filling the field from the highlighted row. Model-B only today. Its own change, not this branch. RESOLVED 2026-09-02: Sean made Model-B the default field for everyone instead of porting Tab into the old field.
+
+**Parked (off-objective):**
+- [ ] Template setup — bundled preset `macos/Presets/orchestrator.md` never seeds; `templates = presets + defaults + custom` has no dedupe (two "Orchestrator" rows if it does seed); Release `workspace.json` holds 3 junk "New Template" entries; presets sort ABOVE built-ins.
+- [ ] `inlineProjectPicker` orphaned — nothing sets `isProjectPickerOpen = true` since `projectControl` was deleted. Left working deliberately; retiring it is its own change (entangled with `ComposerQueryField.isPickerOpen` gating the field's ↑/↓/Return).
+- [ ] `ghostties.composerModelBField.MUTANT` debris in Sean's real Dev `UserDefaults` — left by an agent's mutation test.
+- [ ] `MEMORY.md` is 23.9KB against a 20KB cap; needs a routing pass to `INDEX.md`.
+
+**beta.24:**
+- [ ] Merge PR #149 (unblocks the suite — `main`'s test target did not compile).
+- [ ] CHANGELOG entry for #141
+- [ ] Tag beta.24; unpin both distribution surfaces from beta.22
+- [ ] Re-run full suite on a QUIET machine — last 3 runs each showed 6 failures in `SessionComposerWorktreeLaunchTests`/`GitWorktreeCreationTests`, clean in isolation every time (parallel-agent load).
+
+## 2026-09-01 — PR #155 review round 2
+
+- [ ] **The macOS test target is never executed in CI.** `.github/workflows/test-ghostties.yml:151-155` runs `xcodebuild build-for-testing` only — compiled, never run. The `swift test` job covers `cli/` alone. Every macOS test in this repo rests on a local run by whoever last touched it. This is why fail-open assertions and unpinned globals matter more here than they would elsewhere. | quality | new

@@ -130,11 +130,11 @@ struct SessionComposerPalette: View {
     @FocusState private var newTemplateNameFocused: Bool
 
     /// Step 7 (Composer UI 11 plan §5/§7): the model B field's ONLY switch
-    /// point. Default OFF — `queryRow` builds `ComposerQueryField` unless
-    /// Sean flips this himself (`defaults write … ghostties.composerModelBField -bool YES`).
+    /// point. Default ON — `queryRow` builds `ComposerGhostTextField` unless
+    /// this is explicitly turned off (`defaults write … ghostties.composerModelBField -bool NO`).
     /// `ComposerQueryField` itself is unmodified; this flag lives here, not
     /// there.
-    @AppStorage(ComposerGhostTextField.modelBFieldStorageKey) private var isModelBFieldEnabled = false
+    @AppStorage(ComposerGhostTextField.modelBFieldStorageKey) private var isModelBFieldEnabled = true
 
     /// Testing seam: exposes the exact predicate `queryRow` branches on,
     /// without walking its opaque SwiftUI view tree via reflection (a

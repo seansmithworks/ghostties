@@ -25,7 +25,7 @@ struct ComposerGhostTextFieldTests {
     /// same implicit `.standard` store, so a prior test run or a real
     /// `defaults write` from Sean's own hands-on pass could otherwise leak
     /// into this assertion). Restores whatever was there afterward.
-    @Test func flagDefaultsToOffAndDefaultPathBuildsComposerQueryField() {
+    @Test func flagDefaultsToOnAndDefaultPathBuildsComposerGhostTextField() {
         let key = ComposerGhostTextField.modelBFieldStorageKey
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: key)
@@ -47,14 +47,14 @@ struct ComposerGhostTextFieldTests {
         // `usesModelBFieldForTesting` is the EXACT predicate `queryRow`
         // branches its `if` on (see that property's doc comment for why a
         // view-tree/type-name reflection test would be vacuous here). With
-        // the key cleared, `@AppStorage`'s own default (`false`) is what
+        // the key cleared, `@AppStorage`'s own default (`true`) is what
         // this reads.
         let palette = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
             composerStore: composerStore
         )
-        #expect(palette.usesModelBFieldForTesting == false)
+        #expect(palette.usesModelBFieldForTesting == true)
     }
 
     /// Review round 2, P1-b: `.anchored` never mounts model B
