@@ -23,7 +23,7 @@ public struct SessionComposerCommitError: Error, CustomStringConvertible, Equata
 /// user what to do with the text field they still have.
 public enum SessionComposerCopy {
     public static func unresolvedBranchMessage(token: String) -> String {
-        SessionComposerCopy.unresolvedBranchMessage(token: token)
+        "No worktree found for branch \"\(token)\". Use the create-branch suggestion above, or retype/delete it."
     }
 }
 
