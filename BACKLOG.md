@@ -2351,3 +2351,15 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 ## 2026-09-01 — PR #155 review round 2
 
 - [ ] **The macOS test target is never executed in CI.** `.github/workflows/test-ghostties.yml:151-155` runs `xcodebuild build-for-testing` only — compiled, never run. The `swift test` job covers `cli/` alone. Every macOS test in this repo rests on a local run by whoever last touched it. This is why fail-open assertions and unpinned globals matter more here than they would elsewhere. | quality | new
+
+## 2026-09-02 — composer Tab flow (Beta 25 thread)
+
+**Carried (on-objective):**
+- [ ] **Sean's verdict on the Tab flow.** `/Applications/Ghostties-composer.app` is installed and running the merged build. Test: ⌘T → `ghostt` → Tab → `cco -n "testing"` → Return. Not yet confirmed on screen.
+- [ ] **Push `fix/composer-tab-space` + open PR** — held on Sean's explicit "not until it is right." Branch is at `c24aef12f`, local only, 54 commits ahead of `origin/feat/composer-variant-g` (wrong tracking ref — set upstream to a new `origin/fix/composer-tab-space`, never push to variant-g's ref).
+- [ ] **Confirm the accepted consequence:** after one *unarmed* Tab the ghost stops matching, so a second unarmed Tab is a no-op; multi-segment drilling requires typing `>`. Strawman: this is correct and intended per Sean's own rule — apply or redline, don't re-ask.
+
+**Parked (off-objective):**
+- [ ] `⚠ The EdDSA public key is not valid for Ghostties` toast — Sparkle update-signing key mismatch, visible bottom-right in every window. Never logged before 2026-09-02.
+- [ ] `feat/composer-variant-g` is now fully contained in `fix/composer-tab-space` (merged `origin/main` in at `2ad00cf05`). Merging variant-g separately is moot — retire the branch when the new one lands.
+- [ ] `BACKLOG.md:2108` item **D2** (Tab-to-complete) is arguably closed by Model-B being default-on. Sean's call.
