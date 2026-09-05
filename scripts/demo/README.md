@@ -31,11 +31,19 @@ directory from `Bundle.main.bundleIdentifier`, so the demo app reads/writes
 Release downloads are cached under `~/Library/Caches/ghostties-demo/<tag>/` so
 re-running the same tag doesn't re-download the ~147MB asset.
 
-**Sparkle is disabled in the demo build.** Ad-hoc re-signing (required to
-rewrite the bundle ID) invalidates the Developer ID signature Sparkle needs
-to trust an update, so the script strips `SUFeedURL` and disables automatic
-checks. **This script is the demo's update mechanism — re-run it to refresh
-to a new release.**
+**Sparkle updates are disabled in the demo build.** Ad-hoc re-signing
+(required to rewrite the bundle ID) invalidates the Developer ID signature
+Sparkle needs to trust an update, and `UpdateDelegate.feedURLString(for:)`
+honours an explicit Info.plist `SUFeedURL` before falling back to the real
+release channels — so a manual "Check for Updates…" in the demo could
+otherwise resolve the real Ghostties feed and overwrite the demo app with
+the real one (they share the same `SUPublicEDKey`). The script instead sets
+`SUFeedURL` to `https://ghostties.org/appcast-demo.xml`, a URL that
+deliberately does not exist, so a manual check fails benignly with a 404
+rather than installing anything. It also unconditionally sets
+`SUEnableAutomaticChecks` to `false` (adding the key if absent) — a missing
+key makes Sparkle prompt the user, so it's never left out. **This script is
+the demo's update mechanism — re-run it to refresh to a new release.**
 
 ## Seed the workspace
 

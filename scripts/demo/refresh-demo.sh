@@ -35,8 +35,10 @@
 #   - Never modifies ~/Library/Application Support/Ghostties/ (release workspace).
 #   - Never runs killall. Quit any existing instance before running.
 #   - arm64 only (GhosttyKit.xcframework is arm64-only).
-#   - Sparkle auto-update is DISABLED in the demo build (ad-hoc re-signing
-#     invalidates the Developer ID signature Sparkle needs). This script IS
+#   - Sparkle auto-checks are DISABLED and the feed is pointed at a
+#     deliberately-nonexistent URL (ad-hoc re-signing invalidates the
+#     Developer ID signature Sparkle needs, and a manual "Check for
+#     Updates…" must never resolve the real Ghostties feed). This script IS
 #     the demo's update mechanism — re-run it to refresh.
 # =============================================================================
 set -euo pipefail
@@ -201,18 +203,30 @@ PLIST="$DEST_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Ghostties Demo"    "$PLIST"
 
 # Neutralise Sparkle — ad-hoc re-signing invalidates the Developer ID signature
-# Sparkle needs to trust an update, so leaving the feed URL in place would just
-# produce silent update failures. This script is the demo's update mechanism.
+# Sparkle needs to trust an update, so a manual "Check for Updates…" must
+# never resolve the real Ghostties feed. UpdateDelegate.feedURLString(for:)
+# honours an explicit Info.plist SUFeedURL first, so point it at a feed that
+# deliberately does not exist — a manual check 404s harmlessly instead of
+# installing the real app over this one. (SUFeedURL used to be deleted here,
+# which relied on the delegate falling through to the real channel feeds —
+# that was the bug: Sparkle trusts this byte-copy's signature.)
+DEMO_FEED_URL="https://ghostties.org/appcast-demo.xml"
 if /usr/libexec/PlistBuddy -c "Print :SUFeedURL" "$PLIST" >/dev/null 2>&1; then
-  /usr/libexec/PlistBuddy -c "Delete :SUFeedURL" "$PLIST"
-  echo "    Removed SUFeedURL."
+  /usr/libexec/PlistBuddy -c "Set :SUFeedURL $DEMO_FEED_URL" "$PLIST"
+else
+  /usr/libexec/PlistBuddy -c "Add :SUFeedURL string $DEMO_FEED_URL" "$PLIST"
 fi
+echo "    Set SUFeedURL to a deliberately-nonexistent demo feed."
+
+# Always set SUEnableAutomaticChecks, never delete it — Sparkle treats a
+# missing key as "prompt the user", while an explicit false means no
+# background checks. Add if absent, Set if present.
 if /usr/libexec/PlistBuddy -c "Print :SUEnableAutomaticChecks" "$PLIST" >/dev/null 2>&1; then
   /usr/libexec/PlistBuddy -c "Set :SUEnableAutomaticChecks false" "$PLIST"
 else
   /usr/libexec/PlistBuddy -c "Add :SUEnableAutomaticChecks bool false" "$PLIST"
 fi
-echo "    Sparkle disabled. This script is the demo's update mechanism — re-run it to refresh."
+echo "    Background auto-checks disabled. A manual check fails benignly (404) against the demo feed."
 
 echo "    Plist updated:"
 echo "      CFBundleIdentifier  = $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")"
