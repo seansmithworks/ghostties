@@ -4,7 +4,7 @@ Anonymized demo content for screen-recording, portfolio case studies, and social
 
 ## Projects
 
-Seven fictional projects across different domains:
+Ten fictional projects across different domains:
 
 | Directory | Domain |
 |---|---|
@@ -15,30 +15,23 @@ Seven fictional projects across different domains:
 | `switchboard/` | Developer dashboard / webhook tool |
 | `fieldwork/` | Location and field data capture app |
 | `trove/` | Personal knowledge base app |
+| `brukas/` | Booking / quoting app |
+| `annotie/` | Document annotation and review tool |
+| `ghostties/` | Ghostties itself, dogfooded as a fixture |
 
 ## How to load in Ghostties
 
-Ghostties discovers projects automatically. Any directory containing a `.ghostties/tasks/` subfolder is recognized as a project — no registration required.
-
-To load the demo workspace, open (or navigate to) each project folder in Ghostties:
-
-```
-examples/demo-workspace/atlas-api/
-examples/demo-workspace/pendulum/
-examples/demo-workspace/silo/
-examples/demo-workspace/wren/
-examples/demo-workspace/switchboard/
-examples/demo-workspace/fieldwork/
-examples/demo-workspace/trove/
-```
-
-Or open `examples/demo-workspace/` as a workspace root if Ghostties supports nested discovery from a parent.
+These fixtures aren't opened directly from this checkout. `scripts/demo/seed-demo-workspace.sh`
+copies each one into `~/Library/Application Support/Ghostties Demo/repos/<name>/`, turns it into
+a real git repo, and points the demo app's `workspace.json` at those copies — so the demo doesn't
+depend on this checkout's branch. See `scripts/demo/README.md` for the full refresh + seed
+procedure.
 
 ## What this enables
 
 | Capture moment | Coverage |
 |---|---|
-| Full ghost rail | 7 projects, each auto-assigned a named pixel-art ghost |
+| Full ghost rail | 10 projects, each auto-assigned a named pixel-art ghost |
 | All six zones | Inbox, Backlog, Running, Needs You, Review, Graveyard all populated |
 | Terracotta Needs You cards | 4 tasks across 4 projects, each with a realistic blocking question |
 | Running tasks with branches | 5 tasks with `branch:`, `worktree:`, `files-staged:` fields |
@@ -60,7 +53,6 @@ Or open `examples/demo-workspace/` as a workspace root if Ghostties supports nes
 
 ## Assumptions
 
-- Project discovery walks up from the opened directory, so each project folder must be opened individually if the app doesn't support recursive workspace scanning from a parent.
 - The `worktree:` paths use `~` expansion (`~/Code/<project>`). If the app resolves these, they point to non-existent directories — this is expected for a fixture.
 - PR URLs point to `github.com/example-org/*` which are fictional. These will 404 if opened in a browser.
 - All dates are in the April–June 2026 range.

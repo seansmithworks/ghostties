@@ -10,20 +10,20 @@ Consistency matters because reshoots need to line up with earlier frames — sam
 
 ### Load the fixture
 
-Ghostties discovers any directory that contains a `.ghostties/tasks/` subfolder. Open each of the seven project folders individually in Ghostties (navigate to or open each path):
+Don't open project folders from this checkout directly — run the demo rig scripts instead. See
+`scripts/demo/README.md` for the full procedure; in short:
 
+```bash
+./scripts/demo/refresh-demo.sh          # produce/refresh Ghostties Demo.app
+./scripts/demo/seed-demo-workspace.sh   # copy the 10 fixtures into the demo's workspace
 ```
-examples/demo-workspace/atlas-api/
-examples/demo-workspace/pendulum/
-examples/demo-workspace/silo/
-examples/demo-workspace/wren/
-examples/demo-workspace/switchboard/
-examples/demo-workspace/fieldwork/
-examples/demo-workspace/trove/
-```
+
+`seed-demo-workspace.sh` copies each fixture in `examples/demo-workspace/` into
+`~/Library/Application Support/Ghostties Demo/repos/<name>/`, turns it into a real git repo, and
+points the demo app's `workspace.json` at those copies.
 
 When loaded correctly you should see:
-- 7 named pixel-art ghosts in the project rail
+- 10 named pixel-art ghosts in the project rail
 - All six zones populated: Inbox, Backlog, Running, Needs You, Review, Graveyard
 - 6 tasks in "Needs You" — cards appear in terracotta (#C97350)
 - 5 running tasks with branch/worktree/files-staged metadata
@@ -57,7 +57,7 @@ Five shots minimum. Capture in this order — the hero last, after you have veri
 
 ### Shot 1 — HERO (motion, 8-12s silent loop)
 
-**What is on screen:** Full Ghostties workspace. Ghost rail on the left with all 7 project ghosts visible and labeled. The active project (use `switchboard` — it has a running task, a needs-you card, and a review task) shows all six zone columns with cards. A Needs You card sits terracotta in the center column. The right panel shows a terminal pane with a `gt` command running. The menu bar status item is lit.
+**What is on screen:** Full Ghostties workspace. Ghost rail on the left with all 10 project ghosts visible and labeled. The active project (use `switchboard` — it has a running task, a needs-you card, and a review task) shows all six zone columns with cards. A Needs You card sits terracotta in the center column. The right panel shows a terminal pane with a `gt` command running. The menu bar status item is lit.
 
 **Why it earns its place:** This is the thesis in one frame. Rail + zones + terracotta + live terminal = the whole product story before anyone reads a word.
 
@@ -121,7 +121,7 @@ ffmpeg -f avfoundation -framerate 60 -capture_cursor 0 \
 
 ### Shot 3 — The Ghost Rail Isolated (still)
 
-**What is on screen:** Only the project rail — the 7 named pixel-art ghosts stacked vertically with project labels. Crop tight so each ghost and its label is readable. No zone columns in frame.
+**What is on screen:** Only the project rail — the 10 named pixel-art ghosts stacked vertically with project labels. Crop tight so each ghost and its label is readable. No zone columns in frame.
 
 **Why it earns its place:** The brand IP in one frame. The ghost rail is the visual identity of the product. One still can carry a blog post, a tweet, or an App Store screenshot.
 
@@ -172,7 +172,7 @@ screencapture -o -R 1200,0,240,25 ~/Desktop/ghostties-menubar-status.png
 **Suggested layout before capturing:**
 - Left third: Ghostties sidebar showing the task card
 - Center third: Terminal running `gt show replay-dead-letter` (or equivalent)
-- Right third: Another terminal running `cat examples/demo-workspace/switchboard/.ghostties/tasks/replay-dead-letter.md`
+- Right third: Another terminal running `cat "~/Library/Application Support/Ghostties Demo/repos/switchboard/.ghostties/tasks/replay-dead-letter.md"`
 
 **Capture:**
 
