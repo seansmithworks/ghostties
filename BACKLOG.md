@@ -1,5 +1,21 @@
 # Ghostties — Backlog
 
+## 2026-09-05 — visual pass findings (fixture-mode XCUITest captures, branch `visual-pass-2026-09-05`)
+
+Seventeen of eighteen app states captured with `VisualPassUITests` over the cherry-picked
+capture fixture. Captures and `RUN.md` are untracked in `docs/audits/visual-pass-2026-09-05/`.
+The branch also carries the three-line `TEST_TARGET_NAME = Ghostties` pbxproj fix; every
+GUI-driving UI class was verified gated behind the IDE env check, but a reviewer should
+re-check that list before the hunk reaches `main`.
+
+- [ ] Title-bar collision on sidebar overlay and on browser open: traffic lights over "New Project", terminal shifted under the title bar.
+- [ ] Tab after an accepted completion renders a chevron and drops the branch segment. Verify against the 2 Sep decision that Tab inserts a space.
+- [ ] Browser opens as a separate floating window; the process cannot terminate after opening it (Debug, fresh CEF profile, 3/3).
+- [ ] Task-first capture was a false positive; the Dev-domain defaults key did not take under XCUITest, or the forced ⌘⇧1 switched away.
+- [ ] Capture fixture has no "needs you" session, and window captures include overlapping windows.
+- [ ] Ghost colour on project rows (black vs blue) carries meaning that nothing explains.
+- [ ] Two composer checks for Sean, in a real repo: does Tab after `swi` type a chevron; does `switchboard > feat/demo` offer to create the branch.
+
 ## 2026-09-02 — CEF crash root-caused (Chromium 150→144 profile downgrade); overnight fix dispatched
 
 **Verdict (Fable 5.1):** Sean's Release CEF profile was written by Chromium 150; the Aug 1
