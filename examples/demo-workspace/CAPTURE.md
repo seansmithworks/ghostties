@@ -10,17 +10,23 @@ Consistency matters because reshoots need to line up with earlier frames — sam
 
 ### Load the fixture
 
-Don't open project folders from this checkout directly — run the demo rig scripts instead. See
-`scripts/demo/README.md` for the full procedure; in short:
+Don't open project folders from this checkout directly, and don't run `refresh-demo.sh` /
+`seed-demo-workspace.sh` by hand — start with the preflight entrypoint, which makes it
+structurally impossible to shoot from a stale build:
 
 ```bash
-./scripts/demo/refresh-demo.sh          # produce/refresh Ghostties Demo.app
-./scripts/demo/seed-demo-workspace.sh   # copy the 10 fixtures into the demo's workspace
+./scripts/demo/demo-ready.sh   # step 0: ensures a current Ghostties Demo.app + reseeds fixtures
 ```
 
-`seed-demo-workspace.sh` copies each fixture in `examples/demo-workspace/` into
-`~/Library/Application Support/Ghostties Demo/repos/<name>/`, turns it into a real git repo, and
-points the demo app's `workspace.json` at those copies.
+See `scripts/demo/README.md` for the full procedure. `demo-ready.sh` resolves the newest release
+tag, refreshes the demo app only if it's stale or missing, always reseeds the 10 fixtures in
+`examples/demo-workspace/` into `~/Library/Application Support/Ghostties Demo/repos/<name>/` as
+real git repos, and points the demo app's `workspace.json` at those copies — not at this checkout,
+so the demo doesn't break when this repo changes branch.
+
+**Every capture run must copy the manifest** it writes at
+`~/Library/Application Support/Ghostties Demo/demo-manifest.json` alongside the produced assets —
+it's what lets a stale screenshot be traced back to the build that made it later.
 
 When loaded correctly you should see:
 - 10 named pixel-art ghosts in the project rail

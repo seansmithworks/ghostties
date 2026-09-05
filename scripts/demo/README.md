@@ -3,6 +3,39 @@
 Produces an isolated `Ghostties Demo.app` for screen recording and marketing
 capture — never touches the real daily-driver app or its data.
 
+## Entrypoint: `demo-ready.sh`
+
+Before capturing anything, run:
+
+```bash
+./scripts/demo/demo-ready.sh
+```
+
+This is the one command an agent or Sean should run as preflight. It resolves
+the newest release tag on `SeanSmithWorks/ghostties`, compares it against the
+installed demo app's version, calls `refresh-demo.sh` only if they differ,
+always reseeds the fixture workspace via `seed-demo-workspace.sh`, and writes
+a manifest recording exactly what's on disk. `refresh-demo.sh` and
+`seed-demo-workspace.sh` are the pieces it calls — call them directly only
+when working on the rig itself.
+
+```bash
+./scripts/demo/demo-ready.sh --check     # assert freshness; exits non-zero if stale/missing, changes nothing
+./scripts/demo/demo-ready.sh --source    # demo the current checkout instead of the newest release
+./scripts/demo/demo-ready.sh --dest <path>  # non-default app location
+```
+
+### Manifest
+
+Every non-`--check` run writes
+`~/Library/Application Support/Ghostties Demo/demo-manifest.json`, recording
+the demo app version (or, in `--source` mode, the built commit sha), the
+source tag or ref+sha, the app bundle's mtime, an ISO-8601 refreshed-at
+timestamp, the fixture project count, and the seeded repos path. **A capture
+run should copy this manifest next to whatever assets it produces** — it's
+what lets anyone later trace a screenshot or clip back to the exact build
+that produced it.
+
 ## How isolation works
 
 `refresh-demo.sh` re-bundles the app under bundle ID
