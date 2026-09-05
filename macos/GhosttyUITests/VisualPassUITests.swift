@@ -40,7 +40,16 @@ final class VisualPassUITests: XCTestCase {
         extraEnvironment: [String: String] = [:]
     ) throws -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
+        // `-ghostties.hasSeenOnboarding YES` — the standard NSUserDefaults CLI
+        // override (same pattern `TaskSidebarSmokeUITests` uses for
+        // `-ghostties.sidebarViewMode`). Without it, a Dev-domain profile
+        // with no prior manual launch shows `OnboardingSheet` as a modal
+        // sheet over the whole window, hiding the fixture content the
+        // assertion below checks for.
+        app.launchArguments.append(contentsOf: [
+            "-ApplePersistenceIgnoreState", "YES",
+            "-ghostties.hasSeenOnboarding", "YES",
+        ])
         app.launchEnvironment["GHOSTTIES_CAPTURE_FIXTURE"] = "1"
         for (key, value) in extraEnvironment {
             app.launchEnvironment[key] = value
@@ -53,9 +62,20 @@ final class VisualPassUITests: XCTestCase {
         )
         Thread.sleep(forTimeInterval: 1.0)
 
-        let hasFixtureMarker = app.staticTexts["switchboard"].firstMatch.waitForExistence(timeout: 5)
+        // The sidebar's Projects/Sessions tab selection is a real, persisted
+        // preference (not stubbed by `CaptureFixture`), so a launch can land
+        // on either tab depending on this Dev profile's prior state. On the
+        // Sessions tab, "switchboard" is only ever a substring inside a
+        // compound row label ("Claude Code 4, in switchboard, ..."), never
+        // its own `StaticText` — so the fixture assertion below can only find
+        // it reliably on the Projects tab. Force Projects (⌘⇧1) before
+        // asserting; individual tests switch tabs again afterward as needed.
+        app.typeKey("1", modifierFlags: [.command, .shift])
+        Thread.sleep(forTimeInterval: 0.5)
+
+        let hasFixtureMarker = element(labelContains: "switchboard", in: app).waitForExistence(timeout: 5)
         let leakedRealNames = ["ghostties", "brukas", "Career-ops", "seansmithdesign"].contains {
-            app.staticTexts[$0].firstMatch.exists
+            element(labelContains: $0, in: app).exists
         }
 
         guard hasFixtureMarker, !leakedRealNames else {
@@ -80,6 +100,19 @@ final class VisualPassUITests: XCTestCase {
         print("CAPTURE_UNREACHABLE: \(state) — \(reason)")
     }
 
+    /// Guess, verified against a real run's accessibility dump: sidebar rows
+    /// in this build don't expose plain-text names as standalone
+    /// `StaticText` elements. Project rows are `Button`s labeled
+    /// `"<name> project, collapsed/expanded"`; session rows are non-button
+    /// elements labeled `"<name>, in <project>, last output <age>"`. Every
+    /// query below therefore matches by label substring across ALL element
+    /// kinds rather than by exact `staticTexts[...]` lookup.
+    private func element(labelContains substring: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", substring))
+            .firstMatch
+    }
+
     // MARK: - 1-2. Projects tab
 
     func testProjectsLaunch() throws {
@@ -90,7 +123,7 @@ final class VisualPassUITests: XCTestCase {
 
     func testProjectsExpanded() throws {
         let app = try launchFixtureApp(state: "projects-expanded")
-        let projectRow = app.staticTexts["switchboard"].firstMatch
+        let projectRow = element(labelContains: "switchboard", in: app)
         if projectRow.waitForExistence(timeout: 5) {
             projectRow.click()
             Thread.sleep(forTimeInterval: 0.4)
@@ -104,7 +137,7 @@ final class VisualPassUITests: XCTestCase {
     func testProjectsExpandedAlt() throws {
         let app = try launchFixtureApp(state: "projects-expanded-alt")
         let originalAppearance = XCUIDevice.shared.appearance
-        let projectRow = app.staticTexts["switchboard"].firstMatch
+        let projectRow = element(labelContains: "switchboard", in: app)
         if projectRow.waitForExistence(timeout: 5) {
             projectRow.click()
             Thread.sleep(forTimeInterval: 0.4)
@@ -146,7 +179,7 @@ final class VisualPassUITests: XCTestCase {
         let app = try launchFixtureApp(state: "session-context-menu")
         app.typeKey("2", modifierFlags: [.command, .shift])
         Thread.sleep(forTimeInterval: 0.5)
-        let sessionRow = app.staticTexts["Claude Code 4"].firstMatch
+        let sessionRow = element(labelContains: "Claude Code 4", in: app)
         guard sessionRow.waitForExistence(timeout: 5) else {
             unreachable("session-context-menu", "'Claude Code 4' row not found on Sessions tab")
             app.terminate()
@@ -156,12 +189,15 @@ final class VisualPassUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 0.4)
         // Guess: the context menu surfaces as a standard NSMenu; query the
         // first menu element rather than a specific item, since item titles
-        // aren't documented for this row.
-        let menu = app.menus.firstMatch
-        if menu.waitForExistence(timeout: 2) {
-            try capture(menu, state: "session-context-menu-menu")
+        // aren't documented for this row. `app.menus.firstMatch` alone
+        // matched the menu-bar's own (hidden, zero-frame) Apple menu instead
+        // of the popped-up context menu — filter for a menu with a
+        // non-degenerate frame instead.
+        let visibleMenu = app.menus.allElementsBoundByIndex.first { $0.frame.width > 0 && $0.frame.height > 0 }
+        if let visibleMenu {
+            try capture(visibleMenu, state: "session-context-menu-menu")
         } else {
-            unreachable("session-context-menu-menu", "no menu element found after right-click")
+            unreachable("session-context-menu-menu", "no menu element with a non-empty frame found after right-click")
         }
         try capture(app.windows.firstMatch, state: "session-context-menu")
         app.typeKey(.escape, modifierFlags: [])
@@ -220,9 +256,12 @@ final class VisualPassUITests: XCTestCase {
         app.typeKey("t", modifierFlags: [.command])
         Thread.sleep(forTimeInterval: 0.5)
         // Guess: "New template" is an in-list row (no ellipsis per
-        // SessionComposerPalette.swift), so query it as static text within
-        // the composer's idle list.
-        let newTemplateRow = app.staticTexts["New template"].firstMatch
+        // SessionComposerPalette.swift). Matched by label substring, not
+        // exact `staticTexts[...]`, since sidebar rows in this build turned
+        // out to wrap plain text in compound-labeled container elements
+        // (see `element(labelContains:in:)`'s doc comment) — assume the
+        // composer's rows may do the same.
+        let newTemplateRow = element(labelContains: "New template", in: app)
         guard newTemplateRow.waitForExistence(timeout: 3) else {
             unreachable("new-template", "'New template' row not found in composer idle list")
             app.typeKey(.escape, modifierFlags: [])
