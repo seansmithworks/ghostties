@@ -1,5 +1,32 @@
 # Ghostties — Backlog
 
+## 2026-09-05 — audit follow-ups (carried from the "Ghostties Concepts" thread)
+
+Audit + 23 avenues + visual-pass re-rank live at
+https://ghostties-avenues-67pr67vk3-seansmithworks.vercel.app (throwaway Vercel project
+`ghostties-avenues`, source in `docs/audits/avenues-2026-09-05/`). Codex's concept lab
+(`concept-lab/`, https://ghostties-concept-lab.vercel.app) has the better review format;
+this page has the audit numbers and cost/traction. Sean leaned toward the lab.
+
+- [ ] **carried — rig to `main` as its own PR.** Strawman: fresh branch off `origin/main`,
+  cherry-pick `e87a120c8` (fixture mode), `f78ad8a0d` (VisualPassUITests), `3aa12ef19`
+  (`TEST_TARGET_NAME = Ghostties` + gate audit), reviewer re-checks that every class in
+  `macos/GhosttyUITests/` stays IDE-gated, then PR to `SeanSmithWorks/ghostties`. Unblocks
+  re-capture after every change and a headless CI run. `visual-pass-2026-09-05` itself must
+  NOT be pushed as-is — its history carries the unpushed composer work.
+- [ ] **carried — one review surface.** Fold this page's audit, cost/traction fields, and the
+  seven non-overlapping avenues (1, 3, 5, 11, 13, 20, 21) plus the Part three findings into
+  `concept-lab/` (Vite + drawably, `src/concepts.js`), then retire `ghostties-avenues`.
+- [ ] **carried — fixture gains a "needs you" session** before any hero-film or site-capture
+  work; capture on an empty Space so no other window leaks in.
+- [ ] parked — ghostties.org: ghosts drift over the brew button and the product still at load;
+  the page is three sections with no explanation of status, `gt`, or the composer; the
+  product still shows five identical dots and generic "Claude Code N" rows.
+- [ ] parked — delete `docs/audits/avenues-2026-09-05/.env.local` (a `VERCEL_OIDC_TOKEN`
+  `vercel link` dropped; gitignored, permission mode blocked removal from the thread).
+- [ ] parked — `browser.png` from the visual pass is deliberately uncommitted (second Dev
+  window with the real hostname); regenerate on an empty Space if it is ever needed.
+
 ## 2026-09-05 — visual pass findings (fixture-mode XCUITest captures, branch `visual-pass-2026-09-05`)
 
 Seventeen of eighteen app states captured with `VisualPassUITests` over the cherry-picked

@@ -1,0 +1,892 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ghostties — what next</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+  rel="stylesheet"
+/>
+<link rel="stylesheet" href="./vendor/drawably/style.css" />
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 0. Masthead -->
+  <section class="masthead">
+    <h1>Ghostties — <span id="what-next-underline">what next</span></h1>
+    <p class="dek">
+      Audit of the app and ghostties.org as of 5 Sep 2026, then 13 avenues from mild to wild.
+      Tick the ones worth talking about.
+    </p>
+    <div class="legend-badges">
+      <span class="badge-mild" id="legend-mild">MILD</span>
+      <span class="badge-medium" id="legend-medium">MEDIUM</span>
+      <span class="badge-wild" id="legend-wild">WILD</span>
+    </div>
+    <p class="cost-legend">S = a day or two &middot; M = about a week &middot; L = a few weeks &middot; XL = a month or more.</p>
+    <div class="jump-row">
+      <a href="#where-we-are" id="jump-part-one">Part one — audit and avenues</a>
+      <span class="jump-sep">&middot;</span>
+      <a href="#part-two" id="jump-part-two">Part two — agent-forward</a>
+    <span class="jump-sep">&middot;</span>
+    <a href="#part-three" id="jump-part-three">Part three — after the visual pass</a>
+    </div>
+  </section>
+
+  <!-- 1. Where we are -->
+  <section id="where-we-are">
+    <h2>Where we are</h2>
+    <div class="stat-grid">
+      <div class="stat-card" data-card>
+        <span class="stat-number">beta.24</span>
+        <span class="stat-label">Shipped 31 Aug. 24 betas, 0 stable.</span>
+      </div>
+      <div class="stat-card" data-card>
+        <span class="stat-number">243</span>
+        <span class="stat-label">Commits to main in the last 30 days.</span>
+      </div>
+      <div class="stat-card" data-card>
+        <span class="stat-number">25.5k</span>
+        <span class="stat-label">Lines of fork Swift. The composer palette alone is 174 KB.</span>
+      </div>
+      <div class="stat-card" data-card>
+        <span class="stat-number">45 ★ · 0 forks</span>
+        <span class="stat-label">0 open issues, 0 open PRs.</span>
+      </div>
+      <div class="stat-card" data-card>
+        <span class="stat-number">29 → 22 → 13 → 14 → 10</span>
+        <span class="stat-label">DMG downloads per release, beta.20 → beta.24. Sparkle zip for beta.24: 4.</span>
+      </div>
+      <div class="stat-card" data-card>
+        <span class="stat-number">17 / week</span>
+        <span class="stat-label">npm ghostties-install runs (316 last month).</span>
+      </div>
+      <div class="stat-card" data-card>
+        <span class="stat-number">26</span>
+        <span class="stat-label">Unique GitHub visitors in 14 days. Referrers: github.com, Google, hzoo.net, t.co.</span>
+      </div>
+      <div class="stat-card" data-card>
+        <span class="stat-number">none</span>
+        <span class="stat-label">Analytics on ghostties.org. Vercel Web Analytics is not enabled; there is nothing to read.</span>
+      </div>
+      <div class="stat-card" data-card>
+        <span class="stat-number">1,803 clones</span>
+        <span class="stat-label">451 unique cloners in 14 days vs 26 human visitors. Bots, not traction.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Findings -->
+  <section id="findings">
+    <h2>Five blunt findings</h2>
+    <ul class="findings-list" id="findings-list">
+      <li><strong>The product is deep; the funnel is dark.</strong> No site analytics, no issue traffic, about ten downloads a release. Judge every avenue by whether it lights the funnel.</li>
+      <li><strong>beta.24's headline feature is unreachable.</strong> Real Claude Code status needs seven hook entries hand-pasted into ~/.claude/settings.json; the only copy of the snippet is inside a shell script's header comment. Everyone but Sean gets the guessed status.</li>
+      <li><strong>The site's proof is a still.</strong> The Arcade redesign was built around a 14-second hero film. The hero is a PNG, the sidebar section was removed on 27 Aug, and a 27-commit token-game branch sits unmerged on six design calls.</li>
+      <li><strong>The fork is not thin.</strong> 25.5k lines, a 174 KB composer file, an embedded Chromium. Each upstream merge gets dearer. Not urgent; it shapes the wild end.</li>
+      <li><strong>Is Ghostties your daily terminal?</strong> The mission's own success signal is 30 days as the daily driver. Project memory disagrees with itself about whether that is true today. Worth a straight answer before picking anything below.</li>
+    </ul>
+  </section>
+
+  <!-- 3. Recommendation strip -->
+  <section id="recommendation-section">
+    <div class="recommendation" id="recommendation-card" data-card data-stroke-accent>
+      <p>
+        My pick: 1, 3 and 4 this week (each S, together they make the headline feature reachable,
+        turn on the lights, and put motion on the site). Then 5 as the launch moment, with 9
+        running alongside from now on. Of the wild ones, 11 is the one I'd bet on; 13 is the
+        question to sit with, not a plan.
+      </p>
+    </div>
+  </section>
+
+  <!-- 4. Avenues -->
+  <section id="avenues">
+    <h2>Avenues</h2>
+
+    <div class="avenue-group-title">Mild</div>
+
+    <!-- Card 1 -->
+    <div class="avenue-card" data-card id="card-1">
+      <div class="avenue-top">
+        <span class="avenue-number">1</span>
+        <span class="avenue-title">Make real status one click</span>
+        <span class="badge-mild" data-dial-badge>MILD</span>
+        <span class="avenue-cost">Cost S–M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> HookInstaller only seeds the script; it should register the seven hooks itself behind a visible opt-in, idempotently and reversibly, and the sidebar should say so when status is still guessing.</p>
+          <p><strong>Traction:</strong> it is the one thing beta.24 promised that a new user cannot find.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="1"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="1" data-title="Make real status one click">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 2 -->
+    <div class="avenue-card" data-card id="card-2">
+      <div class="avenue-top">
+        <span class="avenue-number">2</span>
+        <span class="avenue-title">Close the loop: beta.25</span>
+        <span class="badge-mild" data-dial-badge>MILD</span>
+        <span class="avenue-cost">Cost S</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> Tab-inserts-a-space is local-only, variant C has never been seen on screen, the npm installer is unpublished at 0.2.0, the Homebrew auto-bump PAT is unset. beta.25 is also the first real run of the rebuilt release pipeline.</p>
+          <p><strong>Traction:</strong> none by itself. It unblocks everything under it.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="2"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="2" data-title="Close the loop: beta.25">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 3 -->
+    <div class="avenue-card" data-card id="card-3">
+      <div class="avenue-top">
+        <span class="avenue-number">3</span>
+        <span class="avenue-title">Turn the lights on</span>
+        <span class="badge-mild" data-dial-badge>MILD</span>
+        <span class="avenue-cost">Cost S</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> ghostties.org has no analytics at all and the repo has no docs beyond the README. Enable Vercel Web Analytics (included with the plan up to a monthly event cap — check the cap first; Plausible is about $9/mo if you would rather not), open GitHub Discussions, and add /docs with four pages: real status setup, gt, the MCP server, shortcuts.</p>
+          <p><strong>Traction:</strong> you cannot grow what you cannot see.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="3"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="3" data-title="Turn the lights on">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 4 -->
+    <div class="avenue-card" data-card id="card-4">
+      <div class="avenue-top">
+        <span class="avenue-number">4</span>
+        <span class="avenue-title">Record the hero film</span>
+        <span class="badge-mild" data-dial-badge>MILD</span>
+        <span class="avenue-cost">Cost S–M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> the capture rig exists (XCUITest marketing capture) and the TCC screen-capture block that stalled it is solved. 14 seconds, dark and light, today's still becomes the poster.</p>
+          <p><strong>Traction:</strong> the homepage claim is "status you can read at a glance". A still cannot show a glance.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="4"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="4" data-title="Record the hero film">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 5 -->
+    <div class="avenue-card" data-card id="card-5">
+      <div class="avenue-top">
+        <span class="avenue-number">5</span>
+        <span class="avenue-title">Ship v0.1.0 stable and one launch post</span>
+        <span class="badge-mild" data-dial-badge>MILD</span>
+        <span class="avenue-cost">Cost M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> 24 betas reads as never shipping. Cut stable, drop "beta" from the site, light the stable appcast, write one launch post in Sean's voice (through the writing:draft flow).</p>
+          <p><strong>Traction:</strong> the only real launch moment available. Show HN / X post.</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> stable means the crash-class bugs (CEF, status) are actually closed for strangers.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="5"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="5" data-title="Ship v0.1.0 stable and one launch post">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <div class="avenue-group-title">Medium</div>
+
+    <!-- Card 6 -->
+    <div class="avenue-card" data-card id="card-6">
+      <div class="avenue-top">
+        <span class="avenue-number">6</span>
+        <span class="avenue-title">Preset gallery</span>
+        <span class="badge-medium" data-dial-badge>MEDIUM</span>
+        <span class="avenue-cost">Cost M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> the March plan promised Orchestrator, Reviewer and Planner presets; only linear-sync shipped. Four to six curated presets, seeded to both ~/.ghostties/presets/ and ~/.claude/prompts/.</p>
+          <p><strong>Traction:</strong> a new user's first session should be one click, not a blank command field.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="6"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="6" data-title="Preset gallery">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 7 -->
+    <div class="avenue-card" data-card id="card-7">
+      <div class="avenue-top">
+        <span class="avenue-number">7</span>
+        <span class="avenue-title">Menu bar and notifications</span>
+        <span class="badge-medium" data-dial-badge>MEDIUM</span>
+        <span class="avenue-cost">Cost M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> MenuBar/ has three files already (controller, dropdown, icon renderer). Ship the dropdown with per-project status and a macOS notification when a session needs you, click to focus.</p>
+          <p><strong>Traction:</strong> the value lands when the window is NOT focused. Right now nothing reaches you then.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="7"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="7" data-title="Menu bar and notifications">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 8 -->
+    <div class="avenue-card" data-card id="card-8">
+      <div class="avenue-top">
+        <span class="avenue-number">8</span>
+        <span class="avenue-title">Ghost glyph owns status</span>
+        <span class="badge-medium" data-dial-badge>MEDIUM</span>
+        <span class="avenue-cost">Cost M–L</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> the spec is complete (six decisions settled 26 Aug). Blocked on one thing — no pid/sessionId on AgentSession — so rows cannot read ~/.claude/sessions/&lt;pid&gt;.json yet.</p>
+          <p><strong>Traction:</strong> this is the homepage promise made literal.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="8"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="8" data-title="Ghost glyph owns status">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 9 -->
+    <div class="avenue-card" data-card id="card-9">
+      <div class="avenue-top">
+        <span class="avenue-number">9</span>
+        <span class="avenue-title">Build in public, weekly</span>
+        <span class="badge-medium" data-dial-badge>MEDIUM</span>
+        <span class="avenue-cost">Cost: writing time, zero code</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> the CEF crash hunt, the composer saga, 24 betas from a designer — the making-of is the marketing and it already exists in the repo's plans and evidence folders.</p>
+          <p><strong>Traction:</strong> the only lever that moves the funnel numbers without shipping code.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="9"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="9" data-title="Build in public, weekly">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <div class="avenue-group-title">Wild</div>
+
+    <!-- Card 10 -->
+    <div class="avenue-card" data-card id="card-10">
+      <div class="avenue-top">
+        <span class="avenue-number">10</span>
+        <span class="avenue-title">The Claude Code cockpit</span>
+        <span class="badge-wild" data-dial-badge>WILD</span>
+        <span class="avenue-cost">Cost L</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> a session detail panel reading the session log: todos, tokens and cost, last tool, time since last output. Ghostties would know more about your sessions than Claude Code's own UI.</p>
+          <p><strong>Traction:</strong> a demo nobody else has.</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> the log format is undocumented and will change under you.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="10"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="10" data-title="The Claude Code cockpit">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 11 -->
+    <div class="avenue-card" data-card id="card-11">
+      <div class="avenue-top">
+        <span class="avenue-number">11</span>
+        <span class="avenue-title">gt and the MCP server as standalone installs</span>
+        <span class="badge-wild" data-dial-badge>WILD</span>
+        <span class="avenue-cost">Cost M–L</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> publish both on npm and brew, usable without Ghostties — in Warp, iTerm, tmux. The task file format becomes a small spec others can read.</p>
+          <p><strong>Traction:</strong> distribution through the ecosystem instead of the app. The CLI is the free sample; the app is where you see it.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="11"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="11" data-title="gt and the MCP server as standalone installs">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 12 -->
+    <div class="avenue-card" data-card id="card-12">
+      <div class="avenue-top">
+        <span class="avenue-number">12</span>
+        <span class="avenue-title">Glance from your phone</span>
+        <span class="badge-wild" data-dial-badge>WILD</span>
+        <span class="avenue-cost">Cost XL</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> a read-only iPhone view of session status — "what finished overnight" from bed.</p>
+          <p><strong>Traction:</strong> the north-star moment (morning glance) without opening the laptop.</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> the mission says no sync, no accounts. This is the card that breaks that rule.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="12"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="12" data-title="Glance from your phone">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 13 -->
+    <div class="avenue-card" data-card id="card-13">
+      <div class="avenue-top">
+        <span class="avenue-number">13</span>
+        <span class="avenue-title">Un-fork</span>
+        <span class="badge-wild" data-dial-badge>WILD</span>
+        <span class="avenue-cost">Cost XL</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> the sidebar as a companion app hosting stock libghostty, instead of a 25.5k-line fork that chases upstream. The earlier evaluation chose GhosttyKit and closed the question; the new evidence is fork size and the weight of embedded Chromium.</p>
+          <p><strong>Traction:</strong> none directly. Cheaper upstream merges, and a product that could outlive the fork.</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> a question to sit with, not a plan. Presented because you asked for wild.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="13"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="13" data-title="Un-fork">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- Part two -->
+  <section id="part-two">
+    <h2>Part two — <span id="agent-forward-highlight">agent-forward</span></h2>
+
+    <div class="avenue-card part2-intro-card" id="part2-intro-card" data-card>
+      <p><strong>Then:</strong> "the multi-agent terminal." What shipped: a multi-session terminal. Good, and not the same thing.</p>
+      <p><strong>Now:</strong> agents are persistent staff — a name, a role, a model tier, tools, skills, memory. A session is one of them doing one task.</p>
+      <p><strong><span id="part2-next-word">Next:</span></strong> keep everything above; make Ghostties the place those agents live.</p>
+    </div>
+
+    <div class="part2-ghost-row" id="part2-ghost-row"></div>
+
+    <h3>What already exists</h3>
+    <ul class="findings-list" id="part2-exists-list">
+      <li>Every session and every project already carries a pixel ghost (<code>AgentSession.ghostCharacter</code>, project ghost picker). Identity is per session and per project today, not per agent.</li>
+      <li>Sean's agents already exist as files: <code>~/.claude/agents/{explore,implementer,planner,reviewer,strategist}.md</code> — frontmatter with <code>name</code>, <code>description</code>, <code>model</code>, tools. Nothing in Ghostties reads them.</li>
+      <li>Templates in the composer are the nearest thing to an agent: a name plus a command. Only <code>linear-sync</code> ships as a preset.</li>
+      <li>The task layer (<code>gt</code>, the MCP server's 12 tools, <code>.ghostties/tasks/*.md</code>) already lets an agent file and update its own work.</li>
+    </ul>
+
+    <div class="recommendation" id="part2-recommendation-card" data-card data-stroke-accent>
+      <p>
+        My pick: 14 and 15 first — they are the reframe, and they are cheap because the agent files
+        already exist. 17 is the move that makes it feel like staff. 20 is the wild one I'd
+        actually build; 22 is the one that breaks the mission, listed because you asked for wild.
+        Positioning (23) waits until 14 is on screen — name the thing after you can see it.
+      </p>
+    </div>
+
+    <div class="avenue-group-title">Mild</div>
+
+    <!-- Card 14 -->
+    <div class="avenue-card" data-card id="card-14">
+      <div class="avenue-top">
+        <span class="avenue-number">14</span>
+        <span class="avenue-title">Ghosts identify agents, not just sessions</span>
+        <span class="badge-mild" data-dial-badge>MILD</span>
+        <span class="avenue-cost">Cost S–M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> today a ghost means "this session" or "this project". Give each agent definition a ghost and a name; a session row shows WHO is working (the agent's ghost) and on what. Frank's ghost is the one bouncing.</p>
+          <p><strong>Traction:</strong> this is the visible reframe. One screenshot says "staff", not "tabs".</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> the mission says the mascot does not personify the interface. Agents are not the interface — but this moves the ghost from brand to a working glyph. Decide on purpose.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="14"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="14" data-title="Ghosts identify agents, not just sessions">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 15 -->
+    <div class="avenue-card" data-card id="card-15">
+      <div class="avenue-top">
+        <span class="avenue-number">15</span>
+        <span class="avenue-title">A Staff tab that reads the files you already have</span>
+        <span class="badge-mild" data-dial-badge>MILD</span>
+        <span class="avenue-cost">Cost M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> a third sidebar tab (Projects · Sessions · Staff). One row per agent, read straight from <code>~/.claude/agents/*.md</code> and each repo's <code>.claude/agents/</code>: name, ghost, role line, model tier, last active, sessions running now. Click a row, the composer opens with that agent chosen.</p>
+          <p><strong>Traction:</strong> zero new config format. Ghostties becomes the UI over files the ecosystem already uses, which is the only way a personal tool wins here.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="15"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="15" data-title="A Staff tab that reads the files you already have">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 16 -->
+    <div class="avenue-card" data-card id="card-16">
+      <div class="avenue-top">
+        <span class="avenue-number">16</span>
+        <span class="avenue-title">One line from the agent</span>
+        <span class="badge-mild" data-dial-badge>MILD</span>
+        <span class="avenue-cost">Cost S–M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> the status hooks already carry the agent's last notification or permission request. Show one factual line under a row when it needs you — "needs a decision on the auth flow" — not a chat, not a mood. Tool, not companion.</p>
+          <p><strong>Traction:</strong> the glance gets an answer, not just a colour.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="16"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="16" data-title="One line from the agent">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <div class="avenue-group-title">Medium</div>
+
+    <!-- Card 17 -->
+    <div class="avenue-card" data-card id="card-17">
+      <div class="avenue-top">
+        <span class="avenue-number">17</span>
+        <span class="avenue-title">Hand it to Bob</span>
+        <span class="badge-medium" data-dial-badge>MEDIUM</span>
+        <span class="avenue-cost">Cost M</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> a session row's context menu gets "Hand to…" listing your staff. Pick Bob: a handoff brief is generated from the current session (Sean already has a <code>/handoff</code> skill that does this), Bob starts with it, the row's ghost changes. The old session stays, parked.</p>
+          <p><strong>Traction:</strong> the moment sessions become staff. Work moves between people; it does not restart.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="17"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="17" data-title="Hand it to Bob">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 18 -->
+    <div class="avenue-card" data-card id="card-18">
+      <div class="avenue-top">
+        <span class="avenue-number">18</span>
+        <span class="avenue-title">Agent detail pane</span>
+        <span class="badge-medium" data-dial-badge>MEDIUM</span>
+        <span class="avenue-cost">Cost M–L</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> click an agent in Staff: role, model tier and effort, allowed tools, the skills it carries, its last five memories, sessions this week, cost this week. Edit tier and effort in place; it writes the frontmatter back.</p>
+          <p><strong>Traction:</strong> the first place you can actually see what your agents are made of.</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> cost needs the session logs (Part one, card 10) — same undocumented format.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="18"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="18" data-title="Agent detail pane">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 19 -->
+    <div class="avenue-card" data-card id="card-19">
+      <div class="avenue-top">
+        <span class="avenue-number">19</span>
+        <span class="avenue-title">Standing agents</span>
+        <span class="badge-medium" data-dial-badge>MEDIUM</span>
+        <span class="avenue-cost">Cost M–L</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> some staff do not wait for you. "Charlie runs the morning briefing at 07:30", "Reviewer runs on every PR". They show in Staff as sleeping ghosts with a next-run time; when one runs, a session appears in Sessions like any other. Claude Code's scheduled routines are the engine; Ghostties is the roster.</p>
+          <p><strong>Traction:</strong> the sidebar is true when you are not there. That is the north-star morning glance.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="19"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="19" data-title="Standing agents">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 20 -->
+    <div class="avenue-card" data-card id="card-20">
+      <div class="avenue-top">
+        <span class="avenue-number">20</span>
+        <span class="avenue-title">Show the tree</span>
+        <span class="badge-medium" data-dial-badge>MEDIUM</span>
+        <span class="avenue-cost">Cost L</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> an orchestrator dispatches implementers, a reviewer checks them, they message each other. Today that is invisible. Indent child sessions under their parent in the sidebar; show who is waiting on whom; collapse the wave into one row when it is quiet.</p>
+          <p><strong>Traction:</strong> the honest picture of what "multi-agent" means in 2026 — a tree, not a list. Nobody draws it.</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> parent/child needs the harness to say who spawned whom. The status hooks are the seam; the data may not be there yet.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="20"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="20" data-title="Show the tree">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <div class="avenue-group-title">Wild</div>
+
+    <!-- Card 21 -->
+    <div class="avenue-card" data-card id="card-21">
+      <div class="avenue-top">
+        <span class="avenue-number">21</span>
+        <span class="avenue-title">Agents that outlive the laptop</span>
+        <span class="badge-wild" data-dial-badge>WILD</span>
+        <span class="avenue-cost">Cost L–XL</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> cloud sessions and managed agents show in the same Staff roster as local ones — same ghost, a small cloud badge. Start Vinnie in the cloud from the composer, watch from the sidebar, pull the result down. Codex agents in the same roster, read from <code>AGENTS.md</code> and its config profiles, so the roster is harness-neutral.</p>
+          <p><strong>Traction:</strong> Ghostties as the neutral home, whichever vendor runs the agent. Rare position.</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> two vendors' state formats, both moving.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="21"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="21" data-title="Agents that outlive the laptop">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 22 -->
+    <div class="avenue-card" data-card id="card-22">
+      <div class="avenue-top">
+        <span class="avenue-number">22</span>
+        <span class="avenue-title">Share your staff</span>
+        <span class="badge-wild" data-dial-badge>WILD</span>
+        <span class="avenue-cost">Cost XL</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> export an agent — frontmatter, skills, a memory seed — as one bundle; import someone else's "Reviewer Rita". A community roster.</p>
+          <p><strong>Traction:</strong> the only card here that brings other people's work into the app.</p>
+          <p class="avenue-watch"><strong>Watch out:</strong> the mission lists marketplaces as an anti-goal. This is the card that breaks it.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="22"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="22" data-title="Share your staff">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+    <!-- Card 23 -->
+    <div class="avenue-card" data-card id="card-23">
+      <div class="avenue-top">
+        <span class="avenue-number">23</span>
+        <span class="avenue-title">Say what it is now</span>
+        <span class="badge-wild" data-dial-badge>WILD</span>
+        <span class="avenue-cost">Cost S (copy) — and only after 14 is on screen</span>
+      </div>
+      <div class="avenue-body">
+        <div class="avenue-text">
+          <p><strong>Why now:</strong> "the multi-agent terminal" undersells the direction and overclaims the present. Three strawmen, Sean's call, run through his voice before any of them ships.</p>
+          <p><strong>Traction:</strong> the tagline is the first thing a stranger reads. It should describe the thing they will see in the hero film.</p>
+        </div>
+        <div class="avenue-sketch-slot">
+          <div class="sketch" data-sketch="23"></div>
+        </div>
+      </div>
+      <div class="avenue-bottom" data-pick-row data-avenue="23" data-title="Say what it is now">
+        <label><span data-checkbox-wrap><input type="checkbox" /></span> Worth talking about</label>
+        <span class="avenue-note" data-input-wrap><input type="text" placeholder="one-line note" /></span>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- Part three -->
+  <section id="part-three">
+    <h2>Part three — after <span id="visual-pass-underline">the visual pass</span></h2>
+
+    <div class="avenue-card part3-intro-card" id="part3-intro-card" data-card>
+      <p>17 of 18 states captured on 5 Sep from a fixture-mode Dev build. Invented project names, canned transcript, no contact with the live app.</p>
+      <p>The records said what exists. The pixels say how it reads. Below: what the captures showed, what moved in the ranking, and the defects that fell out.</p>
+    </div>
+
+    <h3>What the captures showed</h3>
+    <ul class="findings-list" id="part3-findings-list">
+      <li class="finding-block">
+        <p><strong>Status is two colours and no legend.</strong> Sessions tab: a green ghost means working, a blue one means idle. Projects tab: session rows show a grey ghost and no status at all. The fixture has no "needs you" session, so the terracotta signal the homepage sells never appears anywhere.</p>
+        <div class="capture-grid">
+          <figure class="capture-card" data-card>
+            <img src="./captures/sessions.png" alt="Sessions tab" />
+            <figcaption class="capture-caption">Sessions tab. Green or blue, no key.</figcaption>
+          </figure>
+          <figure class="capture-card" data-card>
+            <img src="./captures/projects-expanded.png" alt="Projects tab" />
+            <figcaption class="capture-caption">Projects tab. Session rows carry no status.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li class="finding-block">
+        <p><strong>The composer is the strongest surface.</strong> Inline ghost text, a <code>Run "swi"</code> row, five templates (Browser, Shell, Claude Code, Codex, Orchestrator), and an inline New template row with an icon picker.</p>
+        <div class="capture-grid">
+          <figure class="capture-card" data-card>
+            <img src="./captures/composer-typed.png" alt="Composer typed 'swi'" />
+            <figcaption class="capture-caption">Typed 'swi'. Ghost text completes the whole destination.</figcaption>
+          </figure>
+          <figure class="capture-card" data-card>
+            <img src="./captures/new-template.png" alt="New template inline row" />
+            <figcaption class="capture-caption">New template is inline, with an icon picker.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li class="finding-block">
+        <p><strong>Two composer questions need your eyes and a real repo.</strong> After <code>swi</code> and Tab the field reads <code>switchboard &gt; Browser</code>: the branch segment is gone and a chevron sits where the 2 Sep decision says Tab inserts a space. And <code>switchboard &gt; feat/demo</code> shows a red "branch not found" with no offer to create it. The fixture folders are not git repositories, so this may be the no-repo path.</p>
+        <div class="capture-grid">
+          <figure class="capture-card" data-card>
+            <img src="./captures/composer-tab.png" alt="Composer after Tab" />
+            <figcaption class="capture-caption">After Tab. Is that chevron typed text?</figcaption>
+          </figure>
+          <figure class="capture-card" data-card>
+            <img src="./captures/composer-chevron.png" alt="Composer branch not found" />
+            <figcaption class="capture-caption">A branch that does not exist. Red string, no way forward.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li class="finding-block">
+        <p><strong>Overlay mode captured broken or mid-transition.</strong> Traffic lights drawn over "New Project", the terminal shifted up under the title bar, no sidebar visible. The same title-bar collision appears when the browser opens.</p>
+        <div class="capture-grid">
+          <figure class="capture-card" data-card>
+            <img src="./captures/sidebar-overlay.png" alt="Sidebar overlay mid-transition" />
+            <figcaption class="capture-caption">Hover at the left edge, 0.6 s later.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li class="finding-block">
+        <p><strong>The browser opens as a separate floating window, loads the network, and the process cannot terminate afterwards.</strong> Three of three runs, Debug build, fresh profile. The downgrade guard fixed one cause; the browser is not settled.</p>
+      </li>
+      <li class="finding-block">
+        <p><strong>The menu bar dropdown is already live.</strong> Grouped by project, status dots, an "Open Ghostties" button. Only notifications are missing.</p>
+        <div class="capture-grid">
+          <figure class="capture-card" data-card>
+            <img src="./captures/menu-bar.png" alt="Menu bar dropdown" />
+            <figcaption class="capture-caption">Already shipping. Nobody knew.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li class="finding-block">
+        <p><strong>The context menu is Rename, Relaunch, Delete.</strong> No archive, no pin, no hand-off, no open-in.</p>
+        <div class="capture-grid">
+          <figure class="capture-card" data-card>
+            <img src="./captures/session-context-menu.png" alt="Session context menu" />
+            <figcaption class="capture-caption">Three verbs.</figcaption>
+          </figure>
+        </div>
+      </li>
+      <li class="finding-block">
+        <p><strong>Task-first never rendered.</strong> The capture named task-first shows the Projects tab, and the run log called it captured. The task layer stays unseen.</p>
+      </li>
+      <li class="finding-block">
+        <p><strong>Sidebar closed is clean and flush.</strong> Ghostty's "70 × 46" resize overlay flashes on every toggle. Minor.</p>
+      </li>
+    </ul>
+
+    <h3>Rig facts</h3>
+    <ul class="findings-list rig-facts" id="part3-rig-facts" data-card>
+      <li>The UI test target was unrunnable from the command line until a three-line project fix, applied on a local branch only.</li>
+      <li>Window screenshots include whatever overlaps the window. One capture picked up a second Dev window with the real hostname; it is not on this page.</li>
+      <li>The fixture has no waiting session. Add one before filming anything.</li>
+      <li>One "captured" state was a false positive. A file existing is not the state existing.</li>
+    </ul>
+
+    <h3>What moved</h3>
+    <div class="moved-table-card" id="part3-moved-table-card" data-card>
+      <table class="moved-table">
+        <thead>
+          <tr>
+            <th>Avenue</th>
+            <th>Was</th>
+            <th>Now</th>
+            <th>Why</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1 Make real status one click</td>
+            <td>first</td>
+            <td>first</td>
+            <td>Everything on screen is the inferred status.</td>
+          </tr>
+          <tr>
+            <td>8 Ghost glyph owns status</td>
+            <td>medium</td>
+            <td>top of medium, paired with 16</td>
+            <td>On screen the promise is a green-or-blue ghost with no key. Project rows show none.</td>
+          </tr>
+          <tr>
+            <td>16 One line from the agent</td>
+            <td>mild</td>
+            <td>paired with 8</td>
+            <td>Same reason. Colour needs a sentence.</td>
+          </tr>
+          <tr>
+            <td>4 Record the hero film</td>
+            <td>this week</td>
+            <td>after the fixture gains a "needs you" row</td>
+            <td>There is nothing to film until a row can say it.</td>
+          </tr>
+          <tr>
+            <td>7 Menu bar and notifications</td>
+            <td>M</td>
+            <td>S–M</td>
+            <td>The dropdown exists. Notifications and click-to-focus remain.</td>
+          </tr>
+          <tr>
+            <td>6 Preset gallery</td>
+            <td>medium</td>
+            <td>lower</td>
+            <td>Five templates ship, Codex and Orchestrator included. The gap is what they contain, not the picker.</td>
+          </tr>
+          <tr>
+            <td>2 Close the loop: beta.25</td>
+            <td>S</td>
+            <td>S, blocked on item 3 above</td>
+            <td>Variant C is confirmed on screen. The Tab question blocks the push.</td>
+          </tr>
+          <tr>
+            <td>17 Hand it to Bob</td>
+            <td>M</td>
+            <td>M</td>
+            <td>The three-verb context menu is its obvious home.</td>
+          </tr>
+          <tr>
+            <td>everything else</td>
+            <td>—</td>
+            <td>unchanged</td>
+            <td>The pass did not touch it.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="recommendation" id="part3-recommendation-card" data-card data-stroke-accent>
+      <p>
+        "The pass moved one thing above everything but real status: make status legible. 8 and 16
+        together, before the hero film, because the film has nothing to show until a row can say
+        'needs you'. Then 4. Menu bar drops to a small follow-on. Two composer questions go to
+        Sean with a real repo, not to an agent."
+      </p>
+    </div>
+
+    <h3>Defects, not avenues</h3>
+    <ul class="findings-list defects-list" id="part3-defects-list">
+      <li>Title-bar collision on sidebar overlay and on browser open: traffic lights over "New Project", terminal shifted under the title bar.</li>
+      <li>Tab after an accepted completion renders a chevron and drops the branch segment. Verify against the 2 Sep decision that Tab inserts a space.</li>
+      <li>Browser opens as a separate floating window; the process cannot terminate after opening it (Debug, fresh CEF profile, 3/3).</li>
+      <li>Task-first capture was a false positive; the Dev-domain defaults key did not take under XCUITest, or the forced ⌘⇧1 switched away.</li>
+      <li>Capture fixture has no "needs you" session, and window captures include overlapping windows.</li>
+      <li>Ghost colour on project rows (black vs blue) carries meaning that nothing explains.</li>
+    </ul>
+  </section>
+
+  <p class="footer-line">Numbers from GitHub, npm and Vercel on 5 Sep 2026. Not published anywhere.</p>
+</div>
+
+<div class="picks-bar">
+  <hr id="picks-divider" style="position:absolute; top:0; left:0; right:0; margin:0; width:100%;" />
+  <span class="picks-count" id="picks-count">0 picked</span>
+  <button id="copy-picks-btn" type="button">Copy picks</button>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,530 @@
+:root {
+  --paper: #faf8f3;
+  --ink: #1d1a17;
+  --accent: #c8572d;
+  --drawably-stroke: var(--ink);
+  --drawably-fill: var(--ink);
+  --drawably-paper: var(--paper);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+code {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  padding-bottom: 96px;
+}
+
+.wrap {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 48px 24px 24px;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+section {
+  margin: 56px 0;
+}
+
+section h2 {
+  font-size: 28px;
+  margin-bottom: 24px;
+}
+
+/* Masthead */
+
+.masthead h1 {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.masthead .dek {
+  font-size: 16px;
+  color: rgba(29, 26, 23, 0.75);
+  margin: 0 0 24px;
+  max-width: 640px;
+}
+
+.legend-badges {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.legend-badges .badge-wild {
+  color: var(--accent);
+}
+
+.cost-legend {
+  font-size: 13px;
+  color: rgba(29, 26, 23, 0.65);
+}
+
+/* Stat cards */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stat-card {
+  padding: 20px;
+}
+
+.stat-card .stat-number {
+  font-size: 24px;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.stat-card .stat-label {
+  font-size: 13px;
+  color: rgba(29, 26, 23, 0.75);
+}
+
+/* Findings list */
+
+.findings-list li {
+  margin-bottom: 14px;
+}
+
+.findings-list strong {
+  font-weight: 600;
+}
+
+/* Recommendation strip */
+
+.recommendation {
+  padding: 20px 24px;
+}
+
+/* Avenue group headers */
+
+.avenue-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(29, 26, 23, 0.55);
+  margin: 40px 0 16px;
+}
+
+/* Avenue cards */
+
+.avenue-card {
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.avenue-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.avenue-top .avenue-number {
+  font-weight: 600;
+  color: rgba(29, 26, 23, 0.55);
+}
+
+.avenue-top .avenue-title {
+  font-weight: 600;
+  font-size: 16px;
+  margin-right: auto;
+}
+
+.avenue-top .avenue-cost {
+  font-size: 13px;
+  color: rgba(29, 26, 23, 0.65);
+}
+
+.avenue-body {
+  display: grid;
+  grid-template-columns: 60% 40%;
+  gap: 20px;
+}
+
+@media (max-width: 640px) {
+  .avenue-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.avenue-text p {
+  margin: 0 0 8px;
+}
+
+.avenue-text .avenue-watch {
+  color: var(--accent);
+}
+
+.avenue-sketch-slot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.sketch {
+  width: 100%;
+  max-width: 340px;
+}
+
+.sketch > svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.sketch-window {
+  padding: 10px 12px;
+}
+
+.sketch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(29, 26, 23, 0.7);
+  padding: 4px 0;
+}
+
+.sketch-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.ghost-glyph {
+  display: inline-block;
+  vertical-align: middle;
+  width: 14px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.avenue-bottom {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.avenue-bottom label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.avenue-note {
+  flex: 1;
+  min-width: 160px;
+}
+
+.avenue-note input {
+  width: 100%;
+}
+
+/* Footer picks bar */
+
+.picks-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--paper);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  z-index: 10;
+}
+
+.picks-bar .picks-count {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rough-path {
+  fill: none;
+  stroke: var(--drawably-stroke, var(--ink));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rough-fill {
+  fill: var(--drawably-fill, var(--ink));
+  stroke: none;
+}
+
+.svg-label {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 11px;
+  fill: var(--ink);
+  fill-opacity: 0.7;
+}
+
+.svg-label-strong {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.svg-label-accent {
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 11px;
+  fill: var(--accent);
+}
+
+.footer-line {
+  font-size: 12px;
+  color: rgba(29, 26, 23, 0.55);
+  margin-top: 48px;
+}
+
+/* Jump row */
+
+.jump-row {
+  font-size: 14px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.jump-sep {
+  color: rgba(29, 26, 23, 0.4);
+}
+
+/* Part two intro + ghost row */
+
+.part2-intro-card {
+  margin-bottom: 24px;
+}
+
+.part2-intro-card p {
+  margin: 0 0 8px;
+}
+
+.part2-ghost-row {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+  margin: 0 0 40px;
+  padding: 8px 4px;
+}
+
+.part2-ghost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.part2-ghost-label {
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(29, 26, 23, 0.65);
+  white-space: nowrap;
+}
+
+/* Sketch extras */
+
+.sketch-tab,
+.sketch-tab-active {
+  font-size: 11px;
+  padding: 2px 6px;
+  color: rgba(29, 26, 23, 0.5);
+}
+
+.sketch-tab-active {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sketch-chip {
+  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px solid rgba(29, 26, 23, 0.4);
+  border-radius: 8px;
+  margin-left: auto;
+}
+
+.sketch-chip-accent {
+  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 8px;
+}
+
+.sketch-subtitle {
+  font-size: 11px;
+  color: rgba(29, 26, 23, 0.55);
+  padding: 2px 0 6px;
+}
+
+.sketch-row-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sketch-indent-1 {
+  padding-left: 16px;
+}
+
+.sketch-indent-2 {
+  padding-left: 32px;
+}
+
+.rough-path-dashed {
+  fill: none;
+  stroke: var(--drawably-stroke, var(--ink));
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 4 4;
+}
+
+.sketch-taglines {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.sketch-tagline {
+  font-size: 13px;
+  padding: 2px 4px;
+}
+
+/* Part three: captures + rig facts + table */
+
+.part3-intro-card {
+  margin-bottom: 24px;
+}
+
+.part3-intro-card p {
+  margin: 0 0 8px;
+}
+
+.capture-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0 24px;
+}
+
+@media (max-width: 640px) {
+  .capture-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.capture-card {
+  padding: 12px;
+}
+
+.capture-card img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.capture-caption {
+  font-size: 12px;
+  color: rgba(29, 26, 23, 0.65);
+  margin-top: 8px;
+}
+
+.finding-block {
+  margin-bottom: 32px;
+}
+
+.finding-block .findings-list {
+  margin-bottom: 12px;
+}
+
+.rig-facts {
+  padding: 20px 24px;
+}
+
+.rig-facts li {
+  margin-bottom: 8px;
+}
+
+.moved-table-card {
+  padding: 20px 24px;
+  overflow-x: auto;
+}
+
+.moved-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.moved-table th,
+.moved-table td {
+  text-align: left;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid rgba(29, 26, 23, 0.15);
+  vertical-align: top;
+}
+
+.moved-table th {
+  font-weight: 600;
+  color: rgba(29, 26, 23, 0.65);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.defects-list li {
+  margin-bottom: 10px;
+}
