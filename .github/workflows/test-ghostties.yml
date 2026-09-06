@@ -173,6 +173,8 @@ jobs:
         working-directory: macos
         continue-on-error: true
         timeout-minutes: 15
+        env:
+          TEST_RUNNER_GHOSTTIES_UI_CAPTURE: "1"
         run: |
           set -o pipefail
           xcodebuild test-without-building \
@@ -182,7 +184,6 @@ jobs:
             -derivedDataPath build \
             -only-testing:GhosttyUITests/VisualPassUITests \
             ONLY_ACTIVE_ARCH=YES \
-            TEST_RUNNER_GHOSTTIES_UI_CAPTURE=1 \
             ARCHS=arm64 \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO
