@@ -5,10 +5,11 @@ import XCTest
 /// `scripts/capture-marketing.sh` — see that script for the build +
 /// convert-to-WebP pipeline this test's output feeds into.
 ///
-/// Deliberately NOT gated behind the `IDE_DISABLED_OS_ACTIVITY_DT_MODE`
-/// guard other UI tests in this file use — same reasoning as
-/// `MarketingCaptureSpikeUITests`: this must run from a plain `xcodebuild
-/// test` CLI invocation, which is exactly how the capture script drives it.
+/// Skipped unless `GHOSTTIES_UI_CAPTURE=1` reaches the test runner — an
+/// unfiltered `xcodebuild test` must never launch the app. From the CLI pass
+/// `TEST_RUNNER_GHOSTTIES_UI_CAPTURE=1` to `xcodebuild` (the `TEST_RUNNER_`
+/// prefix is how xcodebuild forwards env to the runner), combined with
+/// `-only-testing:GhosttyUITests/MarketingCaptureUITests`.
 ///
 /// Every launch sets `GHOSTTIES_CAPTURE_FIXTURE=1` in the launch
 /// environment (see `CaptureFixture`), so the captured window shows an
@@ -16,6 +17,14 @@ import XCTest
 /// Sean's real workspace. See `BACKLOG.md` @ 2026-08-21 for why this
 /// replaced the HTML replica.
 final class MarketingCaptureUITests: XCTestCase {
+    override class var defaultTestSuite: XCTestSuite {
+        if ProcessInfo.processInfo.environment["GHOSTTIES_UI_CAPTURE"] == "1" {
+            return XCTestSuite(forTestCaseClass: Self.self)
+        } else {
+            return XCTestSuite(name: "Skipping \(className()) (set GHOSTTIES_UI_CAPTURE=1 to run)")
+        }
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }

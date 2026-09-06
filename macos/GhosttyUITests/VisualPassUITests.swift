@@ -3,9 +3,13 @@ import XCTest
 /// Visual & usage pass — captures the app's main surfaces across 18 states in
 /// fixture mode, for the 2026-09-05 audit. Modeled on `MarketingCaptureUITests`:
 /// same launch environment, same fixture assertion, same sandboxed temp-dir
-/// output with `CAPTURE_OUTPUT: <path>` lines. NOT gated behind
-/// `IDE_DISABLED_OS_ACTIVITY_DT_MODE` — must run from a plain `xcodebuild test`
-/// CLI invocation.
+/// output with `CAPTURE_OUTPUT: <path>` lines.
+///
+/// Skipped unless `GHOSTTIES_UI_CAPTURE=1` reaches the test runner — an
+/// unfiltered `xcodebuild test` must never launch the app. From the CLI pass
+/// `TEST_RUNNER_GHOSTTIES_UI_CAPTURE=1` to `xcodebuild` (the `TEST_RUNNER_`
+/// prefix is how xcodebuild forwards env to the runner), combined with
+/// `-only-testing:GhosttyUITests/VisualPassUITests`.
 ///
 /// Each test method is independent (fresh launch) and captures exactly one
 /// state. Where a state cannot be reached with element queries, the test
@@ -16,6 +20,14 @@ import XCTest
 /// below is by static text or menu title. Places that had to guess are
 /// annotated inline.
 final class VisualPassUITests: XCTestCase {
+    override class var defaultTestSuite: XCTestSuite {
+        if ProcessInfo.processInfo.environment["GHOSTTIES_UI_CAPTURE"] == "1" {
+            return XCTestSuite(forTestCaseClass: Self.self)
+        } else {
+            return XCTestSuite(name: "Skipping \(className()) (set GHOSTTIES_UI_CAPTURE=1 to run)")
+        }
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
     }

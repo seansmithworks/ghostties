@@ -182,6 +182,7 @@ jobs:
             -derivedDataPath build \
             -only-testing:GhosttyUITests/VisualPassUITests \
             ONLY_ACTIVE_ARCH=YES \
+            TEST_RUNNER_GHOSTTIES_UI_CAPTURE=1 \
             ARCHS=arm64 \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO
