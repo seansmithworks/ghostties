@@ -239,35 +239,12 @@ final class AccessibilityTests: XCTestCase {
             "Composer query field must have a non-empty VoiceOver label")
     }
 
-    func testComposerTrailingControlsCarryTheirCurrentValue() {
-        // DEFECT 4 fix (Composer UI 11 review round 2): same shape as
-        // `testComposerQueryFieldHasLabelAndValueSeparateFromEachOther`
-        // above — round 1 asserted local literals against themselves, which
-        // named no production symbol. Now asserts against
-        // `SessionComposerPalette.accessibilityProjectControlLabel`/
-        // `accessibilityBranchControlLabel`/
-        // `accessibilityBranchControlDefaultValue`, the literal symbols
-        // `projectControl`/`branchControl` actually render
-        // `.accessibilityLabel`/`.accessibilityValue` with.
-        //
-        // Fix 6 (round 1, still the underlying rationale): `.accessibilityLabel`
-        // alone REPLACES a Button's auto-generated label — on `branchControl`
-        // that suppressed the branch name / `Creating…` text rendered inside
-        // its own HStack exactly when it carried news. Both now split label
-        // (the action) from `.accessibilityValue` (the current state), the
-        // same pattern a system Picker uses.
-        //
-        // NOT established: whether `.accessibilityValue` actually reaches
-        // VoiceOver's `AXValue` for a SwiftUI `Button` at runtime — see the
-        // sibling test's note above; this asserts the constants only.
-        XCTAssertEqual(SessionComposerPalette.accessibilityProjectControlLabel, "Select project")
-        XCTAssertEqual(SessionComposerPalette.accessibilityBranchControlLabel, "Select branch")
-        XCTAssertEqual(SessionComposerPalette.accessibilityBranchControlDefaultValue, "Default")
-        XCTAssertFalse(SessionComposerPalette.accessibilityProjectControlLabel.isEmpty)
-        XCTAssertFalse(SessionComposerPalette.accessibilityBranchControlLabel.isEmpty)
-        XCTAssertFalse(SessionComposerPalette.accessibilityBranchControlDefaultValue.isEmpty,
-            "branchControl's accessibilityValue must read 'Default' rather than announcing nothing when no override is active")
-    }
+    // `testComposerTrailingControlsCarryTheirCurrentValue` (asserted
+    // `SessionComposerPalette.accessibilityProjectControlLabel`) removed:
+    // Variant G Pass C (2026-08-30) deleted `projectControl` — the trailing
+    // chevron the label belonged to, the last of the two trailing picker
+    // controls (`branchControl` went in Pass A) — so the constant is
+    // unused and gone; nothing in production renders it anymore.
 
     // MARK: - Graveyard expansion chevron labels (FYI-2)
 

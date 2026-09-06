@@ -426,6 +426,14 @@ final class SessionComposerCommandParserTests: XCTestCase {
     /// branch-actually-exists case, and
     /// `testParseReproducesTheReportedGhosttiesBacklogMigrateBug` for the
     /// exact reported input.
+    /// Composer variant G (Sean's ruling, 2026-08-31) restored this test's
+    /// original assertion and its original name: defect 2's single-chevron
+    /// command-reading carve-out (`armedBranchTokenIsCommand`) is deleted —
+    /// a typed `>` is always the deliberate way to declare a branch now, at
+    /// every chevron count, so "main" resolves `.unresolved` here exactly
+    /// as it did before defect 2. `SessionComposerPalette.commandOptions`
+    /// is what keeps this from being a dead end (a "Create branch" row),
+    /// not the parser.
     func testParseRecognizesChevronAsBranchSeparatorWithSpaces() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parse(query: "ghostties > main", projects: [project], isLocked: false)
@@ -435,7 +443,7 @@ final class SessionComposerCommandParserTests: XCTestCase {
     }
 
     /// See `testParseRecognizesChevronAsBranchSeparatorWithSpaces` — same
-    /// bug, no-space chevron form.
+    /// shift, no-space chevron form.
     func testParseRecognizesChevronAsBranchSeparatorWithoutSpaces() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parse(query: "ghostties>main", projects: [project], isLocked: false)
@@ -444,18 +452,22 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertTrue(result.remainderTokens.isEmpty)
     }
 
-    /// Bug fix (2026-08-26): rewritten now that `>` lands on branch. The
-    /// first `>` arms the branch position; "main" (no known branch list
-    /// passed to `parsePath` here) resolves it as UNRESOLVED, not ad-hoc
-    /// content. The second `>` (branch now filled) advances to operator and
-    /// opens an ad-hoc run at "npm run build"; the third `>` (run open,
-    /// kind `.operation`) closes it and opens a thread run; "log.txt"
-    /// becomes the thread run's content — there's no fourth `>` in this
-    /// query to test the "literal inside thread" rule, see
-    /// `testParsePathChevronLiteralInsideThreadRun` for that half
-    /// (previously combined into this one test, split because the meaning
-    /// of every position after branch shifted by one chevron).
-    func testParsePathChevronAdvancesThroughBranchThenClosesAdHocThenOpensThread() {
+    /// Finding 1 fix (review round 2), superseded again by composer variant
+    /// G's deletion of `armedBranchTokenIsCommand` entirely: "main" resolves
+    /// as an `.unresolved` `.branch` segment unconditionally now, at every
+    /// chevron count — there is no longer a chevron-count distinction to
+    /// draw, so this three-chevron shape behaves the same as the
+    /// single-chevron shape (`testParseSingleChevronNonMatchingTokenResolvesAsUnresolvedBranch`).
+    /// "main" resolves as an `.unresolved` `.branch` segment, exactly as it
+    /// did before `b5286319b` first introduced the fall-through. The SECOND
+    /// `>` then finds branch already filled and
+    /// opens the operator run instead (rule 4's final `else`); "npm run
+    /// build" fills it, and the THIRD `>` closes it as a settled ad-hoc
+    /// segment and opens the thread run that "log.txt" becomes. Renamed
+    /// from `testParsePathChevronAdvancesThroughBranchThenClosesAdHocThenOpensThread`
+    /// (pre-defect-2) via `testParsePathChevronWithNonMatchingTokenClosesAdHocThenOpensThread`
+    /// (defect-2, now superseded).
+    func testParsePathChevronWithNonMatchingTokenResolvesUnresolvedBranchThenClosesAdHocThenOpensThread() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parsePath(
             rawQuery: "ghostties > main > npm run build > log.txt",
@@ -464,20 +476,27 @@ final class SessionComposerCommandParserTests: XCTestCase {
             isLocked: false
         )
         XCTAssertEqual(result.projectId, project.id)
-        let branchSegment = result.segments.first { $0.kind == .branch }
-        XCTAssertEqual(branchSegment?.resolved, .unresolved)
-        XCTAssertEqual(branchSegment.map { $0.text(in: result.source) }, "main")
+        XCTAssertEqual(
+            result.segments.first { $0.kind == .branch }.map { ($0.resolved, $0.text(in: result.source)) }?.1,
+            "main",
+            "a non-matching token in a non-final branch slot must still resolve as a (failed) branch lookup"
+        )
+        XCTAssertEqual(result.segments.first { $0.kind == .branch }?.resolved, .unresolved)
         let adHocSegments = result.segments.filter { $0.kind == .operation && $0.resolved == .adHoc }
         XCTAssertEqual(adHocSegments.map { $0.text(in: result.source) }, ["npm run build"])
         XCTAssertEqual(result.activeKind, .thread)
         XCTAssertEqual(text(result.remainderRange, in: result.source), "log.txt")
     }
 
-    /// The "literal `>` inside an open thread run" half of the old combined
-    /// test, re-derived for the shifted grammar: one extra `>` (four total)
-    /// is needed to actually reach thread and still have a `>` left over to
-    /// swallow literally, now that the first `>` is spent arming branch.
-    func testParsePathChevronLiteralInsideThreadRun() {
+    /// The "literal `>` inside an open thread run" half, re-derived for
+    /// finding 1's corrected grammar (see the test above): once "main"
+    /// resolves as the unresolved branch and "npm build" settles as the
+    /// closed ad-hoc operator, both remaining `>`s are swallowed as literal
+    /// thread-run content, since neither ever finds an unfilled slot to
+    /// advance into. Renamed from `testParsePathChevronLiteralInsideThreadRun`
+    /// (pre-defect-2) via `testParsePathChevronLiteralInsideThreadRunAfterNonMatchingToken`
+    /// (defect-2, now superseded).
+    func testParsePathChevronLiteralInsideThreadRunAfterUnresolvedBranch() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parsePath(
             rawQuery: "ghostties > main > npm build > log.txt > extra",
@@ -485,6 +504,9 @@ final class SessionComposerCommandParserTests: XCTestCase {
             templates: [],
             isLocked: false
         )
+        XCTAssertEqual(result.segments.first { $0.kind == .branch }?.resolved, .unresolved)
+        let adHocSegments = result.segments.filter { $0.kind == .operation && $0.resolved == .adHoc }
+        XCTAssertEqual(adHocSegments.map { $0.text(in: result.source) }, ["npm build"])
         XCTAssertEqual(result.activeKind, .thread)
         XCTAssertEqual(text(result.remainderRange, in: result.source), "log.txt > extra")
     }
@@ -637,15 +659,20 @@ final class SessionComposerCommandParserTests: XCTestCase {
         XCTAssertEqual(resolution, .unresolved(token: "backlog/no-worktree-yet"))
     }
 
-    /// A branch that genuinely does not exist — must fail truthfully
-    /// (`.unresolved`, surfaced as "branch \"...\" not found"), never
-    /// silently exec'd and never confused with the create-offer case above
-    /// (that one distinguishes itself only at the `SessionComposerPalette`
-    /// layer, by checking `branchesWithoutWorktree`; the parser/engine
-    /// layer reports the identical `.unresolved` shape for both, correctly
-    /// — see `SessionComposerCommandParser.TypedBranchResolution.unresolved`'s
-    /// doc comment).
-    func testParseNonexistentBranchReachesTruthfulError() {
+    /// Composer variant G (Sean's ruling, 2026-08-31): a SINGLE armed `>`
+    /// whose next token matches no known branch name STILL resolves as an
+    /// unresolved branch — defect 2's single-chevron command-reading
+    /// carve-out (`armedBranchTokenIsCommand`) is deleted. Sean's own call:
+    /// a typed `>` is the deliberate way to declare a branch, so its content
+    /// is always tried as a branch first, at every chevron count; the reason
+    /// defect 2 carved out an exception (avoiding a dead end for `ghostties
+    /// > cco -n "test"`) no longer applies now that
+    /// `SessionComposerPalette.commandOptions` offers a "Create branch" row
+    /// for exactly this shape AND keeps the `Run "X"` ad-hoc reading visible
+    /// as a separate row (see that property's `runRemainderTokens`) — both
+    /// interpretations are offered, neither guessed by the parser. Restores
+    /// this test's original name and assertion, from before defect 2.
+    func testParseSingleChevronNonMatchingTokenResolvesAsUnresolvedBranch() {
         let project = makeProject(name: "ghostties")
         let result = SessionComposerCommandParser.parse(
             query: "ghostties > totally-made-up-branch",
@@ -653,10 +680,8 @@ final class SessionComposerCommandParserTests: XCTestCase {
             knownBranchNames: ["main", "feature-x"],
             isLocked: false
         )
-        // Doesn't match any known branch name at all: the segment is
-        // `.unresolved`, and `branchToken` still surfaces the raw typed
-        // text (item 3's fix) rather than vanishing.
-        XCTAssertEqual(result.branchToken, "totally-made-up-branch")
+        XCTAssertEqual(result.branchToken, "totally-made-up-branch", "an armed branch position always resolves as a (failed) branch lookup now, at every chevron count")
+        XCTAssertTrue(result.remainderTokens.isEmpty)
 
         let resolution = SessionComposerCommandParser.resolveTypedBranch(
             branchToken: result.branchToken,
@@ -664,16 +689,32 @@ final class SessionComposerCommandParserTests: XCTestCase {
             currentBranchAtProjectRoot: "main"
         )
         XCTAssertEqual(resolution, .unresolved(token: "totally-made-up-branch"))
-        let commitResult = SessionComposerCommandParser.resolveCommitWorktreePathForCommit(
-            typedBranch: resolution,
-            selectedWorktreePath: nil
+    }
+
+    /// The two-or-more-chevron shape behaves identically to the
+    /// single-chevron test above now that `armedBranchTokenIsCommand`'s
+    /// chevron-count distinction is gone — both resolve `.unresolved`. Kept
+    /// as its own test (rather than folded into the one above) because it
+    /// also proves "cco" survives as the operator remainder past the
+    /// resolved branch segment, which the single-chevron shape can't
+    /// exercise (nothing follows the branch token there).
+    func testParseTwoChevronsWithNonMatchingBranchStillFailsAsUnresolvedBranch() {
+        let project = makeProject(name: "ghostties")
+        let result = SessionComposerCommandParser.parse(
+            query: "ghostties > totally-made-up-branch > cco",
+            projects: [project],
+            knownBranchNames: ["main", "feature-x"],
+            isLocked: false
         )
-        switch commitResult {
-        case .failure(let error):
-            XCTAssertTrue(error.message.contains("No worktree found for branch"))
-        case .success:
-            XCTFail("a genuinely nonexistent branch must fail the commit, not silently succeed")
-        }
+        XCTAssertEqual(result.branchToken, "totally-made-up-branch", "a non-final branch slot is unambiguous by position — it must still resolve as a (failed) branch lookup, not fall through as a command")
+        XCTAssertEqual(result.remainderTokens, ["cco"], "cco must survive as the operator remainder, not be discarded past a closed ad-hoc segment that no longer exists here")
+
+        let resolution = SessionComposerCommandParser.resolveTypedBranch(
+            branchToken: result.branchToken,
+            worktrees: [],
+            currentBranchAtProjectRoot: "main"
+        )
+        XCTAssertEqual(resolution, .unresolved(token: "totally-made-up-branch"))
     }
 
     /// Case-sensitivity fix: `resolveTypedBranch` compares the token

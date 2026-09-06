@@ -23,7 +23,7 @@ public struct SessionComposerCommitError: Error, CustomStringConvertible, Equata
 /// user what to do with the text field they still have.
 public enum SessionComposerCopy {
     public static func unresolvedBranchMessage(token: String) -> String {
-        "No worktree found for branch \"\(token)\". Type an existing branch name or clear it."
+        "No worktree found for branch \"\(token)\". Use the create-branch suggestion above, or retype/delete it."
     }
 }
 
@@ -482,18 +482,39 @@ public enum SessionComposerCommandParser {
                 if openRunKind == nil {
                     if branchArmed {
                         // An explicit `>` armed the branch position (rule
-                        // 4, case 1 below) — this token resolves (or
-                        // fails) as the branch UNCONDITIONALLY, regardless
-                        // of `terminated`. It must never fall through to
-                        // rule 3 and become ad-hoc/thread content: that's
-                        // the exact defect this fix closes (a typed branch
-                        // silently exec'd as a shell command).
+                        // 4, case 1 below) — a token that matches a known
+                        // branch resolves as the branch UNCONDITIONALLY,
+                        // regardless of `terminated`. It must never fall
+                        // through to rule 3 and become ad-hoc/thread
+                        // content: that's the exact defect this fix
+                        // closes (a typed branch silently exec'd as a
+                        // shell command).
                         branchArmed = false
                         if let canonical = knownBranchNames.first(where: { $0.caseInsensitiveCompare(matchText) == .orderedSame }) {
                             segments.append(Segment(kind: .branch, range: range, resolved: .branch(canonical)))
-                        } else {
-                            segments.append(Segment(kind: .branch, range: range, resolved: .unresolved))
+                            filled.insert(.branch)
+                            continue
                         }
+                        // Composer variant G (Sean's ruling, 2026-08-31): an
+                        // armed branch position that doesn't match a known
+                        // branch ALWAYS resolves as a (failed) branch
+                        // lookup — never falls through and reads as the
+                        // command, at any chevron count. The single-chevron
+                        // fall-through this used to carve out
+                        // (`armedBranchTokenIsCommand`, deleted) existed only
+                        // to avoid a dead end for `ghostties > cco`; now that
+                        // `SessionComposerPalette.commandOptions` offers a
+                        // "Create branch" row for exactly this case (an
+                        // unresolved token, not just a known branch missing
+                        // its worktree — see `typedBranchCreateOffer`), the
+                        // dead end this fall-through was avoiding no longer
+                        // exists, so the carve-out is gone too. The `Run
+                        // "cco"` reading stays reachable as a SEPARATE row in
+                        // the same results list (`commandOptions`'s ad-hoc
+                        // row, computed independently of this branch
+                        // resolution) — both interpretations are offered,
+                        // never guessed.
+                        segments.append(Segment(kind: .branch, range: range, resolved: .unresolved))
                         filled.insert(.branch)
                         continue
                     }
@@ -1252,6 +1273,62 @@ public enum SessionComposerCommandParser {
         return .unresolved(token: token)
     }
 
+    /// Defect 3 fix, reworded per finding 2 (review round 2): the single
+    /// source for the "unresolved typed branch" message. `branchControl`/
+    /// `projectControl` (the in-field mouse picker) were both deleted
+    /// earlier on this branch — the OLD-old copy ("Pick one from the branch
+    /// picker...") pointed at a control that no longer exists; the
+    /// defect-3 rewrite ("Retype the branch or delete it") replaced that,
+    /// but described an action that reproduced the identical error for the
+    /// dominant case: a REAL branch that simply has no worktree yet, where
+    /// `typedBranchCreateOffer` (`SessionComposerPalette.swift`) sits in the
+    /// same result list as a `Create worktree for "X"` row. Retyping the
+    /// same correct branch name changed nothing.
+    ///
+    /// Composer variant G (Sean's ruling, 2026-08-31): `typedBranchCreateOffer`
+    /// no longer gates on `branchesWithoutWorktree` — every `.unresolved`
+    /// token, known branch or not, gets an offer row. Its title now varies
+    /// by case (`"Create worktree for X"` for a known branch missing a
+    /// worktree, `"Create branch X"` otherwise — see that property's doc
+    /// comment), so this message deliberately does NOT quote either row
+    /// title verbatim; a single wording that names the row generically stays
+    /// honest for both without the two coupled literals the old single-title
+    /// wording risked (`SessionComposerCommandParserPaletteWordingTests`
+    /// pins the direction word instead — see that test). Also fixes stranded
+    /// copy: the create row is appended near the START of `commandOptions`
+    /// (before the `Run "X"` row) and now ranks FIRST in `bestSelectionIndex`
+    /// whenever it's offered — it renders ABOVE this message's own status
+    /// strip, never below.
+    ///
+    /// Merge note (main's PR #155 consolidated the message text into
+    /// `SessionComposerCopy.unresolvedBranchMessage` as the single source
+    /// for both call sites): this delegates rather than duplicating the
+    /// string, so `SessionComposerCopy`'s text — the one this doc comment
+    /// describes — is the only copy that can ever drift.
+    public static func unresolvedBranchMessage(token: String) -> String {
+        SessionComposerCopy.unresolvedBranchMessage(token: token)
+    }
+
+    /// Composer variant G (Sean's ruling, 2026-08-31): the create-offer
+    /// row's title, hoisted into `GhosttiesCore` as a pure function (the same
+    /// established pattern as `resolveWorktreeCreationLaunchTemplate` — a
+    /// decision that used to live only in a `private` View computed property
+    /// is untestable there, see `agent-quality.md`'s "Logic in a View body
+    /// cannot be tested" convention). `SessionComposerPalette.commandOptions`
+    /// is the only production caller. Two copies for the SAME action
+    /// (`SessionComposerStore.createWorktree` — `GitWorktreeEnumerator.add`
+    /// already creates the branch via `git worktree add -b` when it doesn't
+    /// exist, so no new git plumbing is needed for either case): an existing
+    /// branch simply missing a worktree reads "Create worktree for X" (the
+    /// branch decision is already made); a token matching no branch at all
+    /// reads "Create branch X" (creating the branch is the decision the
+    /// user is making, and its worktree comes along with it).
+    public static func createBranchOfferTitle(token: String, isKnownBranchWithoutWorktree: Bool) -> String {
+        isKnownBranchWithoutWorktree
+            ? "Create worktree for \"\(token)\""
+            : "Create branch \"\(token)\""
+    }
+
     /// The COMMIT-time counterpart to `resolveCommitWorktreePath` above —
     /// used ONLY at the write path (`SessionComposerPalette.commit(template:)`),
     /// never for the "is this chip value already shown" comparison
@@ -1480,5 +1557,118 @@ public enum SessionComposerCommandParser {
                 : nil,
             showProjectControl: !isProjectLocked
         )
+    }
+
+    // MARK: - Contextual operator footer (Variant G Pass B, "F" half)
+
+    /// One glyph+label pair rendered in the footer strip — a key chord the
+    /// composer will honor RIGHT NOW, never an aspirational one. `⌥↵ new
+    /// worktree` is deliberately absent from every caller of
+    /// `footerOperators` below: worktree creation is reached through a
+    /// selectable row (`"Create worktree for \"<token>\""`,
+    /// `SessionComposerPalette.commandOptions`) committed with plain
+    /// Return like any other row — there is no Option-Return chord
+    /// anywhere in the composer to advertise.
+    public struct FooterOperatorHint: Equatable {
+        /// The key chord glyph itself — rendered emphasized (semibold,
+        /// primary label color) against its dimmer `label`.
+        public let glyph: String
+        /// The lowercase verb describing what the chord does.
+        public let label: String
+
+        public init(glyph: String, label: String) {
+            self.glyph = glyph
+            self.label = label
+        }
+    }
+
+    /// The ordered set of operators live right now, replacing the
+    /// approved mockup's static four-chord row with only the chords that
+    /// actually do something against the current composer state — a pure
+    /// function so the view and its tests read the one decision, never two
+    /// independently-written copies that can diverge (the pattern
+    /// `statusStripMessage`/`trailingControlVisibility` above already
+    /// establish).
+    ///
+    /// Order is fixed — primary action first, then completion, then list
+    /// navigation, then undo — matching the approved mockup's left-to-right
+    /// reading order. An operator whose liveness condition is `false` is
+    /// simply absent; it is never rendered disabled.
+    public static func footerOperators(
+        // ↵ `open`: `.onSubmit`/`onKeyPress(.return)` — live whenever
+        // there is a current selection to commit
+        // (`SessionComposerPalette.selectedOption != nil`).
+        hasSelection: Bool,
+        // ⇥ `accept`: `ComposerGhostTextField.insertTab` → `acceptGhost`
+        // — live only when the ghost remainder text is non-empty; Tab
+        // no-ops (falls through to ordinary focus traversal) against an
+        // empty remainder, including whenever the experimental model-B
+        // field isn't the one mounted.
+        hasGhostRemainder: Bool,
+        // ↑↓ `navigate`: the four hidden `.keyboardShortcut(.upArrow/
+        // .downArrow)` buttons — live only when more than one option is
+        // on screen to move a selection between.
+        hasMultipleOptions: Bool,
+        // ⌘Z `undo`: the hidden `.keyboardShortcut("z", modifiers:
+        // [.command])` button, mounted only while
+        // `SessionComposerStore.pendingChipUndo != nil`.
+        hasPendingChipUndo: Bool
+    ) -> [FooterOperatorHint] {
+        var operators: [FooterOperatorHint] = []
+        if hasSelection {
+            operators.append(FooterOperatorHint(glyph: "↵", label: "open"))
+        }
+        if hasGhostRemainder {
+            operators.append(FooterOperatorHint(glyph: "⇥", label: "accept"))
+        }
+        if hasMultipleOptions {
+            operators.append(FooterOperatorHint(glyph: "↑↓", label: "navigate"))
+        }
+        if hasPendingChipUndo {
+            operators.append(FooterOperatorHint(glyph: "⌘Z", label: "undo"))
+        }
+        return operators
+    }
+
+    /// The one footer occupant that renders, of the three competing for
+    /// that single position — a `switch`-total enum rather than three
+    /// independent booleans the view could accidentally satisfy at once.
+    /// This pure function's OWN precedence, by static arg order, is
+    /// `isAddingTemplate` first, then `errorMessage`, then `operators` —
+    /// but the view overrides that at runtime: `SessionComposerPalette`'s
+    /// `.onChange(of: composerStore.writeError)` clears `isAddingTemplate`
+    /// the instant a write error arrives specifically so the error CAN
+    /// evict a live naming field, closing a silent-wrong-cwd bug where an
+    /// async worktree-create failure landed after the user had already
+    /// moved on to "+ New template…" and was never shown. This function
+    /// therefore never itself picks `.newTemplateName` over a real
+    /// `errorMessage` in production — by the time both are non-nil, the
+    /// view has already zeroed `isAddingTemplate`. Read the two together;
+    /// neither states the real precedence alone.
+    public enum FooterSlot: Equatable {
+        case error(String)
+        case newTemplateName
+        /// Never constructed with an empty array — `footerSlot(...)` maps
+        /// an empty `operators` to `.none` instead, matching "an empty
+        /// operator list renders no strip at all, not an empty 26pt bar".
+        case operators([FooterOperatorHint])
+        case none
+    }
+
+    /// `errorMessage` is whatever `statusStripMessage` above currently
+    /// returns; `operators` is whatever `footerOperators` above currently
+    /// returns. A pure combinator over those two functions' outputs plus
+    /// `isAddingTemplate`, so the three-way precedence is one decision the
+    /// view and its tests read identically, never three independently
+    /// written `if`s that could double up.
+    public static func footerSlot(
+        errorMessage: String?,
+        isAddingTemplate: Bool,
+        operators: [FooterOperatorHint]
+    ) -> FooterSlot {
+        if isAddingTemplate { return .newTemplateName }
+        if let errorMessage { return .error(errorMessage) }
+        if operators.isEmpty { return .none }
+        return .operators(operators)
     }
 }
