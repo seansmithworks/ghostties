@@ -1,5 +1,28 @@
 # Ghostties — Backlog
 
+## 2026-09-05 — Composer-launched sessions die on exit instead of dropping to a shell
+
+Sean: after `wrap-continue` + exiting a Claude session launched from the composer, the
+surface shows "Process exited. Press any key to close the terminal." instead of returning
+to a live prompt — so the terminal has to be closed and reopened.
+
+**Diagnosed, not a regression from the composer stack.** `SessionCoordinator` writes a
+wrapper script per session and sets it as Ghostty's `command`, which *replaces* the shell.
+The script ends in `exec <cmd>` (`SessionCoordinator.swift:255`), so nothing survives the
+agent's exit. `exec` has been there since `dffde628d` (2026-03-24) and was deliberately
+restored in `e8dbf6ed7` (2026-04-27). What changed is Sean's habit: the old flow was a blank
+shell he typed `cco` into (child process, shell survives), the new flow is composer-launched.
+
+No `cco` template or preset exists — `workspace.json` holds 3 empty "New Template" rows and
+`~/.ghostties/presets/` has only `disk-cleanup.md` and `linear-sync`. `cco` is ad-hoc text.
+
+- [ ] **Decide:** land back on an interactive shell after the agent exits (replace
+  `exec \(cmd)` with `\(cmd)` + `exec zsh -i`), or leave as-is.
+  **Risk if changed:** the surface staying alive after the agent exits decouples "process
+  running" from "session running" — `setStatus(.running,)` and `subscribeToOutput` both
+  assume the surface dies with the agent, and indicator state lives in two caches. Not a
+  one-liner; needs the status engine checked.
+
 ## 2026-09-02 — CEF crash root-caused (Chromium 150→144 profile downgrade); overnight fix dispatched
 
 **Verdict (Fable 5.1):** Sean's Release CEF profile was written by Chromium 150; the Aug 1
