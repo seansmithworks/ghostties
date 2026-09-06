@@ -156,7 +156,50 @@ jobs:
             -scheme Ghostties \
             -configuration Debug \
             -destination 'platform=macOS' \
+            -derivedDataPath build \
             ONLY_ACTIVE_ARCH=YES \
             ARCHS=arm64 \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO
+
+      # Experiment: does GhosttyUITests/VisualPassUITests launch on a
+      # headless GitHub runner? The comment above documents that the
+      # XCTest host reliably hangs ~6 min on this runner class when
+      # launching Ghostties Dev.app; this may hang the same way. The step
+      # is continue-on-error and time-boxed so a hang never reddens the
+      # compile gate above — the answer comes from this step's own log and
+      # the uploaded artifact, not from job status.
+      - name: Visual pass (experiment)
+        working-directory: macos
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme Ghostties \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            -only-testing:GhosttyUITests/VisualPassUITests \
+            ONLY_ACTIVE_ARCH=YES \
+            ARCHS=arm64 \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Collect visual-pass captures
+        if: always()
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/visual-pass-captures"
+          if [ -d "$TMPDIR/ghostties-visual-pass" ]; then
+            cp -R "$TMPDIR/ghostties-visual-pass/." "$GITHUB_WORKSPACE/visual-pass-captures/"
+          else
+            echo "no captures at $TMPDIR/ghostties-visual-pass"
+          fi
+
+      - name: Upload visual-pass captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-pass-captures
+          path: visual-pass-captures
+          if-no-files-found: warn
