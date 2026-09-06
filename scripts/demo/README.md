@@ -94,6 +94,46 @@ a real git repo (init + one commit; a few get an extra branch), and points
 break when this repo changes branch. Idempotent; backs up any existing
 `workspace.json` before overwriting.
 
+## Stage real agent sessions: `demo-drive.sh`
+
+```bash
+./scripts/demo/demo-drive.sh              # stage 4 sessions across seeded repos
+./scripts/demo/demo-drive.sh --count 6    # stage 6 sessions
+./scripts/demo/demo-drive.sh --reset      # clear staged sessions
+```
+
+**The demo app must be quit before running this.** `WorkspacePersistence`
+rewrites `workspace.json` from memory while the app runs, so any edit made
+while it's open is silently reverted. If it's running, the script refuses to
+proceed and prints:
+
+```bash
+osascript -e 'tell application "Ghostties Demo" to quit'
+```
+
+It detects a running instance via `osascript`/System Events by bundle ID —
+querying only, never used to quit or drive the app.
+
+Each staged session is bound to its own per-repo `AgentTemplate` whose
+command is `claude` with a short, harmless, read-only prompt (summarize the
+README, list TODOs, describe the structure, explain the last commit — cycled
+across sessions). Nothing about the resulting activity is faked: no GUI
+automation is used anywhere, and the script never launches the app or runs
+`claude` itself. It only writes the staged records to `workspace.json`
+(backed up first, validated as JSON, written atomically); re-running replaces
+the previously staged set rather than appending duplicates.
+
+**Important:** Ghostties only spawns a process from a user-triggered UI
+action (a sidebar "Relaunch" click, a row click, or the composer) — there is
+no launch-time code path that replays persisted sessions automatically. A
+staged session appears in the sidebar as "Exited" with a Relaunch action;
+producing genuinely live ghost states for capture still requires clicking
+"Relaunch" once per session after opening the app:
+
+```bash
+open "/Applications/Ghostties Demo.app"
+```
+
 ## Quitting
 
 Never `killall`. Quit cleanly:
