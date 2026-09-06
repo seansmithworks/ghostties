@@ -1,5 +1,26 @@
 # Ghostties — Backlog
 
+## 2026-09-06 — Composer Tab flow shipped; exit-to-shell fixed; ten redesign directions
+
+- [x] **PR #164 MERGED** — Tab accepts a segment + space, never a chevron. `main` @ `a0297a9d9`.
+  Verified by Sean in a real build: `ghostt` Tab `cco -n "testing"` Return runs clean.
+- [ ] **PR #165 open, UNVERIFIED — carried.** `fix/composer-return-to-shell` @ `d32fb32b6`.
+  Diff reviewed by hand, but no test run exists anywhere: agent worktrees lack
+  `GhosttyKit.xcframework`, `zig-out/`, `vendor/cef`. Build it and run the ⌘T flow before merge.
+- [ ] **Ten composer directions published — Sean to pick.** Artifact:
+  `https://claude.ai/code/artifact/b9f2eb46-8d4e-41f6-a061-6533f63f89b3`.
+  Mild 01-04, middle 05-07, wild 08-10. Claude's read: 01/03/06 strongest against the
+  minimal constraint, all three subtractive; 02 is the best idea with the worst fit;
+  08 is build-to-learn, not pick-from-a-page. Sources in the session scratchpad
+  (`shotfun/variant-NN.html` + `.swift`) — **scratch, not committed anywhere.**
+- [ ] **PARKED — `design-shotfun` skill is broken.** It calls `mcp__paper__*`; the server on
+  this machine is `pencil`, which refuses every call without a `.pen` file open in the GUI.
+  Skill also caps at 6 variants. Routed around by hand this session.
+- [ ] **PARKED — three fragments were authored broken** (05/06/07): section is `display:flex`
+  with no `flex-direction`, and both boards sit in an unclassed wrapper with no CSS, so
+  `.board{flex:1}` is inert and the boards collapse to ~0 width. Corrected in the page
+  wrapper, not in the fragments.
+
 ## 2026-09-05 — Composer-launched sessions die on exit instead of dropping to a shell
 
 Sean: after `wrap-continue` + exiting a Claude session launched from the composer, the
@@ -16,7 +37,11 @@ shell he typed `cco` into (child process, shell survives), the new flow is compo
 No `cco` template or preset exists — `workspace.json` holds 3 empty "New Template" rows and
 `~/.ghostties/presets/` has only `disk-cleanup.md` and `linear-sync`. `cco` is ad-hoc text.
 
-- [ ] **Decide:** land back on an interactive shell after the agent exits (replace
+- [x] **Decided 2026-09-06 (Sean): yes, default to a shell.** "If I want to go to orchestrator
+  template I would specify that." Implemented in PR #165 — the launcher script now runs the
+  agent in the foreground and ends `exec /bin/zsh -l`. **Tests never executed** (no build
+  inputs in any agent worktree) — needs a real lab build before merge.
+- [ ] ~~Decide~~ (superseded): land back on an interactive shell after the agent exits (replace
   `exec \(cmd)` with `\(cmd)` + `exec zsh -i`), or leave as-is.
   **Risk if changed:** the surface staying alive after the agent exits decouples "process
   running" from "session running" — `setStatus(.running,)` and `subscribeToOutput` both
