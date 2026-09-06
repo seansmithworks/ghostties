@@ -26,19 +26,24 @@
 #
 # FLAGS
 #   --check         Report status and exit non-zero if stale or missing. Never
-#                   refreshes, never reseeds, never writes the manifest.
+#                   refreshes, never reseeds, never touches the app or fixture
+#                   workspace — but a PASSING check still writes the manifest,
+#                   since that's the record of which bundle it just verified.
 #   --dest <path>   Demo app path. Default: /Applications/Ghostties Demo.app
 #   --source        Use this checkout (refresh-demo.sh --from-source) instead
 #                   of the newest release. "Current" means the app's recorded
 #                   git sha equals this checkout's HEAD sha.
 #
 # MANIFEST
-#   Always written (on a non---check run) to:
+#   Written on every successful run (including a passing --check) to:
 #     ~/Library/Application Support/Ghostties Demo/demo-manifest.json
 #   regardless of --dest, because seed-demo-workspace.sh is likewise pinned to
 #   that fixed state directory (it is keyed off the demo bundle ID, not the
-#   app's install location). A capture run should copy this file next to
-#   whatever assets it produces — see scripts/demo/README.md.
+#   app's install location). destPath always records the resolved, absolute
+#   path of the app that was actually inspected — the manifest describes
+#   whatever bundle the run just checked or refreshed, not a fixed default.
+#   A capture run should copy this file next to whatever assets it produces —
+#   see scripts/demo/README.md.
 # =============================================================================
 set -euo pipefail
 
@@ -182,10 +187,54 @@ fi
 
 echo ""
 
-# ── --check: report only, never mutate ──────────────────────────────────────
+# ── Manifest writer: records exactly which bundle was just inspected/refreshed ─
+write_manifest() {
+  local dest_app_resolved
+  dest_app_resolved="$(cd "$(dirname "$DEST_APP")" && pwd)/$(basename "$DEST_APP")"
+
+  local fixture_count app_mtime_epoch app_mtime_iso refreshed_at installed_version_now
+  fixture_count=$(find "$FIXTURES_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+  app_mtime_epoch=$(stat -f%m "$dest_app_resolved")
+  app_mtime_iso=$(date -u -r "$app_mtime_epoch" +"%Y-%m-%dT%H:%M:%SZ")
+  refreshed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  if [[ "$MODE" == "release" ]]; then
+    installed_version_now=$(plist_get "$PLIST" CFBundleShortVersionString)
+  else
+    installed_version_now=$(plist_get "$PLIST" GhosttyCommit)
+  fi
+
+  mkdir -p "$DEMO_STATE_DIR"
+  chmod 700 "$DEMO_STATE_DIR"
+
+  python3 - "$MANIFEST_PATH" <<PYEOF
+import json
+
+manifest = {
+    "demoAppVersion": "$installed_version_now",
+    "mode": "$MODE",
+    "source": "$SOURCE_LABEL",
+    "destPath": "$dest_app_resolved",
+    "appBundleMtime": "$app_mtime_iso",
+    "refreshedAt": "$refreshed_at",
+    "fixtureProjectCount": $fixture_count,
+    "seededReposPath": "$REPOS_DIR",
+}
+
+with open("$MANIFEST_PATH", "w") as f:
+    json.dump(manifest, f, indent=2, sort_keys=True)
+PYEOF
+  chmod 600 "$MANIFEST_PATH"
+
+  echo "==> Wrote manifest: $MANIFEST_PATH"
+}
+
+# ── --check: report only, never touch the app/fixtures — but do record what
+#             was just verified, so a passing check can't leave a stale manifest
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   if [[ "$CURRENT" -eq 1 ]]; then
     echo "OK: Ghostties Demo is current (source: $SOURCE_LABEL, dest: $DEST_APP)."
+    write_manifest
     exit 0
   else
     echo "STALE: Ghostties Demo at '$DEST_APP' does not match $SOURCE_LABEL. Run demo-ready.sh (without --check) to refresh." >&2
@@ -215,40 +264,7 @@ echo "==> Seeding fixture workspace..."
 echo ""
 
 # ── Write manifest ───────────────────────────────────────────────────────────
-FIXTURE_COUNT=$(find "$FIXTURES_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
-APP_MTIME_EPOCH=$(stat -f%m "$DEST_APP")
-APP_MTIME_ISO=$(date -u -r "$APP_MTIME_EPOCH" +"%Y-%m-%dT%H:%M:%SZ")
-REFRESHED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-if [[ "$MODE" == "release" ]]; then
-  INSTALLED_VERSION_NOW=$(plist_get "$PLIST" CFBundleShortVersionString)
-else
-  INSTALLED_VERSION_NOW=$(plist_get "$PLIST" GhosttyCommit)
-fi
-
-mkdir -p "$DEMO_STATE_DIR"
-chmod 700 "$DEMO_STATE_DIR"
-
-python3 - "$MANIFEST_PATH" <<PYEOF
-import json
-
-manifest = {
-    "demoAppVersion": "$INSTALLED_VERSION_NOW",
-    "mode": "$MODE",
-    "source": "$SOURCE_LABEL",
-    "destPath": "$DEST_APP",
-    "appBundleMtime": "$APP_MTIME_ISO",
-    "refreshedAt": "$REFRESHED_AT",
-    "fixtureProjectCount": $FIXTURE_COUNT,
-    "seededReposPath": "$REPOS_DIR",
-}
-
-with open("$MANIFEST_PATH", "w") as f:
-    json.dump(manifest, f, indent=2, sort_keys=True)
-PYEOF
-chmod 600 "$MANIFEST_PATH"
-
-echo "==> Wrote manifest: $MANIFEST_PATH"
+write_manifest
 echo ""
 
 # ── Summary ──────────────────────────────────────────────────────────────────

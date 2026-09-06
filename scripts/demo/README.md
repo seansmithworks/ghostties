@@ -20,21 +20,24 @@ a manifest recording exactly what's on disk. `refresh-demo.sh` and
 when working on the rig itself.
 
 ```bash
-./scripts/demo/demo-ready.sh --check     # assert freshness; exits non-zero if stale/missing, changes nothing
+./scripts/demo/demo-ready.sh --check     # assert freshness; exits non-zero if stale/missing, never changes the app
 ./scripts/demo/demo-ready.sh --source    # demo the current checkout instead of the newest release
 ./scripts/demo/demo-ready.sh --dest <path>  # non-default app location
 ```
 
 ### Manifest
 
-Every non-`--check` run writes
+Every successful run — including a passing `--check` — writes
 `~/Library/Application Support/Ghostties Demo/demo-manifest.json`, recording
 the demo app version (or, in `--source` mode, the built commit sha), the
-source tag or ref+sha, the app bundle's mtime, an ISO-8601 refreshed-at
-timestamp, the fixture project count, and the seeded repos path. **A capture
-run should copy this manifest next to whatever assets it produces** — it's
-what lets anyone later trace a screenshot or clip back to the exact build
-that produced it.
+source tag or ref+sha, the resolved absolute path of the app bundle that was
+just inspected or refreshed, the app bundle's mtime, an ISO-8601
+refreshed-at timestamp, the fixture project count, and the seeded repos
+path. `--check` never touches the app or the fixture workspace — it only
+records what it just verified, so a stale manifest can't survive a clean
+preflight. **A capture run should copy this manifest next to whatever assets
+it produces** — it's what lets anyone later trace a screenshot or clip back
+to the exact build that produced it.
 
 ## How isolation works
 
