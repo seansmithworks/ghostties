@@ -1,0 +1,38 @@
+{
+  "pages": [
+    { "id": "page-4", "name": "Prior art" },
+    { "id": "page-5", "name": "Unsolved" },
+    { "id": "page-1", "name": "Flow" },
+    { "id": "page-2", "name": "Hints" },
+    { "id": "page-3", "name": "Motion" }
+  ],
+  "artboards": [
+    { "file": "PriorArt.dc.html",    "page": "page-4", "x": 0,    "y": 0,   "w": 940, "h": 800, "title": "What the field does" },
+    { "file": "Placement.dc.html",   "page": "page-4", "x": 1020, "y": 0,   "w": 940, "h": 600, "title": "Where it sits" },
+
+    { "file": "Unsolved.dc.html",    "page": "page-5", "x": 0,    "y": 0,   "w": 900, "h": 1100, "title": "Ten open details" },
+
+    { "file": "Main.dc.html",        "page": "page-1", "x": 0,    "y": 0,   "w": 720, "h": 600, "title": "01 · Summoned" },
+    { "file": "Typing.dc.html",      "page": "page-1", "x": 800,  "y": 0,   "w": 720, "h": 620, "title": "02 · Typing" },
+    { "file": "Branch.dc.html",      "page": "page-1", "x": 1600, "y": 0,   "w": 720, "h": 560, "title": "03 · Branch armed" },
+    { "file": "Commit.dc.html",      "page": "page-1", "x": 0,    "y": 740, "w": 720, "h": 580, "title": "04 · Commit" },
+    { "file": "Error.dc.html",       "page": "page-1", "x": 800,  "y": 740, "w": 720, "h": 600, "title": "05 · Not found" },
+
+    { "file": "HintLadder.dc.html",  "page": "page-2", "x": 0,    "y": 0,   "w": 900, "h": 740, "title": "The affordance ladder" },
+    { "file": "JobsHandoff.dc.html", "page": "page-2", "x": 980,  "y": 0,   "w": 900, "h": 680, "title": "What the card was doing" },
+    { "file": "Contrast.dc.html",    "page": "page-2", "x": 0,    "y": 860, "w": 940, "h": 700, "title": "The legibility cost" },
+
+    { "file": "Summon.dc.html",      "page": "page-3", "x": 0,    "y": 0,   "w": 900, "h": 540, "title": "Summon · ⌘T" },
+    { "file": "Reveal.dc.html",      "page": "page-3", "x": 980,  "y": 0,   "w": 900, "h": 580, "title": "Type-to-reveal" },
+    { "file": "Exit.dc.html",        "page": "page-3", "x": 1960, "y": 0,   "w": 900, "h": 620, "title": "Commit vs dismiss" },
+    { "file": "Timing.dc.html",      "page": "page-3", "x": 0,    "y": 740, "w": 820, "h": 1060, "title": "Full timing spec" }
+  ],
+  "annotations": [
+    { "id": "nt-prior", "page": "page-4", "x": 1020, "y": 680, "w": 320, "text": "Sourced from Mobbin's command-palette pattern set, Raycast's 2026 rebuild, Fig's terminal overlay, and the terminal-native pickers.\n\nHeadline: nobody ships a chromeless command palette. Mobbin studied 120+ and not one is borderless.\n\nThe placement board on the right is the one that changes the plan." },
+    { "id": "nt-open",  "page": "page-5", "x": 980, "y": 0,   "w": 320, "text": "Worst first.\n\n01 and 02 can each sink the direction on their own. 02 is the one that surprised me — if motion is the chrome, Reduce Motion leaves nothing at all.\n\nEverything from 03 down is work, not risk.\n\nCheapest next move is 03: ten seconds of capture with a build running." },
+    { "id": "nt-flow",  "page": "page-1", "x": 2400, "y": 0,   "w": 300, "text": "Five states, all over live terminal output.\n\nThe thing to judge here is not whether it looks clean — it will. It is whether you can tell, at a glance, that you are in a mode at all.\n\nTwo forks are called out inline: centred vs. left-aligned at the caret (02), and sub-range tinting at the macOS 13 floor (03)." },
+    { "id": "nt-hints", "page": "page-2", "x": 980,  "y": 740, "w": 300, "text": "Your question was what hints someone gets.\n\nAnswer: three of the four already ship, and the ghost placeholder is the strongest hint in the product — it renders the exact path Return would commit.\n\nThe one real hole is rung 2, and PR #155 opened it, not this direction. Fix is one keystroke: ↓ reveals the list." },
+    { "id": "nt-motion","page": "page-3", "x": 860,  "y": 740, "w": 300, "text": "Three boards animate; let them loop a few times.\n\nThe governing rule is on the spec sheet: blur leads text going in, trails it coming out. That single ordering is what makes this read as a mode rather than a popup.\n\nNothing here exceeds 180ms." }
+  ],
+  "launch": { "view": "canvas", "page": "page-4" }
+}

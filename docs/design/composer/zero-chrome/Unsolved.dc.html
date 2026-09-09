@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 720px; line-height: 1.5; }
+    .list { display: flex; flex-direction: column; }
+    .it { display: grid; grid-template-columns: 22px 1fr 128px; gap: 14px; padding: 13px 0; border-top: 1px solid #2a2a2a; align-items: start; }
+    .n { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: #636363; padding-top: 2px; }
+    .bd { display: flex; flex-direction: column; gap: 4px; }
+    .h { font-size: 12px; font-weight: 600; color: #f0efed; line-height: 1.4; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .p { font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .p b { color: #f0efed; font-weight: 500; }
+    .sv { font-size: 8.5px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 5px; border-radius: 3px; }
+    .s1 { background: #3a1f1f; color: #FF6B6B; }
+    .s2 { background: #3a2a1f; color: #C97350; }
+    .s3 { background: #1f2f4a; color: #5B8DEF; }
+    .set { font-size: 10px; color: #636363; line-height: 1.5; padding-top: 2px; }
+    .set b { color: #9a9a9a; font-weight: 500; display: block; margin-bottom: 2px; }
+    .box { background: #2a2a2a; border-radius: 6px; padding: 14px 16px; display: flex; gap: 10px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .bar { width: 2px; align-self: stretch; background: #C97350; border-radius: 1px; flex: none; }
+    .box strong { color: #f0efed; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Unsolved — what the first canvas did not answer</div>
+    <div class="ttl">Ten open details, worst first</div>
+    <div class="sub">You said the detail has to be crisp. These are the places it currently is not. Numbers 1 and 2 can each sink the direction on their own; the rest are work, not risk.</div>
+  </div>
+
+  <div class="list">
+
+    <div class="it"><div class="n">01</div><div class="bd">
+      <div class="h">Where it sits <span class="sv s1">Blocking</span></div>
+      <div class="p">Centre-float vs. docked band. <b>Everything else on this list changes depending on the answer</b> — pick the docked band and items 03, 04 and 05 stop existing. Drawn on the previous board.</div>
+    </div><div class="set"><b>Settled by</b> Your call. Nothing to build first.</div></div>
+
+    <div class="it"><div class="n">02</div><div class="bd">
+      <div class="h">Reduce Motion deletes the interface <span class="sv s1">Blocking</span></div>
+      <div class="p">The whole direction rests on motion carrying the mode signal, because nothing else is left to carry it. <b>Turn on Reduce Motion and there is no blur ramp, no lift, no stagger — and no card either.</b> Text simply exists, with nothing to say a mode opened. Every other direction in the set degrades gracefully here; this one has no floor.</div>
+    </div><div class="set"><b>Settled by</b> Designing the static fallback. If it needs a surface, the direction has a surface.</div></div>
+
+    <div class="it"><div class="n">03</div><div class="bd">
+      <div class="h">Live output scrolling underneath <span class="sv s2">High</span></div>
+      <div class="p">A build is running; lines move behind stationary text. The card hid this completely. <b>Nobody has seen what it looks like</b> — and moving content under fixed type is the classic way an overlay reads as broken rather than deliberate.</div>
+    </div><div class="set"><b>Settled by</b> A 10-second capture with <code>npm run build</code> going. Cheap, and it may kill the direction outright.</div></div>
+
+    <div class="it"><div class="n">04</div><div class="bd">
+      <div class="h">Other people's terminal themes <span class="sv s2">High</span></div>
+      <div class="p">Every value on the first canvas assumes canvas <code>#2D2D2D</code> / <code>#FAF7F3</code>. <b>Ghostty users theme their terminals heavily</b> — solarized, high-contrast, bright custom backgrounds. Contrast is computed against a background you do not control and cannot predict.</div>
+    </div><div class="set"><b>Settled by</b> Deriving the wash and ghost opacity from the live theme, not from DESIGN.md constants.</div></div>
+
+    <div class="it"><div class="n">05</div><div class="bd">
+      <div class="h">Blur depth is a guess <span class="sv s2">High</span></div>
+      <div class="p">6px was picked to look right in a static mock. Raycast v2 ships 48px. <b>Eight times</b> is not a tuning difference, it is a different idea of what blur is for.</div>
+    </div><div class="set"><b>Settled by</b> Measuring against real scrollback, not a fixture.</div></div>
+
+    <div class="it"><div class="n">06</div><div class="bd">
+      <div class="h">Hover has no shape <span class="sv s3">Medium</span></div>
+      <div class="p">Rows have no background, so there is nothing to highlight on mouse-over. Since PR #155 removed the picker controls, <b>the list is the only mouse surface left in the composer</b> — and this direction gives it no hover state at all.</div>
+    </div><div class="set"><b>Settled by</b> Deciding whether hover tints the glyphs, or the composer goes keyboard-only.</div></div>
+
+    <div class="it"><div class="n">07</div><div class="bd">
+      <div class="h">Nothing bounds the width <span class="sv s3">Medium</span></div>
+      <div class="p">The card capped at 360pt and truncated the ghost path to one line. Remove it and a long project path has no edge to hit. <b>Wrap, truncate, or run the full width of the terminal</b> — all three look wrong for different reasons.</div>
+    </div><div class="set"><b>Settled by</b> Keeping the 360pt measure as an invisible constraint.</div></div>
+
+    <div class="it"><div class="n">08</div><div class="bd">
+      <div class="h">Nothing bounds the row count <span class="sv s3">Medium</span></div>
+      <div class="p">The card gave the list a visual stop. Floating text does not have one — twelve results become a column of free-standing type down the middle of a terminal.</div>
+    </div><div class="set"><b>Settled by</b> A hard cap, probably 5, with no "more" affordance to draw.</div></div>
+
+    <div class="it"><div class="n">09</div><div class="bd">
+      <div class="h">VoiceOver loses its container <span class="sv s3">Medium</span></div>
+      <div class="p">The card was the thing that got announced as a group. The lanes already carry <code>accessibilityLabel</code>s, but the outer grouping element goes away with the surface.</div>
+    </div><div class="set"><b>Settled by</b> An explicit accessibility container that renders nothing.</div></div>
+
+    <div class="it"><div class="n">10</div><div class="bd">
+      <div class="h">The armed-segment tint may not be buildable <span class="sv s3">Medium</span></div>
+      <div class="p">Already flagged on the Flow page — <code>reference_composer-field-cannot-tint-subranges</code> says the field cannot colour sub-ranges at the macOS 13 floor. It needs the ghost-subview trick, or it degrades to no tint.</div>
+    </div><div class="set"><b>Settled by</b> A spike, or accepting the degrade.</div></div>
+
+  </div>
+
+  <div class="box"><div class="bar"></div><div><strong>The cheapest next move is 03.</strong> Ten seconds of capture with a build running answers the one question that no amount of static mockery can, and it is the failure mode most likely to make this direction feel wrong in a way that is hard to argue with afterwards. Everything else on this list is worth doing only if that looks acceptable.</div></div>
+</div>
+</x-dc>
+</body>
+</html>

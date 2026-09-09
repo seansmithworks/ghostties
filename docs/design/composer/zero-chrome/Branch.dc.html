@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 620px; line-height: 1.5; }
+    .term { position: relative; width: 672px; height: 336px; border-radius: 12px; overflow: hidden; background: #2D2D2D; }
+    .backdrop { position: absolute; inset: 0; padding: 16px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; line-height: 17px; color: #f0efed; opacity: 0.62; white-space: pre; }
+    .dim { color: #9a9a9a; }
+    .wash { position: absolute; inset: 0; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .stack { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); width: 360px; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+    .query { font-size: 15px; font-weight: 400; color: #f0efed; display: flex; align-items: center; }
+    .ghost { color: #f0efed; opacity: 0.50; }
+    .caret { display: inline-block; width: 1.5px; height: 17px; background: #f0efed; }
+    .rows { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+    .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 500; color: #f0efed; opacity: 0.55; }
+    .row.on { opacity: 1; color: #5B8DEF; }
+    .meta { font-size: 11px; font-weight: 400; color: #9a9a9a; }
+    .note { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.5; max-width: 672px; }
+    .pin { width: 4px; height: 4px; border-radius: 50%; background: #5B8DEF; margin-top: 6px; flex: none; }
+    .warn { background: #C97350; }
+    .seg { color: #5B8DEF; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">03 · Branch armed — a typed &gt; only</div>
+    <div class="ttl">The accent is the only thing that says "this is structure now"</div>
+    <div class="sub">On a card, a chip or a tinted field background could mark the armed segment. With no surface to tint, the tint has to land on the glyphs themselves — #5B8DEF on the branch segment, no layout shift, 100ms crossfade.</div>
+  </div>
+  <div class="term">
+    <div class="backdrop">$ git log --oneline -3
+<span class="dim">a0297a9  fix(composer): Tab inserts a segment and a space
+d32fb32  fix(session): drop back to a shell instead of closing
+ef1267e  Merge pull request #163 from seansmithworks/docs</span>
+$ zig build run -Doptimize=ReleaseFast
+<span class="dim">  compiling GhosttyKit ... 1.2s
+  linking Ghostties.app ... ok</span>
+$ </div>
+    <div class="wash"></div>
+    <div class="stack">
+      <div class="query">ghostties <span class="seg">&gt; mai</span><span class="ghost">n</span><span class="caret"></span></div>
+      <div class="rows">
+        <div class="row on"><span>main</span><span class="meta">default</span></div>
+        <div class="row"><span>fix/composer-return-to-shell</span><span class="meta">recent</span></div>
+        <div class="row"><span>docs/backlog-2026-09-06</span><span class="meta"></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><div class="pin"></div><div>Tinting live glyphs is the one place this direction fights the codebase: <code>reference_composer-field-cannot-tint-subranges</code> says the field cannot colour sub-ranges at the macOS 13 floor. This needs the ghost-subview trick the remainder ghost already uses, or it needs to degrade to no tint on 13.</div></div>
+</div>
+</x-dc>
+</body>
+</html>

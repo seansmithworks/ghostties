@@ -2325,3 +2325,28 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 ## 2026-09-01 — PR #155 review round 2
 
 - [ ] **The macOS test target is never executed in CI.** `.github/workflows/test-ghostties.yml:151-155` runs `xcodebuild build-for-testing` only — compiled, never run. The `swift test` job covers `cli/` alone. Every macOS test in this repo rests on a local run by whoever last touched it. This is why fail-open assertions and unpinned globals matter more here than they would elsewhere. | quality | new
+
+## 2026-09-09 — Zero-chrome composer exploration (carried)
+
+Sean narrowed the ten directions to **zero-chrome (variant 09)** and asked for flow, hints and
+transition choreography, then for prior-art sourcing. Canvas:
+https://claude.ai/code/artifact/fbd31813-d56e-4a55-8f7a-3a9dea7239f9 · sources committed at
+`docs/design/composer/zero-chrome/`. **No direction is picked yet.**
+
+**Blocking on Sean (either can sink the direction):**
+- [ ] **Placement — centre-float vs docked band.** Every other open detail changes with the answer; the docked band deletes items 3–5 outright. Prior art is unanimous: vim's cmdline, fzf, Emacs' minibuffer and Fig all refuse to float over live content. See the `Placement` artboard. | experience | new
+- [ ] **Reduce Motion has no floor.** The direction rests on motion carrying the mode signal because nothing else is left. With Reduce Motion on there is no ramp, no lift, no stagger and no card — text simply exists. Every other direction in the set degrades gracefully; this one does not. If the static fallback needs a surface, the direction has a surface. | craft | new
+
+**Cheapest next move:**
+- [ ] Capture ~10s of the composer open with a build running, to see live output scrolling *under* stationary text. The card hid this completely; nobody has seen it. Static mockups cannot answer it. | craft | new
+
+**Remaining seven open details** — blur depth (6px proposed vs Raycast v2's 48px), user terminal
+themes breaking every contrast assumption, hover with no row background, nothing bounding width or
+row count, VoiceOver's lost container, and the armed-segment tint that
+[[reference_composer-field-cannot-tint-subranges]] says may not be buildable at the macOS 13 floor.
+All ten are written up worst-first on the canvas's **Unsolved** page; not duplicated here.
+
+**Also open (carried from 2026-09-06):**
+- [ ] PR #165 `fix/composer-return-to-shell` @ `d32fb32b6` — OPEN, MERGEABLE, CI green, but CI is
+  `build-for-testing` only and **its tests have never been executed anywhere**. Needs a build in the
+  main tree and Sean running the ⌘T flow. | build | carried 1×

@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 720px; line-height: 1.5; }
+    .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+    .cell { display: flex; flex-direction: column; gap: 8px; }
+    .lbl { display: flex; align-items: baseline; gap: 8px; }
+    .k { font-size: 11px; font-weight: 600; color: #f0efed; }
+    .kk { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; color: #5B8DEF; }
+
+    .term { position: relative; width: 100%; height: 200px; border-radius: 8px; overflow: hidden; background: #2D2D2D; }
+    .bd { position: absolute; inset: 0; padding: 12px 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; line-height: 16px; color: #f0efed; opacity: 0.62; white-space: pre; }
+    .dim { color: #9a9a9a; }
+    .st { position: absolute; top: 76px; left: 0; right: 0; text-align: center; font-size: 15px; color: #f0efed; }
+    .seg { color: #5B8DEF; }
+
+    .bl-c { position: absolute; inset: 0; animation: blurC 2800ms ease-out infinite; }
+    .st-c { animation: textC 2800ms ease-out infinite; }
+    .bl-d { position: absolute; inset: 0; animation: blurD 2800ms ease-out infinite; }
+    .st-d { animation: textD 2800ms ease-out infinite; }
+
+    @keyframes blurC {
+      0%, 28.6%   { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+      35.7%, 78.6%{ backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
+      82.1%, 100% { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    }
+    @keyframes textC {
+      0%, 28.6%   { opacity: 1; transform: translateY(0); }
+      32.1%, 82.0%{ opacity: 0; transform: translateY(-6px); }
+      82.1%       { opacity: 0; transform: translateY(0); }
+      85.7%, 100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes blurD {
+      0%, 28.6%   { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+      35.0%, 78.6%{ backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
+      82.1%, 100% { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    }
+    @keyframes textD {
+      0%, 28.6%   { opacity: 1; transform: translateY(0); }
+      32.9%, 82.1%{ opacity: 0; transform: translateY(0); }
+      85.7%, 100% { opacity: 1; transform: translateY(0); }
+    }
+
+    .rail { position: relative; height: 14px; background: #2a2a2a; border-radius: 3px; }
+    .sg { position: absolute; top: 0; height: 14px; border-radius: 3px; font-size: 9px; display: flex; align-items: center; justify-content: center; }
+    .b1 { background: #6fcf97; color: #0e2416; }
+    .b2 { background: #5B8DEF; color: #0e1a2e; }
+    .trk { display: flex; flex-direction: column; gap: 4px; }
+    .tn { font-size: 10px; color: #9a9a9a; }
+    .cap { font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .cap strong { color: #f0efed; }
+    .verdict { display: flex; gap: 10px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.55; background: #2a2a2a; border-radius: 6px; padding: 12px 14px; }
+    .bar { width: 2px; align-self: stretch; background: #5B8DEF; border-radius: 1px; flex: none; }
+    .verdict strong { color: #f0efed; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Motion — the two exits</div>
+    <div class="ttl">Commit lifts. Dismiss does not. That 6px is the whole distinction.</div>
+    <div class="sub">With a card, Return and Escape could look identical — the card sliding away was the event, and what happened next was somebody else's problem. With nothing on screen but text, the exit is the only chance to say whether anything was launched.</div>
+  </div>
+
+  <div class="pair">
+    <div class="cell">
+      <div class="lbl"><span class="k">Commit</span><span class="kk">⏎</span></div>
+      <div class="term">
+        <div class="bd">$ git log --oneline -3
+<span class="dim">a0297a9  fix(composer): Tab inserts a segment
+d32fb32  fix(session): drop back to a shell
+ef1267e  Merge pull request #163 from docs</span>
+$ zig build run -Doptimize=ReleaseFast
+<span class="dim">  compiling GhosttyKit ... 1.2s</span>
+$ </div>
+        <div class="bl-c"></div>
+        <div class="st st-c">ghostties <span class="seg">&gt; main</span> claude</div>
+      </div>
+      <div class="trk"><div class="tn">Text · lift 6px + fade</div><div class="rail"><div class="sg b1" style="left:0;width:35%">100ms</div></div></div>
+      <div class="trk"><div class="tn">Blur · 6 → 0</div><div class="rail"><div class="sg b2" style="left:14%;width:56%">160ms</div></div></div>
+      <div class="cap"><strong>Reads as departure.</strong> The text leaves upward and the terminal sharpens behind it — the session took the command.</div>
+    </div>
+
+    <div class="cell">
+      <div class="lbl"><span class="k">Dismiss</span><span class="kk">esc</span></div>
+      <div class="term">
+        <div class="bd">$ git log --oneline -3
+<span class="dim">a0297a9  fix(composer): Tab inserts a segment
+d32fb32  fix(session): drop back to a shell
+ef1267e  Merge pull request #163 from docs</span>
+$ zig build run -Doptimize=ReleaseFast
+<span class="dim">  compiling GhosttyKit ... 1.2s</span>
+$ </div>
+        <div class="bl-d"></div>
+        <div class="st st-d">ghostties <span class="seg">&gt; main</span> claude</div>
+      </div>
+      <div class="trk"><div class="tn">Text · fade only, no lift</div><div class="rail"><div class="sg b1" style="left:0;width:42%">120ms</div></div></div>
+      <div class="trk"><div class="tn">Blur · 6 → 0</div><div class="rail"><div class="sg b2" style="left:7%;width:49%">140ms</div></div></div>
+      <div class="cap"><strong>Reads as cancellation.</strong> Nothing travels anywhere; the mode simply releases and the terminal returns.</div>
+    </div>
+  </div>
+
+  <div class="verdict"><div class="bar"></div><div><strong>Both exits keep blur trailing text.</strong> The text is gone before the backdrop finishes resolving, in both cases — that ordering is what makes the terminal feel like it was underneath the whole time rather than replacing something. It is also the cheapest part of this whole direction to build: two <code>withAnimation</code> blocks where there are currently none.</div></div>
+</div>
+</x-dc>
+</body>
+</html>

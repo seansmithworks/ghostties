@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 620px; line-height: 1.5; }
+    .term { position: relative; width: 672px; height: 336px; border-radius: 12px; overflow: hidden; background: #2D2D2D; }
+    .backdrop { position: absolute; inset: 0; padding: 16px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; line-height: 17px; color: #f0efed; opacity: 0.62; white-space: pre; }
+    .dim { color: #9a9a9a; }
+    .wash { position: absolute; inset: 0; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .stack { position: absolute; top: 104px; left: 50%; transform: translateX(-50%); width: 360px; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+    .query { font-size: 15px; font-weight: 400; color: #f0efed; display: flex; align-items: center; gap: 0; }
+    .ghost { color: #f0efed; opacity: 0.50; }
+    .caret { display: inline-block; width: 1.5px; height: 17px; background: #f0efed; margin-right: 1px; }
+    .note { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.5; max-width: 672px; }
+    .pin { width: 4px; height: 4px; border-radius: 50%; background: #5B8DEF; margin-top: 6px; flex: none; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">01 · Summoned — ⌘T, nothing typed</div>
+    <div class="ttl">Rest state carries one hint, and it is the whole UI</div>
+    <div class="sub">No card, no shadow, no row backgrounds. The only thing on screen is the ghost placeholder already shipping today: the exact path Return would commit right now. With the card gone it stops being a hint and becomes the interface.</div>
+  </div>
+  <div class="term">
+    <div class="backdrop">$ git log --oneline -3
+<span class="dim">a0297a9  fix(composer): Tab inserts a segment and a space
+d32fb32  fix(session): drop back to a shell instead of closing
+ef1267e  Merge pull request #163 from seansmithworks/docs</span>
+$ zig build run -Doptimize=ReleaseFast
+<span class="dim">  compiling GhosttyKit ... 1.2s
+  linking Ghostties.app ... ok</span>
+$ </div>
+    <div class="wash"></div>
+    <div class="stack">
+      <div class="query"><span class="caret"></span><span class="ghost">ghostties &gt; main &gt; claude</span></div>
+    </div>
+  </div>
+  <div class="note"><div class="pin"></div><div>The caret is the mode signal. The terminal draws a block caret; the composer draws a 1.5px bar. Swapping caret shape is the cheapest possible "you are typing at the app, not the shell" — and it happens exactly where the eye already is.</div></div>
+  <div class="note"><div class="pin"></div><div>Blur only, no dim. A scrim was ruled out in PR #132 and stays out. Blur removes competing detail without changing luminance — which is honest, and also why the contrast problem on the Hints page is real.</div></div>
+</div>
+</x-dc>
+</body>
+</html>
