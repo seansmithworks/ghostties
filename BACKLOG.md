@@ -1,5 +1,26 @@
 # Ghostties — Backlog
 
+## 2026-09-09 — rig PR #166 open, concept-lab folded (carried from the "Ghostties Concepts" thread)
+
+- [ ] **carried — merge PR #166** (`test/visual-pass-rig` @ `ae7ec2ee7`, worktree `rig-pr` off
+  `origin/main`; reviewer-approved after one rejected round, CI green). Then
+  `git worktree remove .claude/worktrees/rig-pr` and `rm -rf` its `macos/build` (1.3 GB, the
+  thread's sandbox refused it).
+- [ ] **carried — DECIDE OR KILL: promote concept-lab to its production alias and delete the
+  `ghostties-avenues` Vercel project.** Strawman: `vercel deploy --prod --scope seansmithworks`
+  from `concept-lab/`, then `vercel project rm ghostties-avenues`. Preview (login-walled):
+  https://ghostties-concept-cgtv7en5y-seansmithworks.vercel.app — 22 concepts.
+- [ ] parked — CI visual pass: the macos-15 runner launches the app but XCUITest never loads
+  accessibility (60s per test, 11/12 failed, no captures). Next experiment: ad-hoc signing
+  (`CODE_SIGN_IDENTITY=-`) via `gh workflow run test-ghostties.yml --ref <branch> -f visual_pass=true`.
+- [ ] parked — `concept-lab/` is untracked by any git tree (sits in the main checkout root, Codex
+  built it). Give it a home before it is lost.
+- [ ] parked — this file's 2026-09-05 → 09-09 entries live only on `visual-pass-2026-09-05`, which
+  is never pushed; port them to `main` as a docs-only commit once Sean decides on the audit
+  source (owner-only traffic numbers).
+- [ ] parked — `MarketingCaptureUITests.swift:101` still queries `staticTexts["Claude Code 4"]`,
+  stale against the compound accessibility labels.
+
 ## 2026-09-05 — audit follow-ups (carried from the "Ghostties Concepts" thread)
 
 Audit + 23 avenues + visual-pass re-rank live at
@@ -8,15 +29,6 @@ https://ghostties-avenues-67pr67vk3-seansmithworks.vercel.app (throwaway Vercel 
 (`concept-lab/`, https://ghostties-concept-lab.vercel.app) has the better review format;
 this page has the audit numbers and cost/traction. Sean leaned toward the lab.
 
-- [ ] **carried — rig to `main` as its own PR.** Strawman: fresh branch off `origin/main`,
-  cherry-pick `e87a120c8` (fixture mode), `f78ad8a0d` (VisualPassUITests), `3aa12ef19`
-  (`TEST_TARGET_NAME = Ghostties` + gate audit), reviewer re-checks that every class in
-  `macos/GhosttyUITests/` stays IDE-gated, then PR to `SeanSmithWorks/ghostties`. Unblocks
-  re-capture after every change and a headless CI run. `visual-pass-2026-09-05` itself must
-  NOT be pushed as-is — its history carries the unpushed composer work.
-- [ ] **carried — one review surface.** Fold this page's audit, cost/traction fields, and the
-  seven non-overlapping avenues (1, 3, 5, 11, 13, 20, 21) plus the Part three findings into
-  `concept-lab/` (Vite + drawably, `src/concepts.js`), then retire `ghostties-avenues`.
 - [ ] **carried — fixture gains a "needs you" session** before any hero-film or site-capture
   work; capture on an empty Space so no other window leaks in.
 - [ ] parked — ghostties.org: ghosts drift over the brew button and the product still at load;
