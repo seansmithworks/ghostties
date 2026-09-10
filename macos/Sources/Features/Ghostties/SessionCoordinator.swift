@@ -235,13 +235,18 @@ final class SessionCoordinator: ObservableObject {
             return result
         }()
 
-        // For agent templates, write a wrapper script that prints a banner
-        // then exec's into the real command. Direct `&&` chaining breaks because
-        // Ghostty wraps the command with `exec -l`, which replaces the process
-        // before the second command runs.
+        // Every resolved command (agent or otherwise) is written to a wrapper
+        // script, not `exec`'d directly. Direct `&&` chaining breaks because
+        // Ghostty wraps a bare command with `exec -l`, which replaces the
+        // process before a second command could run — the script is what
+        // lets a banner print first. Unlike the original version of this
+        // script, the resolved command itself is run in the foreground and
+        // is NOT the final `exec`'d process: when the agent exits, the
+        // script keeps going and `exec`s a fresh login shell, so the
+        // terminal surface survives and drops back to a normal interactive
+        // prompt instead of closing ("Process exited. Press any key...").
         let finalCommand: String? = {
             guard let cmd = resolvedCommand else { return nil }
-            guard let banner = template.launchBanner else { return cmd }
 
             let scriptDir = Self.launcherScriptDir
             let fm = FileManager.default
@@ -251,15 +256,12 @@ final class SessionCoordinator: ObservableObject {
                 ])
             }
             let scriptPath = (scriptDir as NSString).appendingPathComponent("\(session.id.uuidString).sh")
-            // Spawn banner: first output line confirms task context before Claude starts.
-            // Uses env vars set in config.environmentVariables so they're already in scope.
-            let spawnBannerEcho = #"echo "task: $GHOSTTIES_TASK_ID · file: $GHOSTTIES_TASK_FILE · cwd: $(pwd)""#
-            let script = "#!/bin/zsh -l\n. ~/.zshrc 2>/dev/null\n\(banner)\n\(spawnBannerEcho)\nexec \(cmd)\n"
+            let script = Self.launcherScript(command: cmd, banner: template.launchBanner)
             if (try? script.write(toFile: scriptPath, atomically: true, encoding: .utf8)) != nil {
                 try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptPath)
                 return scriptPath
             }
-            return cmd // fallback: skip banner
+            return cmd // fallback: script write failed — Ghostty execs cmd directly (dies on exit)
         }()
 
         var config = Ghostty.SurfaceConfiguration()
@@ -1018,10 +1020,29 @@ final class SessionCoordinator: ObservableObject {
     }
 
     /// Delete a single session's launcher script at teardown. A no-op if the
-    /// session never got one (e.g. templates without a `launchBanner`).
+    /// session never got one (e.g. plain shell templates with no `command`,
+    /// which never go through the launcher-script path at all).
     nonisolated static func removeLauncherScript(for sessionId: UUID) {
         let path = (launcherScriptDir as NSString).appendingPathComponent("\(sessionId.uuidString).sh")
         try? FileManager.default.removeItem(atPath: path)
+    }
+
+    /// Builds the wrapper script content for a spawned agent session: prints
+    /// the banner (if any), runs `command` in the foreground, then `exec`s a
+    /// fresh login shell. The resolved command is deliberately NOT the
+    /// script's final `exec`'d process — when it exits, the script keeps
+    /// running and drops into a normal interactive prompt, so the terminal
+    /// surface survives the agent exiting instead of closing with it.
+    nonisolated static func launcherScript(command: String, banner: String?) -> String {
+        let bannerLines: String = {
+            guard let banner else { return "" }
+            // Spawn banner: first output line confirms task context before
+            // the agent starts. Uses env vars set in
+            // config.environmentVariables so they're already in scope.
+            let spawnBannerEcho = #"echo "task: $GHOSTTIES_TASK_ID · file: $GHOSTTIES_TASK_FILE · cwd: $(pwd)""#
+            return "\(banner)\n\(spawnBannerEcho)\n"
+        }()
+        return "#!/bin/zsh -l\n. ~/.zshrc 2>/dev/null\n\(bannerLines)\(command)\nexec /bin/zsh -l\n"
     }
 
     /// Assemble the environment for a spawned session: the template's own

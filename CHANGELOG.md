@@ -8,13 +8,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+---
+
+## [0.1.0-beta.25] — 2026-09-10
+
+The session composer goes ultra-minimal: no trailing buttons on the field, section headers and a contextual footer replace them, and the ghost-text field is on by default for everyone. A session's terminal now survives its agent exiting.
+
 ### Changed
 
 - **The composer field row drops its trailing project/branch buttons too** — the results list below the field is now the only way to browse projects and templates. No mouse route into a branch or project picker remains on the field row itself.
+- **RECENT / TEMPLATES / PROJECTS / COMMAND section headers are back** above the composer's results list, so the list reads as browseable groups again instead of one flat stack.
+- **A thin footer strip shows only the key chords that are live right now** (Return, Tab, arrows, Undo), replacing the old static four-chord row — and it never doubles up with an error message or the new-template naming prompt.
+- **The ghost-text composer field is now on for everyone**, previewing your destination — project, branch, template — as you type instead of requiring you to turn it on first. The old toggle in View → Experimental Composer Field still exists if you want it off.
+- **Tab in the composer accepts one segment plus a space**, never a chevron. Typing a name and hitting Tab used to insert `>`, which could get read as an explicit branch declaration you didn't intend.
 
 ### Fixed
 
+- **Typing a branch name that doesn't exist now offers to create it**, instead of silently trying to run it as a shell command. The "Run" reading still shows as a separate option alongside it.
 - **Abandoning a just-created template's edit sheet no longer leaves a junk, unconfigured template behind.** Opening "New template" and then dismissing without saving (Cancel, Esc, or clicking outside) used to persist an empty `command: nil` row forever.
+- **Closing a session after its agent exits works like closing any other shell.** The terminal used to show "Process exited. Press any key to close the terminal." the moment Claude Code (or another agent) quit; it now drops back to a normal shell prompt and closes the same way a plain terminal session does.
 
 ---
 

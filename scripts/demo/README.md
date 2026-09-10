@@ -1,0 +1,143 @@
+# Ghostties Demo Rig
+
+Produces an isolated `Ghostties Demo.app` for screen recording and marketing
+capture — never touches the real daily-driver app or its data.
+
+## Entrypoint: `demo-ready.sh`
+
+Before capturing anything, run:
+
+```bash
+./scripts/demo/demo-ready.sh
+```
+
+This is the one command an agent or Sean should run as preflight. It resolves
+the newest release tag on `SeanSmithWorks/ghostties`, compares it against the
+installed demo app's version, calls `refresh-demo.sh` only if they differ,
+always reseeds the fixture workspace via `seed-demo-workspace.sh`, and writes
+a manifest recording exactly what's on disk. `refresh-demo.sh` and
+`seed-demo-workspace.sh` are the pieces it calls — call them directly only
+when working on the rig itself.
+
+```bash
+./scripts/demo/demo-ready.sh --check     # assert freshness; exits non-zero if stale/missing, never changes the app
+./scripts/demo/demo-ready.sh --source    # demo the current checkout instead of the newest release
+./scripts/demo/demo-ready.sh --dest <path>  # non-default app location
+```
+
+### Manifest
+
+Every successful run — including a passing `--check` — writes
+`~/Library/Application Support/Ghostties Demo/demo-manifest.json`, recording
+the demo app version (or, in `--source` mode, the built commit sha), the
+source tag or ref+sha, the resolved absolute path of the app bundle that was
+just inspected or refreshed, the app bundle's mtime, an ISO-8601
+refreshed-at timestamp, the fixture project count, and the seeded repos
+path. `--check` never touches the app or the fixture workspace — it only
+records what it just verified, so a stale manifest can't survive a clean
+preflight. **A capture run should copy this manifest next to whatever assets
+it produces** — it's what lets anyone later trace a screenshot or clip back
+to the exact build that produced it.
+
+## How isolation works
+
+`refresh-demo.sh` re-bundles the app under bundle ID
+`com.seansmithdesign.ghostties.demo`. `WorkspacePersistence` derives its state
+directory from `Bundle.main.bundleIdentifier`, so the demo app reads/writes
+`~/Library/Application Support/Ghostties Demo/` — completely separate from
+`~/Library/Application Support/Ghostties/` (release) and `Ghostties Dev/`.
+
+## Refresh modes
+
+```bash
+# Default: download the latest published release and re-bundle it (recommended)
+./scripts/demo/refresh-demo.sh
+
+# Pin to a specific tag
+./scripts/demo/refresh-demo.sh --from-release v0.1.0-beta.24
+
+# Build the local checkout instead (Debug, arm64)
+./scripts/demo/refresh-demo.sh --from-source
+./scripts/demo/refresh-demo.sh --from-source --pull-main   # fetch+checkout main first
+
+# Verification / CI use
+./scripts/demo/refresh-demo.sh --dest /tmp/x.app --no-launch
+```
+
+Release downloads are cached under `~/Library/Caches/ghostties-demo/<tag>/` so
+re-running the same tag doesn't re-download the ~147MB asset.
+
+**Sparkle updates are disabled in the demo build.** Ad-hoc re-signing
+(required to rewrite the bundle ID) invalidates the Developer ID signature
+Sparkle needs to trust an update, and `UpdateDelegate.feedURLString(for:)`
+honours an explicit Info.plist `SUFeedURL` before falling back to the real
+release channels — so a manual "Check for Updates…" in the demo could
+otherwise resolve the real Ghostties feed and overwrite the demo app with
+the real one (they share the same `SUPublicEDKey`). The script instead sets
+`SUFeedURL` to `https://ghostties.org/appcast-demo.xml`, a URL that
+deliberately does not exist, so a manual check fails benignly with a 404
+rather than installing anything. It also unconditionally sets
+`SUEnableAutomaticChecks` to `false` (adding the key if absent) — a missing
+key makes Sparkle prompt the user, so it's never left out. **This script is
+the demo's update mechanism — re-run it to refresh to a new release.**
+
+## Seed the workspace
+
+```bash
+./scripts/demo/seed-demo-workspace.sh
+```
+
+Copies the 10 fixtures in `examples/demo-workspace/` into
+`~/Library/Application Support/Ghostties Demo/repos/<name>/`, turns each into
+a real git repo (init + one commit; a few get an extra branch), and points
+`workspace.json` at those copies — not at this checkout, so the demo doesn't
+break when this repo changes branch. Idempotent; backs up any existing
+`workspace.json` before overwriting.
+
+## Stage real agent sessions: `demo-drive.sh`
+
+```bash
+./scripts/demo/demo-drive.sh              # stage 4 sessions across seeded repos
+./scripts/demo/demo-drive.sh --count 6    # stage 6 sessions
+./scripts/demo/demo-drive.sh --reset      # clear staged sessions
+```
+
+**The demo app must be quit before running this.** `WorkspacePersistence`
+rewrites `workspace.json` from memory while the app runs, so any edit made
+while it's open is silently reverted. If it's running, the script refuses to
+proceed and prints:
+
+```bash
+osascript -e 'tell application "Ghostties Demo" to quit'
+```
+
+It detects a running instance via `osascript`/System Events by bundle ID —
+querying only, never used to quit or drive the app.
+
+Each staged session is bound to its own per-repo `AgentTemplate` whose
+command is `claude` with a short, harmless, read-only prompt (summarize the
+README, list TODOs, describe the structure, explain the last commit — cycled
+across sessions). Nothing about the resulting activity is faked: no GUI
+automation is used anywhere, and the script never launches the app or runs
+`claude` itself. It only writes the staged records to `workspace.json`
+(backed up first, validated as JSON, written atomically); re-running replaces
+the previously staged set rather than appending duplicates.
+
+**Important:** Ghostties only spawns a process from a user-triggered UI
+action (a sidebar "Relaunch" click, a row click, or the composer) — there is
+no launch-time code path that replays persisted sessions automatically. A
+staged session appears in the sidebar as "Exited" with a Relaunch action;
+producing genuinely live ghost states for capture still requires clicking
+"Relaunch" once per session after opening the app:
+
+```bash
+open "/Applications/Ghostties Demo.app"
+```
+
+## Quitting
+
+Never `killall`. Quit cleanly:
+
+```bash
+osascript -e 'tell application "Ghostties Demo" to quit'
+```
