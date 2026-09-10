@@ -109,19 +109,11 @@ struct SessionComposerPalette: View {
 
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
-    /// Zero-chrome style only (`ComposerStyle.zeroChrome`) — drives the
-    /// wash/text summon-in transition. Starts `true` (visible) rather than
-    /// gating first-paint visibility on an `onAppear` round trip — the
-    /// offscreen snapshot harness (`ComposerZeroChromeStyleTests`) captures
-    /// a single synchronous frame with no animation pump, same constraint
-    /// `SessionComposerSnapshotTests` documents for every other transition
-    /// in this file, so a state flip that visibility depends on but that
-    /// only `onAppear` sets would render blank in that harness. `onAppear`
-    /// below still exists to give the summon transition a coordinated 0→1
-    /// starting point when a fresh composer instance mounts through
-    /// `SessionComposerOverlay` in the real app. Unused by `.classic`/
-    /// `.singleLine`.
-    @State private var zeroChromeRevealed = true
+    /// Zero-chrome style only — `↓` on an empty field reveals the
+    /// candidate rows without requiring typed text (brief §4, fix round
+    /// finding 3). Cleared whenever the composer dismisses (`onChange(of:
+    /// isPresented)` below) so a later fresh summon starts collapsed again.
+    @State private var zeroChromeRowsRevealedByArrow = false
     /// Whether the inline project picker is expanded. Used to open from
     /// `projectControl` (Step 5; used to be the resolution line's project
     /// segment, before that the project chip's own click target, Slice
@@ -1383,6 +1375,10 @@ struct SessionComposerPalette: View {
                     // debounced refresh for whatever project was typed must
                     // not land after the composer has already closed.
                     commandProjectRefreshTask?.cancel()
+                    // Fix round (finding 3): a fresh summon should always
+                    // start with the zero-chrome rows collapsed, not
+                    // reopened from whatever `↓` left behind last time.
+                    zeroChromeRowsRevealedByArrow = false
                 }
             }
             .onDisappear {
@@ -1807,8 +1803,11 @@ struct SessionComposerPalette: View {
         }
     }
 
+    /// Fix round (finding 3): `↓` on an empty field must reveal rows too,
+    /// not just typing — `zeroChromeRowsRevealedByArrow` covers that edge,
+    /// reset on every fresh summon (`onChange(of: isPresented)` above).
     private var showNewStyleRows: Bool {
-        activeStyle == .zeroChrome && !query.isEmpty
+        activeStyle == .zeroChrome && (!query.isEmpty || zeroChromeRowsRevealedByArrow)
     }
 
     // MARK: - Zero-chrome style (spike)
@@ -1818,19 +1817,37 @@ struct SessionComposerPalette: View {
     /// vertical placement (38% of window height) is `SessionComposerOverlay`'s
     /// job, not this view's; this is just the field + rows content, centered
     /// horizontally by its parent `ZStack`.
+    /// Fix round (independent review, BLOCKER 1): the earlier `onAppear`
+    /// implementation forced `zeroChromeRevealed = false` THEN animated it
+    /// back to `true` — contradicting that property's own settled-by-
+    /// default contract and guaranteeing a real (if brief) unrevealed first
+    /// frame on every mount, which the offscreen snapshot harness (no
+    /// animation pump) caught as a genuinely blank capture.
+    ///
+    /// An `AnyTransition`-based replacement was tried first (per the
+    /// review's suggested fix) but empirically broke the ADJACENT sibling
+    /// row list's rendering in the SAME offscreen harness — attaching
+    /// `.transition` to the always-present wash/text content, with no
+    /// conditional ever driving an actual insertion/removal, left the
+    /// `newStyleCandidateRows` block beneath it blank in captured PNGs even
+    /// though `showNewStyleRows` was true. Not chased further given the
+    /// BLOCKER priority: settled-on-first-paint correctness over transition
+    /// polish for this spike. Landed on the simplest thing that is
+    /// unconditionally correct — always-visible content, no `@State`, no
+    /// `.transition`, no animation. Sean can request a real summon
+    /// animation as separate follow-up once this ships; the Timing board's
+    /// numbers stay documented above for whoever picks that up.
     private var zeroChromeComposerCard: some View {
         VStack(spacing: 8) {
             ZStack {
                 ComposerZeroChromeWash(
                     material: ComposerZeroChromeMaterial.current(),
-                    revealed: zeroChromeRevealed
+                    revealed: true
                 )
                 VStack(alignment: .leading, spacing: 6) {
                     newStyleField
                     newStyleStatusStrip
                 }
-                .opacity(zeroChromeRevealed ? 1 : 0)
-                .offset(y: zeroChromeRevealed ? 0 : 4)
             }
 
             if showNewStyleRows {
@@ -1842,21 +1859,6 @@ struct SessionComposerPalette: View {
             }
         }
         .frame(width: Self.composerNewStyleFieldWidth)
-        .onAppear {
-            guard !reduceMotionEnabled else { return }
-            // Wash leads text in (brief's Timing rule): wash 0→full 140ms
-            // easeOut; text opacity/offset 120ms easeOut with a 40ms delay,
-            // both driven by the same `zeroChromeRevealed` flip since
-            // SwiftUI applies each modifier's own animation curve/delay
-            // independently within one state change. Starts from `true`
-            // (see the property's doc comment), so summon here is a
-            // deliberate false→true replay, not the initial paint.
-            zeroChromeRevealed = false
-            withAnimation(.easeOut(duration: 0.14)) {
-                zeroChromeRevealed = true
-            }
-        }
-        .animation(reduceMotionEnabled ? nil : .easeOut(duration: 0.12).delay(0.04), value: zeroChromeRevealed)
     }
 
     // MARK: - Single-line style (spike)
@@ -2566,6 +2568,13 @@ struct SessionComposerPalette: View {
             selectedIndex = (current == 0) ? UInt(flattenedOptions.count - 1) : current - 1
 
         case .move(.down):
+            // Fix round (finding 3, brief §4): `↓` on an EMPTY zero-chrome
+            // field must reveal the candidate rows even though there's no
+            // query to filter by yet — `showNewStyleRows` OR's this flag in
+            // alongside the existing `!query.isEmpty` gate. Set
+            // unconditionally (cheap, harmless for `.classic`/`.singleLine`,
+            // which never read it).
+            zeroChromeRowsRevealedByArrow = true
             if flattenedOptions.isEmpty { break }
             let current = selectedIndex ?? UInt.max
             selectedIndex = (current >= UInt(flattenedOptions.count - 1)) ? 0 : current + 1
