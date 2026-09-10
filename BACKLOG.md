@@ -6,15 +6,13 @@
   `origin/main`; reviewer-approved after one rejected round, CI green). Then
   `git worktree remove .claude/worktrees/rig-pr` and `rm -rf` its `macos/build` (1.3 GB, the
   thread's sandbox refused it).
-- [ ] **carried — DECIDE OR KILL: promote concept-lab to its production alias and delete the
-  `ghostties-avenues` Vercel project.** Strawman: `vercel deploy --prod --scope seansmithworks`
-  from `concept-lab/`, then `vercel project rm ghostties-avenues`. Preview (login-walled):
-  https://ghostties-concept-cgtv7en5y-seansmithworks.vercel.app — 22 concepts.
+- [x] concept-lab promoted to https://ghostties-concept-lab.vercel.app (2026-09-10, bundle `index-C8be9qcg.js`: 22 concepts, sketches in the app frame, scoring). 
+- [ ] **HELD — delete the `ghostties-avenues` Vercel project.** Sean: "hold, discuss." Strawman: `vercel project rm ghostties-avenues`.
 - [ ] parked — CI visual pass: the macos-15 runner launches the app but XCUITest never loads
   accessibility (60s per test, 11/12 failed, no captures). Next experiment: ad-hoc signing
   (`CODE_SIGN_IDENTITY=-`) via `gh workflow run test-ghostties.yml --ref <branch> -f visual_pass=true`.
-- [ ] parked — `concept-lab/` is untracked by any git tree (sits in the main checkout root, Codex
-  built it). Give it a home before it is lost.
+- [x] `concept-lab/` has a home: nested repo at the same path, remote https://github.com/seansmithworks/ghostties-concept-lab (PRIVATE — the audit card carries owner-only traffic numbers). First commit `bd5184e`, 2026-09-10.
+- [ ] HELD — two concept-lab design calls: the terminal canvas runs thin (pad with transcript lines?) and overlays stack in flow instead of floating. Sean: "hold, discuss."
 - [ ] parked — this file's 2026-09-05 → 09-09 entries live only on `visual-pass-2026-09-05`, which
   is never pushed; port them to `main` as a docs-only commit once Sean decides on the audit
   source (owner-only traffic numbers).
