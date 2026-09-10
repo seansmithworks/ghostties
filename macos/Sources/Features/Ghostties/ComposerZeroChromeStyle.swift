@@ -209,6 +209,12 @@ enum ComposerZeroChromeTiming {
     static let summonWashDuration: Double = 0.14
     static let summonTextDuration: Double = 0.12
     static let summonTextDelay: Double = 0.04
+    /// Fix round 4, item 1: the summon text transition is opacity 0→1 AND
+    /// y 4→0 (Timing board + brief), not opacity-only — this is the
+    /// pre-reveal offset the field/ghost/descriptor block starts at while
+    /// `revealPhase == .hidden`, animating down to 0 on the SAME
+    /// `summonTextDuration`/`summonTextDelay` curve as the opacity fade.
+    static let summonTextOffsetY: CGFloat = 4
 
     static let commitTextDuration: Double = 0.10
     static let commitWashDuration: Double = 0.16

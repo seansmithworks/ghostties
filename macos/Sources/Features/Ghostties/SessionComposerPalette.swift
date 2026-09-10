@@ -1929,7 +1929,18 @@ struct SessionComposerPalette: View {
                 newStyleStatusStrip
             }
             .opacity(revealPhase.wrappedValue == .revealed ? 1 : 0)
-            .offset(y: revealPhase.wrappedValue == .committing ? ComposerZeroChromeTiming.commitTextOffsetY : 0)
+            // Fix round 4, item 1: summon (`.hidden`) starts offset +4pt,
+            // sliding to 0 on the same curve as the opacity fade below —
+            // the Timing board's summon text transition is opacity 0→1
+            // AND y 4→0, not opacity-only. `.committing` keeps its own
+            // -6pt offset; `.revealed`/`.dismissing` sit at 0.
+            .offset(y: {
+                switch revealPhase.wrappedValue {
+                case .hidden: return ComposerZeroChromeTiming.summonTextOffsetY
+                case .committing: return ComposerZeroChromeTiming.commitTextOffsetY
+                case .revealed, .dismissing: return 0
+                }
+            }())
             .animation(
                 zeroChromeTextAnimation(for: revealPhase.wrappedValue, reduceMotion: reduceMotionEnabled),
                 value: revealPhase.wrappedValue

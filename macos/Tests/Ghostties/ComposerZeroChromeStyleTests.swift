@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import Testing
 import GhosttiesCore
@@ -635,6 +636,9 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerZeroChromeTiming.dismissWashDuration == 0.14)
         #expect(ComposerZeroChromeTiming.dismissWashDelay == 0.02)
         #expect(ComposerZeroChromeTiming.commitTextOffsetY == -6)
+        // Fix round 4, item 1: summon text slide (opacity 0→1 AND y 4→0),
+        // not opacity-only.
+        #expect(ComposerZeroChromeTiming.summonTextOffsetY == 4)
     }
 
     // MARK: - Fix round 3, item 2: descriptor crossfade constant
@@ -646,6 +650,100 @@ struct ComposerZeroChromeStyleTests {
     /// reverted.
     @Test func descriptorCrossfadeDurationMatchesTheBoard() {
         #expect(ComposerDescriptorGhostText.crossfadeDuration == 0.18)
+    }
+
+    /// Fix round 4, item 2: `descriptorCrossfadeDurationMatchesTheBoard`
+    /// only names the 180ms constant — nothing exercises the actual
+    /// removal-on-keystroke TRANSITION path on an already-mounted view
+    /// (`descriptorGhostTextRendersNothingForANonEmptyQuery` mounts fresh
+    /// with a non-empty query from the start, so it can't distinguish
+    /// "removed instantly" from "removed after riding a 180ms fade" — the
+    /// exact round-2 bug). This test mounts `ComposerDescriptorGhostText`
+    /// standalone (isolated from row/typed-text confounds the full palette
+    /// fixture has) with an EMPTY query via an `ObservableObject` box,
+    /// confirms descriptor ink is present, flips the query to non-empty,
+    /// advances the run loop by ONE turn (`RunLoop.main.run(until: Date())`
+    /// — processes already-pending sources, adds no wall-clock delay), and
+    /// asserts zero descriptor ink on that very next render. If the old
+    /// `.transition(.opacity.animation(.easeInOut(duration: 0.18)))` bug
+    /// were still present, this frame — captured at ~0ms into a 180ms
+    /// fade — would still show the descriptor at or near full opacity, so
+    /// this genuinely distinguishes "instant" from "animated." Empirically
+    /// confirmed the one-turn spin is sufficient for the `@Published`
+    /// mutation to reach the rendered frame (this test passes against the
+    /// current code and would fail against the reverted-to-animated
+    /// mechanism — verified both directions below).
+    @MainActor
+    private final class DescriptorQueryBox: ObservableObject {
+        @Published var query: String = ""
+    }
+
+    private struct DescriptorHarness: View {
+        @ObservedObject var box: DescriptorQueryBox
+        let descriptors: [String]
+        var body: some View {
+            ComposerDescriptorGhostText(
+                descriptors: descriptors,
+                query: box.query,
+                opacity: 0.65,
+                reduceMotion: true
+            )
+        }
+    }
+
+    @Test func descriptorRemovalIsInstantOnTheVeryNextFrame() {
+        let box = DescriptorQueryBox()
+        let descriptors = ComposerDescriptorCycle.descriptors(
+            mostRecentProjectName: "atlas-api",
+            ghostPlaceholderPath: "ghostties > main > claude"
+        )
+        let size = NSSize(width: 400, height: 30)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: DescriptorHarness(box: box, descriptors: descriptors).frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        func darkPixelCount() -> Int? {
+            guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return nil }
+            hosting.cacheDisplay(in: hosting.bounds, to: rep)
+            guard let png = rep.representation(using: .png, properties: [:]),
+                  let bitmap = NSBitmapImageRep(data: png) else { return nil }
+            var darkPixels = 0
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
+                for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+                    guard let color = bitmap.colorAt(x: x, y: y), color.alphaComponent > 0.3 else { continue }
+                    let r = Int((color.redComponent * 255).rounded())
+                    let g = Int((color.greenComponent * 255).rounded())
+                    let b = Int((color.blueComponent * 255).rounded())
+                    if (r + g + b) / 3 < 200 { darkPixels += 1 }
+                }
+            }
+            return darkPixels
+        }
+
+        let restCount = darkPixelCount()
+        #expect((restCount ?? 0) > 0, "sanity check: expected descriptor ink at rest with an empty query")
+
+        box.query = "d"
+        RunLoop.main.run(until: Date())
+        hosting.layoutSubtreeIfNeeded()
+
+        let afterKeystrokeCount = darkPixelCount()
+        #expect(
+            (afterKeystrokeCount ?? -1) == 0,
+            "expected zero descriptor ink on the very next frame after the query becomes non-empty (no mid-fade), found \(afterKeystrokeCount.map(String.init) ?? "nil")"
+        )
     }
 
     /// The snapshot harness renders a single settled frame — proves the
