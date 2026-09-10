@@ -2,10 +2,7 @@
 
 ## 2026-09-09 — rig PR #166 open, concept-lab folded (carried from the "Ghostties Concepts" thread)
 
-- [ ] **carried — merge PR #166** (`test/visual-pass-rig` @ `ae7ec2ee7`, worktree `rig-pr` off
-  `origin/main`; reviewer-approved after one rejected round, CI green). Then
-  `git worktree remove .claude/worktrees/rig-pr` and `rm -rf` its `macos/build` (1.3 GB, the
-  thread's sandbox refused it).
+- [x] PR #166 merged to main `45b2053ec` (2026-09-10) after a server-side update-branch onto main and green CI; `rig-pr` worktree removed with `--force` (1.4 GB freed), branch `test/visual-pass-rig` kept.
 - [x] concept-lab promoted to https://ghostties-concept-lab.vercel.app (2026-09-10, bundle `index-C8be9qcg.js`: 22 concepts, sketches in the app frame, scoring). 
 - [ ] **HELD — delete the `ghostties-avenues` Vercel project.** Sean: "hold, discuss." Strawman: `vercel project rm ghostties-avenues`.
 - [ ] parked — CI visual pass: the macos-15 runner launches the app but XCUITest never loads
