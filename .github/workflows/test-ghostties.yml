@@ -25,7 +25,12 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      visual_pass:
+        description: "Run the VisualPassUITests capture experiment on the runner"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -156,7 +161,54 @@ jobs:
             -scheme Ghostties \
             -configuration Debug \
             -destination 'platform=macOS' \
+            -derivedDataPath build \
             ONLY_ACTIVE_ARCH=YES \
             ARCHS=arm64 \
             -skipPackagePluginValidation \
             CODE_SIGNING_ALLOWED=NO
+
+      # Experiment: does GhosttyUITests/VisualPassUITests launch on a
+      # headless GitHub runner? Run 34016193346 (2026-09-06) showed the
+      # runner launches the app host, but the XCTest accessibility
+      # connection never establishes ("has not loaded accessibility" after
+      # a 60s wait per test), which burns the full 15-minute step timeout.
+      # Gated behind workflow_dispatch with visual_pass=true so pushes
+      # stop paying for it. Next experiment: ad-hoc signing
+      # (CODE_SIGN_IDENTITY=-) instead of CODE_SIGNING_ALLOWED=NO.
+      - name: Visual pass (experiment)
+        if: github.event_name == 'workflow_dispatch' && inputs.visual_pass == true
+        working-directory: macos
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          TEST_RUNNER_GHOSTTIES_UI_CAPTURE: "1"
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme Ghostties \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            -only-testing:GhosttyUITests/VisualPassUITests \
+            ONLY_ACTIVE_ARCH=YES \
+            ARCHS=arm64 \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Collect visual-pass captures
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.visual_pass == true
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/visual-pass-captures"
+          if [ -d "$TMPDIR/ghostties-visual-pass" ]; then
+            cp -R "$TMPDIR/ghostties-visual-pass/." "$GITHUB_WORKSPACE/visual-pass-captures/"
+          else
+            echo "no captures at $TMPDIR/ghostties-visual-pass"
+          fi
+
+      - name: Upload visual-pass captures
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.visual_pass == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-pass-captures
+          path: visual-pass-captures
+          if-no-files-found: warn
