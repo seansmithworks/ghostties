@@ -81,20 +81,47 @@ struct SessionComposerPalette: View {
     /// .isAddingTemplateClearsWhenAWriteErrorArrives`) has no other route
     /// in. Defaults `false`, matching every production call site
     /// unchanged.
+    /// Test seam for `ComposerStyle` (zero-chrome/single-line spike),
+    /// same shape as `initialIsAddingTemplateForTesting` above and for the
+    /// same reason: `activeStyle` reads real `UserDefaults.standard` at
+    /// every production call site (matching `ComposerGhostTextField
+    /// .modelBFieldStorageKey`'s existing flag-reading convention), and
+    /// `xcodebuild test`'s parallel test processes share that SAME on-disk
+    /// domain (same bundle id across processes) — a snapshot test that set
+    /// the real key directly raced other parallel snapshot tests and
+    /// intermittently poisoned unrelated `.classic` renders. `nil` (every
+    /// production call site) falls through to the real flag unchanged.
+    let styleOverrideForTesting: ComposerStyle?
+
     init(
         isPresented: Binding<Bool>,
         request: SessionComposerRequest,
         composerStore: SessionComposerStore = .shared,
-        initialIsAddingTemplateForTesting: Bool = false
+        initialIsAddingTemplateForTesting: Bool = false,
+        styleOverrideForTesting: ComposerStyle? = nil
     ) {
         self._isPresented = isPresented
         self.request = request
         self.composerStore = composerStore
+        self.styleOverrideForTesting = styleOverrideForTesting
         self._isAddingTemplate = State(initialValue: initialIsAddingTemplateForTesting)
     }
 
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
+    /// Zero-chrome style only (`ComposerStyle.zeroChrome`) — drives the
+    /// wash/text summon-in transition. Starts `true` (visible) rather than
+    /// gating first-paint visibility on an `onAppear` round trip — the
+    /// offscreen snapshot harness (`ComposerZeroChromeStyleTests`) captures
+    /// a single synchronous frame with no animation pump, same constraint
+    /// `SessionComposerSnapshotTests` documents for every other transition
+    /// in this file, so a state flip that visibility depends on but that
+    /// only `onAppear` sets would render blank in that harness. `onAppear`
+    /// below still exists to give the summon transition a coordinated 0→1
+    /// starting point when a fresh composer instance mounts through
+    /// `SessionComposerOverlay` in the real app. Unused by `.classic`/
+    /// `.singleLine`.
+    @State private var zeroChromeRevealed = true
     /// Whether the inline project picker is expanded. Used to open from
     /// `projectControl` (Step 5; used to be the resolution line's project
     /// segment, before that the project chip's own click target, Slice
@@ -1281,6 +1308,20 @@ struct SessionComposerPalette: View {
         return UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
     }
 
+    // MARK: - Style flag (spike, `ghostties.composerStyle`)
+
+    /// Unset/unrecognized = `.classic` — see `ComposerZeroChromeStyle.swift`.
+    /// Read once per render; SwiftUI re-evaluates `body` on every relevant
+    /// `@Published`/`@State` change already, so no extra invalidation wiring
+    /// is needed for `defaults write` changes to take effect on next launch.
+    private var activeStyle: ComposerStyle {
+        styleOverrideForTesting ?? ComposerStyle.current()
+    }
+
+    private var reduceMotionEnabled: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -1310,11 +1351,11 @@ struct SessionComposerPalette: View {
             // chrome/shadow instead; adding a second shadow there would
             // double up.
             .shadow(
-                color: request.presentation == .centered
+                color: request.presentation == .centered && activeStyle == .classic
                     ? .black.opacity(WorkspaceLayout.composerModalShadowOpacity)
                     : .clear,
-                radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0,
-                y: request.presentation == .centered ? WorkspaceLayout.composerModalShadowYOffset : 0
+                radius: request.presentation == .centered && activeStyle == .classic ? WorkspaceLayout.composerModalShadowRadius : 0,
+                y: request.presentation == .centered && activeStyle == .classic ? WorkspaceLayout.composerModalShadowYOffset : 0
             )
             .environment(\.colorScheme, scheme)
             .onAppear {
@@ -1512,7 +1553,23 @@ struct SessionComposerPalette: View {
     /// it rather than the shake living on the true root, which
     /// left no room to translate inside an `.anchored` NSPopover sized
     /// exactly to its content.
+    /// Dispatches on `activeStyle`. `.classic` renders the exact, byte-for-
+    /// byte unchanged card this project has shipped since PR #132 —
+    /// `classicComposerCard` below is that same code, only renamed to make
+    /// room for the two new styles as siblings, never edited.
+    @ViewBuilder
     private var composerCard: some View {
+        switch activeStyle {
+        case .classic:
+            classicComposerCard
+        case .zeroChrome:
+            zeroChromeComposerCard
+        case .singleLine:
+            singleLineComposerCard
+        }
+    }
+
+    private var classicComposerCard: some View {
         let backgroundColor = Color(nsColor: .windowBackgroundColor)
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -1666,6 +1723,174 @@ struct SessionComposerPalette: View {
             composerClipShape
                 .stroke(Color(nsColor: .systemRed), lineWidth: 2)
                 .opacity(showNoMatchBorder ? 1 : 0)
+        )
+        .modifier(ShakeEffect(animatableData: shakeTrigger))
+    }
+
+    // MARK: - Zero-chrome / single-line shared field (spike)
+
+    /// The one-line field both new styles share (brief §1): 15pt SF Pro
+    /// Text, 38pt tall, 480pt text measure via `Self.zeroChromeFieldWidth`
+    /// below, reusing the SAME Model-B ghost text field and `handle(_:)`
+    /// event routing the shipping card wires today — no new ghost/ranking
+    /// logic, just a different chrome around it. `ghostFullPath` is blanked
+    /// at rest (`query.isEmpty`) so `ComposerDescriptorGhostText` owns the
+    /// rest-state hint text instead of the field's own placeholder ghost
+    /// (which would otherwise always show the chevron path first, the
+    /// thing Sean's rule forbids).
+    private static let composerNewStyleFieldWidth: CGFloat = 480 + 16 * 2 // 512pt
+
+    private var newStyleField: some View {
+        ZStack(alignment: .leading) {
+            ComposerDescriptorGhostText(
+                descriptors: ComposerDescriptorCycle.descriptors(
+                    mostRecentProjectName: currentProject?.name,
+                    ghostPlaceholderPath: ghostPlaceholder
+                ),
+                query: query,
+                opacity: 0.65,
+                reduceMotion: reduceMotionEnabled
+            )
+            .font(.system(size: 15))
+            .allowsHitTesting(false)
+
+            ComposerGhostTextField(
+                query: searchTextBinding,
+                fontSize: 15,
+                rowHeight: 38,
+                focusTrigger: $composerStore.focusSearchFieldTrigger,
+                hasSelection: selectedOption != nil,
+                isPickerOpen: false,
+                ghostFullPath: query.isEmpty ? "" : ghostFullPathForModelB
+            ) { event in
+                handle(event)
+            }
+            .accessibilityLabel(ComposerQueryField.accessibilityFieldLabel)
+        }
+        .frame(width: 480, height: 38)
+    }
+
+    /// Status strip: the one thing that stays loud in both new styles
+    /// (brief §1) — rendered only when non-nil, red, directly beneath the
+    /// field.
+    @ViewBuilder
+    private var newStyleStatusStrip: some View {
+        if let statusStripMessage {
+            Text(statusStripMessage)
+                .font(.system(size: 11))
+                .foregroundStyle(Color(nsColor: .systemRed))
+        }
+    }
+
+    /// Up to 5 ranked candidate rows, fixed slot count, crossfade in place
+    /// (zero-chrome typing state only, brief §2). Selected row uses
+    /// `composerSelectionAccent` text, never a filled bar.
+    private var newStyleCandidateRows: some View {
+        ForEach(Array(flattenedOptions.prefix(5).enumerated()), id: \.element.id) { pair in
+            let (offset, option) = pair
+            let isSelected = selectedOption?.id == option.id
+            Text(option.title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isSelected ? WorkspaceLayout.composerSelectionAccent : Color(nsColor: .labelColor))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { option.action() }
+                .transition(
+                    reduceMotionEnabled
+                        ? .opacity
+                        : .asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 3))
+                                .animation(.easeOut(duration: 0.09).delay(Double(offset) * 0.02)),
+                            removal: .opacity.animation(.easeIn(duration: 0.18))
+                        )
+                )
+        }
+    }
+
+    private var showNewStyleRows: Bool {
+        activeStyle == .zeroChrome && !query.isEmpty
+    }
+
+    // MARK: - Zero-chrome style (spike)
+
+    /// No card, no border, no radius, no shadow, no scrim (brief §2). The
+    /// blur wash (`ComposerZeroChromeWash`) sits behind the field only —
+    /// vertical placement (38% of window height) is `SessionComposerOverlay`'s
+    /// job, not this view's; this is just the field + rows content, centered
+    /// horizontally by its parent `ZStack`.
+    private var zeroChromeComposerCard: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                ComposerZeroChromeWash(
+                    material: ComposerZeroChromeMaterial.current(),
+                    revealed: zeroChromeRevealed
+                )
+                VStack(alignment: .leading, spacing: 6) {
+                    newStyleField
+                    newStyleStatusStrip
+                }
+                .opacity(zeroChromeRevealed ? 1 : 0)
+                .offset(y: zeroChromeRevealed ? 0 : 4)
+            }
+
+            if showNewStyleRows {
+                VStack(alignment: .leading, spacing: 4) {
+                    newStyleCandidateRows
+                }
+                .frame(width: Self.composerNewStyleFieldWidth, alignment: .leading)
+                .transition(.opacity)
+            }
+        }
+        .frame(width: Self.composerNewStyleFieldWidth)
+        .onAppear {
+            guard !reduceMotionEnabled else { return }
+            // Wash leads text in (brief's Timing rule): wash 0→full 140ms
+            // easeOut; text opacity/offset 120ms easeOut with a 40ms delay,
+            // both driven by the same `zeroChromeRevealed` flip since
+            // SwiftUI applies each modifier's own animation curve/delay
+            // independently within one state change. Starts from `true`
+            // (see the property's doc comment), so summon here is a
+            // deliberate false→true replay, not the initial paint.
+            zeroChromeRevealed = false
+            withAnimation(.easeOut(duration: 0.14)) {
+                zeroChromeRevealed = true
+            }
+        }
+        .animation(reduceMotionEnabled ? nil : .easeOut(duration: 0.12).delay(0.04), value: zeroChromeRevealed)
+    }
+
+    // MARK: - Single-line style (spike)
+
+    /// Current card chrome exactly as DESIGN.md §4 specifies
+    /// (`.regularMaterial` + `windowBackgroundColor` blend, 12pt continuous
+    /// radius, stroke, shadow tokens), sized to the field row only — no
+    /// results list ever (brief §3). Reuses `composerClipShape` and the
+    /// classic card's shadow tokens rather than re-deriving them.
+    private var singleLineComposerCard: some View {
+        let backgroundColor = Color(nsColor: .windowBackgroundColor)
+        return VStack(alignment: .leading, spacing: 8) {
+            newStyleField
+            newStyleStatusStrip
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .frame(width: Self.composerNewStyleFieldWidth)
+        .background(
+            ZStack {
+                Rectangle().fill(.regularMaterial)
+                Rectangle().fill(backgroundColor).blendMode(.color)
+            }
+            .compositingGroup()
+        )
+        .clipShape(composerClipShape)
+        .overlay(
+            composerClipShape
+                .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
+        )
+        .shadow(
+            color: .black.opacity(WorkspaceLayout.composerModalShadowOpacity),
+            radius: WorkspaceLayout.composerModalShadowRadius,
+            y: WorkspaceLayout.composerModalShadowYOffset
         )
         .modifier(ShakeEffect(animatableData: shakeTrigger))
     }

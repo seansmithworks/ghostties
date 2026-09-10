@@ -49,29 +49,44 @@ struct SessionComposerOverlay: View {
     }
 
     var body: some View {
-        ZStack {
-            // F7 (Phase 3 review): this layer excludes the titlebar band
-            // (traffic lights + drag region) rather than covering the full
-            // window height — painting a full-height tap target under the
-            // titlebar would claim mouse-down there too, so the window
-            // couldn't be dragged by its titlebar while the composer was
-            // open, and a click up there would dismiss it instead.
-            // `Color.clear` no longer dims the terminal (shadow-only
-            // treatment), but it still relies on the explicit
-            // `.contentShape(Rectangle())` below to act as a tap target —
-            // do not remove it.
-            VStack(spacing: 0) {
-                Color.clear
-                    .frame(height: centeringModel.titlebarBandHeight)
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { composerStore.cancel() }
-                    .accessibilityElement()
-                    .accessibilityLabel("Dismiss session composer")
-                    .accessibilityAddTraits(.isButton)
-            }
+        // Zero-chrome (spike, `ghostties.composerStyle=zeroChrome`) floats
+        // its field with its TOP at 38% of the window height (brief §2),
+        // not vertically centered like `.classic`/`.singleLine` — only this
+        // view knows the window's full height, so the style branch lives
+        // here rather than inside `SessionComposerPalette`.
+        GeometryReader { geometry in
+            ZStack {
+                // F7 (Phase 3 review): this layer excludes the titlebar band
+                // (traffic lights + drag region) rather than covering the full
+                // window height — painting a full-height tap target under the
+                // titlebar would claim mouse-down there too, so the window
+                // couldn't be dragged by its titlebar while the composer was
+                // open, and a click up there would dismiss it instead.
+                // `Color.clear` no longer dims the terminal (shadow-only
+                // treatment), but it still relies on the explicit
+                // `.contentShape(Rectangle())` below to act as a tap target —
+                // do not remove it.
+                VStack(spacing: 0) {
+                    Color.clear
+                        .frame(height: centeringModel.titlebarBandHeight)
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { composerStore.cancel() }
+                        .accessibilityElement()
+                        .accessibilityLabel("Dismiss session composer")
+                        .accessibilityAddTraits(.isButton)
+                }
 
-            SessionComposerPalette(isPresented: isPresented, request: request)
+                if ComposerStyle.current() == .zeroChrome {
+                    VStack {
+                        SessionComposerPalette(isPresented: isPresented, request: request)
+                            .padding(.top, geometry.size.height * 0.38)
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    SessionComposerPalette(isPresented: isPresented, request: request)
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
