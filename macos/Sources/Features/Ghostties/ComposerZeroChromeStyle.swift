@@ -96,31 +96,37 @@ struct ComposerDescriptorGhostText: View {
 
     private static let holdNanoseconds: UInt64 = 2_600_000_000
 
+    /// Fix round 3, item 2: the Timing board's crossfade between cycle
+    /// items, 180ms. Fix round 2 landed with NO `.transition()` at all
+    /// (item-to-item cycling snapped) after two wrong mechanisms: a
+    /// `.transition(.opacity.animation(.easeInOut(duration: 0.18)))` baked
+    /// the animation directly onto the transition, so it fired on EVERY
+    /// removal of this view — including the query-non-empty removal, which
+    /// must be instant — and `.animation(nil, value: query.isEmpty)`
+    /// couldn't suppress it (a transition's own embedded `.animation(...)`
+    /// is independent of the ambient `.animation(_, value:)` modifier).
+    /// The fix here keeps `.transition(.opacity)` with NO baked animation —
+    /// a transition with no active animation in its transaction doesn't
+    /// animate at all, so the query-driven removal (never wrapped in
+    /// `withAnimation` by anything in this subtree) stays instant — and
+    /// animates ONLY the index swap by wrapping that one state mutation in
+    /// an explicit `withAnimation(.easeInOut(duration: crossfadeDuration))`
+    /// at its single call site below. `.animation(nil, value: query.isEmpty)`
+    /// is kept as a second, explicit guard on the same edge (this time
+    /// effective, since there's no baked-in override left for it to lose
+    /// to).
+    static let crossfadeDuration: TimeInterval = 0.18
+
     var body: some View {
         let shownIndex = reduceMotion ? 0 : index
-        // Fix round 2 (found chasing item 3/8's typing snapshots, NOT one
-        // of the coordinator's numbered items — a real regression the new
-        // snapshots surfaced): a `.transition()` here (tried first, for
-        // item-to-item crossfading) applies to ANY removal of this view,
-        // including the query-non-empty removal — the instant the user
-        // types, this whole block should vanish immediately (brief §1:
-        // "stops the instant the field has any text"), but a `.transition`
-        // fades it out over 180ms instead, and a single-frame offscreen
-        // capture mid-fade (or the real app's first ~180ms of typing)
-        // showed the descriptor still fully opaque, overlapping the
-        // candidate rows underneath it. `.animation(nil, value:
-        // query.isEmpty)` was tried next and did NOT suppress it — a
-        // `.transition`'s own embedded `.animation(...)` is independent of
-        // the ambient `.animation(_, value:)` modifier. Landed on no
-        // `.transition` at all: item-to-item cycling now snaps instead of
-        // crossfading (a real, accepted motion regression, flagged in the
-        // PR) rather than risk a second wrong mechanism this late.
         Group {
             if query.isEmpty, descriptors.indices.contains(shownIndex) {
                 Text(descriptors[shownIndex])
                     .id(shownIndex)
+                    .transition(.opacity)
             }
         }
+        .animation(nil, value: query.isEmpty)
         .foregroundStyle(Color(nsColor: .labelColor).opacity(opacity))
         .task(id: reduceMotion) {
             index = 0
@@ -129,7 +135,9 @@ struct ComposerDescriptorGhostText: View {
                 try? await Task.sleep(nanoseconds: Self.holdNanoseconds)
                 if Task.isCancelled { return }
                 guard query.isEmpty else { continue }
-                index = (index + 1) % descriptors.count
+                withAnimation(.easeInOut(duration: Self.crossfadeDuration)) {
+                    index = (index + 1) % descriptors.count
+                }
             }
         }
     }

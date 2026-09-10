@@ -637,6 +637,17 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerZeroChromeTiming.commitTextOffsetY == -6)
     }
 
+    // MARK: - Fix round 3, item 2: descriptor crossfade constant
+
+    /// Names the 180ms crossfade constant explicitly (not just exercises it
+    /// indirectly) — same evidence shape `timingConstantsMatchTheBoard`
+    /// uses for the summon/commit/dismiss board. Mutation-verified:
+    /// temporarily changed `crossfadeDuration` to `0.5`, watched this fail,
+    /// reverted.
+    @Test func descriptorCrossfadeDurationMatchesTheBoard() {
+        #expect(ComposerDescriptorGhostText.crossfadeDuration == 0.18)
+    }
+
     /// The snapshot harness renders a single settled frame — proves the
     /// `revealPhase` test seam (`.constant(.revealed)`, the default every
     /// call site in this file already uses) produces a non-blank capture,

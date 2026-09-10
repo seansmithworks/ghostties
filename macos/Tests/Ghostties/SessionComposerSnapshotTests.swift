@@ -478,7 +478,8 @@ struct SessionComposerSnapshotTests {
         SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -657,7 +658,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -707,7 +709,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -833,7 +836,8 @@ struct SessionComposerSnapshotTests {
         let oneView = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-            composerStore: oneComposerStore
+            composerStore: oneComposerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(oneProjectStore)
         .environmentObject(SessionCoordinator())
@@ -845,7 +849,8 @@ struct SessionComposerSnapshotTests {
         let threeView = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-            composerStore: threeComposerStore
+            composerStore: threeComposerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(threeProjectStore)
         .environmentObject(SessionCoordinator())
@@ -902,7 +907,8 @@ struct SessionComposerSnapshotTests {
         let manyView = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(lockedProject)),
-            composerStore: manyComposerStore
+            composerStore: manyComposerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(manyStore)
         .environmentObject(SessionCoordinator())
@@ -913,7 +919,8 @@ struct SessionComposerSnapshotTests {
         let aloneView = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(lockedProject)),
-            composerStore: aloneComposerStore
+            composerStore: aloneComposerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(aloneStore)
         .environmentObject(SessionCoordinator())
@@ -971,7 +978,8 @@ struct SessionComposerSnapshotTests {
             let tenView = SessionComposerPalette(
                 isPresented: .constant(true),
                 request: SessionComposerRequest(presentation: presentation, projectBinding: .open),
-                composerStore: tenComposerStore
+                composerStore: tenComposerStore,
+                styleOverrideForTesting: .classic
             )
             .environmentObject(tenStore)
             .environmentObject(SessionCoordinator())
@@ -983,7 +991,8 @@ struct SessionComposerSnapshotTests {
             let twentySevenView = SessionComposerPalette(
                 isPresented: .constant(true),
                 request: SessionComposerRequest(presentation: presentation, projectBinding: .open),
-                composerStore: twentySevenComposerStore
+                composerStore: twentySevenComposerStore,
+                styleOverrideForTesting: .classic
             )
             .environmentObject(twentySevenStore)
             .environmentObject(SessionCoordinator())
@@ -1038,7 +1047,8 @@ struct SessionComposerSnapshotTests {
             return SessionComposerPalette(
                 isPresented: .constant(true),
                 request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-                composerStore: composerStore
+                composerStore: composerStore,
+                styleOverrideForTesting: .classic
             )
             .environmentObject(workspaceStore)
             .environmentObject(SessionCoordinator())
@@ -1097,7 +1107,8 @@ struct SessionComposerSnapshotTests {
             SessionComposerPalette(
                 isPresented: .constant(true),
                 request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(projects[0])),
-                composerStore: composerStore
+                composerStore: composerStore,
+                styleOverrideForTesting: .classic
             )
             .environmentObject(workspaceStore)
             .environmentObject(SessionCoordinator()),
@@ -1192,7 +1203,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -1274,7 +1286,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -1541,7 +1554,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(project)),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -1773,7 +1787,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -1855,7 +1870,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .anchored, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -1952,7 +1968,8 @@ struct SessionComposerSnapshotTests {
         let palette = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: presentation, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         let size = NSSize(width: 600, height: 40)
         // Opaque white background: `operatorRow`'s label `Text` uses
@@ -2005,7 +2022,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .anchored, projectBinding: .prefilled(project)),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -2181,7 +2199,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .anchored, projectBinding: .prefilled(project)),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -2235,7 +2254,8 @@ struct SessionComposerSnapshotTests {
         let palette = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         let fourOperators: [SessionComposerCommandParser.FooterOperatorHint] = [
             .init(glyph: "↵", label: "open"),
@@ -2313,7 +2333,8 @@ struct SessionComposerSnapshotTests {
         let palette = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .anchored, projectBinding: .open),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         #expect(
             !palette.usesModelBFieldForTesting,
@@ -2412,7 +2433,8 @@ struct SessionComposerSnapshotTests {
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(project)),
             composerStore: composerStore,
-            initialIsAddingTemplateForTesting: true
+            initialIsAddingTemplateForTesting: true,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -2535,7 +2557,8 @@ struct SessionComposerSnapshotTests {
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-            composerStore: composerStore
+            composerStore: composerStore,
+            styleOverrideForTesting: .classic
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())

@@ -76,7 +76,8 @@ struct ComposerCardFitTests {
             SessionComposerPalette(
                 isPresented: .constant(true),
                 request: SessionComposerRequest(presentation: presentation, projectBinding: .locked(project)),
-                composerStore: composerStore
+                composerStore: composerStore,
+                styleOverrideForTesting: .classic
             )
             .environmentObject(workspaceStore)
             .environmentObject(SessionCoordinator())
