@@ -294,6 +294,26 @@ struct SessionComposerSnapshotTests {
         return nil
     }
 
+    /// Variant G Pass A: `cardTopEdge`'s mirror, scanning from the image's
+    /// bottom row upward for the first opaque pixel — the card's own bottom
+    /// edge, same technique/rationale as `cardTopEdge` above. Paired with it
+    /// to measure a fixture's total card height
+    /// (`emptyLanesRenderNoHeaderOrExtraSpace` below) — a spurious header
+    /// rendered for an empty lane (the guard this test exists to catch)
+    /// adds real height between top and bottom edge, so no text-recognition
+    /// is needed to detect it.
+    private func cardBottomEdge(in data: Data) -> Int? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        for y in stride(from: rep.pixelsHigh - 1, through: 0, by: -1) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+                if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 {
+                    return y
+                }
+            }
+        }
+        return nil
+    }
+
     /// Fix 7 (review), step 3 specifically: counts pixels in the exact gray
     /// band the 11.1 ghost placeholder renders at rest — was
     /// `Color(nsColor: .labelColor).opacity(0.49)` over the card's
@@ -595,7 +615,8 @@ struct SessionComposerSnapshotTests {
     /// An UNLOCKED project (`.open`, not `.locked`) — the project-lock state
     /// no longer changes what renders in the field row at all now that
     /// `projectControl`/`branchControl` are gone (Sean's ultra-minimal call,
-    /// 2026-08-30); kept unlocked only so this fixture matches
+    /// 2026-08-30, and Variant G Pass A/C's independent removal of the same
+    /// two controls); kept unlocked only so this fixture matches
     /// `SessionComposerTrailingControlTests`' other cases. Proves three
     /// things, one assertion each: the results rows survived the
     /// resolution-line deletion (`selectionHighlightPixelCount`), the field
@@ -656,6 +677,463 @@ struct SessionComposerSnapshotTests {
         writeEvidence(dark, filename: "step5-line-deleted-dark.png")
         #expect(dark != nil)
         if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the field/hairline/rows to render, got a near-blank card") }
+    }
+
+    // MARK: - Variant G Pass C: chevron removed, projects live in results at rest
+
+    /// Change 2's acceptance check: the field's trailing edge carries no
+    /// `projectControl` chevron anymore. A rendered-content diff, not a
+    /// glyph-recognition check — `projectControl` was a
+    /// `chevron.down`-glyph `Button` sitting to the RIGHT of the text
+    /// field, inside the query row's fixed-height `HStack`
+    /// (`SessionComposerPalette.queryRow`). Scoped to that row's own
+    /// vertical band, relative to the card's own top edge (`cardTopEdge`,
+    /// same technique the ghost-band checks above use) so this survives
+    /// the card's total height changing for unrelated reasons: the LAST
+    /// ~24pt-wide column of that band must be empty (alpha 0 or a color
+    /// indistinguishable from the card's own `.regularMaterial`
+    /// background) now that nothing renders there.
+    ///
+    /// Mutant-proved: re-adding a bare `Image(systemName: "chevron.down")`
+    /// at the query row's trailing edge (this repo's forbidden regression)
+    /// flips this from pass to fail — see the mutation note in the PR
+    /// description for the exact diff exercised.
+    @Test func fieldTrailingEdgeHasNoChevronLightAndDark() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        for (appearance, label) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
+            guard let data = renderPNG(view, appearance: appearance, size: size) else {
+                Issue.record("failed to render \(label) fixture")
+                continue
+            }
+            writeEvidence(data, filename: "variant-g-no-chevron-\(label).png")
+            guard let rep = NSBitmapImageRep(data: data), let cardTop = cardTopEdge(in: data) else {
+                Issue.record("failed to decode \(label) PNG or find the card's top edge")
+                continue
+            }
+            // Query row only: `fieldHeight` is 38pt (centered scale) — 76
+            // backing px at this render's 2x scale — followed immediately
+            // by a `Divider()` and then the first results row
+            // (`composerCard`'s `VStack(spacing: 0)`). Scoped to 68 backing
+            // px (34pt), safely inside the field's own height and short of
+            // both the divider and the first row: an earlier, looser 100px
+            // bound reached into row 0, whose selection-highlight fill
+            // (`Color.accentColor.opacity(0.2)`) tints the WHOLE row width
+            // including its trailing edge, false-failing this check against
+            // real, unrelated content — not a chevron.
+            let rowBottom = min(cardTop + 68, rep.pixelsHigh)
+            // `WorkspaceLayout.terminalCornerRadius` (12pt, 24 backing px
+            // at 2x) applies to this card too (`DESIGN.md` §7) — the top
+            // corners curve inward for roughly that many px below
+            // `cardTop`, so the card's TRUE right edge (measured within the
+            // curve) reads narrower than its real straight-edge width there.
+            // Both the right-edge measurement AND the ink scan below start
+            // 28 backing px (14pt) under `cardTop` — past the 24px curve
+            // with margin — so neither reads the curve's own antialiasing
+            // as "the edge" or as "ink." An earlier version measured from
+            // `cardTop` directly and intermittently false-failed against
+            // that curve under heavier system load (more antialiasing
+            // blend at some renders than others).
+            let safeTop = min(cardTop + 28, rowBottom)
+            // The CARD's own right edge, not the image canvas edge — the
+            // card sits inset within an 8pt shake-clearance gutter
+            // (`anchoredThreeOperatorFooterNeverTruncates` above measures
+            // the same edge the same way). An earlier version of this scan
+            // used `rep.pixelsWide - 48` directly and caught the rounded
+            // card corner's own antialiasing (the border curve blends
+            // through a range of luminances right at the canvas edge),
+            // false-failing against the card's OWN border, not a chevron.
+            var cardRightEdge: Int?
+            for x in stride(from: rep.pixelsWide - 1, through: 0, by: -1) {
+                var found = false
+                for y in stride(from: safeTop, to: rowBottom, by: 2) {
+                    if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 {
+                        found = true
+                        break
+                    }
+                }
+                if found {
+                    cardRightEdge = x
+                    break
+                }
+            }
+            guard let cardRightEdge else {
+                Issue.record("failed to find the card's right edge for \(label)")
+                continue
+            }
+            // 48 backing px (24pt at 2x), inset 16 backing px (8pt) from
+            // the card's own right edge to clear its border stroke — wide
+            // enough to catch the whole 16pt hit target `projectControl`
+            // used plus its trailing padding, narrow enough to not catch
+            // the text field's own glyphs, which sit well to the left of
+            // the card's right edge in every fixture this file renders.
+            let scanEnd = max(0, cardRightEdge - 16)
+            let scanStart = max(0, scanEnd - 48)
+            // Self-calibrating background instead of a hardcoded luminance
+            // threshold — an earlier version guessed light/dark background
+            // luminance directly (`> 235`/`> 200`) and was wrong for dark
+            // mode's actual `.regularMaterial` value, false-failing on the
+            // card's OWN background (1920 of ~1900 scanned pixels flagged
+            // as "ink"). A 48×40px window with no chevron in it is
+            // overwhelmingly ONE color (the card background, give or take
+            // antialiasing noise); with one it's still a majority
+            // background with a compact 16×16 outlier blob. Buckets each
+            // pixel to its nearest-16 RGB cell, takes the most POPULAR
+            // bucket as "the background" for THIS render, and counts
+            // pixels outside it — no light/dark-specific guess needed.
+            var bucketCounts: [String: Int] = [:]
+            var pixels: [(r: Int, g: Int, b: Int)] = []
+            for x in stride(from: scanStart, to: scanEnd, by: 1) {
+                for y in stride(from: safeTop, to: rowBottom, by: 1) {
+                    guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                    let r = Int((color.redComponent * 255).rounded())
+                    let g = Int((color.greenComponent * 255).rounded())
+                    let b = Int((color.blueComponent * 255).rounded())
+                    pixels.append((r, g, b))
+                    bucketCounts["\(r / 16)-\(g / 16)-\(b / 16)", default: 0] += 1
+                }
+            }
+            let backgroundBucket = bucketCounts.max { $0.value < $1.value }?.key
+            let opaqueChevronBandPixels = pixels.filter { "\($0.r / 16)-\($0.g / 16)-\($0.b / 16)" != backgroundBucket }.count
+            #expect(
+                opaqueChevronBandPixels < 30,
+                "\(label): expected no glyph ink in the query row's trailing 24pt column (plain caret only), found \(opaqueChevronBandPixels) non-background pixels of \(pixels.count) scanned — a chevron or other trailing control may have regressed back in"
+            )
+        }
+    }
+
+    /// Change 1's acceptance check: a blank query populates PROJECTS with
+    /// every project instead of hiding the lane. Relational, not absolute —
+    /// compares the SAME fixture (same store, same template lane) with 1
+    /// vs. 3 projects; only the PROJECTS lane's row count differs between
+    /// them, so a taller card on the 3-project fixture is only explainable
+    /// by the extra rows rendering. `> 40` backing px (`20pt` at 2x) is
+    /// comfortably less than even one extra row's height (Composer UI 11's
+    /// row metrics: 8pt vertical padding + row content, `DESIGN.md` §4) —
+    /// two extra rows should clear it with margin.
+    @Test func blankQueryPopulatesProjectsLaneAtRestLightAndDark() {
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+
+        let oneProject = makeProject()
+        let oneProjectStore = WorkspaceStore(testingProjects: [oneProject], testingSessions: [])
+        let oneComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".one")
+        oneComposerStore.open(projectBinding: .open, workspaceStore: oneProjectStore)
+        let oneView = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: oneComposerStore
+        )
+        .environmentObject(oneProjectStore)
+        .environmentObject(SessionCoordinator())
+
+        let threeProjects = [makeProject(), makeProject(), makeProject()]
+        let threeProjectStore = WorkspaceStore(testingProjects: threeProjects, testingSessions: [])
+        let threeComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".three")
+        threeComposerStore.open(projectBinding: .open, workspaceStore: threeProjectStore)
+        let threeView = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: threeComposerStore
+        )
+        .environmentObject(threeProjectStore)
+        .environmentObject(SessionCoordinator())
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 700)
+
+        for (appearance, label) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
+            guard let oneData = renderPNG(oneView, appearance: appearance, size: size),
+                let threeData = renderPNG(threeView, appearance: appearance, size: size)
+            else {
+                Issue.record("failed to render \(label) fixtures")
+                continue
+            }
+            writeEvidence(oneData, filename: "variant-g-projects-lane-one-project-\(label).png")
+            writeEvidence(threeData, filename: "variant-g-projects-lane-three-projects-\(label).png")
+
+            guard let oneTop = cardTopEdge(in: oneData), let oneBottom = cardBottomEdge(in: oneData),
+                let threeTop = cardTopEdge(in: threeData), let threeBottom = cardBottomEdge(in: threeData)
+            else {
+                Issue.record("failed to measure card edges for \(label)")
+                continue
+            }
+            let oneHeight = oneBottom - oneTop
+            let threeHeight = threeBottom - threeTop
+            #expect(
+                threeHeight - oneHeight > 40,
+                "\(label): expected the 3-project fixture's PROJECTS lane to add real height over the 1-project fixture (blank query should populate every project), got \(oneHeight)px vs \(threeHeight)px"
+            )
+        }
+    }
+
+    /// N3's acceptance check: `isProjectLocked` still yields an empty
+    /// PROJECTS lane even at a blank query, naming the real production
+    /// path (`SessionComposerRequest(projectBinding: .locked(...))` →
+    /// `SessionComposerPalette.isProjectLocked` →
+    /// `filteredProjectOptions`'s locked guard). Relational, and BOTH sides
+    /// are `.locked` — comparing a locked fixture against an `.open` one
+    /// (an earlier draft of this test did) confounds two different
+    /// changes at once, since Change 1 also makes `.open` grow at blank
+    /// query now. Isolates the ONE variable that matters: a `.locked`
+    /// fixture with 3 OTHER projects sitting in the SAME store must render
+    /// at the SAME height as a `.locked` fixture whose store has no other
+    /// projects to leak — if the locked guard regressed, the "many" side
+    /// would grow with 3 extra rows the "alone" side never has the chance
+    /// to show.
+    @Test func lockedProjectStillYieldsEmptyProjectsLaneAtBlankQuery() {
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+
+        let lockedProject = makeProject()
+        let otherProjects = [makeProject(), makeProject(), makeProject()]
+        let manyStore = WorkspaceStore(testingProjects: [lockedProject] + otherProjects, testingSessions: [])
+        let manyComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".many")
+        manyComposerStore.open(projectBinding: .locked(lockedProject), workspaceStore: manyStore)
+        let manyView = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(lockedProject)),
+            composerStore: manyComposerStore
+        )
+        .environmentObject(manyStore)
+        .environmentObject(SessionCoordinator())
+
+        let aloneStore = WorkspaceStore(testingProjects: [lockedProject], testingSessions: [])
+        let aloneComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".alone")
+        aloneComposerStore.open(projectBinding: .locked(lockedProject), workspaceStore: aloneStore)
+        let aloneView = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(lockedProject)),
+            composerStore: aloneComposerStore
+        )
+        .environmentObject(aloneStore)
+        .environmentObject(SessionCoordinator())
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 700)
+
+        guard let manyData = renderPNG(manyView, appearance: .aqua, size: size),
+            let aloneData = renderPNG(aloneView, appearance: .aqua, size: size)
+        else {
+            Issue.record("failed to render fixtures")
+            return
+        }
+        writeEvidence(manyData, filename: "variant-g-locked-projects-lane-light.png")
+
+        guard let manyTop = cardTopEdge(in: manyData), let manyBottom = cardBottomEdge(in: manyData),
+            let aloneTop = cardTopEdge(in: aloneData), let aloneBottom = cardBottomEdge(in: aloneData)
+        else {
+            Issue.record("failed to measure card edges")
+            return
+        }
+        let manyHeight = manyBottom - manyTop
+        let aloneHeight = aloneBottom - aloneTop
+        #expect(
+            abs(manyHeight - aloneHeight) <= 8,
+            "expected a locked composer's card height to stay the same regardless of how many OTHER projects exist in the store (locked always hides PROJECTS), got many=\(manyHeight)px vs alone=\(aloneHeight)px"
+        )
+    }
+
+    /// Acceptance criterion 2: 27 projects (Sean's real Release-workspace
+    /// count) scroll cleanly inside the results well instead of blowing out
+    /// the card, in BOTH presentations. Relational, not an absolute height
+    /// assertion (per this file's own "absolute-pixel bands get retuned to
+    /// match a bug" lesson): compares a 10-project fixture against a
+    /// 27-project one. `ComposerResultsTable` caps the well at
+    /// `resultsWellMaxHeight` (220pt `.anchored` / 440pt `.centered`) and
+    /// scrolls past it — per that constant's own doc comment, ~14 rows
+    /// already fills the centered well, so BOTH 10 and 27 projects (plus
+    /// this fixture's lane1/lane2 rows) should already be pinned at the
+    /// same capped height. If the cap regressed to uncapped growth, 27
+    /// projects would render measurably taller than 10.
+    @Test func twentySevenProjectsScrollCleanlyBothPresentations() {
+        func makeProjects(_ count: Int, prefix: String) -> [Project] {
+            (0..<count).map {
+                Project(name: "\(prefix) \($0)", rootPath: "/tmp/composer-ui-11-scale-\(prefix)-\($0)-\(UUID().uuidString)")
+            }
+        }
+
+        for presentation: SessionComposerRequest.Presentation in [.anchored, .centered] {
+            let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+
+            let tenProjects = makeProjects(10, prefix: "Ten")
+            let tenStore = WorkspaceStore(testingProjects: tenProjects, testingSessions: [])
+            let tenComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".ten")
+            tenComposerStore.open(projectBinding: .open, workspaceStore: tenStore)
+            let tenView = SessionComposerPalette(
+                isPresented: .constant(true),
+                request: SessionComposerRequest(presentation: presentation, projectBinding: .open),
+                composerStore: tenComposerStore
+            )
+            .environmentObject(tenStore)
+            .environmentObject(SessionCoordinator())
+
+            let twentySevenProjects = makeProjects(27, prefix: "TwentySeven")
+            let twentySevenStore = WorkspaceStore(testingProjects: twentySevenProjects, testingSessions: [])
+            let twentySevenComposerStore = SessionComposerStore(isolatedForTesting: suiteName + ".twentyseven")
+            twentySevenComposerStore.open(projectBinding: .open, workspaceStore: twentySevenStore)
+            let twentySevenView = SessionComposerPalette(
+                isPresented: .constant(true),
+                request: SessionComposerRequest(presentation: presentation, projectBinding: .open),
+                composerStore: twentySevenComposerStore
+            )
+            .environmentObject(twentySevenStore)
+            .environmentObject(SessionCoordinator())
+
+            let width = presentation == .anchored ? WorkspaceLayout.sidebarWidth : WorkspaceLayout.composerOverlayWidth + 16
+            let size = NSSize(width: width, height: 900)
+
+            guard let tenData = renderPNG(tenView, appearance: .aqua, size: size),
+                let twentySevenData = renderPNG(twentySevenView, appearance: .aqua, size: size)
+            else {
+                Issue.record("failed to render \(presentation) fixtures")
+                continue
+            }
+            writeEvidence(twentySevenData, filename: "variant-g-27-projects-\(presentation).png")
+
+            guard let tenTop = cardTopEdge(in: tenData), let tenBottom = cardBottomEdge(in: tenData),
+                let twentySevenTop = cardTopEdge(in: twentySevenData), let twentySevenBottom = cardBottomEdge(in: twentySevenData)
+            else {
+                Issue.record("failed to measure card edges for \(presentation)")
+                continue
+            }
+            let tenHeight = tenBottom - tenTop
+            let twentySevenHeight = twentySevenBottom - twentySevenTop
+            #expect(
+                abs(twentySevenHeight - tenHeight) <= 8,
+                "\(presentation): expected the results well to cap and scroll (10- and 27-project fixtures pinned at the same height), got ten=\(tenHeight)px vs twentySeven=\(twentySevenHeight)px — the well may have stopped capping and grown unbounded"
+            )
+        }
+    }
+
+    // MARK: - Composer variant G: rest-state lane cap
+
+    /// Acceptance criterion 1: a blank query caps the PROJECTS lane at
+    /// `SessionComposerPalette.restStateLaneCap` (3) instead of listing
+    /// every project. Relational, not absolute (this file's own
+    /// "absolute-pixel bands get retuned to match a bug" lesson): a
+    /// 3-project fixture and a 6-project fixture, both at a blank query,
+    /// must render at the SAME card height — if the cap regressed to
+    /// uncapped growth, the 6-project fixture would render measurably
+    /// taller, exactly like `blankQueryPopulatesProjectsLaneAtRestLightAndDark`
+    /// proves for the UNCAPPED, pre-cap behavior it's paired against.
+    @Test func restStateCapsProjectsLaneAtThreeLightAndDark() {
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+
+        func makeFixture(count: Int, suffix: String) -> some View {
+            let projects = (0..<count).map {
+                Project(name: "Cap Project \($0)", rootPath: "/tmp/composer-ui-11-cap-\(suffix)-\($0)-\(UUID().uuidString)")
+            }
+            let workspaceStore = WorkspaceStore(testingProjects: projects, testingSessions: [])
+            let composerStore = SessionComposerStore(isolatedForTesting: suiteName + "." + suffix)
+            composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+            return SessionComposerPalette(
+                isPresented: .constant(true),
+                request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+                composerStore: composerStore
+            )
+            .environmentObject(workspaceStore)
+            .environmentObject(SessionCoordinator())
+        }
+
+        let threeView = makeFixture(count: 3, suffix: "three")
+        let sixView = makeFixture(count: 6, suffix: "six")
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 700)
+
+        for (appearance, label) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
+            guard let threeData = renderPNG(threeView, appearance: appearance, size: size),
+                let sixData = renderPNG(sixView, appearance: appearance, size: size)
+            else {
+                Issue.record("failed to render \(label) fixtures")
+                continue
+            }
+            writeEvidence(threeData, filename: "variant-g-rest-cap-three-projects-\(label).png")
+            writeEvidence(sixData, filename: "variant-g-rest-cap-six-projects-\(label).png")
+
+            guard let threeTop = cardTopEdge(in: threeData), let threeBottom = cardBottomEdge(in: threeData),
+                let sixTop = cardTopEdge(in: sixData), let sixBottom = cardBottomEdge(in: sixData)
+            else {
+                Issue.record("failed to measure card edges for \(label)")
+                continue
+            }
+            let threeHeight = threeBottom - threeTop
+            let sixHeight = sixBottom - sixTop
+            #expect(
+                abs(sixHeight - threeHeight) <= 8,
+                "\(label): expected the rest-state PROJECTS lane to cap at 3 (3-project and 6-project fixtures rendering at the same height), got three=\(threeHeight)px vs six=\(sixHeight)px — the cap may have regressed to uncapped growth"
+            )
+        }
+    }
+
+    /// Acceptance criterion 2: the cap is rest-state only — once the user
+    /// types a query that matches every project, all of them render, not
+    /// just the first 3. Same 6-project fixture, blank query (capped at 3)
+    /// vs. a typed query matching all 6 (uncapped): the typed render must
+    /// be measurably taller.
+    @Test func typingUncapsTheProjectsLaneBeyondThree() {
+        let projects = (0..<6).map {
+            Project(name: "Zulu Project \($0)", rootPath: "/tmp/composer-ui-11-uncap-\($0)-\(UUID().uuidString)")
+        }
+        let workspaceStore = WorkspaceStore(testingProjects: projects, testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        // `.prefilled`, not `.locked` — a locked composer's
+        // `filteredProjectOptions` is unconditionally empty, which would
+        // hide the very lane this test is proving uncaps.
+        composerStore.open(projectBinding: .prefilled(projects[0]), workspaceStore: workspaceStore)
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 700)
+
+        guard let blankData = renderPNG(
+            SessionComposerPalette(
+                isPresented: .constant(true),
+                request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(projects[0])),
+                composerStore: composerStore
+            )
+            .environmentObject(workspaceStore)
+            .environmentObject(SessionCoordinator()),
+            appearance: .aqua,
+            size: size
+        ) else {
+            Issue.record("failed to render blank-query fixture")
+            return
+        }
+        writeEvidence(blankData, filename: "variant-g-uncap-blank-query-light.png")
+
+        guard let typedData = renderMountedPaletteAfterTyping(
+            project: projects[0],
+            workspaceStore: workspaceStore,
+            composerStore: composerStore,
+            typed: "zulu",
+            appearance: .aqua,
+            size: size
+        ) else {
+            Issue.record("failed to render typed-query fixture")
+            return
+        }
+        writeEvidence(typedData, filename: "variant-g-uncap-typed-query-light.png")
+
+        guard let blankTop = cardTopEdge(in: blankData), let blankBottom = cardBottomEdge(in: blankData),
+            let typedTop = cardTopEdge(in: typedData), let typedBottom = cardBottomEdge(in: typedData)
+        else {
+            Issue.record("failed to measure card edges")
+            return
+        }
+        let blankHeight = blankBottom - blankTop
+        let typedHeight = typedBottom - typedTop
+        #expect(
+            typedHeight - blankHeight > 40,
+            "expected typing a query matching all 6 projects to render taller than the capped, blank-query rest state, got blank=\(blankHeight)px vs typed=\(typedHeight)px — a non-blank query may still be capped"
+        )
     }
 
     // MARK: - Step 3: ghost placeholder opacity
@@ -729,6 +1207,94 @@ struct SessionComposerSnapshotTests {
         writeEvidence(dark, filename: "step4-zero-project-dark.png")
         #expect(dark != nil)
         if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the 'Add project…' empty-state row to render, got a near-blank card") }
+    }
+
+    // MARK: - Variant G Pass A: section headers, empty-lane guard
+
+    /// `ComposerResultsTable` (Variant G Pass A) renders a visible header
+    /// for each of the four lanes (RECENT/TEMPLATES/PROJECTS/COMMAND) but
+    /// ONLY when that lane has at least one option — the guard is
+    /// `if !section.options.isEmpty` around BOTH the header `Text` and the
+    /// row `ForEach`, one shared code path for all four lanes. This reuses
+    /// the zero-project fixture (`step4ZeroProjectEmptyStateRendersLightAndDark`'s
+    /// setup): with no projects anywhere, ALL FOUR lanes are structurally
+    /// empty (`lane1Options`/`lane2Options`/`filteredProjectOptions`/
+    /// `commandOptions` all `[]`), so a correct guard renders zero headers
+    /// and the card's total measured height (`cardTopEdge`...`cardBottomEdge`)
+    /// stays small — just the field, divider, and the single "Add
+    /// project…" empty-state row.
+    ///
+    /// Review round 4, P1-b fix: round 2 measured this fixture WITHOUT
+    /// pinning `ComposerGhostTextField.modelBFieldStorageKey`, against a
+    /// process-global `UserDefaults.standard` that five OTHER tests in this
+    /// file flip `true` for their own duration (same mechanism
+    /// `operatorFooterStripRendersWhenOperatorsAreLive` and
+    /// `footerStripAbsentWhenOperatorListIsEmpty` below pin against). With
+    /// the flag contaminated `true`, this `.centered`/zero-project fixture's
+    /// `ghostPlaceholder` returns a non-empty remainder, `hasGhostRemainder`
+    /// goes true, and a spurious 26pt (52px at 2x) operator strip renders —
+    /// round 2 measured THAT contaminated 275px and wrote it into this
+    /// comment as the correct baseline, with a 295 threshold tuned to sit
+    /// just above it. The mutant this test exists to catch (a spuriously
+    /// rendered section header) was passing green either way.
+    ///
+    /// Re-measured here with the flag explicitly pinned `false` (this
+    /// fixture never uses model B — pinning only removes the shared-global
+    /// hazard): correct code measures 223px, matching
+    /// `footerStripAbsentWhenOperatorListIsEmpty`'s own measurement of this
+    /// identical fixture exactly, as it should — same projects, same
+    /// presentation, same empty lanes. Deleting the
+    /// `!section.options.isEmpty` guard (`if true`, all 4 lanes render a
+    /// header with zero rows beneath it) measures 271px — a 48px growth
+    /// for one spurious header, confirming round 2's per-header estimate.
+    /// This test's threshold (260) sits with 37px of margin above the
+    /// correct build's 223 and 11px below the one-header mutant's 271.
+    @Test func emptyLanesRenderNoHeaderOrExtraSpace() {
+        // Pin model B off for the duration of this render — see this test's
+        // doc comment above and the matching idiom in
+        // `operatorFooterStripRendersWhenOperatorsAreLive` below. Without
+        // this, a test running concurrently in the same process can
+        // transiently leave the global flag `true` here.
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(false, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-empty-lanes-no-header-light.png")
+        #expect(light != nil)
+        guard let light,
+              let top = cardTopEdge(in: light),
+              let bottom = cardBottomEdge(in: light)
+        else {
+            Issue.record("failed to render or measure the card's opaque bounds")
+            return
+        }
+        let height = bottom - top
+        #expect(
+            height < 260,
+            "card measured \(height)px tall (top \(top), bottom \(bottom)) with zero populated lanes — expected under 260px (field + divider + one empty-state row); a single spuriously rendered header for an empty lane measures 271px, past this threshold"
+        )
     }
 
     // MARK: - Step 7: model B ghost field (UNVERIFIED-INTERACTION)
@@ -1076,6 +1642,964 @@ struct SessionComposerSnapshotTests {
                 "typed \"\(row.typed)\" against \(row.other) (scoped to \(row.current)): expected a non-empty ghost in the field's gray band, found \(bandCount) matching pixels — the ghost stayed welded to currentProject instead of following the highlighted row"
             )
         }
+    }
+
+    // MARK: - Variant G Pass B: contextual operator footer strip
+
+    /// The operators-live fixture: a locked project with the app's own
+    /// built-in template set (`makePlainComposer`) seeds `onAppear`'s
+    /// selection at row 0 (`hasSelection`) against more than one option
+    /// (`hasMultipleOptions`) — `footerOperators` resolves to `[↵ open,
+    /// ↑↓ navigate]`, `⇥`/`⌘Z` absent (model B off by default, no chip
+    /// cascade pending). Evidences acceptance criteria 6 (footer renders
+    /// at spec) directly; criterion 4 (precedence) is proven at the pure-
+    /// function level by `SessionComposerFooterSlotTests` above — no error
+    /// and no in-flight template naming compete for the position in this
+    /// fixture, so the operator branch is what's under test here.
+    ///
+    /// Asserts by measured card height (`cardTopEdge`...`cardBottomEdge`),
+    /// NOT a divider-line pixel search — an earlier draft of this test
+    /// tried scanning for the strip's 1pt `.separatorColor` line by
+    /// "near-full-width, near-uniform row," and that signature turned out
+    /// to also match blank card background between rows (mutant-verified:
+    /// forcing the `.operators` case to render `EmptyView()` still found a
+    /// "divider" and still passed). Height is the reliable signal —
+    /// mutant-verified directly against THIS fixture: correct code
+    /// measures 555px, forcing `.operators` to `EmptyView()` (no strip at
+    /// all) measures 503px, a clean 52px (26pt at this render's 2x backing
+    /// scale) gap matching the footer's own spec height exactly — matches
+    /// review round 2's numbers exactly, re-measured, not just trusted.
+    /// Upper-bounded at 580 (25px margin below 555) so a mutant that
+    /// over-renders (e.g. a doubled strip) doesn't slip past a lower-bound-
+    /// only check.
+    ///
+    /// KNOWN CAVEAT, re-derived and NOT what review round 2 estimated:
+    /// `AgentTemplate.defaults` growing by exactly one row does not survive
+    /// this band. Measured directly (temporarily seeding one extra custom
+    /// template into this same fixture, then reverted): correct code moves
+    /// to 613px, but the NO-STRIP mutant ALSO moves to 561px — inside
+    /// 530-580, so that specific (+1 template AND no strip) combination
+    /// would pass incorrectly. Review round 4: that framing understates the
+    /// risk — the LOUDER half is that correct code itself lands at 613px,
+    /// OUTSIDE the 530-580 band. The next person to add a fifth default
+    /// template hits a hard RED on entirely correct code before they ever
+    /// hit the quieter false-green above; that false red is the one
+    /// they'll actually see and have to diagnose. The strip-vs-no-strip gap
+    /// stays a constant ~52-58px regardless of template count; growth
+    /// shifts the whole pair upward together, not apart, so no single fixed
+    /// band survives arbitrary future growth — only a relational assertion
+    /// against a live-measured no-operators baseline would. Out of scope
+    /// for this pass (asked-for fix was tightening this into a band, not a
+    /// rewrite); flagged for whoever touches `AgentTemplate.defaults` next.
+    @Test func operatorFooterStripRendersWhenOperatorsAreLive() {
+        // Pin model B off for the duration of this render — `isModelBFieldEnabled`
+        // reads the process-global `UserDefaults.standard`
+        // (`ComposerGhostTextField.modelBFieldStorageKey`), which this file's
+        // OTHER model-B tests flip `true` for their own duration (same
+        // save/restore idiom, `mountedModelBGhostTracksHighlightedRowAcrossProjects`
+        // above) — without this, a test running concurrently in the same
+        // process can transiently see `⇥ accept` join the operator set here.
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(false, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore)
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-pass-b-footer-live-light.png")
+        #expect(light != nil)
+        if let light, let top = cardTopEdge(in: light), let bottom = cardBottomEdge(in: light) {
+            let height = bottom - top
+            #expect(
+                height > 415 && height < 465,
+                "card measured \(height)px tall (top \(top), bottom \(bottom)) with a live operator footer — expected 415-465px. Retuned for Composer variant G's rest-state lane cap (`SessionComposerPalette.applyRestStateCap`, capped at 3): this fixture's TEMPLATES lane previously rendered every default template uncapped (measured 555px, the old band's center); capping at 3 removed the rest and re-measured at 439px. Mutant-verified against the new band: with `applyRestStateCap`'s body temporarily replaced with `return options` (the cap deleted), this test failed — height reverted to the old, uncapped 555px, outside the new 415-465 band. The mutation was then reverted; production `applyRestStateCap` is unchanged from what's committed here."
+            )
+        } else {
+            Issue.record("failed to render or measure the card's opaque bounds")
+        }
+
+        let dark = renderPNG(view, appearance: .darkAqua, size: size)
+        writeEvidence(dark, filename: "variant-g-pass-b-footer-live-dark.png")
+        #expect(dark != nil)
+        if let dark {
+            #expect(containsRenderedContent(in: dark, isDark: true), "expected the field/rows/footer strip to render, got a near-blank card")
+        }
+    }
+
+    /// Zero projects anywhere (`step4ZeroProjectEmptyStateRendersLightAndDark`'s
+    /// fixture, reused): `flattenedOptions` is empty, so `selectedOption`
+    /// is `nil` (`hasSelection` false) and there is nothing to navigate
+    /// between (`hasMultipleOptions` false) — `footerOperators` resolves
+    /// to `[]`, and `footerSlot` maps that to `.none`. No divider line
+    /// should render at all; the card's total measured height should stay
+    /// exactly what `emptyLanesRenderNoHeaderOrExtraSpace` (Pass A) already
+    /// pins for this same fixture (field + divider + one empty-state row,
+    /// under 300px) — a real 26pt strip rendered here would add height
+    /// that test doesn't budget for, which is exactly why that test's
+    /// still-green status after this pass is itself corroborating
+    /// evidence, not just this test.
+    @Test func footerStripAbsentWhenOperatorListIsEmpty() {
+        // See `operatorFooterStripRendersWhenOperatorsAreLive`'s matching
+        // comment — pin model B off so a concurrently-running model-B test
+        // can't transiently add `⇥ accept` to this fixture's empty list.
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(false, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-pass-b-footer-empty-light.png")
+        #expect(light != nil)
+        // Same measured-height technique as
+        // `operatorFooterStripRendersWhenOperatorsAreLive` above and Pass
+        // A's `emptyLanesRenderNoHeaderOrExtraSpace` — NOT a divider-line
+        // pixel search: a blank card region and the strip's own tinted
+        // background both render as uniform, full-width bands, so "no
+        // uniform band near the bottom" is not a reliable negative signal
+        // here (an earlier draft of this test relied on exactly that and
+        // was mutant-verified vacuous — see the sibling test's doc
+        // comment). Mutant-verified directly against THIS fixture: correct
+        // code measures 223px (matches Pass A's own measurement of this
+        // same fixture exactly); forcing the `.none` case to render a
+        // one-operator strip anyway measures 275px, a 52px (26pt) gap.
+        // 250 sits with 27px of margin on both sides — tighter than Pass
+        // A's own 300 threshold, which was calibrated against a much
+        // larger mutant (a spurious whole SECTION HEADER, not a 26pt
+        // strip) and doesn't have enough margin to catch this one.
+        guard let light,
+              let top = cardTopEdge(in: light),
+              let bottom = cardBottomEdge(in: light)
+        else {
+            Issue.record("failed to render or measure the card's opaque bounds")
+            return
+        }
+        let height = bottom - top
+        #expect(
+            height < 250,
+            "card measured \(height)px tall with an empty operator list (top \(top), bottom \(bottom)) — expected under 250px (mutant-verified: 223px correct, 275px with a spurious strip)"
+        )
+    }
+
+    /// Review round 2, P1-b regression test: `modelBGhostRemainder`'s guard
+    /// used to read `isModelBFieldEnabled` alone, which stays `true` in
+    /// `.anchored` even though `.anchored` never mounts model B
+    /// (`usesModelBFieldForTesting` — gated to `.centered`, G-F28). With no
+    /// projects anywhere, `hasSelection`/`hasMultipleOptions`/
+    /// `hasPendingChipUndo` are all false (same fixture as
+    /// `footerStripAbsentWhenOperatorListIsEmpty` above), so `⇥ accept` is
+    /// the ONLY operator that could ever populate the footer here — and
+    /// `.anchored`'s own `ghostPlaceholder` fallback ("Type a project,
+    /// branch, and command…") is non-empty regardless of project count, so
+    /// the buggy guard produced a non-empty ghost remainder and rendered a
+    /// footer strip even in this empty-everything fixture. This can only be
+    /// exercised by a real hosted render (`@EnvironmentObject` access
+    /// crashes a bare `SessionComposerPalette` construction — see
+    /// `ComposerGhostTextFieldTests
+    /// .anchoredNeverUsesModelBFieldEvenWithFlagOn`'s doc comment).
+    ///
+    /// Mutant-verified directly against THIS fixture: correct code measures
+    /// 195px; reverting `modelBGhostRemainder`'s guard to
+    /// `isModelBFieldEnabled` alone measures 247px, a 52px (26pt at this
+    /// render's 2x backing scale) gap — the footer strip's own spec height,
+    /// exactly matching the signature the sibling `.centered` tests above
+    /// use. 220 sits with 25px of margin on both sides.
+    @Test func anchoredNeverAdvertisesAcceptEvenWithModelBFlagOn() {
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(true, forKey: key)
+        defer {
+            if let previous {
+                defaults.set(previous, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let workspaceStore = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .open, workspaceStore: workspaceStore)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .anchored, projectBinding: .open),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.sidebarWidth, height: 420)
+
+        let light = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(light, filename: "variant-g-anchored-no-accept-light.png")
+        #expect(light != nil)
+        guard let light,
+              let top = cardTopEdge(in: light),
+              let bottom = cardBottomEdge(in: light)
+        else {
+            Issue.record("failed to render or measure the card's opaque bounds")
+            return
+        }
+        let height = bottom - top
+        #expect(
+            height < 220,
+            "card measured \(height)px tall in `.anchored` with the model B flag on and zero projects (top \(top), bottom \(bottom)) — expected under 220px (mutant-verified: 195px correct, 247px with `⇥ accept` wrongly advertised)"
+        )
+    }
+
+    // MARK: - Round 7: `ViewThatFits` truncation detection
+    //
+    // Rounds 3/5/6 each computed an analytic "required width vs available
+    // width" model for this strip (`requiredFooterContentWidth`,
+    // `anchoredFooterAvailableWidth`, both deleted here) and every one of
+    // them disagreed with what the renderer actually does — round 6's
+    // "170.14pt required vs 172pt available, fits" was rendered and still
+    // truncated to "navig…"
+    // (`docs/plans/composer-ui-11/evidence/variant-g-anchored-three-operators-light.png`,
+    // captured by the agent that computed that number). Production now uses
+    // `ViewThatFits` (`operatorFooterStrip`) instead of a fixed-width
+    // computation, so this section stops re-deriving a width model and
+    // instead checks what got rendered.
+    //
+    // What this CAN prove: `ViewThatFits` always renders one of its two
+    // candidates WHOLE — the labeled row or the glyph-only row — never a
+    // partial mix, so the footer's own rendered ink width must equal one of
+    // those two candidates' REAL, independently-rendered ink widths (each
+    // measured by rendering that exact candidate alone, unconstrained, via
+    // the renderer, not `NSString.size(withAttributes:)`, which is what
+    // disagreed with the renderer before). An ellipsis-truncated render
+    // produces a THIRD width — narrower than the full labeled candidate,
+    // not equal to the glyph-only candidate either — and that mismatch is
+    // what fails the assertion.
+    //
+    // What this CANNOT prove: that the mismatching width is caused
+    // specifically by a U+2026 ellipsis glyph rather than some other form
+    // of narrowing. There is no reliable per-glyph OCR in this offscreen
+    // harness, and a pixel-pattern match for "…" specifically would just be
+    // a new magic-number model of the kind this round is trying to get away
+    // from. "Ink width matches neither known full-content candidate" is the
+    // narrowest assertion available that still discriminates the actual
+    // bug (mutation-proved below).
+
+    /// Scans the given vertical pixel band for opaque, dark ("ink") pixels
+    /// and returns their bounding box in backing pixels. Shared by the
+    /// reference-width measurement and the live-footer measurement below so
+    /// both use the identical luminance threshold.
+    private func inkBounds(in data: Data, yRange: ClosedRange<Int>) -> (left: Int, right: Int, top: Int, bottom: Int)? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        var left: Int?, right: Int?, top: Int?, bottom: Int?
+        let lowY = max(0, yRange.lowerBound)
+        let highY = min(rep.pixelsHigh - 1, yRange.upperBound)
+        guard lowY <= highY else { return nil }
+        for y in stride(from: lowY, through: highY, by: 1) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 1) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let luminance = Int(((color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255).rounded())
+                guard luminance <= 160 else { continue }
+                left = min(left ?? x, x)
+                right = max(right ?? x, x)
+                top = min(top ?? y, y)
+                bottom = max(bottom ?? y, y)
+            }
+        }
+        guard let left, let right, let top, let bottom else { return nil }
+        return (left, right, top, bottom)
+    }
+
+    /// Renders exactly one `ViewThatFits` candidate — `operatorRow(showLabels:)`,
+    /// production's own helper, not a re-implementation — alone in a wide,
+    /// unconstrained window, and returns its real rendered ink width in
+    /// points. This is the reference the live footer's ink width gets
+    /// compared against below.
+    private func referenceOperatorRowInkWidth(
+        operators: [SessionComposerCommandParser.FooterOperatorHint],
+        showLabels: Bool,
+        presentation: SessionComposerRequest.Presentation
+    ) -> CGFloat? {
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        let palette = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: presentation, projectBinding: .open),
+            composerStore: composerStore
+        )
+        let size = NSSize(width: 600, height: 40)
+        // Opaque white background: `operatorRow`'s label `Text` uses
+        // `.secondaryLabelColor`, which composites at reduced alpha over a
+        // transparent window (this harness's default) — pixels with real,
+        // visible gray ink can still read alpha <= 0.5 and drop out of
+        // `inkBounds`'s filter. The live footer never hits this because
+        // `operatorFooterStrip`'s own background sits on the opaque
+        // composer card; an isolated `operatorRow` render needs its own
+        // opaque backing to match.
+        guard let data = renderPNG(
+            palette.operatorRow(operators, showLabels: showLabels, spacing: 14)
+                .frame(width: size.width, height: size.height, alignment: .leading)
+                .background(Color.white),
+            appearance: .aqua,
+            size: size
+        ) else { return nil }
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        guard let bounds = inkBounds(in: data, yRange: 0...(rep.pixelsHigh - 1)) else { return nil }
+        let scale = CGFloat(rep.pixelsWide) / size.width
+        return CGFloat(bounds.right - bounds.left) / scale
+    }
+
+    /// `.anchored`'s content width (`paletteWidth`, `.anchored` case) is
+    /// `WorkspaceLayout.sidebarWidth - 16` = 204pt — every prior footer
+    /// snapshot fixture in this file is `.centered` (`composerOverlayWidth`,
+    /// much wider), so this is the first fixture to actually render the
+    /// operator strip at sidebar width. `⇥ accept` is STRUCTURALLY
+    /// UNREACHABLE in `.anchored` (`usesModelBFieldForTesting` gates it to
+    /// `.centered`), so this fixture reaches the maximum REAL operator
+    /// count in `.anchored` today: three (`↵ open`, `↑↓ navigate`, `⌘Z
+    /// undo`) — via two projects (`.prefilled` so `changeProjectChip` can
+    /// actually cascade, unlike `.locked`) and the app's own multi-template
+    /// default set.
+    ///
+    /// Mutation-proved (round 7): forcing `operatorFooterStrip` to render
+    /// `operatorRow(showLabels: true, ...)` directly — bypassing
+    /// `ViewThatFits` entirely, reproducing rounds 3-6's fixed-width bug —
+    /// makes this test fail: the live footer's ink width lands at neither
+    /// reference candidate (it's compressed by the fixed `paletteWidth`
+    /// parent to something narrower than the full labeled candidate, via
+    /// `.lineLimit(1)` truncation). Restored after confirming the failure.
+    @Test func anchoredThreeOperatorFooterNeverTruncates() {
+        let project = Project(name: "Demo Project", rootPath: "/tmp/composer-ui-11-anchored-\(UUID().uuidString)")
+        let otherProject = Project(name: "Other Project", rootPath: "/tmp/composer-ui-11-anchored-other-\(UUID().uuidString)")
+        let workspaceStore = WorkspaceStore(testingProjects: [project, otherProject], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .anchored, projectBinding: .prefilled(project)),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.sidebarWidth, height: 420)
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        // Settles `.onAppear` — `SessionComposerPalette.onAppear` calls
+        // `composerStore.open(...)` itself, which resets `pendingChipUndo`
+        // to `nil` (`open(projectBinding:workspaceStore:)`'s own reset) —
+        // arming the chip-undo BEFORE this mount, as an earlier draft of
+        // this test did, gets silently wiped the instant the view appears.
+        // `hasSelection`/`hasMultipleOptions` come for free from this same
+        // `.onAppear` (row-0 seed against >1 built-in template).
+        hosting.layoutSubtreeIfNeeded()
+        composerStore.changeProjectChip(to: otherProject.id, currentlyShown: project.id)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let rep0 = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render `.anchored` three-operator fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep0)
+        let light = rep0.representation(using: .png, properties: [:])
+        writeEvidence(light, filename: "variant-g-anchored-three-operators-light.png")
+        #expect(light != nil)
+        guard let light else {
+            Issue.record("failed to render `.anchored` three-operator fixture")
+            return
+        }
+        // The strip has NO `.lineLimit`/`.truncationMode` (flagged as a
+        // real gap by the review) — if the three chords overflow
+        // `paletteWidth`, SwiftUI's default behavior for an HStack of
+        // fixed-size `Text` children with a trailing `Spacer(minLength: 0)`
+        // is to let the LAST child (the `Spacer`) collapse to 0 and the
+        // overflowing content EXTEND PAST the card's own right edge rather
+        // than wrap or clip — a right-edge opacity check catches that:
+        // scans the footer's own 26pt band (bottom of the card) for opaque
+        // content beyond `paletteWidth`'s right edge, which would only be
+        // possible if the strip's content pushed past its parent's bounds.
+        guard let bottom = cardBottomEdge(in: light) else {
+            Issue.record("failed to measure card bottom edge")
+            return
+        }
+        guard let rep = NSBitmapImageRep(data: light) else {
+            Issue.record("failed to decode PNG")
+            return
+        }
+        // The card's own right edge (opaque `.regularMaterial` background),
+        // NOT the render canvas edge — the card sits inset within an 8pt
+        // shake-clearance gutter on each side (`paletteWidth`'s doc
+        // comment), so a naive "did ink reach the canvas edge" check would
+        // never trip even with real overflow.
+        var cardRightEdge: Int?
+        for x in stride(from: rep.pixelsWide - 1, through: 0, by: -1) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 2) {
+                if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 {
+                    cardRightEdge = x
+                    break
+                }
+            }
+            if cardRightEdge != nil { break }
+        }
+        guard let cardRightEdge else {
+            Issue.record("failed to measure the card's right edge")
+            return
+        }
+        let scale = CGFloat(rep.pixelsWide) / size.width
+        let footerHeightPx = Int(26 * scale)
+        let footerTop = max(0, bottom - footerHeightPx + 2)
+        var rightmostInk: Int?
+        // A wrapped-to-2-lines strip (this test's original draft caught
+        // this ONLY by screenshot, not by the rightmost-ink-stays-inside-
+        // the-card check below, which stays true even while wrapped:
+        // wrapping keeps ink horizontally inside the card, it just
+        // corrupts the strip vertically) spans roughly double a single
+        // 10.5pt line's own ink height — measuring the ink's own
+        // topmost-to-bottommost extent (not a fixed third-band split,
+        // which false-positived against tall glyphs like `↑↓`/`⌘`'s
+        // natural ascender height) survives glyph-height variance while
+        // still catching the wrap.
+        var inkTop: Int?, inkBottom: Int?, leftmostInk: Int?
+        for y in stride(from: footerTop, through: bottom, by: 1) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: 1) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let luminance = Int(((color.redComponent + color.greenComponent + color.blueComponent) / 3 * 255).rounded())
+                if luminance <= 160 {
+                    rightmostInk = max(rightmostInk ?? x, x)
+                    leftmostInk = min(leftmostInk ?? x, x)
+                    inkTop = min(inkTop ?? y, y)
+                    inkBottom = max(inkBottom ?? y, y)
+                }
+            }
+        }
+        guard let rightmostInk, let leftmostInk, let inkTop, let inkBottom else {
+            Issue.record("found no ink in the footer band — expected `↵ open ↑↓ navigate ⌘Z undo`")
+            return
+        }
+        #expect(
+            rightmostInk < cardRightEdge,
+            "rightmost footer ink at backing x=\(rightmostInk), card's own right edge at x=\(cardRightEdge) — three operators overflowed the card's own right edge (paletteWidth has no lineLimit/truncationMode to contain it)"
+        )
+        let inkHeight = inkBottom - inkTop
+        #expect(
+            inkHeight < Int(18 * scale),
+            "footer ink spans \(inkHeight)px tall (single-line `↑↓`/`⌘` glyphs measured ~13px at this fixture's 2x scale) — a label wrapped onto a second line instead of truncating on one"
+        )
+
+        // Round 7: the ACTUAL truncation-detection check. Rounds 2/3/4/5/6
+        // all stopped at some form of an analytic width comparison, which
+        // is exactly what disagreed with the renderer three times over (see
+        // this section's header comment). This instead compares the
+        // footer's REAL RENDERED ink width against two REAL RENDERED
+        // reference widths — the labeled candidate and the glyph-only
+        // candidate, each measured by rendering that exact `operatorRow`
+        // production helper alone. `ViewThatFits` always renders one
+        // candidate whole, so a correct render's ink width must match one
+        // of the two references; an ellipsis-truncated render matches
+        // neither.
+        let threeLiveOperators: [SessionComposerCommandParser.FooterOperatorHint] = [
+            .init(glyph: "↵", label: "open"),
+            .init(glyph: "↑↓", label: "navigate"),
+            .init(glyph: "⌘Z", label: "undo")
+        ]
+        let renderedInkWidthPt = CGFloat(rightmostInk - leftmostInk) / scale
+        guard let labeledReference = referenceOperatorRowInkWidth(
+            operators: threeLiveOperators, showLabels: true, presentation: .anchored
+        ), let glyphOnlyReference = referenceOperatorRowInkWidth(
+            operators: threeLiveOperators, showLabels: false, presentation: .anchored
+        ) else {
+            Issue.record("failed to render one of the reference candidates")
+            return
+        }
+        // 3pt anti-aliasing/kerning slack — both the live footer and the
+        // reference candidates are rendered through the identical code
+        // path (`operatorRow`) and font, so this only needs to absorb
+        // sub-pixel rounding, not the ~15pt an analytic-vs-rendered
+        // comparison needed.
+        let matchesLabeled = abs(renderedInkWidthPt - labeledReference) < 3
+        let matchesGlyphOnly = abs(renderedInkWidthPt - glyphOnlyReference) < 3
+        #expect(
+            matchesLabeled || matchesGlyphOnly,
+            "live `.anchored` three-operator footer ink spans \(renderedInkWidthPt)pt, which matches neither the labeled candidate's real rendered width (\(labeledReference)pt) nor the glyph-only candidate's (\(glyphOnlyReference)pt) — `ViewThatFits` should always render one of those two candidates whole; a width matching neither is the signature of `.lineLimit(1)` ellipsis truncation squeezing partial content into the available space"
+        )
+    }
+
+    /// Round 7 acceptance capture: `.anchored`'s steady state, two
+    /// operators (`↵ open`, `↑↓ navigate`) — a single project, no chip
+    /// change, so `pendingChipUndo` never arms and `⌘Z undo` never joins
+    /// the set. `.anchored` has ~50pt of headroom at two labeled operators
+    /// (per the brief), so `ViewThatFits` is expected to pick the labeled
+    /// candidate here, distinct from the three-operator case above where it
+    /// may correctly fall back to glyph-only.
+    @Test func anchoredTwoOperatorFooterRendersLabeled() {
+        let project = Project(name: "Demo Project", rootPath: "/tmp/composer-ui-11-anchored-two-op-\(UUID().uuidString)")
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .anchored, projectBinding: .prefilled(project)),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.sidebarWidth, height: 420)
+        let data = renderPNG(view, appearance: .aqua, size: size)
+        writeEvidence(data, filename: "variant-g-anchored-two-operators-light.png")
+        #expect(data != nil, "failed to render `.anchored` two-operator fixture")
+
+        guard let data, let bottom = cardBottomEdge(in: data), let rep = NSBitmapImageRep(data: data) else {
+            Issue.record("failed to render or measure `.anchored` two-operator fixture")
+            return
+        }
+        let scale = CGFloat(rep.pixelsWide) / size.width
+        let footerHeightPx = Int(26 * scale)
+        let footerTop = max(0, bottom - footerHeightPx + 2)
+        guard let bounds = inkBounds(in: data, yRange: footerTop...bottom) else {
+            Issue.record("found no ink in the two-operator footer band — expected `↵ open ↑↓ navigate`")
+            return
+        }
+        let renderedInkWidthPt = CGFloat(bounds.right - bounds.left) / scale
+        let twoLiveOperators: [SessionComposerCommandParser.FooterOperatorHint] = [
+            .init(glyph: "↵", label: "open"),
+            .init(glyph: "↑↓", label: "navigate")
+        ]
+        guard let labeledReference = referenceOperatorRowInkWidth(
+            operators: twoLiveOperators, showLabels: true, presentation: .anchored
+        ) else {
+            Issue.record("failed to render the labeled reference candidate")
+            return
+        }
+        #expect(
+            abs(renderedInkWidthPt - labeledReference) < 3,
+            "`.anchored` two-operator footer ink spans \(renderedInkWidthPt)pt, labeled reference is \(labeledReference)pt — expected the steady state (~50pt of headroom) to render labels, not fall back to glyph-only"
+        )
+    }
+
+    /// Round 7 acceptance capture: `.centered`'s widest real case, four
+    /// operators (`↵ open`, `⇥ accept`, `↑↓ navigate`, `⌘Z undo`) — rendered
+    /// directly via `operatorFooterStrip` (production's own function) at
+    /// `.centered`'s real width, since assembling all four preconditions
+    /// (model B enabled + a live ghost remainder + a multi-option list + an
+    /// armed chip undo) through the full composer flow simultaneously is
+    /// orthogonal to what this test is checking — the strip's layout
+    /// decision at this operator count and width, not the sourcing logic
+    /// for each operator (already covered by `SessionComposerCommandParser`
+    /// 's own tests). `.centered` has ~324pt of headroom (per the brief),
+    /// so `ViewThatFits` is expected to pick the labeled candidate.
+    @Test func centeredFourOperatorFooterRendersLabeled() {
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        let palette = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .open),
+            composerStore: composerStore
+        )
+        let fourOperators: [SessionComposerCommandParser.FooterOperatorHint] = [
+            .init(glyph: "↵", label: "open"),
+            .init(glyph: "⇥", label: "accept"),
+            .init(glyph: "↑↓", label: "navigate"),
+            .init(glyph: "⌘Z", label: "undo")
+        ]
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth, height: 60)
+        // Opaque backing — see `referenceOperatorRowInkWidth`'s doc comment;
+        // `operatorFooterStrip`'s own `Color.secondary.opacity(0.08)`
+        // background isn't opaque either, so the secondary-colored labels
+        // still need real backing to composite at full alpha.
+        guard let data = renderPNG(
+            palette.operatorFooterStrip(fourOperators).background(Color.white),
+            appearance: .aqua,
+            size: size
+        ) else {
+            Issue.record("failed to render `.centered` four-operator footer")
+            return
+        }
+        writeEvidence(data, filename: "variant-g-centered-four-operators-light.png")
+        guard let rep = NSBitmapImageRep(data: data) else {
+            Issue.record("failed to decode PNG")
+            return
+        }
+        guard let bounds = inkBounds(in: data, yRange: 0...(rep.pixelsHigh - 1)) else {
+            Issue.record("found no ink in the four-operator centered footer render")
+            return
+        }
+        let scale = CGFloat(rep.pixelsWide) / size.width
+        let renderedInkWidthPt = CGFloat(bounds.right - bounds.left) / scale
+        guard let labeledReference = referenceOperatorRowInkWidth(
+            operators: fourOperators, showLabels: true, presentation: .centered
+        ) else {
+            Issue.record("failed to render the labeled reference candidate")
+            return
+        }
+        #expect(
+            abs(renderedInkWidthPt - labeledReference) < 3,
+            "`.centered` four-operator footer ink spans \(renderedInkWidthPt)pt, labeled reference is \(labeledReference)pt — expected `.centered`'s ~324pt of headroom to fit the labeled candidate"
+        )
+    }
+
+    /// Round 7: `⇥ accept` (the 4th possible operator) is STRUCTURALLY
+    /// UNREACHABLE in `.anchored` — it requires `usesModelBFieldForTesting`,
+    /// hardcoded to `.centered` only
+    /// (`SessionComposerPalette.usesModelBFieldForTesting`) — no
+    /// `AppStorage` flag or state can make it true in `.anchored`. First
+    /// half asserts that structural guarantee directly, with the flag
+    /// forced on to prove the presentation check (not the flag) is what's
+    /// gating it — unchanged from round 5.
+    ///
+    /// Second half: round 5's "corroborating evidence" was an analytic
+    /// claim that 4 labeled operators don't fit — exactly the kind of
+    /// number this round stopped trusting. Replaced with a live render:
+    /// `operatorFooterStrip` (production's own function, not a
+    /// re-implementation) called directly with 4 operators at `.anchored`'s
+    /// real width. `ViewThatFits` should fall back to the glyph-only
+    /// candidate rather than truncate — verified against the glyph-only
+    /// candidate's real rendered width, same technique as
+    /// `anchoredThreeOperatorFooterNeverTruncates` above. This is defensive
+    /// coverage for a state production cannot currently reach, not a claim
+    /// that it does.
+    @Test func anchoredCannotReachFourOperators() {
+        let key = ComposerGhostTextField.modelBFieldStorageKey
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: key)
+        defaults.set(true, forKey: key) // force the flag ON — proves `.anchored` alone blocks it
+        defer {
+            if let previous { defaults.set(previous, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
+
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        let palette = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .anchored, projectBinding: .open),
+            composerStore: composerStore
+        )
+        #expect(
+            !palette.usesModelBFieldForTesting,
+            "`.anchored` must never mount the model-B field, or `⇥ accept` becomes a 4th footer operator — see the doc comment above"
+        )
+
+        // Defensive coverage: even if the structural guard above were ever
+        // removed, `ViewThatFits` degrades to glyph-only rather than
+        // truncating. Rendered directly via `operatorFooterStrip` at
+        // `.anchored`'s real width.
+        let fourOperators: [SessionComposerCommandParser.FooterOperatorHint] = [
+            .init(glyph: "↵", label: "open"),
+            .init(glyph: "⇥", label: "accept"),
+            .init(glyph: "↑↓", label: "navigate"),
+            .init(glyph: "⌘Z", label: "undo")
+        ]
+        let size = NSSize(width: WorkspaceLayout.sidebarWidth, height: 60)
+        guard let data = renderPNG(
+            palette.operatorFooterStrip(fourOperators)
+                .frame(width: size.width, height: size.height)
+                .background(Color.white),
+            appearance: .aqua,
+            size: size
+        ), let rep = NSBitmapImageRep(data: data) else {
+            Issue.record("failed to render the forced four-operator `.anchored` footer")
+            return
+        }
+        guard let bounds = inkBounds(in: data, yRange: 0...(rep.pixelsHigh - 1)) else {
+            Issue.record("found no ink in the forced four-operator footer render")
+            return
+        }
+        let scale = CGFloat(rep.pixelsWide) / size.width
+        let renderedInkWidthPt = CGFloat(bounds.right - bounds.left) / scale
+        guard let glyphOnlyReference = referenceOperatorRowInkWidth(
+            operators: fourOperators, showLabels: false, presentation: .anchored
+        ) else {
+            Issue.record("failed to render the glyph-only reference candidate")
+            return
+        }
+        #expect(
+            abs(renderedInkWidthPt - glyphOnlyReference) < 3,
+            "forced four-operator `.anchored` footer ink spans \(renderedInkWidthPt)pt, glyph-only reference is \(glyphOnlyReference)pt — expected `ViewThatFits` to fall back to the glyph-only candidate rather than render truncated labeled content"
+        )
+    }
+
+    // MARK: - Review round 4, P2: `writeError` must not stay hidden behind `isAddingTemplate`
+
+    /// Scans for `.systemRed` ink anywhere in the card — the ONLY red
+    /// content this composer ever paints is the `writeError`/typed-branch
+    /// error text (`SessionComposerPalette`'s `.error(let message)` footer
+    /// branch) and the no-match shake border, which this fixture never
+    /// triggers (no Return is ever sent). A wide per-channel gap (red
+    /// channel clearly dominant over green/blue) distinguishes it from the
+    /// UI's other warm-neutral tones (labels, terracotta accents elsewhere
+    /// in the app are not present in this view at all).
+    private func containsRedInk(in data: Data) -> Bool {
+        guard let rep = NSBitmapImageRep(data: data) else { return false }
+        for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if r > 150, r - g > 60, r - b > 60 { return true }
+            }
+        }
+        return false
+    }
+
+    /// Review round 4, P2 fix: the precedence swap (round 2) correctly
+    /// made `isAddingTemplate` win the footer slot over `writeError` for
+    /// the COMMON case (a live text field must never be evicted by a stale
+    /// resolution message). The gap it opened: an async worktree create
+    /// that OUTLIVES the user moving on to "+ New template…" sets
+    /// `writeError` well after `isAddingTemplate` went true, and — without
+    /// this fix — that error stays permanently hidden behind the naming
+    /// field until the user commits or cancels the template, at which
+    /// point `cancel()`/`commitNewTemplate()` silently discards it. Net:
+    /// no worktree, no error ever shown, wrong cwd.
+    ///
+    /// Mounts with `initialIsAddingTemplateForTesting: true` (this bug's
+    /// only reachable starting state — `isAddingTemplate` is private
+    /// `@State`, see that init parameter's doc comment for why this is the
+    /// only route in), confirms the footer shows NO red ink yet (the
+    /// naming field, correctly, still owns the slot with no error present),
+    /// then calls `composerStore.rejectUnresolvedBranch(token:)` directly
+    /// (same synchronous `writeError` write path the async worktree-create
+    /// timeout uses, `SessionComposerStore.swift:1187`, without waiting on
+    /// a real 10s timeout) and re-renders — the fix means the error now
+    /// wins the footer slot and its red text appears.
+    @Test func isAddingTemplateClearsWhenAWriteErrorArrives() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
+        let palette = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(project)),
+            composerStore: composerStore,
+            initialIsAddingTemplateForTesting: true
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: palette.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let before = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the pre-error fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: before)
+        let beforeData = before.representation(using: .png, properties: [:])
+        writeEvidence(beforeData, filename: "variant-g-adding-template-before-error-light.png")
+        #expect(beforeData != nil)
+        if let beforeData {
+            #expect(
+                !containsRedInk(in: beforeData),
+                "expected no red error ink while only `isAddingTemplate` is true (nothing has failed yet)"
+            )
+        }
+
+        composerStore.rejectUnresolvedBranch(token: "does-not-exist")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let after = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the post-error fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: after)
+        let afterData = after.representation(using: .png, properties: [:])
+        writeEvidence(afterData, filename: "variant-g-adding-template-after-error-light.png")
+        #expect(afterData != nil)
+        guard let afterData else { return }
+        #expect(
+            containsRedInk(in: afterData),
+            "expected `writeError`'s red error text to win the footer slot once it arrives — instead it stayed hidden behind `isAddingTemplate`, exactly the silent-wrong-cwd bug this fix closes"
+        )
+    }
+
+    // MARK: - Composer variant G (Sean's ruling, 2026-08-31): an armed `>`
+    // whose token matches no known branch offers a "Create branch" row.
+
+    /// A real, minimal throwaway git repo — `typedBranchCreateOffer` gates
+    /// on `SessionComposerCommandParser.resolveTypedBranch`'s
+    /// `cachedProjectId == resolvingForProjectId` check, which only ever
+    /// settles via a genuine `SessionComposerStore.refreshWorktrees` shell-out
+    /// against a real repo (a synthetic, non-existent `rootPath` never
+    /// becomes a git repo, so `worktreesProjectId` would stay `nil`/`.pending`
+    /// forever and the row this test exists to evidence would never render).
+    /// Same fixture shape as `SessionComposerWorktreeLaunchTests
+    /// .makeThrowawayRepo` — kept local to this file rather than shared,
+    /// matching every other fixture helper already private to this file.
+    private static func makeThrowawayRepoForSnapshot() -> String {
+        let path = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-composer-snapshot-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+
+        func run(_ args: [String]) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = args
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+            task.waitUntilExit()
+        }
+
+        run(["git", "-C", path, "init", "-q", "-b", "main"])
+        run(["git", "-C", path, "-c", "user.email=test@ghostties.test", "-c", "user.name=Ghostties Test",
+             "commit", "-q", "--allow-empty", "-m", "init"])
+        return path
+    }
+
+    /// Evidence for acceptance criterion 4: rendered pixels showing the
+    /// create-branch row for an UNKNOWN token (`mybrnach` matches no branch
+    /// in the throwaway repo) — the class this task adds, distinct from the
+    /// pre-existing known-branch-without-worktree case
+    /// (`branchNoLongerAppearsAsACreateOfferAfterASuccessfulCreation` in
+    /// `SessionComposerWorktreeLaunchTests` already covers that class at the
+    /// store level). `selectionHighlightPixelCount` doubles as evidence for
+    /// decision 3 (the create-branch row ranks first after a typed `>`) —
+    /// row 0 in `commandOptions` is the ONLY thing that could be highlighted
+    /// here, since `searchText` starts a fresh query with no RECENT/pinned
+    /// state seeded.
+    @Test func typedUnknownBranchTokenRendersCreateBranchRowFirst() async {
+        let repo = Self.makeThrowawayRepoForSnapshot()
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+
+        let project = Project(name: "atlas", rootPath: repo)
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+
+        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+            composerStore: composerStore
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        // Settles `.onAppear` — mounting the view is what calls
+        // `composerStore.open(...)` in production (`renderMountedPaletteAfterTyping`'s
+        // own precedent, above); calling `open()` a second time BEFORE mount
+        // would have its `searchText = ""` reset undone by THIS one anyway,
+        // so open() is only ever called the once, via mount.
+        hosting.layoutSubtreeIfNeeded()
+
+        // `open()` kicks `refreshWorktrees` off an unstructured `Task` on the
+        // SAME `@MainActor` executor this async test body runs on — `await
+        // Task.sleep` actually yields the executor (unlike `RunLoop.main
+        // .run(until:)`, which does not reliably pump Swift Concurrency's
+        // MainActor queue here), same pattern
+        // `SessionComposerWorktreeLaunchTests.waitUntil` already uses. 20s,
+        // not that file's 8-12s budgets: this polls the FIRST refresh from a
+        // cold `open()`, which can itself retry every ~4s on its own 2s
+        // internal race (`SessionComposerStore.refreshWorktrees`'s doc
+        // comment) — under the full unfiltered suite's parallel git
+        // contention this joins that file's own documented load-flake class
+        // (`SessionComposerWorktreeLaunchTests`, `GitWorktreeCreationTests
+        // .raceReturnsTimedOut`) rather than eliminating it; a real 12s+
+        // shell-out under load is a false negative in THIS poll's budget,
+        // not evidence the row itself is broken (confirmed green in
+        // isolation, see the PR report).
+        let deadline = Date().addingTimeInterval(20)
+        while composerStore.worktreesProjectId != project.id, Date() < deadline {
+            try? await _Concurrency.Task.sleep(for: .milliseconds(20))
+        }
+        #expect(composerStore.worktreesProjectId == project.id, "setup failed: worktrees never settled for this project — the row this test evidences can never render without it")
+
+        // Same state transition a real keystroke produces (matches
+        // `renderMountedPaletteAfterTyping`'s own precedent), typed AFTER
+        // mount/settle — setting it before mount would have been wiped by
+        // `.onAppear`'s own `open()` call resetting `searchText = ""`. No
+        // "atlas " project prefix: `.locked(project)` already fixes the
+        // project position (`projectPositionIsFixed` in `parsePath`), so a
+        // typed leading word would itself become the branch-armed content
+        // instead of a project token — the field's OWN placeholder for a
+        // locked composer never shows the project name either (Model A).
+        composerStore.noteSearchTextEditedByTyping()
+        composerStore.searchText = "> mybrnach"
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the create-branch-row fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        let light = rep.representation(using: .png, properties: [:])
+        writeEvidence(light, filename: "variant-g-create-branch-row-light.png")
+        #expect(light != nil)
+        guard let light else { return }
+        #expect(containsRenderedContent(in: light, isDark: false), "expected the create-branch row to render, got a near-blank card")
+        let highlightCount = selectionHighlightPixelCount(in: light)
+        #expect(highlightCount > 100, "expected the create-branch row to be selected/highlighted first (bestSelectionIndex ranks it first after a typed >), found \(highlightCount) accent-tinted pixels")
     }
 
 }

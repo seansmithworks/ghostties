@@ -277,6 +277,38 @@ struct ComposerGhostTextField: NSViewRepresentable {
         return String(remainder[remainder.startIndex..<separatorRange.upperBound])
     }
 
+    /// Decides what Tab actually types for `acceptGhost`, per Sean's
+    /// 2026-09-02 ruling: Tab must never be the thing that declares a
+    /// formal branch path — only SEAN typing `>` himself does that
+    /// (`decision_composer-chevron-is-explicit-branch-declaration`). This
+    /// check is deterministic and driven only by explicit user input, never
+    /// inferred from ghost state, per his explicit rejection of an
+    /// infer-it variant: it looks at `currentText` (what's already in the
+    /// field, before this Tab), not at prediction quality.
+    ///
+    /// If a `>` already appears in `currentText`, structure mode is armed
+    /// — Sean typed it, so `segment` (verbatim, chevron and all) is exactly
+    /// what he asked Tab to keep drilling with.
+    ///
+    /// Otherwise every `>` the segment carries is stripped, not just a
+    /// clean trailing `segmentSeparator` — an unarmed Tab that has already
+    /// swapped one `" > "` for a plain space lands the NEXT `nextSegment`
+    /// call mid-separator (e.g. `"> Default > "` — the leading space of the
+    /// true separator was already consumed by the space this function
+    /// wrote last time), so a trailing-suffix-only strip would still leak
+    /// a bare `>` into the field on the second unarmed Tab. Stripping every
+    /// `>` and collapsing the leftover whitespace to one trailing space
+    /// keeps Tab from EVER typing the chevron itself, at any segment
+    /// count — which is also why a `>` found in `currentText` can only
+    /// mean Sean typed it: Tab never produces one to confuse it with.
+    static func tabInsertionSegment(segment: String, currentText: String) -> String {
+        guard !currentText.contains(">") else { return segment }
+        guard segment.contains(">") else { return segment }
+        let withoutChevrons = segment.replacingOccurrences(of: ">", with: "")
+        let trimmed = withoutChevrons.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? "" : trimmed + " "
+    }
+
     /// FINAL REVIEW correction: this was previously a throwaway TextKit 1
     /// stack (`NSTextStorage`/`NSLayoutManager`/`NSTextContainer`), on the
     /// claim that `boundingRect(forGlyphRange:in:)` is "bearing-aware / the
@@ -823,11 +855,24 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// case-insensitive — `Gho` + accepted `stties > ` yields exactly
         /// `Ghostties > `, never a canonical rewrite of what was already
         /// typed.
+        ///
+        /// Sean's ruling, 2026-09-02: *"I normally wouldn't type the `>`."*
+        /// Tab was typing it FOR him — `nextSegment` returns the accepted
+        /// segment plus its trailing `segmentSeparator`, so `ghostt` + Tab
+        /// produced `ghostties > `, which per
+        /// `decision_composer-chevron-is-explicit-branch-declaration` reads
+        /// as an explicit (formal) branch declaration and broke his 95%
+        /// idiom (`cco` then got parsed as a branch name). Routed through
+        /// `ComposerGhostTextField.tabInsertionSegment` below.
         func acceptGhost(in textView: NSTextView) {
             guard let ghostText = self.textView?.currentGhostText, !ghostText.isEmpty else { return }
             let segment = ComposerGhostTextField.nextSegment(remainder: ghostText)
             guard !segment.isEmpty else { return }
-            let newText = textView.string + segment
+            let insertedSegment = ComposerGhostTextField.tabInsertionSegment(
+                segment: segment,
+                currentText: textView.string
+            )
+            let newText = textView.string + insertedSegment
             setText(newText, in: textView)
             parent.query = newText
             applyStyles()

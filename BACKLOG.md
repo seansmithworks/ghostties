@@ -1,5 +1,63 @@
 # Ghostties — Backlog
 
+## 2026-08-31 — Composer variant G session (carried)
+
+- [x] Composer variant G — centered-modal type-scale conformance. `.centered` section headers
+  and footer hint now route through `subtitleFontSize`; `.anchored` (sidebar popover) restored
+  to its exact pre-`786f4d56f` values via new `sectionHeaderFont`/`footerGlyphFont`/
+  `footerLabelFont` properties. **Correction (round 2):** the original entry overstated
+  DESIGN.md's coverage — §4's centered-modal type-scale table has no entry for a section header
+  or footer hint, so the mapping is a reasonable interpretation, not literal conformance.
+- [x] `ThrottleTrailingEdgeHypothesisTests.swift` — already deleted from the main tree; carried
+  item closed.
+
+**Composer review findings — open:**
+
+- [x] `armedBranchTokenIsCommand`'s dead-API status — resolved by `8f899fc24`, which gave it the
+  `isLastChevron` parameter and a real call site. Closed, round 1.
+- [x] Dead `.unresolved` segment paths and their doc comments (round 1 findings 6/8) — round 2
+  re-checked and found the three named sites are now correct and reachable. Closed, round 2.
+- [ ] `SessionComposerSnapshotTests/mountedModelBGhostTracksHighlightedRowAcrossProjects` fails
+  ~25-50% of runs on unmodified code, serially — not parallel load. Root cause is a one-shot
+  render race: `ComposerGhostTextField.applyStyles()` bails out when
+  `firstRect(forCharacterRange:)` returns `.zero` before TextKit lays out the range, and nothing
+  re-fires it. Suspected user-visible symptom (PLAUSIBLE, unverified in the app): arrow-keying
+  between rows changes `ghostFullPath` and fires exactly one `applyStyles`; if that one bails
+  the ghost stays blank until the next keystroke. Fix direction: make the test drive
+  `applyStyles` deterministically with a bounded retry, or assert against
+  `textView.currentGhostText` (set before every bail-out) rather than pixels.
+- [ ] The unresolved-branch error says `use the "Create worktree" suggestion below`, but the
+  status strip is the last child of `composerCard`'s VStack while `commandOptions`' create row
+  is the fourth section of the results table — always **above** the message, never below. And
+  for the non-final-branch-slot class that `8f899fc24` revived, `typedBranchCreateOffer` gates
+  on `branchesWithoutWorktree.contains(token)`, so no create row is generated at all. Pixel
+  evidence: `docs/plans/composer-ui-11/evidence/variant-g-adding-template-after-error-light.png`.
+- [ ] `SessionComposerCommandParser.swift:607-615` — the round-3 Fix-5 doc comment claims
+  `ghostties > orchestrator > mythread` and `ghostties orchestrator > mythread` "resolve
+  identically". Measured against the real parser they do not: the chevron form yields branch
+  `.unresolved("orchestrator")` with no template at all. Its guard test was rewritten on
+  2026-08-26 to a double-chevron form that cannot see the regression, so it stays green while
+  the comment is false.
+- [ ] `SessionComposerCommandParser.swift:774-778` — `parse()`'s "Behavior note" claims
+  `ghostties > main` resolves as ad-hoc remainder `main`, not a branch. Measured with the
+  `knownBranchNames: ["main"]` that production always supplies, it yields
+  `branchToken == "main"`, `remainderTokens == []`. Pre-existing, untouched by these commits.
+- [ ] `SessionComposerCommandParserIdiomTests.swift:166-172` — the new message test's
+  `contains("worktree")` is already satisfied by the message's own `"No worktree found for
+  branch"` prefix, so the effective assertion is only `contains("create")`. Also, nothing ties
+  the message's quoted `"Create worktree"` to `commandOptions`' actual row-title literal at
+  `SessionComposerPalette.swift:922` — a new pair of coupled literals across the Core/AppKit
+  boundary with no test holding them together, which is the drift class the original
+  consolidation existed to prevent.
+- [ ] **Open decision for Sean, do not act on it:** `8f899fc24` fixed the dropped-command bug
+  at the grammar layer, so the single-chevron ruling now holds for exactly one chevron.
+  Measured: `ghostties > cco -n "test" > thread` claims `cco` as an unresolved branch and
+  hard-fails, and the ad-hoc segment becomes `-n "test"` with the binary name gone. Round 2's
+  argument is that the actual bug was `parse()`'s remainder precedence at `:857-858`
+  (`closedAdHocRange ?? …`), and fixing it there would have preserved the ruling at every
+  chevron count without touching the grammar. Sean decides whether to keep the grammar fix or
+  move it to the adapter.
+
 ## 2026-09-02 — CEF crash root-caused (Chromium 150→144 profile downgrade); overnight fix dispatched
 
 **Verdict (Fable 5.1):** Sean's Release CEF profile was written by Chromium 150; the Aug 1
@@ -1348,6 +1406,7 @@ merged after six weeks; repo hygiene wave.
 ## 2026-08-11 — Repo hygiene wave (worktrees, branches, stale PRs)
 
 Worktrees 21 → 3, local branches 60 → 13, origin branches 11 → 5, disk 34 GB → 2.5 GB. Merged
+
 #116 `3ea42d69d`, #105 `45c834929`, #119 `7ec311a57`. Recovered an unpushed commit (`059d5ef38`,
 website session notes) from an abandoned worktree before pruning would have destroyed it.
 
@@ -1421,6 +1480,7 @@ Left open:
 
 `v0.1.0-beta.22` tagged at `3979c7025`, release CI green, appcast live (build 16655, verified in
 the deployed XML). Merged tonight: #110 (title-sanitizer leaks), #113 (`Remove`→`Delete`),
+
 #115 (changelog), #117 (npm pin). Sean passed all three runtime gates (#57, #58, #92) on a build
 proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fail / 1 skip** via
 `xcrun xcresulttool get test-results summary` at the merged tip.
@@ -2253,6 +2313,19 @@ Branch `feat/composer-branch-segment` @ `948ad5fa8`, pushed, suite 871/0/1, tree
 keyboard behavior gated on Sean's manual pass — subagents may screen-capture but must NEVER drive
 synthetic keystrokes ([[feedback_subagent-gui-automation-hit-live-session]]).
 
+## 2026-08-30 — Composer variant G
+
+- [x] Composer variant G — Pass A: section headers + remove in-field branch control
+- [x] Composer variant G — Pass B: contextual operator footer strip
+- [ ] Composer variant G — independent review of the complete diff
+- [x] Composer variant G — review round 2 fixes
+- [x] Composer variant G — review round 4 fixes
+- [x] Composer variant G — review round 6 fixes (revert glyph-only over-correction)
+- [x] Composer variant G — round 7: ViewThatFits, no truncation
+- [x] Composer variant G — projects in results at rest, chevron removed
+- [x] Composer variant G — cap TEMPLATES/PROJECTS at 3 in rest state
+- [x] Composer variant G — one-Tab-per-segment, no-branch command shape, stale error copy
+
 ## 2026-08-31 — Composer variant G session (carried)
 
 Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
@@ -2260,6 +2333,7 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 **Decisions open on Sean (carried 1×):**
 - [ ] Composer type scale — mockup values (header 10pt `.bold` + 0.6 tracking; footer 10.5pt `design: .monospaced`; strip `Color.secondary.opacity(0.08)`) vs `DESIGN.md`'s 15/13/11 scale + one font family. Note: no monospaced font carries `↵`/`⇥`, so the footer mixes families either way — weakens the mono case.
 - [ ] `macos/Tests/Ghostties/ThrottleTrailingEdgeHypothesisTests.swift` — delete or fix? Untracked, dated Aug 14, self-described "DIAGNOSTIC ONLY". Missing `import GhosttiesCore`; breaks local `xcodebuild test` for every session in this repo until resolved.
+- [x] Tab-to-complete in the DEFAULT field — Tab filling the field from the highlighted row. Model-B only today. Its own change, not this branch. RESOLVED 2026-09-02: Sean made Model-B the default field for everyone instead of porting Tab into the old field.
 - [ ] Tab-to-complete in the DEFAULT field — Tab filling the field from the highlighted row. Model-B only today. Its own change, not this branch.
 
 **Parked (off-objective):**
@@ -2277,3 +2351,15 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 ## 2026-09-01 — PR #155 review round 2
 
 - [ ] **The macOS test target is never executed in CI.** `.github/workflows/test-ghostties.yml:151-155` runs `xcodebuild build-for-testing` only — compiled, never run. The `swift test` job covers `cli/` alone. Every macOS test in this repo rests on a local run by whoever last touched it. This is why fail-open assertions and unpinned globals matter more here than they would elsewhere. | quality | new
+
+## 2026-09-02 — composer Tab flow (Beta 25 thread)
+
+**Carried (on-objective):**
+- [ ] **Sean's verdict on the Tab flow.** `/Applications/Ghostties-composer.app` is installed and running the merged build. Test: ⌘T → `ghostt` → Tab → `cco -n "testing"` → Return. Not yet confirmed on screen.
+- [ ] **Push `fix/composer-tab-space` + open PR** — held on Sean's explicit "not until it is right." Branch is at `c24aef12f`, local only, 54 commits ahead of `origin/feat/composer-variant-g` (wrong tracking ref — set upstream to a new `origin/fix/composer-tab-space`, never push to variant-g's ref).
+- [ ] **Confirm the accepted consequence:** after one *unarmed* Tab the ghost stops matching, so a second unarmed Tab is a no-op; multi-segment drilling requires typing `>`. Strawman: this is correct and intended per Sean's own rule — apply or redline, don't re-ask.
+
+**Parked (off-objective):**
+- [ ] `⚠ The EdDSA public key is not valid for Ghostties` toast — Sparkle update-signing key mismatch, visible bottom-right in every window. Never logged before 2026-09-02.
+- [ ] `feat/composer-variant-g` is now fully contained in `fix/composer-tab-space` (merged `origin/main` in at `2ad00cf05`). Merging variant-g separately is moot — retire the branch when the new one lands.
+- [ ] `BACKLOG.md:2108` item **D2** (Tab-to-complete) is arguably closed by Model-B being default-on. Sean's call.
