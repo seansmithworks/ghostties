@@ -9,7 +9,9 @@
   accessibility (60s per test, 11/12 failed, no captures). Next experiment: ad-hoc signing
   (`CODE_SIGN_IDENTITY=-`) via `gh workflow run test-ghostties.yml --ref <branch> -f visual_pass=true`.
 - [x] `concept-lab/` has a home: nested repo at the same path, remote https://github.com/seansmithworks/ghostties-concept-lab (PRIVATE — the audit card carries owner-only traffic numbers). First commit `bd5184e`, 2026-09-10.
-- [ ] HELD — two concept-lab design calls: the terminal canvas runs thin (pad with transcript lines?) and overlays stack in flow instead of floating. Sean: "hold, discuss."
+- [ ] HELD — two concept-lab design calls: the terminal canvas runs thin (pad with transcript lines?) and overlays stack in flow instead of floating. Sean: "hold, discuss." Strawman: pad every app canvas with 4–6 illustrative transcript lines so it reads as a live pane; float the composer overlay centred over the canvas with a paper scrim behind it so the pane content dims instead of colliding.
+- [ ] carried — map Sean's kept concepts / personal scores to the avenue numbering in memory `project_avenues-review-site-2026-09-05` once he pastes the export or the kept titles. Nothing received yet.
+- [ ] parked — concept-lab `.mobile-picker` `<select>` overflows to 414px at a 390px viewport (native intrinsic width follows the longest option). Pre-existing, seen by two reviewers, not touched.
 - [ ] parked — this file's 2026-09-05 → 09-09 entries live only on `visual-pass-2026-09-05`, which
   is never pushed; port them to `main` as a docs-only commit once Sean decides on the audit
   source (owner-only traffic numbers).
