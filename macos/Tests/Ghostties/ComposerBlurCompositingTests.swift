@@ -16,6 +16,14 @@ import Testing
 /// the raw text and a flat fill, so a future change that silently turns the
 /// wash into a no-op (e.g. `revealed` wired backwards) fails a test instead
 /// of only failing Sean's eye.
+///
+/// Fix round 2, item 5: `ComposerZeroChromeWash` no longer sizes or masks
+/// itself (deleted its own 560×112pt `.frame` and feathered-edge mask) — it
+/// now fills whatever bounds its caller proposes. This file's fixture
+/// canvas (`size`, below) already stands in for "the caller's proposed
+/// bounds", so the wash filling it EDGE TO EDGE with no visible boundary is
+/// exactly what these tests already exercise; no test mechanics changed,
+/// only this comment, which used to describe a self-sized "patch".
 @MainActor
 struct ComposerBlurCompositingTests {
 
@@ -144,5 +152,40 @@ struct ComposerBlurCompositingTests {
         let revealedDiff = pixelDifference(revealed, rawText)
 
         #expect(unrevealedDiff < revealedDiff)
+    }
+
+    /// Fix round 2, item 5: the wash must cover its bounds EDGE TO EDGE —
+    /// no feathered mask fading it out near the border, unlike the deleted
+    /// 24pt-feather patch. Compares the corner pixel (2pt in from each
+    /// edge, where the old mask would have been fully transparent) against
+    /// the center pixel — both revealed, both should show wash difference
+    /// from the raw text, roughly equally, proving no edge falloff.
+    @Test func revealedWashHasNoEdgeFeather() {
+        let rawText = renderPNG(DenseTerminalBackdrop())
+        let revealed = renderPNG(
+            ZStack {
+                DenseTerminalBackdrop()
+                ComposerZeroChromeWash(material: .regular, revealed: true)
+            }
+        )
+        guard let rawText, let revealed,
+              let rawRep = NSBitmapImageRep(data: rawText),
+              let washRep = NSBitmapImageRep(data: revealed) else {
+            Issue.record("Failed to render fixtures")
+            return
+        }
+        // Near-corner sample (2pt in, well inside where a 24pt feather
+        // mask would previously have been fully transparent).
+        let cornerX = 4
+        let cornerY = 4
+        guard let rawCorner = rawRep.colorAt(x: cornerX, y: cornerY),
+              let washCorner = washRep.colorAt(x: cornerX, y: cornerY) else {
+            Issue.record("Failed to sample corner pixel")
+            return
+        }
+        let cornerDiff = abs(rawCorner.redComponent - washCorner.redComponent)
+            + abs(rawCorner.greenComponent - washCorner.greenComponent)
+            + abs(rawCorner.blueComponent - washCorner.blueComponent)
+        #expect(cornerDiff > 0, "expected the wash to visibly affect a near-corner pixel (no edge feather)")
     }
 }

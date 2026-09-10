@@ -105,6 +105,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
 
     @Binding var query: String
     var fontSize: CGFloat
+    /// Fix round 2, item 8 (zero-chrome type scale): default `.regular`
+    /// keeps every existing call site (classic Model B, `.singleLine`)
+    /// byte-identical — only `.zeroChrome`'s field passes `.semibold`.
+    var fontWeight: NSFont.Weight = .regular
     /// The row height the field renders inside (`.centered` only tonight,
     /// 38pt — `SessionComposerPalette.fieldHeight`). Used only to compute a
     /// vertical `textContainerInset` that centers a single line, since
@@ -375,7 +379,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         // against the WRONG line height. Setting the real font first makes
         // `textView.font` always non-nil AND correct, so the inset is
         // always computed against it.
-        textView.font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
+        textView.font = NSFont.systemFont(ofSize: fontSize, weight: fontWeight)
         textView.textColor = .labelColor
 
         let lineHeight = layoutManager.defaultLineHeight(for: textView.font ?? NSFont.systemFont(ofSize: fontSize))

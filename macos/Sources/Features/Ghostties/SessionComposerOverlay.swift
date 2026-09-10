@@ -39,6 +39,18 @@ struct SessionComposerOverlay: View {
 
     @ObservedObject private var composerStore = SessionComposerStore.shared
 
+    /// Fix round 2: zero-chrome's summon/commit/dismiss motion is driven
+    /// from HERE — this is the only thing that knows "one frame after
+    /// mount" (`.task` below), and `SessionComposerPalette` writes
+    /// `.committing`/`.dismissing` into the SAME binding for the two exit
+    /// paths that originate inside it (commit, Esc). Starts `.hidden` so
+    /// the summon transition has a real 0→1 to animate — unlike fix
+    /// round 1's rejected approach, this can never be observed mid-race by
+    /// the offscreen snapshot harness, because that harness always passes
+    /// its OWN `.constant(.revealed)` override instead of ever
+    /// constructing a real `SessionComposerOverlay`.
+    @State private var zeroChromeRevealPhase: ComposerRevealPhase = .hidden
+
     private var isPresented: Binding<Bool> {
         Binding(
             get: { composerStore.isOpen },
@@ -59,27 +71,86 @@ struct SessionComposerOverlay: View {
         // this file had before this spike touched it.
         if ComposerStyle.current() == .zeroChrome {
             GeometryReader { geometry in
-                composerZStack
+                let measure = min(
+                    max(geometry.size.width * ComposerZeroChromeTypography.measureFraction, ComposerZeroChromeTypography.measureMin),
+                    ComposerZeroChromeTypography.measureMax
+                )
+                zeroChromeFullBleedWash
                     .overlay(alignment: .top) {
-                        SessionComposerPalette(isPresented: isPresented, request: request)
-                            .padding(.top, geometry.size.height * 0.38)
+                        SessionComposerPalette(
+                            isPresented: isPresented,
+                            request: request,
+                            revealPhase: $zeroChromeRevealPhase,
+                            zeroChromeMeasureOverride: measure
+                        )
+                        // Fix round 2, item 8: field top moved from 38% to
+                        // 32% of overlay height to leave room for the
+                        // taller 32/44pt block.
+                        .padding(.top, geometry.size.height * ComposerZeroChromeTypography.fieldTopFraction)
                     }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .task {
+                // Fix round 2 (Timing board, summon): "one frame after the
+                // palette mounts" per the reviewer's exact mechanism — a
+                // plain synchronous write here would coincide with the
+                // FIRST layout pass (same class of race fix round 1's
+                // rejected `onAppear` reset hit), so this yields to the
+                // run loop once before flipping the phase. `Task.isCancelled`
+                // guards a composer that opens and closes within one frame
+                // (theoretically possible, cheap to guard).
+                zeroChromeRevealPhase = .hidden
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                zeroChromeRevealPhase = .revealed
+            }
         } else {
             composerZStack
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
+    /// Fix round 2, item 5 (Sean's live look): the wash used to be a small
+    /// patch rendered INSIDE `SessionComposerPalette`, sized to the field.
+    /// Now it fills the whole window content area (sidebar included) below
+    /// the titlebar band — same F7 exclusion `composerZStack` already
+    /// established (a full-height tap target would claim the titlebar
+    /// drag region too). This IS this composer's dismiss layer now: any
+    /// tap on the wash that ISN'T consumed first by the field/rows
+    /// overlaid on top of it (SwiftUI routes a tap to the topmost
+    /// hit-testable view, so their own gestures/`Button`s win before this
+    /// one ever sees the tap) dismisses, matching "outside means anywhere
+    /// on the wash that is not the field or a row."
+    private var zeroChromeFullBleedWash: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: centeringModel.titlebarBandHeight)
+            ComposerZeroChromeWash(
+                material: ComposerZeroChromeMaterial.current(),
+                revealed: zeroChromeRevealPhase == .revealed
+            )
+            .animation(
+                zeroChromeWashAnimation(for: zeroChromeRevealPhase, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion),
+                value: zeroChromeRevealPhase
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                zeroChromeRevealPhase = .dismissing
+                composerStore.cancel()
+            }
+            .accessibilityElement()
+            .accessibilityLabel("Dismiss session composer")
+            .accessibilityAddTraits(.isButton)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     /// The exact `.classic`/`.singleLine` tree this file shipped with on
     /// `main` before this spike — dismiss layer + centered
-    /// `SessionComposerPalette`, unchanged. `.zeroChrome` reuses this same
-    /// dismiss layer (via `body`'s `overlay`) rather than duplicating it,
-    /// but positions its OWN palette instance at 38% from the top instead
-    /// of this tree's centered one — so the zero-chrome branch never
-    /// mounts `SessionComposerPalette` from inside here at all; see
-    /// `body` above.
+    /// `SessionComposerPalette`, unchanged. `.zeroChrome` no longer uses
+    /// this at all (see `zeroChromeFullBleedWash` above, which is now its
+    /// OWN dismiss layer) — kept exactly as `main` had it for the other
+    /// two styles.
     private var composerZStack: some View {
         ZStack {
             // F7 (Phase 3 review): this layer excludes the titlebar band
@@ -97,7 +168,15 @@ struct SessionComposerOverlay: View {
                     .frame(height: centeringModel.titlebarBandHeight)
                 Color.clear
                     .contentShape(Rectangle())
-                    .onTapGesture { composerStore.cancel() }
+                    .onTapGesture {
+                        // Fix round 2 (Timing board, click-outside exit) —
+                        // only zero-chrome reads `zeroChromeRevealPhase`;
+                        // harmless write for `.classic`/`.singleLine`.
+                        if ComposerStyle.current() == .zeroChrome {
+                            zeroChromeRevealPhase = .dismissing
+                        }
+                        composerStore.cancel()
+                    }
                     .accessibilityElement()
                     .accessibilityLabel("Dismiss session composer")
                     .accessibilityAddTraits(.isButton)
