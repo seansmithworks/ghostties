@@ -1,5 +1,40 @@
 # Ghostties — Backlog
 
+## 2026-09-10 — PR #165 + changelog merged; zero-chrome composer spike in review; beta.25 tag on hold
+
+- [x] **PR #165 exit-to-shell MERGED** `9d1c8710d` — 6/6 launcher-script tests executed
+  locally; full suite 1073, the 6 documented load flakes clean in isolation (35/35).
+- [x] **PR #168 beta.25 CHANGELOG section MERGED** `57b086d87`; `extract-release-notes.py
+  0.1.0-beta.25` passes on `main`.
+- [ ] **beta.25 tag ON HOLD** — Sean wants to see zero-chrome first, then decide whether
+  beta.25 ships today's composer or waits. Before tagging: full suite on `main` @
+  `57b086d87` (needs no `Ghostties Dev` instance running — the test host shares the `.dev`
+  bundle id), then `git tag -a v0.1.0-beta.25` from the orchestrator thread on his nod.
+- [ ] **Zero-chrome composer spike — draft PR #169** `feat/composer-zero-chrome` @
+  `01d2b8c3b`, behind `ghostties.composerStyle` = `zeroChrome` | `singleLine` (unset =
+  classic) and `ghostties.composerZeroChromeMaterial`. Sean's decisions 2026-09-10: centre
+  float, left-aligned text, wash takes over the full window, type larger/bolder (32pt
+  semibold field, 20pt rows, 75% measure 480–960pt); standard fallback = single line, no
+  list; descriptors cycle at rest with the chevron path never first. Three review rounds;
+  fourth (rounds 2–3) in progress. Dev app for Sean lives in the builder's agent worktree
+  `.claude/worktrees/agent-abdc9d9bfba62cfd5` — keep until he has reacted.
+- [ ] **DESIGN.md follow-ups if zero-chrome sticks:** semibold weight and 32pt on a floating
+  surface deviate from §3; a new "zero-chrome" surface class needs an entry; `ghostPlaceholder`
+  opacity 65% in new styles vs 50% classic.
+- [ ] **Stranded copy, pre-existing:** `SessionComposerCommandParser.swift:26` "Use the
+  create-branch suggestion above" was already wrong after PR #155 hid the pickers; PR #169
+  adds a second constant for the new styles, classic string still says "above".
+- [ ] **Test isolation:** app-hosted composer tests read the live
+  `com.seansmithdesign.ghostties.dev` defaults; PR #169 pins `styleOverrideForTesting:
+  .classic` at 24 call sites. Any future style flag needs the same seam. Subagents must
+  never `defaults write`/`delete` a real bundle id (one did, and wiped Sean's flag mid-review).
+- [ ] **Worktree cleanup after the tag:** `session-7` has a `macos/build` (GBs) plus
+  symlinked build inputs; the builder worktree above has its own `macos/build`. Disk was
+  15G → 13G free across the day.
+- [ ] **This docs branch (`worktree-session-7`) is not on `main`** — carries the zero-chrome
+  canvas sources (`docs/design/composer/zero-chrome/`) and three backlog entries. Merge via
+  this PR.
+
 ## 2026-09-06 — Composer Tab flow shipped; exit-to-shell fixed; ten redesign directions
 
 - [x] **PR #164 MERGED** — Tab accepts a segment + space, never a chevron. `main` @ `a0297a9d9`.
