@@ -23,9 +23,28 @@ struct WorkspacePersistence {
         return "Ghostties"
     }
 
-    /// The directory where workspace data is stored.
-    private static var directory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    /// The directory where workspace data is stored. Honors
+    /// `GHOSTTIES_STATE_DIR` when set to a non-empty value, so a UI test or
+    /// lab launch can isolate `workspace.json` from the real user's state
+    /// without touching the shipping path. Unset/empty → unaffected, exactly
+    /// today's bundle-ID-derived Application Support path.
+    static var directory: URL {
+        if let raw = ProcessInfo.processInfo.environment["GHOSTTIES_STATE_DIR"],
+           !raw.isEmpty {
+            let expanded = (raw as NSString).expandingTildeInPath
+            let overrideURL = URL(fileURLWithPath: expanded, isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(
+                    at: overrideURL,
+                    withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700]
+                )
+                return overrideURL
+            } catch {
+                logger.error("GHOSTTIES_STATE_DIR override (\(expanded, privacy: .public)) unusable: \(error.localizedDescription) — falling back to default state directory")
+            }
+        }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(directoryName, isDirectory: true)
     }
 
