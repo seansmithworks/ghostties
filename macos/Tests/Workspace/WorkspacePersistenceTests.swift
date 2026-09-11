@@ -567,6 +567,29 @@ struct WorkspacePersistenceTests {
         #expect(toastVisible == false)
     }
 
+    // MARK: - GHOSTTIES_STATE_DIR Override
+
+    @Test func stateDirOverrideIsUsedWhenSet() {
+        let overridePath = NSTemporaryDirectory().appending("ghostties-state-dir-override-test-\(UUID().uuidString)")
+        setenv("GHOSTTIES_STATE_DIR", overridePath, 1)
+        defer {
+            unsetenv("GHOSTTIES_STATE_DIR")
+            try? FileManager.default.removeItem(atPath: overridePath)
+        }
+
+        let resolved = WorkspacePersistence.directory
+        #expect(resolved.path == overridePath)
+    }
+
+    @Test func stateDirOverrideUnsetUsesBundleDerivedDirectory() {
+        unsetenv("GHOSTTIES_STATE_DIR")
+
+        let resolved = WorkspacePersistence.directory
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #expect(resolved.deletingLastPathComponent().path == appSupport.path)
+        #expect(resolved.lastPathComponent == "Ghostties" || resolved.lastPathComponent == "Ghostties Dev")
+    }
+
     @Test func decodingCorruptMigrationFlagDefaultsToNotMigrated() throws {
         // A non-bool value where the flag should be → safe default `false`
         // (treat as not-yet-migrated). This is intentional: the migration
