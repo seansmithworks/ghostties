@@ -1953,6 +1953,19 @@ struct SessionComposerPalette: View {
                 .padding(.top, ComposerZeroChromeTypography.rowTopOffset - 8) // outer VStack's own 8pt spacing already covers part of the gap
                 .frame(width: newStyleFieldWidth, alignment: .leading)
                 .transition(.opacity)
+                // B1 fix: `showNewStyleRows` tracks query/arrow state only,
+                // not `revealPhase` — on `.committing`/`.dismissing` the
+                // field+status stack above fades via its own `.opacity`
+                // binding, but this block had no such gate, so the rows
+                // stayed fully painted after the field and wash were gone.
+                // Same phase check, same curve as the text block immediately
+                // above (`zeroChromeTextAnimation`), so rows and text
+                // fade out together.
+                .opacity(revealPhase.wrappedValue == .revealed ? 1 : 0)
+                .animation(
+                    zeroChromeTextAnimation(for: revealPhase.wrappedValue, reduceMotion: reduceMotionEnabled),
+                    value: revealPhase.wrappedValue
+                )
             }
         }
         .frame(width: newStyleFieldWidth)
@@ -2651,6 +2664,18 @@ struct SessionComposerPalette: View {
             // so Return is dead until the user types or arrows; re-seed the
             // best match (D1) so Return works again immediately.
             selectedIndex = bestSelectionIndex(in: flattenedOptions)
+            // B2 fix: `revealPhase` was set to `.committing` above before
+            // `precommit` ran. On failure the composer stays open (this is
+            // the whole point of `writeError`), but `.committing` fades the
+            // field/rows to invisible — leaving an open, unreadable
+            // composer with no visible error. Restore `.revealed` so the
+            // field, rows, and `writeError` are visible again. No-op
+            // outside `.zeroChrome` (`revealPhase` defaults
+            // `.constant(.revealed)` there, so this write matches the
+            // existing value).
+            if activeStyle == .zeroChrome {
+                revealPhase.wrappedValue = .revealed
+            }
         }
     }
 

@@ -983,4 +983,158 @@ struct ComposerZeroChromeStyleTests {
             Color.black
         }
     }
+
+    // MARK: - B1: rows must fade with the field, not outlive it
+
+    /// `showNewStyleRows` tracks query/arrow state only, not `revealPhase` —
+    /// pre-fix, rows stayed fully painted on `.committing`/`.dismissing`
+    /// even though the field+status stack above them faded via its own
+    /// `revealPhase`-gated `.opacity`. Mounts with a non-empty query (so
+    /// `showNewStyleRows` is true) and `revealPhase: .constant(.committing)`
+    /// directly (same injection seam `revealPhaseConstantRevealedRendersSettled`
+    /// uses) — against the unfixed code this renders a visible selected-row
+    /// accent tint despite the phase never being `.revealed`; the fix gates
+    /// the rows block on the same phase check the text block already had.
+    @Test func zeroChromeRowsFadeOutDuringCommitPhase() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+        let size = NSSize(width: 560, height: 260)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+            composerStore: composerStore,
+            styleOverrideForTesting: .zeroChrome,
+            revealPhase: .constant(.committing)
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        composerStore.noteSearchTextEditedByTyping()
+        composerStore.searchText = "d"
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the committing-phase fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        let png = rep.representation(using: .png, properties: [:])
+        writeScratchPNG(png, filename: "zero-chrome-rows-committing-phase.png")
+        #expect(png != nil)
+        if let png {
+            #expect(
+                selectionAccentPixelCount(in: png) == 0,
+                "expected rows to be faded out (opacity 0) while revealPhase == .committing, even though showNewStyleRows is true"
+            )
+        }
+    }
+
+    // MARK: - B2: a failed commit must restore revealPhase to .revealed
+
+    /// Drives a REAL commit through the keyboard path (`insertNewline:` on
+    /// the mounted `NSTextView`, same technique
+    /// `zeroChromeArrowDownRevealsRowsOnEmptyQuery` uses for `moveDown:`) —
+    /// not a call to the private `commit(template:)`. Calls `composerStore
+    /// .createWorktree(named:in:)` (same fixture-free call
+    /// `SessionComposerWorktreeLaunchTests` uses — the underlying `git
+    /// worktree add` fails harmlessly in the background against the
+    /// synthetic non-repo path this test's `makeProject()` always uses;
+    /// nothing here waits on or asserts its outcome) immediately before
+    /// firing Return, with no intervening `RunLoop` spin — `isCreatingWorktree`
+    /// is set `true` SYNCHRONOUSLY before that call returns (`SessionComposerStore
+    /// .swift:1104`), so `precommit`'s guard at `SessionComposerStore
+    /// .swift:723-726` fails and returns `false` with `writeError` set,
+    /// without ever touching the (still fully valid, still fully rendered)
+    /// project or row list — unlike removing the project, this doesn't
+    /// collapse `selectedOption` out from under the same synchronous Return
+    /// that's supposed to observe the failure. Pre-fix, `revealPhase` is set
+    /// to `.committing` before `precommit` runs and never restored on this
+    /// failure path, leaving the composer open but invisible. Reads
+    /// `revealPhase.wrappedValue` back through an `ObservableObject` box
+    /// bound in, and `composerStore.writeError` directly.
+    @MainActor
+    private final class RevealPhaseBox: ObservableObject {
+        @Published var phase: ComposerRevealPhase = .revealed
+    }
+
+    @Test func failedCommitRestoresRevealPhaseToRevealed() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+        let box = RevealPhaseBox()
+        let phaseBinding = Binding<ComposerRevealPhase>(
+            get: { box.phase },
+            set: { box.phase = $0 }
+        )
+        let size = NSSize(width: 560, height: 260)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+            composerStore: composerStore,
+            styleOverrideForTesting: .zeroChrome,
+            revealPhase: phaseBinding
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        // A second pass, matching `zeroChromeTypingRevealsSelectedCandidateRow`'s
+        // documented ordering: `onAppear` seeds `selectedIndex` synchronously,
+        // but `ComposerGhostTextField`'s `hasSelection` is an `NSViewRepresentable`
+        // param — it only reaches the Coordinator on `updateNSView`, which needs
+        // this second layout pass to have actually run before Return is simulated.
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let textView = firstTextView(in: hosting), let delegate = textView.delegate else {
+            Issue.record("could not locate the mounted ComposerGhostTextField's NSTextView/delegate")
+            return
+        }
+
+        // Arms `isCreatingWorktree` synchronously (set before this call
+        // returns) — the git op itself runs in the background against a
+        // non-repo synthetic path and is never awaited or asserted here.
+        composerStore.createWorktree(named: "test-branch", in: project)
+        #expect(composerStore.isCreatingWorktree, "sanity check: expected isCreatingWorktree armed before Return")
+
+        _ = delegate.textView?(textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
+
+        #expect(composerStore.writeError != nil, "expected precommit to fail and set writeError")
+        #expect(
+            box.phase == .revealed,
+            "expected revealPhase restored to .revealed after a failed commit, got \(box.phase)"
+        )
+    }
 }
