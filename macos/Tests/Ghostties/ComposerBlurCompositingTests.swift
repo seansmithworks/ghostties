@@ -188,4 +188,58 @@ struct ComposerBlurCompositingTests {
             + abs(rawCorner.blueComponent - washCorner.blueComponent)
         #expect(cornerDiff > 0, "expected the wash to visibly affect a near-corner pixel (no edge feather)")
     }
+
+    // MARK: - Fix round 5: focal falloff (Sean's live look, "the focal point
+    // of the blur should be where the text is")
+
+    /// Proves `ComposerZeroChromeWash`'s second, focal layer
+    /// (`ComposerZeroChromeFocalBlur`) is genuinely stronger near its
+    /// center than near the edges — not a uniform sheet. Samples the pixel
+    /// nearest `ComposerZeroChromeFocalBlur`'s own center fraction against
+    /// BOTH the top-left and bottom-left corners (checking both guards
+    /// against `NSBitmapImageRep`'s pixel-origin convention either way)
+    /// and asserts the center's departure from the raw text is larger than
+    /// either corner's — i.e. more material is genuinely stacked there.
+    /// Mutation-checked: setting `ComposerZeroChromeFocalBlur
+    /// .focalMaterial` equal to the base `.regular` layer (so the two
+    /// layers contribute identically everywhere) collapses this margin
+    /// toward zero; setting `innerStopLocation`/`outerStopLocation` to 0
+    /// (no falloff shape at all) does the same. Both were confirmed to
+    /// fail this test by hand during implementation, then reverted.
+    @Test func focalCenterDiffersMoreFromRawTextThanEitherCorner() {
+        let rawText = renderPNG(DenseTerminalBackdrop())
+        let withWash = renderPNG(
+            ZStack {
+                DenseTerminalBackdrop()
+                ComposerZeroChromeWash(material: .regular, revealed: true)
+            }
+        )
+        guard let rawText, let withWash,
+              let rawRep = NSBitmapImageRep(data: rawText),
+              let washRep = NSBitmapImageRep(data: withWash) else {
+            Issue.record("Failed to render fixtures")
+            return
+        }
+
+        func diff(_ x: Int, _ y: Int) -> Double {
+            guard let rawColor = rawRep.colorAt(x: x, y: y),
+                  let washColor = washRep.colorAt(x: x, y: y) else { return 0 }
+            return abs(rawColor.redComponent - washColor.redComponent)
+                + abs(rawColor.greenComponent - washColor.greenComponent)
+                + abs(rawColor.blueComponent - washColor.blueComponent)
+        }
+
+        let width = rawRep.pixelsWide
+        let height = rawRep.pixelsHigh
+        let centerX = Int(CGFloat(width) * ComposerZeroChromeFocalBlur.centerXFraction)
+        let centerY = Int(CGFloat(height) * ComposerZeroChromeFocalBlur.centerYFraction)
+        let centerDiff = diff(centerX, centerY)
+        let topCornerDiff = diff(4, 4)
+        let bottomCornerDiff = diff(4, height - 4)
+
+        #expect(
+            centerDiff > topCornerDiff && centerDiff > bottomCornerDiff,
+            "expected the focal center (\(centerDiff)) to differ from raw text more than either corner (top \(topCornerDiff), bottom \(bottomCornerDiff)) — the focal layer should stack ONLY near its center"
+        )
+    }
 }

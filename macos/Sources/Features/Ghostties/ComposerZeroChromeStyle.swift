@@ -178,11 +178,93 @@ struct ComposerZeroChromeWash: View {
     /// place, not this leaf view.
     var revealed: Bool
 
+    /// Fix round 5 (Sean's live look): "The focal point of the blur should
+    /// be where the text is. Fading out slightly but still obscuring
+    /// content below." The base layer below still fills edge to edge at
+    /// full opacity (unchanged — nothing near the window edge is ever
+    /// left un-obscured, and `ComposerBlurCompositingTests
+    /// .revealedWashHasNoEdgeFeather` still asserts that at a near-corner
+    /// pixel). This second, stronger layer stacks ONLY near
+    /// `ComposerZeroChromeFocalBlur`'s center, masked by an elliptical
+    /// falloff, so the material reads as strongest where reading would
+    /// otherwise be possible and eases off toward the edges — a depth
+    /// layer, not a flat frosted sheet.
     var body: some View {
-        Rectangle()
-            .fill(material.material)
-            .opacity(revealed ? 1 : 0)
+        ZStack {
+            Rectangle()
+                .fill(material.material)
+            Rectangle()
+                .fill(ComposerZeroChromeFocalBlur.focalMaterial)
+                .mask(focalMask)
+        }
+        .opacity(revealed ? 1 : 0)
     }
+
+    private var focalMask: some View {
+        Rectangle()
+            .fill(
+                EllipticalGradient(
+                    stops: [
+                        .init(color: .white, location: 0),
+                        .init(color: .white, location: ComposerZeroChromeFocalBlur.innerStopLocation),
+                        .init(color: .clear, location: ComposerZeroChromeFocalBlur.outerStopLocation)
+                    ],
+                    center: UnitPoint(
+                        x: ComposerZeroChromeFocalBlur.centerXFraction,
+                        y: ComposerZeroChromeFocalBlur.centerYFraction
+                    ),
+                    startRadiusFraction: 0,
+                    endRadiusFraction: ComposerZeroChromeFocalBlur.reachFraction
+                )
+            )
+    }
+}
+
+/// Focal-blur shaping (fix round 5). Every tunable for the stronger,
+/// text-centered layer lives here — nothing else in this file or
+/// `SessionComposerOverlay` hardcodes a focal number — so Sean can retune
+/// by eye without hunting through view code. The base layer
+/// (`ComposerZeroChromeMaterial`, tuned via
+/// `ghostties.composerZeroChromeMaterial`) is untouched by this enum; it
+/// keeps obscuring the whole wash at full strength regardless of where the
+/// focal falloff lands.
+enum ComposerZeroChromeFocalBlur {
+    /// The stronger material stacked only near the focal center — one step
+    /// up from the base layer's own default (`.regular`), hardcoded rather
+    /// than exposed via a defaults key: the base layer is what Sean tunes;
+    /// this one only needs to read as "denser than the base", not be
+    /// independently switchable yet.
+    static let focalMaterial: Material = .thickMaterial
+
+    /// Horizontal focal center, as a fraction of the wash's own width —
+    /// 0.5 because the composer text block is horizontally centered in the
+    /// window (PR #132 removed the sidebar-width sensitive offset).
+    static let centerXFraction: CGFloat = 0.5
+
+    /// Vertical focal center, as a fraction of the wash's own height.
+    /// `ComposerZeroChromeTypography.fieldTopFraction` (0.32) is where the
+    /// FIELD starts; the rows block extends below it, so the text block's
+    /// visual center sits a bit lower — approximated here rather than
+    /// computed from the live row count (0–3 rows), same class of
+    /// approximation as `ComposerZeroChromeTypography.rowTopOffset`'s own
+    /// comment.
+    static let centerYFraction: CGFloat = 0.40
+
+    /// `EllipticalGradient`'s own reach: how far, as a fraction of the
+    /// wash's bounding box, the gradient extends before its stops are
+    /// evaluated. 1.0 lets the falloff reach the window's corners rather
+    /// than stopping halfway (SwiftUI's own default, 0.5, would clip the
+    /// fade well short of the edges on a wide window).
+    static let reachFraction: CGFloat = 1.0
+
+    /// Along the gradient (0 = center, 1 = `reachFraction`'s edge), the
+    /// focal material is fully opaque up to this location.
+    static let innerStopLocation: Double = 0.25
+
+    /// Beyond this location, the focal material has fully faded — only the
+    /// base layer remains, so the window edges still read as obscured, not
+    /// clear.
+    static let outerStopLocation: Double = 0.85
 }
 
 // MARK: - Reveal motion (fix round 2)

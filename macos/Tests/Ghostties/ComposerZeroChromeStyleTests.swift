@@ -896,4 +896,91 @@ struct ComposerZeroChromeStyleTests {
         #expect(png != nil)
         #expect(measure == 750) // 1000 * 0.75, within the 480-960 clamp
     }
+
+    // MARK: - Fix round 5: wash reaches the titlebar band
+
+    /// Sean's live look: "the ghostties app should be blurred" — the whole
+    /// window, titlebar band included. Mounts a REAL `SessionComposerOverlay`
+    /// (not just the palette, which never rendered the titlebar-band
+    /// spacer this bug lived in) with a non-zero `titlebarBandHeight`, and
+    /// asserts the wash's material visibly lightens a solid-black pixel
+    /// INSIDE that band — a pre-fix render leaves that strip untouched
+    /// (`Color.clear`), so this pixel would stay pure black.
+    /// `revealPhaseOverrideForTesting: .revealed` bypasses the `.task`'s
+    /// one-run-loop-turn summon race for a deterministic settled frame.
+    /// Mutation-checked: temporarily restoring the old
+    /// `VStack { Color.clear.frame(height:); ComposerZeroChromeWash(...) }`
+    /// structure in `SessionComposerOverlay.zeroChromeFullBleedWash` made
+    /// this fail red (confirmed by hand during implementation — see the
+    /// implementer's report — then reverted back to the fix, green).
+    @Test func zeroChromeWashCoversTheTitlebarBand() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+        let centeringModel = ComposerCenteringModel()
+        centeringModel.titlebarBandHeight = 28
+
+        let size = NSSize(width: 700, height: 400)
+        let composite = ZStack {
+            DenseTerminalBackdropForOverlayTest()
+            SessionComposerOverlay(
+                request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+                styleOverrideForTesting: .zeroChrome,
+                revealPhaseOverrideForTesting: .revealed,
+                centeringModel: centeringModel
+            )
+            .environmentObject(workspaceStore)
+            .environmentObject(SessionCoordinator())
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.isOpaque = true
+        window.backgroundColor = .black
+
+        let hosting = NSHostingView(rootView: composite.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let compositeRep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the composite fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: compositeRep)
+
+        // Sample a pixel well inside the 28pt titlebar band (y = 10, 4pt in
+        // from the left) on a backdrop that painted a distinctive band
+        // color there — a wash that stops at the band boundary would leave
+        // this pixel unchanged.
+        guard let bandColor = compositeRep.colorAt(x: 4, y: 10) else {
+            Issue.record("failed to sample the titlebar-band pixel")
+            return
+        }
+        let bandLuma = (bandColor.redComponent + bandColor.greenComponent + bandColor.blueComponent) / 3
+        let centerColor = compositeRep.colorAt(x: 350, y: 200)
+        let centerLuma = centerColor.map { ($0.redComponent + $0.greenComponent + $0.blueComponent) / 3 } ?? -1
+        #expect(
+            bandLuma > 0.05,
+            "expected the wash's material to visibly lighten the titlebar-band pixel (raw backdrop paints solid black there), got luma \(bandLuma), centerLuma \(centerLuma)"
+        )
+    }
+
+    /// Solid black everywhere, including the titlebar band, so any
+    /// non-black pixel sampled there after compositing the overlay proves
+    /// something painted over it.
+    private struct DenseTerminalBackdropForOverlayTest: View {
+        var body: some View {
+            Color.black
+        }
+    }
 }

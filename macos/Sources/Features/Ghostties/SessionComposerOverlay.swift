@@ -29,6 +29,25 @@ import SwiftUI
 struct SessionComposerOverlay: View {
     let request: SessionComposerRequest
 
+    /// Test seam, same pattern as `SessionComposerPalette
+    /// .styleOverrideForTesting` — this view's own `body` reads
+    /// `ComposerStyle.current()` from `.standard` with no injection at that
+    /// call site (deliberate, matching the palette's documented reasoning);
+    /// writing the real `UserDefaults.standard` key directly would race
+    /// other parallel Swift Testing processes the same way that comment
+    /// warns against, so tests that need to force the zero-chrome branch
+    /// through THIS view (not just the palette it hosts) pass this instead.
+    var styleOverrideForTesting: ComposerStyle? = nil
+
+    /// Test seam, same shape as `SessionComposerPalette`'s own
+    /// `revealPhase` constant-binding pattern used by
+    /// `revealPhaseConstantRevealedRendersSettled` — bypasses the `.task`
+    /// below's one-run-loop-turn summon race so a hermetic offscreen
+    /// render can assert on a SETTLED `.revealed` frame deterministically,
+    /// with no dependency on Swift Concurrency actually resuming a
+    /// suspended `Task` before the test samples pixels.
+    var revealPhaseOverrideForTesting: ComposerRevealPhase? = nil
+
     /// `titlebarBandHeight` is the only field this model still carries (PR
     /// #132 removed `horizontalOffset` — the composer now centers on the
     /// whole window, not the terminal card, so there's no sidebar-width
@@ -51,6 +70,17 @@ struct SessionComposerOverlay: View {
     /// constructing a real `SessionComposerOverlay`.
     @State private var zeroChromeRevealPhase: ComposerRevealPhase = .hidden
 
+    /// Real state when `revealPhaseOverrideForTesting` is nil (every
+    /// production call site); a fixed constant binding when it's set, so
+    /// the `.task` below's write is a harmless no-op racing nothing a test
+    /// cares about.
+    private var revealPhaseBinding: Binding<ComposerRevealPhase> {
+        if let revealPhaseOverrideForTesting {
+            return .constant(revealPhaseOverrideForTesting)
+        }
+        return $zeroChromeRevealPhase
+    }
+
     private var isPresented: Binding<Bool> {
         Binding(
             get: { composerStore.isOpen },
@@ -69,7 +99,7 @@ struct SessionComposerOverlay: View {
         // `GeometryReader` now applies ONLY on the `.zeroChrome` branch;
         // `.classic`/`.singleLine` render the exact, unwrapped `ZStack`
         // this file had before this spike touched it.
-        if ComposerStyle.current() == .zeroChrome {
+        if (styleOverrideForTesting ?? ComposerStyle.current()) == .zeroChrome {
             GeometryReader { geometry in
                 let measure = min(
                     max(geometry.size.width * ComposerZeroChromeTypography.measureFraction, ComposerZeroChromeTypography.measureMin),
@@ -80,7 +110,7 @@ struct SessionComposerOverlay: View {
                         SessionComposerPalette(
                             isPresented: isPresented,
                             request: request,
-                            revealPhase: $zeroChromeRevealPhase,
+                            revealPhase: revealPhaseBinding,
                             zeroChromeMeasureOverride: measure
                         )
                         // Fix round 2, item 8: field top moved from 38% to
@@ -99,6 +129,7 @@ struct SessionComposerOverlay: View {
                 // run loop once before flipping the phase. `Task.isCancelled`
                 // guards a composer that opens and closes within one frame
                 // (theoretically possible, cheap to guard).
+                guard revealPhaseOverrideForTesting == nil else { return }
                 zeroChromeRevealPhase = .hidden
                 await Task.yield()
                 guard !Task.isCancelled else { return }
@@ -112,35 +143,74 @@ struct SessionComposerOverlay: View {
 
     /// Fix round 2, item 5 (Sean's live look): the wash used to be a small
     /// patch rendered INSIDE `SessionComposerPalette`, sized to the field.
-    /// Now it fills the whole window content area (sidebar included) below
-    /// the titlebar band — same F7 exclusion `composerZStack` already
-    /// established (a full-height tap target would claim the titlebar
-    /// drag region too). This IS this composer's dismiss layer now: any
-    /// tap on the wash that ISN'T consumed first by the field/rows
-    /// overlaid on top of it (SwiftUI routes a tap to the topmost
-    /// hit-testable view, so their own gestures/`Button`s win before this
-    /// one ever sees the tap) dismisses, matching "outside means anywhere
-    /// on the wash that is not the field or a row."
+    /// Now it fills the whole window content area, sidebar included.
+    ///
+    /// Fix round 5 (Sean's live look): "The ghostties app should be
+    /// blurred" — the wash's VISUAL reach was still excluding the
+    /// titlebar band (traffic lights, tab strip), which read as "not
+    /// full". The window has `.fullSizeContentView` (`WorkspaceViewContainer
+    /// .swift`), so the content view — and this hosting overlay — already
+    /// extends under the titlebar; `ComposerZeroChromeWash` below is now a
+    /// separate, full-height layer with NO gesture and `.allowsHitTesting
+    /// (false)`, so it paints across the whole window without claiming any
+    /// clicks. The titlebar-band EXCLUSION lives ONLY on the second,
+    /// invisible `VStack` beneath it — the actual dismiss/tap-target layer,
+    /// same F7 reasoning `composerZStack` already established (a
+    /// full-height tap target would claim the titlebar's drag region and
+    /// traffic-light clicks). That invisible layer IS this composer's
+    /// dismiss layer: any tap on it that ISN'T consumed first by the
+    /// field/rows overlaid on top (SwiftUI routes a tap to the topmost
+    /// hit-testable view, so their own gestures/`Button`s win first)
+    /// dismisses, matching "outside means anywhere on the wash below the
+    /// titlebar band that is not the field or a row."
+    ///
+    /// Coverage check (`WorkspaceViewContainer.swift`): the traffic lights
+    /// are native `NSWindow` chrome, entirely outside any content view —
+    /// no SwiftUI layer can ever paint over them, by design (they must
+    /// stay clickable and legible regardless). The "+ New Project" /
+    /// "New Session" toolbar row (`WorkspaceSidebarView.titlebarToolbar`)
+    /// IS plain SwiftUI content, hosted in `sidebarHostingView` — this
+    /// wash's own hosting view, `composerOverlayHostingView`, is
+    /// `addSubview`'d onto the SAME container AFTER `sidebarHostingView`
+    /// (`WorkspaceViewContainer.swift`, `showComposerOverlay`) and pinned
+    /// to the container's full bounds, so plain AppKit z-order already
+    /// puts it on top — this fix's full-height reach DOES visually cover
+    /// that row. The one titlebar element genuinely out of reach is the
+    /// native terminal TAB STRIP added via `NSWindow
+    /// .addTitlebarAccessoryViewController` (`TerminalWindow.swift` /
+    /// `TitlebarTabsTahoeTerminalWindow.swift`) — an actual titlebar
+    /// accessory living in the window's non-content chrome, structurally
+    /// outside every content-view hierarchy this overlay can reach. No
+    /// content-view SwiftUI change can cover it; the smallest fix would be
+    /// window-level (e.g. toggling the accessory's own hidden/alpha state
+    /// alongside the composer's reveal phase) and is out of this file's
+    /// scope.
     private var zeroChromeFullBleedWash: some View {
-        VStack(spacing: 0) {
-            Color.clear
-                .frame(height: centeringModel.titlebarBandHeight)
+        let phase = revealPhaseBinding.wrappedValue
+        return ZStack {
             ComposerZeroChromeWash(
                 material: ComposerZeroChromeMaterial.current(),
-                revealed: zeroChromeRevealPhase == .revealed
+                revealed: phase == .revealed
             )
             .animation(
-                zeroChromeWashAnimation(for: zeroChromeRevealPhase, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion),
-                value: zeroChromeRevealPhase
+                zeroChromeWashAnimation(for: phase, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion),
+                value: phase
             )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                zeroChromeRevealPhase = .dismissing
-                composerStore.cancel()
+            .allowsHitTesting(false)
+
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: centeringModel.titlebarBandHeight)
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        zeroChromeRevealPhase = .dismissing
+                        composerStore.cancel()
+                    }
+                    .accessibilityElement()
+                    .accessibilityLabel("Dismiss session composer")
+                    .accessibilityAddTraits(.isButton)
             }
-            .accessibilityElement()
-            .accessibilityLabel("Dismiss session composer")
-            .accessibilityAddTraits(.isButton)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
