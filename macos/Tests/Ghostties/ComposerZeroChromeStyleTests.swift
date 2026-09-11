@@ -920,6 +920,18 @@ struct ComposerZeroChromeStyleTests {
         let centeringModel = ComposerCenteringModel()
         centeringModel.titlebarBandHeight = 28
 
+        // Round 7: was reading real `.standard` (this xctest bundle IS
+        // `com.seansmithdesign.ghostties.dev` — the same domain Sean's own
+        // DEBUG tuning pill writes into on this machine, currently pinned to
+        // `ultraThin` per the in-flight memo). This test asserts the DEFAULT
+        // wash's coverage, not whatever material Sean last tuned by eye —
+        // an isolated empty suite resolves both knobs to their `.regular`/
+        // `.thick` defaults, same seam `overlayResolvedStyleFollowsInjectedDefaultsWrite`
+        // already uses. Round 7's ultraThin/thin transparency (0.35/0.55)
+        // made this pre-existing hermeticity gap visible: `ultraThin` alone
+        // still cleared the >0.05 threshold, `ultraThin` × 0.35 opacity
+        // didn't.
+        let isolatedDefaults = UserDefaults(suiteName: "ghostties.zeroChromeTitlebarBand.test.\(UUID().uuidString)")!
         let size = NSSize(width: 700, height: 400)
         let composite = ZStack {
             DenseTerminalBackdropForOverlayTest()
@@ -927,6 +939,7 @@ struct ComposerZeroChromeStyleTests {
                 request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
                 styleOverrideForTesting: .zeroChrome,
                 revealPhaseOverrideForTesting: .revealed,
+                defaultsForTesting: isolatedDefaults,
                 centeringModel: centeringModel
             )
             .environmentObject(workspaceStore)
@@ -1138,11 +1151,159 @@ struct ComposerZeroChromeStyleTests {
         )
     }
 
+    // MARK: - Round 7: the OTHER commit-time failure arm must also restore revealPhase
+
+    /// Open finding from the zero-chrome in-flight memo:
+    /// `resolveCommitWorktreePathForCommit`'s `.failure` arm in
+    /// `commit(template:)` (`SessionComposerPalette.swift`) returned early
+    /// without restoring `revealPhase` to `.revealed` — the same bug class
+    /// as B2 above, but on the sibling switch a few lines later. Reachable
+    /// even though both switches read the SAME `typedBranchResolution`
+    /// computed property with no intervening keystroke: `SessionComposerStore
+    /// .selectedProjectId`'s `didSet` synchronously clears `worktreesProjectId`
+    /// (`cascadeProjectChange`) the instant `commit(template:)`'s own
+    /// mid-function write resolves a NEWLY-typed project into
+    /// `selectedProjectId` — so a typed `"<project B> > <branch> > <idiom>"`
+    /// that resolved cleanly against B's PRE-populated cache on the FIRST
+    /// read (passing the earlier `.unresolved`/`.pending` guard) reads
+    /// `.pending` on the SECOND read, once that write has fired and wiped
+    /// the cache out from under it. Project B's worktree cache is populated
+    /// directly via `refreshWorktrees` here (the same call production makes,
+    /// just not routed through the view's 300ms-debounced `.onChange` —
+    /// bypassing that debounce is what keeps this test deterministic rather
+    /// than racing a `Task.sleep`).
+    @Test func failedTypedProjectCommitRestoresRevealPhaseToRevealed() async {
+        let repoA = Self.makeThrowawayRepo()
+        let repoB = Self.makeThrowawayRepo()
+        defer {
+            Self.cleanup(repoA)
+            Self.cleanup(repoB)
+        }
+        let projectA = Project(name: "projecta", rootPath: repoA)
+        let projectB = Project(name: "projectb", rootPath: repoB)
+        let workspaceStore = WorkspaceStore(testingProjects: [projectA, projectB], testingSessions: [])
+        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
+        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
+        composerStore.open(projectBinding: .prefilled(projectA), workspaceStore: workspaceStore)
+        #expect(composerStore.selectedProjectId == projectA.id, "setup failed: .prefilled must pre-select A")
+
+        let box = RevealPhaseBox()
+        let phaseBinding = Binding<ComposerRevealPhase>(
+            get: { box.phase },
+            set: { box.phase = $0 }
+        )
+        let size = NSSize(width: 560, height: 260)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(projectA)),
+            composerStore: composerStore,
+            styleOverrideForTesting: .zeroChrome,
+            revealPhase: phaseBinding
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        // Settles `.onAppear` (`open()` + the empty-query default selection)
+        // BEFORE the query is set — matches
+        // `zeroChromeTypingRevealsSelectedCandidateRow`'s documented
+        // ordering; setting a full command string before mount left
+        // `commandProject`/`selectedIndex` unseeded and Return committed
+        // into project A's own ad-hoc path instead of resolving B at all.
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        // Mounting fires its own `.onAppear` `open()`/refresh cycle for A,
+        // asynchronously, racing anything called right after `layoutSubtreeIfNeeded()`
+        // returns. Settle to A first (absorbing that race), THEN settle to
+        // B (the project the text below types) — retrying each
+        // `refreshWorktrees` call until it actually sticks, since a single
+        // call can still lose to an in-flight competing refresh for the
+        // other project. Production populates B's cache the same way, via
+        // the view's own 300ms-debounced `commandProjectRefreshTask`; this
+        // just does it deterministically instead of racing that timer.
+        func settleWorktrees(to projectId: UUID, path: String) async {
+            for _ in 0..<40 where composerStore.worktreesProjectId != projectId {
+                await composerStore.refreshWorktrees(for: path, projectId: projectId)
+                if composerStore.worktreesProjectId == projectId { return }
+                try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        await settleWorktrees(to: projectA.id, path: repoA)
+        await settleWorktrees(to: projectB.id, path: repoB)
+        #expect(composerStore.worktreesProjectId == projectB.id, "sanity check: expected B's cache populated before typing")
+
+        composerStore.noteSearchTextEditedByTyping()
+        composerStore.searchText = "projectb > main > cco"
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let textView = firstTextView(in: hosting), let delegate = textView.delegate else {
+            Issue.record("could not locate the mounted ComposerGhostTextField's NSTextView/delegate")
+            return
+        }
+
+        _ = delegate.textView?(textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
+
+        #expect(composerStore.selectedProjectId == projectB.id, "sanity check: expected the typed project to have won by commit time")
+        #expect(
+            box.phase == .revealed,
+            "expected revealPhase restored to .revealed after the .failure arm fired, got \(box.phase)"
+        )
+    }
+
     // MARK: - DEBUG-only tuning control (session-7 brief, 2026-09-11)
 
     /// Isolated suite per test, matching this file's own documented reason
     /// for never touching `.standard` directly (racing other parallel Swift
     /// Testing processes).
+    /// Same throwaway-repo helper as `SessionComposerBranchLaunchTests` —
+    /// duplicated rather than shared across test targets/files, matching
+    /// this codebase's existing per-file convention for this exact helper.
+    private static func makeThrowawayRepo() -> String {
+        let unresolvedPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-zero-chrome-branch-test-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(atPath: unresolvedPath, withIntermediateDirectories: true)
+        let path = realPath(unresolvedPath)
+
+        func run(_ args: [String]) {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.arguments = args
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+            task.waitUntilExit()
+        }
+
+        run(["git", "-C", path, "init", "-q", "-b", "main"])
+        run(["git", "-C", path, "-c", "user.email=test@ghostties.test", "-c", "user.name=Ghostties Test",
+             "commit", "-q", "--allow-empty", "-m", "init"])
+        return path
+    }
+
+    private static func realPath(_ path: String) -> String {
+        guard let cPath = realpath(path, nil) else { return path }
+        defer { free(cPath) }
+        return String(cString: cPath)
+    }
+
+    private static func cleanup(_ path: String) {
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
     private func makeTuningDefaults() -> UserDefaults {
         UserDefaults(suiteName: "ghostties.composerDebugTuning.test.\(UUID().uuidString)")!
     }

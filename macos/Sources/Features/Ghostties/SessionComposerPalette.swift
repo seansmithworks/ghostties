@@ -2628,6 +2628,15 @@ struct SessionComposerPalette: View {
         case .failure(let error):
             composerStore.rejectUnresolvedBranch(message: error.message)
             selectedIndex = bestSelectionIndex(in: flattenedOptions)
+            // Round 7 (open finding from the zero-chrome in-flight memo):
+            // `revealPhase` was already set to `.committing` above before
+            // this switch ran, same as the B2 fix below for a failed
+            // precommit. This early return skipped that restoration
+            // entirely, so a rejected typed-branch commit left the
+            // composer open but faded to invisible. Mirror B2's fix here.
+            if activeStyle == .zeroChrome {
+                revealPhase.wrappedValue = .revealed
+            }
             return
         }
 

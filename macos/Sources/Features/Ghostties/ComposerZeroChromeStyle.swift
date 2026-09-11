@@ -58,6 +58,20 @@ enum ComposerZeroChromeMaterial: String {
         case .thick: return .thickMaterial
         }
     }
+
+    /// Round 7 (Sean, live look): "I'd like to see more of the background as
+    /// well. I think your thin/ultra thin should be much more transparent."
+    /// SwiftUI's materials have a fixed internal density independent of
+    /// this value, so this is a layer opacity multiplied on top of the
+    /// material fill — NOT a material substitution. `.regular`/`.thick`
+    /// stay 1.0 (unchanged, Release default) per the brief's explicit scope.
+    var layerOpacity: Double {
+        switch self {
+        case .ultraThin: return 0.35
+        case .thin: return 0.55
+        case .regular, .thick: return 1.0
+        }
+    }
 }
 
 // MARK: - Rest-state descriptor cycle
@@ -200,10 +214,12 @@ struct ComposerZeroChromeWash: View {
         ZStack {
             Rectangle()
                 .fill(material.material)
+                .opacity(material.layerOpacity)
             if let focalMaterial = ComposerZeroChromeFocalBlur.focalMaterial(for: focalBlurStyle) {
                 Rectangle()
                     .fill(focalMaterial)
                     .mask(focalMask)
+                    .opacity(focalBlurStyle.layerOpacity)
             }
         }
         .opacity(revealed ? 1 : 0)
@@ -263,6 +279,19 @@ enum ComposerZeroChromeFocalBlurStyle: String, CaseIterable {
         case .thick: return .thickMaterial
         }
     }
+
+    /// Round 7 — same rationale as `ComposerZeroChromeMaterial.layerOpacity`,
+    /// applied to the focal layer so a thin/ultraThin focal choice reads
+    /// more transparent too. `.off` never renders this layer at all, so its
+    /// value here is moot; `.regular`/`.thick` stay 1.0 (unchanged).
+    var layerOpacity: Double {
+        switch self {
+        case .off: return 1.0
+        case .ultraThin: return 0.35
+        case .thin: return 0.55
+        case .regular, .thick: return 1.0
+        }
+    }
 }
 
 /// Focal-blur shaping (fix round 5). Every tunable for the stronger,
@@ -291,13 +320,14 @@ enum ComposerZeroChromeFocalBlur {
     static let centerXFraction: CGFloat = 0.5
 
     /// Vertical focal center, as a fraction of the wash's own height.
-    /// `ComposerZeroChromeTypography.fieldTopFraction` (0.32) is where the
-    /// FIELD starts; the rows block extends below it, so the text block's
-    /// visual center sits a bit lower — approximated here rather than
-    /// computed from the live row count (0–3 rows), same class of
-    /// approximation as `ComposerZeroChromeTypography.rowTopOffset`'s own
-    /// comment.
-    static let centerYFraction: CGFloat = 0.40
+    /// `ComposerZeroChromeTypography.fieldTopFraction` (0.42 as of round 7)
+    /// is where the FIELD starts; the rows block extends below it, so the
+    /// text block's visual center sits a bit lower — approximated here
+    /// rather than computed from the live row count (0–3 rows), same class
+    /// of approximation as `ComposerZeroChromeTypography.rowTopOffset`'s
+    /// own comment. Raised from 0.40 to 0.50 alongside `fieldTopFraction`
+    /// so the focal blur follows the "center stage" text block.
+    static let centerYFraction: CGFloat = 0.50
 
     /// `EllipticalGradient`'s own reach: how far, as a fraction of the
     /// wash's bounding box, the gradient extends before its stops are
@@ -438,10 +468,12 @@ enum ComposerZeroChromeTypography {
     static let measureMin: CGFloat = 480
     static let measureMax: CGFloat = 960
 
-    /// Field top, as a fraction of overlay height — 32%, not the shared
-    /// 38% `SessionComposerOverlay` still uses for its own vertical-
-    /// placement constant, to leave room for the taller block.
-    static let fieldTopFraction: CGFloat = 0.32
+    /// Field top, as a fraction of overlay height — 42% (round 7, Sean's
+    /// live look: "center stage"), not the shared 38%
+    /// `SessionComposerOverlay` still uses for its own vertical-placement
+    /// constant. Was 32% through round 6; raised to sit the text block at
+    /// the window's optical center rather than the upper third.
+    static let fieldTopFraction: CGFloat = 0.42
 }
 
 // MARK: - DEBUG-only live tuning control (session-7 brief, 2026-09-11)
