@@ -4,12 +4,9 @@
 
 - [x] PR #166 merged to main `45b2053ec` (2026-09-10) after a server-side update-branch onto main and green CI; `rig-pr` worktree removed with `--force` (1.4 GB freed), branch `test/visual-pass-rig` kept.
 - [x] concept-lab promoted to https://ghostties-concept-lab.vercel.app (2026-09-10, bundle `index-C8be9qcg.js`: 22 concepts, sketches in the app frame, scoring). 
-- [ ] **HELD — delete the `ghostties-avenues` Vercel project.** Sean: "hold, discuss." Strawman: `vercel project rm ghostties-avenues`.
 - [ ] parked — CI visual pass: the macos-15 runner launches the app but XCUITest never loads
   accessibility (60s per test, 11/12 failed, no captures). Next experiment: ad-hoc signing
   (`CODE_SIGN_IDENTITY=-`) via `gh workflow run test-ghostties.yml --ref <branch> -f visual_pass=true`.
-- [x] `concept-lab/` has a home: nested repo at the same path, remote https://github.com/seansmithworks/ghostties-concept-lab (PRIVATE — the audit card carries owner-only traffic numbers). First commit `bd5184e`, 2026-09-10.
-- [ ] HELD — two concept-lab design calls: the terminal canvas runs thin (pad with transcript lines?) and overlays stack in flow instead of floating. Sean: "hold, discuss." Strawman: pad every app canvas with 4–6 illustrative transcript lines so it reads as a live pane; float the composer overlay centred over the canvas with a paper scrim behind it so the pane content dims instead of colliding.
 - [ ] carried — map Sean's kept concepts / personal scores to the avenue numbering in memory `project_avenues-review-site-2026-09-05` once he pastes the export or the kept titles. Nothing received yet.
 - [ ] parked — concept-lab `.mobile-picker` `<select>` overflows to 414px at a 390px viewport (native intrinsic width follows the longest option). Pre-existing, seen by two reviewers, not touched.
 - [ ] parked — this file's 2026-09-05 → 09-09 entries live only on `visual-pass-2026-09-05`, which
@@ -21,8 +18,8 @@
 ## 2026-09-05 — audit follow-ups (carried from the "Ghostties Concepts" thread)
 
 Audit + 23 avenues + visual-pass re-rank live at
-https://ghostties-avenues-67pr67vk3-seansmithworks.vercel.app (throwaway Vercel project
-`ghostties-avenues`, source in `docs/audits/avenues-2026-09-05/`). Codex's concept lab
+(Vercel project `ghostties-avenues` deleted 2026-09-11; source still in
+`docs/audits/avenues-2026-09-05/`). Codex's concept lab
 (`concept-lab/`, https://ghostties-concept-lab.vercel.app) has the better review format;
 this page has the audit numbers and cost/traction. Sean leaned toward the lab.
 
