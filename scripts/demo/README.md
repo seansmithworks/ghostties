@@ -134,6 +134,50 @@ producing genuinely live ghost states for capture still requires clicking
 open "/Applications/Ghostties Demo.app"
 ```
 
+## Capture marketing PNGs from the seeded workspace: `demo-capture.sh`
+
+```bash
+./scripts/demo/demo-capture.sh              # writes to output/demo-capture/
+./scripts/demo/demo-capture.sh --out <dir>   # custom output dir
+```
+
+The agent-facing entrypoint for producing marketing assets from the **real
+seeded fixture repos** — 10 real git repos with real branches — instead of
+`MarketingCaptureUITests`' hardcoded in-app cast (`switchboard`, `atlas-api`,
+`fieldwork`, `pendulum`, `silo`, `trove`, `wren`). It:
+
+1. Runs `demo-ready.sh --check` and aborts if the demo app / fixtures are stale.
+2. Copies `~/Library/Application Support/Ghostties Demo/` to a throwaway
+   location — the demo state dir is treated as **read-only** by this script,
+   never written to.
+3. Runs `GhosttyUITests/DemoWorkspaceCaptureUITests` via `xcodebuild test`,
+   pointing the app at the throwaway copy via `GHOSTTIES_STATE_DIR`. Asserts
+   the resolved test count matches what's expected (a malformed
+   `-only-testing` filter can silently match zero tests and still exit 0 —
+   this is checked, not trusted).
+4. Copies the captured PNGs to the output directory, alongside a copy of
+   `demo-manifest.json` so every capture traces back to the exact build that
+   produced it.
+5. Asserts every PNG is non-blank (checks decompressed pixel-data variance,
+   not just file existence) before declaring success — a denied capture or a
+   solid-color window still produces a structurally valid PNG.
+
+### `DemoWorkspaceCaptureUITests` — fail-closed by design
+
+`WorkspacePersistence.directory` honors `GHOSTTIES_STATE_DIR` when set, but
+**falls back to the real state directory if the override path is unusable** —
+by design, so a shipping launch is never affected. That means a bad override
+here would silently point the app at Sean's real workspace. The test does not
+trust the env var being set as proof: before capturing anything, it asserts
+that `brukas` — a project name that exists only in
+`examples/demo-workspace/`, not in `MarketingCaptureUITests`' invented cast —
+is visibly rendered in the sidebar. If it isn't, the test fails loudly instead
+of capturing.
+
+This test is additive: it does not change `MarketingCaptureUITests`' behavior
+or output paths, and it never sets `GHOSTTIES_CAPTURE_FIXTURE` (that flag
+seeds an in-memory invented cast, which would defeat the point).
+
 ## Quitting
 
 Never `killall`. Quit cleanly:
