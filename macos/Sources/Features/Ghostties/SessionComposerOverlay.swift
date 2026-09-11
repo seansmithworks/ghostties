@@ -48,6 +48,58 @@ struct SessionComposerOverlay: View {
     /// suspended `Task` before the test samples pixels.
     var revealPhaseOverrideForTesting: ComposerRevealPhase? = nil
 
+    /// Test seam for the DEBUG tuning control's `@AppStorage` reads/writes
+    /// below (session-7 brief, 2026-09-11) — same shape as `styleOverrideForTesting`:
+    /// production leaves this `nil` and reads real `UserDefaults.standard`;
+    /// a test injects an isolated suite so it never races other parallel
+    /// Swift Testing processes reading/writing the same keys (see this
+    /// file's own doc comment on `styleOverrideForTesting` for why that
+    /// race is a real, previously-hit failure mode here).
+    private let composerDefaultsForTesting: UserDefaults?
+
+    /// `ComposerStyle`/`ComposerZeroChromeMaterial`/`ComposerZeroChromeFocalBlurStyle`
+    /// used to be read once per render pass via their own `.current()`
+    /// statics, with no observation — a change from the DEBUG tuning
+    /// control below would sit unseen until the next unrelated re-render.
+    /// `@AppStorage` observes the key directly, so any write (from the
+    /// control, or `defaults write` by hand) re-renders this view
+    /// immediately. `resolvedStyle`/`resolvedMaterial`/`resolvedFocalBlurStyle`
+    /// below are what every call site in this file reads instead of calling
+    /// `.current()` directly.
+    @AppStorage private var composerStyleRaw: String
+    @AppStorage private var composerMaterialRaw: String
+    @AppStorage private var composerFocalBlurRaw: String
+
+    private var resolvedStyle: ComposerStyle {
+        styleOverrideForTesting ?? ComposerStyle(rawValue: composerStyleRaw) ?? .classic
+    }
+
+    private var resolvedMaterial: ComposerZeroChromeMaterial {
+        ComposerZeroChromeMaterial(rawValue: composerMaterialRaw) ?? .regular
+    }
+
+    private var resolvedFocalBlurStyle: ComposerZeroChromeFocalBlurStyle {
+        ComposerZeroChromeFocalBlurStyle(rawValue: composerFocalBlurRaw) ?? .thick
+    }
+
+    init(
+        request: SessionComposerRequest,
+        styleOverrideForTesting: ComposerStyle? = nil,
+        revealPhaseOverrideForTesting: ComposerRevealPhase? = nil,
+        defaultsForTesting: UserDefaults? = nil,
+        centeringModel: ComposerCenteringModel
+    ) {
+        self.request = request
+        self.styleOverrideForTesting = styleOverrideForTesting
+        self.revealPhaseOverrideForTesting = revealPhaseOverrideForTesting
+        self.composerDefaultsForTesting = defaultsForTesting
+        self.centeringModel = centeringModel
+        let store = defaultsForTesting ?? .standard
+        _composerStyleRaw = AppStorage(wrappedValue: ComposerStyle.classic.rawValue, ComposerStyle.storageKey, store: store)
+        _composerMaterialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.regular.rawValue, ComposerZeroChromeMaterial.storageKey, store: store)
+        _composerFocalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.thick.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: store)
+    }
+
     /// `titlebarBandHeight` is the only field this model still carries (PR
     /// #132 removed `horizontalOffset` — the composer now centers on the
     /// whole window, not the terminal card, so there's no sidebar-width
@@ -99,47 +151,86 @@ struct SessionComposerOverlay: View {
         // `GeometryReader` now applies ONLY on the `.zeroChrome` branch;
         // `.classic`/`.singleLine` render the exact, unwrapped `ZStack`
         // this file had before this spike touched it.
-        if (styleOverrideForTesting ?? ComposerStyle.current()) == .zeroChrome {
-            GeometryReader { geometry in
-                let measure = min(
-                    max(geometry.size.width * ComposerZeroChromeTypography.measureFraction, ComposerZeroChromeTypography.measureMin),
-                    ComposerZeroChromeTypography.measureMax
-                )
-                zeroChromeFullBleedWash
-                    .overlay(alignment: .top) {
-                        SessionComposerPalette(
-                            isPresented: isPresented,
-                            request: request,
-                            revealPhase: revealPhaseBinding,
-                            zeroChromeMeasureOverride: measure
-                        )
-                        // Fix round 2, item 8: field top moved from 38% to
-                        // 32% of overlay height to leave room for the
-                        // taller 32/44pt block.
-                        .padding(.top, geometry.size.height * ComposerZeroChromeTypography.fieldTopFraction)
-                    }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .task {
-                // Fix round 2 (Timing board, summon): "one frame after the
-                // palette mounts" per the reviewer's exact mechanism — a
-                // plain synchronous write here would coincide with the
-                // FIRST layout pass (same class of race fix round 1's
-                // rejected `onAppear` reset hit), so this yields to the
-                // run loop once before flipping the phase. `Task.isCancelled`
-                // guards a composer that opens and closes within one frame
-                // (theoretically possible, cheap to guard).
-                guard revealPhaseOverrideForTesting == nil else { return }
-                zeroChromeRevealPhase = .hidden
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                zeroChromeRevealPhase = .revealed
-            }
-        } else {
-            composerZStack
+        Group {
+            if resolvedStyle == .zeroChrome {
+                GeometryReader { geometry in
+                    let measure = min(
+                        max(geometry.size.width * ComposerZeroChromeTypography.measureFraction, ComposerZeroChromeTypography.measureMin),
+                        ComposerZeroChromeTypography.measureMax
+                    )
+                    zeroChromeFullBleedWash
+                        .overlay(alignment: .top) {
+                            SessionComposerPalette(
+                                isPresented: isPresented,
+                                request: request,
+                                revealPhase: revealPhaseBinding,
+                                zeroChromeMeasureOverride: measure
+                            )
+                            // Fix round 2, item 8: field top moved from 38% to
+                            // 32% of overlay height to leave room for the
+                            // taller 32/44pt block.
+                            .padding(.top, geometry.size.height * ComposerZeroChromeTypography.fieldTopFraction)
+                        }
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task {
+                    // Fix round 2 (Timing board, summon): "one frame after the
+                    // palette mounts" per the reviewer's exact mechanism — a
+                    // plain synchronous write here would coincide with the
+                    // FIRST layout pass (same class of race fix round 1's
+                    // rejected `onAppear` reset hit), so this yields to the
+                    // run loop once before flipping the phase. `Task.isCancelled`
+                    // guards a composer that opens and closes within one frame
+                    // (theoretically possible, cheap to guard).
+                    guard revealPhaseOverrideForTesting == nil else { return }
+                    zeroChromeRevealPhase = .hidden
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    zeroChromeRevealPhase = .revealed
+                }
+            } else {
+                composerZStack
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
+        #if DEBUG
+        // DEBUG-only live tuning control (session-7 brief, 2026-09-11) —
+        // rendered for ALL THREE styles (this `Group` wraps both branches
+        // above), so switching away from `.zeroChrome` can be switched back.
+        // Compiled out of Release entirely; every symbol it touches lives
+        // inside this `#if DEBUG` block. `isMarketingCaptureFixtureActive`
+        // hides it whenever the marketing capture rig is running — see that
+        // property's own doc comment for why this doesn't just read
+        // `CaptureFixture.isActive` directly.
+        .overlay(alignment: .bottomTrailing) {
+            if !Self.isMarketingCaptureFixtureActive {
+                ComposerDebugTuningControl(
+                    defaults: composerDefaultsForTesting ?? .standard,
+                    onChange: { composerStore.focusSearchFieldTrigger = true }
+                )
+                .padding(12)
+            }
+        }
+        #endif
     }
+
+    #if DEBUG
+    /// `CaptureFixture.swift` (the real fixture, `main` branch — see its
+    /// commit message: "gated only by `GHOSTTIES_CAPTURE_FIXTURE=1` in the
+    /// launch environment") hasn't merged into `feat/composer-zero-chrome`
+    /// yet, so `CaptureFixture.isActive` doesn't exist on this branch. This
+    /// mirrors its exact gate directly rather than block this control on a
+    /// merge — swap for `CaptureFixture.isActive` once main merges in.
+    /// Not `private` — `ComposerZeroChromeStyleTests` (`@testable import`)
+    /// asserts on this directly, the exact gate `body` checks above, rather
+    /// than trying to prove a `Picker`'s absence via fragile AppKit-backing
+    /// hierarchy introspection (SwiftUI doesn't reliably materialize an
+    /// `NSPopUpButton` for a `.menu`-style `Picker` in an offscreen,
+    /// non-key `NSHostingView` — confirmed empirically, not assumed).
+    static var isMarketingCaptureFixtureActive: Bool {
+        ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_FIXTURE"] == "1"
+    }
+    #endif
 
     /// Fix round 2, item 5 (Sean's live look): the wash used to be a small
     /// patch rendered INSIDE `SessionComposerPalette`, sized to the field.
@@ -189,8 +280,9 @@ struct SessionComposerOverlay: View {
         let phase = revealPhaseBinding.wrappedValue
         return ZStack {
             ComposerZeroChromeWash(
-                material: ComposerZeroChromeMaterial.current(),
-                revealed: phase == .revealed
+                material: resolvedMaterial,
+                revealed: phase == .revealed,
+                focalBlurStyle: resolvedFocalBlurStyle
             )
             .animation(
                 zeroChromeWashAnimation(for: phase, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion),
@@ -242,7 +334,7 @@ struct SessionComposerOverlay: View {
                         // Fix round 2 (Timing board, click-outside exit) —
                         // only zero-chrome reads `zeroChromeRevealPhase`;
                         // harmless write for `.classic`/`.singleLine`.
-                        if ComposerStyle.current() == .zeroChrome {
+                        if resolvedStyle == .zeroChrome {
                             zeroChromeRevealPhase = .dismissing
                         }
                         composerStore.cancel()
@@ -252,7 +344,7 @@ struct SessionComposerOverlay: View {
                     .accessibilityAddTraits(.isButton)
             }
 
-            if ComposerStyle.current() != .zeroChrome {
+            if resolvedStyle != .zeroChrome {
                 SessionComposerPalette(isPresented: isPresented, request: request)
             }
         }

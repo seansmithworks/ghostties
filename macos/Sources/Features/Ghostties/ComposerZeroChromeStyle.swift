@@ -178,6 +178,12 @@ struct ComposerZeroChromeWash: View {
     /// place, not this leaf view.
     var revealed: Bool
 
+    /// DEBUG-tunable (session-7 brief, 2026-09-11); defaults to `.current()`
+    /// so every pre-existing call site (production and the fixed-`.regular`
+    /// calls in `ComposerBlurCompositingTests`) keeps its exact prior
+    /// behavior — `.thick`, unchanged — with no call-site edits required.
+    var focalBlurStyle: ComposerZeroChromeFocalBlurStyle = .current()
+
     /// Fix round 5 (Sean's live look): "The focal point of the blur should
     /// be where the text is. Fading out slightly but still obscuring
     /// content below." The base layer below still fills edge to edge at
@@ -188,14 +194,17 @@ struct ComposerZeroChromeWash: View {
     /// `ComposerZeroChromeFocalBlur`'s center, masked by an elliptical
     /// falloff, so the material reads as strongest where reading would
     /// otherwise be possible and eases off toward the edges — a depth
-    /// layer, not a flat frosted sheet.
+    /// layer, not a flat frosted sheet. `.off` (`focalBlurStyle`) skips this
+    /// second layer entirely, leaving only the base wash.
     var body: some View {
         ZStack {
             Rectangle()
                 .fill(material.material)
-            Rectangle()
-                .fill(ComposerZeroChromeFocalBlur.focalMaterial)
-                .mask(focalMask)
+            if let focalMaterial = ComposerZeroChromeFocalBlur.focalMaterial(for: focalBlurStyle) {
+                Rectangle()
+                    .fill(focalMaterial)
+                    .mask(focalMask)
+            }
         }
         .opacity(revealed ? 1 : 0)
     }
@@ -220,6 +229,42 @@ struct ComposerZeroChromeWash: View {
     }
 }
 
+/// Focal-blur strength, tunable independently of the base wash
+/// (`ComposerZeroChromeMaterial`) via the composer's DEBUG-only tuning
+/// control (session-7 brief, 2026-09-11). `.off` removes the focal layer
+/// entirely — only geometry (`ComposerZeroChromeFocalBlur`'s
+/// center/reach/stop constants) stays untouched, per that brief's explicit
+/// scope. Default `.thick` matches the value this replaced
+/// (`ComposerZeroChromeFocalBlur.focalMaterial`'s old hardcoded
+/// `.thickMaterial`) exactly, so Release behavior is unchanged.
+enum ComposerZeroChromeFocalBlurStyle: String, CaseIterable {
+    case off
+    case ultraThin
+    case thin
+    case regular
+    case thick
+
+    static let storageKey = "ghostties.composerZeroChromeFocalBlur"
+
+    static func current(defaults: UserDefaults = .standard) -> ComposerZeroChromeFocalBlurStyle {
+        guard let raw = defaults.string(forKey: storageKey),
+              let style = ComposerZeroChromeFocalBlurStyle(rawValue: raw) else {
+            return .thick
+        }
+        return style
+    }
+
+    var material: Material? {
+        switch self {
+        case .off: return nil
+        case .ultraThin: return .ultraThinMaterial
+        case .thin: return .thinMaterial
+        case .regular: return .regularMaterial
+        case .thick: return .thickMaterial
+        }
+    }
+}
+
 /// Focal-blur shaping (fix round 5). Every tunable for the stronger,
 /// text-centered layer lives here — nothing else in this file or
 /// `SessionComposerOverlay` hardcodes a focal number — so Sean can retune
@@ -229,12 +274,16 @@ struct ComposerZeroChromeWash: View {
 /// keeps obscuring the whole wash at full strength regardless of where the
 /// focal falloff lands.
 enum ComposerZeroChromeFocalBlur {
-    /// The stronger material stacked only near the focal center — one step
-    /// up from the base layer's own default (`.regular`), hardcoded rather
-    /// than exposed via a defaults key: the base layer is what Sean tunes;
-    /// this one only needs to read as "denser than the base", not be
-    /// independently switchable yet.
-    static let focalMaterial: Material = .thickMaterial
+    /// Resolves the focal layer's material for a given tunable style —
+    /// `nil` means "off" (no second layer at all; the base wash still
+    /// obscures edge to edge, unchanged). Session-7 brief (2026-09-11):
+    /// promoted from the hardcoded `.thickMaterial` constant this used to
+    /// be to a DEBUG-tunable knob (`ComposerZeroChromeFocalBlurStyle`,
+    /// below) — Release keeps reading the exact same default
+    /// (`.thickMaterial`, via `.thick`), byte-identical behavior.
+    static func focalMaterial(for style: ComposerZeroChromeFocalBlurStyle) -> Material? {
+        style.material
+    }
 
     /// Horizontal focal center, as a fraction of the wash's own width —
     /// 0.5 because the composer text block is horizontally centered in the
@@ -394,3 +443,98 @@ enum ComposerZeroChromeTypography {
     /// placement constant, to leave room for the taller block.
     static let fieldTopFraction: CGFloat = 0.32
 }
+
+// MARK: - DEBUG-only live tuning control (session-7 brief, 2026-09-11)
+//
+// Sean, live look: "a little view control just for me to kinda bounce back
+// and forth within that composer... there's gonna be ways and spaces where
+// I'm gonna wanna tune more." Compiled ONLY under `#if DEBUG` — every symbol
+// in this section is unreachable from a Release build. Hosted by
+// `SessionComposerOverlay` in the bottom-trailing corner, for all three
+// composer styles.
+#if DEBUG
+struct ComposerDebugTuningControl: View {
+    @AppStorage private var styleRaw: String
+    @AppStorage private var materialRaw: String
+    @AppStorage private var focalBlurRaw: String
+
+    /// Called after any knob write, so the caller can return keyboard focus
+    /// to the composer's search field — this control must never leave focus
+    /// stranded on itself.
+    var onChange: () -> Void
+
+    /// `defaults` mirrors every other test seam in this feature
+    /// (`styleOverrideForTesting`, etc.): production leaves it `.standard`;
+    /// a test injects an isolated suite so it never races other parallel
+    /// Swift Testing processes reading/writing the same keys.
+    init(defaults: UserDefaults = .standard, onChange: @escaping () -> Void = {}) {
+        _styleRaw = AppStorage(wrappedValue: ComposerStyle.classic.rawValue, ComposerStyle.storageKey, store: defaults)
+        _materialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.regular.rawValue, ComposerZeroChromeMaterial.storageKey, store: defaults)
+        _focalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.thick.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: defaults)
+        self.onChange = onChange
+    }
+
+    /// Not `private` — `ComposerZeroChromeStyleTests` (`@testable import`)
+    /// drives these directly, the same way it drives real keyboard/AX-free
+    /// seams elsewhere in this feature, to prove "the control writes the
+    /// right key" without simulating a menu click.
+    var style: Binding<ComposerStyle> {
+        Binding(
+            get: { ComposerStyle(rawValue: styleRaw) ?? .classic },
+            set: { styleRaw = $0.rawValue; onChange() }
+        )
+    }
+
+    var material: Binding<ComposerZeroChromeMaterial> {
+        Binding(
+            get: { ComposerZeroChromeMaterial(rawValue: materialRaw) ?? .regular },
+            set: { materialRaw = $0.rawValue; onChange() }
+        )
+    }
+
+    var focalBlur: Binding<ComposerZeroChromeFocalBlurStyle> {
+        Binding(
+            get: { ComposerZeroChromeFocalBlurStyle(rawValue: focalBlurRaw) ?? .thick },
+            set: { focalBlurRaw = $0.rawValue; onChange() }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("Style", selection: style) {
+                Text("Classic").tag(ComposerStyle.classic)
+                Text("Single line").tag(ComposerStyle.singleLine)
+                Text("Zero chrome").tag(ComposerStyle.zeroChrome)
+            }
+            // Base/focal blur only mean anything for `.zeroChrome` — hidden
+            // for the other two styles rather than shown disabled.
+            if style.wrappedValue == .zeroChrome {
+                Picker("Base blur", selection: material) {
+                    Text("Ultra thin").tag(ComposerZeroChromeMaterial.ultraThin)
+                    Text("Thin").tag(ComposerZeroChromeMaterial.thin)
+                    Text("Regular").tag(ComposerZeroChromeMaterial.regular)
+                    Text("Thick").tag(ComposerZeroChromeMaterial.thick)
+                }
+                Picker("Focal blur", selection: focalBlur) {
+                    Text("Off").tag(ComposerZeroChromeFocalBlurStyle.off)
+                    Text("Ultra thin").tag(ComposerZeroChromeFocalBlurStyle.ultraThin)
+                    Text("Thin").tag(ComposerZeroChromeFocalBlurStyle.thin)
+                    Text("Regular").tag(ComposerZeroChromeFocalBlurStyle.regular)
+                    Text("Thick").tag(ComposerZeroChromeFocalBlurStyle.thick)
+                }
+            }
+        }
+        .pickerStyle(.menu)
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .padding(8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        // Swallows every tap on the pill's own padding/background — a tap
+        // that reached the wash beneath would dismiss the composer
+        // (`SessionComposerOverlay.zeroChromeFullBleedWash`'s own dismiss
+        // layer); this control must never do that.
+        .contentShape(Rectangle())
+        .onTapGesture {}
+    }
+}
+#endif

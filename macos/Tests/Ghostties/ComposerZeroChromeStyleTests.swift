@@ -1137,4 +1137,142 @@ struct ComposerZeroChromeStyleTests {
             "expected revealPhase restored to .revealed after a failed commit, got \(box.phase)"
         )
     }
+
+    // MARK: - DEBUG-only tuning control (session-7 brief, 2026-09-11)
+
+    /// Isolated suite per test, matching this file's own documented reason
+    /// for never touching `.standard` directly (racing other parallel Swift
+    /// Testing processes).
+    private func makeTuningDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "ghostties.composerDebugTuning.test.\(UUID().uuidString)")!
+    }
+
+    /// "The control writes the right key" — drives the (non-`private`,
+    /// `@testable`-reachable) bindings directly rather than simulating a
+    /// menu click, same no-AX-driving shape this file already uses for
+    /// keyboard events. Covers all three knobs' storage keys in one test.
+    @Test func debugTuningControlWritesTheRightKeys() {
+        let defaults = makeTuningDefaults()
+        var changeCount = 0
+        let control = ComposerDebugTuningControl(defaults: defaults, onChange: { changeCount += 1 })
+
+        control.style.wrappedValue = .zeroChrome
+        #expect(defaults.string(forKey: ComposerStyle.storageKey) == "zeroChrome")
+
+        control.material.wrappedValue = .thin
+        #expect(defaults.string(forKey: ComposerZeroChromeMaterial.storageKey) == "thin")
+
+        control.focalBlur.wrappedValue = .off
+        #expect(defaults.string(forKey: ComposerZeroChromeFocalBlurStyle.storageKey) == "off")
+
+        #expect(changeCount == 3, "expected onChange to fire once per knob write, got \(changeCount)")
+    }
+
+    /// `ComposerZeroChromeFocalBlurStyle.current()`'s own default (unset
+    /// key) must still be `.thick` — the exact value
+    /// `ComposerZeroChromeFocalBlur.focalMaterial`'s old hardcoded constant
+    /// resolved to, so Release behavior is unchanged by this knob's
+    /// addition.
+    @Test func focalBlurStyleDefaultsToThick() {
+        let defaults = makeTuningDefaults()
+        #expect(ComposerZeroChromeFocalBlurStyle.current(defaults: defaults) == .thick)
+    }
+
+    @Test func focalBlurStyleOffProducesNoMaterial() {
+        #expect(ComposerZeroChromeFocalBlur.focalMaterial(for: .off) == nil)
+        #expect(ComposerZeroChromeFocalBlur.focalMaterial(for: .thick) != nil)
+    }
+
+    /// "The overlay's resolved style/material follows it" — writes directly
+    /// to the SAME injected suite `SessionComposerOverlay(defaultsForTesting:)`
+    /// reads via `@AppStorage`, then re-renders and confirms the view
+    /// switched from the classic bordered card to the zero-chrome branch
+    /// (no border-stroke drawing code, `zeroChromeRestStateHasNoCardBorderDrawingCode`'s
+    /// same reasoning) — proving observation, not just a one-time read.
+    @Test func overlayResolvedStyleFollowsInjectedDefaultsWrite() {
+        let defaults = makeTuningDefaults()
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let centeringModel = ComposerCenteringModel()
+        let size = NSSize(width: 700, height: 400)
+
+        let view = SessionComposerOverlay(
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+            revealPhaseOverrideForTesting: .revealed,
+            defaultsForTesting: defaults,
+            centeringModel: centeringModel
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let before = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the pre-write fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: before)
+        if let beforeData = before.representation(using: .png, properties: [:]) {
+            #expect(borderStrokePixelCount(in: beforeData) > 0, "expected the default (.classic) style to render a bordered card")
+        }
+
+        defaults.set(ComposerStyle.zeroChrome.rawValue, forKey: ComposerStyle.storageKey)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let after = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the post-write fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: after)
+        let afterData = after.representation(using: .png, properties: [:])
+        writeScratchPNG(afterData, filename: "overlay-follows-injected-defaults-write.png")
+        #expect(afterData != nil)
+        if let afterData {
+            #expect(
+                borderStrokePixelCount(in: afterData) == 0,
+                "expected writing ComposerStyle.zeroChrome into the injected suite to switch the LIVE overlay to the zero-chrome (borderless) branch"
+            )
+        }
+    }
+
+    /// The fixture-hiding gate itself: `GHOSTTIES_CAPTURE_FIXTURE=1` in the
+    /// launch environment must hide the control entirely — the marketing
+    /// capture rig builds Debug, so a screenshot must never show it. Asserts
+    /// directly on `SessionComposerOverlay.isMarketingCaptureFixtureActive`
+    /// — the EXACT gate `body`'s `.overlay(alignment: .bottomTrailing)`
+    /// checks before ever constructing `ComposerDebugTuningControl` — rather
+    /// than hunting for a `Picker`'s AppKit backing view: `.menu`-style
+    /// `Picker`s don't reliably materialize an `NSPopUpButton` inside an
+    /// offscreen, non-key `NSHostingView` (confirmed empirically: a full
+    /// subview-hierarchy dump of a mounted, capture-inactive overlay showed
+    /// zero AppKit picker/button/menu classes anywhere, only the field's own
+    /// `NSTextView` machinery — an artifact of this specific offscreen
+    /// harness, not evidence the production control fails to render in a
+    /// real, key window).
+    @Test func debugTuningControlGateReflectsCaptureFixtureEnvVar() {
+        unsetenv("GHOSTTIES_CAPTURE_FIXTURE")
+        #expect(SessionComposerOverlay.isMarketingCaptureFixtureActive == false)
+
+        setenv("GHOSTTIES_CAPTURE_FIXTURE", "1", 1)
+        #expect(SessionComposerOverlay.isMarketingCaptureFixtureActive == true)
+
+        unsetenv("GHOSTTIES_CAPTURE_FIXTURE")
+        #expect(SessionComposerOverlay.isMarketingCaptureFixtureActive == false)
+    }
 }
