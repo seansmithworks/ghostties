@@ -2363,3 +2363,13 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [ ] `⚠ The EdDSA public key is not valid for Ghostties` toast — Sparkle update-signing key mismatch, visible bottom-right in every window. Never logged before 2026-09-02.
 - [ ] `feat/composer-variant-g` is now fully contained in `fix/composer-tab-space` (merged `origin/main` in at `2ad00cf05`). Merging variant-g separately is moot — retire the branch when the new one lands.
 - [ ] `BACKLOG.md:2108` item **D2** (Tab-to-complete) is arguably closed by Model-B being default-on. Sean's call.
+
+## 2026-09-11 — demo rig + capture (Sparkle Demo thread)
+
+**Carried (on-objective):**
+- [ ] **Finish `DemoWorkspaceCaptureUITests` so captures are post-ready.** Three defects, all visible in `output/demo-capture/demo-projects-light.png`: (1) real hostname `seansmith@Seans-MacBook-Pro` in the terminal pane — privacy leak on any post; (2) dev build badge `0.1.0 (1) · built … · up 0m` bottom-left; (3) terminal pane empty, no agent output — the dark capture is 99.6% one byte and the blank-frame guard correctly fails the run. Fix (3) by relaunching the staged sessions in-test, which is ALSO the answer to "demo loops without hand-clicking."
+- [ ] **Open the PR for `feat/demo-capture`** once captures are clean. Branch pushed at `e18b7a344`.
+
+**Parked (off-objective):**
+- [ ] Screen Recording grant for `com.seansmithdesign.ghostties` is revoked — I ran `tccutil reset` on a black-frame symptom without first confirming the csreq mismatch in the tccd log. `screencapture` from any agent shell fails until Sean re-adds it in System Settings. NOT needed for the XCUITest capture path, which runs through testmanagerd. Memo corrected: `reference_screencapture-responsible-app-is-the-terminal.md`.
+- [ ] `BACKLOG.md` is 220KB — memory says it stays open-items-only; it is well past that.
