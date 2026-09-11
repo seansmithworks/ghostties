@@ -90,6 +90,8 @@ echo "==> Running DemoWorkspaceCaptureUITests..."
 RESULT_BUNDLE="$(mktemp -d "${TMPDIR:-/tmp}/ghostties-demo-capture-result.XXXXXX")/Result.xcresult"
 
 set +e
+TEST_RUNNER_GHOSTTIES_UI_CAPTURE=1 \
+TEST_RUNNER_GHOSTTIES_DEMO_STATE_DIR="$COPY_DIR" \
 xcodebuild test \
   -project "$REPO_ROOT/macos/Ghostties.xcodeproj" \
   -scheme Ghostties \
@@ -101,8 +103,6 @@ xcodebuild test \
   ONLY_ACTIVE_ARCH=YES \
   ARCHS=arm64 \
   -skipPackagePluginValidation \
-  TEST_RUNNER_GHOSTTIES_UI_CAPTURE=1 \
-  TEST_RUNNER_GHOSTTIES_DEMO_STATE_DIR="$COPY_DIR" \
   | tee "$COPY_DIR/xcodebuild.log"
 XCODEBUILD_EXIT=${PIPESTATUS[0]}
 set -e
@@ -136,7 +136,10 @@ echo ""
 echo "==> Collecting captured PNGs..."
 mkdir -p "$OUTPUT_DIR"
 
-mapfile -t CAPTURE_PATHS < <(grep -o 'CAPTURE_OUTPUT: .*\.png' "$COPY_DIR/xcodebuild.log" | sed 's/^CAPTURE_OUTPUT: //' | sort -u)
+CAPTURE_PATHS=()
+while IFS= read -r line; do
+  CAPTURE_PATHS+=("$line")
+done < <(grep -o 'CAPTURE_OUTPUT: .*\.png' "$COPY_DIR/xcodebuild.log" | sed 's/^CAPTURE_OUTPUT: //' | sort -u)
 
 if [[ "${#CAPTURE_PATHS[@]}" -eq 0 ]]; then
   fail "No CAPTURE_OUTPUT lines found in xcodebuild log — no PNGs were produced."

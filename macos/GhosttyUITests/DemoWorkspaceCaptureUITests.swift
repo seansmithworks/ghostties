@@ -99,10 +99,29 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         XCUIDevice.shared.appearance = appearance
         Thread.sleep(forTimeInterval: 0.5)
 
+        // Switch to the Projects tab via the real keyboard shortcut
+        // (Cmd+Shift+1 — see AppDelegate's "Sidebar View" submenu). Project
+        // rows like the fixture-only "brukas" only render on this tab;
+        // `ghostties.sidebarTab` is a persisted @AppStorage default that
+        // this machine's dev-build UserDefaults may already have set to
+        // `.sessions` from real use, and `-ApplePersistenceIgnoreState`
+        // does not reset UserDefaults. Same fix MarketingCaptureUITests
+        // already applies for the same reason.
+        app.typeKey("1", modifierFlags: [.command, .shift])
+        Thread.sleep(forTimeInterval: 0.5)
+
         // ── Fail-closed assert: prove the override actually took effect ──
         // before capturing anything. Do not trust the env var being set;
         // require the demo-only fixture project to be visibly rendered.
-        let demoProjectRow = app.staticTexts[Self.demoOnlyProjectName].firstMatch
+        //
+        // `ProjectDisclosureRow` combines its whole header into one
+        // accessibility element (`.accessibilityElement(children: .combine)`)
+        // exposed as a Button labeled "<name> project, collapsed/expanded" —
+        // there is no separate StaticText named exactly the project name.
+        // Match on that Button's label instead of `app.staticTexts[...]`.
+        let demoProjectRow = app.buttons.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "\(Self.demoOnlyProjectName) project")
+        ).firstMatch
         guard demoProjectRow.waitForExistence(timeout: 10) else {
             app.terminate()
             XCTFail(
