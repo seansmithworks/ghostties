@@ -165,9 +165,28 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         // "Demo Agent — " prefix demo-drive.sh writes) and choose
         // "Relaunch" from its context menu. NOT exercised against a real
         // build — see class doc comment.
-        let stagedSessionRows = app.staticTexts.matching(
+        //
+        // `SessionRow` (SessionDetailView.swift:9-95) is a plain `HStack`
+        // with `.accessibilityElement(children: .combine)` and no `Button`
+        // — unlike `ProjectDisclosureRow`'s header, which this file already
+        // matches via `app.buttons` for that reason (see the `brukas`
+        // assert above). `MarketingCaptureUITests` finds its fixture
+        // session ("Claude Code 4") via `app.staticTexts[...]` against that
+        // same `SessionRow` view (`CaptureFixture` seeds the real
+        // `WorkspaceStore`/`SessionCoordinator`, not a separate view), but
+        // there is no test in this repo that proves `.staticTexts` is the
+        // right element type for a `.combine`d row rather than an
+        // implementation detail of the current SwiftUI/AppKit hosting
+        // bridge. Query type-agnostically instead of betting on one
+        // `XCUIElementType`.
+        let stagedSessionRows = app.descendants(matching: .any).matching(
             NSPredicate(format: "label BEGINSWITH %@", "Demo Agent — ")
         )
+        // `.any` may surface both a row's combined parent element and an
+        // inner leaf with an overlapping label, double-counting one visual
+        // row. That's harmless here: a second right-click on an
+        // already-relaunched row simply finds no "Relaunch" item and falls
+        // through to the escape branch below.
         let stagedCount = stagedSessionRows.count
         if stagedCount == 0 {
             XCTFail(
@@ -201,20 +220,23 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         }
 
         // ── Wait until a terminal pane actually shows content ──
-        // `Ghostty.SurfaceView` exposes its rendered terminal text via
-        // `accessibilityValue()` with role `.textArea` (see
-        // "Surface View/SurfaceView_AppKit.swift"'s Accessibility
-        // extension), which XCUITest should surface as a `textView`'s
-        // `.value`. Poll that instead of a guessed sleep duration — a
-        // freshly relaunched `claude` process takes a variable amount of
-        // time to print its first output. NOT exercised against a real
-        // build: if `.textViews` doesn't pick up the surface here, that is
-        // a finding to fix, not a reason to delete this wait or fall back
-        // silently to a fixed sleep.
+        // `Ghostty.SurfaceView` declares AX role `.textArea` and returns its
+        // rendered text via `accessibilityValue()`
+        // ("Surface View/SurfaceView_AppKit.swift":2308-2320). There is no
+        // existing UI test in this repo that confirms `.textArea` reaches
+        // XCUITest as `app.textViews` — `MarketingCaptureUITests` never
+        // checks terminal content, it just sleeps a fixed 2s. Query
+        // type-agnostically instead of betting on one `XCUIElementType`,
+        // the same reasoning as the staged-session-row match above. To
+        // avoid a vacuous pass (almost anything in the app could carry
+        // some non-empty string value — a menu title, a tooltip), require
+        // content that actually looks like rendered terminal output: long
+        // enough that it can't be a UI label, and multi-line the way a
+        // shell prompt + command + output block always is.
         let terminalHasContent = NSPredicate { _, _ in
-            app.textViews.allElementsBoundByIndex.contains { textView in
-                guard let value = textView.value as? String else { return false }
-                return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            app.descendants(matching: .any).allElementsBoundByIndex.contains { element in
+                guard let value = element.value as? String else { return false }
+                return value.count > 40 && value.contains("\n")
             }
         }
         let contentExpectation = XCTNSPredicateExpectation(predicate: terminalHasContent, object: nil)
@@ -222,7 +244,11 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
             XCTFail(
                 "Timed out (15s) waiting for a terminal pane to show content " +
                 "after relaunching staged sessions. This wait has not been " +
-                "exercised against a real build."
+                "exercised against a real build — if SurfaceView's rendered " +
+                "text genuinely never reaches XCUITest as an element value, " +
+                "that's a finding to fix (or a different signal to poll), " +
+                "not a reason to delete this wait or fall back silently to " +
+                "a fixed sleep."
             )
         }
 
