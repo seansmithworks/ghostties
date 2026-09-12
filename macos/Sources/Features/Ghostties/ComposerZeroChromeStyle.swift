@@ -718,9 +718,13 @@ enum ComposerSingleLineTuning {
     /// PRIOR fixed constants (15pt field, 11pt status, 512pt width) are
     /// preserved as the dial's floor, not deleted — Sean can dial back down
     /// to them live.
-    static let defaultFieldSize: CGFloat = 22
-    static let defaultRowSize: CGFloat = 16
-    static let defaultWidth: CGFloat = 680
+    ///
+    /// Round 13b: Sean tuned these live on an HTML bench mirroring this
+    /// code 1pt = 1px and landed on 28pt field / 18pt row / 688pt width —
+    /// these are now the defaults, replacing round 12's strawman.
+    static let defaultFieldSize: CGFloat = 28
+    static let defaultRowSize: CGFloat = 18
+    static let defaultWidth: CGFloat = 688
 
     static let fieldSizeRange: ClosedRange<Double> = 15...28
     static let rowSizeRange: ClosedRange<Double> = 11...20
@@ -764,16 +768,24 @@ enum ComposerSingleLineShadowPreset: String, CaseIterable {
     case soft
     case lifted
     case long
+    case custom
 
     static let storageKey = "ghostties.composerSingleLineShadowPreset"
 
-    /// Default `.soft` matches `WorkspaceLayout.composerModalShadow*`
-    /// exactly (24pt radius, 8pt y, 0.30 opacity) — the shipped `.singleLine`
-    /// shadow, unchanged, until Sean picks a different preset.
+    /// Round 13b: Sean's tuned defaults (64pt radius, 48pt y, 0.24 opacity)
+    /// match none of the three fixed presets, so the fallback here resolves
+    /// from the actual dial values (`resolved(radius:yOffset:opacity:)`)
+    /// rather than a hardcoded `.soft` — a hardcoded fallback would mislabel
+    /// his shadow "Soft" in the picker while it renders as something else
+    /// entirely.
     static func current(defaults: UserDefaults = .standard) -> ComposerSingleLineShadowPreset {
         guard let raw = defaults.string(forKey: storageKey),
               let preset = ComposerSingleLineShadowPreset(rawValue: raw) else {
-            return .soft
+            return resolved(
+                radius: ComposerSingleLineShadowDials.radius(defaults: defaults),
+                yOffset: ComposerSingleLineShadowDials.yOffset(defaults: defaults),
+                opacity: ComposerSingleLineShadowDials.opacity(defaults: defaults)
+            )
         }
         return preset
     }
@@ -784,7 +796,21 @@ enum ComposerSingleLineShadowPreset: String, CaseIterable {
         case .soft: return (WorkspaceLayout.composerModalShadowRadius, WorkspaceLayout.composerModalShadowYOffset, WorkspaceLayout.composerModalShadowOpacity)
         case .lifted: return (32, 16, 0.30)
         case .long: return (48, 32, 0.22)
+        case .custom: return (64, 48, 0.24)
         }
+    }
+
+    /// Which fixed preset (if any) the given dial values match — `.custom`
+    /// when they match none. Pure function, same pattern as
+    /// `ComposerSingleLineBackgroundChoice.resolve` below.
+    static func resolved(radius: CGFloat, yOffset: CGFloat, opacity: Double) -> ComposerSingleLineShadowPreset {
+        for preset: ComposerSingleLineShadowPreset in [.none, .soft, .lifted, .long] {
+            let values = preset.dialValues
+            if values.radius == radius, values.yOffset == yOffset, values.opacity == opacity {
+                return preset
+            }
+        }
+        return .custom
     }
 }
 
@@ -796,22 +822,26 @@ enum ComposerSingleLineShadowDials {
     static let yOffsetStorageKey = "ghostties.composerSingleLineShadowYOffset"
     static let opacityStorageKey = "ghostties.composerSingleLineShadowOpacity"
 
+    /// Round 13b: fallbacks are literal constants (Sean's tuned 64/48/0.24),
+    /// not `.soft`'s values — `ComposerSingleLineShadowPreset.resolved`
+    /// reads these same fallbacks when nothing is stored, so a literal here
+    /// avoids a circular dependency between the dials and the preset enum.
     static func radius(defaults: UserDefaults = .standard) -> CGFloat {
         guard let stored = defaults.object(forKey: radiusStorageKey) as? Double else {
-            return ComposerSingleLineShadowPreset.soft.dialValues.radius
+            return 64
         }
         return CGFloat(stored)
     }
 
     static func yOffset(defaults: UserDefaults = .standard) -> CGFloat {
         guard let stored = defaults.object(forKey: yOffsetStorageKey) as? Double else {
-            return ComposerSingleLineShadowPreset.soft.dialValues.yOffset
+            return 48
         }
         return CGFloat(stored)
     }
 
     static func opacity(defaults: UserDefaults = .standard) -> Double {
-        defaults.object(forKey: opacityStorageKey) as? Double ?? ComposerSingleLineShadowPreset.soft.dialValues.opacity
+        defaults.object(forKey: opacityStorageKey) as? Double ?? 0.24
     }
 
     /// Writes a preset's three values into the dials — the picker's only
@@ -843,10 +873,14 @@ enum ComposerSingleLineTreatment: String, CaseIterable {
 
     static let storageKey = "ghostties.composerSingleLineTreatment"
 
+    /// Round 13b: default is `.glass` (Sean's tuned pick) — the macOS-26
+    /// availability gate and `.material` degrade-gracefully fallback live at
+    /// the `ComposerSingleLineBackgroundChoice.resolve` call site below, not
+    /// here.
     static func current(defaults: UserDefaults = .standard) -> ComposerSingleLineTreatment {
         guard let raw = defaults.string(forKey: storageKey),
               let treatment = ComposerSingleLineTreatment(rawValue: raw) else {
-            return .material
+            return .glass
         }
         return treatment
     }
@@ -972,11 +1006,11 @@ struct ComposerDebugTuningControl: View {
         _singleLineFieldSize = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultFieldSize), ComposerSingleLineTuning.fieldSizeStorageKey, store: defaults)
         _singleLineRowSize = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultRowSize), ComposerSingleLineTuning.rowSizeStorageKey, store: defaults)
         _singleLineWidth = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultWidth), ComposerSingleLineTuning.widthStorageKey, store: defaults)
-        _singleLineShadowPresetRaw = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.soft.rawValue, ComposerSingleLineShadowPreset.storageKey, store: defaults)
-        _singleLineShadowRadius = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.soft.dialValues.radius), ComposerSingleLineShadowDials.radiusStorageKey, store: defaults)
-        _singleLineShadowYOffset = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.soft.dialValues.yOffset), ComposerSingleLineShadowDials.yOffsetStorageKey, store: defaults)
-        _singleLineShadowOpacity = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.soft.dialValues.opacity, ComposerSingleLineShadowDials.opacityStorageKey, store: defaults)
-        _singleLineTreatmentRaw = AppStorage(wrappedValue: ComposerSingleLineTreatment.material.rawValue, ComposerSingleLineTreatment.storageKey, store: defaults)
+        _singleLineShadowPresetRaw = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.custom.rawValue, ComposerSingleLineShadowPreset.storageKey, store: defaults)
+        _singleLineShadowRadius = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.custom.dialValues.radius), ComposerSingleLineShadowDials.radiusStorageKey, store: defaults)
+        _singleLineShadowYOffset = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.custom.dialValues.yOffset), ComposerSingleLineShadowDials.yOffsetStorageKey, store: defaults)
+        _singleLineShadowOpacity = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.custom.dialValues.opacity, ComposerSingleLineShadowDials.opacityStorageKey, store: defaults)
+        _singleLineTreatmentRaw = AppStorage(wrappedValue: ComposerSingleLineTreatment.glass.rawValue, ComposerSingleLineTreatment.storageKey, store: defaults)
         self.defaults = defaults
         self.onChange = onChange
     }
@@ -1155,6 +1189,7 @@ struct ComposerDebugTuningControl: View {
                     Text("Soft").tag(ComposerSingleLineShadowPreset.soft)
                     Text("Lifted").tag(ComposerSingleLineShadowPreset.lifted)
                     Text("Long").tag(ComposerSingleLineShadowPreset.long)
+                    Text("Custom").tag(ComposerSingleLineShadowPreset.custom)
                 }
                 dialRow("Shadow radius", value: singleLineShadowRadiusBinding, range: 0...64, format: "%.0f")
                 dialRow("Shadow length", value: singleLineShadowYOffsetBinding, range: 0...64, format: "%.0f")
@@ -1243,6 +1278,18 @@ final class ComposerDialKitCoordinator: ObservableObject {
             initial: initial,
             controls: Self.controls
         )
+        // `DialPanelState.init` normalizes `initial` against each control's
+        // range/step (e.g. rounds a width to the nearest 10) BEFORE storing
+        // it as `state.values` — capturing `lastKnownModel` from the
+        // pre-normalization `initial` instead of the panel's own
+        // (possibly-rounded) `state.values` left `lastKnownModel` off by
+        // whatever a control rounded away. `write(from:to:)` then diffed
+        // that phantom drift as a real user edit on the very first
+        // unrelated change and clobbered a key nobody touched. Round 13b's
+        // 688pt width default (not a multiple of the width dial's 10pt
+        // step) is what exposed this — round 12's 680pt default happened to
+        // already be a multiple of 10.
+        lastKnownModel = state.values
         cancellable = state.$values
             .dropFirst()
             .sink { [weak self] newValue in
@@ -1409,7 +1456,8 @@ final class ComposerDialKitCoordinator: ObservableObject {
                     DialOption(ComposerSingleLineShadowPreset.none.rawValue, label: "None"),
                     DialOption(ComposerSingleLineShadowPreset.soft.rawValue, label: "Soft"),
                     DialOption(ComposerSingleLineShadowPreset.lifted.rawValue, label: "Lifted"),
-                    DialOption(ComposerSingleLineShadowPreset.long.rawValue, label: "Long")
+                    DialOption(ComposerSingleLineShadowPreset.long.rawValue, label: "Long"),
+                    DialOption(ComposerSingleLineShadowPreset.custom.rawValue, label: "Custom")
                 ]
             ),
             .slider("shadowRadius", keyPath: \.shadowRadius, label: "Shadow radius", range: 0...64),

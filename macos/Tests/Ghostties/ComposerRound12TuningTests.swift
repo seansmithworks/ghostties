@@ -19,15 +19,15 @@ struct ComposerRound12TuningTests {
 
     // MARK: - Single-line size/width dials (item 2)
 
-    /// Strawman defaults from the brief: 22pt field, 16pt row, 680pt width —
-    /// bigger than the shipped 15pt/11pt/512pt `.singleLine` used before
-    /// this round. Red before the fix: `ComposerSingleLineTuning` didn't
+    /// Round 13b: Sean's tuned defaults from the HTML bench — 28pt field,
+    /// 18pt row, 688pt width — replacing round 12's 22pt/16pt/680pt
+    /// strawman. Red before the fix: `ComposerSingleLineTuning` didn't
     /// exist; these three functions would not compile.
     @Test func singleLineTuningDefaultsToTheBiggerStrawman() {
         let suite = isolatedSuite("tuning-defaults")
-        #expect(ComposerSingleLineTuning.fieldSize(defaults: suite) == 22)
-        #expect(ComposerSingleLineTuning.rowSize(defaults: suite) == 16)
-        #expect(ComposerSingleLineTuning.width(defaults: suite) == 680)
+        #expect(ComposerSingleLineTuning.fieldSize(defaults: suite) == 28)
+        #expect(ComposerSingleLineTuning.rowSize(defaults: suite) == 18)
+        #expect(ComposerSingleLineTuning.width(defaults: suite) == 688)
     }
 
     /// Proves each dial actually READS its stored key rather than always
@@ -99,21 +99,24 @@ struct ComposerRound12TuningTests {
         #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == expected.opacity)
     }
 
-    /// With nothing written yet, the dials read `.soft`'s values (the
-    /// shipped look) rather than zero/garbage — red if the fallback
-    /// defaulted to `.none` or a bare `0`.
-    @Test func shadowDialsFallBackToSoftWhenUnset() {
+    /// Round 13b: with nothing written yet, the dials read Sean's tuned
+    /// defaults (64pt radius, 48pt y, 0.24 opacity) rather than `.soft`'s —
+    /// red if the fallback defaulted to `.none`, a bare `0`, or `.soft`.
+    @Test func shadowDialsFallBackToTheTunedCustomDefaultWhenUnset() {
         let suite = isolatedSuite("shadow-unset")
-        #expect(ComposerSingleLineShadowDials.radius(defaults: suite) == ComposerSingleLineShadowPreset.soft.dialValues.radius)
-        #expect(ComposerSingleLineShadowDials.yOffset(defaults: suite) == ComposerSingleLineShadowPreset.soft.dialValues.yOffset)
-        #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == ComposerSingleLineShadowPreset.soft.dialValues.opacity)
+        #expect(ComposerSingleLineShadowDials.radius(defaults: suite) == 64)
+        #expect(ComposerSingleLineShadowDials.yOffset(defaults: suite) == 48)
+        #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == 0.24)
+        #expect(ComposerSingleLineShadowPreset.current(defaults: suite) == .custom)
     }
 
     // MARK: - Liquid Glass treatment + macOS-26 fallback (item 4)
 
-    @Test func singleLineTreatmentDefaultsToMaterial() {
+    /// Round 13b: default is `.glass` (Sean's tuned pick) — was `.material`
+    /// through round 12.
+    @Test func singleLineTreatmentDefaultsToGlass() {
         let suite = isolatedSuite("treatment-default")
-        #expect(ComposerSingleLineTreatment.current(defaults: suite) == .material)
+        #expect(ComposerSingleLineTreatment.current(defaults: suite) == .glass)
     }
 
     @Test func singleLineTreatmentReadsGlass() {

@@ -1623,16 +1623,17 @@ struct ComposerZeroChromeStyleTests {
     /// isolated `UserDefaults` suite (`tuningDefaultsForTesting`, added
     /// alongside this test — same test-seam shape as
     /// `styleOverrideForTesting`) holding tuning values distinct from both
-    /// `ComposerSingleLineTuning`'s defaults (22pt/680pt) AND the pre-round-12
-    /// fixed constants (15pt/512pt), then asserts the MOUNTED NSTextView's
-    /// real `font.pointSize` and enclosing `NSScrollView`'s frame width
-    /// against those injected values — not against the tuning enum's own
-    /// getters, which would only prove the enum reads its own keys back,
-    /// not that the view reads the enum. Red/green proof (temporarily
-    /// hardcoding `newStyleFieldFontSize`/`newStyleFieldWidth`'s `.singleLine`
-    /// cases and confirming both assertions fail, then reverting) has NOT
-    /// been performed — no local `xcodebuild` run has happened for this
-    /// round. Pending a local run.
+    /// `ComposerSingleLineTuning`'s defaults (round 13b: 28pt/688pt) AND the
+    /// pre-round-12 fixed constants (15pt/512pt), then asserts the MOUNTED
+    /// NSTextView's real `font.pointSize` and enclosing `NSScrollView`'s
+    /// frame width against those injected values — not against the tuning
+    /// enum's own getters, which would only prove the enum reads its own
+    /// keys back, not that the view reads the enum. Red/green proof
+    /// performed 2026-09-12: temporarily hardcoded
+    /// `newStyleFieldFontSize`/`newStyleFieldWidth`'s `.singleLine` cases to
+    /// 15/512 — failed with "expected the mounted field's font to reflect
+    /// the injected tuning (26.0pt), got Optional(15.0)"; reverted and
+    /// confirmed green (`xcodebuild test`, this test only, exit 0).
     @Test func singleLineCardRendersInjectedTuningNotDefaults() {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
@@ -1705,10 +1706,27 @@ struct ComposerZeroChromeStyleTests {
     /// unlike the legacy pill's binding which calls
     /// `ComposerSingleLineShadowDials.apply`. Names the production
     /// coordinator/model directly (not a re-implementation) so a regression
-    /// that goes back to writing only the raw key fails this. No local
-    /// `xcodebuild` run has been performed for this round — red/green proof
-    /// (temporarily reverting the derivation and confirming this fails) is
-    /// pending a local run.
+    /// that goes back to writing only the raw key fails this.
+    ///
+    /// Red proof performed 2026-09-12: temporarily disabled the
+    /// preset→dials derivation in `handle(_:)` (`if false, ...`) — failed
+    /// identically to the unmodified baseline below. THIS TEST IS CURRENTLY
+    /// RED ON THE UNMODIFIED CODE, independent of that derivation: `handle`
+    /// reassigns `state.values = derived` from inside the Combine sink on
+    /// `state.$values` — since `@Published` publishes in `willSet` (before
+    /// the property's backing storage commits), that nested reentrant
+    /// assignment finishes and commits `derived` first, but then the
+    /// OUTER, still-in-flight assignment (the raw, un-derived model) commits
+    /// its own value right after, clobbering the derivation. Confirmed with
+    /// a standalone Combine repro (nested `@Published` set inside a `sink`
+    /// gets overwritten by the outer set every time). Observed failure both
+    /// with and without the temporary break: "(coordinator.state.values
+    /// .shadowRadius → 64.0) == (Double(expected.radius) → 32.0)". This is
+    /// a pre-existing round-13 bug in `ComposerDialKitCoordinator.handle`,
+    /// unrelated to round 13b's default-value changes — fixing the
+    /// reentrancy is out of this round's scope (not an "initial model
+    /// reads" change); reverting the deliberate break did NOT turn this
+    /// green. Flagged, not fixed.
     @available(macOS 14, *)
     @Test func dialKitShadowPresetSelectionWritesAllThreeDialsAndUpdatesModel() {
         let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.preset.test.\(UUID().uuidString)")!
@@ -1740,9 +1758,17 @@ struct ComposerZeroChromeStyleTests {
     /// panel, the legacy pill, or a raw `defaults write`) changing a key this
     /// coordinator never touched, in the SAME isolated suite, and asserts
     /// that a further coordinator-driven write leaves the externally-changed
-    /// key alone. No local `xcodebuild` run has been performed for this
-    /// round — red/green proof (temporarily reverting to a full-model write
-    /// and confirming this fails) is pending a local run.
+    /// key alone. Red/green proof performed 2026-09-12: temporarily added an
+    /// unconditional `defaults.set(model.singleLineWidth, forKey: ...)`
+    /// ahead of the diff-based writes in `write(from:to:)` — failed with "a
+    /// write for one field must not clobber a key this panel didn't touch"
+    /// (690.0 != 999.0); reverted and confirmed green (`xcodebuild test`,
+    /// this test only, exit 0). Note: this proof also surfaced and fixed a
+    /// separate real bug in `ComposerDialKitCoordinator.init` — see that
+    /// init's doc comment — where `lastKnownModel` captured the coordinator's
+    /// pre-normalization `initial` instead of the panel's own (rounded)
+    /// `state.values`, exposed by round 13b's 688pt width default (not a
+    /// multiple of the width dial's 10pt step).
     @available(macOS 14, *)
     @Test func dialKitCoordinatorWriteLeavesExternallyChangedKeyIntact() {
         let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.stale.test.\(UUID().uuidString)")!
