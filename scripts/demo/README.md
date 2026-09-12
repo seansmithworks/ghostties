@@ -39,6 +39,20 @@ preflight. **A capture run should copy this manifest next to whatever assets
 it produces** — it's what lets anyone later trace a screenshot or clip back
 to the exact build that produced it.
 
+### Fixture trust
+
+Claude Code stops each staged session at its "Do you trust this folder?"
+screen unless the folder is already marked trusted, which would otherwise
+show a safety prompt instead of an agent in every capture. `demo-ready.sh`
+(the non-`--check` path) marks only the 10 seeded fixture repo paths as
+trusted by setting `projects["<fixture path>"].hasTrustDialogAccepted = true`
+in Sean's real `~/.claude.json` — no other key or entry is touched. It backs
+up the file first (`~/.claude.json.bak-demo-<timestamp>`), writes nothing if
+already trusted, and re-reads the file afterward to confirm the write stuck.
+`demo-ready.sh --check` treats a missing or `false` trust entry as not ready
+(non-zero exit), so a concurrent Claude Code process rewriting the config
+can't silently drop the entries without the preflight catching it.
+
 ## How isolation works
 
 `refresh-demo.sh` re-bundles the app under bundle ID

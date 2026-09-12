@@ -60,6 +60,9 @@ MANIFEST_PATH="$DEMO_STATE_DIR/demo-manifest.json"
 # shows the real username — only the demo STATE dir (above) stays under
 # $HOME. Must match the value in seed-demo-workspace.sh and demo-drive.sh.
 REPOS_DIR="/Users/Shared/Ghostties Demo/repos"
+# Claude Code's own trust store. Overridable for fail-closed verification
+# against a scratch copy — never used against the real file in normal runs.
+CLAUDE_CONFIG="${DEMO_CLAUDE_CONFIG:-$HOME/.claude.json}"
 
 MODE="release"
 DEST_APP="/Applications/Ghostties Demo.app"
@@ -232,10 +235,140 @@ PYEOF
   echo "==> Wrote manifest: $MANIFEST_PATH"
 }
 
+# ── Fixture trust: mark only the seeded fixture repo paths as trusted in
+#    Claude Code's own config, so a staged `claude` session doesn't stop at
+#    the "Do you trust this folder?" screen during capture. Never touches
+#    any other key or project entry. See scripts/demo/README.md.
+check_fixture_trust() {
+  python3 - "$CLAUDE_CONFIG" "$FIXTURES_DIR" "$REPOS_DIR" <<'PYEOF'
+import sys, os, json
+
+config_path, fixtures_dir, repos_dir = sys.argv[1:4]
+
+if not os.path.isfile(config_path):
+    print(f"ERROR: Claude config not found at {config_path}", file=sys.stderr)
+    sys.exit(1)
+
+with open(config_path) as f:
+    try:
+        data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: {config_path} is not valid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+
+projects = data.get("projects", {})
+fixture_names = sorted(
+    n for n in os.listdir(fixtures_dir)
+    if os.path.isdir(os.path.join(fixtures_dir, n))
+)
+
+untrusted = []
+for name in fixture_names:
+    path = os.path.join(repos_dir, name)
+    entry = projects.get(path)
+    if not entry or entry.get("hasTrustDialogAccepted") is not True:
+        untrusted.append(name)
+
+if untrusted:
+    print(f"NOT READY: fixture repo(s) not trusted in {config_path}: {', '.join(untrusted)}", file=sys.stderr)
+    print("           Fix: run ./scripts/demo/demo-ready.sh (without --check) to write trust entries.", file=sys.stderr)
+    sys.exit(1)
+
+print(f"OK: trusted {len(fixture_names)}/{len(fixture_names)} fixture paths in {config_path}.")
+PYEOF
+}
+
+ensure_fixture_trust() {
+  echo "==> Ensuring fixture repos are trusted in Claude Code config ($CLAUDE_CONFIG)..."
+  python3 - "$CLAUDE_CONFIG" "$FIXTURES_DIR" "$REPOS_DIR" <<'PYEOF'
+import sys, os, json, time, shutil
+
+config_path, fixtures_dir, repos_dir = sys.argv[1:4]
+
+if not os.path.isfile(config_path):
+    print(f"ERROR: Claude config not found at {config_path}", file=sys.stderr)
+    sys.exit(1)
+
+with open(config_path, "r") as f:
+    raw = f.read()
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError as e:
+    print(f"ERROR: {config_path} is not valid JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+
+if "projects" not in data or not isinstance(data["projects"], dict):
+    print(f"ERROR: {config_path} has no top-level 'projects' object — refusing to invent one.", file=sys.stderr)
+    sys.exit(1)
+
+# Detect the file's existing indent so the rewrite matches its formatting.
+indent = "  "
+for line in raw.split("\n")[1:]:
+    stripped = line.lstrip(" \t")
+    if stripped and stripped != line:
+        indent = line[: len(line) - len(stripped)]
+        break
+trailing_newline = raw.endswith("\n")
+
+fixture_names = sorted(
+    n for n in os.listdir(fixtures_dir)
+    if os.path.isdir(os.path.join(fixtures_dir, n))
+)
+
+projects = data["projects"]
+before_count = len(projects)
+changed = False
+trusted = 0
+
+for name in fixture_names:
+    path = os.path.join(repos_dir, name)
+    entry = projects.get(path)
+    if entry is None:
+        projects[path] = {"hasTrustDialogAccepted": True}
+        changed = True
+    elif entry.get("hasTrustDialogAccepted") is not True:
+        entry["hasTrustDialogAccepted"] = True
+        changed = True
+    trusted += 1
+
+if not changed:
+    print("NOCHANGE")
+    print(f"TRUSTED={trusted}")
+    print(f"BEFORE={before_count}")
+    print(f"AFTER={before_count}")
+    sys.exit(0)
+
+after_count = len(projects)
+
+backup_path = f"{config_path}.bak-demo-{time.strftime('%Y%m%dT%H%M%S')}"
+shutil.copy2(config_path, backup_path)
+
+dirn = os.path.dirname(config_path) or "."
+tmp_path = os.path.join(dirn, f".{os.path.basename(config_path)}.tmp-{os.getpid()}")
+mode = os.stat(config_path).st_mode
+
+with open(tmp_path, "w") as f:
+    json.dump(data, f, indent=indent, separators=(",", ": "))
+    if trailing_newline:
+        f.write("\n")
+
+os.chmod(tmp_path, mode)
+os.replace(tmp_path, config_path)
+
+print(f"BACKUP={backup_path}")
+print(f"TRUSTED={trusted}")
+print(f"BEFORE={before_count}")
+print(f"AFTER={after_count}")
+PYEOF
+}
+
 # ── --check: report only, never touch the app/fixtures — but do record what
 #             was just verified, so a passing check can't leave a stale manifest
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   if [[ "$CURRENT" -eq 1 ]]; then
+    if ! check_fixture_trust; then
+      exit 1
+    fi
     echo "OK: Ghostties Demo is current (source: $SOURCE_LABEL, dest: $DEST_APP)."
     write_manifest
     exit 0
@@ -264,6 +397,24 @@ echo ""
 # ── Always reseed the fixture workspace ─────────────────────────────────────
 echo "==> Seeding fixture workspace..."
 "$SEED_SCRIPT"
+echo ""
+
+# ── Ensure fixture repos are trusted, so staged `claude` sessions don't stop
+#    at a trust prompt during capture ────────────────────────────────────────
+TRUST_OUTPUT="$(ensure_fixture_trust)"
+echo "$TRUST_OUTPUT"
+if echo "$TRUST_OUTPUT" | grep -q '^BACKUP='; then
+  echo "    Backup: $(echo "$TRUST_OUTPUT" | sed -n 's/^BACKUP=//p')"
+fi
+TRUST_BEFORE="$(echo "$TRUST_OUTPUT" | sed -n 's/^BEFORE=//p')"
+TRUST_AFTER="$(echo "$TRUST_OUTPUT" | sed -n 's/^AFTER=//p')"
+TRUST_COUNT="$(echo "$TRUST_OUTPUT" | sed -n 's/^TRUSTED=//p')"
+echo "    Trusted fixture paths: $TRUST_COUNT (projects before=$TRUST_BEFORE after=$TRUST_AFTER)"
+
+echo "==> Verifying fixture trust..."
+if ! check_fixture_trust; then
+  fail "Fixture trust verification failed after write — see message above."
+fi
 echo ""
 
 # ── Write manifest ───────────────────────────────────────────────────────────
