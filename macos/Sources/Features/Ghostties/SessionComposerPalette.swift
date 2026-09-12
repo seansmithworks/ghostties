@@ -93,6 +93,16 @@ struct SessionComposerPalette: View {
     /// production call site) falls through to the real flag unchanged.
     let styleOverrideForTesting: ComposerStyle?
 
+    /// Round 13 review finding: `.singleLine`'s `newStyleFieldFontSize`/
+    /// `newStyleFieldWidth` read `ComposerSingleLineTuning`'s `.standard`-
+    /// defaulting call sites with no injection point, so no test could
+    /// prove this palette actually consumes a non-default tuning without
+    /// writing the real `UserDefaults.standard` domain — off-limits to a
+    /// parallel `xcodebuild test` run for the same reason documented on
+    /// `styleOverrideForTesting` above. `nil` (every production call site)
+    /// falls through to `.standard`, unchanged.
+    let tuningDefaultsForTesting: UserDefaults?
+
     /// Fix round 2: `SessionComposerOverlay` owns this — it's the only
     /// thing that knows "one frame after mount" (summon) — and drives it
     /// via a real `Binding` so this palette's own `commit(template:)` /
@@ -130,6 +140,7 @@ struct SessionComposerPalette: View {
         composerStore: SessionComposerStore = .shared,
         initialIsAddingTemplateForTesting: Bool = false,
         styleOverrideForTesting: ComposerStyle? = nil,
+        tuningDefaultsForTesting: UserDefaults? = nil,
         revealPhase: Binding<ComposerRevealPhase> = .constant(.revealed),
         zeroChromeMeasureOverride: CGFloat? = nil,
         zeroChromeFieldHeight: Binding<CGFloat> = .constant(ComposerZeroChromeTypography.fieldLineHeight)
@@ -138,6 +149,7 @@ struct SessionComposerPalette: View {
         self.request = request
         self.composerStore = composerStore
         self.styleOverrideForTesting = styleOverrideForTesting
+        self.tuningDefaultsForTesting = tuningDefaultsForTesting
         self.revealPhase = revealPhase
         self.zeroChromeMeasureOverride = zeroChromeMeasureOverride
         self.zeroChromeFieldHeight = zeroChromeFieldHeight
@@ -1795,10 +1807,14 @@ struct SessionComposerPalette: View {
     /// (`ComposerSingleLineTuning`, default 22pt, strawman "bigger" per
     /// Sean's round 11 debrief). `.classic` keeps the original 15pt
     /// DESIGN.md §3 scale, unchanged.
+    private var tuningDefaults: UserDefaults {
+        tuningDefaultsForTesting ?? .standard
+    }
+
     private var newStyleFieldFontSize: CGFloat {
         switch activeStyle {
         case .zeroChrome: return ComposerZeroChromeTypography.fieldSize
-        case .singleLine: return ComposerSingleLineTuning.fieldSize()
+        case .singleLine: return ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults)
         case .classic: return 15
         }
     }
@@ -1806,7 +1822,7 @@ struct SessionComposerPalette: View {
     private var newStyleFieldLineHeight: CGFloat {
         switch activeStyle {
         case .zeroChrome: return ComposerZeroChromeTypography.fieldLineHeight
-        case .singleLine: return ComposerSingleLineTuning.lineHeight(fieldSize: ComposerSingleLineTuning.fieldSize())
+        case .singleLine: return ComposerSingleLineTuning.lineHeight(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
         case .classic: return 38
         }
     }
@@ -1814,7 +1830,7 @@ struct SessionComposerPalette: View {
     private var newStyleFieldWidth: CGFloat {
         switch activeStyle {
         case .zeroChrome: return zeroChromeMeasure
-        case .singleLine: return ComposerSingleLineTuning.width()
+        case .singleLine: return ComposerSingleLineTuning.width(defaults: tuningDefaults)
         case .classic: return 480
         }
     }

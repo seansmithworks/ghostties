@@ -1,5 +1,9 @@
 import SwiftUI
 import AppKit
+#if DEBUG
+import Combine
+import DialKit
+#endif
 
 // MARK: - Composer style flag (spike, beta.25 hold)
 //
@@ -1071,9 +1075,10 @@ struct ComposerDebugTuningControl: View {
 
     /// Round 12: a labeled `Slider` row, the DEBUG pill's stand-in for a
     /// continuous dial (`Picker` only fits discrete choices, used
-    /// everywhere else in this control). This is exactly the fallback the
-    /// brief's DialKit timebox calls for — see this file's PR-facing note
-    /// on why DialKit itself isn't wired in on this branch.
+    /// everywhere else in this control). Round 13 replaces this with a real
+    /// `DialKit` panel (`ComposerDialKitHost` below) on macOS 14+; this row
+    /// stays as the macOS 13 fallback body only (`decision_align-to-
+    /// upstream-degrade-gracefully` — DialKit itself needs macOS 14).
     @ViewBuilder
     private func dialRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, format: String) -> some View {
         HStack(spacing: 4) {
@@ -1086,7 +1091,27 @@ struct ComposerDebugTuningControl: View {
         }
     }
 
+    /// Round 13: real DialKit (vendored `macos/Packages/DialKit`, v0.3) is
+    /// the tuning surface on macOS 14+, per Sean's explicit ask — round 12's
+    /// slider rows were a substitute the review rejected. DialKit's SwiftUI
+    /// surface (`DialPanelView.swift`) uses the two-parameter
+    /// `.onChange(of:) { _, new in }` form throughout, which is a macOS
+    /// 14/iOS 17 SDK API, not just a deployment-target nicety — so this
+    /// branch, not a lowered package platform, is what keeps the app's
+    /// macOS 13 floor intact (`decision_align-to-upstream-degrade-
+    /// gracefully`). Below 14, the ORIGINAL round-12 picker/slider pill
+    /// (`legacyBody`) is the fallback — core function (every knob still
+    /// reachable) survives on the floor OS; only the nicer dial surface is
+    /// macOS-14-and-up.
     var body: some View {
+        if #available(macOS 14, *) {
+            ComposerDialKitHost(defaults: defaults, onChange: onChange)
+        } else {
+            legacyBody
+        }
+    }
+
+    private var legacyBody: some View {
         VStack(alignment: .leading, spacing: 4) {
             Picker("Style", selection: style) {
                 Text("Classic").tag(ComposerStyle.classic)
@@ -1151,6 +1176,196 @@ struct ComposerDebugTuningControl: View {
         // layer); this control must never do that.
         .contentShape(Rectangle())
         .onTapGesture {}
+    }
+}
+
+// MARK: - Round 13: real DialKit tuning panel (macOS 14+)
+//
+// Vendored MIT-licensed source, `macos/Packages/DialKit` (v0.3, unmodified —
+// `DialKit`'s own `Package.swift` still declares `.macOS(.v14)`; SwiftPM/
+// Xcode enforce that as a per-call-site availability requirement on a
+// consumer with a LOWER deployment target, exactly like any other macOS
+// 14-only API, rather than refusing to link — so every symbol below is
+// wrapped in `@available(macOS 14, *)`/`if #available(macOS 14, *)` instead
+// of the package itself being patched down to `.v13`.
+@available(macOS 14, *)
+private struct ComposerDialKitTuningModel: Codable, Equatable {
+    var styleRaw: String
+    var materialRaw: String
+    var focalBlurRaw: String
+    var fogEnabled: Bool
+    var alignmentRaw: String
+    var singleLineFieldSize: Double
+    var singleLineRowSize: Double
+    var singleLineWidth: Double
+    var shadowPresetRaw: String
+    var shadowRadius: Double
+    var shadowYOffset: Double
+    var shadowOpacity: Double
+    var treatmentRaw: String
+}
+
+/// Owns the `DialPanelState` and mirrors every change back into the same
+/// `@AppStorage` keys `ComposerDebugTuningControl`/production reads —
+/// `DialPanelState` is its own source of truth while the panel is open, so
+/// this is a one-way "panel changed → write UserDefaults" sync, not a
+/// two-way live binding; UserDefaults is always re-read on next launch,
+/// matching every other knob in this file.
+@available(macOS 14, *)
+@MainActor
+private final class ComposerDialKitCoordinator: ObservableObject {
+    let state: DialPanelState<ComposerDialKitTuningModel>
+    private var cancellable: AnyCancellable?
+    private let defaults: UserDefaults
+    private let onChange: () -> Void
+
+    init(defaults: UserDefaults, onChange: @escaping () -> Void) {
+        self.defaults = defaults
+        self.onChange = onChange
+        let initial = Self.readModel(defaults: defaults)
+        state = DialPanelState(
+            name: "Composer Tuning",
+            initial: initial,
+            controls: Self.controls
+        )
+        cancellable = state.$values
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.write(newValue)
+            }
+    }
+
+    private static func readModel(defaults: UserDefaults) -> ComposerDialKitTuningModel {
+        ComposerDialKitTuningModel(
+            styleRaw: ComposerStyle.current(defaults: defaults).rawValue,
+            materialRaw: ComposerZeroChromeMaterial.current(defaults: defaults).rawValue,
+            focalBlurRaw: ComposerZeroChromeFocalBlurStyle.current(defaults: defaults).rawValue,
+            fogEnabled: defaults.object(forKey: ComposerZeroChromeFogSetting.storageKey) as? Bool ?? true,
+            alignmentRaw: ComposerZeroChromeAlignment.current(defaults: defaults).rawValue,
+            singleLineFieldSize: Double(ComposerSingleLineTuning.fieldSize(defaults: defaults)),
+            singleLineRowSize: Double(ComposerSingleLineTuning.rowSize(defaults: defaults)),
+            singleLineWidth: Double(ComposerSingleLineTuning.width(defaults: defaults)),
+            shadowPresetRaw: ComposerSingleLineShadowPreset.current(defaults: defaults).rawValue,
+            shadowRadius: Double(ComposerSingleLineShadowDials.radius(defaults: defaults)),
+            shadowYOffset: Double(ComposerSingleLineShadowDials.yOffset(defaults: defaults)),
+            shadowOpacity: ComposerSingleLineShadowDials.opacity(defaults: defaults),
+            treatmentRaw: ComposerSingleLineTreatment.current(defaults: defaults).rawValue
+        )
+    }
+
+    private func write(_ model: ComposerDialKitTuningModel) {
+        defaults.set(model.styleRaw, forKey: ComposerStyle.storageKey)
+        defaults.set(model.materialRaw, forKey: ComposerZeroChromeMaterial.storageKey)
+        defaults.set(model.focalBlurRaw, forKey: ComposerZeroChromeFocalBlurStyle.storageKey)
+        defaults.set(model.fogEnabled, forKey: ComposerZeroChromeFogSetting.storageKey)
+        defaults.set(model.alignmentRaw, forKey: ComposerZeroChromeAlignment.storageKey)
+        defaults.set(model.singleLineFieldSize, forKey: ComposerSingleLineTuning.fieldSizeStorageKey)
+        defaults.set(model.singleLineRowSize, forKey: ComposerSingleLineTuning.rowSizeStorageKey)
+        defaults.set(model.singleLineWidth, forKey: ComposerSingleLineTuning.widthStorageKey)
+        defaults.set(model.shadowPresetRaw, forKey: ComposerSingleLineShadowPreset.storageKey)
+        defaults.set(model.shadowRadius, forKey: ComposerSingleLineShadowDials.radiusStorageKey)
+        defaults.set(model.shadowYOffset, forKey: ComposerSingleLineShadowDials.yOffsetStorageKey)
+        defaults.set(model.shadowOpacity, forKey: ComposerSingleLineShadowDials.opacityStorageKey)
+        defaults.set(model.treatmentRaw, forKey: ComposerSingleLineTreatment.storageKey)
+        onChange()
+    }
+
+    /// One panel, every knob from `ComposerDebugTuningControl.legacyBody` —
+    /// Style included (brief: "keep the Style picker"; here that means the
+    /// Style knob stays reachable, now as this panel's own `.select`
+    /// control rather than a second, separately-bound `Picker` living
+    /// beside DialKit — two live copies of the same key is exactly the
+    /// "two-cache coupling" class of bug this project's memory warns about
+    /// elsewhere).
+    private static var controls: [DialControl<ComposerDialKitTuningModel>] {
+        [
+            .select(
+                "style", keyPath: \.styleRaw, label: "Style",
+                options: [
+                    DialOption(ComposerStyle.classic.rawValue, label: "Classic"),
+                    DialOption(ComposerStyle.singleLine.rawValue, label: "Single line"),
+                    DialOption(ComposerStyle.zeroChrome.rawValue, label: "Zero chrome")
+                ]
+            ),
+            .select(
+                "baseBlur", keyPath: \.materialRaw, label: "Base blur",
+                options: [
+                    DialOption(ComposerZeroChromeMaterial.ultraThin.rawValue, label: "Ultra thin"),
+                    DialOption(ComposerZeroChromeMaterial.thin.rawValue, label: "Thin"),
+                    DialOption(ComposerZeroChromeMaterial.medium.rawValue, label: "Medium"),
+                    DialOption(ComposerZeroChromeMaterial.regular.rawValue, label: "Regular"),
+                    DialOption(ComposerZeroChromeMaterial.thick.rawValue, label: "Thick")
+                ]
+            ),
+            .select(
+                "focalBlur", keyPath: \.focalBlurRaw, label: "Focal blur",
+                options: [
+                    DialOption(ComposerZeroChromeFocalBlurStyle.off.rawValue, label: "Off"),
+                    DialOption(ComposerZeroChromeFocalBlurStyle.ultraThin.rawValue, label: "Ultra thin"),
+                    DialOption(ComposerZeroChromeFocalBlurStyle.thin.rawValue, label: "Thin"),
+                    DialOption(ComposerZeroChromeFocalBlurStyle.regular.rawValue, label: "Regular"),
+                    DialOption(ComposerZeroChromeFocalBlurStyle.thick.rawValue, label: "Thick")
+                ]
+            ),
+            .toggle("fog", keyPath: \.fogEnabled, label: "Fog"),
+            .select(
+                "alignment", keyPath: \.alignmentRaw, label: "Alignment",
+                options: [
+                    DialOption(ComposerZeroChromeAlignment.left.rawValue, label: "Left"),
+                    DialOption(ComposerZeroChromeAlignment.center.rawValue, label: "Center")
+                ]
+            ),
+            .slider(
+                "singleLineFieldSize", keyPath: \.singleLineFieldSize, label: "Field size",
+                range: ComposerSingleLineTuning.fieldSizeRange, unit: "pt"
+            ),
+            .slider(
+                "singleLineRowSize", keyPath: \.singleLineRowSize, label: "Row size",
+                range: ComposerSingleLineTuning.rowSizeRange, unit: "pt"
+            ),
+            .slider(
+                "singleLineWidth", keyPath: \.singleLineWidth, label: "Width",
+                range: ComposerSingleLineTuning.widthRange, unit: "pt"
+            ),
+            .select(
+                "shadowPreset", keyPath: \.shadowPresetRaw, label: "Shadow",
+                options: [
+                    DialOption(ComposerSingleLineShadowPreset.none.rawValue, label: "None"),
+                    DialOption(ComposerSingleLineShadowPreset.soft.rawValue, label: "Soft"),
+                    DialOption(ComposerSingleLineShadowPreset.lifted.rawValue, label: "Lifted"),
+                    DialOption(ComposerSingleLineShadowPreset.long.rawValue, label: "Long")
+                ]
+            ),
+            .slider("shadowRadius", keyPath: \.shadowRadius, label: "Shadow radius", range: 0...64),
+            .slider("shadowYOffset", keyPath: \.shadowYOffset, label: "Shadow length", range: 0...64),
+            .slider("shadowOpacity", keyPath: \.shadowOpacity, label: "Shadow opacity", range: 0...0.6),
+            .select(
+                "treatment", keyPath: \.treatmentRaw, label: "Treatment",
+                options: [
+                    DialOption(ComposerSingleLineTreatment.material.rawValue, label: "Material"),
+                    DialOption(ComposerSingleLineTreatment.glass.rawValue, label: "Liquid Glass")
+                ]
+            )
+        ]
+    }
+}
+
+/// Hosts the DialKit drawer (`DialRoot`'s own FAB is the "DEBUG button that
+/// opens the panel" the brief calls for — no separate button needed).
+/// `@StateObject` keeps `ComposerDialKitCoordinator` (and the
+/// `DialPanelState` it owns) alive for this view's identity; letting it
+/// deinit would unregister the panel from `DialStore.shared` and the drawer
+/// would vanish.
+@available(macOS 14, *)
+private struct ComposerDialKitHost: View {
+    @StateObject private var coordinator: ComposerDialKitCoordinator
+
+    init(defaults: UserDefaults, onChange: @escaping () -> Void) {
+        _coordinator = StateObject(wrappedValue: ComposerDialKitCoordinator(defaults: defaults, onChange: onChange))
+    }
+
+    var body: some View {
+        DialRoot(position: .bottomRight, mode: .drawer)
     }
 }
 #endif

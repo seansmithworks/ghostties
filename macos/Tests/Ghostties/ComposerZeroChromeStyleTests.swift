@@ -1608,4 +1608,91 @@ struct ComposerZeroChromeStyleTests {
         #expect(textView.isHorizontallyResizable == true)
         #expect(textView.isVerticallyResizable == false)
     }
+
+    // MARK: - Round 13 review finding: prove the palette actually consumes ComposerSingleLineTuning
+
+    /// Round 12 added `ComposerSingleLineTuning` and wired `.singleLine`'s
+    /// `newStyleFieldFontSize`/`newStyleFieldWidth` (`SessionComposerPalette`)
+    /// to read it, but nothing mounted the real card and checked the
+    /// rendered field against a NON-default tuning — every existing
+    /// `.singleLine` render used the untouched defaults, so a typo in the
+    /// wiring (e.g. hardcoding 15/512 instead of reading the dial) would
+    /// have passed every other test in this file silently. This mounts
+    /// `SessionComposerPalette`'s real `singleLineComposerCard` with an
+    /// isolated `UserDefaults` suite (`tuningDefaultsForTesting`, added
+    /// alongside this test — same test-seam shape as
+    /// `styleOverrideForTesting`) holding tuning values distinct from both
+    /// `ComposerSingleLineTuning`'s defaults (22pt/680pt) AND the pre-round-12
+    /// fixed constants (15pt/512pt), then asserts the MOUNTED NSTextView's
+    /// real `font.pointSize` and enclosing `NSScrollView`'s frame width
+    /// against those injected values — not against the tuning enum's own
+    /// getters, which would only prove the enum reads its own keys back,
+    /// not that the view reads the enum. Proved red once by temporarily
+    /// hardcoding `newStyleFieldFontSize`/`newStyleFieldWidth`'s `.singleLine`
+    /// cases to `15`/`512` in `SessionComposerPalette.swift`: both
+    /// assertions failed; reverted after confirming.
+    @Test func singleLineCardRendersInjectedTuningNotDefaults() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+        let suite = UserDefaults(suiteName: "ghostties.composerSingleLineTuning.test.\(UUID().uuidString)")!
+
+        let injectedFieldSize: Double = 26
+        let injectedWidth: Double = 740
+        suite.set(injectedFieldSize, forKey: ComposerSingleLineTuning.fieldSizeStorageKey)
+        suite.set(injectedWidth, forKey: ComposerSingleLineTuning.widthStorageKey)
+
+        let size = NSSize(width: 900, height: 300)
+        let view = SessionComposerPalette(
+            isPresented: .constant(true),
+            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+            composerStore: composerStore,
+            styleOverrideForTesting: .singleLine,
+            tuningDefaultsForTesting: suite
+        )
+        .environmentObject(workspaceStore)
+        .environmentObject(SessionCoordinator())
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let textView = firstTextView(in: hosting) else {
+            Issue.record("expected a mounted NSTextView for the .singleLine card")
+            return
+        }
+        #expect(
+            textView.font?.pointSize == CGFloat(injectedFieldSize),
+            "expected the mounted field's font to reflect the injected tuning (\(injectedFieldSize)pt), got \(String(describing: textView.font?.pointSize))"
+        )
+
+        guard let scrollView = firstScrollView(in: hosting) else {
+            Issue.record("expected a mounted NSScrollView for the .singleLine card")
+            return
+        }
+        #expect(
+            abs(scrollView.frame.width - CGFloat(injectedWidth)) < 0.5,
+            "expected the mounted field's width to reflect the injected tuning (\(injectedWidth)pt), got \(scrollView.frame.width)"
+        )
+
+        // Sanity: the injected values are NOT the enum's own defaults, so
+        // this test can't pass by accident just because the palette reads
+        // ANY value off `ComposerSingleLineTuning` — it has to read the
+        // ISOLATED suite specifically.
+        #expect(injectedFieldSize != Double(ComposerSingleLineTuning.defaultFieldSize))
+        #expect(injectedWidth != Double(ComposerSingleLineTuning.defaultWidth))
+    }
 }

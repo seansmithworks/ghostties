@@ -4,12 +4,14 @@
 
 Sean, after live-testing R11: typewriter position "just not landing"; single-line may be the best option for now, but feels small.
 
-- [ ] R12.1 DialKit (`mikelikesdesign/dialkit-ios`, MIT, macOS 14+) as the DEBUG tuning surface; app floor stays macOS 13
-- [ ] R12.2 Single-line: bigger text + bigger container (dials)
-- [ ] R12.3 Single-line: shadow presets + dials (radius, length/offset, opacity)
-- [ ] R12.4 Liquid Glass treatment option (macOS 26+, falls back to material)
-- [ ] R12.5 Zero-chrome: center-aligned text option, "one last ditch effort"
-- [ ] R12.6 Separate reviewer on the R12 diff
+- [ ] R12.1 DialKit (`mikelikesdesign/dialkit-ios`, MIT, macOS 14+) as the DEBUG tuning surface; app floor stays macOS 13 — NOT done in R12 (`2e4b44c59` extended the pill instead; blockers unproven per review) → R13
+- [x] R12.2 Single-line: bigger text + bigger container (dials) — `2e4b44c59`, 22/16/680pt strawman
+- [x] R12.3 Single-line: shadow presets + dials (radius, length/offset, opacity) — Soft = shipped tokens
+- [x] R12.4 Liquid Glass treatment option (macOS 26+, falls back to material) — single-line only, not zero-chrome
+- [x] R12.5 Zero-chrome: center-aligned text option — review: centered line re-centers on every keystroke (inherent), live look decides
+- [x] R12.6 Separate reviewer on the R12 diff — pass with notes; no test proves the palette consumes `ComposerSingleLineTuning` → R13
+- [ ] R13 Real DialKit integration + palette wiring test + stale "PR-facing note" comment (`ComposerZeroChromeStyle.swift:1075`)
+- [ ] R13 gate: builders check Dev by bundle id, not process name (the name is `ghostty`)
 - [ ] R13 Ghost characters playing on the composer — options research → board → Sean picks → build
 
 ## 2026-08-31 — Composer variant G session (carried)
