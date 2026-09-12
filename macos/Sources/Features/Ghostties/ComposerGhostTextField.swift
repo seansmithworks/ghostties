@@ -861,10 +861,24 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // multiple columns (14 -> 11 -> 8 -> 0) instead of a hard
             // cutoff (see this fix set's commit body for the full scan).
             let measuredSize = ComposerGhostTextField.ghostInkSize(for: ghostText, font: ghostLabel.font ?? textView.font ?? NSFont.systemFont(ofSize: parent.fontSize))
+            let fullWidth = measuredSize.width + ComposerGhostTextField.glyphAntialiasMargin
+            // Round 11 (review): in wrap mode the field's own frame width
+            // IS the centered column width — `widthTracksTextView = true`
+            // means growing `textView.frame` (as A-F2 below does for the
+            // single-line/horizontal-scroll styles) widens the text
+            // container too, so typed text re-wraps past the 640pt column.
+            // Clip the label to the column's right edge instead of growing
+            // the field to fit it; Tab still completes the full string
+            // regardless of what's currently painted. (Flowing the
+            // overflow onto the next wrapped line was considered and
+            // rejected for this round — see round-11 report.)
+            let labelWidth = parent.wrapsAndGrows
+                ? min(fullWidth, max(0, textView.bounds.width - origin.x))
+                : fullWidth
             ghostLabel.frame = NSRect(
                 x: origin.x,
                 y: origin.y,
-                width: measuredSize.width + ComposerGhostTextField.glyphAntialiasMargin,
+                width: labelWidth,
                 height: measuredSize.height
             )
             ghostLabel.isHidden = false
@@ -873,9 +887,16 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // or a long-path ghost is clipped to zero — the text view
             // otherwise sizes itself to the used rect of the real glyphs
             // only, and the scroll view has nothing beyond that to reveal.
-            let requiredWidth = ghostLabel.frame.maxX + textView.textContainerInset.width
-            if textView.frame.width < requiredWidth {
-                textView.setFrameSize(NSSize(width: requiredWidth, height: textView.frame.height))
+            // Round 11 (review): NEVER in wrap mode — `widthTracksTextView`
+            // syncs the text container to this same frame, so growing it
+            // here re-wraps typed text past the column. Wrap mode's field
+            // width is driven by SwiftUI's column layout, not by ghost
+            // content.
+            if !parent.wrapsAndGrows {
+                let requiredWidth = ghostLabel.frame.maxX + textView.textContainerInset.width
+                if textView.frame.width < requiredWidth {
+                    textView.setFrameSize(NSSize(width: requiredWidth, height: textView.frame.height))
+                }
             }
         }
 

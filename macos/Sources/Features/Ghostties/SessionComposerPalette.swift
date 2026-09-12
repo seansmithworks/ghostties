@@ -106,7 +106,7 @@ struct SessionComposerPalette: View {
 
     /// Fix round 2, item 8: `SessionComposerOverlay` computes its own
     /// `GeometryReader` width via `ComposerZeroChromeTypography.columnFrame`
-    /// (leading edge at 0.38, 48pt gutter, clamped 480–960pt), and passes
+    /// (round 10: centered, `min(640, overlayWidth − 96)`), and passes
     /// it in — every OTHER
     /// call site (every snapshot test, `.classic`/`.singleLine`) has no
     /// overlay to measure from, so `zeroChromeMeasure` falls back to
