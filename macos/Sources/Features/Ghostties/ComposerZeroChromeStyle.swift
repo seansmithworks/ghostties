@@ -689,6 +689,237 @@ enum ComposerZeroChromeTypography {
     }
 }
 
+// MARK: - Single-line tuning (round 12, session-7 brief, 2026-09-12)
+//
+// Sean, live look round 11: the single-line style "isn't landing" for
+// zero-chrome, so single-line is the near-term default candidate — but it
+// "feels small." These three dials (field text size, row/status text size,
+// container width) are Sean-tunable STRAWMEN, not DESIGN.md values — see
+// this file's header MARK for why they live behind `@AppStorage` instead of
+// a DESIGN.md edit. `.zeroChrome`/`.classic` never read any of these keys.
+
+/// `.singleLine`'s field text size, row/status text size, and container
+/// width — each independently tunable. Container height and horizontal/
+/// vertical padding SCALE from `fieldSize` (`lineHeight`/`verticalPadding`/
+/// `horizontalPadding` below) rather than being separate dials, so tuning
+/// text size alone can't desync the two — exactly the class of bug a
+/// second, uncoupled "container height" dial would invite.
+enum ComposerSingleLineTuning {
+    static let fieldSizeStorageKey = "ghostties.composerSingleLineFieldSize"
+    static let rowSizeStorageKey = "ghostties.composerSingleLineRowSize"
+    static let widthStorageKey = "ghostties.composerSingleLineWidth"
+
+    /// Strawman defaults (brief §2, round 12, "feels small" → bigger):
+    /// 15→22pt field text, 13→16pt row/status text, 512→680pt width. The
+    /// PRIOR fixed constants (15pt field, 11pt status, 512pt width) are
+    /// preserved as the dial's floor, not deleted — Sean can dial back down
+    /// to them live.
+    static let defaultFieldSize: CGFloat = 22
+    static let defaultRowSize: CGFloat = 16
+    static let defaultWidth: CGFloat = 680
+
+    static let fieldSizeRange: ClosedRange<Double> = 15...28
+    static let rowSizeRange: ClosedRange<Double> = 11...20
+    static let widthRange: ClosedRange<Double> = 480...760
+
+    static func fieldSize(defaults: UserDefaults = .standard) -> CGFloat {
+        let stored = defaults.object(forKey: fieldSizeStorageKey) as? Double
+        return CGFloat(stored ?? Double(defaultFieldSize))
+    }
+
+    static func rowSize(defaults: UserDefaults = .standard) -> CGFloat {
+        let stored = defaults.object(forKey: rowSizeStorageKey) as? Double
+        return CGFloat(stored ?? Double(defaultRowSize))
+    }
+
+    static func width(defaults: UserDefaults = .standard) -> CGFloat {
+        let stored = defaults.object(forKey: widthStorageKey) as? Double
+        return CGFloat(stored ?? Double(defaultWidth))
+    }
+
+    /// Preserves the shipped 15pt→38pt relationship (a fixed +23pt) rather
+    /// than a fresh ratio — at the old 15pt default this returns exactly 38,
+    /// the byte-identical prior constant.
+    static func lineHeight(fieldSize: CGFloat) -> CGFloat { fieldSize + 23 }
+
+    /// Preserves the shipped 15pt→(8pt vertical / 16pt horizontal) padding
+    /// ratio — scales proportionally with `fieldSize` off that same 15pt
+    /// anchor.
+    static func verticalPadding(fieldSize: CGFloat) -> CGFloat { 8 * (fieldSize / 15) }
+    static func horizontalPadding(fieldSize: CGFloat) -> CGFloat { 16 * (fieldSize / 15) }
+}
+
+/// Shadow preset for `.singleLine` (brief §3). Each preset writes tasteful
+/// strawman values into the three underlying dials
+/// (`ComposerSingleLineShadowDials`) so Sean can pick a starting point, then
+/// keep tuning those same three dials by hand without the preset silently
+/// overwriting his edits on every render (a preset only WRITES on
+/// selection, never re-applies on read).
+enum ComposerSingleLineShadowPreset: String, CaseIterable {
+    case none
+    case soft
+    case lifted
+    case long
+
+    static let storageKey = "ghostties.composerSingleLineShadowPreset"
+
+    /// Default `.soft` matches `WorkspaceLayout.composerModalShadow*`
+    /// exactly (24pt radius, 8pt y, 0.30 opacity) — the shipped `.singleLine`
+    /// shadow, unchanged, until Sean picks a different preset.
+    static func current(defaults: UserDefaults = .standard) -> ComposerSingleLineShadowPreset {
+        guard let raw = defaults.string(forKey: storageKey),
+              let preset = ComposerSingleLineShadowPreset(rawValue: raw) else {
+            return .soft
+        }
+        return preset
+    }
+
+    var dialValues: (radius: CGFloat, yOffset: CGFloat, opacity: Double) {
+        switch self {
+        case .none: return (0, 0, 0)
+        case .soft: return (WorkspaceLayout.composerModalShadowRadius, WorkspaceLayout.composerModalShadowYOffset, WorkspaceLayout.composerModalShadowOpacity)
+        case .lifted: return (32, 16, 0.30)
+        case .long: return (48, 32, 0.22)
+        }
+    }
+}
+
+/// The three shadow dials a preset seeds — independently tunable afterward.
+/// `current` reads the live dial values (defaulting to `.soft`'s, the
+/// shipped look, when nothing has been written yet).
+enum ComposerSingleLineShadowDials {
+    static let radiusStorageKey = "ghostties.composerSingleLineShadowRadius"
+    static let yOffsetStorageKey = "ghostties.composerSingleLineShadowYOffset"
+    static let opacityStorageKey = "ghostties.composerSingleLineShadowOpacity"
+
+    static func radius(defaults: UserDefaults = .standard) -> CGFloat {
+        guard let stored = defaults.object(forKey: radiusStorageKey) as? Double else {
+            return ComposerSingleLineShadowPreset.soft.dialValues.radius
+        }
+        return CGFloat(stored)
+    }
+
+    static func yOffset(defaults: UserDefaults = .standard) -> CGFloat {
+        guard let stored = defaults.object(forKey: yOffsetStorageKey) as? Double else {
+            return ComposerSingleLineShadowPreset.soft.dialValues.yOffset
+        }
+        return CGFloat(stored)
+    }
+
+    static func opacity(defaults: UserDefaults = .standard) -> Double {
+        defaults.object(forKey: opacityStorageKey) as? Double ?? ComposerSingleLineShadowPreset.soft.dialValues.opacity
+    }
+
+    /// Writes a preset's three values into the dials — the picker's only
+    /// action; the dials themselves are what every render actually reads.
+    static func apply(_ preset: ComposerSingleLineShadowPreset, defaults: UserDefaults = .standard) {
+        let values = preset.dialValues
+        defaults.set(Double(values.radius), forKey: radiusStorageKey)
+        defaults.set(Double(values.yOffset), forKey: yOffsetStorageKey)
+        defaults.set(values.opacity, forKey: opacityStorageKey)
+    }
+}
+
+/// `.singleLine`'s chrome treatment (brief §4): `.material` is the shipped
+/// `.regularMaterial` + `windowBackgroundColor` blend, unchanged; `.glass`
+/// uses AppKit's real Liquid Glass API, `NSGlassEffectView` — SwiftUI has no
+/// `glassEffect` modifier in this SDK (checked directly against
+/// `MacOSX26.5.sdk`'s `SwiftUI.swiftinterface`: only `GlassButtonStyle`/
+/// `GlassProminentButtonStyle` exist there); `NSGlassEffectView` is the
+/// SAME class `TerminalViewContainer.swift` already ships behind, gated the
+/// same way (`#if compiler(>=6.2)` + `@available(macOS 26.0, *)`). See
+/// `ComposerLiquidGlassBackground` below for the `NSViewRepresentable`
+/// wrapper and `SessionComposerPalette.singleLineComposerCard`'s call site
+/// for the macOS-26-and-below fallback (`.material`, always —
+/// `decision_align-to-upstream-degrade-gracefully`: never raise the floor
+/// for a fork feature).
+enum ComposerSingleLineTreatment: String, CaseIterable {
+    case material
+    case glass
+
+    static let storageKey = "ghostties.composerSingleLineTreatment"
+
+    static func current(defaults: UserDefaults = .standard) -> ComposerSingleLineTreatment {
+        guard let raw = defaults.string(forKey: storageKey),
+              let treatment = ComposerSingleLineTreatment(rawValue: raw) else {
+            return .material
+        }
+        return treatment
+    }
+}
+
+/// Which background layer `.singleLine` actually paints, given the picked
+/// treatment AND whether `NSGlassEffectView` is available at runtime. Pulled
+/// out as a pure function (rather than inlining `treatment == .glass, #available(...)`
+/// at the call site alone) SPECIFICALLY so the fallback rule is unit-testable
+/// without needing to fake the OS version at runtime — `glassAvailable` is
+/// the one thing a test can set directly; `SessionComposerPalette
+/// .isGlassTreatmentAvailable` is the only production call site that
+/// resolves it from a real `#available` check.
+enum ComposerSingleLineBackgroundChoice: Equatable {
+    case glass
+    case material
+
+    static func resolve(treatment: ComposerSingleLineTreatment, glassAvailable: Bool) -> ComposerSingleLineBackgroundChoice {
+        (treatment == .glass && glassAvailable) ? .glass : .material
+    }
+}
+
+#if compiler(>=6.2)
+/// Thin `NSViewRepresentable` wrapper around `NSGlassEffectView`
+/// (`TerminalViewContainer.TerminalGlassView`'s same underlying class) so
+/// `.singleLine`'s SwiftUI card can use it as a `.background(...)` layer.
+/// macOS 26+ only, matching the class itself.
+@available(macOS 26.0, *)
+struct ComposerLiquidGlassBackground: NSViewRepresentable {
+    var cornerRadius: CGFloat
+    var tintColor: NSColor
+
+    func makeNSView(context: Context) -> NSGlassEffectView {
+        let view = NSGlassEffectView()
+        view.cornerRadius = cornerRadius
+        view.tintColor = tintColor
+        return view
+    }
+
+    func updateNSView(_ nsView: NSGlassEffectView, context: Context) {
+        nsView.cornerRadius = cornerRadius
+        nsView.tintColor = tintColor
+    }
+}
+#endif
+
+// MARK: - Zero-chrome alignment (round 12, "one last ditch effort")
+//
+// Sean, round 11 debrief: the typewriter position "isn't landing" —
+// centering the column's own TEXT (not just the column itself, which is
+// already centered per round 10) is the one layout variant not yet tried.
+// `.left` is the shipped, unchanged default; `.center` centers the typed
+// text, caret, ghost suggestion, and wrapped lines together by setting
+// `NSTextView.alignment` (which `firstRect(forCharacterRange:)` — the
+// single source `ComposerGhostTextField.applyStyles()` already uses to
+// place the ghost label in `wrapsAndGrows` mode — follows automatically,
+// with NO separate ghost-position math needed for centered text).
+enum ComposerZeroChromeAlignment: String, CaseIterable {
+    case left
+    case center
+
+    static let storageKey = "ghostties.composerZeroChromeAlignment"
+
+    static func current(defaults: UserDefaults = .standard) -> ComposerZeroChromeAlignment {
+        guard let raw = defaults.string(forKey: storageKey),
+              let alignment = ComposerZeroChromeAlignment(rawValue: raw) else {
+            return .left
+        }
+        return alignment
+    }
+
+    var zstackAlignment: Alignment { self == .center ? .center : .leading }
+    var frameAlignment: Alignment { self == .center ? .center : .leading }
+    var multilineAlignment: TextAlignment { self == .center ? .center : .leading }
+    var nsTextAlignment: NSTextAlignment { self == .center ? .center : .left }
+}
+
 // MARK: - DEBUG-only live tuning control (session-7 brief, 2026-09-11)
 //
 // Sean, live look: "a little view control just for me to kinda bounce back
@@ -703,6 +934,21 @@ struct ComposerDebugTuningControl: View {
     @AppStorage private var materialRaw: String
     @AppStorage private var focalBlurRaw: String
     @AppStorage private var fogEnabled: Bool
+    @AppStorage private var zeroChromeAlignmentRaw: String
+    @AppStorage private var singleLineFieldSize: Double
+    @AppStorage private var singleLineRowSize: Double
+    @AppStorage private var singleLineWidth: Double
+    @AppStorage private var singleLineShadowPresetRaw: String
+    @AppStorage private var singleLineShadowRadius: Double
+    @AppStorage private var singleLineShadowYOffset: Double
+    @AppStorage private var singleLineShadowOpacity: Double
+    @AppStorage private var singleLineTreatmentRaw: String
+
+    /// Round 12: kept so `ComposerSingleLineShadowDials.apply` writes to the
+    /// SAME `UserDefaults` instance this control's own `@AppStorage`
+    /// properties read from (production `.standard`, or a test's isolated
+    /// suite) — never a second, un-synced write target.
+    private let defaults: UserDefaults
 
     /// Called after any knob write, so the caller can return keyboard focus
     /// to the composer's search field — this control must never leave focus
@@ -718,6 +964,16 @@ struct ComposerDebugTuningControl: View {
         _materialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.medium.rawValue, ComposerZeroChromeMaterial.storageKey, store: defaults)
         _focalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.regular.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: defaults)
         _fogEnabled = AppStorage(wrappedValue: true, ComposerZeroChromeFogSetting.storageKey, store: defaults)
+        _zeroChromeAlignmentRaw = AppStorage(wrappedValue: ComposerZeroChromeAlignment.left.rawValue, ComposerZeroChromeAlignment.storageKey, store: defaults)
+        _singleLineFieldSize = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultFieldSize), ComposerSingleLineTuning.fieldSizeStorageKey, store: defaults)
+        _singleLineRowSize = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultRowSize), ComposerSingleLineTuning.rowSizeStorageKey, store: defaults)
+        _singleLineWidth = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultWidth), ComposerSingleLineTuning.widthStorageKey, store: defaults)
+        _singleLineShadowPresetRaw = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.soft.rawValue, ComposerSingleLineShadowPreset.storageKey, store: defaults)
+        _singleLineShadowRadius = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.soft.dialValues.radius), ComposerSingleLineShadowDials.radiusStorageKey, store: defaults)
+        _singleLineShadowYOffset = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.soft.dialValues.yOffset), ComposerSingleLineShadowDials.yOffsetStorageKey, store: defaults)
+        _singleLineShadowOpacity = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.soft.dialValues.opacity, ComposerSingleLineShadowDials.opacityStorageKey, store: defaults)
+        _singleLineTreatmentRaw = AppStorage(wrappedValue: ComposerSingleLineTreatment.material.rawValue, ComposerSingleLineTreatment.storageKey, store: defaults)
+        self.defaults = defaults
         self.onChange = onChange
     }
 
@@ -755,6 +1011,81 @@ struct ComposerDebugTuningControl: View {
         )
     }
 
+    /// Round 12: zero-chrome's "one last ditch effort" alignment knob.
+    var zeroChromeAlignment: Binding<ComposerZeroChromeAlignment> {
+        Binding(
+            get: { ComposerZeroChromeAlignment(rawValue: zeroChromeAlignmentRaw) ?? .left },
+            set: { zeroChromeAlignmentRaw = $0.rawValue; onChange() }
+        )
+    }
+
+    var singleLineFieldSizeBinding: Binding<Double> {
+        Binding(get: { singleLineFieldSize }, set: { singleLineFieldSize = $0; onChange() })
+    }
+
+    var singleLineRowSizeBinding: Binding<Double> {
+        Binding(get: { singleLineRowSize }, set: { singleLineRowSize = $0; onChange() })
+    }
+
+    var singleLineWidthBinding: Binding<Double> {
+        Binding(get: { singleLineWidth }, set: { singleLineWidth = $0; onChange() })
+    }
+
+    /// Round 12: selecting a preset WRITES the three shadow dials once
+    /// (`ComposerSingleLineShadowDials.apply`) — it does not stay "live
+    /// bound" to the preset afterward, so tuning a dial post-selection
+    /// never gets silently overwritten by this picker re-asserting itself.
+    var singleLineShadowPreset: Binding<ComposerSingleLineShadowPreset> {
+        Binding(
+            get: { ComposerSingleLineShadowPreset(rawValue: singleLineShadowPresetRaw) ?? .soft },
+            set: { newValue in
+                singleLineShadowPresetRaw = newValue.rawValue
+                ComposerSingleLineShadowDials.apply(newValue, defaults: defaults)
+                let values = newValue.dialValues
+                singleLineShadowRadius = Double(values.radius)
+                singleLineShadowYOffset = Double(values.yOffset)
+                singleLineShadowOpacity = values.opacity
+                onChange()
+            }
+        )
+    }
+
+    var singleLineShadowRadiusBinding: Binding<Double> {
+        Binding(get: { singleLineShadowRadius }, set: { singleLineShadowRadius = $0; onChange() })
+    }
+
+    var singleLineShadowYOffsetBinding: Binding<Double> {
+        Binding(get: { singleLineShadowYOffset }, set: { singleLineShadowYOffset = $0; onChange() })
+    }
+
+    var singleLineShadowOpacityBinding: Binding<Double> {
+        Binding(get: { singleLineShadowOpacity }, set: { singleLineShadowOpacity = $0; onChange() })
+    }
+
+    var singleLineTreatment: Binding<ComposerSingleLineTreatment> {
+        Binding(
+            get: { ComposerSingleLineTreatment(rawValue: singleLineTreatmentRaw) ?? .material },
+            set: { singleLineTreatmentRaw = $0.rawValue; onChange() }
+        )
+    }
+
+    /// Round 12: a labeled `Slider` row, the DEBUG pill's stand-in for a
+    /// continuous dial (`Picker` only fits discrete choices, used
+    /// everywhere else in this control). This is exactly the fallback the
+    /// brief's DialKit timebox calls for — see this file's PR-facing note
+    /// on why DialKit itself isn't wired in on this branch.
+    @ViewBuilder
+    private func dialRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, format: String) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+            Slider(value: value, in: range)
+                .frame(width: 90)
+            Text(String(format: format, value.wrappedValue))
+                .frame(width: 40, alignment: .trailing)
+                .monospacedDigit()
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Picker("Style", selection: style) {
@@ -782,6 +1113,30 @@ struct ComposerDebugTuningControl: View {
                 Picker("Fog", selection: fog) {
                     Text("On").tag(true)
                     Text("Off").tag(false)
+                }
+                Picker("Alignment", selection: zeroChromeAlignment) {
+                    Text("Left").tag(ComposerZeroChromeAlignment.left)
+                    Text("Center").tag(ComposerZeroChromeAlignment.center)
+                }
+            }
+            // Round 12: single-line-only dials, same show/hide pattern as
+            // the zero-chrome-only pickers above.
+            if style.wrappedValue == .singleLine {
+                dialRow("Field size", value: singleLineFieldSizeBinding, range: ComposerSingleLineTuning.fieldSizeRange, format: "%.0fpt")
+                dialRow("Row size", value: singleLineRowSizeBinding, range: ComposerSingleLineTuning.rowSizeRange, format: "%.0fpt")
+                dialRow("Width", value: singleLineWidthBinding, range: ComposerSingleLineTuning.widthRange, format: "%.0fpt")
+                Picker("Shadow", selection: singleLineShadowPreset) {
+                    Text("None").tag(ComposerSingleLineShadowPreset.none)
+                    Text("Soft").tag(ComposerSingleLineShadowPreset.soft)
+                    Text("Lifted").tag(ComposerSingleLineShadowPreset.lifted)
+                    Text("Long").tag(ComposerSingleLineShadowPreset.long)
+                }
+                dialRow("Shadow radius", value: singleLineShadowRadiusBinding, range: 0...64, format: "%.0f")
+                dialRow("Shadow length", value: singleLineShadowYOffsetBinding, range: 0...64, format: "%.0f")
+                dialRow("Shadow opacity", value: singleLineShadowOpacityBinding, range: 0...0.6, format: "%.2f")
+                Picker("Treatment", selection: singleLineTreatment) {
+                    Text("Material").tag(ComposerSingleLineTreatment.material)
+                    Text("Liquid Glass").tag(ComposerSingleLineTreatment.glass)
                 }
             }
         }

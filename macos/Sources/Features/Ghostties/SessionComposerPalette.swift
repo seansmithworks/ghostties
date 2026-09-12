@@ -409,6 +409,15 @@ struct SessionComposerPalette: View {
         RoundedRectangle(cornerRadius: cornerRadius, style: cornerStyle)
     }
 
+    /// Round 12: the one production call site that resolves `NSGlassEffect
+    /// View`'s real runtime availability — see `ComposerSingleLineBackground
+    /// Choice`'s doc comment for why the SELECTION rule itself lives in a
+    /// separate, unit-testable pure function instead of being inlined here.
+    private var isGlassTreatmentAvailable: Bool {
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+
     private var isProjectLocked: Bool {
         if case .locked = request.projectBinding { return true }
         return false
@@ -1775,21 +1784,39 @@ struct SessionComposerPalette: View {
     /// rest-state hint text instead of the field's own placeholder ghost
     /// (which would otherwise always show the chevron path first, the
     /// thing Sean's rule forbids).
-    private static let composerNewStyleFieldWidth: CGFloat = 480 + 16 * 2 // 512pt — `.singleLine` only as of fix round 2 item 8
-
-    /// Fix round 2, item 8: `.zeroChrome` reads
-    /// `ComposerZeroChromeTypography` (32/44pt); `.singleLine`/`.classic`
-    /// keep the original 15/38pt DESIGN.md §3 scale, unchanged.
+    /// Round 12: `.singleLine`'s field text size, row size, and container
+    /// width are now live dials (`ComposerSingleLineTuning`) — the prior
+    /// fixed 512pt width constant this replaced is gone; see that enum's
+    /// doc comment for the exact ratios it preserves from the old fixed
+    /// 15pt/512pt/8pt/16pt numbers.
+    ///
+    /// `.zeroChrome` reads `ComposerZeroChromeTypography` (32/44pt,
+    /// unchanged). `.singleLine` reads the round 12 tuning dial
+    /// (`ComposerSingleLineTuning`, default 22pt, strawman "bigger" per
+    /// Sean's round 11 debrief). `.classic` keeps the original 15pt
+    /// DESIGN.md §3 scale, unchanged.
     private var newStyleFieldFontSize: CGFloat {
-        activeStyle == .zeroChrome ? ComposerZeroChromeTypography.fieldSize : 15
+        switch activeStyle {
+        case .zeroChrome: return ComposerZeroChromeTypography.fieldSize
+        case .singleLine: return ComposerSingleLineTuning.fieldSize()
+        case .classic: return 15
+        }
     }
 
     private var newStyleFieldLineHeight: CGFloat {
-        activeStyle == .zeroChrome ? ComposerZeroChromeTypography.fieldLineHeight : 38
+        switch activeStyle {
+        case .zeroChrome: return ComposerZeroChromeTypography.fieldLineHeight
+        case .singleLine: return ComposerSingleLineTuning.lineHeight(fieldSize: ComposerSingleLineTuning.fieldSize())
+        case .classic: return 38
+        }
     }
 
     private var newStyleFieldWidth: CGFloat {
-        activeStyle == .zeroChrome ? zeroChromeMeasure : 480
+        switch activeStyle {
+        case .zeroChrome: return zeroChromeMeasure
+        case .singleLine: return ComposerSingleLineTuning.width()
+        case .classic: return 480
+        }
     }
 
     /// Round 10: `.zeroChrome`'s field wraps and grows up to
@@ -1829,8 +1856,15 @@ struct SessionComposerPalette: View {
         zeroChromeDescriptorHeight = capped
     }
 
+    /// Round 12 ("one last ditch effort"): `.zeroChrome` only — `.left`
+    /// (unchanged) or `.center`, tunable live via the DEBUG pill's
+    /// `Alignment` picker. `.singleLine`/`.classic` always render `.left`.
+    private var newStyleAlignment: ComposerZeroChromeAlignment {
+        activeStyle == .zeroChrome ? ComposerZeroChromeAlignment.current() : .left
+    }
+
     private var newStyleField: some View {
-        ZStack(alignment: .leading) {
+        ZStack(alignment: newStyleAlignment.zstackAlignment) {
             ComposerDescriptorGhostText(
                 descriptors: ComposerDescriptorCycle.descriptors(
                     mostRecentProjectName: currentProject?.name,
@@ -1841,16 +1875,18 @@ struct SessionComposerPalette: View {
                 reduceMotion: reduceMotionEnabled
             )
             .font(
-                activeStyle == .zeroChrome
-                    ? .system(size: ComposerZeroChromeTypography.fieldSize, weight: ComposerZeroChromeTypography.fieldWeight)
-                    : .system(size: 15)
+                .system(
+                    size: newStyleFieldFontSize,
+                    weight: activeStyle == .zeroChrome ? ComposerZeroChromeTypography.fieldWeight : .regular
+                )
             )
+            .multilineTextAlignment(newStyleAlignment.multilineAlignment)
             .allowsHitTesting(false)
             // Round 10: the descriptor wraps within the column width
             // (plain SwiftUI `Text` word-wraps by default; no lineLimit
             // is set anywhere on this view) instead of assuming one line —
             // measured here so the anchor math above can react to it.
-            .frame(width: newStyleFieldWidth, alignment: .leading)
+            .frame(width: newStyleFieldWidth, alignment: newStyleAlignment.frameAlignment)
             .fixedSize(horizontal: false, vertical: true)
             .background(
                 GeometryReader { proxy in
@@ -1873,6 +1909,10 @@ struct SessionComposerPalette: View {
                 // `.singleLine`/`.classic` never set this, keeping their
                 // horizontally-scrolling single-line field byte-identical.
                 wrapsAndGrows: activeStyle == .zeroChrome,
+                // Round 12: `.center` only ever applies in `.zeroChrome`
+                // (`newStyleAlignment` above); `.singleLine`/`.classic`
+                // always pass `.left`, this field's prior, only alignment.
+                textAlignment: newStyleAlignment.nsTextAlignment,
                 measuredHeight: $zeroChromeFieldTextHeight
             ) { event in
                 handle(event)
@@ -1912,11 +1952,23 @@ struct SessionComposerPalette: View {
     /// Status strip: the one thing that stays loud in both new styles
     /// (brief §1) — rendered only when non-nil, red, directly beneath the
     /// field.
+    private var newStyleStatusStripSize: CGFloat {
+        switch activeStyle {
+        case .zeroChrome: return ComposerZeroChromeTypography.statusStripSize
+        case .singleLine: return ComposerSingleLineTuning.rowSize()
+        case .classic: return 11
+        }
+    }
+
     @ViewBuilder
     private var newStyleStatusStrip: some View {
         if let newStyleStatusStripMessage {
+            // Round 12: `.singleLine`'s status/row text now reads the
+            // `ComposerSingleLineTuning.rowSize` dial (default 16pt, was
+            // the fixed 11pt this ternary used to fall through to) — the
+            // "row text 13→16pt" strawman from the brief's item 2.
             Text(newStyleStatusStripMessage)
-                .font(.system(size: activeStyle == .zeroChrome ? ComposerZeroChromeTypography.statusStripSize : 11))
+                .font(.system(size: newStyleStatusStripSize))
                 .foregroundStyle(Color(nsColor: .systemRed))
                 .padding(.top, activeStyle == .zeroChrome ? ComposerZeroChromeTypography.statusStripTopOffset : 0)
         }
@@ -2044,36 +2096,77 @@ struct SessionComposerPalette: View {
 
     // MARK: - Single-line style (spike)
 
+    /// Round 12: container padding scales off the field-size dial —
+    /// `ComposerSingleLineTuning.verticalPadding`/`horizontalPadding`'s doc
+    /// comment has the exact ratio this preserves from the shipped 8pt/16pt
+    /// constants.
+    private var singleLineVerticalPadding: CGFloat {
+        ComposerSingleLineTuning.verticalPadding(fieldSize: ComposerSingleLineTuning.fieldSize())
+    }
+
+    private var singleLineHorizontalPadding: CGFloat {
+        ComposerSingleLineTuning.horizontalPadding(fieldSize: ComposerSingleLineTuning.fieldSize())
+    }
+
     /// Current card chrome exactly as DESIGN.md §4 specifies
     /// (`.regularMaterial` + `windowBackgroundColor` blend, 12pt continuous
     /// radius, stroke, shadow tokens), sized to the field row only — no
     /// results list ever (brief §3). Reuses `composerClipShape` and the
-    /// classic card's shadow tokens rather than re-deriving them.
+    /// classic card's shadow tokens rather than re-deriving them. Round 12:
+    /// width/padding are now dial-driven (see the two properties above and
+    /// `newStyleFieldWidth`'s `.singleLine` case), and the whole chrome
+    /// layer branches on `ComposerSingleLineTreatment` — `.material` is
+    /// this same background/clip/stroke, byte-identical; `.glass` swaps in
+    /// `NSGlassEffectView` (via `ComposerLiquidGlassBackground`) on macOS
+    /// 26+ only, falling back to `.material` below that (never raising the
+    /// macOS 13 floor for a fork feature, per
+    /// `decision_align-to-upstream-degrade-gracefully`).
     private var singleLineComposerCard: some View {
         let backgroundColor = Color(nsColor: .windowBackgroundColor)
-        return VStack(alignment: .leading, spacing: 8) {
+        let content = VStack(alignment: .leading, spacing: 8) {
             newStyleField
             newStyleStatusStrip
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 16)
-        .frame(width: Self.composerNewStyleFieldWidth)
-        .background(
-            ZStack {
-                Rectangle().fill(.regularMaterial)
-                Rectangle().fill(backgroundColor).blendMode(.color)
+        .padding(.vertical, singleLineVerticalPadding)
+        .padding(.horizontal, singleLineHorizontalPadding)
+        .frame(width: newStyleFieldWidth)
+
+        let materialBackground = content
+            .background(
+                ZStack {
+                    Rectangle().fill(.regularMaterial)
+                    Rectangle().fill(backgroundColor).blendMode(.color)
+                }
+                .compositingGroup()
+            )
+            .clipShape(composerClipShape)
+            .overlay(
+                composerClipShape
+                    .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
+            )
+
+        return Group {
+            #if compiler(>=6.2)
+            if ComposerSingleLineBackgroundChoice.resolve(
+                treatment: ComposerSingleLineTreatment.current(),
+                glassAvailable: isGlassTreatmentAvailable
+            ) == .glass, #available(macOS 26.0, *) {
+                content
+                    .background(
+                        ComposerLiquidGlassBackground(cornerRadius: cornerRadius, tintColor: .windowBackgroundColor)
+                    )
+                    .clipShape(composerClipShape)
+            } else {
+                materialBackground
             }
-            .compositingGroup()
-        )
-        .clipShape(composerClipShape)
-        .overlay(
-            composerClipShape
-                .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
-        )
+            #else
+            materialBackground
+            #endif
+        }
         .shadow(
-            color: .black.opacity(WorkspaceLayout.composerModalShadowOpacity),
-            radius: WorkspaceLayout.composerModalShadowRadius,
-            y: WorkspaceLayout.composerModalShadowYOffset
+            color: .black.opacity(ComposerSingleLineShadowDials.opacity()),
+            radius: ComposerSingleLineShadowDials.radius(),
+            y: ComposerSingleLineShadowDials.yOffset()
         )
         .modifier(ShakeEffect(animatableData: shakeTrigger))
     }

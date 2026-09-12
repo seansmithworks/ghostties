@@ -150,6 +150,16 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// byte-for-byte (see `makeNSView`'s branch below).
     var wrapsAndGrows: Bool = false
 
+    /// Round 12 (zero-chrome "one last ditch effort" centering): `.left`
+    /// (unchanged) or `.center` — sets `NSTextView.alignment` directly.
+    /// `applyStyles()`'s ghost-label placement needs NO separate branch for
+    /// this: in `wrapsAndGrows` mode it already reads the caret's real
+    /// on-screen position via `firstRect(forCharacterRange:)`, which
+    /// reflects whatever alignment TextKit actually laid the line out
+    /// with — see that method's doc comment. `.classic`/`.singleLine`
+    /// always pass `.left`, this field's only alignment before this round.
+    var textAlignment: NSTextAlignment = .left
+
     /// Round 10: the field's own laid-out content height — one
     /// `ComposerZeroChromeTypography.fieldLineHeight` per wrapped line,
     /// capped at `maxFieldLines` — written back to SwiftUI so the caller's
@@ -170,6 +180,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         isPickerOpen: Bool,
         ghostFullPath: String,
         wrapsAndGrows: Bool = false,
+        textAlignment: NSTextAlignment = .left,
         measuredHeight: Binding<CGFloat> = .constant(ComposerZeroChromeTypography.fieldLineHeight),
         onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)? = nil
     ) {
@@ -182,6 +193,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         self.isPickerOpen = isPickerOpen
         self.ghostFullPath = ghostFullPath
         self.wrapsAndGrows = wrapsAndGrows
+        self.textAlignment = textAlignment
         self._measuredHeight = measuredHeight
         self.onEvent = onEvent
     }
@@ -444,6 +456,11 @@ struct ComposerGhostTextField: NSViewRepresentable {
         // always computed against it.
         textView.font = NSFont.systemFont(ofSize: fontSize, weight: fontWeight)
         textView.textColor = .labelColor
+        // Round 12: set BEFORE any text is inserted (`setText` below) so the
+        // typing attributes' paragraph style already carries this alignment
+        // for the very first character, not just ones typed after a later
+        // `updateNSView` pass.
+        textView.alignment = textAlignment
 
         if wrapsAndGrows {
             // No single-line centering inset — each wrapped line uses the
@@ -512,6 +529,12 @@ struct ComposerGhostTextField: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.parent = self
         guard let textView = context.coordinator.textView else { return }
+
+        // Round 12: the live pill can flip alignment while the field is
+        // mounted (Sean tuning by eye) — keep it in sync every update.
+        if textView.alignment != textAlignment {
+            textView.alignment = textAlignment
+        }
 
         // A-F14: never write the binding — or run the styling pass — into a
         // live IME composition session.
