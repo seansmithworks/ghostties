@@ -14,10 +14,14 @@ Before capturing anything, run:
 This is the one command an agent or Sean should run as preflight. It resolves
 the newest release tag on `SeanSmithWorks/ghostties`, compares it against the
 installed demo app's version, calls `refresh-demo.sh` only if they differ,
-always reseeds the fixture workspace via `seed-demo-workspace.sh`, and writes
-a manifest recording exactly what's on disk. `refresh-demo.sh` and
-`seed-demo-workspace.sh` are the pieces it calls — call them directly only
-when working on the rig itself.
+always reseeds the fixture workspace via `seed-demo-workspace.sh`, stages
+demo agent sessions via the same logic `demo-drive.sh` uses (since reseeding
+always wipes any previously staged sessions), and writes a manifest recording
+exactly what's on disk. `refresh-demo.sh`, `seed-demo-workspace.sh`, and
+`demo-drive.sh` are the pieces it builds on — call them directly only when
+working on the rig itself. "Ready" means all of: app current, fixtures
+seeded, fixture repos trusted, AND sessions staged — `--check` verifies all
+four.
 
 ```bash
 ./scripts/demo/demo-ready.sh --check     # assert freshness; exits non-zero if stale/missing, never changes the app
@@ -52,6 +56,17 @@ already trusted, and re-reads the file afterward to confirm the write stuck.
 `demo-ready.sh --check` treats a missing or `false` trust entry as not ready
 (non-zero exit), so a concurrent Claude Code process rewriting the config
 can't silently drop the entries without the preflight catching it.
+
+### Staged sessions
+
+`demo-ready.sh --check` also treats a missing or short-staffed set of staged
+sessions (fewer than `demo-drive.sh`'s own default `--count`) as not ready.
+This exists because `seed-demo-workspace.sh` always writes a fresh,
+session-free `workspace.json` — a reseed with no restaging would otherwise
+leave `--check` reporting "ready" for a demo with nothing to capture. The
+non-`--check` path re-stages sessions via `_stage-demo-sessions.sh` (shared
+with `demo-drive.sh`, so the two never drift) every time it runs, after
+seeding and fixture trust.
 
 ## How isolation works
 
@@ -129,6 +144,14 @@ osascript -e 'tell application "Ghostties Demo" to quit'
 
 It detects a running instance via `osascript`/System Events by bundle ID —
 querying only, never used to quit or drive the app.
+
+The actual write is delegated to `_stage-demo-sessions.sh`, an internal
+script also called by `demo-ready.sh` — `demo-drive.sh` owns the
+user-facing preconditions (readiness check, "is the app running") and stays
+a standalone entrypoint; `demo-ready.sh` calls the shared writer directly
+instead of calling `demo-drive.sh`, to avoid a
+demo-ready → demo-drive → demo-ready cycle through `demo-drive.sh`'s own
+`demo-ready.sh --check` precondition.
 
 Each staged session is bound to its own per-repo `AgentTemplate` whose
 command is `claude` with a short, harmless, read-only prompt (summarize the

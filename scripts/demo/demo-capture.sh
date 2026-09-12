@@ -25,7 +25,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEMO_READY_SCRIPT="$REPO_ROOT/scripts/demo/demo-ready.sh"
-DEMO_STATE_DIR="$HOME/Library/Application Support/Ghostties Demo"
+
+source "$REPO_ROOT/scripts/demo/_demo-paths.sh"
+
 MANIFEST_PATH="$DEMO_STATE_DIR/demo-manifest.json"
 
 BUILD_DIR="$REPO_ROOT/macos/build"

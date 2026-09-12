@@ -50,16 +50,14 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REFRESH_SCRIPT="$REPO_ROOT/scripts/demo/refresh-demo.sh"
 SEED_SCRIPT="$REPO_ROOT/scripts/demo/seed-demo-workspace.sh"
+STAGE_SCRIPT="$REPO_ROOT/scripts/demo/_stage-demo-sessions.sh"
 FIXTURES_DIR="$REPO_ROOT/examples/demo-workspace"
 RELEASE_REPO="SeanSmithWorks/ghostties"
 ASSET_NAME="ghostties-macos-arm64.zip"
 
-DEMO_STATE_DIR="$HOME/Library/Application Support/Ghostties Demo"
+source "$REPO_ROOT/scripts/demo/_demo-paths.sh"
+
 MANIFEST_PATH="$DEMO_STATE_DIR/demo-manifest.json"
-# Repos root lives outside $HOME so a captured terminal pane's cwd never
-# shows the real username — only the demo STATE dir (above) stays under
-# $HOME. Must match the value in seed-demo-workspace.sh and demo-drive.sh.
-REPOS_DIR="/Users/Shared/Ghostties Demo/repos"
 # Claude Code's own trust store. Overridable for fail-closed verification
 # against a scratch copy — never used against the real file in normal runs.
 CLAUDE_CONFIG="${DEMO_CLAUDE_CONFIG:-$HOME/.claude.json}"
@@ -362,11 +360,46 @@ print(f"AFTER={after_count}")
 PYEOF
 }
 
+# ── Staged sessions check: "ready" must mean sessions are staged, not just
+#    app-current + fixtures-seeded — a reseed silently wipes staged sessions
+#    (seed-demo-workspace.sh always writes a fresh, session-free
+#    workspace.json) and the preflight previously had no way to see that.
+#    Expected count is derived from DEMO_DRIVE_DEFAULT_COUNT in
+#    _demo-paths.sh, not hardcoded here.
+check_staged_sessions() {
+  local target="$DEMO_STATE_DIR/workspace.json"
+  if [[ ! -f "$target" ]]; then
+    echo "NOT READY: no workspace.json at $target — fixtures were never seeded." >&2
+    echo "           Fix: run ./scripts/demo/demo-ready.sh (without --check)." >&2
+    return 1
+  fi
+  python3 - "$target" "$DEMO_SESSION_MARKER" "$DEMO_DRIVE_DEFAULT_COUNT" <<'PYEOF'
+import sys, json
+
+target_path, marker, expected_str = sys.argv[1:4]
+expected = int(expected_str)
+
+with open(target_path) as f:
+    data = json.load(f)
+
+staged = [s for s in data.get("sessions", []) if s.get("name", "").startswith(marker)]
+if len(staged) < expected:
+    print(f"NOT READY: only {len(staged)}/{expected} staged session(s) found in {target_path} (marker '{marker}').", file=sys.stderr)
+    print("           Fix: run ./scripts/demo/demo-ready.sh (without --check) to stage sessions.", file=sys.stderr)
+    sys.exit(1)
+
+print(f"OK: {len(staged)}/{expected} staged session(s) found in {target_path}.")
+PYEOF
+}
+
 # ── --check: report only, never touch the app/fixtures — but do record what
 #             was just verified, so a passing check can't leave a stale manifest
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   if [[ "$CURRENT" -eq 1 ]]; then
     if ! check_fixture_trust; then
+      exit 1
+    fi
+    if ! check_staged_sessions; then
       exit 1
     fi
     echo "OK: Ghostties Demo is current (source: $SOURCE_LABEL, dest: $DEST_APP)."
@@ -415,6 +448,16 @@ echo "==> Verifying fixture trust..."
 if ! check_fixture_trust; then
   fail "Fixture trust verification failed after write — see message above."
 fi
+echo ""
+
+# ── Stage demo agent sessions — seeding above always wipes any previously
+#    staged sessions, so this must run every time, not just once. Calls the
+#    staging logic directly (not demo-drive.sh) to avoid a demo-ready ->
+#    demo-drive -> demo-ready cycle: demo-drive.sh checks
+#    `demo-ready.sh --check` as its own precondition, which would deadlock on
+#    a first run before any sessions exist yet to satisfy that check.
+echo "==> Staging demo agent sessions..."
+"$STAGE_SCRIPT" --count "$DEMO_DRIVE_DEFAULT_COUNT"
 echo ""
 
 # ── Write manifest ───────────────────────────────────────────────────────────

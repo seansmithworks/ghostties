@@ -33,12 +33,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FIXTURES_DIR="$REPO_ROOT/examples/demo-workspace"
 
-DEMO_DIR="$HOME/Library/Application Support/Ghostties Demo"
+source "$REPO_ROOT/scripts/demo/_demo-paths.sh"
+
+DEMO_DIR="$DEMO_STATE_DIR"
 TARGET="$DEMO_DIR/workspace.json"
-# Repos root lives outside $HOME so a captured terminal pane's cwd never
-# shows the real username — only the demo STATE dir (above) stays under
-# $HOME. Must match the value in demo-ready.sh and demo-drive.sh.
-REPOS_DIR="/Users/Shared/Ghostties Demo/repos"
 
 echo "==> Seeding Ghostties Demo workspace"
 echo "    Target: $TARGET"
