@@ -2368,6 +2368,9 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 
 **Carried (on-objective):**
 - [ ] **Finish `DemoWorkspaceCaptureUITests` so captures are post-ready.** Three defects, all visible in `output/demo-capture/demo-projects-light.png`: (1) real hostname `seansmith@Seans-MacBook-Pro` in the terminal pane — privacy leak on any post; (2) dev build badge `0.1.0 (1) · built … · up 0m` bottom-left; (3) terminal pane empty, no agent output — the dark capture is 99.6% one byte and the blank-frame guard correctly fails the run. Fix (3) by relaunching the staged sessions in-test, which is ALSO the answer to "demo loops without hand-clicking."
+- [x] Separate bundle ID for capture builds — `Ghostties` target's Debug config now resolves `PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.ghostties$(GHOSTTIES_DEV_BUNDLE_SUFFIX)` (defaults to `.dev`); `demo-capture.sh` passes `GHOSTTIES_DEV_BUNDLE_SUFFIX=.democapture` so a capture run no longer collides with a live Dev build in another worktree.
+- [ ] Capture run verifies B+C (dev build badge hidden via launch argument; staged sessions relaunched in-test before capture) — neither has been exercised against a real `demo-capture.sh` run yet.
+- [ ] Hostname/identity leak in pane (pending measurement capture) — defect (1) above, not fixed by this pass.
 - [ ] **Open the PR for `feat/demo-capture`** once captures are clean. Branch pushed at `e18b7a344`.
 
 **Parked (off-objective):**

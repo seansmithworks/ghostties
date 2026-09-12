@@ -141,6 +141,13 @@ open "/Applications/Ghostties Demo.app"
 ./scripts/demo/demo-capture.sh --out <dir>   # custom output dir
 ```
 
+The capture build gets its own bundle ID (`com.seansmithdesign.ghostties.democapture`,
+via `GHOSTTIES_DEV_BUNDLE_SUFFIX`) instead of the shared `.dev` every worktree's
+Debug build otherwise uses — XCUITest's `launch()` quits any running app
+under the target bundle ID, and Ghostty is single-instance per bundle ID, so
+a capture run under the shared `.dev` ID would either kill or hijack
+whatever Dev build is already running elsewhere.
+
 The agent-facing entrypoint for producing marketing assets from the **real
 seeded fixture repos** — 10 real git repos with real branches — instead of
 `MarketingCaptureUITests`' hardcoded in-app cast (`switchboard`, `atlas-api`,
