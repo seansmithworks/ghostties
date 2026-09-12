@@ -102,7 +102,7 @@ xcodebuild test \
   -only-testing:"$ONLY_TESTING" \
   ONLY_ACTIVE_ARCH=YES \
   ARCHS=arm64 \
-  GHOSTTIES_DEV_BUNDLE_SUFFIX=.democapture \
+  GHOSTTIES_DEV_BUNDLE_SUFFIX=.democapture.dev \
   -skipPackagePluginValidation \
   | tee "$COPY_DIR/xcodebuild.log"
 XCODEBUILD_EXIT=${PIPESTATUS[0]}

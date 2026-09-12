@@ -141,12 +141,18 @@ open "/Applications/Ghostties Demo.app"
 ./scripts/demo/demo-capture.sh --out <dir>   # custom output dir
 ```
 
-The capture build gets its own bundle ID (`com.seansmithdesign.ghostties.democapture`,
+The capture build gets its own bundle ID (`com.seansmithdesign.ghostties.democapture.dev`,
 via `GHOSTTIES_DEV_BUNDLE_SUFFIX`) instead of the shared `.dev` every worktree's
 Debug build otherwise uses — XCUITest's `launch()` quits any running app
 under the target bundle ID, and Ghostty is single-instance per bundle ID, so
 a capture run under the shared `.dev` ID would either kill or hijack
-whatever Dev build is already running elsewhere.
+whatever Dev build is already running elsewhere. The suffix must always end
+in `.dev`: `WorkspacePersistence.directory` falls back to a bundle-ID-derived
+state directory whenever `GHOSTTIES_STATE_DIR` is unusable, and that fallback
+routes to the real release workspace (`~/Library/Application Support/Ghostties`)
+unless the bundle ID itself ends in `.dev` or `.debug` — a suffix like
+`.democapture` alone would risk mutating Sean's real, running workspace if
+the override ever failed.
 
 The agent-facing entrypoint for producing marketing assets from the **real
 seeded fixture repos** — 10 real git repos with real branches — instead of
