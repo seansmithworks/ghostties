@@ -3,6 +3,7 @@ import Combine
 import SwiftUI
 import Testing
 import GhosttiesCore
+import DialKit
 @testable import Ghostty
 
 /// Tests for the zero-chrome / single-line composer style spike
