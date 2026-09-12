@@ -84,7 +84,15 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         // dir, and never the real one. Deliberately does NOT set
         // `GHOSTTIES_CAPTURE_FIXTURE`: this test wants the real
         // `WorkspacePersistence`-backed workspace, not the in-memory cast.
-        app.launchArguments.append(contentsOf: ["-ApplePersistenceIgnoreState", "YES"])
+        app.launchArguments.append(contentsOf: [
+            "-ApplePersistenceIgnoreState", "YES",
+            // Hide the dev-build badge in captures — it's an
+            // `@AppStorage("ghostties.devBuildInfoBadge.enabled")` flag
+            // (see BuildInfoBadgeView.swift); this launch-argument domain
+            // override keeps the badge off marketing PNGs without touching
+            // production code.
+            "-ghostties.devBuildInfoBadge.enabled", "NO",
+        ])
         app.launchEnvironment["GHOSTTIES_STATE_DIR"] = stateDir
         app.launch()
 
