@@ -11,7 +11,13 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
 - [x] R12.5 Zero-chrome: center-aligned text option — review: centered line re-centers on every keystroke (inherent), live look decides
 - [x] R12.6 Separate reviewer on the R12 diff — pass with notes; no test proves the palette consumes `ComposerSingleLineTuning` → R13
 - [ ] R13 Real DialKit integration + palette wiring test + stale "PR-facing note" comment — code pushed UNBUILT as `e08cda235` (DialKit vendored at `macos/Packages/DialKit/`, local package like GhosttiesCore, macOS 14 `@available`-gated; 13 falls back to the pill). CI RED on `e08cda235`: `compiling for macOS 13.0, but module 'DialKit' has a minimum deployment target of macOS 14.0` (`ComposerZeroChromeStyle.swift:5`) — `@available` can't gate an import; fixed in `d572fd995` (platform → `.v13` + `@available(macOS 14, *)` inside the vendored package), CI build-for-testing GREEN. Still owed once Dev closes: local build, suite totals, wiring-test red proof, Release `nm` proof of no DialKit symbols, separate reviewer
-- [ ] R13 review (pass with notes): DialKit shadow preset doesn't set its dials; coordinator one-way sync lets a stale panel overwrite keys; wiring-test comment falsely claims a red run; DialKit links into Release (static, likely dead-stripped, unproven) — fix round dispatched 2026-09-12
+- [x] R13 review (pass with notes): preset sets its dials + panel writes only changed fields + false red-proof comment corrected — `57b6b56ce`/`08bec654c`, CI 6/6 green; 2 new coordinator tests NOT yet run locally
+- [ ] DialKit links into Release (static, likely dead-stripped) — prove with Release `nm` once Dev closes
+- [ ] R13c: DialKit preset STILL doesn't set its dials — Combine reentrancy in `ComposerDialKitCoordinator.handle`, observed failing locally at `b64621c98` (reviewer's manual trace had called it correct)
+- [ ] R13c: 3 suite failures at `b64621c98` builder called "pre-existing" — `overlayResolvedStyleFollowsInjectedDefaultsWrite`, `singleLineFieldStaysAtTheOriginalFifteenPointScale`, `singleLineRestStateHasCardChrome`. Not in the R12 report (1129/1135, flakes only), so root-cause before rebaselining
+- [x] Sean's tuned single-line values (Composer Tuning Bench, 2026-09-12) are now the defaults — `b64621c98` (width slider step rounds 688→690 in the panel): field 28pt / rows 18pt / width 688pt, shadow radius 64 / length 48 / opacity 0.24, treatment Liquid Glass. Bench is CSS, so re-check live in Dev + DialKit
+- [ ] Keep zero-chrome centered alignment: Sean wants to keep trying it through the refinements (2026-09-12)
+- [ ] R14 ghost characters: Sean to pick option + cast from Ghost Auditions (Shelf recommended; app ghosts still carry Pac-Man names)
 - [ ] R13 gate: builders check Dev by bundle id, not process name (the name is `ghostty`)
 - [ ] R13 Ghost characters playing on the composer — options research → board → Sean picks → build
 
