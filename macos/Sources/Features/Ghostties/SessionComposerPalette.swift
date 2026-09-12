@@ -115,6 +115,15 @@ struct SessionComposerPalette: View {
     /// 512pt constant).
     let zeroChromeMeasureOverride: CGFloat?
 
+    /// Round 10 (typewriter centered column): `SessionComposerOverlay` owns
+    /// the field's live content height (feeds `fieldFrame(overlaySize:
+    /// lineCount:)`'s anchor math) — this palette writes into it whenever
+    /// its own measured field/descriptor height changes (see
+    /// `newStyleField`'s `.onChange`). Defaults to a `.constant` matching
+    /// every OTHER test seam in this file — every snapshot test and
+    /// `.classic`/`.singleLine` call site never reads or writes it.
+    let zeroChromeFieldHeight: Binding<CGFloat>
+
     init(
         isPresented: Binding<Bool>,
         request: SessionComposerRequest,
@@ -122,7 +131,8 @@ struct SessionComposerPalette: View {
         initialIsAddingTemplateForTesting: Bool = false,
         styleOverrideForTesting: ComposerStyle? = nil,
         revealPhase: Binding<ComposerRevealPhase> = .constant(.revealed),
-        zeroChromeMeasureOverride: CGFloat? = nil
+        zeroChromeMeasureOverride: CGFloat? = nil,
+        zeroChromeFieldHeight: Binding<CGFloat> = .constant(ComposerZeroChromeTypography.fieldLineHeight)
     ) {
         self._isPresented = isPresented
         self.request = request
@@ -130,6 +140,7 @@ struct SessionComposerPalette: View {
         self.styleOverrideForTesting = styleOverrideForTesting
         self.revealPhase = revealPhase
         self.zeroChromeMeasureOverride = zeroChromeMeasureOverride
+        self.zeroChromeFieldHeight = zeroChromeFieldHeight
         self._isAddingTemplate = State(initialValue: initialIsAddingTemplateForTesting)
     }
 
@@ -1781,6 +1792,43 @@ struct SessionComposerPalette: View {
         activeStyle == .zeroChrome ? zeroChromeMeasure : 480
     }
 
+    /// Round 10: `.zeroChrome`'s field wraps and grows up to
+    /// `ComposerZeroChromeTypography.maxFieldLines` lines — its height is
+    /// whichever of `zeroChromeDescriptorHeight`/`zeroChromeFieldTextHeight`
+    /// is actually on screen right now (`zeroChromeFieldContentHeight`
+    /// below). `.singleLine`/`.classic` are unaffected — fixed
+    /// `newStyleFieldLineHeight`, exactly as before.
+    private var newStyleFieldHeight: CGFloat {
+        activeStyle == .zeroChrome ? zeroChromeFieldContentHeight : newStyleFieldLineHeight
+    }
+
+    /// Round 10: the rest-state descriptor's own wrapped height, measured
+    /// live (`updateZeroChromeDescriptorHeight`) rather than assumed to be
+    /// one line — a long descriptor (`Tab completes · ↓ next match ·
+    /// Return launches`) can wrap inside the 640pt column.
+    @State private var zeroChromeDescriptorHeight: CGFloat = ComposerZeroChromeTypography.fieldLineHeight
+
+    /// Round 10: `ComposerGhostTextField`'s own reported wrapped-content
+    /// height while `activeStyle == .zeroChrome` (`measuredHeight` binding
+    /// below) — meaningless (and never read) for `.singleLine`/`.classic`.
+    @State private var zeroChromeFieldTextHeight: CGFloat = ComposerZeroChromeTypography.fieldLineHeight
+
+    /// Round 10: which of the two measured heights above is actually on
+    /// screen right now — the descriptor while the field is empty (typed
+    /// text hides it), the field's own wrapped text once typing starts.
+    /// Picking rather than combining avoids a same-turn race where the
+    /// SIDE THAT JUST HID reports a stale/zero height after the other one
+    /// already reported the correct one.
+    private var zeroChromeFieldContentHeight: CGFloat {
+        query.isEmpty ? zeroChromeDescriptorHeight : zeroChromeFieldTextHeight
+    }
+
+    private func updateZeroChromeDescriptorHeight(_ height: CGFloat) {
+        let capped = min(height, ComposerZeroChromeTypography.fieldLineHeight * CGFloat(ComposerZeroChromeTypography.maxFieldLines))
+        guard abs(capped - zeroChromeDescriptorHeight) > 0.5 else { return }
+        zeroChromeDescriptorHeight = capped
+    }
+
     private var newStyleField: some View {
         ZStack(alignment: .leading) {
             ComposerDescriptorGhostText(
@@ -1798,6 +1846,19 @@ struct SessionComposerPalette: View {
                     : .system(size: 15)
             )
             .allowsHitTesting(false)
+            // Round 10: the descriptor wraps within the column width
+            // (plain SwiftUI `Text` word-wraps by default; no lineLimit
+            // is set anywhere on this view) instead of assuming one line —
+            // measured here so the anchor math above can react to it.
+            .frame(width: newStyleFieldWidth, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { updateZeroChromeDescriptorHeight(proxy.size.height) }
+                        .onChange(of: proxy.size.height) { updateZeroChromeDescriptorHeight($0) }
+                }
+            )
 
             ComposerGhostTextField(
                 query: searchTextBinding,
@@ -1807,13 +1868,22 @@ struct SessionComposerPalette: View {
                 focusTrigger: $composerStore.focusSearchFieldTrigger,
                 hasSelection: selectedOption != nil,
                 isPickerOpen: false,
-                ghostFullPath: query.isEmpty ? "" : ghostFullPathForModelB
+                ghostFullPath: query.isEmpty ? "" : ghostFullPathForModelB,
+                // Round 10: wraps + grows in `.zeroChrome` only —
+                // `.singleLine`/`.classic` never set this, keeping their
+                // horizontally-scrolling single-line field byte-identical.
+                wrapsAndGrows: activeStyle == .zeroChrome,
+                measuredHeight: $zeroChromeFieldTextHeight
             ) { event in
                 handle(event)
             }
             .accessibilityLabel(ComposerQueryField.accessibilityFieldLabel)
         }
-        .frame(width: newStyleFieldWidth, height: newStyleFieldLineHeight)
+        .frame(width: newStyleFieldWidth, height: newStyleFieldHeight)
+        .onChange(of: zeroChromeFieldContentHeight) { newValue in
+            guard activeStyle == .zeroChrome else { return }
+            zeroChromeFieldHeight.wrappedValue = newValue
+        }
     }
 
     /// Fix round 2 (finding 2): the classic "no worktree found" message

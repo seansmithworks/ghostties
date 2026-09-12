@@ -124,6 +124,15 @@ struct SessionComposerOverlay: View {
     /// constructing a real `SessionComposerOverlay`.
     @State private var zeroChromeRevealPhase: ComposerRevealPhase = .hidden
 
+    /// Round 10 (typewriter centered column): the field's current
+    /// content height, fed back up from `SessionComposerPalette` (which in
+    /// turn reads it from either the wrapped `ComposerGhostTextField` or
+    /// the rest-state descriptor, whichever is actually showing). Drives
+    /// `ComposerZeroChromeTypography.fieldFrame(overlaySize:lineCount:)`
+    /// below so the field's TOP moves up as it grows, its bottom staying
+    /// fixed.
+    @State private var zeroChromeFieldContentHeight: CGFloat = ComposerZeroChromeTypography.fieldLineHeight
+
     /// Real state when `revealPhaseOverrideForTesting` is nil (every
     /// production call site); a fixed constant binding when it's set, so
     /// the `.task` below's write is a harmless no-op racing nothing a test
@@ -156,27 +165,34 @@ struct SessionComposerOverlay: View {
         Group {
             if resolvedStyle == .zeroChrome {
                 GeometryReader { geometry in
-                    // Round 8, "center stage": horizontal placement is the
-                    // column's leading-edge/max-width/gutter math
-                    // (`columnFrame(overlayWidth:)`); vertical placement
-                    // centers the FIELD LINE itself (not the top of the
-                    // field+rows block) at `fieldCenterFraction` of overlay
-                    // height, approximated as `fieldLineHeight / 2` above
-                    // that midpoint — an approximation because the field's
-                    // own line box (44pt) is a fixed constant, not measured
-                    // live from the mounted text view.
+                    // Round 10, typewriter centered column: horizontal
+                    // placement centers a `columnMaxWidth`-wide column with
+                    // symmetric gutters (`columnFrame(overlayWidth:)`).
+                    // Vertical placement anchors the field's LAST VISIBLE
+                    // line at `fieldAnchorFraction` — `lineCount` here is
+                    // derived from the LIVE measured content height fed
+                    // back up via `zeroChromeFieldContentHeight` (written
+                    // by `SessionComposerPalette`'s own field/descriptor
+                    // measurement), not a fixed constant, so the field's
+                    // top moves up as it wraps to more lines while its
+                    // bottom edge (`fieldFrame`'s `top + height`) stays
+                    // fixed.
+                    let lineCount = max(1, min(
+                        ComposerZeroChromeTypography.maxFieldLines,
+                        Int((zeroChromeFieldContentHeight / ComposerZeroChromeTypography.fieldLineHeight).rounded())
+                    ))
                     let column = ComposerZeroChromeTypography.columnFrame(overlayWidth: geometry.size.width)
-                    let fieldTop = geometry.size.height * ComposerZeroChromeTypography.fieldCenterFraction
-                        - ComposerZeroChromeTypography.fieldLineHeight / 2
+                    let field = ComposerZeroChromeTypography.fieldFrame(overlaySize: geometry.size, lineCount: lineCount)
                     zeroChromeFullBleedWash
                         .overlay(alignment: .topLeading) {
                             SessionComposerPalette(
                                 isPresented: isPresented,
                                 request: request,
                                 revealPhase: revealPhaseBinding,
-                                zeroChromeMeasureOverride: column.width
+                                zeroChromeMeasureOverride: column.width,
+                                zeroChromeFieldHeight: $zeroChromeFieldContentHeight
                             )
-                            .padding(.top, fieldTop)
+                            .padding(.top, field.top)
                             .padding(.leading, column.leadingX)
                         }
                 }

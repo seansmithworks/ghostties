@@ -815,34 +815,56 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerZeroChromeTypography.rowLineHeight == 30)
         #expect(ComposerZeroChromeTypography.measureMin == 480)
         #expect(ComposerZeroChromeTypography.measureMax == 960)
-        // Round 8: replaced the centered 75%-of-width measure with the
-        // off-center "center stage" column placement.
-        #expect(ComposerZeroChromeTypography.fieldLeadingFraction == 0.38)
-        #expect(ComposerZeroChromeTypography.columnTrailingGutter == 48)
-        #expect(ComposerZeroChromeTypography.fieldCenterFraction == 0.5)
+        // Round 10: replaced the round-8 off-center "center stage" column
+        // (leading-edge fraction) with a centered column.
+        #expect(ComposerZeroChromeTypography.columnMaxWidth == 640)
+        #expect(ComposerZeroChromeTypography.columnGutter == 48)
+        #expect(ComposerZeroChromeTypography.fieldAnchorFraction == 0.46)
+        #expect(ComposerZeroChromeTypography.fieldAnchorBottomOffset == 22)
+        #expect(ComposerZeroChromeTypography.maxFieldLines == 3)
     }
 
-    /// Round 8: `columnFrame(overlayWidth:)` at two widths — proves the
-    /// leading-edge/max-width/gutter math directly, not just its
-    /// constants. Neither width here clips into the 480pt floor (that path
-    /// is covered by `columnFrameClampsToTheFloorOnANarrowOverlay` below).
+    /// Round 10: `columnFrame(overlayWidth:)` centers a 640pt column with
+    /// 48pt gutters both sides at a wide overlay (1600pt: x 480, w 640 —
+    /// the brief's own worked example), and shrinks to fit — still
+    /// centered, gutters intact — on a narrower one (600pt: w 504, x 48,
+    /// which is exactly centered since `(600 - 504) / 2 == 48`).
     @Test func columnFrameAtTwoWidths() {
         let wide = ComposerZeroChromeTypography.columnFrame(overlayWidth: 1600)
-        #expect(wide.leadingX == 1600 * 0.38)
-        #expect(wide.width == 944) // 1600 - 608 - 48
+        #expect(wide.width == 640)
+        #expect(wide.leadingX == 480)
 
-        let narrower = ComposerZeroChromeTypography.columnFrame(overlayWidth: 900)
-        #expect(narrower.leadingX == 900 * 0.38)
-        #expect(narrower.width == 510) // 900 - 342 - 48
+        let narrow = ComposerZeroChromeTypography.columnFrame(overlayWidth: 600)
+        #expect(narrow.width == 504) // 600 - 2*48
+        #expect(narrow.leadingX == 48) // (600 - 504) / 2
     }
 
-    /// A narrow enough overlay must fall back to the 480pt minimum and pull
-    /// the leading edge left (rather than shrink the column further), per
-    /// the brief.
-    @Test func columnFrameClampsToTheFloorOnANarrowOverlay() {
-        let column = ComposerZeroChromeTypography.columnFrame(overlayWidth: 800)
-        #expect(column.width == 480)
-        #expect(column.leadingX == 272) // 800 - 48 - 480
+    /// A degenerate overlay narrower than twice the gutter must never go
+    /// negative — width floors at 0, and the column stays centered (x ==
+    /// half the overlay).
+    @Test func columnFrameNeverGoesNegativeOnADegenerateOverlay() {
+        let column = ComposerZeroChromeTypography.columnFrame(overlayWidth: 40)
+        #expect(column.width == 0)
+        #expect(column.leadingX == 20)
+    }
+
+    /// Round 10: pure anchor math — the field's BOTTOM edge
+    /// (`top + height`) must equal `0.46*H + 22` at 1, 2, and 3 lines, and
+    /// the height must cap at `maxFieldLines` (3) even when asked for 5.
+    @Test func fieldFrameHoldsTheBottomEdgeFixedAsLinesGrow() {
+        let overlaySize = CGSize(width: 1200, height: 800)
+        let expectedBottom = 800 * ComposerZeroChromeTypography.fieldAnchorFraction
+            + ComposerZeroChromeTypography.fieldAnchorBottomOffset
+
+        for lineCount in 1...3 {
+            let frame = ComposerZeroChromeTypography.fieldFrame(overlaySize: overlaySize, lineCount: lineCount)
+            #expect(frame.height == CGFloat(lineCount) * ComposerZeroChromeTypography.fieldLineHeight)
+            #expect(abs((frame.top + frame.height) - expectedBottom) < 0.001)
+        }
+
+        let overflowing = ComposerZeroChromeTypography.fieldFrame(overlaySize: overlaySize, lineCount: 5)
+        #expect(overflowing.height == CGFloat(ComposerZeroChromeTypography.maxFieldLines) * ComposerZeroChromeTypography.fieldLineHeight)
+        #expect(abs((overflowing.top + overflowing.height) - expectedBottom) < 0.001)
     }
 
     /// `.singleLine` must keep the ORIGINAL 15pt field size, not
@@ -907,7 +929,7 @@ struct ComposerZeroChromeStyleTests {
     }
 
     /// A 1000×700 window — proves nothing clips at the measure clamp
-    /// (960pt max, well under `columnFrame`'s leading-edge-0.38 result).
+    /// (960pt max, well under `columnFrame`'s centered-column result).
     @Test func zeroChromeNothingClipsAtALargeWindow() {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
@@ -926,7 +948,7 @@ struct ComposerZeroChromeStyleTests {
         let png = renderPNG(view, size: size)
         writeScratchPNG(png, filename: "zero-chrome-1000x700-no-clip.png")
         #expect(png != nil)
-        #expect(measure == 572) // 1000 - (1000*0.38) - 48, within the 480-960 clamp
+        #expect(measure == 640) // min(640, 1000 - 2*48) — the centered column's own max width
     }
 
     // MARK: - Fix round 5: wash reaches the titlebar band
@@ -1468,5 +1490,122 @@ struct ComposerZeroChromeStyleTests {
 
         unsetenv("GHOSTTIES_CAPTURE_FIXTURE")
         #expect(SessionComposerOverlay.isMarketingCaptureFixtureActive == false)
+    }
+
+    // MARK: - Round 10: typewriter centered column, field wraps
+
+    /// Plain reference box for building `Binding`s in these `ComposerGhostTextField`
+    /// mount tests, without SwiftUI `@State` (unavailable outside a `View`).
+    private final class ValueBox<T> {
+        var value: T
+        init(_ value: T) { self.value = value }
+    }
+
+    private func firstScrollView(in view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView { return scrollView }
+        for subview in view.subviews {
+            if let found = firstScrollView(in: subview) { return found }
+        }
+        return nil
+    }
+
+    /// Mounts the PRODUCTION `ComposerGhostTextField` (`wrapsAndGrows: true`)
+    /// at the 640pt column width with the exact long prompt from the round-10
+    /// brief and proves it actually wraps (line count >= 2, via
+    /// `ComposerGhostNSTextView.wrappedLineCount`, TextKit's own line-fragment
+    /// count) with no horizontal scroll offset — the start of the text is
+    /// never clipped. Proven to fail on the OLD single-line configuration
+    /// during implementation: temporarily removing the `wrapsAndGrows`
+    /// branch in `ComposerGhostTextField.makeNSView` and re-running this
+    /// test alone reported `wrappedLineCount == 1` (red); restoring the
+    /// branch returns it to green.
+    @Test func wrappingFieldAtColumnWidthNeverClipsTheStartOfALongPrompt() {
+        let longPrompt = "brukas cco -n \"testing the naming set up for this stuff and\""
+        let queryBox = ValueBox(longPrompt)
+        let focusBox = ValueBox(false)
+        let heightBox = ValueBox<CGFloat>(ComposerZeroChromeTypography.fieldLineHeight)
+
+        let field = ComposerGhostTextField(
+            query: Binding(get: { queryBox.value }, set: { queryBox.value = $0 }),
+            fontSize: ComposerZeroChromeTypography.fieldSize,
+            fontWeight: .semibold,
+            rowHeight: ComposerZeroChromeTypography.fieldLineHeight,
+            focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
+            hasSelection: false,
+            isPickerOpen: false,
+            ghostFullPath: "",
+            wrapsAndGrows: true,
+            measuredHeight: Binding(get: { heightBox.value }, set: { heightBox.value = $0 })
+        ) { _ in }
+
+        let size = NSSize(width: 640, height: 200)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: field.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let scrollView = firstScrollView(in: hosting),
+              let textView = scrollView.documentView as? ComposerGhostNSTextView else {
+            Issue.record("expected a mounted ComposerGhostNSTextView")
+            return
+        }
+        #expect(textView.wrappedLineCount >= 2)
+        #expect(scrollView.contentView.bounds.origin.x == 0)
+        #expect(textView.string.hasPrefix("brukas"))
+    }
+
+    /// `.classic`/`.singleLine` never set `wrapsAndGrows` — asserts the
+    /// PRODUCTION default (`wrapsAndGrows: false`) keeps the field's
+    /// original horizontally-scrolling single-line `NSTextContainer`/
+    /// `NSTextView` configuration, unaffected by the round-10 wrap branch.
+    @Test func defaultConfigurationStaysSingleLineAndHorizontallyScrolling() {
+        let queryBox = ValueBox("")
+        let focusBox = ValueBox(false)
+        let field = ComposerGhostTextField(
+            query: Binding(get: { queryBox.value }, set: { queryBox.value = $0 }),
+            fontSize: 15,
+            rowHeight: 38,
+            focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
+            hasSelection: false,
+            isPickerOpen: false,
+            ghostFullPath: ""
+        ) { _ in }
+
+        let size = NSSize(width: 512, height: 60)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: field.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        guard let scrollView = firstScrollView(in: hosting),
+              let textView = scrollView.documentView as? ComposerGhostNSTextView,
+              let textContainer = textView.textContainer else {
+            Issue.record("expected a mounted single-line ComposerGhostNSTextView")
+            return
+        }
+        #expect(textContainer.widthTracksTextView == false)
+        #expect(textView.isHorizontallyResizable == true)
+        #expect(textView.isVerticallyResizable == false)
     }
 }

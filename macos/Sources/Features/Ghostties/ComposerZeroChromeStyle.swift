@@ -359,18 +359,16 @@ enum ComposerZeroChromeFocalBlur {
     }
 
     /// Horizontal focal center, as a fraction of the wash's own width.
-    /// Round 8: the composer column itself moved off-center (leading edge
-    /// at `ComposerZeroChromeTypography.fieldLeadingFraction`, 0.38), but
-    /// Sean's brief keeps the focal blur's own center pinned at the
-    /// window's true middle regardless.
+    /// Round 10: the composer column is centered in the overlay (see
+    /// `ComposerZeroChromeTypography.columnFrame(overlayWidth:)`), so the
+    /// window's true middle and the column's own middle now coincide.
     static let centerXFraction: CGFloat = 0.5
 
     /// Vertical focal center, as a fraction of the wash's own height.
-    /// Round 8: the FIELD line's vertical center now sits at exactly
-    /// `ComposerZeroChromeTypography.fieldCenterFraction` (0.5) — this
-    /// stays 0.50 to match, per Sean's brief ("Keep the focal center at
-    /// x 0.5, y 0.5").
-    static let centerYFraction: CGFloat = 0.50
+    /// Round 10: matches `ComposerZeroChromeTypography.fieldAnchorFraction`
+    /// (0.46) — the typewriter model's last-visible-line anchor — per
+    /// Sean's decision.
+    static let centerYFraction: CGFloat = 0.46
 
     /// `EllipticalGradient`'s own reach: how far, as a fraction of the
     /// wash's bounding box, the gradient extends before its stops are
@@ -623,48 +621,71 @@ enum ComposerZeroChromeTypography {
     static let statusStripSize: CGFloat = 15
     static let statusStripTopOffset: CGFloat = 12
 
-    /// Measure floor/ceiling in points (480pt was the WHOLE measure at the
-    /// old 15pt scale — too narrow, ~28 characters, at 32pt; 960pt caps it
-    /// from reading as a full-width paragraph on a wide window). Round 8
-    /// replaced the old centered 75%-of-width measure with
-    /// `columnFrame(overlayWidth:)` below, which still clamps into this
-    /// same 480–960 range. Call sites with no overlay (every snapshot test)
-    /// fall back to `measureMin`.
+    /// Fallback measure for call sites with no overlay to measure from
+    /// (every snapshot test) — `zeroChromeMeasure` in
+    /// `SessionComposerPalette` falls back to this when no override is
+    /// given. Round 10 no longer clamps `columnFrame`'s own result into
+    /// this range (that column is now `columnMaxWidth`-capped directly),
+    /// but the fallback constant itself is kept, byte-identical, since
+    /// existing call sites reference it.
     static let measureMin: CGFloat = 480
     static let measureMax: CGFloat = 960
 
-    /// Round 8 (Sean, live look): "I'd like the composer text position to
-    /// be centered in the screen but left aligned still" — the column's
-    /// leading edge sits just left of the window's horizontal middle,
-    /// extending rightward (long prompts grow right, not into both
-    /// margins). Replaces the centered 75%-of-width measure.
-    static let fieldLeadingFraction: CGFloat = 0.38
+    /// Round 10 (Sean's decision, typewriter centered column): the column
+    /// is centered horizontally in the overlay, replacing round 8's
+    /// off-center `fieldLeadingFraction` (0.38) leading-edge placement.
+    static let columnMaxWidth: CGFloat = 640
 
-    /// Clear gutter kept at the overlay's trailing (right) edge once the
-    /// column reaches `measureMax`.
-    static let columnTrailingGutter: CGFloat = 48
-
-    /// Fraction of overlay height where the FIELD LINE's own vertical
-    /// center sits — round 8 carries "center stage" further than round 7's
-    /// block-top placement: the field's optical center, not just the top
-    /// of the field+rows block, now sits at the window's true middle. Rows
-    /// hang below it, unaffected by this constant.
-    static let fieldCenterFraction: CGFloat = 0.5
+    /// Clear gutter kept at BOTH the leading and trailing edge — round 8
+    /// only guaranteed this at the trailing edge; the centered column
+    /// keeps it symmetric.
+    static let columnGutter: CGFloat = 48
 
     /// The column's leading x-offset and width for an overlay of
-    /// `overlayWidth` points: leading edge at `fieldLeadingFraction`,
-    /// extending to `measureMax` while keeping `columnTrailingGutter` clear
-    /// at the right edge. If that leaves less than `measureMin`, the
-    /// minimum wins and the leading edge moves left (still keeping the
-    /// trailing gutter) rather than shrinking the column further.
+    /// `overlayWidth` points: `min(columnMaxWidth, overlayWidth -
+    /// 2*columnGutter)`, centered — so a narrow overlay still keeps
+    /// `columnGutter` clear on both sides rather than clipping into it,
+    /// and a wide overlay never grows the column past `columnMaxWidth`.
     static func columnFrame(overlayWidth: CGFloat) -> (leadingX: CGFloat, width: CGFloat) {
-        let proposedLeading = overlayWidth * fieldLeadingFraction
-        let available = overlayWidth - proposedLeading - columnTrailingGutter
-        guard available >= measureMin else {
-            let leadingX = max(0, overlayWidth - columnTrailingGutter - measureMin)
-            return (leadingX, measureMin)
-        }
-        return (proposedLeading, min(available, measureMax))
+        let available = max(0, overlayWidth - 2 * columnGutter)
+        let width = min(columnMaxWidth, available)
+        let leadingX = (overlayWidth - width) / 2
+        return (leadingX, width)
+    }
+
+    /// Round 10: replaces round 8's `fieldCenterFraction` (0.5, which
+    /// centered the WHOLE field block regardless of line count). The
+    /// typewriter model anchors the LAST VISIBLE line's own vertical
+    /// center at this fraction of overlay height — earlier lines move up
+    /// as the field grows, this one line's position never does. See
+    /// `fieldFrame(overlaySize:lineCount:)` below for the exact derivation.
+    static let fieldAnchorFraction: CGFloat = 0.46
+
+    /// The field's BOTTOM edge — not its center — is what's actually held
+    /// fixed as more lines wrap in; this is the fixed offset added to
+    /// `fieldAnchorFraction * overlayHeight` to locate that bottom edge.
+    /// Chosen so a single 44pt line's own vertical center still lands
+    /// exactly on `fieldAnchorFraction`: bottom == fraction*H + 22, and a
+    /// 1-line field's center == bottom - fieldLineHeight/2 == fraction*H +
+    /// 22 - 22 == fraction*H.
+    static let fieldAnchorBottomOffset: CGFloat = 22
+
+    /// Past this many lines the field scrolls internally instead of
+    /// growing further (brief §2/§3).
+    static let maxFieldLines: Int = 3
+
+    /// Pure, unit-testable anchor math: given the overlay's own size and
+    /// how many lines the field is CURRENTLY showing (clamped to
+    /// `maxFieldLines`, floored at 1), returns the field block's top
+    /// y-offset and total height. The bottom edge (`top + height`) is
+    /// always `fieldAnchorFraction * overlaySize.height +
+    /// fieldAnchorBottomOffset` regardless of `lineCount` — growth happens
+    /// entirely upward, never downward into the rows below.
+    static func fieldFrame(overlaySize: CGSize, lineCount: Int) -> (top: CGFloat, height: CGFloat) {
+        let cappedLines = max(1, min(lineCount, maxFieldLines))
+        let height = CGFloat(cappedLines) * fieldLineHeight
+        let bottom = overlaySize.height * fieldAnchorFraction + fieldAnchorBottomOffset
+        return (bottom - height, height)
     }
 }
 

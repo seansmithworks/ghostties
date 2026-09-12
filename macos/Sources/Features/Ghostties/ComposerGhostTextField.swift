@@ -140,7 +140,51 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// (`remainderGhost`) from it; `Tab` advances one segment at a time
     /// (`nextSegment(remainder:)`).
     var ghostFullPath: String
+
+    /// Round 10 (typewriter centered column): when true, the field WRAPS
+    /// at word boundaries within its own width instead of scrolling
+    /// horizontally, growing vertically up to
+    /// `ComposerZeroChromeTypography.maxFieldLines` lines before scrolling
+    /// internally. `.classic`/`.singleLine` never set this — both keep the
+    /// original single-line, horizontally-scrolling configuration
+    /// byte-for-byte (see `makeNSView`'s branch below).
+    var wrapsAndGrows: Bool = false
+
+    /// Round 10: the field's own laid-out content height — one
+    /// `ComposerZeroChromeTypography.fieldLineHeight` per wrapped line,
+    /// capped at `maxFieldLines` — written back to SwiftUI so the caller's
+    /// frame can grow (`Coordinator.reportMeasuredHeightIfNeeded()`).
+    /// Ignored entirely (never read or written) when `wrapsAndGrows` is
+    /// false.
+    @Binding var measuredHeight: CGFloat
+
     var onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)?
+
+    init(
+        query: Binding<String>,
+        fontSize: CGFloat,
+        fontWeight: NSFont.Weight = .regular,
+        rowHeight: CGFloat,
+        focusTrigger: Binding<Bool>,
+        hasSelection: Bool,
+        isPickerOpen: Bool,
+        ghostFullPath: String,
+        wrapsAndGrows: Bool = false,
+        measuredHeight: Binding<CGFloat> = .constant(ComposerZeroChromeTypography.fieldLineHeight),
+        onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)? = nil
+    ) {
+        self._query = query
+        self.fontSize = fontSize
+        self.fontWeight = fontWeight
+        self.rowHeight = rowHeight
+        self._focusTrigger = focusTrigger
+        self.hasSelection = hasSelection
+        self.isPickerOpen = isPickerOpen
+        self.ghostFullPath = ghostFullPath
+        self.wrapsAndGrows = wrapsAndGrows
+        self._measuredHeight = measuredHeight
+        self.onEvent = onEvent
+    }
 
     /// DESIGN.md §4's ghost grey went through `#1A1A1A7E` (0x7E/0xFF ≈ 0.49,
     /// measured 2.99:1 light / 3.99:1 dark against WCAG AA text contrast's
@@ -359,6 +403,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
         // these the document view never grows past the clip view's width,
         // `NSScrollView` has nothing to scroll, and typed text past the
         // field's edge simply clips instead of scrolling into view.
+        // Round 10: `wrapsAndGrows` (zero-chrome only) overrides this whole
+        // block below — `.classic`/`.singleLine` never set it, so this
+        // stays byte-for-byte their existing single-line, horizontally-
+        // scrolling configuration.
         textView.isHorizontallyResizable = true
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.autoresizingMask = [.height]
@@ -371,6 +419,21 @@ struct ComposerGhostTextField: NSViewRepresentable {
         textView.isRichText = false
         textView.isVerticallyResizable = false
 
+        if wrapsAndGrows {
+            // Round 10 (typewriter centered column): word-wrap within the
+            // text view's own width instead of scrolling horizontally.
+            // `widthTracksTextView = true` syncs the container's width to
+            // the text view's frame on every layout — SwiftUI drives that
+            // frame width via `newStyleFieldWidth` at the call site, so no
+            // explicit `containerSize` write is needed here. Height is
+            // content-driven (`reportMeasuredHeightIfNeeded()` below), not
+            // the fixed `rowHeight` single-line centering uses.
+            textContainer.widthTracksTextView = true
+            textView.isHorizontallyResizable = false
+            textView.isVerticallyResizable = true
+            textView.autoresizingMask = [.width]
+        }
+
         // Fix 4 (review, A-F6): font MUST be set before computing
         // `verticalInset` — `NSTextView.font` is already non-nil at
         // construction (its own AppKit default, not this field's 15pt), so
@@ -382,9 +445,21 @@ struct ComposerGhostTextField: NSViewRepresentable {
         textView.font = NSFont.systemFont(ofSize: fontSize, weight: fontWeight)
         textView.textColor = .labelColor
 
-        let lineHeight = layoutManager.defaultLineHeight(for: textView.font ?? NSFont.systemFont(ofSize: fontSize))
-        let verticalInset = max(0, (rowHeight - lineHeight) / 2)
-        textView.textContainerInset = NSSize(width: 0, height: verticalInset)
+        if wrapsAndGrows {
+            // No single-line centering inset — each wrapped line uses the
+            // font's own natural line height. The SwiftUI frame this field
+            // renders inside grows in `ComposerZeroChromeTypography
+            // .fieldLineHeight`-per-line increments (`measuredHeight`
+            // below), which is a nominal 44pt/line contract for the
+            // ANCHOR math, not a pixel-exact measurement of this font's
+            // own line spacing — a documented approximation, not tuned
+            // further here.
+            textView.textContainerInset = .zero
+        } else {
+            let lineHeight = layoutManager.defaultLineHeight(for: textView.font ?? NSFont.systemFont(ofSize: fontSize))
+            let verticalInset = max(0, (rowHeight - lineHeight) / 2)
+            textView.textContainerInset = NSSize(width: 0, height: verticalInset)
+        }
 
         // `isFieldEditor = true` (A-F15/G-F10): rejects newline-bearing
         // paste, drag, and Services insertions wholesale — the only
@@ -429,6 +504,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         context.coordinator.textView = textView
         context.coordinator.installGhostLabel(in: textView)
         context.coordinator.applyStyles()
+        context.coordinator.reportMeasuredHeightIfNeeded()
 
         return scrollView
     }
@@ -443,6 +519,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             context.coordinator.setText(query, in: textView)
         }
         context.coordinator.applyStyles()
+        context.coordinator.reportMeasuredHeightIfNeeded()
 
         if focusTrigger {
             // A-F8: never assign SwiftUI `@Published` state synchronously
@@ -685,9 +762,24 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // leading offset that `titleRect(forBounds:)` doesn't expose
             // remains UNTESTED; that piece is still a hypothesis, not a
             // measured cause.
-            let typedWidth = (typed as NSString).size(withAttributes: [.font: textView.font as Any]).width
-            let originX = textView.textContainerInset.width + typedWidth
-            let origin = NSPoint(x: originX, y: viewRect.minY)
+            // Round 10: the `typedWidth`-sum measurement above assumes the
+            // ENTIRE typed string sits on one line — true for the
+            // single-line callers this was tuned for, but wrong once
+            // `wrapsAndGrows` lets the caret land on line 2 or 3. Use
+            // `firstRect`'s own on-screen rect directly there instead —
+            // it's exactly the caret's real position regardless of which
+            // wrapped line it's on, at the cost of reintroducing the small
+            // sub-pixel gap the `typedWidth` measurement above was tuned
+            // to close (acceptable: correct line/position beats a few
+            // points of kerning gap).
+            let origin: NSPoint
+            if parent.wrapsAndGrows {
+                origin = NSPoint(x: viewRect.minX, y: viewRect.minY)
+            } else {
+                let typedWidth = (typed as NSString).size(withAttributes: [.font: textView.font as Any]).width
+                let originX = textView.textContainerInset.width + typedWidth
+                origin = NSPoint(x: originX, y: viewRect.minY)
+            }
 
             // This method is a legitimate MULTI-CALL socket by design
             // (A-F3 — fired from both `onWindowChange` AND `updateNSView`,
@@ -800,6 +892,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             }
             parent.query = textView.string
             applyStyles()
+            reportMeasuredHeightIfNeeded()
         }
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -880,6 +973,35 @@ struct ComposerGhostTextField: NSViewRepresentable {
             setText(newText, in: textView)
             parent.query = newText
             applyStyles()
+            reportMeasuredHeightIfNeeded()
+        }
+
+        /// Round 10 (typewriter centered column): writes the field's
+        /// current wrapped-line-count-derived height
+        /// (`ComposerZeroChromeTypography.fieldLineHeight` per line,
+        /// capped at `maxFieldLines`) back into `parent.measuredHeight` —
+        /// the "report the laid-out used height back to SwiftUI" mechanism
+        /// this file's caller (`SessionComposerPalette`) uses to grow its
+        /// own frame upward from a fixed bottom anchor. No-op when
+        /// `wrapsAndGrows` is false — `.classic`/`.singleLine` never read
+        /// `measuredHeight`, so this never touches their bindings. Also
+        /// keeps the caret's own line visible once content exceeds the cap
+        /// (`scrollRangeToVisible`), per the brief's "scrolls internally,
+        /// keeping the caret's line visible."
+        func reportMeasuredHeightIfNeeded() {
+            guard parent.wrapsAndGrows, let textView else { return }
+            textView.scrollRangeToVisible(textView.selectedRange())
+            let lines = min(ComposerZeroChromeTypography.maxFieldLines, textView.wrappedLineCount)
+            let height = CGFloat(lines) * ComposerZeroChromeTypography.fieldLineHeight
+            guard abs(height - parent.measuredHeight) > 0.5 else { return }
+            // A-F8 pattern: defer the binding write to the next runloop
+            // turn, same reasoning `updateNSView`'s `focusTrigger` handling
+            // documents — this method is called FROM `updateNSView` and
+            // `textDidChange`, both mid-view-update contexts.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.textView != nil else { return }
+                self.parent.measuredHeight = height
+            }
         }
 
         func teardown() {
@@ -923,5 +1045,26 @@ final class ComposerGhostNSTextView: NSTextView {
     override func accessibilityValue() -> String? {
         guard !currentGhostText.isEmpty else { return string }
         return "\(string), suggestion: \(currentGhostText)"
+    }
+
+    /// Round 10 (typewriter centered column): how many wrapped line
+    /// fragments the CURRENT text lays out into, via TextKit's own
+    /// authoritative line-fragment enumeration (not a
+    /// `usedRect.height / lineHeight` division, which drifts against this
+    /// font's real line spacing). Floors at 1 (even empty text occupies one
+    /// line). Not gated on `wrapsAndGrows` — harmless to call on a
+    /// single-line configuration (always returns 1 there, since a
+    /// non-wrapping container never breaks a line), but only
+    /// `Coordinator.reportMeasuredHeightIfNeeded()` actually reads it.
+    var wrappedLineCount: Int {
+        guard let layoutManager, let textContainer else { return 1 }
+        layoutManager.ensureLayout(for: textContainer)
+        let glyphRange = layoutManager.glyphRange(for: textContainer)
+        guard glyphRange.length > 0 else { return 1 }
+        var count = 0
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, _, _, _, _ in
+            count += 1
+        }
+        return max(1, count)
     }
 }
