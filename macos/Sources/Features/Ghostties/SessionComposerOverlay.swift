@@ -69,17 +69,18 @@ struct SessionComposerOverlay: View {
     @AppStorage private var composerStyleRaw: String
     @AppStorage private var composerMaterialRaw: String
     @AppStorage private var composerFocalBlurRaw: String
+    @AppStorage private var composerFogEnabled: Bool
 
     private var resolvedStyle: ComposerStyle {
         styleOverrideForTesting ?? ComposerStyle(rawValue: composerStyleRaw) ?? .classic
     }
 
     private var resolvedMaterial: ComposerZeroChromeMaterial {
-        ComposerZeroChromeMaterial(rawValue: composerMaterialRaw) ?? .regular
+        ComposerZeroChromeMaterial(rawValue: composerMaterialRaw) ?? .medium
     }
 
     private var resolvedFocalBlurStyle: ComposerZeroChromeFocalBlurStyle {
-        ComposerZeroChromeFocalBlurStyle(rawValue: composerFocalBlurRaw) ?? .thick
+        ComposerZeroChromeFocalBlurStyle(rawValue: composerFocalBlurRaw) ?? .regular
     }
 
     init(
@@ -96,8 +97,9 @@ struct SessionComposerOverlay: View {
         self.centeringModel = centeringModel
         let store = defaultsForTesting ?? .standard
         _composerStyleRaw = AppStorage(wrappedValue: ComposerStyle.classic.rawValue, ComposerStyle.storageKey, store: store)
-        _composerMaterialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.regular.rawValue, ComposerZeroChromeMaterial.storageKey, store: store)
-        _composerFocalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.thick.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: store)
+        _composerMaterialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.medium.rawValue, ComposerZeroChromeMaterial.storageKey, store: store)
+        _composerFocalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.regular.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: store)
+        _composerFogEnabled = AppStorage(wrappedValue: true, ComposerZeroChromeFogSetting.storageKey, store: store)
     }
 
     /// `titlebarBandHeight` is the only field this model still carries (PR
@@ -154,22 +156,28 @@ struct SessionComposerOverlay: View {
         Group {
             if resolvedStyle == .zeroChrome {
                 GeometryReader { geometry in
-                    let measure = min(
-                        max(geometry.size.width * ComposerZeroChromeTypography.measureFraction, ComposerZeroChromeTypography.measureMin),
-                        ComposerZeroChromeTypography.measureMax
-                    )
+                    // Round 8, "center stage": horizontal placement is the
+                    // column's leading-edge/max-width/gutter math
+                    // (`columnFrame(overlayWidth:)`); vertical placement
+                    // centers the FIELD LINE itself (not the top of the
+                    // field+rows block) at `fieldCenterFraction` of overlay
+                    // height, approximated as `fieldLineHeight / 2` above
+                    // that midpoint — an approximation because the field's
+                    // own line box (44pt) is a fixed constant, not measured
+                    // live from the mounted text view.
+                    let column = ComposerZeroChromeTypography.columnFrame(overlayWidth: geometry.size.width)
+                    let fieldTop = geometry.size.height * ComposerZeroChromeTypography.fieldCenterFraction
+                        - ComposerZeroChromeTypography.fieldLineHeight / 2
                     zeroChromeFullBleedWash
-                        .overlay(alignment: .top) {
+                        .overlay(alignment: .topLeading) {
                             SessionComposerPalette(
                                 isPresented: isPresented,
                                 request: request,
                                 revealPhase: revealPhaseBinding,
-                                zeroChromeMeasureOverride: measure
+                                zeroChromeMeasureOverride: column.width
                             )
-                            // Fix round 2, item 8: field top moved from 38% to
-                            // 32% of overlay height to leave room for the
-                            // taller 32/44pt block.
-                            .padding(.top, geometry.size.height * ComposerZeroChromeTypography.fieldTopFraction)
+                            .padding(.top, fieldTop)
+                            .padding(.leading, column.leadingX)
                         }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -282,7 +290,9 @@ struct SessionComposerOverlay: View {
             ComposerZeroChromeWash(
                 material: resolvedMaterial,
                 revealed: phase == .revealed,
-                focalBlurStyle: resolvedFocalBlurStyle
+                focalBlurStyle: resolvedFocalBlurStyle,
+                fogEnabled: composerFogEnabled,
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             )
             .animation(
                 zeroChromeWashAnimation(for: phase, reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion),

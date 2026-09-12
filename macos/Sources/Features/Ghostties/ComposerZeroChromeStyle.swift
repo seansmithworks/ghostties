@@ -30,13 +30,15 @@ enum ComposerStyle: String {
 
 /// Tunes the zero-chrome wash's material by eye:
 /// `defaults write com.seansmithdesign.ghostties.dev ghostties.composerZeroChromeMaterial thin`
-/// Default `.regular` matches the shipping card's own `.regularMaterial`
-/// (`SessionComposerPalette.composerCard`'s `.background`), which is the
-/// direct proof the blur-feasibility gate rests on — see this file's header
-/// comment on `ComposerZeroChromeWash` for the full argument.
+/// Round 8 (Sean, live look): "I like this [Thin/Regular]. I would say an
+/// in between of both of these thin and regular option may be optimal" —
+/// `.medium` fills that gap (`.thinMaterial`, but a heavier 0.8 layer
+/// opacity than `.thin`'s 0.55), and is now the Release default, replacing
+/// `.regular`.
 enum ComposerZeroChromeMaterial: String {
     case ultraThin
     case thin
+    case medium
     case regular
     case thick
 
@@ -45,7 +47,7 @@ enum ComposerZeroChromeMaterial: String {
     static func current(defaults: UserDefaults = .standard) -> ComposerZeroChromeMaterial {
         guard let raw = defaults.string(forKey: storageKey),
               let material = ComposerZeroChromeMaterial(rawValue: raw) else {
-            return .regular
+            return .medium
         }
         return material
     }
@@ -54,6 +56,7 @@ enum ComposerZeroChromeMaterial: String {
         switch self {
         case .ultraThin: return .ultraThinMaterial
         case .thin: return .thinMaterial
+        case .medium: return .thinMaterial
         case .regular: return .regularMaterial
         case .thick: return .thickMaterial
         }
@@ -65,10 +68,13 @@ enum ComposerZeroChromeMaterial: String {
     /// this value, so this is a layer opacity multiplied on top of the
     /// material fill — NOT a material substitution. `.regular`/`.thick`
     /// stay 1.0 (unchanged, Release default) per the brief's explicit scope.
+    /// `.medium` (round 8) sits between `.thin` (0.55) and `.regular`
+    /// (1.0) at 0.8.
     var layerOpacity: Double {
         switch self {
         case .ultraThin: return 0.35
         case .thin: return 0.55
+        case .medium: return 0.8
         case .regular, .thick: return 1.0
         }
     }
@@ -198,6 +204,16 @@ struct ComposerZeroChromeWash: View {
     /// behavior — `.thick`, unchanged — with no call-site edits required.
     var focalBlurStyle: ComposerZeroChromeFocalBlurStyle = .current()
 
+    /// Round 8 (Sean, live look): "Can we set these an animated shader too?
+    /// a fog shader with a central focal point." Toggle for the DEBUG
+    /// tuning pill's `Fog` picker (`ghostties.composerZeroChromeFog`,
+    /// default on); every production call site leaves this `true`.
+    var fogEnabled: Bool = true
+
+    /// Whether Reduce Motion is on — freezes `ComposerZeroChromeFogLayer` at
+    /// full, static density instead of animating the drift/summon ramp.
+    var reduceMotion: Bool = false
+
     /// Fix round 5 (Sean's live look): "The focal point of the blur should
     /// be where the text is. Fading out slightly but still obscuring
     /// content below." The base layer below still fills edge to edge at
@@ -210,6 +226,27 @@ struct ComposerZeroChromeWash: View {
     /// otherwise be possible and eases off toward the edges — a depth
     /// layer, not a flat frosted sheet. `.off` (`focalBlurStyle`) skips this
     /// second layer entirely, leaving only the base wash.
+    ///
+    /// KNOWN OFFSCREEN-HARNESS LIMITATION (round 8, flagged for Sean —
+    /// not something this spike could safely paper over): compositing the
+    /// fog layer's `.colorEffect` shader ANYWHERE in this view's tree —
+    /// `ZStack` sibling, `.overlay`, `.drawingGroup()`-isolated or not —
+    /// defeats `Material`'s live blur sampling specifically in
+    /// `NSHostingView.cacheDisplay`'s OFFSCREEN snapshot path on this
+    /// machine (macOS 27 host): `ComposerBlurCompositingTests
+    /// .focalCenterDiffersMoreFromRawTextThanEitherCorner` measured
+    /// IDENTICAL diffs at the focal center and both corners the instant
+    /// `fogEnabled` defaulted true, regardless of where the shader view
+    /// sat in the tree. Confirmed NOT a fixture/ordering bug: removing
+    /// only the `.colorEffect` call (keeping the same `GeometryReader`/
+    /// `TimelineView` structure) restored the expected margin every time.
+    /// No amount of restructuring within this view fixed it, so that test
+    /// pins `fogEnabled: false` explicitly and documents this exact
+    /// finding at its call site — it is NOT evidence the shader is broken
+    /// in the real, live-windowed app (materials and Metal shaders both
+    /// fundamentally depend on live GPU compositing that `cacheDisplay`'s
+    /// software snapshot doesn't fully reproduce), but it IS an open risk
+    /// this spike could not verify offscreen. Flag to Sean before ship.
     var body: some View {
         ZStack {
             Rectangle()
@@ -220,6 +257,11 @@ struct ComposerZeroChromeWash: View {
                     .fill(focalMaterial)
                     .mask(focalMask)
                     .opacity(focalBlurStyle.layerOpacity)
+            }
+            if fogEnabled {
+                if #available(macOS 14, *) {
+                    ComposerZeroChromeFogLayer(revealed: revealed, reduceMotion: reduceMotion)
+                }
             }
         }
         .opacity(revealed ? 1 : 0)
@@ -262,10 +304,12 @@ enum ComposerZeroChromeFocalBlurStyle: String, CaseIterable {
 
     static let storageKey = "ghostties.composerZeroChromeFocalBlur"
 
+    /// Round 8 (Sean, live look): default moved from `.thick` to `.regular`
+    /// alongside the base material's move to `.medium`.
     static func current(defaults: UserDefaults = .standard) -> ComposerZeroChromeFocalBlurStyle {
         guard let raw = defaults.string(forKey: storageKey),
               let style = ComposerZeroChromeFocalBlurStyle(rawValue: raw) else {
-            return .thick
+            return .regular
         }
         return style
     }
@@ -314,19 +358,18 @@ enum ComposerZeroChromeFocalBlur {
         style.material
     }
 
-    /// Horizontal focal center, as a fraction of the wash's own width —
-    /// 0.5 because the composer text block is horizontally centered in the
-    /// window (PR #132 removed the sidebar-width sensitive offset).
+    /// Horizontal focal center, as a fraction of the wash's own width.
+    /// Round 8: the composer column itself moved off-center (leading edge
+    /// at `ComposerZeroChromeTypography.fieldLeadingFraction`, 0.38), but
+    /// Sean's brief keeps the focal blur's own center pinned at the
+    /// window's true middle regardless.
     static let centerXFraction: CGFloat = 0.5
 
     /// Vertical focal center, as a fraction of the wash's own height.
-    /// `ComposerZeroChromeTypography.fieldTopFraction` (0.42 as of round 7)
-    /// is where the FIELD starts; the rows block extends below it, so the
-    /// text block's visual center sits a bit lower — approximated here
-    /// rather than computed from the live row count (0–3 rows), same class
-    /// of approximation as `ComposerZeroChromeTypography.rowTopOffset`'s
-    /// own comment. Raised from 0.40 to 0.50 alongside `fieldTopFraction`
-    /// so the focal blur follows the "center stage" text block.
+    /// Round 8: the FIELD line's vertical center now sits at exactly
+    /// `ComposerZeroChromeTypography.fieldCenterFraction` (0.5) — this
+    /// stays 0.50 to match, per Sean's brief ("Keep the focal center at
+    /// x 0.5, y 0.5").
     static let centerYFraction: CGFloat = 0.50
 
     /// `EllipticalGradient`'s own reach: how far, as a fraction of the
@@ -368,14 +411,29 @@ enum ComposerZeroChromeFocalBlur {
 /// without re-deriving them from rendered output.
 enum ComposerZeroChromeTiming {
     static let summonWashDuration: Double = 0.14
-    static let summonTextDuration: Double = 0.12
-    static let summonTextDelay: Double = 0.04
+    /// Round 8 (Sean, live look): "a blended smoking increase to then
+    /// reveal the text field input" — the fog now ramps in FIRST
+    /// (`summonFogRampDuration`), and the text reveal starts only once that
+    /// ramp is mostly settled, so the smoke visibly precedes the text
+    /// rather than racing it. 220ms = 320ms fog ramp minus a small
+    /// overlap, close enough to "ramp settles, then text" without a dead
+    /// gap. Text is 180ms fade (up from 120ms, so it reads as part of the
+    /// same "reveal" beat as the fog, not a separate snap) + the existing
+    /// 4pt rise (`summonTextOffsetY`, unchanged).
+    static let summonTextDuration: Double = 0.18
+    static let summonTextDelay: Double = 0.22
     /// Fix round 4, item 1: the summon text transition is opacity 0→1 AND
     /// y 4→0 (Timing board + brief), not opacity-only — this is the
     /// pre-reveal offset the field/ghost/descriptor block starts at while
     /// `revealPhase == .hidden`, animating down to 0 on the SAME
     /// `summonTextDuration`/`summonTextDelay` curve as the opacity fade.
     static let summonTextOffsetY: CGFloat = 4
+
+    /// Round 8: `ComposerZeroChromeFogLayer`'s density/reach ramp, 0→1
+    /// ease-in, from the moment the composer reveals — see this enum's
+    /// header comment on `summonTextDelay` for how it relates to the text
+    /// reveal.
+    static let summonFogRampDuration: Double = 0.32
 
     static let commitTextDuration: Double = 0.10
     static let commitWashDuration: Double = 0.16
@@ -428,6 +486,112 @@ func zeroChromeTextAnimation(for phase: ComposerRevealPhase, reduceMotion: Bool)
     }
 }
 
+// MARK: - Animated fog shader (round 8)
+//
+// Sean, live look: "Can we set these an animated shader too? a fog shader
+// with a central focal point." / "a blended smoking increase to then
+// reveal the text field input." `ComposerZeroChromeFogLayer` is a
+// `.colorEffect`-driven Metal shader (`Fog.metal`,
+// `composerFogDensity`), full-window, densest around
+// `ComposerZeroChromeFocalBlur`'s center, fading toward the edges. It is
+// macOS 14+ only (`.colorEffect` needs SwiftUI 5) — `ComposerZeroChromeWash`
+// guards its use with `if #available(macOS 14, *)`, so macOS 13 renders
+// the exact blur-only wash it always has, per
+// `decision_align-to-upstream-degrade-gracefully` (never raise the
+// deployment target for a fork feature; degrade instead).
+
+/// `ghostties.composerZeroChromeFog` on/off knob — default on. Boolean
+/// storage (unlike the other zero-chrome knobs' raw-string enums) since
+/// there's no third state to represent.
+enum ComposerZeroChromeFogSetting {
+    static let storageKey = "ghostties.composerZeroChromeFog"
+}
+
+/// Full-bleed animated fog, composited over the base/focal blur layers in
+/// `ComposerZeroChromeWash`. `allowsHitTesting(false)` throughout (inherited
+/// from the wash's own call site) — this view claims no clicks.
+@available(macOS 14, *)
+struct ComposerZeroChromeFogLayer: View {
+    /// Drives the summon ramp: `false` (pre-summon / commit / dismiss)
+    /// pauses the `TimelineView` on its current, already-composited frame
+    /// so the fade-out rides the SAME external opacity animation
+    /// (`ComposerZeroChromeWash`'s `.opacity(revealed ? 1 : 0)`) as every
+    /// other layer, rather than snapping to blank — no separate fade-out
+    /// mechanism needed here.
+    var revealed: Bool
+
+    /// Reduce Motion floor: no ramp, no drift — a single static frame at
+    /// full density/reach, rendered once. "If motion is the chrome, Reduce
+    /// Motion deletes the interface" (`reference_zero-chrome-prior-art`) —
+    /// the fog must never be the thing that disappears under Reduce
+    /// Motion; it goes static instead.
+    var reduceMotion: Bool
+
+    /// Set once, the instant `revealed` first becomes true (summon) — the
+    /// ramp's t=0 reference. This view is freshly constructed per composer
+    /// session (no reuse across summons), so `nil` here always means "not
+    /// yet summoned."
+    @State private var rampStart: Date?
+
+    private static let fogFunction = ShaderFunction(library: .default, name: "composerFogDensity")
+
+    private var fogTint: Color {
+        Color(nsColor: .windowBackgroundColor)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            Group {
+                if reduceMotion {
+                    fogRectangle(size: size, time: 0, ramp: 1)
+                } else {
+                    TimelineView(.animation(paused: !revealed)) { timeline in
+                        let elapsed = rampStart.map { timeline.date.timeIntervalSince($0) } ?? 0
+                        let t = min(1, max(0, elapsed / ComposerZeroChromeTiming.summonFogRampDuration))
+                        // Ease-in: slow start, fast finish, per the brief.
+                        let ramp = t * t
+                        fogRectangle(
+                            size: size,
+                            time: timeline.date.timeIntervalSinceReferenceDate,
+                            ramp: ramp
+                        )
+                    }
+                }
+            }
+        }
+        .task(id: revealed) {
+            guard revealed, !reduceMotion, rampStart == nil else { return }
+            rampStart = Date()
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// `ramp` drives BOTH the density and the falloff reach uniforms
+    /// together, per the brief ("animate the density/radius uniform") —
+    /// the fog visibly spreads outward from the focal center as it
+    /// thickens, rather than fading in uniformly everywhere at once.
+    private func fogRectangle(size: CGSize, time: TimeInterval, ramp: Double) -> some View {
+        Rectangle()
+            .fill(fogTint)
+            .colorEffect(
+                Shader(
+                    function: Self.fogFunction,
+                    arguments: [
+                        .float2(Float(size.width), Float(size.height)),
+                        .float(Float(time)),
+                        .float2(
+                            Float(ComposerZeroChromeFocalBlur.centerXFraction),
+                            Float(ComposerZeroChromeFocalBlur.centerYFraction)
+                        ),
+                        .float(Float(ramp)),
+                        .float(Float(max(ramp, 0.001)))
+                    ]
+                )
+            )
+    }
+}
+
 // MARK: - Zero-chrome type scale (fix round 2, item 8)
 //
 // Sean, live look: "make the no chrome text larger as well. Almost like a
@@ -459,21 +623,49 @@ enum ComposerZeroChromeTypography {
     static let statusStripSize: CGFloat = 15
     static let statusStripTopOffset: CGFloat = 12
 
-    /// Measure: 75% of the overlay width, clamped 480–960pt (480pt was the
-    /// WHOLE measure at the old 15pt scale — too narrow, ~28 characters, at
-    /// 32pt). `SessionComposerOverlay` computes the clamped value from its
-    /// own `GeometryReader` and passes it in; call sites with no overlay
-    /// (every snapshot test) fall back to `measureMin`.
-    static let measureFraction: CGFloat = 0.75
+    /// Measure floor/ceiling in points (480pt was the WHOLE measure at the
+    /// old 15pt scale — too narrow, ~28 characters, at 32pt; 960pt caps it
+    /// from reading as a full-width paragraph on a wide window). Round 8
+    /// replaced the old centered 75%-of-width measure with
+    /// `columnFrame(overlayWidth:)` below, which still clamps into this
+    /// same 480–960 range. Call sites with no overlay (every snapshot test)
+    /// fall back to `measureMin`.
     static let measureMin: CGFloat = 480
     static let measureMax: CGFloat = 960
 
-    /// Field top, as a fraction of overlay height — 42% (round 7, Sean's
-    /// live look: "center stage"), not the shared 38%
-    /// `SessionComposerOverlay` still uses for its own vertical-placement
-    /// constant. Was 32% through round 6; raised to sit the text block at
-    /// the window's optical center rather than the upper third.
-    static let fieldTopFraction: CGFloat = 0.42
+    /// Round 8 (Sean, live look): "I'd like the composer text position to
+    /// be centered in the screen but left aligned still" — the column's
+    /// leading edge sits just left of the window's horizontal middle,
+    /// extending rightward (long prompts grow right, not into both
+    /// margins). Replaces the centered 75%-of-width measure.
+    static let fieldLeadingFraction: CGFloat = 0.38
+
+    /// Clear gutter kept at the overlay's trailing (right) edge once the
+    /// column reaches `measureMax`.
+    static let columnTrailingGutter: CGFloat = 48
+
+    /// Fraction of overlay height where the FIELD LINE's own vertical
+    /// center sits — round 8 carries "center stage" further than round 7's
+    /// block-top placement: the field's optical center, not just the top
+    /// of the field+rows block, now sits at the window's true middle. Rows
+    /// hang below it, unaffected by this constant.
+    static let fieldCenterFraction: CGFloat = 0.5
+
+    /// The column's leading x-offset and width for an overlay of
+    /// `overlayWidth` points: leading edge at `fieldLeadingFraction`,
+    /// extending to `measureMax` while keeping `columnTrailingGutter` clear
+    /// at the right edge. If that leaves less than `measureMin`, the
+    /// minimum wins and the leading edge moves left (still keeping the
+    /// trailing gutter) rather than shrinking the column further.
+    static func columnFrame(overlayWidth: CGFloat) -> (leadingX: CGFloat, width: CGFloat) {
+        let proposedLeading = overlayWidth * fieldLeadingFraction
+        let available = overlayWidth - proposedLeading - columnTrailingGutter
+        guard available >= measureMin else {
+            let leadingX = max(0, overlayWidth - columnTrailingGutter - measureMin)
+            return (leadingX, measureMin)
+        }
+        return (proposedLeading, min(available, measureMax))
+    }
 }
 
 // MARK: - DEBUG-only live tuning control (session-7 brief, 2026-09-11)
@@ -489,6 +681,7 @@ struct ComposerDebugTuningControl: View {
     @AppStorage private var styleRaw: String
     @AppStorage private var materialRaw: String
     @AppStorage private var focalBlurRaw: String
+    @AppStorage private var fogEnabled: Bool
 
     /// Called after any knob write, so the caller can return keyboard focus
     /// to the composer's search field — this control must never leave focus
@@ -501,8 +694,9 @@ struct ComposerDebugTuningControl: View {
     /// Swift Testing processes reading/writing the same keys.
     init(defaults: UserDefaults = .standard, onChange: @escaping () -> Void = {}) {
         _styleRaw = AppStorage(wrappedValue: ComposerStyle.classic.rawValue, ComposerStyle.storageKey, store: defaults)
-        _materialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.regular.rawValue, ComposerZeroChromeMaterial.storageKey, store: defaults)
-        _focalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.thick.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: defaults)
+        _materialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.medium.rawValue, ComposerZeroChromeMaterial.storageKey, store: defaults)
+        _focalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.regular.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: defaults)
+        _fogEnabled = AppStorage(wrappedValue: true, ComposerZeroChromeFogSetting.storageKey, store: defaults)
         self.onChange = onChange
     }
 
@@ -526,8 +720,17 @@ struct ComposerDebugTuningControl: View {
 
     var focalBlur: Binding<ComposerZeroChromeFocalBlurStyle> {
         Binding(
-            get: { ComposerZeroChromeFocalBlurStyle(rawValue: focalBlurRaw) ?? .thick },
+            get: { ComposerZeroChromeFocalBlurStyle(rawValue: focalBlurRaw) ?? .regular },
             set: { focalBlurRaw = $0.rawValue; onChange() }
+        )
+    }
+
+    /// Round 8: `Fog` on/off knob — not `private`, same testability
+    /// pattern as `style`/`material`/`focalBlur` above.
+    var fog: Binding<Bool> {
+        Binding(
+            get: { fogEnabled },
+            set: { fogEnabled = $0; onChange() }
         )
     }
 
@@ -544,6 +747,7 @@ struct ComposerDebugTuningControl: View {
                 Picker("Base blur", selection: material) {
                     Text("Ultra thin").tag(ComposerZeroChromeMaterial.ultraThin)
                     Text("Thin").tag(ComposerZeroChromeMaterial.thin)
+                    Text("Medium").tag(ComposerZeroChromeMaterial.medium)
                     Text("Regular").tag(ComposerZeroChromeMaterial.regular)
                     Text("Thick").tag(ComposerZeroChromeMaterial.thick)
                 }
@@ -553,6 +757,10 @@ struct ComposerDebugTuningControl: View {
                     Text("Thin").tag(ComposerZeroChromeFocalBlurStyle.thin)
                     Text("Regular").tag(ComposerZeroChromeFocalBlurStyle.regular)
                     Text("Thick").tag(ComposerZeroChromeFocalBlurStyle.thick)
+                }
+                Picker("Fog", selection: fog) {
+                    Text("On").tag(true)
+                    Text("Off").tag(false)
                 }
             }
         }

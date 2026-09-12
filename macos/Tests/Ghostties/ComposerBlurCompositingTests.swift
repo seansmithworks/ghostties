@@ -211,7 +211,36 @@ struct ComposerBlurCompositingTests {
         let withWash = renderPNG(
             ZStack {
                 DenseTerminalBackdrop()
-                ComposerZeroChromeWash(material: .regular, revealed: true)
+                // `focalBlurStyle` pinned explicitly (round 8) — was
+                // `.current()`'s `UserDefaults.standard` read, which
+                // raced/inherited whatever this machine's own DEBUG tuning
+                // pill last wrote, observed failing here with Sean's Dev
+                // domain pinned to `.off`.
+                //
+                // `fogEnabled: false` pinned too, for an UNRELATED and
+                // confirmed-by-hand reason: compositing the fog layer's
+                // `.colorEffect` Metal shader ANYWHERE in `ComposerZeroChromeWash`'s
+                // tree (ZStack sibling, `.overlay`, `.drawingGroup()`-isolated
+                // or not — all tried) defeats the focal `Material`'s live
+                // blur sampling in THIS specific offscreen
+                // `NSHostingView.cacheDisplay` snapshot path on this machine
+                // (macOS 27): with fog on, centerDiff/topCornerDiff/
+                // bottomCornerDiff all measured IDENTICAL
+                // (0.17647058823529416), i.e. the focal layer stopped
+                // reading as a localized blur at all. Removing only the
+                // `.colorEffect` call (same GeometryReader/TimelineView
+                // structure otherwise) restored the margin every time — this
+                // is NOT a fixture-ordering bug, and NOT evidence the
+                // shader is broken in the real, live-windowed app (Materials
+                // and Metal shaders both fundamentally need live GPU
+                // compositing that a software `cacheDisplay` snapshot
+                // doesn't fully reproduce), but it IS an open risk this
+                // spike could not verify offscreen — flagged to Sean, not
+                // silently routed around. This test's own purpose (the
+                // FOCAL layer's falloff shape) is independent of fog, so
+                // disabling fog here isolates the thing actually under
+                // test without weakening what it asserts.
+                ComposerZeroChromeWash(material: .regular, revealed: true, focalBlurStyle: .thick, fogEnabled: false)
             }
         )
         guard let rawText, let withWash,
@@ -241,5 +270,24 @@ struct ComposerBlurCompositingTests {
             centerDiff > topCornerDiff && centerDiff > bottomCornerDiff,
             "expected the focal center (\(centerDiff)) to differ from raw text more than either corner (top \(topCornerDiff), bottom \(bottomCornerDiff)) — the focal layer should stack ONLY near its center"
         )
+    }
+
+    // MARK: - Round 8: fog layer smoke test
+
+    /// Not a fidelity check (see `focalCenterDiffersMoreFromRawTextThanEitherCorner`'s
+    /// own comment on why this offscreen harness can't assert the fog
+    /// shader's blur behavior) — this only proves `fogEnabled: true`
+    /// renders a non-nil frame on macOS 14+, i.e. the `.colorEffect` shader
+    /// compiles and runs at all rather than crashing or producing an empty
+    /// bitmap.
+    @Test func fogEnabledRendersWithoutCrashing() {
+        guard #available(macOS 14, *) else { return }
+        let png = renderPNG(
+            ZStack {
+                DenseTerminalBackdrop()
+                ComposerZeroChromeWash(material: .regular, revealed: true, focalBlurStyle: .off, fogEnabled: true)
+            }
+        )
+        #expect(png != nil)
     }
 }

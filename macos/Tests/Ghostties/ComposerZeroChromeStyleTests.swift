@@ -69,9 +69,11 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerStyle.current(defaults: suite) == .classic)
     }
 
-    @Test func composerZeroChromeMaterialDefaultsToRegular() {
+    /// Round 8 (Sean, live look): default moved from `.regular` to
+    /// `.medium` — the "in between thin and regular" option.
+    @Test func composerZeroChromeMaterialDefaultsToMedium() {
         let suite = UserDefaults(suiteName: "ghostties.composerZeroChromeMaterial.test.\(UUID().uuidString)")!
-        #expect(ComposerZeroChromeMaterial.current(defaults: suite) == .regular)
+        #expect(ComposerZeroChromeMaterial.current(defaults: suite) == .medium)
     }
 
     @Test func composerZeroChromeMaterialReadsThin() {
@@ -627,8 +629,11 @@ struct ComposerZeroChromeStyleTests {
 
     @Test func timingConstantsMatchTheBoard() {
         #expect(ComposerZeroChromeTiming.summonWashDuration == 0.14)
-        #expect(ComposerZeroChromeTiming.summonTextDuration == 0.12)
-        #expect(ComposerZeroChromeTiming.summonTextDelay == 0.04)
+        // Round 8: text now waits for the fog's smoke-build to mostly
+        // settle before revealing (was 0.12s duration / 0.04s delay).
+        #expect(ComposerZeroChromeTiming.summonTextDuration == 0.18)
+        #expect(ComposerZeroChromeTiming.summonTextDelay == 0.22)
+        #expect(ComposerZeroChromeTiming.summonFogRampDuration == 0.32)
         #expect(ComposerZeroChromeTiming.commitTextDuration == 0.10)
         #expect(ComposerZeroChromeTiming.commitWashDuration == 0.16)
         #expect(ComposerZeroChromeTiming.commitWashDelay == 0.04)
@@ -810,7 +815,34 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerZeroChromeTypography.rowLineHeight == 30)
         #expect(ComposerZeroChromeTypography.measureMin == 480)
         #expect(ComposerZeroChromeTypography.measureMax == 960)
-        #expect(ComposerZeroChromeTypography.measureFraction == 0.75)
+        // Round 8: replaced the centered 75%-of-width measure with the
+        // off-center "center stage" column placement.
+        #expect(ComposerZeroChromeTypography.fieldLeadingFraction == 0.38)
+        #expect(ComposerZeroChromeTypography.columnTrailingGutter == 48)
+        #expect(ComposerZeroChromeTypography.fieldCenterFraction == 0.5)
+    }
+
+    /// Round 8: `columnFrame(overlayWidth:)` at two widths — proves the
+    /// leading-edge/max-width/gutter math directly, not just its
+    /// constants. Neither width here clips into the 480pt floor (that path
+    /// is covered by `columnFrameClampsToTheFloorOnANarrowOverlay` below).
+    @Test func columnFrameAtTwoWidths() {
+        let wide = ComposerZeroChromeTypography.columnFrame(overlayWidth: 1600)
+        #expect(wide.leadingX == 1600 * 0.38)
+        #expect(wide.width == 944) // 1600 - 608 - 48
+
+        let narrower = ComposerZeroChromeTypography.columnFrame(overlayWidth: 900)
+        #expect(narrower.leadingX == 900 * 0.38)
+        #expect(narrower.width == 510) // 900 - 342 - 48
+    }
+
+    /// A narrow enough overlay must fall back to the 480pt minimum and pull
+    /// the leading edge left (rather than shrink the column further), per
+    /// the brief.
+    @Test func columnFrameClampsToTheFloorOnANarrowOverlay() {
+        let column = ComposerZeroChromeTypography.columnFrame(overlayWidth: 800)
+        #expect(column.width == 480)
+        #expect(column.leadingX == 272) // 800 - 48 - 480
     }
 
     /// `.singleLine` must keep the ORIGINAL 15pt field size, not
@@ -881,7 +913,7 @@ struct ComposerZeroChromeStyleTests {
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
         let size = NSSize(width: 1000, height: 700)
-        let measure = min(max(size.width * ComposerZeroChromeTypography.measureFraction, ComposerZeroChromeTypography.measureMin), ComposerZeroChromeTypography.measureMax)
+        let measure = ComposerZeroChromeTypography.columnFrame(overlayWidth: size.width).width
         let view = SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
@@ -894,7 +926,7 @@ struct ComposerZeroChromeStyleTests {
         let png = renderPNG(view, size: size)
         writeScratchPNG(png, filename: "zero-chrome-1000x700-no-clip.png")
         #expect(png != nil)
-        #expect(measure == 750) // 1000 * 0.75, within the 480-960 clamp
+        #expect(measure == 572) // 1000 - (1000*0.38) - 48, within the 480-960 clamp
     }
 
     // MARK: - Fix round 5: wash reaches the titlebar band
@@ -1326,17 +1358,18 @@ struct ComposerZeroChromeStyleTests {
         control.focalBlur.wrappedValue = .off
         #expect(defaults.string(forKey: ComposerZeroChromeFocalBlurStyle.storageKey) == "off")
 
-        #expect(changeCount == 3, "expected onChange to fire once per knob write, got \(changeCount)")
+        control.fog.wrappedValue = false
+        #expect(defaults.bool(forKey: ComposerZeroChromeFogSetting.storageKey) == false)
+
+        #expect(changeCount == 4, "expected onChange to fire once per knob write, got \(changeCount)")
     }
 
-    /// `ComposerZeroChromeFocalBlurStyle.current()`'s own default (unset
-    /// key) must still be `.thick` — the exact value
-    /// `ComposerZeroChromeFocalBlur.focalMaterial`'s old hardcoded constant
-    /// resolved to, so Release behavior is unchanged by this knob's
-    /// addition.
-    @Test func focalBlurStyleDefaultsToThick() {
+    /// Round 8: `ComposerZeroChromeFocalBlurStyle.current()`'s own default
+    /// (unset key) moved from `.thick` to `.regular`, alongside the base
+    /// material's move to `.medium` (Sean's live look).
+    @Test func focalBlurStyleDefaultsToRegular() {
         let defaults = makeTuningDefaults()
-        #expect(ComposerZeroChromeFocalBlurStyle.current(defaults: defaults) == .thick)
+        #expect(ComposerZeroChromeFocalBlurStyle.current(defaults: defaults) == .regular)
     }
 
     @Test func focalBlurStyleOffProducesNoMaterial() {
