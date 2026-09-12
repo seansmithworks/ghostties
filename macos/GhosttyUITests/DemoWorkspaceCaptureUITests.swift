@@ -301,6 +301,21 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
             )
         }
 
+        // Anti-vacuous guard: `waitForExistence` only proves *some* value
+        // matched "value CONTAINS \n" — a lone newline or a short truncated
+        // fragment would satisfy that predicate without being real rendered
+        // terminal output. Require a value long enough that it can only be
+        // genuine shell prompt + command + output, not a false-positive match.
+        let capturedValue = (terminalWithContent.value as? String) ?? ""
+        XCTAssertGreaterThan(
+            capturedValue.count,
+            40,
+            "Matched .textView's value is only \(capturedValue.count) " +
+            "character(s) — too short to be real rendered terminal output. " +
+            "This looks like a vacuous match on the \"\\n\" predicate, not " +
+            "genuine content."
+        )
+
         let window = app.windows.firstMatch
         let windowShot = window.screenshot()
         let outputPath = outputDir.appendingPathComponent("\(name).png")
