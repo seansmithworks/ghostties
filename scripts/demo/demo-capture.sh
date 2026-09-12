@@ -85,6 +85,36 @@ echo ""
 # message.
 [[ -f "$COPY_DIR/workspace.json" ]] || fail "Copied state dir has no workspace.json — run demo-ready.sh (it seeds this)."
 
+# ── 2b. Fixture zsh dotdir — strips the real username/hostname from the ────
+# captured prompt. Lives inside the throwaway COPY_DIR, never under $HOME.
+# Each dotfile sources the matching real one from $HOME first (if present)
+# so PATH and `claude` still resolve, then .zshrc overrides the prompt.
+# Ghostty's zsh auto-integration round-trips ZDOTDIR through its own
+# resource dir and restores this value before sourcing these files — see
+# src/termio/shell_integration.zig's setupZsh and
+# src/shell-integration/zsh/.zshenv:28-33,45. Passed as a TEST_RUNNER_ env
+# var (process env), never a trailing build setting — a build setting runs
+# 0 tests and exits green.
+DEMO_ZDOTDIR="$COPY_DIR/.demo-zdotdir"
+mkdir -p "$DEMO_ZDOTDIR"
+
+cat > "$DEMO_ZDOTDIR/.zshenv" <<'EOF'
+[[ -r "$HOME/.zshenv" ]] && source "$HOME/.zshenv"
+EOF
+
+cat > "$DEMO_ZDOTDIR/.zprofile" <<'EOF'
+[[ -r "$HOME/.zprofile" ]] && source "$HOME/.zprofile"
+EOF
+
+cat > "$DEMO_ZDOTDIR/.zshrc" <<'EOF'
+[[ -r "$HOME/.zshrc" ]] && source "$HOME/.zshrc"
+
+# User/host-free prompt for marketing captures — overrides anything the
+# real .zshrc above set.
+PROMPT='%1~ %# '
+RPROMPT=''
+EOF
+
 # ── 3. Run the capture test ──────────────────────────────────────────────────
 echo "==> Running DemoWorkspaceCaptureUITests..."
 RESULT_BUNDLE="$(mktemp -d "${TMPDIR:-/tmp}/ghostties-demo-capture-result.XXXXXX")/Result.xcresult"
@@ -92,6 +122,7 @@ RESULT_BUNDLE="$(mktemp -d "${TMPDIR:-/tmp}/ghostties-demo-capture-result.XXXXXX
 set +e
 TEST_RUNNER_GHOSTTIES_UI_CAPTURE=1 \
 TEST_RUNNER_GHOSTTIES_DEMO_STATE_DIR="$COPY_DIR" \
+TEST_RUNNER_GHOSTTIES_DEMO_ZDOTDIR="$DEMO_ZDOTDIR" \
 xcodebuild test \
   -project "$REPO_ROOT/macos/Ghostties.xcodeproj" \
   -scheme Ghostties \
@@ -108,12 +139,13 @@ xcodebuild test \
 XCODEBUILD_EXIT=${PIPESTATUS[0]}
 set -e
 
-if [[ "$XCODEBUILD_EXIT" -eq 65 ]]; then
-  fail "xcodebuild exited 65 — this is a BUILD failure, not a test failure. See log above."
+# ── Resolve real totals FIRST — never trust raw log lines or exit code ─────
+# alone. xcodebuild also exits 65 for a plain test failure, not just a
+# build failure, so classify only after the xcresult totals are in hand.
+if [[ ! -d "$RESULT_BUNDLE" ]]; then
+  fail "No result bundle produced at $RESULT_BUNDLE (xcodebuild exit $XCODEBUILD_EXIT) — this is a BUILD failure, not a test failure. See log above."
 fi
 
-# ── Resolve real totals — never trust raw log lines or exit code alone ──────
-[[ -d "$RESULT_BUNDLE" ]] || fail "No result bundle produced at $RESULT_BUNDLE"
 SUMMARY_JSON="$(xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE" --format json)"
 TOTAL_TEST_COUNT="$(echo "$SUMMARY_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("totalTestCount", 0))')"
 PASSED_COUNT="$(echo "$SUMMARY_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("passedTests", 0))')"
@@ -123,6 +155,9 @@ echo ""
 echo "==> Resolved totals: total=$TOTAL_TEST_COUNT passed=$PASSED_COUNT failed=$FAILED_COUNT"
 
 if [[ "$TOTAL_TEST_COUNT" -eq 0 ]]; then
+  if [[ "$XCODEBUILD_EXIT" -eq 65 ]]; then
+    fail "xcodebuild exited 65 with zero tests resolved — this is a BUILD failure. See log above."
+  fi
   fail "-only-testing:$ONLY_TESTING matched ZERO tests. This is a malformed -only-testing filter (Swift Testing identifiers need '()'), not a clean run — xcodebuild's exit code cannot be trusted here."
 fi
 if [[ "$TOTAL_TEST_COUNT" -ne "$EXPECTED_TEST_COUNT" ]]; then

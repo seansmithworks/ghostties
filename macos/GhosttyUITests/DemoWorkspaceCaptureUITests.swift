@@ -72,6 +72,18 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
             return
         }
 
+        guard let demoZdotdir = ProcessInfo.processInfo.environment["GHOSTTIES_DEMO_ZDOTDIR"],
+              !demoZdotdir.isEmpty else {
+            XCTFail(
+                "GHOSTTIES_DEMO_ZDOTDIR must be set (forwarded as " +
+                "TEST_RUNNER_GHOSTTIES_DEMO_ZDOTDIR) to a fixture zsh dotdir " +
+                "with a user/host-free prompt — refusing to launch without " +
+                "it, since the default prompt leaks the real username and " +
+                "hostname into marketing captures."
+            )
+            return
+        }
+
         // Sandboxed runner — write inside its own temp container, print the
         // resolved path so `demo-capture.sh` can copy it out.
         let outputDir = FileManager.default.temporaryDirectory
@@ -92,8 +104,23 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
             // override keeps the badge off marketing PNGs without touching
             // production code.
             "-ghostties.devBuildInfoBadge.enabled", "NO",
+            // The capture build's own bundle ID means fresh UserDefaults, so
+            // the first-launch onboarding sheet (OnboardingSheet.swift,
+            // gated by `ghostties.hasSeenOnboarding` in
+            // WorkspaceSidebarView.swift:39) would otherwise cover the
+            // window for the entire capture. Same launch-argument domain
+            // override idiom as the dev badge above.
+            "-ghostties.hasSeenOnboarding", "YES",
         ])
         app.launchEnvironment["GHOSTTIES_STATE_DIR"] = stateDir
+        // Ghostty's zsh auto-integration (setupZsh in
+        // src/termio/shell_integration.zig) round-trips ZDOTDIR through its
+        // own resource dir and restores this value before the user's dotfile
+        // chain loads (src/shell-integration/zsh/.zshenv:28-33,45) — it does
+        // not clobber it. Our fixture dotdir's .zshrc sets a user/host-free
+        // PROMPT so the captured terminal panes never show
+        // "seansmith@<hostname> ~ %".
+        app.launchEnvironment["ZDOTDIR"] = demoZdotdir
         app.launch()
 
         XCTAssertTrue(
@@ -101,6 +128,24 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
             "Main window should exist after launch"
         )
         Thread.sleep(forTimeInterval: 1.5)
+
+        // ── Fail-closed: never click behind an unexpected onboarding sheet ──
+        // If the launch-argument override above ever stops working (e.g. the
+        // AppStorage key is renamed), OnboardingSheet would silently block
+        // every click this test makes on the sidebar underneath it. Fail
+        // loudly instead of proceeding.
+        let onboardingSheet = app.staticTexts["Welcome to Ghostties"].firstMatch
+        let getStartedButton = app.buttons["Get started"].firstMatch
+        if onboardingSheet.exists || getStartedButton.exists {
+            app.terminate()
+            XCTFail(
+                "Onboarding sheet is visible after launch despite " +
+                "-ghostties.hasSeenOnboarding YES — refusing to click " +
+                "behind it. Check WorkspaceSidebarView's " +
+                "\"ghostties.hasSeenOnboarding\" AppStorage key."
+            )
+            return
+        }
 
         // Same appearance-after-launch ordering as MarketingCaptureUITests —
         // see that file's comment on why appearance is set post-launch.

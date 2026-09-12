@@ -162,9 +162,16 @@ seeded fixture repos** — 10 real git repos with real branches — instead of
 1. Runs `demo-ready.sh --check` and aborts if the demo app / fixtures are stale.
 2. Copies `~/Library/Application Support/Ghostties Demo/` to a throwaway
    location — the demo state dir is treated as **read-only** by this script,
-   never written to.
+   never written to. Also writes a fixture zsh dotdir (`.demo-zdotdir`)
+   inside that same throwaway location, so the captured terminal prompt
+   never shows the real username or hostname.
 3. Runs `GhosttyUITests/DemoWorkspaceCaptureUITests` via `xcodebuild test`,
-   pointing the app at the throwaway copy via `GHOSTTIES_STATE_DIR`. Asserts
+   pointing the app at the throwaway copy via `GHOSTTIES_STATE_DIR` and the
+   fixture dotdir via `GHOSTTIES_DEMO_ZDOTDIR`. Resolves the real xcresult
+   totals before classifying any failure — `xcodebuild` exits 65 for both a
+   build failure and a plain test failure, so a missing result bundle (or
+   zero tests) is reported as a BUILD failure, and a present bundle with
+   real totals is reported as the actual test failure count. Also asserts
    the resolved test count matches what's expected (a malformed
    `-only-testing` filter can silently match zero tests and still exit 0 —
    this is checked, not trusted).
@@ -174,6 +181,29 @@ seeded fixture repos** — 10 real git repos with real branches — instead of
 5. Asserts every PNG is non-blank (checks decompressed pixel-data variance,
    not just file existence) before declaring success — a denied capture or a
    solid-color window still produces a structurally valid PNG.
+
+### Prompt identity leak — fixture zsh dotdir
+
+The default zsh prompt reads `user@hostname ~ %`, which would otherwise leak
+Sean's real username and machine name into every marketing capture.
+`demo-capture.sh` writes a throwaway `.demo-zdotdir` (containing `.zshenv`,
+`.zprofile`, `.zshrc`) inside the same `COPY_DIR` it already treats as
+disposable. Each dotfile sources the matching real dotfile from `$HOME` first
+(so `PATH` and `claude` still resolve), then `.zshrc` sets a user/host-free
+`PROMPT='%1~ %# '` with `RPROMPT=''`.
+
+The directory is forwarded to `xcodebuild` as `TEST_RUNNER_GHOSTTIES_DEMO_ZDOTDIR`
+(a process env var picked up by the test runner) and the test sets
+`app.launchEnvironment["ZDOTDIR"]` from it before launch. This works because
+Ghostty's zsh auto-integration (`setupZsh` in `src/termio/shell_integration.zig`)
+preserves any pre-existing `ZDOTDIR` and restores it before sourcing the
+user's dotfile chain (`src/shell-integration/zsh/.zshenv`) — it round-trips
+through the integration, it doesn't get clobbered by it.
+
+Separately: the "Last login: … on ttysNNN" line comes from macOS's
+`/usr/bin/login` binary itself (Ghostty spawns shells via `login -flp`, see
+`src/termio/Exec.zig`), not from any dotfile or env var — this rig does not
+attempt to suppress it.
 
 ### `DemoWorkspaceCaptureUITests` — fail-closed by design
 
