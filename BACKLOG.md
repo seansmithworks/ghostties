@@ -2372,6 +2372,7 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [ ] Capture run verifies B+C (dev build badge hidden via launch argument; staged sessions relaunched in-test before capture) — neither has been exercised against a real `demo-capture.sh` run yet. Review pass-with-notes; its AX-query risk fixed in `0d2fd1d82` (type-agnostic `descendants(matching: .any)`). Run needs Sean hands-off ~2 min (XCUITest clicks can land on a window on top) and spawns real `claude` sessions.
 - [ ] Hostname/identity leak in pane (pending measurement capture) — defect (1) above, not fixed by this pass. Strawman: `ZDOTDIR` in the test's `launchEnvironment` → fixture `.zshrc` with a user/host-free `PROMPT` (unverified that spawned shells inherit the app env); also check the Claude Code header for `/Users/seansmith` paths or account email.
 - [ ] **Open the PR for `feat/demo-capture`** once captures are clean. Branch pushed at `0d2fd1d82`.
+- [ ] Dev badge should say which branch/worktree a build came from. Sean asked 2026-09-12 after a sibling thread's Dev build was mistaken for this one. His shape: `0.1.0 (Sparkle Build …)`. Format undecided. Build can embed worktree name + branch + short SHA at build time; thread name isn't known at build time.
 
 **Parked (off-objective):**
 - [ ] `MarketingCaptureUITests` / `VisualPassUITests` still build `.dev`, so their `launch()` quits a sibling worktree's live Dev build; `VisualPassUITests.swift:353` also hardcodes the `.dev` defaults domain.
