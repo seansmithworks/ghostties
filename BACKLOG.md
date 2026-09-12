@@ -2366,15 +2366,34 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 
 ## 2026-09-11 — demo rig + capture (Sparkle Demo thread)
 
+**Status 2026-09-12:** capture passes 2/2 on a real GUI run (run 5), PNGs inspected. **PR #172 open** @ `4f12f7f4c`, not merged. Closed below: capture defects 1–3, relaunch, hostname leak, PR.
+
 **Carried (on-objective):**
-- [ ] **Finish `DemoWorkspaceCaptureUITests` so captures are post-ready.** Three defects, all visible in `output/demo-capture/demo-projects-light.png`: (1) real hostname `seansmith@Seans-MacBook-Pro` in the terminal pane — privacy leak on any post; (2) dev build badge `0.1.0 (1) · built … · up 0m` bottom-left; (3) terminal pane empty, no agent output — the dark capture is 99.6% one byte and the blank-frame guard correctly fails the run. Fix (3) by relaunching the staged sessions in-test, which is ALSO the answer to "demo loops without hand-clicking."
+- [ ] **Merge PR #172** — Sean's call. It carries a production data-safety fix (`WorkspacePersistence.directoryName(forBundleId:)`).
+- [ ] **Cleanup after merge:**
+  - old fixture repos `~/Library/Application Support/Ghostties Demo/repos` (1.5M)
+  - staged build inputs in worktree `demo-rig` (`GhosttyKit.xcframework`, `zig-out/`, `vendor/cef*`)
+  - untracked `output/demo-capture/`
+  - `~/.claude.json.bak-demo-*` backup
+  - xcresult bundles containing full-screen recordings in `$TMPDIR/ghostties-demo-capture-result.*`, which are private screen content
+  All deletions need Sean's OK.
+
+**Closed:**
+- [x] **Finish `DemoWorkspaceCaptureUITests` so captures are post-ready.** Three defects, all visible in `output/demo-capture/demo-projects-light.png`: (1) real hostname `seansmith@Seans-MacBook-Pro` in the terminal pane — privacy leak on any post; (2) dev build badge `0.1.0 (1) · built … · up 0m` bottom-left; (3) terminal pane empty, no agent output — the dark capture is 99.6% one byte and the blank-frame guard correctly fails the run. Fix (3) by relaunching the staged sessions in-test, which is ALSO the answer to "demo loops without hand-clicking."
 - [x] Separate bundle ID for capture builds — `Ghostties` target's Debug config now resolves `PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.ghostties$(GHOSTTIES_DEV_BUNDLE_SUFFIX)` (defaults to `.dev`); `demo-capture.sh` passes `GHOSTTIES_DEV_BUNDLE_SUFFIX=.democapture.dev` so a capture run no longer collides with a live Dev build in another worktree. Suffix must end in `.dev` — `WorkspacePersistence`'s fallback path only routes to `Ghostties Dev` (not the real release workspace) when the bundle ID ends in `.dev`/`.debug`; a bare `.democapture` suffix risked mutating Sean's real running workspace if the `GHOSTTIES_STATE_DIR` override ever failed.
-- [ ] Capture run verifies B+C (dev build badge hidden via launch argument; staged sessions relaunched in-test before capture) — neither has been exercised against a real `demo-capture.sh` run yet. Review pass-with-notes; its AX-query risk fixed in `0d2fd1d82` (type-agnostic `descendants(matching: .any)`). Run needs Sean hands-off ~2 min (XCUITest clicks can land on a window on top) and spawns real `claude` sessions.
-- [ ] Hostname/identity leak in pane (pending measurement capture) — defect (1) above, not fixed by this pass. Strawman: `ZDOTDIR` in the test's `launchEnvironment` → fixture `.zshrc` with a user/host-free `PROMPT` (unverified that spawned shells inherit the app env); also check the Claude Code header for `/Users/seansmith` paths or account email.
-- [ ] **Open the PR for `feat/demo-capture`** once captures are clean. Branch pushed at `0d2fd1d82`.
-- [ ] Dev badge should say which branch/worktree a build came from. Sean asked 2026-09-12 after a sibling thread's Dev build was mistaken for this one. His shape: `0.1.0 (Sparkle Build …)`. Format undecided. Build can embed worktree name + branch + short SHA at build time; thread name isn't known at build time.
+- [x] Capture run verifies B+C (dev build badge hidden via launch argument; staged sessions relaunched in-test before capture) — neither has been exercised against a real `demo-capture.sh` run yet. Review pass-with-notes; its AX-query risk fixed in `0d2fd1d82` (type-agnostic `descendants(matching: .any)`). Run needs Sean hands-off ~2 min (XCUITest clicks can land on a window on top) and spawns real `claude` sessions.
+- [x] Hostname/identity leak in pane (pending measurement capture) — defect (1) above, not fixed by this pass. Strawman: `ZDOTDIR` in the test's `launchEnvironment` → fixture `.zshrc` with a user/host-free `PROMPT` (unverified that spawned shells inherit the app env); also check the Claude Code header for `/Users/seansmith` paths or account email.
+- [x] **Open the PR for `feat/demo-capture`** once captures are clean. → PR #172.
+
+**Carried (needs Sean's call, each with a strawman to apply or redline):**
+- [ ] Dev badge should say which branch/worktree a build came from. Sean asked 2026-09-12 after a sibling thread's Dev build was mistaken for this one. His shape: `0.1.0 (Sparkle Build …)`. Format undecided. Build can embed worktree name + branch + short SHA at build time; thread name isn't known at build time. **Strawman:** `0.1.0 · demo-rig @ b4caa99 · built 10:42 · up 1m` (worktree name, short, and matches the thread's folder).
+
+**Parked (off-objective):**
 - [ ] **Shared metrics folder across builds.** `macos/Sources/App/macOS/AppDelegate.swift:2010-2014` `metricsDirectory()` hardcodes `Ghostties/metrics` under Application Support, keyed on neither bundle ID nor `GHOSTTIES_STATE_DIR`. Dev, Demo and Release all write MXMetricManager payloads into the same folder. Diagnostics only, not workspace data. Pre-existing; flagged by review 2026-09-12.
-- [ ] **Demo capture frame polish.** Four open items, Sean undecided (2026-09-12): (a) Claude Code status line shows "← 7 agents", the real live agent count, which conflicts with the no-agent-count-in-copy rule; (b) "/rc connecting…" from the user's Remote Control setting; (c) sidebar is scrolled, so the atlas-api header is clipped and only silo is active; (d) the agent is idle, so the pane is mostly empty.
+- [ ] **Demo capture frame polish.** Four open items, Sean undecided (2026-09-12): (a) Claude Code status line shows "← 7 agents", the real live agent count, which conflicts with the no-agent-count-in-copy rule; (b) "/rc connecting…" from the user's Remote Control setting; (c) sidebar is scrolled, so the atlas-api header is clipped and only silo is active; (d) the agent is idle, so the pane is mostly empty. **Strawman:**
+  - (a)+(b): give the fixture repos a project-level Claude Code settings file that turns off the status-line agent count and Remote Control (setting keys unverified);
+  - (c): the test scrolls the sidebar to the top before capture;
+  - (d): the staged template passes a canned first prompt so the agent is mid-task at capture.
 - [ ] **`demo-ready.sh --check` double message.** On an isolation failure it prints the specific reason, then also the generic "STALE: … does not match" line. Nit.
 
 **Parked (off-objective):**
