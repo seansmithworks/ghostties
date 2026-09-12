@@ -189,6 +189,14 @@ else
   REFRESH_ARGS=(--from-source --dest "$DEST_APP" --no-launch)
 fi
 
+# Version/sha match alone isn't "current" — the installed bundle must also
+# carry the LSEnvironment isolation pin, or a LaunchServices launch
+# (open/Finder/Dock) reads/writes Sean's real workspace.json.
+if [[ "$CURRENT" -eq 1 ]] && ! demo_app_isolation_ok "$DEST_APP" >/dev/null 2>&1; then
+  CURRENT=0
+  echo "==> Demo app matches $SOURCE_LABEL but is missing the LSEnvironment isolation pin — treating as stale."
+fi
+
 echo ""
 
 # ── Manifest writer: records exactly which bundle was just inspected/refreshed ─
@@ -396,6 +404,9 @@ PYEOF
 #             was just verified, so a passing check can't leave a stale manifest
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   if [[ "$CURRENT" -eq 1 ]]; then
+    if ! demo_app_isolation_ok "$DEST_APP"; then
+      exit 1
+    fi
     if ! check_fixture_trust; then
       exit 1
     fi

@@ -24,3 +24,42 @@ REPOS_DIR="/Users/Shared/Ghostties Demo/repos"
 # hardcoding a count that could drift from demo-drive.sh's own default.
 DEMO_SESSION_MARKER="Demo Agent — "
 DEMO_DRIVE_DEFAULT_COUNT=4
+
+# ── Isolation check: LSEnvironment must pin GHOSTTIES_STATE_DIR ─────────────
+# `WorkspacePersistence.directoryName` maps the demo bundle ID
+# (com.seansmithdesign.ghostties.demo) to "Ghostties Demo" — but ONLY when
+# the app is launched by a process that inherited that bundle ID naturally
+# (e.g. run directly from xcodebuild). A LaunchServices launch (`open`,
+# Finder, Dock double-click) reads Info.plist but the running process's
+# Bundle.main.bundleIdentifier still reflects the on-disk bundle ID, so that
+# part is fine — the actual risk is bundle IDs the mapping doesn't recognize,
+# or this rig's own re-signing/re-bundling process losing the state dir
+# override that pins it explicitly. `refresh-demo.sh` sets
+# LSEnvironment:GHOSTTIES_STATE_DIR to this exact path so isolation does not
+# depend solely on bundle-ID string matching. This function is the one place
+# that checks it, so demo-ready.sh and demo-drive.sh can't drift.
+#
+# Usage: demo_app_isolation_ok "<path to .app>"  → prints a status line,
+# returns 0 if LSEnvironment:GHOSTTIES_STATE_DIR equals $DEMO_STATE_DIR.
+demo_app_isolation_ok() {
+  local app_path="$1"
+  local plist="$app_path/Contents/Info.plist"
+  if [[ ! -f "$plist" ]]; then
+    echo "NOT READY: no Info.plist at $plist." >&2
+    return 1
+  fi
+  local state_dir
+  state_dir=$(/usr/libexec/PlistBuddy -c "Print :LSEnvironment:GHOSTTIES_STATE_DIR" "$plist" 2>/dev/null || true)
+  if [[ -z "$state_dir" ]]; then
+    echo "NOT READY: $plist has no LSEnvironment:GHOSTTIES_STATE_DIR." >&2
+    echo "           Fix: run ./scripts/demo/refresh-demo.sh to rebundle with the isolation env set." >&2
+    return 1
+  fi
+  if [[ "$state_dir" != "$DEMO_STATE_DIR" ]]; then
+    echo "NOT READY: $plist LSEnvironment:GHOSTTIES_STATE_DIR is '$state_dir', expected '$DEMO_STATE_DIR'." >&2
+    echo "           Fix: run ./scripts/demo/refresh-demo.sh to rebundle with the correct isolation env." >&2
+    return 1
+  fi
+  echo "OK: isolation env set (LSEnvironment:GHOSTTIES_STATE_DIR = $state_dir)."
+  return 0
+}

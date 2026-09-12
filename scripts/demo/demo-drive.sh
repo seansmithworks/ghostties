@@ -154,7 +154,15 @@ else
   "$STAGE_SCRIPT" --count "$COUNT"
 fi
 echo ""
-echo "Next: open the demo app to materialize the staged sessions, then click"
-echo "\"Relaunch\" on each one to spawn its real claude process for capture:"
-echo ""
-echo "  open \"$APP_PATH\""
+
+if demo_app_isolation_ok "$APP_PATH"; then
+  echo "Next: open the demo app to materialize the staged sessions, then click"
+  echo "\"Relaunch\" on each one to spawn its real claude process for capture:"
+  echo ""
+  echo "  open \"$APP_PATH\""
+else
+  echo "Do NOT run 'open \"$APP_PATH\"' — it is not isolated from the real workspace." >&2
+  echo "Fix: run ./scripts/demo/refresh-demo.sh to rebundle with the isolation env set," >&2
+  echo "then re-run this script." >&2
+  exit 1
+fi

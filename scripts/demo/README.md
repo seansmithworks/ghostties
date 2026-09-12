@@ -71,10 +71,22 @@ seeding and fixture trust.
 ## How isolation works
 
 `refresh-demo.sh` re-bundles the app under bundle ID
-`com.seansmithdesign.ghostties.demo`. `WorkspacePersistence` derives its state
-directory from `Bundle.main.bundleIdentifier`, so the demo app reads/writes
-`~/Library/Application Support/Ghostties Demo/` — completely separate from
-`~/Library/Application Support/Ghostties/` (release) and `Ghostties Dev/`.
+`com.seansmithdesign.ghostties.demo` AND sets an explicit Info.plist
+`LSEnvironment:GHOSTTIES_STATE_DIR` pinned to
+`~/Library/Application Support/Ghostties Demo/`. That `LSEnvironment` entry —
+not the bundle ID alone — is what actually isolates the demo app: it's the
+only mechanism that reaches a **LaunchServices launch** (`open`, Finder, Dock
+double-click), and `WorkspacePersistence.directory` checks
+`GHOSTTIES_STATE_DIR` before falling back to bundle-ID-derived resolution.
+Without it, opening the Demo app normally would read/write the release
+workspace at `~/Library/Application Support/Ghostties/` — the same file
+Sean's real, running app uses. `refresh-demo.sh` re-registers the app with
+`lsregister` after rewriting the plist so `open` picks up the new env instead
+of a cached registration.
+
+`demo-ready.sh --check` and `demo-drive.sh` both verify this pin is present
+and correct before reporting ready / printing the `open` instruction — a
+demo app missing it is treated as stale, even if its version matches.
 
 ## Refresh modes
 
