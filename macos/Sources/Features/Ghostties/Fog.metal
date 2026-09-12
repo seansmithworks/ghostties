@@ -47,11 +47,13 @@ static float fogFractalNoise(float2 p) {
 }
 
 /// `color` is the pixel already rendered by the SwiftUI view this shader is
-/// attached to (a solid, window-background-tinted `Rectangle`) — this
-/// function only reshapes its ALPHA: drifting noise, gated by `ramp`
-/// (0 = invisible, 1 = fully summoned) and an outward falloff from
-/// `focalCenter` whose reach also grows with `ramp` ("spreading outward
-/// from the focal center" per the brief).
+/// attached to (a solid, window-background-tinted `Rectangle`) — SwiftUI's
+/// `.colorEffect` passes and expects PREMULTIPLIED alpha, so this function
+/// reshapes density by scaling all four channels (rgb and alpha together)
+/// by a single factor: drifting noise, gated by `ramp` (0 = invisible,
+/// 1 = fully summoned) and an outward falloff from `focalCenter` whose
+/// reach also grows with `ramp` ("spreading outward from the focal center"
+/// per the brief).
 [[ stitchable ]] half4 composerFogDensity(
     float2 position,
     half4 color,
@@ -71,5 +73,6 @@ static float fogFractalNoise(float2 p) {
     float falloff = 1.0 - smoothstep(0.0, reach, dist);
 
     float alpha = noise * falloff * ramp;
-    return half4(color.rgb, color.a * half(clamp(alpha, 0.0, 1.0)));
+    half a = half(clamp(alpha, 0.0, 1.0));
+    return color * a;
 }

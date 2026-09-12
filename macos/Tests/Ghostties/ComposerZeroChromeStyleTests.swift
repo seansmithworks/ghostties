@@ -907,7 +907,7 @@ struct ComposerZeroChromeStyleTests {
     }
 
     /// A 1000×700 window — proves nothing clips at the measure clamp
-    /// (960pt max, well under 1000×0.75=750).
+    /// (960pt max, well under `columnFrame`'s leading-edge-0.38 result).
     @Test func zeroChromeNothingClipsAtALargeWindow() {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
