@@ -142,6 +142,90 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         }
         Thread.sleep(forTimeInterval: 0.3)
 
+        // ── Expand every project so all staged session rows are visible ──
+        // Projects start collapsed on launch, same as a real user's first
+        // open; demo-drive.sh spreads staged sessions across every fixture
+        // repo, not just the demo-only "brukas" project confirmed above.
+        let collapsedProjects = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "project, collapsed")
+        )
+        var expandAttempts = 0
+        while collapsedProjects.count > 0 && expandAttempts < 20 {
+            collapsedProjects.element(boundBy: 0).click()
+            Thread.sleep(forTimeInterval: 0.3)
+            expandAttempts += 1
+        }
+
+        // ── Relaunch every staged session so terminal panes show real
+        // activity ──
+        // Staged sessions restore as "Exited" (see demo-drive.sh's own doc
+        // comment) — nothing relaunches them at app launch, and there is no
+        // URL scheme to trigger it. Mirror MarketingCaptureUITests' real-UI
+        // idiom: right-click each staged row (named with the
+        // "Demo Agent — " prefix demo-drive.sh writes) and choose
+        // "Relaunch" from its context menu. NOT exercised against a real
+        // build — see class doc comment.
+        let stagedSessionRows = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Demo Agent — ")
+        )
+        let stagedCount = stagedSessionRows.count
+        if stagedCount == 0 {
+            XCTFail(
+                "No staged sessions found (looked for rows labeled starting " +
+                "\"Demo Agent — \"). Run demo-drive.sh to stage sessions " +
+                "before capturing, or terminal panes will show an empty/" +
+                "exited state."
+            )
+        } else {
+            for i in 0..<stagedCount {
+                let row = stagedSessionRows.element(boundBy: i)
+                guard row.waitForExistence(timeout: 5) else {
+                    XCTFail(
+                        "Staged session row at index \(i) of \(stagedCount) " +
+                        "disappeared before it could be relaunched."
+                    )
+                    continue
+                }
+                row.rightClick()
+                let relaunch = app.menuItems["Relaunch"].firstMatch
+                if relaunch.waitForExistence(timeout: 2) {
+                    relaunch.click()
+                } else {
+                    // Already running (no Relaunch item in the menu) or the
+                    // context menu didn't appear — dismiss and move on
+                    // rather than get stuck on one row.
+                    app.typeKey(.escape, modifierFlags: [])
+                }
+                Thread.sleep(forTimeInterval: 0.3)
+            }
+        }
+
+        // ── Wait until a terminal pane actually shows content ──
+        // `Ghostty.SurfaceView` exposes its rendered terminal text via
+        // `accessibilityValue()` with role `.textArea` (see
+        // "Surface View/SurfaceView_AppKit.swift"'s Accessibility
+        // extension), which XCUITest should surface as a `textView`'s
+        // `.value`. Poll that instead of a guessed sleep duration — a
+        // freshly relaunched `claude` process takes a variable amount of
+        // time to print its first output. NOT exercised against a real
+        // build: if `.textViews` doesn't pick up the surface here, that is
+        // a finding to fix, not a reason to delete this wait or fall back
+        // silently to a fixed sleep.
+        let terminalHasContent = NSPredicate { _, _ in
+            app.textViews.allElementsBoundByIndex.contains { textView in
+                guard let value = textView.value as? String else { return false }
+                return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+        }
+        let contentExpectation = XCTNSPredicateExpectation(predicate: terminalHasContent, object: nil)
+        if XCTWaiter().wait(for: [contentExpectation], timeout: 15) != .completed {
+            XCTFail(
+                "Timed out (15s) waiting for a terminal pane to show content " +
+                "after relaunching staged sessions. This wait has not been " +
+                "exercised against a real build."
+            )
+        }
+
         let window = app.windows.firstMatch
         let windowShot = window.screenshot()
         let outputPath = outputDir.appendingPathComponent("\(name).png")
