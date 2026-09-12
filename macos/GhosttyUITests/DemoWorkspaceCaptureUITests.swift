@@ -265,35 +265,39 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         }
 
         // ── Wait until a terminal pane actually shows content ──
-        // `Ghostty.SurfaceView` declares AX role `.textArea` and returns its
-        // rendered text via `accessibilityValue()`
-        // ("Surface View/SurfaceView_AppKit.swift":2308-2320). There is no
-        // existing UI test in this repo that confirms `.textArea` reaches
-        // XCUITest as `app.textViews` — `MarketingCaptureUITests` never
-        // checks terminal content, it just sleeps a fixed 2s. Query
-        // type-agnostically instead of betting on one `XCUIElementType`,
-        // the same reasoning as the staged-session-row match above. To
-        // avoid a vacuous pass (almost anything in the app could carry
-        // some non-empty string value — a menu title, a tooltip), require
-        // content that actually looks like rendered terminal output: long
-        // enough that it can't be a UI label, and multi-line the way a
-        // shell prompt + command + output block always is.
-        let terminalHasContent = NSPredicate { _, _ in
-            app.descendants(matching: .any).allElementsBoundByIndex.contains { element in
-                guard let value = element.value as? String else { return false }
-                return value.count > 40 && value.contains("\n")
-            }
-        }
-        let contentExpectation = XCTNSPredicateExpectation(predicate: terminalHasContent, object: nil)
-        if XCTWaiter().wait(for: [contentExpectation], timeout: 15) != .completed {
+        // `Ghostty.SurfaceView` declares AX role `.textArea`, which XCUITest
+        // surfaces as `XCUIElementType.textView`
+        // ("Surface View/SurfaceView_AppKit.swift":2302-2320). Capture run 2
+        // found that enumerating `app.descendants(matching: .any)` and
+        // reading `.value` on every element is a separate AX round-trip per
+        // element (~70ms each) — the log showed 701 "Find the Any" round
+        // trips and only 319 resolved elements by the 15s timeout, so the
+        // very first predicate evaluation never completed. Scope the query
+        // to `.textView` and let a single NSPredicate-driven `firstMatch`
+        // evaluate in one AX snapshot instead of enumerating in Swift. To
+        // avoid a vacuous pass (almost anything with a long single-line
+        // string could otherwise match), still require content that looks
+        // like rendered terminal output: a newline, the way a shell prompt +
+        // command + output block always has one.
+        let terminalWithContent = app.descendants(matching: .textView).matching(
+            NSPredicate(format: "value CONTAINS %@", "\n")
+        ).firstMatch
+        if !terminalWithContent.waitForExistence(timeout: 20) {
+            let textViews = app.descendants(matching: .textView).allElementsBoundByIndex
+            let lengths = textViews.map { ($0.value as? String)?.count ?? -1 }
+            print(
+                "DIAGNOSTIC: \(textViews.count) .textView descendant(s) found, " +
+                "value lengths: \(lengths)"
+            )
             XCTFail(
-                "Timed out (15s) waiting for a terminal pane to show content " +
+                "Timed out (20s) waiting for a terminal pane to show content " +
                 "after relaunching staged sessions. This wait has not been " +
                 "exercised against a real build — if SurfaceView's rendered " +
-                "text genuinely never reaches XCUITest as an element value, " +
+                "text genuinely never reaches XCUITest as a .textView value, " +
                 "that's a finding to fix (or a different signal to poll), " +
                 "not a reason to delete this wait or fall back silently to " +
-                "a fixed sleep."
+                "a fixed sleep. See the DIAGNOSTIC line above for the actual " +
+                ".textView count and value lengths."
             )
         }
 
