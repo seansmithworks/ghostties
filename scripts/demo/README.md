@@ -88,11 +88,13 @@ the demo's update mechanism — re-run it to refresh to a new release.**
 ```
 
 Copies the 10 fixtures in `examples/demo-workspace/` into
-`~/Library/Application Support/Ghostties Demo/repos/<name>/`, turns each into
-a real git repo (init + one commit; a few get an extra branch), and points
-`workspace.json` at those copies — not at this checkout, so the demo doesn't
-break when this repo changes branch. Idempotent; backs up any existing
-`workspace.json` before overwriting.
+`/Users/Shared/Ghostties Demo/repos/<name>/`, turns each into a real git repo
+(init + one commit; a few get an extra branch), and points `workspace.json`
+at those copies — not at this checkout, so the demo doesn't break when this
+repo changes branch. The repos root lives outside `$HOME` (unlike the rest of
+the demo state dir) so a captured terminal pane's cwd never shows the real
+username. Idempotent; backs up any existing `workspace.json` before
+overwriting.
 
 ## Stage real agent sessions: `demo-drive.sh`
 

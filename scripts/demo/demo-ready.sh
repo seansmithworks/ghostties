@@ -56,7 +56,10 @@ ASSET_NAME="ghostties-macos-arm64.zip"
 
 DEMO_STATE_DIR="$HOME/Library/Application Support/Ghostties Demo"
 MANIFEST_PATH="$DEMO_STATE_DIR/demo-manifest.json"
-REPOS_DIR="$DEMO_STATE_DIR/repos"
+# Repos root lives outside $HOME so a captured terminal pane's cwd never
+# shows the real username — only the demo STATE dir (above) stays under
+# $HOME. Must match the value in seed-demo-workspace.sh and demo-drive.sh.
+REPOS_DIR="/Users/Shared/Ghostties Demo/repos"
 
 MODE="release"
 DEST_APP="/Applications/Ghostties Demo.app"

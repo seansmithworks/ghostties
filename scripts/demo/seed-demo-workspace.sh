@@ -9,9 +9,11 @@
 #   It NEVER touches ~/Library/Application Support/Ghostties/ (release workspace).
 #
 #   Each fixture in examples/demo-workspace/ is copied into
-#   "~/Library/Application Support/Ghostties Demo/repos/<name>/" and turned into
-#   a real git repo (git init, one commit; a few get an extra branch), so the
-#   demo has real repo state and doesn't depend on this checkout's branch.
+#   "/Users/Shared/Ghostties Demo/repos/<name>/" and turned into a real git
+#   repo (git init, one commit; a few get an extra branch), so the demo has
+#   real repo state and doesn't depend on this checkout's branch. The repos
+#   root lives outside $HOME (unlike the rest of the demo state dir) so
+#   captured terminal panes never show a path containing the real username.
 #
 # USAGE
 #   ./scripts/demo/seed-demo-workspace.sh
@@ -33,7 +35,10 @@ FIXTURES_DIR="$REPO_ROOT/examples/demo-workspace"
 
 DEMO_DIR="$HOME/Library/Application Support/Ghostties Demo"
 TARGET="$DEMO_DIR/workspace.json"
-REPOS_DIR="$DEMO_DIR/repos"
+# Repos root lives outside $HOME so a captured terminal pane's cwd never
+# shows the real username — only the demo STATE dir (above) stays under
+# $HOME. Must match the value in demo-ready.sh and demo-drive.sh.
+REPOS_DIR="/Users/Shared/Ghostties Demo/repos"
 
 echo "==> Seeding Ghostties Demo workspace"
 echo "    Target: $TARGET"

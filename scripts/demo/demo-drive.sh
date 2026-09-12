@@ -60,7 +60,10 @@ DEMO_READY_SCRIPT="$REPO_ROOT/scripts/demo/demo-ready.sh"
 
 DEMO_DIR="$HOME/Library/Application Support/Ghostties Demo"
 TARGET="$DEMO_DIR/workspace.json"
-REPOS_DIR="$DEMO_DIR/repos"
+# Repos root lives outside $HOME so a captured terminal pane's cwd never
+# shows the real username — only the demo STATE dir (above) stays under
+# $HOME. Must match the value in seed-demo-workspace.sh and demo-ready.sh.
+REPOS_DIR="/Users/Shared/Ghostties Demo/repos"
 APP_PATH="/Applications/Ghostties Demo.app"
 BUNDLE_ID="com.seansmithdesign.ghostties.demo"
 
