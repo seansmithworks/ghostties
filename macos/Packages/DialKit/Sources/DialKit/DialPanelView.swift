@@ -724,6 +724,7 @@ package func dialDefaultFABCenter(
 }
 #endif
 
+@available(macOS 14, iOS 17, *)
 struct DialDrawerHost: View {
     @ObservedObject private var store: DialStore
     let position: DialPosition
@@ -1074,6 +1075,7 @@ struct DialDrawerHost: View {
     }
 }
 
+@available(macOS 14, iOS 17, *)
 private struct DialDrawerPanel: View {
     @ObservedObject var panel: AnyDialPanelBox
     let panels: [AnyDialPanelBox]
@@ -1216,6 +1218,7 @@ private struct DialDrawerPanel: View {
     }
 }
 
+@available(macOS 14, iOS 17, *)
 private struct DialPanelControlsView: View {
     @ObservedObject var panel: AnyDialPanelBox
     let toolbarBottomPadding: CGFloat
@@ -1579,6 +1582,7 @@ private struct DialPanelControlsView: View {
     }
 }
 
+@available(macOS 14, iOS 17, *)
 struct DialPanelContainer: View {
     @ObservedObject var panel: AnyDialPanelBox
     let defaultOpen: Bool
@@ -2227,6 +2231,7 @@ private struct DialSelectRow: View {
     }
 }
 
+@available(macOS 14, iOS 17, *)
 private struct DialTextRow: View {
     let title: String
     @Binding var text: String
@@ -2260,6 +2265,7 @@ private struct DialTextRow: View {
     }
 }
 
+@available(macOS 14, iOS 17, *)
 private struct DialColorRow: View {
     let title: String
     @Binding var hexValue: String
@@ -2711,6 +2717,7 @@ private struct DialSpringControl: View {
     }
 }
 
+@available(macOS 14, iOS 17, *)
 private struct DialTransitionControl: View {
     let title: String
     let control: DialResolvedTransition
@@ -2814,6 +2821,7 @@ private struct DialTransitionControl: View {
     }
 }
 
+@available(macOS 14, iOS 17, *)
 private struct DialBezierRow: View {
     let bezier: DialBezier
     let focusID: String?

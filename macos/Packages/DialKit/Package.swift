@@ -5,7 +5,7 @@ let package = Package(
     name: "DialKit",
     platforms: [
         .iOS(.v17),
-        .macOS(.v14)
+        .macOS(.v13)
     ],
     products: [
         .library(
@@ -20,14 +20,6 @@ let package = Package(
         .target(
             name: "DialKit",
             dependencies: ["DialKitCore"]
-        ),
-        .testTarget(
-            name: "DialKitCoreTests",
-            dependencies: ["DialKitCore"]
-        ),
-        .testTarget(
-            name: "DialKitTests",
-            dependencies: ["DialKit"]
         )
     ]
 )

@@ -10,7 +10,7 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
 - [x] R12.4 Liquid Glass treatment option (macOS 26+, falls back to material) — single-line only, not zero-chrome
 - [x] R12.5 Zero-chrome: center-aligned text option — review: centered line re-centers on every keystroke (inherent), live look decides
 - [x] R12.6 Separate reviewer on the R12 diff — pass with notes; no test proves the palette consumes `ComposerSingleLineTuning` → R13
-- [ ] R13 Real DialKit integration + palette wiring test + stale "PR-facing note" comment (`ComposerZeroChromeStyle.swift:1075`)
+- [ ] R13 Real DialKit integration + palette wiring test + stale "PR-facing note" comment — code pushed UNBUILT as `e08cda235` (DialKit vendored at `macos/Packages/DialKit/`, local package like GhosttiesCore, macOS 14 `@available`-gated; 13 falls back to the pill). CI RED on `e08cda235`: `compiling for macOS 13.0, but module 'DialKit' has a minimum deployment target of macOS 14.0` (`ComposerZeroChromeStyle.swift:5`) — `@available` can't gate an import; fix = vendored package platform → `.v13` + `@available(macOS 14, *)` inside it. Still owed once Dev closes: local build, suite totals, wiring-test red proof, Release `nm` proof of no DialKit symbols, separate reviewer
 - [ ] R13 gate: builders check Dev by bundle id, not process name (the name is `ghostty`)
 - [ ] R13 Ghost characters playing on the composer — options research → board → Sean picks → build
 

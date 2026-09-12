@@ -13,6 +13,7 @@ public enum DialMode: String, CaseIterable {
     case inline
 }
 
+@available(macOS 14, iOS 17, *)
 public struct DialRoot: View {
     @ObservedObject private var store: DialStore
     private let position: DialPosition
