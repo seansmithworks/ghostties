@@ -1627,10 +1627,11 @@ struct ComposerZeroChromeStyleTests {
     /// real `font.pointSize` and enclosing `NSScrollView`'s frame width
     /// against those injected values — not against the tuning enum's own
     /// getters, which would only prove the enum reads its own keys back,
-    /// not that the view reads the enum. Proved red once by temporarily
+    /// not that the view reads the enum. Red/green proof (temporarily
     /// hardcoding `newStyleFieldFontSize`/`newStyleFieldWidth`'s `.singleLine`
-    /// cases to `15`/`512` in `SessionComposerPalette.swift`: both
-    /// assertions failed; reverted after confirming.
+    /// cases and confirming both assertions fail, then reverting) has NOT
+    /// been performed — no local `xcodebuild` run has happened for this
+    /// round. Pending a local run.
     @Test func singleLineCardRendersInjectedTuningNotDefaults() {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
@@ -1694,5 +1695,70 @@ struct ComposerZeroChromeStyleTests {
         // ISOLATED suite specifically.
         #expect(injectedFieldSize != Double(ComposerSingleLineTuning.defaultFieldSize))
         #expect(injectedWidth != Double(ComposerSingleLineTuning.defaultWidth))
+    }
+
+    // MARK: - Round 13 review findings: DialKit tuning coordinator
+
+    /// Finding #1: the `shadowPreset` `.select` control only ever wrote
+    /// `shadowPresetRaw` — none of the preset's derived radius/length/opacity,
+    /// unlike the legacy pill's binding which calls
+    /// `ComposerSingleLineShadowDials.apply`. Names the production
+    /// coordinator/model directly (not a re-implementation) so a regression
+    /// that goes back to writing only the raw key fails this. No local
+    /// `xcodebuild` run has been performed for this round — red/green proof
+    /// (temporarily reverting the derivation and confirming this fails) is
+    /// pending a local run.
+    @available(macOS 14, *)
+    @Test func dialKitShadowPresetSelectionWritesAllThreeDialsAndUpdatesModel() {
+        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.preset.test.\(UUID().uuidString)")!
+        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+
+        coordinator.state.values.shadowPresetRaw = ComposerSingleLineShadowPreset.lifted.rawValue
+
+        let expected = ComposerSingleLineShadowPreset.lifted.dialValues
+
+        // The panel's own model reflects the derived dials immediately, so
+        // the sliders redraw with the preset's numbers, not the old ones.
+        #expect(coordinator.state.values.shadowRadius == Double(expected.radius))
+        #expect(coordinator.state.values.shadowYOffset == Double(expected.yOffset))
+        #expect(coordinator.state.values.shadowOpacity == expected.opacity)
+
+        // The persisted keys — what `ComposerSingleLineShadowDials` and every
+        // render actually read — carry the same derived values.
+        #expect(suite.string(forKey: ComposerSingleLineShadowPreset.storageKey) == ComposerSingleLineShadowPreset.lifted.rawValue)
+        #expect(suite.object(forKey: ComposerSingleLineShadowDials.radiusStorageKey) as? Double == Double(expected.radius))
+        #expect(suite.object(forKey: ComposerSingleLineShadowDials.yOffsetStorageKey) as? Double == Double(expected.yOffset))
+        #expect(suite.object(forKey: ComposerSingleLineShadowDials.opacityStorageKey) as? Double == expected.opacity)
+    }
+
+    /// Finding #2: the coordinator used to write its ENTIRE model on every
+    /// change, so a panel whose own snapshot of an unrelated key was stale
+    /// would silently stomp that key back to its stale value the moment the
+    /// user touched anything else in the panel. This changes an unrelated
+    /// field on the coordinator, then simulates a second actor (another open
+    /// panel, the legacy pill, or a raw `defaults write`) changing a key this
+    /// coordinator never touched, in the SAME isolated suite, and asserts
+    /// that a further coordinator-driven write leaves the externally-changed
+    /// key alone. No local `xcodebuild` run has been performed for this
+    /// round — red/green proof (temporarily reverting to a full-model write
+    /// and confirming this fails) is pending a local run.
+    @available(macOS 14, *)
+    @Test func dialKitCoordinatorWriteLeavesExternallyChangedKeyIntact() {
+        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.stale.test.\(UUID().uuidString)")!
+        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+
+        // A second actor changes a key this coordinator has never touched —
+        // its in-memory model still holds the OLD value for this key.
+        let externalWidth = 999.0
+        suite.set(externalWidth, forKey: ComposerSingleLineTuning.widthStorageKey)
+
+        // This coordinator now changes an UNRELATED field.
+        coordinator.state.values.focalBlurRaw = ComposerZeroChromeFocalBlurStyle.thick.rawValue
+
+        #expect(suite.string(forKey: ComposerZeroChromeFocalBlurStyle.storageKey) == ComposerZeroChromeFocalBlurStyle.thick.rawValue)
+        #expect(
+            suite.object(forKey: ComposerSingleLineTuning.widthStorageKey) as? Double == externalWidth,
+            "a write for one field must not clobber a key this panel didn't touch"
+        )
     }
 }

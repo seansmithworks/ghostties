@@ -1189,7 +1189,7 @@ struct ComposerDebugTuningControl: View {
 // wrapped in `@available(macOS 14, *)`/`if #available(macOS 14, *)` instead
 // of the package itself being patched down to `.v13`.
 @available(macOS 14, *)
-private struct ComposerDialKitTuningModel: Codable, Equatable {
+struct ComposerDialKitTuningModel: Codable, Equatable {
     var styleRaw: String
     var materialRaw: String
     var focalBlurRaw: String
@@ -1211,18 +1211,33 @@ private struct ComposerDialKitTuningModel: Codable, Equatable {
 /// this is a one-way "panel changed → write UserDefaults" sync, not a
 /// two-way live binding; UserDefaults is always re-read on next launch,
 /// matching every other knob in this file.
+///
+/// Round-13 review finding #2: writing the WHOLE model on every emission let
+/// one open panel clobber a key a second panel (or the legacy pill, or a raw
+/// `defaults write`) had just changed but this panel's own snapshot hadn't
+/// seen. Fix is diff-based: `write(from:to:)` only calls `defaults.set` for
+/// fields that actually moved between the previous and current emission of
+/// `state.values` — since nothing external ever mutates `state.values`
+/// itself, any field difference between two consecutive emissions is by
+/// construction a change the user just made IN THIS PANEL, so a field this
+/// panel never touched is never re-persisted, however stale this panel's
+/// last-known value for it is. No `UserDefaults.didChangeNotification`/KVO
+/// observer is needed for that guarantee — it would only add a live-refresh
+/// nicety, not fix the clobber, and risks its own panel ⇄ defaults loop.
 @available(macOS 14, *)
 @MainActor
-private final class ComposerDialKitCoordinator: ObservableObject {
+final class ComposerDialKitCoordinator: ObservableObject {
     let state: DialPanelState<ComposerDialKitTuningModel>
     private var cancellable: AnyCancellable?
     private let defaults: UserDefaults
     private let onChange: () -> Void
+    private var lastKnownModel: ComposerDialKitTuningModel
 
     init(defaults: UserDefaults, onChange: @escaping () -> Void) {
         self.defaults = defaults
         self.onChange = onChange
         let initial = Self.readModel(defaults: defaults)
+        lastKnownModel = initial
         state = DialPanelState(
             name: "Composer Tuning",
             initial: initial,
@@ -1231,8 +1246,40 @@ private final class ComposerDialKitCoordinator: ObservableObject {
         cancellable = state.$values
             .dropFirst()
             .sink { [weak self] newValue in
-                self?.write(newValue)
+                self?.handle(newValue)
             }
+    }
+
+    /// Round-13 review finding #1: the `shadowPreset` `.select` control only
+    /// ever wrote `shadowPresetRaw` — none of `ComposerSingleLineShadowPreset`'s
+    /// three derived dial values (mirroring the legacy pill's
+    /// `singleLineShadowPreset` binding, which calls
+    /// `ComposerSingleLineShadowDials.apply` on every selection) — so picking
+    /// a preset here left the three sliders, and the persisted keys they
+    /// write, exactly where they were. When the preset changes, derive its
+    /// dial values and push them back into `state.values` BEFORE diffing, so
+    /// both the panel's own sliders and the persisted keys update together.
+    private func handle(_ model: ComposerDialKitTuningModel) {
+        let previous = lastKnownModel
+        if model.shadowPresetRaw != previous.shadowPresetRaw,
+           let preset = ComposerSingleLineShadowPreset(rawValue: model.shadowPresetRaw) {
+            var derived = model
+            let values = preset.dialValues
+            derived.shadowRadius = Double(values.radius)
+            derived.shadowYOffset = Double(values.yOffset)
+            derived.shadowOpacity = values.opacity
+            lastKnownModel = derived
+            // Reassigning `state.values` re-renders the panel's sliders with
+            // the derived numbers and re-enters this sink synchronously; by
+            // the time that nested call runs, `lastKnownModel` already
+            // equals `derived`, so it diffs to nothing and writes nothing —
+            // the single `write(from:to:)` below is the only persistence.
+            state.values = derived
+            write(from: previous, to: derived)
+            return
+        }
+        lastKnownModel = model
+        write(from: previous, to: model)
     }
 
     private static func readModel(defaults: UserDefaults) -> ComposerDialKitTuningModel {
@@ -1253,20 +1300,49 @@ private final class ComposerDialKitCoordinator: ObservableObject {
         )
     }
 
-    private func write(_ model: ComposerDialKitTuningModel) {
-        defaults.set(model.styleRaw, forKey: ComposerStyle.storageKey)
-        defaults.set(model.materialRaw, forKey: ComposerZeroChromeMaterial.storageKey)
-        defaults.set(model.focalBlurRaw, forKey: ComposerZeroChromeFocalBlurStyle.storageKey)
-        defaults.set(model.fogEnabled, forKey: ComposerZeroChromeFogSetting.storageKey)
-        defaults.set(model.alignmentRaw, forKey: ComposerZeroChromeAlignment.storageKey)
-        defaults.set(model.singleLineFieldSize, forKey: ComposerSingleLineTuning.fieldSizeStorageKey)
-        defaults.set(model.singleLineRowSize, forKey: ComposerSingleLineTuning.rowSizeStorageKey)
-        defaults.set(model.singleLineWidth, forKey: ComposerSingleLineTuning.widthStorageKey)
-        defaults.set(model.shadowPresetRaw, forKey: ComposerSingleLineShadowPreset.storageKey)
-        defaults.set(model.shadowRadius, forKey: ComposerSingleLineShadowDials.radiusStorageKey)
-        defaults.set(model.shadowYOffset, forKey: ComposerSingleLineShadowDials.yOffsetStorageKey)
-        defaults.set(model.shadowOpacity, forKey: ComposerSingleLineShadowDials.opacityStorageKey)
-        defaults.set(model.treatmentRaw, forKey: ComposerSingleLineTreatment.storageKey)
+    /// Persists only the fields where `to` differs from `from` — see the
+    /// coordinator doc comment above for why a full-model write is the bug.
+    private func write(from previous: ComposerDialKitTuningModel, to model: ComposerDialKitTuningModel) {
+        guard previous != model else { return }
+        if model.styleRaw != previous.styleRaw {
+            defaults.set(model.styleRaw, forKey: ComposerStyle.storageKey)
+        }
+        if model.materialRaw != previous.materialRaw {
+            defaults.set(model.materialRaw, forKey: ComposerZeroChromeMaterial.storageKey)
+        }
+        if model.focalBlurRaw != previous.focalBlurRaw {
+            defaults.set(model.focalBlurRaw, forKey: ComposerZeroChromeFocalBlurStyle.storageKey)
+        }
+        if model.fogEnabled != previous.fogEnabled {
+            defaults.set(model.fogEnabled, forKey: ComposerZeroChromeFogSetting.storageKey)
+        }
+        if model.alignmentRaw != previous.alignmentRaw {
+            defaults.set(model.alignmentRaw, forKey: ComposerZeroChromeAlignment.storageKey)
+        }
+        if model.singleLineFieldSize != previous.singleLineFieldSize {
+            defaults.set(model.singleLineFieldSize, forKey: ComposerSingleLineTuning.fieldSizeStorageKey)
+        }
+        if model.singleLineRowSize != previous.singleLineRowSize {
+            defaults.set(model.singleLineRowSize, forKey: ComposerSingleLineTuning.rowSizeStorageKey)
+        }
+        if model.singleLineWidth != previous.singleLineWidth {
+            defaults.set(model.singleLineWidth, forKey: ComposerSingleLineTuning.widthStorageKey)
+        }
+        if model.shadowPresetRaw != previous.shadowPresetRaw {
+            defaults.set(model.shadowPresetRaw, forKey: ComposerSingleLineShadowPreset.storageKey)
+        }
+        if model.shadowRadius != previous.shadowRadius {
+            defaults.set(model.shadowRadius, forKey: ComposerSingleLineShadowDials.radiusStorageKey)
+        }
+        if model.shadowYOffset != previous.shadowYOffset {
+            defaults.set(model.shadowYOffset, forKey: ComposerSingleLineShadowDials.yOffsetStorageKey)
+        }
+        if model.shadowOpacity != previous.shadowOpacity {
+            defaults.set(model.shadowOpacity, forKey: ComposerSingleLineShadowDials.opacityStorageKey)
+        }
+        if model.treatmentRaw != previous.treatmentRaw {
+            defaults.set(model.treatmentRaw, forKey: ComposerSingleLineTreatment.storageKey)
+        }
         onChange()
     }
 
