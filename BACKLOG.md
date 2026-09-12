@@ -2363,3 +2363,20 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [ ] `⚠ The EdDSA public key is not valid for Ghostties` toast — Sparkle update-signing key mismatch, visible bottom-right in every window. Never logged before 2026-09-02.
 - [ ] `feat/composer-variant-g` is now fully contained in `fix/composer-tab-space` (merged `origin/main` in at `2ad00cf05`). Merging variant-g separately is moot — retire the branch when the new one lands.
 - [ ] `BACKLOG.md:2108` item **D2** (Tab-to-complete) is arguably closed by Model-B being default-on. Sean's call.
+
+## 2026-09-11 — zero-chrome composer #169, rounds 7–11 (Composer thread)
+
+**Carried (on-objective):**
+- [ ] **Sean's live look on R11** `3f19d130c` (Dev app in `session-7`): a long ghost suggestion clips at the 640pt column edge; watch for a one-frame anchor jump on the first keystroke and when the field grows a line (reviewer: PLAUSIBLE, unverified).
+- [ ] **`career-ops > main >` + Enter launches a session** — asked every round, never reported live.
+- [ ] **Column width** — strawman: keep 640pt (≈36 chars at 32pt semibold). Apply or redline.
+- [ ] **Gap field → Run row** reads loose now that the field wraps (~1.5 lines). Strawman: `ComposerZeroChromeTypography.rowTopOffset` 24 → 12pt. Apply or redline.
+- [ ] **Double space after a Tab-completed project name** (R10 screenshot: `ghostties  cco`). Cause unverified — Tab's own space plus a typed one, or a wrap-mode insertion bug.
+- [ ] **Ghost at the column edge** — shipped a hard cut. Alternative: flow the overflow onto the next line. Strawman: keep the cut.
+- [ ] **⊖ glyph left of the caret** — no composer code draws it (grep); likely a macOS caret indicator. Check whether it appears in other apps.
+- [ ] Single-line A-F2 coverage rests on `step7ModelBGhostFieldRendersLightAndDark` — not red/green-proven.
+- [ ] Blur + fog together has no automated coverage (offscreen snapshot can't composite both) — live look only.
+
+**Parked (off-objective):**
+- [ ] beta.25 tag — its own clean thread after #169 lands.
+- [ ] `SessionComposerSnapshotTests.typedUnknownBranchTokenRendersCreateBranchRowFirst` failed once in a full suite (`worktrees never settled`), passed 5/5 reruns alone and in-suite — same load-flake family as `SessionComposerWorktreeLaunchTests`/`GitWorktreeCreationTests`.
