@@ -13,7 +13,12 @@
   - Dragging down isn't supported; Stop does that job.
 - [ ] (D1) Claude Code resume: Resume + Start Fresh menu — relaunch resumes the agent conversation
   (`claude --resume`) instead of always starting fresh
-- [ ] (D2) Codex resume (feasibility spike running)
+- [ ] (D2) Codex resume — spike 2026-09-13 says FEASIBLE: hooks inherit `GHOSTTIES_SESSION_ID`,
+  `codex resume -C '<cwd>' '<id>'` (Codex does not restore cwd). Ghostties appends its hook to
+  `~/.codex/hooks.json` automatically on the first Codex launch (append, never prepend — trust is
+  per position); user approves once in Codex's own review prompt; untrusted hooks fail silently, so
+  show a quiet "approve the Ghostties hook in Codex" hint. Build D1+D2 as one generalized
+  `AgentSession.resume` record. Full plan: memory `project_relaunch-resume-plan.md`. (carried)
 - [ ] (E) Cmd+W close dialog: `SessionCoordinator.closeCurrentSessionWithConfirmation()`'s inline
   `isActive` check treats a closed `.error` session as active (same divergence fixed for the
   sidebar in `1c0f78b2b`)
@@ -30,6 +35,17 @@
 - [x] (H) Project-view Archive header now matches session view's section headers — chevron moved
   to the leading side, and `.disabled(!isCollapsible)`'s automatic dimming (the actual cause of
   Archive reading darker than Active/Inactive) removed in favor of the existing tap-guard.
+- [ ] (I) Review `4e3a04419` (separate reviewer, not yet run) + live checks the headless renders can't
+  prove: a drag released over empty space reverts (the `leftMouseUp` monitor is unverified), auto-scroll
+  feel (row-stepped, not continuous), relaunch-on-drop holds its slot. Then a Dev build screenshot —
+  the Dev slot is held by the Composer review build, so coordinate. (carried)
+- [ ] (J) DECIDE OR KILL — status visual system. Canvases `d9ccb142…` (round 1) and `2cc82cb4…`
+  (round 2, incl. "Row anatomy — name first"). Sean 2026-09-13: current colors + density are too much,
+  yet wants more character. Strawman: #3 "Quiet, plus a hand" (grey ghosts, gold + raised hand only on
+  needs-you), thread name kept on line 1, row layout C for Allow/Deny and A for "Answer in terminal",
+  Deny stays a word. Waiting on the sidebar inspiration board before picking. (carried)
+- [ ] (K) `DESIGN.md` status colors/type sizes are stale vs code (terracotta = waiting, 11pt) —
+  reconcile when (J) lands. (parked)
 
 ## 2026-08-31 — Composer variant G session (carried)
 
