@@ -94,6 +94,89 @@ enum ComposerWitness {
     }
 }
 
+/// Pure transition logic for an identity change arriving while a beat is
+/// mid-playback — extracted out of `ComposerWitnessView.onChange(of:
+/// identity)` so it's directly testable without constructing a View.
+///
+/// R2 review fix 1: a second identity change during a resolve morph (or one
+/// landing mid tab/error/open beat) must start its own morph from EXACTLY
+/// what's on screen at that instant — chars, cell offset, and per-cell
+/// colour — never from the interrupted beat's named target's full base
+/// grid (that discarded whatever fraction of the prior morph had already
+/// played, producing a visible jump).
+///
+/// R2 review fix 2: once a `.launch` beat has armed, it's terminal —
+/// `identityChanged` returns `nil` (a no-op) for every identity change
+/// until the caller reports a later non-launch beat, so the dissolve can
+/// never be overridden by a resolve.
+enum ComposerWitnessTransition {
+    struct ResolvedState {
+        var previousIdentity: ComposerWitness.Identity
+        var displayedIdentity: ComposerWitness.Identity
+        var beatFrames: [ComposerWitnessFrames.WitnessFrame]
+        var resolveFromColors: [[Color]]
+    }
+
+    static func identityChanged(
+        to newIdentity: ComposerWitness.Identity,
+        currentDisplayedIdentity: ComposerWitness.Identity,
+        currentPreviousIdentity: ComposerWitness.Identity?,
+        onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?),
+        targetGrid: [String],
+        isLaunchLocked: Bool,
+        colorFor: (ComposerWitness.Identity) -> Color,
+        seed: Int32
+    ) -> ResolvedState? {
+        guard !isLaunchLocked else { return nil }
+        guard newIdentity != currentDisplayedIdentity else { return nil }
+
+        let currentColor = colorFor(currentDisplayedIdentity)
+        let priorColor = currentPreviousIdentity.map(colorFor) ?? currentColor
+        let rows = onScreen.grid.count
+        let cols = onScreen.grid.first?.count ?? 0
+        let fromColors: [[Color]]
+        if let sourceIsB = onScreen.sourceIsB {
+            // Already mid-morph: some cells are already painted the
+            // (about-to-be-outgoing) target colour, the rest still the
+            // older source colour — carry each cell's ACTUAL colour
+            // forward rather than collapsing back to a single source.
+            fromColors = (0..<rows).map { r in
+                (0..<cols).map { c in sourceIsB[r][c] ? currentColor : priorColor }
+            }
+        } else {
+            // Not mid-morph (idle/tab/error/open all show a single
+            // identity's colour uniformly) — every on-screen cell is the
+            // same colour.
+            fromColors = Array(repeating: Array(repeating: currentColor, count: cols), count: rows)
+        }
+
+        var frames = ComposerWitnessFrames.buildResolveFrames(
+            gridA: onScreen.grid,
+            gridB: targetGrid,
+            seed: seed
+        )
+        // A resolve always plays at cellOffsetY 0 — if the interrupted beat
+        // had shifted the sprite (e.g. mid tab-accept hop), blend that
+        // offset back to 0 across the new morph's frames instead of
+        // snapping to 0 on frame one.
+        if onScreen.cellOffsetY != 0 {
+            let start = onScreen.cellOffsetY
+            let n = frames.count
+            for i in frames.indices {
+                let progress = Double(i + 1) / Double(n)
+                frames[i].cellOffsetY = Int((Double(start) * (1 - progress)).rounded())
+            }
+        }
+
+        return ResolvedState(
+            previousIdentity: currentDisplayedIdentity,
+            displayedIdentity: newIdentity,
+            beatFrames: frames,
+            resolveFromColors: fromColors
+        )
+    }
+}
+
 /// The 24×24 sprite view. `TimelineView` wraps ONLY this sprite (never the
 /// palette around it — the palette re-parses `query` on every redraw, plan
 /// §4), so its clock never forces the whole composer to re-render.
@@ -119,6 +202,16 @@ struct ComposerWitnessView: View {
     /// tinting while that morph's frames play.
     @State private var displayedIdentity: ComposerWitness.Identity
     @State private var previousIdentity: ComposerWitness.Identity?
+    /// Per-cell "from" colours for the resolve currently playing, captured
+    /// once at arm time by `ComposerWitnessTransition.identityChanged` —
+    /// may mix more than one prior ghost's colour when a resolve interrupts
+    /// another resolve already in flight. `nil` outside a resolve.
+    @State private var resolveFromColors: [[Color]]?
+    /// R2 review fix 2: once a `.launch` beat arms this stays `true` until
+    /// a later NON-launch beat trigger arrives — while locked, `identity`
+    /// changes are ignored outright so launch's terminal empty grid can
+    /// never be overridden by a resolve.
+    @State private var isLaunchLocked = false
 
     private let frameSize: CGFloat = 24
 
@@ -146,33 +239,58 @@ struct ComposerWitnessView: View {
                 grid: display.grid,
                 cellOffsetY: display.cellOffsetY,
                 primaryColor: bodyColor(for: displayedIdentity),
-                secondaryColor: previousIdentity.map(bodyColor(for:)),
+                secondaryColors: resolveFromColors,
                 sourceIsB: display.sourceIsB
             )
         }
         .frame(width: frameSize, height: frameSize)
         .onChange(of: beatTrigger) { newValue in
+            isLaunchLocked = newValue.kind == .launch
             currentBeat = newValue
             beatStartedAt = .now
             beatFrames = frames(for: newValue.kind, target: displayedIdentity, source: previousIdentity)
+            resolveFromColors = nil
         }
         .onChange(of: identity) { newValue in
             guard newValue != displayedIdentity else { return }
             if reduceMotion {
+                guard !isLaunchLocked else { return }
                 // Instant swap, no frames, no idle motion.
                 displayedIdentity = newValue
                 previousIdentity = nil
                 currentBeat = .idle
                 beatFrames = []
-            } else {
-                previousIdentity = displayedIdentity
-                displayedIdentity = newValue
-                // `.resolve` is an identity swap, not a replay of `.open` —
-                // it must never re-arm the open materialise.
-                currentBeat = currentBeat.next(.resolve)
-                beatStartedAt = .now
-                beatFrames = frames(for: .resolve, target: newValue, source: previousIdentity)
+                resolveFromColors = nil
+                return
             }
+            let now = Date.now
+            let onScreen = ComposerWitnessFrames.displayGrid(
+                identityGrid: pixels(for: displayedIdentity),
+                isIdleBeat: currentBeat.kind == .idle,
+                isLaunchBeat: currentBeat.kind == .launch,
+                beatFrames: beatFrames,
+                beatElapsedMs: Int(now.timeIntervalSince(beatStartedAt) * 1000),
+                idleClockMs: Int(now.timeIntervalSince(mountedAt) * 1000),
+                reduceMotion: false
+            )
+            guard let resolved = ComposerWitnessTransition.identityChanged(
+                to: newValue,
+                currentDisplayedIdentity: displayedIdentity,
+                currentPreviousIdentity: previousIdentity,
+                onScreen: onScreen,
+                targetGrid: pixels(for: newValue),
+                isLaunchLocked: isLaunchLocked,
+                colorFor: bodyColor(for:),
+                seed: Self.ditherSeed
+            ) else { return }
+            previousIdentity = resolved.previousIdentity
+            displayedIdentity = resolved.displayedIdentity
+            // `.resolve` is an identity swap, not a replay of `.open` — it
+            // must never re-arm the open materialise.
+            currentBeat = currentBeat.next(.resolve)
+            beatStartedAt = now
+            beatFrames = resolved.beatFrames
+            resolveFromColors = resolved.resolveFromColors
         }
     }
 
@@ -217,14 +335,17 @@ private struct WitnessSprite: View, Equatable {
     let grid: [String]
     let cellOffsetY: Int
     let primaryColor: Color
-    let secondaryColor: Color?
+    /// Per-cell "from" colours for a resolve morph — `nil` outside a
+    /// resolve, in which case every non-primary cell just falls back to
+    /// `primaryColor` (see `color(forCell:row:col:)`).
+    let secondaryColors: [[Color]]?
     let sourceIsB: [[Bool]]?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.grid == rhs.grid
             && lhs.cellOffsetY == rhs.cellOffsetY
             && lhs.primaryColor == rhs.primaryColor
-            && lhs.secondaryColor == rhs.secondaryColor
+            && lhs.secondaryColors == rhs.secondaryColors
             && lhs.sourceIsB == rhs.sourceIsB
     }
 
@@ -252,7 +373,7 @@ private struct WitnessSprite: View, Equatable {
 
     private func color(forCell cell: Character, row: Int, col: Int) -> Color? {
         let fromB = sourceIsB?[row][col] ?? true
-        let bodyColor = fromB ? primaryColor : (secondaryColor ?? primaryColor)
+        let bodyColor = fromB ? primaryColor : (secondaryColors?[row][col] ?? primaryColor)
         switch cell {
         case "X": return bodyColor
         case "e": return Color(hex: ComposerWitnessGhost.eyeColorHex)
