@@ -76,8 +76,63 @@ struct WorkspaceStoreSessionPinningTests {
         let store = WorkspaceStore(testingSessions: [a, b, c])
         let section = [a, b, c]
 
-        // Move "a" (index 0) to index 2 — after "c".
-        store.moveSessionInSessionsView(id: a.id, toIndex: 2, within: section)
+        // Move "a" to the end — dropped past the last row.
+        store.moveSessionInSessionsView(id: a.id, before: nil, within: section)
+
+        let reordered = RecentsListView.orderedBySessionViewOrder(store.sessions)
+        #expect(reordered.map(\.name) == ["b", "c", "a"])
+    }
+
+    /// Fix-round repro: dragging A onto C in [A,B,C,D] must land A
+    /// immediately BEFORE C -> [B,A,C,D]. The pre-fix call convention
+    /// (`toIndex` = the drop target's index in the PRE-removal list, exactly
+    /// what `handleSessionDrop` passed) instead removes A first — shifting C
+    /// to index 1 — then inserts at the now-stale pre-removal index 2,
+    /// producing [B,C,A,D]. Watched red against the pre-fix implementation;
+    /// see task report for the exact totals line.
+    @Test func moveSessionInSessionsViewDownwardDropMustInsertBeforeTarget() {
+        let a = makeSession(name: "a")
+        let b = makeSession(name: "b")
+        let c = makeSession(name: "c")
+        let d = makeSession(name: "d")
+        let store = WorkspaceStore(testingSessions: [a, b, c, d])
+        let section = [a, b, c, d]
+
+        store.moveSessionInSessionsView(id: a.id, before: c.id, within: section)
+
+        let reordered = RecentsListView.orderedBySessionViewOrder(store.sessions)
+        #expect(reordered.map(\.name) == ["b", "a", "c", "d"])
+    }
+
+    /// Upward mid-list: dragging D onto B in [A,B,C,D] must land D
+    /// immediately BEFORE B -> [A,D,B,C]. Upward drags happened to already
+    /// work under the pre-fix index math (the removed element was AFTER the
+    /// target, so removal never shifted the target's index) — kept as a
+    /// regression guard for the new `before:` API.
+    @Test func moveSessionInSessionsViewUpwardDropMustInsertBeforeTarget() {
+        let a = makeSession(name: "a")
+        let b = makeSession(name: "b")
+        let c = makeSession(name: "c")
+        let d = makeSession(name: "d")
+        let store = WorkspaceStore(testingSessions: [a, b, c, d])
+        let section = [a, b, c, d]
+
+        store.moveSessionInSessionsView(id: d.id, before: b.id, within: section)
+
+        let reordered = RecentsListView.orderedBySessionViewOrder(store.sessions)
+        #expect(reordered.map(\.name) == ["a", "d", "b", "c"])
+    }
+
+    /// Dropping past the last row (`before: nil`) must land the session
+    /// last, regardless of direction.
+    @Test func moveSessionInSessionsViewDropAtEndLandsLast() {
+        let a = makeSession(name: "a")
+        let b = makeSession(name: "b")
+        let c = makeSession(name: "c")
+        let store = WorkspaceStore(testingSessions: [a, b, c])
+        let section = [a, b, c]
+
+        store.moveSessionInSessionsView(id: a.id, before: nil, within: section)
 
         let reordered = RecentsListView.orderedBySessionViewOrder(store.sessions)
         #expect(reordered.map(\.name) == ["b", "c", "a"])
@@ -96,9 +151,9 @@ struct WorkspaceStoreSessionPinningTests {
         let store = WorkspaceStore(testingSessions: [pinnedA, pinnedB, newlyPinned])
 
         // Simulate the "pin" action: set pinned, then insert into the
-        // PRE-pin snapshot of the Pinned list at index 1 (between pinnedA and pinnedB).
+        // PRE-pin snapshot of the Pinned list, before pinnedB.
         store.setSessionPinned(id: newlyPinned.id, true)
-        store.moveSessionInSessionsView(id: newlyPinned.id, toIndex: 1, within: [pinnedA, pinnedB])
+        store.moveSessionInSessionsView(id: newlyPinned.id, before: pinnedB.id, within: [pinnedA, pinnedB])
 
         let pinnedOrder = RecentsListView.pinnedSessions(from: store.sessions)
         #expect(pinnedOrder.map(\.name) == ["pinnedA", "newlyPinned", "pinnedB"])
@@ -109,8 +164,8 @@ struct WorkspaceStoreSessionPinningTests {
         let b = makeSession(name: "b")
         let store = WorkspaceStore(testingSessions: [a, b])
 
-        // Way out of range — must clamp to the end, not crash or no-op.
-        store.moveSessionInSessionsView(id: a.id, toIndex: 999, within: [a, b])
+        // Dropped past the last row — must clamp to the end, not crash or no-op.
+        store.moveSessionInSessionsView(id: a.id, before: nil, within: [a, b])
 
         let reordered = RecentsListView.orderedBySessionViewOrder(store.sessions)
         #expect(reordered.map(\.name) == ["b", "a"])
@@ -120,7 +175,7 @@ struct WorkspaceStoreSessionPinningTests {
         let a = makeSession(name: "a")
         let store = WorkspaceStore(testingSessions: [a])
 
-        store.moveSessionInSessionsView(id: UUID(), toIndex: 0, within: [a]) // must not crash
+        store.moveSessionInSessionsView(id: UUID(), before: a.id, within: [a]) // must not crash
 
         #expect(store.sessions.map(\.name) == ["a"])
     }

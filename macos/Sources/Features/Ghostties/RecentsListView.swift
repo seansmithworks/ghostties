@@ -203,11 +203,6 @@ struct RecentsListView: View {
             Button("Rename") {
                 beginRename(session: session)
             }
-            if session.isNamePinned {
-                Button("Sync name automatically") {
-                    store.resetNamePin(id: session.id)
-                }
-            }
             Divider()
             Button(session.isPinned ? "Unpin" : "Pin") {
                 store.toggleSessionPin(id: session.id)
@@ -266,8 +261,7 @@ struct RecentsListView: View {
     ) -> Bool {
         guard let raw = items.first,
               let draggedId = UUID(uuidString: raw),
-              let draggedSession = store.sessions.first(where: { $0.id == draggedId }),
-              let targetIndex = targetList.firstIndex(where: { $0.id == droppedOnSession.id })
+              let draggedSession = store.sessions.first(where: { $0.id == draggedId })
         else { return false }
 
         let draggedBucket = SessionBucket.membership(
@@ -287,31 +281,45 @@ struct RecentsListView: View {
         case .reject:
             return false
         case .reorder:
-            store.moveSessionInSessionsView(id: draggedId, toIndex: targetIndex, within: targetList)
+            store.moveSessionInSessionsView(id: draggedId, before: droppedOnSession.id, within: targetList)
         case .pin:
             store.setSessionPinned(id: draggedId, true)
-            store.moveSessionInSessionsView(id: draggedId, toIndex: targetIndex, within: targetList)
+            store.moveSessionInSessionsView(id: draggedId, before: droppedOnSession.id, within: targetList)
         case .unpin(let relaunchIfClosed):
             store.setSessionPinned(id: draggedId, false)
             if relaunchIfClosed {
                 relaunchSession(draggedSession, project: store.projects.first { $0.id == draggedSession.projectId })
             }
-            store.moveSessionInSessionsView(id: draggedId, toIndex: targetIndex, within: targetList)
+            store.moveSessionInSessionsView(id: draggedId, before: droppedOnSession.id, within: targetList)
         case .relaunch:
             relaunchSession(draggedSession, project: store.projects.first { $0.id == draggedSession.projectId })
-            store.moveSessionInSessionsView(id: draggedId, toIndex: targetIndex, within: targetList)
+            store.moveSessionInSessionsView(id: draggedId, before: droppedOnSession.id, within: targetList)
         }
         return true
     }
 
     /// VoiceOver/keyboard reorder within one section — the accessible
     /// counterpart to drag-reorder. `direction` is -1 (up) or +1 (down); a
-    /// move past either end of the section is a no-op.
+    /// move past either end of the section is a no-op. Adjacent swap,
+    /// expressed as "insert before" the id that will end up on the other
+    /// side of the swap — same rule drag-drop uses, so both paths share one
+    /// insertion semantic in `WorkspaceStore.moveSessionInSessionsView`.
     private func moveWithinSection(session: AgentSession, indexInSection: Int?, direction: Int, sectionList: [AgentSession]) {
         guard let indexInSection else { return }
         let target = indexInSection + direction
         guard target >= 0, target < sectionList.count else { return }
-        store.moveSessionInSessionsView(id: session.id, toIndex: target, within: sectionList)
+
+        let beforeId: UUID?
+        if direction < 0 {
+            // Moving up: insert before whatever currently sits at `target`.
+            beforeId = sectionList[target].id
+        } else {
+            // Moving down: insert before whatever comes right after `target`
+            // (nil — drop at end — if `target` is the last row).
+            let afterTarget = target + 1
+            beforeId = afterTarget < sectionList.count ? sectionList[afterTarget].id : nil
+        }
+        store.moveSessionInSessionsView(id: session.id, before: beforeId, within: sectionList)
     }
 
     // MARK: - Empty State

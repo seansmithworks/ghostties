@@ -828,24 +828,32 @@ final class WorkspaceStore: ObservableObject {
         setSessionPinned(id: id, !sessions[index].isPinned)
     }
 
-    /// Reposition a session to `newIndex` within a Sessions-tab section,
-    /// renumbering `sessionViewOrder` for the resulting list.
+    /// Reposition a session so it renders immediately BEFORE `beforeId`
+    /// within a Sessions-tab section — or last, if `beforeId` is `nil` or
+    /// not found (a drop past the last row) — renumbering `sessionViewOrder`
+    /// for the resulting list.
     ///
     /// `sectionSessions` is the section's CURRENT rendered list (from
     /// `RecentsListView.pinnedSessions`/`activeSessions`/`inactiveSessions`)
     /// — the session being moved does not need to already be a member of it.
     /// This single function handles both a same-section reorder (the session
-    /// IS in `sectionSessions`; it's removed and reinserted at `newIndex`)
-    /// and a cross-section move (the session is NOT in `sectionSessions`,
-    /// e.g. after `setSessionPinned`/a relaunch moved it into a new section;
-    /// it's simply inserted at `newIndex`), because filtering it out first is
-    /// a no-op in the reorder case and a correctness requirement in the
-    /// cross-section case.
-    func moveSessionInSessionsView(id: UUID, toIndex newIndex: Int, within sectionSessions: [AgentSession]) {
+    /// IS in `sectionSessions`) and a cross-section move (it's NOT — e.g.
+    /// after `setSessionPinned`/a relaunch moved it into a new section).
+    ///
+    /// The dragged session is filtered OUT first, and `beforeId` is resolved
+    /// against that POST-removal list — never a raw index into the original
+    /// list. Resolving against a stale pre-removal index was the bug: "drop
+    /// A onto C" in [A,B,C,D] removes A first, shifting C to index 1: if the
+    /// caller had already computed "insert at 2" from the ORIGINAL list, it
+    /// would land A at the OLD index of C, one slot too late ([B,C,A,D]
+    /// instead of [B,A,C,D]). Resolving `beforeId`'s position fresh, after
+    /// removal, makes "drop on a row = insert before that row" true in both
+    /// directions with no index arithmetic to get wrong.
+    func moveSessionInSessionsView(id: UUID, before beforeId: UUID?, within sectionSessions: [AgentSession]) {
         guard let session = sessions.first(where: { $0.id == id }) else { return }
         var list = sectionSessions.filter { $0.id != id }
-        let clampedIndex = max(0, min(newIndex, list.count))
-        list.insert(session, at: clampedIndex)
+        let insertIndex = beforeId.flatMap { target in list.firstIndex(where: { $0.id == target }) } ?? list.count
+        list.insert(session, at: insertIndex)
 
         for (order, s) in list.enumerated() {
             if let globalIndex = sessions.firstIndex(where: { $0.id == s.id }) {
