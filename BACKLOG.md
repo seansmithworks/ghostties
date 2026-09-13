@@ -2,6 +2,7 @@
 
 ## PR #169 merge + post-merge verification (handoff, 2026-09-13)
 
+- [x] Stale default assertions and vacuous stored-value tests fixed pre-merge in this commit, found by the adversarial test-plan review.
 - [ ] (a) Mark PR #169 ready and merge it via `--repo SeanSmithWorks/ghostties`.
 - [ ] (b) After merge, on main, with Ghostties Dev quit for the duration: full unfiltered suite via `xcodebuild test-without-building` with real totals from `xcresulttool`. Also red proofs by minimal production mutation (a compile failure doesn't count) for every test-bearing commit in `git log --first-parent --no-merges 911759a6e..057c19fed`, including the carried R15/R15b/Custom-preset/R18/Witness items listed in the sections below, and (session-7, Classic removal commit) `SessionComposerSnapshotTests.swift`'s 21 retargeted `.centered`→`.anchored` sites plus `twentySevenProjectsScrollCleanlyInPopover` — red proof: re-route `.anchored` to the single-line card in `cardKind(style:presentation:)` and confirm the popover-card tests go red.
 - [ ] (c) Sean's full manual run-through of the composer on a main build.

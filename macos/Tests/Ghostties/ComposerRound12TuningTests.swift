@@ -19,15 +19,15 @@ struct ComposerRound12TuningTests {
 
     // MARK: - Single-line size/width dials (item 2)
 
-    /// Round 13b: Sean's tuned defaults from the HTML bench — 28pt field,
-    /// 18pt row, 688pt width — replacing round 12's 22pt/16pt/680pt
-    /// strawman. Red before the fix: `ComposerSingleLineTuning` didn't
-    /// exist; these three functions would not compile.
+    /// Round 14 (session-7): Sean's Dev-tuned defaults — 24pt field, 18pt
+    /// row, 640pt width — replacing round 13b's 28pt/18pt/688pt strawman.
+    /// Red before the fix: `ComposerSingleLineTuning` didn't exist; these
+    /// three functions would not compile.
     @Test func singleLineTuningDefaultsToTheBiggerStrawman() {
         let suite = isolatedSuite("tuning-defaults")
-        #expect(ComposerSingleLineTuning.fieldSize(defaults: suite) == 28)
+        #expect(ComposerSingleLineTuning.fieldSize(defaults: suite) == 24)
         #expect(ComposerSingleLineTuning.rowSize(defaults: suite) == 18)
-        #expect(ComposerSingleLineTuning.width(defaults: suite) == 688)
+        #expect(ComposerSingleLineTuning.width(defaults: suite) == 640)
     }
 
     /// Proves each dial actually READS its stored key rather than always
@@ -36,10 +36,10 @@ struct ComposerRound12TuningTests {
     @Test func singleLineTuningDialsReadTheirStoredOverride() {
         let suite = isolatedSuite("tuning-override")
         suite.set(26.0, forKey: ComposerSingleLineTuning.fieldSizeStorageKey)
-        suite.set(18.0, forKey: ComposerSingleLineTuning.rowSizeStorageKey)
+        suite.set(20.0, forKey: ComposerSingleLineTuning.rowSizeStorageKey)
         suite.set(720.0, forKey: ComposerSingleLineTuning.widthStorageKey)
         #expect(ComposerSingleLineTuning.fieldSize(defaults: suite) == 26)
-        #expect(ComposerSingleLineTuning.rowSize(defaults: suite) == 18)
+        #expect(ComposerSingleLineTuning.rowSize(defaults: suite) == 20)
         #expect(ComposerSingleLineTuning.width(defaults: suite) == 720)
     }
 
@@ -99,14 +99,15 @@ struct ComposerRound12TuningTests {
         #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == expected.opacity)
     }
 
-    /// Round 13b: with nothing written yet, the dials read Sean's tuned
-    /// defaults (64pt radius, 48pt y, 0.24 opacity) rather than `.soft`'s —
+    /// Round 14 (session-7): with nothing written yet, the dials read
+    /// Sean's Dev-tuned defaults (48pt radius, 32pt y, 0.10 opacity) —
+    /// replacing round 13b's 64/48/0.24 fallback — rather than `.soft`'s;
     /// red if the fallback defaulted to `.none`, a bare `0`, or `.soft`.
     @Test func shadowDialsFallBackToTheTunedCustomDefaultWhenUnset() {
         let suite = isolatedSuite("shadow-unset")
-        #expect(ComposerSingleLineShadowDials.radius(defaults: suite) == 64)
-        #expect(ComposerSingleLineShadowDials.yOffset(defaults: suite) == 48)
-        #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == 0.24)
+        #expect(ComposerSingleLineShadowDials.radius(defaults: suite) == 48)
+        #expect(ComposerSingleLineShadowDials.yOffset(defaults: suite) == 32)
+        #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == 0.10)
         #expect(ComposerSingleLineShadowPreset.current(defaults: suite) == .custom)
     }
 

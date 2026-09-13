@@ -584,6 +584,11 @@ struct SessionComposerSnapshotTests {
     /// forward: the gray-band pixels (the ghost text) must stay within a
     /// SINGLE line's y-span — a regression back to wrapping would spread
     /// them across two stacked lines, roughly doubling the span.
+    ///
+    /// The thresholds below (bandCount > 50, ySpan < 35) were calibrated
+    /// against the old 360pt `.centered` card. The harness now renders
+    /// `.anchored`, a 204pt card — these thresholds are unverified at that
+    /// width and may need recalibration.
     @Test func step3RestStateGhostPathLongPathTruncatesLightAndDark() {
         let project = Project(
             name: "ghostties-composer-ui-eleven-long-project-name",

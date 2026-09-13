@@ -2247,15 +2247,15 @@ struct ComposerZeroChromeStyleTests {
     // MARK: - Session-7: new single-line dials (corner radius, glass tint,
     // ghost gap) + conditional DialKit panel visibility + reset
 
-    @Test func composerSingleLineCornerRadiusDefaultsToAnchoredsExistingTen() {
+    @Test func composerSingleLineCornerRadiusDefaultsToSixteen() {
         let suite = UserDefaults(suiteName: "ghostties.singleLineCornerRadius.default.test.\(UUID().uuidString)")!
-        #expect(ComposerSingleLineTuning.cornerRadius(defaults: suite) == 10)
+        #expect(ComposerSingleLineTuning.cornerRadius(defaults: suite) == 16)
     }
 
     @Test func composerSingleLineCornerRadiusReadsStoredValue() {
         let suite = UserDefaults(suiteName: "ghostties.singleLineCornerRadius.stored.test.\(UUID().uuidString)")!
-        suite.set(16.0, forKey: ComposerSingleLineTuning.cornerRadiusStorageKey)
-        #expect(ComposerSingleLineTuning.cornerRadius(defaults: suite) == 16)
+        suite.set(20.0, forKey: ComposerSingleLineTuning.cornerRadiusStorageKey)
+        #expect(ComposerSingleLineTuning.cornerRadius(defaults: suite) == 20)
     }
 
     @Test func composerSingleLineGlassTintDefaultsToNone() {
