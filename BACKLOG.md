@@ -2369,13 +2369,14 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 **Status 2026-09-12:** capture passes 2/2 on a real GUI run (run 5), PNGs inspected. **PR #172 open** @ `4f12f7f4c`, not merged. Closed below: capture defects 1–3, relaunch, hostname leak, PR.
 
 **Carried (on-objective):**
-- [ ] **Merge PR #172** — Sean's call. It carries a production data-safety fix (`WorkspacePersistence.directoryName(forBundleId:)`).
+- [x] **Merge PR #172** — merged to main as `8f0b1d450` (2026-09-13).
 - [ ] **Cleanup after merge:**
   - old fixture repos `~/Library/Application Support/Ghostties Demo/repos` (1.5M)
   - staged build inputs in worktree `demo-rig` (`GhosttyKit.xcframework`, `zig-out/`, `vendor/cef*`)
   - untracked `output/demo-capture/`
   - `~/.claude.json.bak-demo-*` backup
   - xcresult bundles containing full-screen recordings in `$TMPDIR/ghostties-demo-capture-result.*`, which are private screen content
+  - `~/.ghostties-demo-wrappers` (per-session launcher wrapper scripts)
   All deletions need Sean's OK.
 
 **Closed:**
@@ -2386,14 +2387,15 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [x] **Open the PR for `feat/demo-capture`** once captures are clean. → PR #172.
 
 **Carried (needs Sean's call, each with a strawman to apply or redline):**
-- [ ] Dev badge should say which branch/worktree a build came from. Sean asked 2026-09-12 after a sibling thread's Dev build was mistaken for this one. His shape: `0.1.0 (Sparkle Build …)`. Format undecided. Build can embed worktree name + branch + short SHA at build time; thread name isn't known at build time. **Strawman:** `0.1.0 · demo-rig @ b4caa99 · built 10:42 · up 1m` (worktree name, short, and matches the thread's folder).
+- [x] Dev badge should say which Claude thread built it. **Built** (`05003c079`, not yet captured in a real screenshot): `0.1.0 · <thread name> @ <short sha> · built HH:MM · up Nm`, e.g. `0.1.0 · Demo Rig @ 8f0b1d4 · built 10:42 · up 1m`. Thread name is resolved at build time from `~/.claude/sessions/<pid>.json` (cwd match + live pid + newest updatedAt), falling back to the worktree directory name; Debug/Dev builds only, Release/CI never touch `~/.claude`.
 
 **Parked (off-objective):**
 - [ ] **Shared metrics folder across builds.** `macos/Sources/App/macOS/AppDelegate.swift:2010-2014` `metricsDirectory()` hardcodes `Ghostties/metrics` under Application Support, keyed on neither bundle ID nor `GHOSTTIES_STATE_DIR`. Dev, Demo and Release all write MXMetricManager payloads into the same folder. Diagnostics only, not workspace data. Pre-existing; flagged by review 2026-09-12.
-- [ ] **Demo capture frame polish.** Four open items, Sean undecided (2026-09-12): (a) Claude Code status line shows "← 7 agents", the real live agent count, which conflicts with the no-agent-count-in-copy rule; (b) "/rc connecting…" from the user's Remote Control setting; (c) sidebar is scrolled, so the atlas-api header is clipped and only silo is active; (d) the agent is idle, so the pane is mostly empty. **Strawman:**
-  - (a)+(b): give the fixture repos a project-level Claude Code settings file that turns off the status-line agent count and Remote Control (setting keys unverified);
-  - (c): the test scrolls the sidebar to the top before capture;
-  - (d): the staged template passes a canned first prompt so the agent is mid-task at capture.
+- [x] **Demo capture frame polish.** Four items from 2026-09-12 review, all resolved:
+  - (a) **dropped by Sean 2026-09-13** — "← N agents" is Claude Code's own footer (counts live sessions in `~/.claude/sessions`), not Ghostties UI; no setting hides it; left in frame.
+  - (b) `5fa3835aa` — each fixture repo's `.claude/settings.local.json` sets `remoteControlAtStartup: false` (merged, not clobbered); `demo-ready.sh --check` fails if any fixture is missing it. Built.
+  - (c) `05a34b695` — `DemoWorkspaceCaptureUITests` scrolls the sidebar's scroll view back to the top before the window screenshot. Built.
+  - (d) `d8bb4e54a` — staged sessions already carried a canned first prompt, but `WorkspacePersistence.sanitizeTemplate` was silently stripping it from `agent.additionalFlags`; fixed by staging a per-prompt executable wrapper script and pointing the template's `command` at it instead. Built.
 - [ ] **`demo-ready.sh --check` double message.** On an isolation failure it prints the specific reason, then also the generic "STALE: … does not match" line. Nit.
 
 **Parked (off-objective):**
@@ -2402,3 +2404,8 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 **Parked (off-objective):**
 - [ ] Screen Recording grant for `com.seansmithdesign.ghostties` is revoked — I ran `tccutil reset` on a black-frame symptom without first confirming the csreq mismatch in the tccd log. `screencapture` from any agent shell fails until Sean re-adds it in System Settings. NOT needed for the XCUITest capture path, which runs through testmanagerd. Memo corrected: `reference_screencapture-responsible-app-is-the-terminal.md`.
 - [ ] `BACKLOG.md` is 220KB — memory says it stays open-items-only; it is well past that.
+- [x] **Overnight N1 — re-seed:** (2026-09-13 02:04 — reseed ran, `--check` all OK: isolation, trust 10/10, remote-control 10/10, 4/4 staged, beta.24 current) run `scripts/demo/demo-ready.sh`, then `scripts/demo/demo-ready.sh --check` passes (includes the new remote-control override and wrapper checks).
+- [x] **Overnight N2 — capture:** (2026-09-13 02:06 — attempt 1 of 3 passed, xcresult totals 2/2, both PNGs non-blank) run `scripts/demo/demo-capture.sh` from the main thread only, Mac awake and hands-off; max 3 attempts total.
+- [x] **Overnight N3 — inspect** (2026-09-13 — all five criteria pass in both PNGs; no defects, so N4 not needed) light + dark PNGs: no "/rc connecting…", sidebar at top (atlas-api header visible), agent mid-task with output in the pane, no hostname/`/Users/seansmith`/email, dev badge hidden. "← N agents" is expected.
+- [x] **Overnight N4 — on a defect:** (n/a — N3 found no defect) diagnose from the xcresult recording + `lsappinfo` (never guess), fix via a subagent on `feat/demo-frame-polish`, separate review, re-run (counts toward the 3).
+- [x] **Overnight N5 — PR:** (#173, open, not merged)
