@@ -419,7 +419,15 @@ struct ComposerZeroChromeStyleTests {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let size = NSSize(width: 560, height: 100)
+        // R15: 560pt was sized for the pre-R13b 512pt default width. The
+        // isolated suite below has no stored width override, so it resolves
+        // `ComposerSingleLineTuning.defaultWidth` (688pt, round-13b's tuned
+        // default) — a 560pt-wide capture puts both border-stroke edges
+        // off-canvas, sampling nothing but interior card fill. Widened past
+        // `ComposerSingleLineTuning.widthRange`'s 760pt ceiling so the
+        // capture stays valid across the whole dial, not just today's
+        // default.
+        let size = NSSize(width: 800, height: 100)
         // Step 0 (R14): isolated suite, treatment pinned to `.material` — the
         // stroke this test asserts on only renders in the material branch of
         // `singleLineComposerCard`; `.glass` has no `.stroke(` at all. Reading
@@ -541,7 +549,15 @@ struct ComposerZeroChromeStyleTests {
         suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
         suite.set(witnessEnabled, forKey: ComposerWitnessSetting.storageKey)
         let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
-        return (view, NSSize(width: 560, height: 140))
+        // R15: same root cause as `singleLineRestStateHasCardChrome` — the
+        // isolated suite resolves the 688pt round-13b width default. `body`
+        // centers `composerCard` inside `renderPNG`'s outer `.frame`, so at
+        // 560pt the 704pt (688 + 16pt shake padding) card is clipped ~72pt
+        // on each side; the Witness overlay at `.offset(x: 20, y: -24)` from
+        // the card's topLeading lands off-canvas to the left regardless of
+        // the toggle, which is why the ON assertion failed and the OFF
+        // twin passed for the wrong reason (nothing to find either way).
+        return (view, NSSize(width: 800, height: 140))
     }
 
     /// red mutation: gate `showsWitness` on `false` unconditionally — this
@@ -961,7 +977,10 @@ struct ComposerZeroChromeStyleTests {
         let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
         suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
         let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
-        let size = NSSize(width: 560, height: 100)
+        // R15: see `singleLineRestStateHasCardChrome`'s comment — the
+        // isolated suite resolves the 688pt round-13b width default, not
+        // the pre-R13b 512pt this canvas was originally sized for.
+        let size = NSSize(width: 800, height: 100)
         let png = renderPNG(view, size: size)
         writeScratchPNG(png, filename: "single-line-unchanged-scale.png")
         #expect(png != nil)
