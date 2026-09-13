@@ -509,6 +509,18 @@ enum ComposerZeroChromeFogSetting {
     static let storageKey = "ghostties.composerZeroChromeFog"
 }
 
+/// R14: the Witness ghost toggle (`ComposerWitnessView`, single-line +
+/// centered only). Default ON — unset key reads `true`, matching every
+/// other toggle in this file's `defaults.object(forKey:) as? Bool ??`
+/// pattern.
+enum ComposerWitnessSetting {
+    static let storageKey = "ghostties.composerWitness"
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: storageKey) as? Bool ?? true
+    }
+}
+
 /// Full-bleed animated fog, composited over the base/focal blur layers in
 /// `ComposerZeroChromeWash`. `allowsHitTesting(false)` throughout (inherited
 /// from the wash's own call site) — this view claims no clicks.
@@ -981,6 +993,7 @@ struct ComposerDebugTuningControl: View {
     @AppStorage private var singleLineShadowYOffset: Double
     @AppStorage private var singleLineShadowOpacity: Double
     @AppStorage private var singleLineTreatmentRaw: String
+    @AppStorage private var witnessEnabled: Bool
 
     /// Round 12: kept so `ComposerSingleLineShadowDials.apply` writes to the
     /// SAME `UserDefaults` instance this control's own `@AppStorage`
@@ -1011,6 +1024,7 @@ struct ComposerDebugTuningControl: View {
         _singleLineShadowYOffset = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.custom.dialValues.yOffset), ComposerSingleLineShadowDials.yOffsetStorageKey, store: defaults)
         _singleLineShadowOpacity = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.custom.dialValues.opacity, ComposerSingleLineShadowDials.opacityStorageKey, store: defaults)
         _singleLineTreatmentRaw = AppStorage(wrappedValue: ComposerSingleLineTreatment.glass.rawValue, ComposerSingleLineTreatment.storageKey, store: defaults)
+        _witnessEnabled = AppStorage(wrappedValue: true, ComposerWitnessSetting.storageKey, store: defaults)
         self.defaults = defaults
         self.onChange = onChange
     }
@@ -1107,6 +1121,11 @@ struct ComposerDebugTuningControl: View {
         )
     }
 
+    /// R14: not `private`, same testability pattern as `fog` above.
+    var witness: Binding<Bool> {
+        Binding(get: { witnessEnabled }, set: { witnessEnabled = $0; onChange() })
+    }
+
     /// Round 12: a labeled `Slider` row, the DEBUG pill's stand-in for a
     /// continuous dial (`Picker` only fits discrete choices, used
     /// everywhere else in this control). Round 13 replaces this with a real
@@ -1198,6 +1217,10 @@ struct ComposerDebugTuningControl: View {
                     Text("Material").tag(ComposerSingleLineTreatment.material)
                     Text("Liquid Glass").tag(ComposerSingleLineTreatment.glass)
                 }
+                Picker("Witness", selection: witness) {
+                    Text("On").tag(true)
+                    Text("Off").tag(false)
+                }
             }
         }
         .pickerStyle(.menu)
@@ -1238,6 +1261,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
     var shadowYOffset: Double
     var shadowOpacity: Double
     var treatmentRaw: String
+    var witnessEnabled: Bool
 
     /// The `shadowPreset` `.select` control (in `ComposerDialKitCoordinator
     /// .controls`) writes through this keyPath via DialKit's generic
@@ -1276,7 +1300,8 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         shadowRadius: Double,
         shadowYOffset: Double,
         shadowOpacity: Double,
-        treatmentRaw: String
+        treatmentRaw: String,
+        witnessEnabled: Bool
     ) {
         self.styleRaw = styleRaw
         self.materialRaw = materialRaw
@@ -1297,13 +1322,14 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         self.shadowYOffset = shadowYOffset
         self.shadowOpacity = shadowOpacity
         self.treatmentRaw = treatmentRaw
+        self.witnessEnabled = witnessEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
         case styleRaw, materialRaw, focalBlurRaw, fogEnabled, alignmentRaw
         case singleLineFieldSize, singleLineRowSize, singleLineWidth
         case shadowPresetRawStorage = "shadowPresetRaw"
-        case shadowRadius, shadowYOffset, shadowOpacity, treatmentRaw
+        case shadowRadius, shadowYOffset, shadowOpacity, treatmentRaw, witnessEnabled
     }
 }
 
@@ -1412,7 +1438,8 @@ final class ComposerDialKitCoordinator: ObservableObject {
             shadowRadius: Double(ComposerSingleLineShadowDials.radius(defaults: defaults)),
             shadowYOffset: Double(ComposerSingleLineShadowDials.yOffset(defaults: defaults)),
             shadowOpacity: ComposerSingleLineShadowDials.opacity(defaults: defaults),
-            treatmentRaw: ComposerSingleLineTreatment.current(defaults: defaults).rawValue
+            treatmentRaw: ComposerSingleLineTreatment.current(defaults: defaults).rawValue,
+            witnessEnabled: ComposerWitnessSetting.isEnabled(defaults: defaults)
         )
     }
 
@@ -1458,6 +1485,9 @@ final class ComposerDialKitCoordinator: ObservableObject {
         }
         if model.treatmentRaw != previous.treatmentRaw {
             defaults.set(model.treatmentRaw, forKey: ComposerSingleLineTreatment.storageKey)
+        }
+        if model.witnessEnabled != previous.witnessEnabled {
+            defaults.set(model.witnessEnabled, forKey: ComposerWitnessSetting.storageKey)
         }
         onChange()
     }
@@ -1546,7 +1576,8 @@ final class ComposerDialKitCoordinator: ObservableObject {
                     DialOption(ComposerSingleLineTreatment.material.rawValue, label: "Material"),
                     DialOption(ComposerSingleLineTreatment.glass.rawValue, label: "Liquid Glass")
                 ]
-            )
+            ),
+            .toggle("witness", keyPath: \.witnessEnabled, label: "Witness")
         ]
     }
 }

@@ -499,6 +499,76 @@ struct ComposerZeroChromeStyleTests {
         }
     }
 
+    // MARK: - R14: Witness ghost pixels (plan §6 test 6 — RUN OWED, Dev is open)
+
+    /// Counts pixels close to `ComposerWitnessGhost.flicker`'s `colorHex`
+    /// (`#ff3b3b`) — reuses `containsRedInk`'s tolerance band (that band
+    /// was tuned for exactly this kind of saturated red, and `.blinky`'s
+    /// mapped witness IS `.flicker`).
+    private func flickerRedPixelCount(in data: Data) -> Int {
+        guard let rep = NSBitmapImageRep(data: data) else { return 0 }
+        var count = 0
+        for x in stride(from: 0, to: rep.pixelsWide, by: 1) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 1) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if r > 150, r - g > 60, r - b > 60 { count += 1 }
+            }
+        }
+        return count
+    }
+
+    /// `.locked` project with `.blinky` (-> `.flicker`, red) so the sprite's
+    /// body color is unambiguous against the card's neutral chrome. Extra
+    /// 40pt of canvas ABOVE the card's own frame — the Witness overlay sits
+    /// at `.offset(x: 20, y: -24)` from `.topLeading`, poking up past the
+    /// card's top edge (plan §1); a tight frame would clip exactly the
+    /// pixels this test looks for. Reduce Motion is NOT overridden here
+    /// (no live `NSWorkspace` stub in this harness, matching
+    /// `reduceMotionShowsStaticFirstDescriptor`'s documented limitation) —
+    /// this reads whatever Reduce Motion setting is actually live, which is
+    /// why this test's run (not just its build) is owed until Dev closes:
+    /// an offscreen render can otherwise land on a blank first frame before
+    /// `TimelineView` ever fires (`SessionComposerPalette.swift` `:2037-
+    /// 2042`'s documented trap).
+    private func witnessFixture(witnessEnabled: Bool) -> (view: some View, size: NSSize) {
+        let project = Project(name: "Demo", rootPath: "/tmp/composer-witness-pixels-\(UUID().uuidString)", ghostCharacter: .blinky)
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+        let suite = UserDefaults(suiteName: "ghostties.composerWitness.pixels.test.\(UUID().uuidString)")!
+        suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+        suite.set(witnessEnabled, forKey: ComposerWitnessSetting.storageKey)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+        return (view, NSSize(width: 560, height: 140))
+    }
+
+    /// red mutation: gate `showsWitness` on `false` unconditionally — this
+    /// test then fails (0 flicker-red pixels with the toggle on).
+    @Test func witnessGhostPixelsPresentAboveCardWhenToggleOn() {
+        let fixture = witnessFixture(witnessEnabled: true)
+        let png = renderPNG(fixture.view, size: fixture.size)
+        writeScratchPNG(png, filename: "witness-toggle-on.png")
+        #expect(png != nil)
+        if let png {
+            #expect(flickerRedPixelCount(in: png) > 0, "expected the Witness ghost's flicker-red pixels above the card with the toggle on")
+        }
+    }
+
+    /// red mutation: gate `showsWitness` on `true` unconditionally — this
+    /// test then fails (flicker-red pixels present even with the toggle
+    /// off).
+    @Test func witnessGhostPixelsAbsentWhenToggleOff() {
+        let fixture = witnessFixture(witnessEnabled: false)
+        let png = renderPNG(fixture.view, size: fixture.size)
+        writeScratchPNG(png, filename: "witness-toggle-off.png")
+        #expect(png != nil)
+        if let png {
+            #expect(flickerRedPixelCount(in: png) == 0, "expected no flicker-red pixels with the Witness toggle off")
+        }
+    }
+
     // MARK: - Reduce Motion floor
 
     /// `ComposerDescriptorGhostText` freezes on descriptor index 0 under
@@ -1788,6 +1858,33 @@ struct ComposerZeroChromeStyleTests {
         #expect(
             suite.object(forKey: ComposerSingleLineTuning.widthStorageKey) as? Double == externalWidth,
             "a write for one field must not clobber a key this panel didn't touch"
+        )
+    }
+
+    // MARK: - R14: Witness toggle (plan §6 test 7, mirrors
+    // dialKitCoordinatorWriteLeavesExternallyChangedKeyIntact above)
+
+    /// red mutation: change `write(from:to:)`'s witness-key branch to also
+    /// write `ComposerSingleLineTuning.widthStorageKey` (or any other key)
+    /// — the "only its key" assertion below then fails.
+    @available(macOS 14, *)
+    @Test func dialKitWitnessToggleWritesOnlyItsKey() {
+        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.witness.test.\(UUID().uuidString)")!
+        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+
+        // A second actor changes an unrelated key this coordinator has
+        // never touched — proves the witness write is diff-based, same
+        // guarantee `dialKitCoordinatorWriteLeavesExternallyChangedKeyIntact`
+        // proves for `singleLineWidth`.
+        let externalWidth = 999.0
+        suite.set(externalWidth, forKey: ComposerSingleLineTuning.widthStorageKey)
+
+        coordinator.state.values.witnessEnabled = false
+
+        #expect(suite.object(forKey: ComposerWitnessSetting.storageKey) as? Bool == false)
+        #expect(
+            suite.object(forKey: ComposerSingleLineTuning.widthStorageKey) as? Double == externalWidth,
+            "the witness toggle write must not clobber a key this panel didn't touch"
         )
     }
 }
