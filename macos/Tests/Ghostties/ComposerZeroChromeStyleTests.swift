@@ -110,7 +110,7 @@ struct ComposerZeroChromeStyleTests {
     ///     the card's top-leading corner, plus rounding slack)
     /// = 800pt — same value round 15 hardcoded, now provable instead of
     /// guessed, and correct across the whole width dial rather than just
-    /// today's 688pt default.
+    /// one round's default (round 13b's 688pt, then round 14's 640pt).
     private static let derivedRenderCanvasWidth =
         CGFloat(ComposerSingleLineTuning.widthRange.upperBound) + 16 + 24
 
@@ -1862,8 +1862,9 @@ struct ComposerZeroChromeStyleTests {
     /// `shadowPresetRaw`'s computed setter (round 13d) derived all three
     /// shadow dials for EVERY preset, including `.custom` — so selecting
     /// "Custom" after hand-tuning the sliders snapped them to
-    /// `ComposerSingleLineShadowPreset.custom.dialValues` (64/48/0.24)
-    /// instead of leaving the hand-tuned numbers alone. `.custom` has no
+    /// `ComposerSingleLineShadowPreset.custom.dialValues` (round 14:
+    /// 48/32/0.10) instead of leaving the hand-tuned numbers alone.
+    /// `.custom` has no
     /// fixed values of its own; it is the label for "whatever the dials
     /// currently read." Selecting it must be a no-op on the three dials.
     /// Red mutation: remove the `preset != .custom` exclusion from the
@@ -2057,9 +2058,9 @@ struct ComposerZeroChromeStyleTests {
     /// fixtures) and proves the first typed-ink column sits at least
     /// `singleLineHorizontalPadding − 2pt` inside the card's own left edge
     /// — i.e. the padding insets the text instead of spilling outside the
-    /// card — and that the card itself stayed at its tuned width (688pt),
-    /// not narrowed to make the inset "work" by shrinking the card instead
-    /// of insetting the field.
+    /// card — and that the card itself stayed at its tuned width
+    /// (`ComposerSingleLineTuning.defaultWidth`), not narrowed to make the
+    /// inset "work" by shrinking the card instead of insetting the field.
     ///
     /// Red mutation: reverting `newStyleFieldRenderWidth`'s `.singleLine`
     /// case back to the un-reduced `newStyleFieldWidth` reproduces the
@@ -2257,9 +2258,9 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerSingleLineGlassTint.windowBackground.nsColor == NSColor.windowBackgroundColor)
     }
 
-    @Test func composerWitnessGapDefaultsToFour() {
+    @Test func composerWitnessGapDefaultsToFive() {
         let suite = UserDefaults(suiteName: "ghostties.witnessGap.default.test.\(UUID().uuidString)")!
-        #expect(ComposerWitnessGap.gap(defaults: suite) == 4)
+        #expect(ComposerWitnessGap.gap(defaults: suite) == 5)
     }
 
     @Test func composerWitnessGapReadsStoredValue() {
@@ -2268,15 +2269,132 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerWitnessGap.gap(defaults: suite) == 9)
     }
 
+    // MARK: - Round 14 (session-7): new Witness dials — fallback defaults
+
+    @Test func composerWitnessSizeDefaultsToTwentyFour() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessSize.default.test.\(UUID().uuidString)")!
+        #expect(ComposerWitnessSize.size(defaults: suite) == 24)
+    }
+
+    @Test func composerWitnessSizeReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessSize.stored.test.\(UUID().uuidString)")!
+        suite.set(36.0, forKey: ComposerWitnessSize.storageKey)
+        #expect(ComposerWitnessSize.size(defaults: suite) == 36)
+    }
+
+    @Test func composerWitnessFloatAmplitudeDefaultsToZero() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessFloatAmplitude.default.test.\(UUID().uuidString)")!
+        #expect(ComposerWitnessFloatAmplitude.amplitude(defaults: suite) == 0)
+    }
+
+    @Test func composerWitnessFloatAmplitudeReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessFloatAmplitude.stored.test.\(UUID().uuidString)")!
+        suite.set(2.5, forKey: ComposerWitnessFloatAmplitude.storageKey)
+        #expect(ComposerWitnessFloatAmplitude.amplitude(defaults: suite) == 2.5)
+    }
+
+    @Test func composerWitnessFloatPeriodDefaultsToThree() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessFloatPeriod.default.test.\(UUID().uuidString)")!
+        #expect(ComposerWitnessFloatPeriod.period(defaults: suite) == 3)
+    }
+
+    @Test func composerWitnessFloatPeriodReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessFloatPeriod.stored.test.\(UUID().uuidString)")!
+        suite.set(5.0, forKey: ComposerWitnessFloatPeriod.storageKey)
+        #expect(ComposerWitnessFloatPeriod.period(defaults: suite) == 5.0)
+    }
+
+    @Test func composerWitnessOpacityDefaultsToOne() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessOpacity.default.test.\(UUID().uuidString)")!
+        #expect(ComposerWitnessOpacity.opacity(defaults: suite) == 1.0)
+    }
+
+    @Test func composerWitnessOpacityReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessOpacity.stored.test.\(UUID().uuidString)")!
+        suite.set(0.5, forKey: ComposerWitnessOpacity.storageKey)
+        #expect(ComposerWitnessOpacity.opacity(defaults: suite) == 0.5)
+    }
+
+    @Test func composerWitnessBeatSpeedDefaultsToOne() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessBeatSpeed.default.test.\(UUID().uuidString)")!
+        #expect(ComposerWitnessBeatSpeed.speed(defaults: suite) == 1.0)
+    }
+
+    @Test func composerWitnessBeatSpeedReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessBeatSpeed.stored.test.\(UUID().uuidString)")!
+        suite.set(2.0, forKey: ComposerWitnessBeatSpeed.storageKey)
+        #expect(ComposerWitnessBeatSpeed.speed(defaults: suite) == 2.0)
+    }
+
+    /// Round-trip through the DialKit coordinator: reading, mutating, and
+    /// re-reading each new key proves `readModel`/`write(from:to:)` both
+    /// carry it — the same pattern `dialKitResetActionClearsKeysAndUpdatesPanelImmediately`
+    /// uses for the pre-existing dials.
+    @available(macOS 14, *)
+    @Test func dialKitCoordinatorRoundTripsEachNewWitnessDial() {
+        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.witnessDials.test.\(UUID().uuidString)")!
+        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+
+        coordinator.state.values.witnessSize = 42
+        coordinator.state.values.witnessFloatAmplitude = 3
+        coordinator.state.values.witnessFloatPeriod = 4.5
+        coordinator.state.values.witnessOpacity = 0.6
+        coordinator.state.values.witnessBeatSpeed = 1.5
+
+        #expect(suite.object(forKey: ComposerWitnessSize.storageKey) as? Double == 42)
+        #expect(suite.object(forKey: ComposerWitnessFloatAmplitude.storageKey) as? Double == 3)
+        #expect(suite.object(forKey: ComposerWitnessFloatPeriod.storageKey) as? Double == 4.5)
+        #expect(suite.object(forKey: ComposerWitnessOpacity.storageKey) as? Double == 0.6)
+        #expect(suite.object(forKey: ComposerWitnessBeatSpeed.storageKey) as? Double == 1.5)
+
+        let reread = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+        #expect(reread.state.values.witnessSize == 42)
+        #expect(reread.state.values.witnessFloatAmplitude == 3)
+        #expect(reread.state.values.witnessFloatPeriod == 4.5)
+        #expect(reread.state.values.witnessOpacity == 0.6)
+        #expect(reread.state.values.witnessBeatSpeed == 1.5)
+    }
+
+    /// Acceptance criterion 6: beat speed 2.0 finishes a beat in half the
+    /// wall time — at raw elapsed 30ms (half of `buildTabFrames`'s first
+    /// 60ms frame), speed 1.0 is still on frame 0, speed 2.0 has already
+    /// advanced to frame 1 (`frameIndex` matches `displayGrid`'s own use of
+    /// the scaled elapsed).
+    @Test func beatSpeedTwoAdvancesFrameIndexAtHalfTheWallTime() {
+        let grid = ["XX", "XX"]
+        let frames = ComposerWitnessFrames.buildTabFrames(grid: grid)
+        let rawElapsedMs = 30
+        let normalSpeedIndex = ComposerWitnessFrames.frameIndex(
+            frames: frames, elapsedMs: Int(Double(rawElapsedMs) * 1.0)
+        )
+        let doubleSpeedIndex = ComposerWitnessFrames.frameIndex(
+            frames: frames, elapsedMs: Int(Double(rawElapsedMs) * 2.0)
+        )
+        #expect(normalSpeedIndex == 0)
+        #expect(doubleSpeedIndex == 1)
+    }
+
     /// Acceptance item 2: the overlay's `y:` offset is driven by the gap —
-    /// extracted as `SessionComposerPalette.witnessOverlayYOffset(ghostGap:)`
-    /// specifically so this doesn't need a render. Red mutation: hardcoding
-    /// `-24` (dropping the `+ ghostGap` term) fails every assertion but the
-    /// `ghostGap: 0` one.
-    @Test func witnessOverlayYOffsetIsNegativeTwentyFourMinusGap() {
-        #expect(SessionComposerPalette.witnessOverlayYOffset(ghostGap: 0) == -24)
-        #expect(SessionComposerPalette.witnessOverlayYOffset(ghostGap: 4) == -28)
-        #expect(SessionComposerPalette.witnessOverlayYOffset(ghostGap: 12) == -36)
+    /// extracted as `SessionComposerPalette.witnessOverlayYOffset(size:
+    /// ghostGap:)` specifically so this doesn't need a render. Round 14: the
+    /// sprite size is itself a dial now, so the offset must derive from it
+    /// rather than a hardcoded 24 — asserted here at two different sizes
+    /// with the same gap. Red mutation: hardcoding `24` for `size` (dropping
+    /// the `size:` parameter) fails the size-36 assertions.
+    @Test func witnessOverlayYOffsetIsSizePlusGap() {
+        #expect(SessionComposerPalette.witnessOverlayYOffset(size: 24, ghostGap: 0) == -24)
+        #expect(SessionComposerPalette.witnessOverlayYOffset(size: 24, ghostGap: 4) == -28)
+        #expect(SessionComposerPalette.witnessOverlayYOffset(size: 24, ghostGap: 12) == -36)
+    }
+
+    /// Acceptance criterion 5: the gap between the sprite's bottom and the
+    /// card stays the gap at every size — at size 24 vs size 36 with the
+    /// same `ghostGap`, the offset must differ by exactly 12 (the size
+    /// delta), not stay pinned to a hardcoded 24.
+    @Test func witnessOverlayYOffsetDiffersBySizeDeltaAtSameGap() {
+        let at24 = SessionComposerPalette.witnessOverlayYOffset(size: 24, ghostGap: 5)
+        let at36 = SessionComposerPalette.witnessOverlayYOffset(size: 36, ghostGap: 5)
+        #expect(at24 - at36 == 12)
     }
 
     /// Acceptance item 4: reset clears every single-line key.
@@ -2305,17 +2423,18 @@ struct ComposerZeroChromeStyleTests {
     // MARK: - DialKit panel: conditional visibility + reset action
 
     /// Acceptance item 1: exactly Style for Classic, Style + the 4
-    /// zero-chrome dials for Zero chrome, Style + the 13 single-line dials
-    /// for Single line. `DialControl` doesn't expose its label/path outside
-    /// the DialKit package, so this names the discriminator this test
-    /// target CAN see — `state.controls.count`, the panel's actual visible
-    /// control list. Red mutation: showing every control for every style
-    /// (the "just don't hide anything" shortcut) fails all three.
+    /// zero-chrome dials for Zero chrome, Style + the 18 single-line dials
+    /// for Single line (round 14 added 5 Witness dials to round 13's 13).
+    /// `DialControl` doesn't expose its label/path outside the DialKit
+    /// package, so this names the discriminator this test target CAN see —
+    /// `state.controls.count`, the panel's actual visible control list. Red
+    /// mutation: showing every control for every style (the "just don't
+    /// hide anything" shortcut) fails all three.
     @available(macOS 14, *)
     @Test func dialKitVisibleControlCountsMatchEachStyle() {
         #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.classic.rawValue).count == 1)
         #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.zeroChrome.rawValue).count == 5)
-        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.singleLine.rawValue).count == 14)
+        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.singleLine.rawValue).count == 19)
     }
 
     /// Proves the LIVE panel (not just the pure function above) rebuilds
@@ -2332,7 +2451,7 @@ struct ComposerZeroChromeStyleTests {
         #expect(coordinator.state.controls.count == 1)
 
         coordinator.state.values.styleRaw = ComposerStyle.singleLine.rawValue
-        #expect(coordinator.state.controls.count == 14)
+        #expect(coordinator.state.controls.count == 19)
 
         coordinator.state.values.styleRaw = ComposerStyle.zeroChrome.rawValue
         #expect(coordinator.state.controls.count == 5)
@@ -2350,12 +2469,22 @@ struct ComposerZeroChromeStyleTests {
         coordinator.state.values.singleLineWidth = 512
         coordinator.state.values.singleLineCornerRadius = 20
         coordinator.state.values.witnessGap = 12
+        coordinator.state.values.witnessSize = 48
+        coordinator.state.values.witnessFloatAmplitude = 4
+        coordinator.state.values.witnessFloatPeriod = 6
+        coordinator.state.values.witnessOpacity = 0.2
+        coordinator.state.values.witnessBeatSpeed = 2.0
 
         coordinator.handleAction("resetSingleLine")
 
         #expect(coordinator.state.values.singleLineWidth == Double(ComposerSingleLineTuning.defaultWidth))
         #expect(coordinator.state.values.singleLineCornerRadius == Double(ComposerSingleLineTuning.defaultCornerRadius))
         #expect(coordinator.state.values.witnessGap == Double(ComposerWitnessGap.defaultGap))
+        #expect(coordinator.state.values.witnessSize == Double(ComposerWitnessSize.defaultSize))
+        #expect(coordinator.state.values.witnessFloatAmplitude == ComposerWitnessFloatAmplitude.defaultAmplitude)
+        #expect(coordinator.state.values.witnessFloatPeriod == ComposerWitnessFloatPeriod.defaultPeriod)
+        #expect(coordinator.state.values.witnessOpacity == ComposerWitnessOpacity.defaultOpacity)
+        #expect(coordinator.state.values.witnessBeatSpeed == ComposerWitnessBeatSpeed.defaultSpeed)
 
         for key in ComposerSingleLineReset.resetKeys {
             #expect(suite.object(forKey: key) == nil, "expected \(key) to be cleared by the panel's reset action")

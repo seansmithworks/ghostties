@@ -182,4 +182,23 @@ struct ComposerWitnessFramesTests {
             #expect(result.sourceIsB == nil)
         }
     }
+
+    // MARK: - Float (round 14, session-7)
+
+    @Test func floatOffsetIsZeroAtTimeZero() {
+        #expect(ComposerWitnessFrames.floatOffset(clockMs: 0, amplitude: 2, periodMs: 3000, reduceMotion: false) == 0)
+    }
+
+    @Test func floatOffsetIsNegativeAmplitudeAtOneQuarterPeriod() {
+        let result = ComposerWitnessFrames.floatOffset(clockMs: 750, amplitude: 2, periodMs: 3000, reduceMotion: false)
+        #expect(abs(result - (-2)) < 0.0001)
+    }
+
+    @Test func floatOffsetIsZeroUnderReduceMotion() {
+        #expect(ComposerWitnessFrames.floatOffset(clockMs: 750, amplitude: 2, periodMs: 3000, reduceMotion: true) == 0)
+    }
+
+    @Test func floatOffsetIsZeroAtZeroAmplitude() {
+        #expect(ComposerWitnessFrames.floatOffset(clockMs: 750, amplitude: 0, periodMs: 3000, reduceMotion: false) == 0)
+    }
 }

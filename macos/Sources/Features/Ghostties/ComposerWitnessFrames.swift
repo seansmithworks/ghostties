@@ -4,8 +4,10 @@ import Foundation
 /// approved 2026-09-13 (`board-b-spec.js`). Foundation-only, no SwiftUI —
 /// every function here operates on `[String]` 12×12 grids (`.` empty, `X`
 /// body, `e` eye, `l` lit) so it's directly testable and reusable by
-/// `ComposerWitnessView`. `floatOn` from the spec is NOT approved and is not
-/// ported.
+/// `ComposerWitnessView`. The spec's `floatOn` was not ported at the time —
+/// round 14 (session-7 live-look round) adds an independent `floatOffset`
+/// below, a Sean-tunable dial (default off), not a revival of that spec
+/// function.
 enum ComposerWitnessFrames {
     // MARK: - Pure grid generators
 
@@ -316,5 +318,17 @@ enum ComposerWitnessFrames {
         let index = frameIndex(frames: beatFrames, elapsedMs: beatElapsedMs)
         let f = beatFrames[index]
         return (f.grid, f.cellOffsetY, f.sourceIsB)
+    }
+
+    /// Round 14 (session-7): a gentle vertical bob, a sine wave —
+    /// `-amplitude * sin(2π · clockMs / periodMs)`. Pure and Foundation-only
+    /// so `ComposerWitnessView` can apply it as a transform/offset inside
+    /// its `TimelineView`, never a layout or frame change. Driven off the
+    /// idle clock, not the beat clock, so it runs continuously, including
+    /// during beats — the beat's own `cellOffsetY` hop stacks on top.
+    /// Returns 0 under Reduce Motion or when the amplitude/period dial is 0.
+    static func floatOffset(clockMs: Int, amplitude: Double, periodMs: Double, reduceMotion: Bool) -> Double {
+        guard !reduceMotion, amplitude != 0, periodMs > 0 else { return 0 }
+        return -amplitude * sin(2 * Double.pi * Double(clockMs) / periodMs)
     }
 }

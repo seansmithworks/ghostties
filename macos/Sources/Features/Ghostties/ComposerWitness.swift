@@ -328,6 +328,22 @@ struct ComposerWitnessView: View {
     /// identity change already happened this frame.
     let beatTrigger: ComposerWitness.Beat
     let reduceMotion: Bool
+    /// Round 14 (session-7): the sprite's edge length in points — the grid
+    /// itself is always the fixed 12×12 `ComposerWitnessGhost.pixels`, so
+    /// this is the whole `frameSize`; `WitnessSprite` derives cell size as
+    /// `size/12` from it (`cellW`/`cellH` below, already computed from the
+    /// frame size and the grid's own column/row count).
+    let size: CGFloat
+    /// Round 14: idle vertical bob amplitude, in points. 0 is off.
+    let floatAmplitude: Double
+    /// Round 14: the float bob's full period, in seconds.
+    let floatPeriod: Double
+    /// Round 14: applied as one `.opacity` on the whole sprite, not per
+    /// colour.
+    let opacity: Double
+    /// Round 14: scales beat time only (tab-accept/error/resolve/launch/
+    /// open) — never the idle ripple/blink/glance clock.
+    let beatSpeed: Double
 
     private static let ditherSeed: Int32 = 11
 
@@ -338,12 +354,24 @@ struct ComposerWitnessView: View {
     @State private var beatStartedAt: Date = .now
     @State private var mountedAt: Date = .now
 
-    private let frameSize: CGFloat = 24
-
-    init(identity: ComposerWitness.Identity, beatTrigger: ComposerWitness.Beat, reduceMotion: Bool) {
+    init(
+        identity: ComposerWitness.Identity,
+        beatTrigger: ComposerWitness.Beat,
+        reduceMotion: Bool,
+        size: CGFloat = ComposerWitnessSize.defaultSize,
+        floatAmplitude: Double = ComposerWitnessFloatAmplitude.defaultAmplitude,
+        floatPeriod: Double = ComposerWitnessFloatPeriod.defaultPeriod,
+        opacity: Double = ComposerWitnessOpacity.defaultOpacity,
+        beatSpeed: Double = ComposerWitnessBeatSpeed.defaultSpeed
+    ) {
         self.identity = identity
         self.beatTrigger = beatTrigger
         self.reduceMotion = reduceMotion
+        self.size = size
+        self.floatAmplitude = floatAmplitude
+        self.floatPeriod = floatPeriod
+        self.opacity = opacity
+        self.beatSpeed = beatSpeed
         _state = State(initialValue: ComposerWitnessTransition.ViewState(
             currentBeat: .idle,
             displayedIdentity: identity,
@@ -369,7 +397,7 @@ struct ComposerWitnessView: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 0.02, paused: reduceMotion)) { context in
-            let beatElapsedMs = Int(context.date.timeIntervalSince(beatStartedAt) * 1000)
+            let beatElapsedMs = scaledBeatElapsedMs(now: context.date)
             let idleClockMs = Int(context.date.timeIntervalSince(mountedAt) * 1000)
             let display = ComposerWitnessFrames.displayGrid(
                 identityGrid: pixels(for: state.displayedIdentity),
@@ -380,6 +408,18 @@ struct ComposerWitnessView: View {
                 idleClockMs: idleClockMs,
                 reduceMotion: reduceMotion
             )
+            // Round 14: the float bob is applied here, as an `.offset`
+            // transform on the sprite, never a layout/frame change — it
+            // runs off `idleClockMs`, not the beat clock, so it never
+            // pauses during a beat; the beat's own `cellOffsetY` hop
+            // (already baked into `WitnessSprite`'s Canvas draw) stacks on
+            // top of it untouched.
+            let floatOffsetY = ComposerWitnessFrames.floatOffset(
+                clockMs: idleClockMs,
+                amplitude: floatAmplitude,
+                periodMs: floatPeriod * 1000,
+                reduceMotion: reduceMotion
+            )
             WitnessSprite(
                 grid: display.grid,
                 cellOffsetY: display.cellOffsetY,
@@ -387,8 +427,10 @@ struct ComposerWitnessView: View {
                 secondaryColors: state.resolveFromColors,
                 sourceIsB: display.sourceIsB
             )
+            .offset(y: floatOffsetY)
         }
-        .frame(width: frameSize, height: frameSize)
+        .frame(width: size, height: size)
+        .opacity(opacity)
         // R4 review: `onChange` never fires for the value a view mounts
         // with — the palette arms `.open` from its OWN `onAppear`
         // (`SessionComposerPalette.swift:1452`), which can run before OR
@@ -412,17 +454,27 @@ struct ComposerWitnessView: View {
         }
     }
 
+    /// Round 14: `beatSpeed` scales beat time only — the idle ripple/blink/
+    /// glance clock (`idleClockMs`, always derived from `mountedAt`
+    /// elsewhere) must never go through this.
+    private func scaledBeatElapsedMs(now: Date) -> Int {
+        let rawElapsedMs = Int(now.timeIntervalSince(beatStartedAt) * 1000)
+        return Int(Double(rawElapsedMs) * beatSpeed)
+    }
+
     private func apply(_ update: Update) {
         let now = Date.now
         // What was ACTUALLY on screen a moment ago — every morph or
         // dissolve `next(...)` produces starts from this, never from a
-        // named identity's resting grid.
+        // named identity's resting grid. Uses the same scaled beat elapsed
+        // as `body`'s `TimelineView`, so a beat interrupted mid-flight
+        // reads the frame that was ACTUALLY on screen at that speed.
         let onScreen = ComposerWitnessFrames.displayGrid(
             identityGrid: pixels(for: state.displayedIdentity),
             isIdleBeat: state.currentBeat.kind == .idle,
             isLaunchBeat: state.currentBeat.kind == .launch,
             beatFrames: state.beatFrames,
-            beatElapsedMs: Int(now.timeIntervalSince(beatStartedAt) * 1000),
+            beatElapsedMs: scaledBeatElapsedMs(now: now),
             idleClockMs: Int(now.timeIntervalSince(mountedAt) * 1000),
             reduceMotion: false
         )

@@ -2,9 +2,14 @@
 
 ## 2026-09-13 (later) — Composer live-look round (PR #169)
 
+- [x] Sean's Dev-tuned defaults applied to code (width 640, corner radius 16, field size 24, shadow 48/32/0.10, ghost gap 5) — session-7 brief, confirmed via `defaults read com.seansmithdesign.ghostties.dev`.
+- [x] DialKit Copy button fixed on macOS (`copyTextToPasteboard` had no AppKit branch — wrote nothing, still flipped to the checkmark).
+- [x] 5 new Witness ghost dials (size, float amplitude, float period, opacity, beat speed) wired through model/read/write/reset, in dial order Ghost size → Ghost gap → Float → Float period → Ghost opacity → Beat speed.
+- [ ] All three above owe a local test run + red proofs (Dev was open; `build-for-testing` only). Includes the two new overlay-y-offset tests, the round-trip test, and the beat-speed frame-index test.
+
 - [x] DialKit single-line dial set rebuilt in `57b0fcd42` (independent review: pass). Order: Style, Treatment, Glass tint (new, default None), Width, Corner radius (new, default 10), Field size, Row size, Shadow ×4, Witness, Ghost gap (new, default 4), Reset single-line (new). Zero-chrome dials show only under Zero chrome; Classic shows Style only. Tests compiled, NOT run. The visible-controls test asserts counts only, because DialKit's control labels are `package`-scoped.
 - [x] DialKit panel moved from the full-width bottom drawer to a 320pt top-trailing inline card with a collapse pill (`83d796814`). No separate review (DEBUG-only). Not visually verified clear of the composer at narrow window widths.
-- [ ] (carried) Sean's live tuning on Dev (running build `83d796814`): text size (field size is stored at 25; code default 28), ghost gap, glass tint, corner radius. Strawman: when Sean pastes DialKit **Copy** output, those values become the code defaults.
+- [x] (carried) Sean's live tuning on Dev (running build `83d796814`): text size, ghost gap, glass tint, corner radius. Applied via `defaults read com.seansmithdesign.ghostties.dev`, session-7 brief (see the new item above) — not via DialKit Copy (Copy itself was broken on macOS, fixed this session).
 - [ ] (carried) Liquid Glass "not visible": inferred cause is the hardcoded `.windowBackgroundColor` glass tint. Glass tint None is now the default; confirm live that the glass reads as glass.
 - [ ] DECIDE OR KILL: the ⊖ bubble beside the caret is macOS's own cursor indicator, with no public per-NSTextView API (SDK headers checked). Sean checks whether it shows on focus in Spotlight/Raycast/TextEdit. Strawman: if it shows there, accept it (the only off switch is the system-wide, unsupported `redesigned_text_cursor` flag, Sean's machine-wide choice). If it doesn't, spike an NSTextField field-editor variant of the composer field.
 - [ ] (parked) Stale doc comment "Reuses `composerClipShape`" in `singleLineComposerCard` (`SessionComposerPalette.swift` ~2212); the card now uses `singleLineClipShape`.

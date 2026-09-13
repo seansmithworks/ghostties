@@ -3037,6 +3037,11 @@ private func slider(
 private func copyTextToPasteboard(_ text: String) {
     #if canImport(UIKit)
     UIPasteboard.general.string = text
+    #elseif canImport(AppKit)
+    // Ghostties session-7 brief: macOS had no branch here, so Copy flipped
+    // to its checkmark state but wrote nothing to the pasteboard.
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
     #endif
 }
 

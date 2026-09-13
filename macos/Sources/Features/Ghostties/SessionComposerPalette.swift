@@ -2198,12 +2198,15 @@ struct SessionComposerPalette: View {
 
     /// Pure function extracted from the overlay modifier below so it's
     /// directly testable without rendering (`ComposerZeroChromeStyleTests
-    /// .witnessOverlayYOffsetIsNegativeTwentyFourMinusGap`) — the Witness
-    /// sprite is a fixed 24pt tall; `ghostGap` is the tunable space between
-    /// its bottom edge and the card's top edge, so the overlay must rise an
-    /// additional `ghostGap` points beyond the sprite's own height.
-    static func witnessOverlayYOffset(ghostGap: CGFloat) -> CGFloat {
-        -(24 + ghostGap)
+    /// .witnessOverlayYOffsetIsSizePlusGap`) — `ghostGap` is the tunable
+    /// space between the Witness sprite's bottom edge and the card's top
+    /// edge, so the overlay must rise an additional `ghostGap` points
+    /// beyond the sprite's own height. Round 14: the sprite's height is
+    /// itself now a dial (`ComposerWitnessSize`), so this takes `size`
+    /// rather than a hardcoded 24 — otherwise the gap would silently
+    /// shrink or grow as Sean tunes the sprite bigger or smaller.
+    static func witnessOverlayYOffset(size: CGFloat, ghostGap: CGFloat) -> CGFloat {
+        -(size + ghostGap)
     }
 
     /// Current card chrome exactly as DESIGN.md §4 specifies
@@ -2280,19 +2283,27 @@ struct SessionComposerPalette: View {
                 ComposerWitnessView(
                     identity: witnessIdentity,
                     beatTrigger: witnessBeat,
-                    reduceMotion: reduceMotionEnabled
+                    reduceMotion: reduceMotionEnabled,
+                    size: ComposerWitnessSize.size(defaults: tuningDefaults),
+                    floatAmplitude: ComposerWitnessFloatAmplitude.amplitude(defaults: tuningDefaults),
+                    floatPeriod: ComposerWitnessFloatPeriod.period(defaults: tuningDefaults),
+                    opacity: ComposerWitnessOpacity.opacity(defaults: tuningDefaults),
+                    beatSpeed: ComposerWitnessBeatSpeed.speed(defaults: tuningDefaults)
                 )
                 // R18 fix: was a hardcoded 20 — now the SAME
                 // `singleLineHorizontalPadding` value the field's own text
                 // is inset by (`newStyleFieldRenderWidth`'s doc comment),
                 // so the ghost's leading edge lines up with the typed
                 // text's leading edge instead of sitting ~10pt off it.
-                // Session-7 brief: `y: -24` was flush against the 24pt-tall
-                // sprite's own bottom edge — `ComposerWitnessGap` adds the
-                // tunable gap on top of that same 24pt constant, default 4.
+                // Session-7 brief: `y: -24` was flush against the sprite's
+                // own bottom edge — `ComposerWitnessGap` adds the tunable
+                // gap on top of the sprite's own (now dial-driven) height.
                 .offset(
                     x: singleLineHorizontalPadding,
-                    y: Self.witnessOverlayYOffset(ghostGap: ComposerWitnessGap.gap(defaults: tuningDefaults))
+                    y: Self.witnessOverlayYOffset(
+                        size: ComposerWitnessSize.size(defaults: tuningDefaults),
+                        ghostGap: ComposerWitnessGap.gap(defaults: tuningDefaults)
+                    )
                 )
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
