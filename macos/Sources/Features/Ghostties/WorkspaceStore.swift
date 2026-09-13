@@ -768,6 +768,21 @@ final class WorkspaceStore: ObservableObject {
         persist()
     }
 
+    /// Persist a session's resume record (agent CLI's own session id,
+    /// transcript path, cwd, launcher) — read by `ResumePlan.command(for:)`
+    /// at relaunch time. Called from `ClaudeStateStore.refresh()` on every
+    /// hook event; replaces the stored record whenever anything about it
+    /// changed, which is how a Claude `/clear`/`/new` (a new `session_id`)
+    /// naturally supersedes the old one. Survives `Stop` and
+    /// `ClaudeStateStore.removeState(for:)` — those only delete the hook
+    /// status files under `~/.ghostties/state/`, never this field.
+    func updateResume(id: UUID, resume: AgentResume) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }),
+              sessions[index].resume != resume else { return }
+        sessions[index].resume = resume
+        persist()
+    }
+
     /// Rename a session in place. A manual rename pins the name — see
     /// `isNamePinned` on `AgentSession` — so subsequent agent title updates
     /// (`syncSessionNameFromTitle`) stop overwriting it until the pin is

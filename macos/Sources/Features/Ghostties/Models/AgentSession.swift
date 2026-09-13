@@ -1,6 +1,38 @@
 import Foundation
 import GhosttiesCore
 
+/// A persisted record of the underlying agent CLI's own conversation, so a
+/// closed session's terminal can be relaunched with `--resume`/`resume`
+/// instead of starting over. Written by `ClaudeStateStore.refresh()` from
+/// the hook payload (before `derive`'s event filtering, so it survives
+/// events `derive` doesn't act on) and read by `ResumePlan.command(for:)` at
+/// relaunch time. Unlike the hook status files in `~/.ghostties/state/`
+/// (deleted on `Stop`/`SessionEnd`), this lives on `AgentSession` in
+/// `workspace.json` — it must outlive the process that reported it.
+struct AgentResume: Codable, Hashable {
+    enum Agent: String, Codable {
+        case claude
+        case codex
+    }
+
+    var agent: Agent
+    /// The agent CLI's own session id (Claude's `session_id`, Codex's
+    /// rollout id) — NOT `AgentSession.id` (the Ghostties row identity).
+    var sessionId: String
+    /// Claude's transcript file, or Codex's rollout file. Existence is
+    /// checked at relaunch time for Claude only — Codex is migrating
+    /// rollouts to a DB and its path isn't a reliable existence proxy.
+    var transcriptPath: String?
+    /// Working directory at the time this record was last written. Codex's
+    /// `resume` does not restore cwd on its own — `ResumePlan` passes this
+    /// explicitly via `-C`.
+    var cwd: String?
+    /// `$GHOSTTIES_LAUNCHER` at spawn time (e.g. `cco`, `ccob`), or nil for
+    /// a shell-hosted `claude` with no wrapper. Only meaningful for
+    /// `.claude` — Codex has no equivalent wrapper convention.
+    var launcher: String?
+}
+
 /// Persistent metadata for a terminal session.
 ///
 /// This is the Codable record stored in workspace.json. Runtime state (the actual
@@ -73,6 +105,12 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// another section's numbering.
     var sessionViewOrder: Int?
 
+    /// This session's underlying agent conversation, if one has been
+    /// reported — see `AgentResume`. Nil for a session that predates this
+    /// field, one that never reported (pre-hook, or an untrusted Codex
+    /// hook), or a Shell/Browser session with no agent conversation.
+    var resume: AgentResume?
+
     init(
         id: UUID = UUID(),
         name: String,
@@ -84,7 +122,8 @@ struct AgentSession: Identifiable, Codable, Hashable {
         isNamePinned: Bool = false,
         ghostCharacter: GhostCharacter? = nil,
         isPinned: Bool = false,
-        sessionViewOrder: Int? = nil
+        sessionViewOrder: Int? = nil,
+        resume: AgentResume? = nil
     ) {
         self.id = id
         self.name = name
@@ -97,6 +136,7 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.ghostCharacter = ghostCharacter
         self.isPinned = isPinned
         self.sessionViewOrder = sessionViewOrder
+        self.resume = resume
     }
 
     // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
@@ -118,6 +158,7 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
         self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         self.sessionViewOrder = try container.decodeIfPresent(Int.self, forKey: .sessionViewOrder)
+        self.resume = try container.decodeIfPresent(AgentResume.self, forKey: .resume)
     }
 
     /// The timestamp Sessions rows and the Archive sort should display and
