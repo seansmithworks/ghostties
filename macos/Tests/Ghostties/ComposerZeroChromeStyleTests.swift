@@ -98,6 +98,22 @@ struct ComposerZeroChromeStyleTests {
     // renders (caught by `SessionComposerSnapshotTests` regressing on the
     // same run).
 
+    /// R15b: shared canvas width for the single-line render tests below,
+    /// derived instead of hardcoded. Must contain the card at its widest
+    /// tunable width plus the palette's own shake-clearance padding, with
+    /// the Witness ghost (offset above the card) still on-canvas:
+    ///   `ComposerSingleLineTuning.widthRange.upperBound` (760pt, the
+    ///     widest the width dial goes)
+    /// + 16pt (`body`'s `.padding(8)` per side, `SessionComposerPalette
+    ///     .swift` ~289 — the shake-clearance inset wrapping the card)
+    /// + 24pt margin (covers the Witness's `.offset(x: 20, y: -24)` above
+    ///     the card's top-leading corner, plus rounding slack)
+    /// = 800pt — same value round 15 hardcoded, now provable instead of
+    /// guessed, and correct across the whole width dial rather than just
+    /// today's 688pt default.
+    private static let derivedRenderCanvasWidth =
+        CGFloat(ComposerSingleLineTuning.widthRange.upperBound) + 16 + 24
+
     private func makeProject() -> Project {
         Project(name: "Demo Project", rootPath: "/tmp/composer-zero-chrome-snapshot-\(UUID().uuidString)")
     }
@@ -423,11 +439,10 @@ struct ComposerZeroChromeStyleTests {
         // isolated suite below has no stored width override, so it resolves
         // `ComposerSingleLineTuning.defaultWidth` (688pt, round-13b's tuned
         // default) — a 560pt-wide capture puts both border-stroke edges
-        // off-canvas, sampling nothing but interior card fill. Widened past
-        // `ComposerSingleLineTuning.widthRange`'s 760pt ceiling so the
-        // capture stays valid across the whole dial, not just today's
-        // default.
-        let size = NSSize(width: 800, height: 100)
+        // off-canvas, sampling nothing but interior card fill. R15b: see
+        // `derivedRenderCanvasWidth` for why 800pt is the right value, not
+        // just a wider guess.
+        let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 100)
         // Step 0 (R14): isolated suite, treatment pinned to `.material` — the
         // stroke this test asserts on only renders in the material branch of
         // `singleLineComposerCard`; `.glass` has no `.stroke(` at all. Reading
@@ -557,7 +572,9 @@ struct ComposerZeroChromeStyleTests {
         // the card's topLeading lands off-canvas to the left regardless of
         // the toggle, which is why the ON assertion failed and the OFF
         // twin passed for the wrong reason (nothing to find either way).
-        return (view, NSSize(width: 800, height: 140))
+        // R15b: see `derivedRenderCanvasWidth` for why 800pt is the right
+        // value, not just a wider guess.
+        return (view, NSSize(width: Self.derivedRenderCanvasWidth, height: 140))
     }
 
     /// red mutation: gate `showsWitness` on `false` unconditionally — this
@@ -979,8 +996,9 @@ struct ComposerZeroChromeStyleTests {
         let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
         // R15: see `singleLineRestStateHasCardChrome`'s comment — the
         // isolated suite resolves the 688pt round-13b width default, not
-        // the pre-R13b 512pt this canvas was originally sized for.
-        let size = NSSize(width: 800, height: 100)
+        // the pre-R13b 512pt this canvas was originally sized for. R15b:
+        // see `derivedRenderCanvasWidth` for why 800pt is the right value.
+        let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 100)
         let png = renderPNG(view, size: size)
         writeScratchPNG(png, filename: "single-line-unchanged-scale.png")
         #expect(png != nil)

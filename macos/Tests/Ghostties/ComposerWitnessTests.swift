@@ -112,6 +112,25 @@ struct ComposerWitnessTests {
         #expect(end.opacity == 0, "expected opacity 0 at 200ms, got \(end.opacity)")
     }
 
+    /// R15b: the launch pose must start from wherever the idle bob was
+    /// sitting when the beat armed, not snap to 0 — while still landing
+    /// exactly on -40 at 200ms regardless of that starting point.
+    ///
+    /// red mutation: drop the `launchRestingAtStart` blend (go straight to
+    /// 0 at `beatElapsed == 0` as round 15 did) — the start-of-beat
+    /// assertion below then fails (`offsetY == 0`, not `-1`).
+    @Test func launchBlendsFromRestingOffsetAtBeatStartToFortyAtTwoHundredMs() {
+        let start = ComposerWitnessMotion.pose(
+            beat: .launch, beatElapsed: 0, clockElapsed: 0, reduceMotion: false, launchRestingAtStart: -1
+        )
+        #expect(start.offsetY == -1, "expected the resting -1pt carried into the launch pose at beat start, got \(start.offsetY)")
+
+        let end = ComposerWitnessMotion.pose(
+            beat: .launch, beatElapsed: 0.2, clockElapsed: 0.2, reduceMotion: false, launchRestingAtStart: -1
+        )
+        #expect(end.offsetY == -40, "expected -40 at 200ms regardless of the resting start point, got \(end.offsetY)")
+    }
+
     /// red mutation: drop the `reduceMotion` early-return in
     /// `ComposerWitnessMotion.pose` — every beat below would then animate.
     @Test func reduceMotionHoldsRestingPoseForEveryBeat() {

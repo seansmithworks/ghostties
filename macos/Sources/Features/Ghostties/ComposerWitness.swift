@@ -118,7 +118,7 @@ enum ComposerWitnessMotion {
     /// continuous sine) — matches `TimelineView(.animation(minimumInterval:
     /// 0.125, ...))`'s own cadence in `ComposerWitnessView` so the bob never
     /// looks smoother than the clock actually redraws.
-    private static func idleBobOffsetY(elapsed: TimeInterval) -> CGFloat {
+    fileprivate static func idleBobOffsetY(elapsed: TimeInterval) -> CGFloat {
         let step = Int(elapsed / 0.125)
         return step.isMultiple(of: 2) ? 0 : -1
     }
@@ -139,7 +139,8 @@ enum ComposerWitnessMotion {
         beat: ComposerWitness.BeatKind,
         beatElapsed: TimeInterval,
         clockElapsed: TimeInterval,
-        reduceMotion: Bool
+        reduceMotion: Bool,
+        launchRestingAtStart: CGFloat = 0
     ) -> Pose {
         let restingY = idleBobOffsetY(elapsed: clockElapsed)
         let blinking = isBlinking(elapsed: clockElapsed)
@@ -184,14 +185,22 @@ enum ComposerWitnessMotion {
 
         case .launch:
             // Lift and fade: -40 offset, opacity 0, both reached at 200ms.
-            // An absolute departure, not a bob-relative motion like `.open`/
-            // `.tabAccept` — adding `restingY` here let the idle bob's ±1pt
-            // step land on top of the scripted -40 whenever `clockElapsed`
-            // fell on an odd 125ms step (e.g. exactly -41 at 200ms), which
-            // breaks the spec's whole-point-offset guarantee.
+            // Round 15 dropped the live `restingY` here (an absolute
+            // departure, not a bob-relative motion like `.open`/
+            // `.tabAccept`) because reading `clockElapsed` mid-beat let the
+            // idle bob's ±1pt step land on top of the scripted -40 (e.g.
+            // exactly -41 at 200ms if the clock fell on an odd 125ms step).
+            // But that also made the pose snap from wherever the bob was
+            // sitting at beat-arm time straight to 0 at `beatElapsed == 0`,
+            // a discontinuity no other beat has. Fix: blend from the
+            // resting offset captured ONCE when the beat armed
+            // (`launchRestingAtStart`, frozen — not re-read from the live
+            // clock) down to the fixed -40 target, so f=0 matches whatever
+            // the ghost was doing an instant before launch, and f=1 still
+            // lands exactly on -40 regardless of that starting point.
             let duration = 0.2
             let t = min(beatElapsed / duration, 1)
-            let offsetY = t * -40
+            let offsetY = (launchRestingAtStart * (1 - t) + -40 * t).rounded()
             let opacity = 1 - t
             return Pose(offsetY: offsetY, offsetX: 0, opacity: opacity, eyesOpen: true)
         }
@@ -246,6 +255,10 @@ struct ComposerWitnessView: View {
     @State private var currentBeat: ComposerWitness.Beat = .idle
     @State private var beatStartedAt: Date = .now
     @State private var mountedAt: Date = .now
+    /// The idle bob's offset at the instant the `.launch` beat armed —
+    /// captured once, not re-read from the live clock, so `.launch`'s pose
+    /// blend has a fixed start point (see `ComposerWitnessMotion.pose`).
+    @State private var launchRestingAtStart: CGFloat = 0
 
     /// The identity actually on screen. Diverges from `identity` only
     /// while a resolve crossfade is in flight — `identity` is the new
@@ -273,7 +286,8 @@ struct ComposerWitnessView: View {
                 beat: currentBeat.kind,
                 beatElapsed: beatElapsed,
                 clockElapsed: clockElapsed,
-                reduceMotion: reduceMotion
+                reduceMotion: reduceMotion,
+                launchRestingAtStart: launchRestingAtStart
             )
             let resolveElapsed = resolveStartedAt.map { context.date.timeIntervalSince($0) }
             // `beatInFlight`: true only for the resolve crossfade's own
@@ -301,8 +315,12 @@ struct ComposerWitnessView: View {
         }
         .frame(width: frameSize, height: frameSize)
         .onChange(of: beatTrigger) { newValue in
+            let now = Date.now
+            if newValue.kind == .launch {
+                launchRestingAtStart = ComposerWitnessMotion.idleBobOffsetY(elapsed: now.timeIntervalSince(mountedAt))
+            }
             currentBeat = newValue
-            beatStartedAt = .now
+            beatStartedAt = now
         }
         .onChange(of: identity) { newValue in
             guard newValue != displayedIdentity else { return }
