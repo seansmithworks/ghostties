@@ -9,9 +9,11 @@
 #   It NEVER touches ~/Library/Application Support/Ghostties/ (release workspace).
 #
 #   Each fixture in examples/demo-workspace/ is copied into
-#   "~/Library/Application Support/Ghostties Demo/repos/<name>/" and turned into
-#   a real git repo (git init, one commit; a few get an extra branch), so the
-#   demo has real repo state and doesn't depend on this checkout's branch.
+#   "/Users/Shared/Ghostties Demo/repos/<name>/" and turned into a real git
+#   repo (git init, one commit; a few get an extra branch), so the demo has
+#   real repo state and doesn't depend on this checkout's branch. The repos
+#   root lives outside $HOME (unlike the rest of the demo state dir) so
+#   captured terminal panes never show a path containing the real username.
 #
 # USAGE
 #   ./scripts/demo/seed-demo-workspace.sh
@@ -31,9 +33,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FIXTURES_DIR="$REPO_ROOT/examples/demo-workspace"
 
-DEMO_DIR="$HOME/Library/Application Support/Ghostties Demo"
+source "$REPO_ROOT/scripts/demo/_demo-paths.sh"
+
+DEMO_DIR="$DEMO_STATE_DIR"
 TARGET="$DEMO_DIR/workspace.json"
-REPOS_DIR="$DEMO_DIR/repos"
 
 echo "==> Seeding Ghostties Demo workspace"
 echo "    Target: $TARGET"
@@ -101,6 +104,31 @@ for spec in "${PROJECT_SPECS[@]}"; do
     git -C "$dest" checkout -q -b "$extra_branch"
     git -C "$dest" checkout -q main
   fi
+
+  # Suppress Claude Code's "/rc connecting..." startup line, which otherwise
+  # shows in every captured pane because Sean's user settings have
+  # remoteControlAtStartup: true. A project-level settings.local.json may
+  # override to false (never to true). Merge the key rather than clobbering
+  # any existing fixture settings file.
+  mkdir -p "$dest/.claude"
+  python3 - "$dest/.claude/settings.local.json" <<'PYEOF'
+import sys, json, os
+
+path = sys.argv[1]
+settings = {}
+if os.path.isfile(path):
+    with open(path) as f:
+        try:
+            settings = json.load(f)
+        except json.JSONDecodeError:
+            settings = {}
+
+settings["remoteControlAtStartup"] = False
+
+with open(path, "w") as f:
+    json.dump(settings, f, indent=2, sort_keys=True)
+    f.write("\n")
+PYEOF
 
   echo "    $name -> $dest ($(git -C "$dest" branch --show-current))"
 done

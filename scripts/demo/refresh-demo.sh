@@ -3,9 +3,12 @@
 # refresh-demo.sh — Produce/refresh Ghostties Demo.app for marketing capture
 #
 # PURPOSE
-#   Produces "Ghostties Demo.app" with bundle ID com.seansmithdesign.ghostties.demo,
-#   which causes WorkspacePersistence to resolve its state directory to
-#   "~/Library/Application Support/Ghostties Demo/" — completely isolated from
+#   Produces "Ghostties Demo.app" with bundle ID com.seansmithdesign.ghostties.demo
+#   AND an explicit Info.plist LSEnvironment:GHOSTTIES_STATE_DIR pinned to
+#   "~/Library/Application Support/Ghostties Demo/". Isolation comes from that
+#   LSEnvironment override, not the bundle ID alone: LSEnvironment is the only
+#   mechanism that reaches a LaunchServices launch (open/Finder/Dock), and it's
+#   what WorkspacePersistence.directory checks first — completely isolated from
 #   the release ("Ghostties") and dev ("Ghostties Dev") workspaces.
 #
 # DEFAULT MODE: --from-release
@@ -51,6 +54,8 @@ BUNDLE_ID="com.seansmithdesign.ghostties.demo"
 RELEASE_REPO="SeanSmithWorks/ghostties"
 ASSET_NAME="ghostties-macos-arm64.zip"
 CACHE_DIR="$HOME/Library/Caches/ghostties-demo"
+
+source "$REPO_ROOT/scripts/demo/_demo-paths.sh"
 
 MODE="from-release"
 RELEASE_TAG=""
@@ -228,11 +233,25 @@ else
 fi
 echo "    Background auto-checks disabled. A manual check fails benignly (404) against the demo feed."
 
+# Pin the state directory explicitly via LSEnvironment, so isolation from the
+# real ("Ghostties") and dev ("Ghostties Dev") workspaces does not depend
+# solely on WorkspacePersistence recognizing the bundle-ID suffix. This is
+# what WorkspacePersistence.directory checks first (GHOSTTIES_STATE_DIR),
+# before falling back to bundle-ID-derived resolution. Add the key if absent,
+# Set if present — the existing GHOSTTY_MAC_LAUNCH_SOURCE key must survive.
+if /usr/libexec/PlistBuddy -c "Print :LSEnvironment:GHOSTTIES_STATE_DIR" "$PLIST" >/dev/null 2>&1; then
+  /usr/libexec/PlistBuddy -c "Set :LSEnvironment:GHOSTTIES_STATE_DIR $DEMO_STATE_DIR" "$PLIST"
+else
+  /usr/libexec/PlistBuddy -c "Add :LSEnvironment:GHOSTTIES_STATE_DIR string $DEMO_STATE_DIR" "$PLIST"
+fi
+echo "    Pinned LSEnvironment:GHOSTTIES_STATE_DIR to $DEMO_STATE_DIR."
+
 echo "    Plist updated:"
 echo "      CFBundleIdentifier  = $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")"
 echo "      CFBundleName        = $(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$PLIST")"
 echo "      CFBundleDisplayName = $(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$PLIST")"
 echo "      CFBundleExecutable  = $(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST") (unchanged)"
+echo "      LSEnvironment:GHOSTTIES_STATE_DIR = $(/usr/libexec/PlistBuddy -c 'Print :LSEnvironment:GHOSTTIES_STATE_DIR' "$PLIST")"
 echo ""
 
 # ── Phase 3: Re-sign ad-hoc ──────────────────────────────────────────────────
@@ -245,6 +264,16 @@ codesign --force --deep --sign - "$DEST_APP"
 echo "    Signed. Verifying..."
 codesign --verify --deep "$DEST_APP"
 echo "    Verification passed."
+echo ""
+
+# ── Phase 3b: Re-register with LaunchServices ───────────────────────────────
+# `open` can resolve a cached LaunchServices registration for this bundle ID
+# from before the Info.plist rewrite above, ignoring the newly-set
+# LSEnvironment. Force a fresh registration of this exact bundle path so a
+# LaunchServices launch (open/Finder/Dock) always picks up the current plist.
+echo "==> Re-registering with LaunchServices..."
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST_APP"
+echo "    Registered."
 echo ""
 
 # ── Phase 4: Launch ──────────────────────────────────────────────────────────

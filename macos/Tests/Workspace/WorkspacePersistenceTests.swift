@@ -590,6 +590,42 @@ struct WorkspacePersistenceTests {
         #expect(resolved.lastPathComponent == "Ghostties" || resolved.lastPathComponent == "Ghostties Dev")
     }
 
+    // MARK: - directoryName(forBundleId:)
+
+    @Test func directoryNameForReleaseBundleIdIsGhosties() {
+        #expect(WorkspacePersistence.directoryName(forBundleId: "com.seansmithdesign.ghostties") == "Ghostties")
+    }
+
+    @Test func directoryNameForNilBundleIdIsGhosties() {
+        #expect(WorkspacePersistence.directoryName(forBundleId: nil) == "Ghostties")
+    }
+
+    @Test func directoryNameForEmptyBundleIdIsGhosties() {
+        #expect(WorkspacePersistence.directoryName(forBundleId: "") == "Ghostties")
+    }
+
+    @Test func directoryNameForDevSuffixIsGhostiesDev() {
+        #expect(WorkspacePersistence.directoryName(forBundleId: "com.seansmithdesign.ghostties.dev") == "Ghostties Dev")
+    }
+
+    @Test func directoryNameForDebugSuffixIsGhostiesDev() {
+        #expect(WorkspacePersistence.directoryName(forBundleId: "com.seansmithdesign.ghostties.debug") == "Ghostties Dev")
+    }
+
+    @Test func directoryNameForDemoSuffixIsGhostiesDemo() {
+        #expect(WorkspacePersistence.directoryName(forBundleId: "com.seansmithdesign.ghostties.demo") == "Ghostties Demo")
+    }
+
+    /// Data-loss regression: an unrecognized bundle ID (e.g. a future
+    /// democapture variant, `com.seansmithdesign.ghostties.democapture`, which
+    /// does NOT end in `.dev`) must NEVER fall through to the release
+    /// folder — it must resolve to its own isolated folder instead.
+    @Test func directoryNameForUnknownBundleIdIsIsolatedNeverGhosties() {
+        let name = WorkspacePersistence.directoryName(forBundleId: "com.seansmithdesign.ghostties.democapture")
+        #expect(name != "Ghostties")
+        #expect(name == "Ghostties (com.seansmithdesign.ghostties.democapture)")
+    }
+
     @Test func decodingCorruptMigrationFlagDefaultsToNotMigrated() throws {
         // A non-bool value where the flag should be → safe default `false`
         // (treat as not-yet-migrated). This is intentional: the migration
