@@ -1115,4 +1115,20 @@ final class ComposerGhostNSTextView: NSTextView {
         }
         return max(1, count)
     }
+
+    /// Sean doesn't want the macOS cursor-accessory bubble (dictation /
+    /// caps lock / input source indicator) popping up beside the caret when
+    /// the composer field is focused. `NSTextInputClient.h`
+    /// (`-preferredTextAccessoryPlacement`, macOS 14+) documents
+    /// `NSTextCursorAccessoryPlacementInvisible` as "hide". CORRECTION vs
+    /// `reference_macos-cursor-indicator-no-per-view-api`'s runtime scan
+    /// (older SDK): on the macOS 26.5 SDK this builds against, `NSTextView`
+    /// declares this as an `open func` with its own default, so this is a
+    /// genuine `override`, not new conformance — it only suppresses the
+    /// cursor ACCESSORY bubble, the caret itself still draws and blinks
+    /// normally.
+    @available(macOS 14.0, *)
+    override func preferredTextAccessoryPlacement() -> NSTextCursorAccessoryPlacement {
+        .invisible
+    }
 }

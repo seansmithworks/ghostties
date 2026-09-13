@@ -575,4 +575,32 @@ struct ComposerGhostTextFieldTests {
         #expect(typed == fullPath, "Tab-drill on \"\(fullPath)\" settled at \"\(typed)\", not the full path")
         #expect(iterations <= segmentCount, "Tab-drill on \"\(fullPath)\" took \(iterations) Tabs for \(segmentCount) segments — expected at most one Tab per segment")
     }
+
+    // MARK: - Cursor accessory bubble (reference_macos-cursor-indicator-no-per-view-api)
+
+    /// `preferredTextAccessoryPlacement` (`NSTextInputClient.h`, macOS 14+)
+    /// hides the macOS cursor-accessory bubble Sean doesn't want in the
+    /// composer. CORRECTION vs `reference_macos-cursor-indicator-no-per-
+    /// view-api`'s runtime scan (older SDK): on the macOS 26.5 SDK this
+    /// build compiles against, `NSTextView` itself declares
+    /// `preferredTextAccessoryPlacement` as an `open func` — the compiler
+    /// required `override`, so it is NOT an unimplemented optional
+    /// selector here. This test therefore records the actual non-collision
+    /// fact for THIS SDK: a plain `NSTextView` responds to the selector
+    /// (it has AppKit's own default) but does not itself return
+    /// `.invisible` — only this subclass's override does.
+    @available(macOS 14.0, *)
+    @Test func ghostTextViewHidesCursorAccessoryPlacementPlainNSTextViewDoesNot() {
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+        let textContainer = NSTextContainer()
+        layoutManager.addTextContainer(textContainer)
+
+        let ghostTextView = ComposerGhostNSTextView(frame: .zero, textContainer: textContainer)
+        #expect(ghostTextView.preferredTextAccessoryPlacement() == .invisible)
+
+        let plainTextView = NSTextView()
+        #expect(plainTextView.preferredTextAccessoryPlacement() != .invisible)
+    }
 }
