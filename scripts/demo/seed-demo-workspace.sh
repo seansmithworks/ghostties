@@ -73,7 +73,7 @@ fi
 echo "==> Ensuring clone cache is populated ($DEMO_CLONE_CACHE_DIR)..."
 mkdir -p "$DEMO_CLONE_CACHE_DIR"
 for spec in "${DEMO_PROJECT_SPECS[@]}"; do
-  IFS='|' read -r name repo sha extra_branch ghost <<< "$spec"
+  IFS='|' read -r name repo sha extra_branch ghost prompt_key <<< "$spec"
   cache_dir="$DEMO_CLONE_CACHE_DIR/$name"
 
   if [[ -d "$cache_dir/.git" ]] && git -C "$cache_dir" cat-file -e "${sha}^{commit}" 2>/dev/null; then
@@ -110,7 +110,7 @@ echo ""
 #    pinned SHA on branch main ────────────────────────────────────────────────
 echo "==> Rebuilding seeded repos under $REPOS_DIR ..."
 for spec in "${DEMO_PROJECT_SPECS[@]}"; do
-  IFS='|' read -r name repo sha extra_branch ghost <<< "$spec"
+  IFS='|' read -r name repo sha extra_branch ghost prompt_key <<< "$spec"
   cache_dir="$DEMO_CLONE_CACHE_DIR/$name"
   dest="$REPOS_DIR/$name"
 
@@ -158,11 +158,12 @@ echo ""
 # ── Generate JSON via python3 ────────────────────────────────────────────────
 echo "    Generating workspace.json with ${#DEMO_PROJECT_SPECS[@]} projects..."
 
-# DEMO_PROJECT_SPECS (from _demo-paths.sh) is "name|repo|sha|branch|ghost";
-# reduce to "name|ghost" for the JSON generator below.
+# DEMO_PROJECT_SPECS (from _demo-paths.sh) is
+# "name|repo|sha|branch|ghost|promptkey"; reduce to "name|ghost" for the
+# JSON generator below.
 PROJECTS_SPEC_ARG=""
 for spec in "${DEMO_PROJECT_SPECS[@]}"; do
-  IFS='|' read -r name _repo _sha _branch ghost <<< "$spec"
+  IFS='|' read -r name _repo _sha _branch ghost _prompt_key <<< "$spec"
   PROJECTS_SPEC_ARG+="$name|$ghost"$'\n'
 done
 

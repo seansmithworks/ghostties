@@ -170,9 +170,13 @@ demo-ready → demo-drive → demo-ready cycle through `demo-drive.sh`'s own
 `demo-ready.sh --check` precondition.
 
 Each staged session is bound to its own per-repo `AgentTemplate` whose
-command is `claude` with a short, harmless, read-only prompt (summarize the
-README, list TODOs, describe the structure, explain the last commit — cycled
-across sessions). Nothing about the resulting activity is faked: no GUI
+command is `claude` with a short, harmless, read-only prompt. Each staged
+repo carries its own prompt key in `DEMO_PROJECT_SPECS`
+(`scripts/demo/_demo-paths.sh`) — not picked by cycling an index — so
+reordering repos never moves a prompt onto an unaudited pin: ghostties
+summarizes the README, riff lists TODOs, surface-fx describes the directory
+structure, colophon explains the most recent git commit. Nothing about the
+resulting activity is faked: no GUI
 automation is used anywhere, and the script never launches the app or runs
 `claude` itself. It only writes the staged records to `workspace.json`
 (backed up first, validated as JSON, written atomically); re-running replaces

@@ -22,7 +22,7 @@ for the exact repo/SHA/branch/ghost-character mapping.
 
 These repos aren't opened directly from this checkout. `scripts/demo/seed-demo-workspace.sh`
 clones each one (from a persistent local cache, so re-seeding doesn't re-download once a SHA
-is cached) into `~/Library/Application Support/Ghostties Demo/repos/<name>/` at its pinned
+is cached) into `/Users/Shared/Ghostties Demo/repos/<name>/` at its pinned
 commit, and points the demo app's `workspace.json` at those clones — so the demo doesn't
 depend on this checkout's branch. See `scripts/demo/README.md` for the full refresh + seed
 procedure.
