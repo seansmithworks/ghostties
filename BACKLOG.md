@@ -1,5 +1,14 @@
 # Ghostties — Backlog
 
+## 2026-09-13 (later) — Composer live-look round (PR #169)
+
+- [x] DialKit single-line dial set rebuilt in `57b0fcd42` (independent review: pass). Order: Style, Treatment, Glass tint (new, default None), Width, Corner radius (new, default 10), Field size, Row size, Shadow ×4, Witness, Ghost gap (new, default 4), Reset single-line (new). Zero-chrome dials show only under Zero chrome; Classic shows Style only. Tests compiled, NOT run. The visible-controls test asserts counts only, because DialKit's control labels are `package`-scoped.
+- [x] DialKit panel moved from the full-width bottom drawer to a 320pt top-trailing inline card with a collapse pill (`83d796814`). No separate review (DEBUG-only). Not visually verified clear of the composer at narrow window widths.
+- [ ] (carried) Sean's live tuning on Dev (running build `83d796814`): text size (field size is stored at 25; code default 28), ghost gap, glass tint, corner radius. Strawman: when Sean pastes DialKit **Copy** output, those values become the code defaults.
+- [ ] (carried) Liquid Glass "not visible": inferred cause is the hardcoded `.windowBackgroundColor` glass tint. Glass tint None is now the default; confirm live that the glass reads as glass.
+- [ ] DECIDE OR KILL: the ⊖ bubble beside the caret is macOS's own cursor indicator, with no public per-NSTextView API (SDK headers checked). Sean checks whether it shows on focus in Spotlight/Raycast/TextEdit. Strawman: if it shows there, accept it (the only off switch is the system-wide, unsupported `redesigned_text_cursor` flag, Sean's machine-wide choice). If it doesn't, spike an NSTextField field-editor variant of the composer field.
+- [ ] (parked) Stale doc comment "Reuses `composerClipShape`" in `singleLineComposerCard` (`SessionComposerPalette.swift` ~2212); the card now uses `singleLineClipShape`.
+
 ## 2026-09-13 — Composer thread checkpoint (PR #169)
 
 - [x] (carried) Build the frame-based Witness ghost animation. Sean approved board B on 2026-09-13 ("ghost propsal looks good to me"), artifact https://claude.ai/code/artifact/74c0df2d-0d62-42e6-819c-692e3258fc9e.
@@ -12,9 +21,9 @@
     - open: dither materialise, bottom rows first (~240ms)
     - Reduce Motion: static, instant swap
   - Built 2026-09-13 in `ef496f46d` (port) + `204fc5bdb`/`3b94a1226`/`6e0f97c37` (review fixes: interrupted morphs start from the on-screen frame; launch is terminal and wins over a same-update identity change; initial-mount beat). Two independent reviews passed. Swift↔board JS parity dump: 0 diffs across all 9 ghosts + placeholder. build-for-testing green. **Tests compiled, NOT run** (Dev was open).
-- [ ] (carried) Local verification once Sean quits Dev: full unfiltered suite plus red proofs for R15 (`df25c6023`, `6c25d8ef9`, `264222ea0`), R15b `e4257a247`, the Custom preset fix `01d3f1ef5`, and R18 `f9d454e2e`. The two R18 tests' tolerances (1pt Witness alignment, <3pt card width) are uncalibrated. The last full suite (at `911759a6e`) was 1147/1158, where 5 failures were pre-existing load flakes. Also owed: a first run + red proofs for the Witness frame tests in `ComposerWitnessFramesTests.swift` (19) and the `ComposerWitnessTests.swift` transition tests added in `204fc5bdb`/`3b94a1226`/`6e0f97c37`. Exception: `tabPlusIdentityChange…` and `unknownBranchPlusIdentityChange…` are lock-in tests that pass on `3b94a1226` by design, so they get no red proof.
+- [ ] (carried 2× since 2026-09-12) Local verification once Sean quits Dev: full unfiltered suite plus red proofs for R15 (`df25c6023`, `6c25d8ef9`, `264222ea0`), R15b `e4257a247`, the Custom preset fix `01d3f1ef5`, and R18 `f9d454e2e`. The two R18 tests' tolerances (1pt Witness alignment, <3pt card width) are uncalibrated. The last full suite (at `911759a6e`) was 1147/1158, where 5 failures were pre-existing load flakes. Also owed: a first run + red proofs for the Witness frame tests in `ComposerWitnessFramesTests.swift` (19) and the `ComposerWitnessTests.swift` transition tests added in `204fc5bdb`/`3b94a1226`/`6e0f97c37`. Exception: `tabPlusIdentityChange…` and `unknownBranchPlusIdentityChange…` are lock-in tests that pass on `3b94a1226` by design, so they get no red proof. Also owed: `57b0fcd42` (dial tests) and `83d796814`.
 - [ ] (carried) Single-line taste defaults, strawman set 2026-09-13, to apply unless Sean redlines:
-  - treatment → Material (glass has nothing to refract over a flat terminal)
+  - ~~treatment → Material~~ superseded 2026-09-13: Sean wants Liquid Glass visible; Glass stays default, tint None added
   - shadow radius 64 → 32 (the HTML bench's CSS blur is ~2× a SwiftUI shadow radius)
   - placeholder ghost → `secondaryLabelColor`, eyes kept
 - [ ] (carried) DECIDE OR KILL: a `ghostties-release.yml` dry run on this branch (`workflow_dispatch`, `dry_run=true`) to exercise the new "Assert DialKit absent" gate. The reviewer found no externally visible side effects. It needs Sean's explicit yes.
