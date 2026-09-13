@@ -8,11 +8,14 @@ import DialKit
 // MARK: - Composer style flag (spike, beta.25 hold)
 //
 // Zero-chrome + single-line composer redesign, behind `ghostties.composerStyle`.
-// Unset or unrecognized value = `.classic`, the shipping composer, with ZERO
-// visual or behavioral change on that path — every classic render call site
-// stays exactly as it was before this file existed; only `SessionComposerPalette
-// .composerCard` and `SessionComposerOverlay`'s vertical placement branch on
-// `ComposerStyle.current()`.
+// Sean's decision (2026-09-13): single-line is now the default composer style
+// for everyone. Unset or unrecognized value = `.singleLine`; `.classic` (the
+// pre-single-line shipping composer) and `.zeroChrome` both remain fully
+// intact and reachable via the flag — this is a default flip, not a removal.
+// `SessionComposerPalette.composerCard` and `SessionComposerOverlay`'s
+// vertical placement branch on `ComposerStyle.current()`. `.anchored`
+// presentation (the sidebar popover) is gated back to `.classic` regardless
+// of this default — see `SessionComposerPalette.activeStyle`'s doc comment.
 
 /// Which composer visual style renders. Read once per render pass via
 /// `UserDefaults`, same pattern as `ComposerGhostTextField.modelBFieldStorageKey`.
@@ -26,7 +29,7 @@ enum ComposerStyle: String {
     static func current(defaults: UserDefaults = .standard) -> ComposerStyle {
         guard let raw = defaults.string(forKey: storageKey),
               let style = ComposerStyle(rawValue: raw) else {
-            return .classic
+            return .singleLine
         }
         return style
     }
@@ -1210,7 +1213,7 @@ struct ComposerDebugTuningControl: View {
     /// a test injects an isolated suite so it never races other parallel
     /// Swift Testing processes reading/writing the same keys.
     init(defaults: UserDefaults = .standard, onChange: @escaping () -> Void = {}) {
-        _styleRaw = AppStorage(wrappedValue: ComposerStyle.classic.rawValue, ComposerStyle.storageKey, store: defaults)
+        _styleRaw = AppStorage(wrappedValue: ComposerStyle.singleLine.rawValue, ComposerStyle.storageKey, store: defaults)
         _materialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.medium.rawValue, ComposerZeroChromeMaterial.storageKey, store: defaults)
         _focalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.regular.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: defaults)
         _fogEnabled = AppStorage(wrappedValue: true, ComposerZeroChromeFogSetting.storageKey, store: defaults)

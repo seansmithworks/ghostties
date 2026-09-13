@@ -1389,12 +1389,23 @@ struct SessionComposerPalette: View {
 
     // MARK: - Style flag (spike, `ghostties.composerStyle`)
 
-    /// Unset/unrecognized = `.classic` — see `ComposerZeroChromeStyle.swift`.
-    /// Read once per render; SwiftUI re-evaluates `body` on every relevant
-    /// `@Published`/`@State` change already, so no extra invalidation wiring
-    /// is needed for `defaults write` changes to take effect on next launch.
+    /// Unset/unrecognized = `.singleLine` (Sean's decision, 2026-09-13) — see
+    /// `ComposerZeroChromeStyle.swift`. Read once per render; SwiftUI
+    /// re-evaluates `body` on every relevant `@Published`/`@State` change
+    /// already, so no extra invalidation wiring is needed for `defaults
+    /// write` changes to take effect on next launch.
+    ///
+    /// `.anchored` (the sidebar popover, `ProjectDisclosureRow.swift`) is
+    /// gated to `.classic` here regardless of the stored style: single-line
+    /// was only ever built for `.centered` and never renders
+    /// `ComposerResultsTable` (only `classicComposerCard` does — the
+    /// results dropdown the popover exists to show). Flipping the default
+    /// without this gate would silently drop the popover's results list.
+    /// Zero-chrome is unaffected either way — it's already opt-in via the
+    /// flag, not the new default.
     private var activeStyle: ComposerStyle {
-        styleOverrideForTesting ?? ComposerStyle.current()
+        guard request.presentation != .anchored else { return .classic }
+        return styleOverrideForTesting ?? ComposerStyle.current()
     }
 
     private var reduceMotionEnabled: Bool {

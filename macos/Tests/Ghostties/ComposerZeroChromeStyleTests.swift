@@ -45,9 +45,11 @@ struct ComposerZeroChromeStyleTests {
 
     // MARK: - Style flag
 
-    @Test func composerStyleDefaultsToClassicWhenUnset() {
+    /// Sean's decision (2026-09-13): single-line is the default composer
+    /// style for everyone. Unset reads `.singleLine`, not `.classic`.
+    @Test func composerStyleDefaultsToSingleLineWhenUnset() {
         let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
-        #expect(ComposerStyle.current(defaults: suite) == .classic)
+        #expect(ComposerStyle.current(defaults: suite) == .singleLine)
     }
 
     @Test func composerStyleReadsZeroChrome() {
@@ -56,18 +58,18 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerStyle.current(defaults: suite) == .zeroChrome)
     }
 
-    @Test func composerStyleReadsSingleLine() {
+    @Test func composerStyleReadsClassic() {
         let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
-        suite.set("singleLine", forKey: ComposerStyle.storageKey)
-        #expect(ComposerStyle.current(defaults: suite) == .singleLine)
+        suite.set("classic", forKey: ComposerStyle.storageKey)
+        #expect(ComposerStyle.current(defaults: suite) == .classic)
     }
 
-    /// An unrecognized value (typo, stale build) falls back to `.classic`
-    /// rather than crashing or defaulting to a new, less-tested style.
-    @Test func composerStyleFallsBackToClassicOnUnrecognizedValue() {
+    /// An unrecognized value (typo, stale build) falls back to the same
+    /// default as unset — `.singleLine` — rather than crashing.
+    @Test func composerStyleFallsBackToSingleLineOnUnrecognizedValue() {
         let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
         suite.set("bogus", forKey: ComposerStyle.storageKey)
-        #expect(ComposerStyle.current(defaults: suite) == .classic)
+        #expect(ComposerStyle.current(defaults: suite) == .singleLine)
     }
 
     /// Round 8 (Sean, live look): default moved from `.regular` to

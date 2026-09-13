@@ -72,7 +72,7 @@ struct SessionComposerOverlay: View {
     @AppStorage private var composerFogEnabled: Bool
 
     private var resolvedStyle: ComposerStyle {
-        styleOverrideForTesting ?? ComposerStyle(rawValue: composerStyleRaw) ?? .classic
+        styleOverrideForTesting ?? ComposerStyle(rawValue: composerStyleRaw) ?? .singleLine
     }
 
     private var resolvedMaterial: ComposerZeroChromeMaterial {
@@ -96,7 +96,7 @@ struct SessionComposerOverlay: View {
         self.composerDefaultsForTesting = defaultsForTesting
         self.centeringModel = centeringModel
         let store = defaultsForTesting ?? .standard
-        _composerStyleRaw = AppStorage(wrappedValue: ComposerStyle.classic.rawValue, ComposerStyle.storageKey, store: store)
+        _composerStyleRaw = AppStorage(wrappedValue: ComposerStyle.singleLine.rawValue, ComposerStyle.storageKey, store: store)
         _composerMaterialRaw = AppStorage(wrappedValue: ComposerZeroChromeMaterial.medium.rawValue, ComposerZeroChromeMaterial.storageKey, store: store)
         _composerFocalBlurRaw = AppStorage(wrappedValue: ComposerZeroChromeFocalBlurStyle.regular.rawValue, ComposerZeroChromeFocalBlurStyle.storageKey, store: store)
         _composerFogEnabled = AppStorage(wrappedValue: true, ComposerZeroChromeFogSetting.storageKey, store: store)
