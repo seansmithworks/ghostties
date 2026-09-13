@@ -199,3 +199,71 @@ enum SessionIndicatorState: Comparable {
         lhs.priority < rhs.priority
     }
 }
+
+// MARK: - Lifecycle Bucket (Active / Inactive / Archive)
+
+/// The three groups every session bucket into — shared by the Sessions tab
+/// (`RecentsListView`) and each project's expanded session list
+/// (`WorkspaceStore.computeSessionGroups`). One rule, one set of labels, in
+/// both views.
+enum SessionBucket: String, CaseIterable, Hashable {
+    case active
+    case inactive
+    case archive
+}
+
+extension SessionBucket {
+    /// The single Active/Inactive/Archive membership rule.
+    ///
+    /// Active means the session's terminal is open: a live surface exists
+    /// and its process is running (`SessionStatus.isAlive`). This is
+    /// deliberately `status.isAlive` (i.e. `status == .running`), NOT
+    /// `SessionIndicatorState != .inactive` — indicator state reports
+    /// `.error` as "not inactive" for a session whose surface has ALREADY
+    /// closed (`SessionCoordinator.handleSurfaceClose` sets
+    /// `.error`/`.exited`/`.completed` only AFTER removing the surface from
+    /// `sessionTrees`), which would leave a closed, errored session stuck in
+    /// Active forever. `status.isAlive` is true only while a live surface
+    /// exists.
+    ///
+    /// - Inactive: not open, but `startedThisLaunch` — its terminal was open
+    ///   at some point this launch (Stop, or the shell it fell back to
+    ///   exited) and then closed.
+    /// - Archive: not open, and never started this launch — restored from
+    ///   `workspace.json`, untouched this run.
+    static func membership(
+        status: SessionStatus?,
+        startedThisLaunch: Bool
+    ) -> SessionBucket {
+        if status?.isAlive == true { return .active }
+        return startedThisLaunch ? .inactive : .archive
+    }
+}
+
+extension AgentSession {
+    /// Sorts sessions newest-first by `displayTimestamp`, nil last. Shared by
+    /// the Sessions tab's Archive section (`RecentsListView`) and each
+    /// project's expanded Archive bucket (`WorkspaceStore.computeSessionGroups`)
+    /// — the one bucket that does NOT keep append/alphabetical order, per
+    /// Sean's call that Archive should read reverse-chronological everywhere.
+    /// `Array.sort` is not guaranteed stable, so ties (and nil-vs-nil) break
+    /// on the original index to preserve incoming relative order.
+    static func sortedNewestFirst(_ sessions: [AgentSession]) -> [AgentSession] {
+        sessions
+            .enumerated()
+            .sorted { lhs, rhs in
+                switch (lhs.element.displayTimestamp, rhs.element.displayTimestamp) {
+                case let (l?, r?):
+                    if l != r { return l > r }
+                case (nil, .some):
+                    return false
+                case (.some, nil):
+                    return true
+                case (nil, nil):
+                    break
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+}

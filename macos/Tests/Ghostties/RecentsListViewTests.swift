@@ -4,8 +4,8 @@ import GhosttiesCore
 
 /// Tests for the recents-list ordering + section-membership logic in RecentsListView.
 ///
-/// Exercises the static `sorted(sessions:)` and `belongsInActive(...)` helpers plus
-/// `relativeLabel(_:)` — all are pure functions with no SwiftUI or AppKit dependencies.
+/// Exercises the static `sorted(sessions:)` and `SessionBucket.membership(status:startedThisLaunch:)`
+/// helpers plus `relativeLabel(_:)` — all are pure functions with no SwiftUI or AppKit dependencies.
 final class RecentsListViewTests: XCTestCase {
 
     // MARK: - Helpers
@@ -126,56 +126,79 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertEqual(sorted.count, 5)
     }
 
-    // MARK: - Section Membership (indicator-state-only — FIX 6)
+    // MARK: - Section Membership (SessionBucket.membership — the shared rule)
 
-    func testInactiveSessionBelongsInArchiveByDefault() {
-        XCTAssertFalse(RecentsListView.belongsInActive(indicatorState: .inactive))
+    func testClosedSessionBelongsInArchiveByDefault() {
+        XCTAssertEqual(SessionBucket.membership(status: nil, startedThisLaunch: false), .archive)
     }
 
-    func testLiveIndicatorStateBelongsInActive() {
-        XCTAssertTrue(RecentsListView.belongsInActive(indicatorState: .processing))
+    func testRunningStatusBelongsInActive() {
+        XCTAssertEqual(SessionBucket.membership(status: .running, startedThisLaunch: false), .active)
     }
 
-    /// FIX 6: selection must NEVER promote a session into Active. Membership
-    /// depends only on indicator state — otherwise clicking an Archive row
-    /// makes it vanish from Archive and reappear in Active, shifting every
-    /// row below it under the cursor.
+    /// FIX 6: selection must NEVER promote a session into Active. Selection
+    /// isn't even a parameter to `membership` — there is no way to wire it in
+    /// accidentally. Membership depends only on `status`/`startedThisLaunch`.
     func testSelectionDoesNotAffectMembership() {
-        // Selected but inactive — must stay in Archive (no promotion).
-        XCTAssertFalse(RecentsListView.belongsInActive(indicatorState: .inactive))
-        // Never selected but active — still belongs in Active.
-        XCTAssertTrue(RecentsListView.belongsInActive(indicatorState: .waiting))
+        XCTAssertEqual(SessionBucket.membership(status: nil, startedThisLaunch: false), .archive)
+        XCTAssertEqual(SessionBucket.membership(status: .running, startedThisLaunch: false), .active)
     }
 
-    /// `belongsInActive` and its archive complement (`!belongsInActive`) must
-    /// be exact complements across the FULL `SessionIndicatorState` enum —
-    /// every session lands in exactly one section, never both, never neither.
-    func testBelongsInActiveAndArchiveAreExactComplementsAcrossFullEnum() {
-        let allStates: [SessionIndicatorState] = [
-            .inactive, .idle, .processing, .longRunning, .waiting, .needsAttention, .error,
-        ]
-        for state in allStates {
-            let inActive = RecentsListView.belongsInActive(indicatorState: state)
-            let inArchive = !RecentsListView.belongsInActive(indicatorState: state)
-            XCTAssertNotEqual(inActive, inArchive, "state \(state) must be in exactly one section")
+    /// The bug this whole rewrite exists to fix: a session whose surface
+    /// already closed with a non-zero exit code must NOT count as Active.
+    /// The OLD rule (`SessionIndicatorState != .inactive`) read `.error` as
+    /// "not inactive" even though `SessionCoordinator.handleSurfaceClose`
+    /// only sets `.error` AFTER removing the surface from `sessionTrees` —
+    /// leaving a closed, errored session stuck in Active forever.
+    /// `SessionStatus.isAlive` is `false` for `.error`, so `membership`
+    /// correctly buckets it as Inactive/Archive instead.
+    func testErrorStatusDoesNotCountAsActive() {
+        XCTAssertEqual(SessionBucket.membership(status: .error(exitCode: 1), startedThisLaunch: true), .inactive)
+        XCTAssertEqual(SessionBucket.membership(status: .error(exitCode: 1), startedThisLaunch: false), .archive)
+    }
+
+    /// `.exited`/`.completed`/`.killed` are all terminal, non-alive statuses —
+    /// each must land in Inactive (started this launch) or Archive (never
+    /// started), never Active.
+    func testAllTerminalStatusesDoNotCountAsActive() {
+        let terminalStatuses: [SessionStatus] = [.exited, .completed, .killed, .error(exitCode: 1)]
+        for status in terminalStatuses {
+            XCTAssertNotEqual(
+                SessionBucket.membership(status: status, startedThisLaunch: true),
+                .active,
+                "\(status) must not count as Active"
+            )
+        }
+    }
+
+    /// `membership` must be an exact partition — every `(status,
+    /// startedThisLaunch)` combination resolves to exactly one bucket. Pinned
+    /// here so a future case addition can't silently produce ambiguity.
+    func testMembershipCoversEveryStatusExactlyOnce() {
+        let statuses: [SessionStatus?] = [nil, .running, .exited, .completed, .killed, .error(exitCode: 1)]
+        for status in statuses {
+            for startedThisLaunch in [true, false] {
+                let bucket = SessionBucket.membership(status: status, startedThisLaunch: startedThisLaunch)
+                XCTAssertTrue(SessionBucket.allCases.contains(bucket))
+            }
         }
     }
 
     // MARK: - Active/Inactive/Archive Sessions (pure helpers)
 
-    /// Sean hit this directly: at cold launch every session resolves
-    /// `.inactive` (no `globalIndicatorStates` entries yet) and has no live
-    /// surface, Active is empty, nothing is selected, and Archive's stored
-    /// preference is `false` (its default). Archive must render COLLAPSED —
-    /// an empty Active section is not a reason to override the user's
-    /// collapsed/expanded choice for Archive. A bare sidebar in this state
-    /// is the accepted outcome; it is not this helper's job to prevent it.
+    /// Sean hit this directly: at cold launch every session has no
+    /// `globalStatuses` entry yet (no live surface), Active is empty, nothing
+    /// is selected, and Archive's stored preference is `false` (its default).
+    /// Archive must render COLLAPSED — an empty Active section is not a
+    /// reason to override the user's collapsed/expanded choice for Archive.
+    /// A bare sidebar in this state is the accepted outcome; it is not this
+    /// helper's job to prevent it.
     func testColdLaunchArchiveStaysCollapsedWhenActiveIsEmpty() {
         let sessions = (0..<14).map { session(name: "s\($0)") }
 
-        let active = RecentsListView.activeSessions(from: sessions, indicatorStates: [:])
-        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: [])
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: [])
+        let active = RecentsListView.activeSessions(from: sessions, statuses: [:])
+        let inactive = RecentsListView.inactiveSessions(from: sessions, statuses: [:], sessionIdsStartedThisLaunch: [])
+        let archive = RecentsListView.archiveSessions(from: sessions, statuses: [:], sessionIdsStartedThisLaunch: [])
 
         XCTAssertTrue(active.isEmpty)
         XCTAssertTrue(inactive.isEmpty)
@@ -196,10 +219,10 @@ final class RecentsListViewTests: XCTestCase {
         let selected = session(name: "selected")
         let other = session(name: "other")
         let sessions = [selected, other]
-        let indicatorStates: [UUID: SessionIndicatorState] = [other.id: .processing]
+        let statuses: [UUID: SessionStatus] = [other.id: .running]
 
-        let active = RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsStartedThisLaunch: [])
+        let active = RecentsListView.activeSessions(from: sessions, statuses: statuses)
+        let archive = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: [])
 
         XCTAssertTrue(archive.contains { $0.id == selected.id }, "selected session must stay in Archive")
         XCTAssertFalse(active.contains { $0.id == selected.id }, "selected session must NOT be promoted into Active")
@@ -223,16 +246,16 @@ final class RecentsListViewTests: XCTestCase {
         let selected = session(name: "selected")
         let other = session(name: "other")
         let sessions = [selected, other]
-        let indicatorStates: [UUID: SessionIndicatorState] = [other.id: .processing]
+        let statuses: [UUID: SessionStatus] = [other.id: .running]
 
         let inactive = RecentsListView.inactiveSessions(
             from: sessions,
-            indicatorStates: indicatorStates,
+            statuses: statuses,
             sessionIdsStartedThisLaunch: [selected.id]
         )
         let archive = RecentsListView.archiveSessions(
             from: sessions,
-            indicatorStates: indicatorStates,
+            statuses: statuses,
             sessionIdsStartedThisLaunch: [selected.id]
         )
 
@@ -281,25 +304,25 @@ final class RecentsListViewTests: XCTestCase {
 
     /// The three static buckets must be an EXACT partition: every session
     /// lands in exactly one of Active/Inactive/Archive, never zero, never
-    /// two. Mixes all combinations of indicator state x live-surface
-    /// presence across a set of sessions.
+    /// two. Mixes all combinations of status x started-this-launch across a
+    /// set of sessions.
     func testActiveInactiveArchivePartitionIsExact() {
-        let liveNoSurface = session(name: "liveNoSurface") // active, no surface (impossible in prod but must still partition)
+        let liveNoSurface = session(name: "liveNoSurface") // active status, not tracked as started (impossible in prod but must still partition)
         let liveWithSurface = session(name: "liveWithSurface") // active, started this launch
         let stoppedWithSurface = session(name: "stoppedWithSurface") // inactive, started this launch -> Inactive
         let neverStarted = session(name: "neverStarted") // inactive, never started -> Archive
         let sessions = [liveNoSurface, liveWithSurface, stoppedWithSurface, neverStarted]
 
-        let indicatorStates: [UUID: SessionIndicatorState] = [
-            liveNoSurface.id: .processing,
-            liveWithSurface.id: .idle,
-            // stoppedWithSurface, neverStarted absent -> resolve .inactive.
+        let statuses: [UUID: SessionStatus] = [
+            liveNoSurface.id: .running,
+            liveWithSurface.id: .running,
+            // stoppedWithSurface, neverStarted absent -> not alive.
         ]
         let sessionIdsStartedThisLaunch: Set<UUID> = [liveWithSurface.id, stoppedWithSurface.id]
 
-        let active = RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
-        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: indicatorStates, sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
+        let active = RecentsListView.activeSessions(from: sessions, statuses: statuses)
+        let inactive = RecentsListView.inactiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
+        let archive = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
 
         for s in sessions {
             let memberships = [active, inactive, archive].filter { bucket in bucket.contains { $0.id == s.id } }
@@ -313,8 +336,8 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertTrue(archive.contains { $0.id == neverStarted.id })
     }
 
-    /// The exact bug Sean hit: a session that RAN and was stopped (inactive
-    /// indicator, but was started at some point this launch) must land in
+    /// The exact bug Sean hit: a session that RAN and was stopped (no live
+    /// status, but was started at some point this launch) must land in
     /// INACTIVE, not ARCHIVE. This is the pure-function analog of
     /// `testStartedThenStoppedSessionLandsInInactiveNotArchive` below.
     func testStoppedButStillSurfacedSessionLandsInInactiveNotArchive() {
@@ -322,8 +345,8 @@ final class RecentsListViewTests: XCTestCase {
         let sessions = [stopped]
         let sessionIdsStartedThisLaunch: Set<UUID> = [stopped.id]
 
-        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
+        let inactive = RecentsListView.inactiveSessions(from: sessions, statuses: [:], sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
+        let archive = RecentsListView.archiveSessions(from: sessions, statuses: [:], sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch)
 
         XCTAssertTrue(inactive.contains { $0.id == stopped.id }, "a stopped-but-started-this-launch session must land in Inactive")
         XCTAssertTrue(archive.isEmpty, "must not also land in Archive")
@@ -335,8 +358,8 @@ final class RecentsListViewTests: XCTestCase {
         let neverStarted = session(name: "neverStarted")
         let sessions = [neverStarted]
 
-        let inactive = RecentsListView.inactiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: [])
-        let archive = RecentsListView.archiveSessions(from: sessions, indicatorStates: [:], sessionIdsStartedThisLaunch: [])
+        let inactive = RecentsListView.inactiveSessions(from: sessions, statuses: [:], sessionIdsStartedThisLaunch: [])
+        let archive = RecentsListView.archiveSessions(from: sessions, statuses: [:], sessionIdsStartedThisLaunch: [])
 
         XCTAssertTrue(archive.contains { $0.id == neverStarted.id }, "a never-started session must land in Archive")
         XCTAssertTrue(inactive.isEmpty, "must not also land in Inactive")
@@ -350,8 +373,8 @@ final class RecentsListViewTests: XCTestCase {
     /// also inserts into `sessionIdsStartedThisLaunch`), then stopped
     /// (`closeSession` removes the tree — mirroring every real way a
     /// session stops: `closeSession`, natural process exit, and
-    /// `clearRuntime` all remove the tree). The session now has NO current
-    /// surface and indicator state resolves to `.inactive`.
+    /// `clearRuntime` all remove the tree). The session now has NO live
+    /// status.
     ///
     /// It must land in INACTIVE. This is the exact case that broke: under
     /// the OLD `hasLiveSurface(id:)`-based discriminator, a stopped session
@@ -387,12 +410,12 @@ final class RecentsListViewTests: XCTestCase {
 
         let inactive = RecentsListView.inactiveSessions(
             from: sessions,
-            indicatorStates: [:],
+            statuses: [:],
             sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
         )
         let archive = RecentsListView.archiveSessions(
             from: sessions,
-            indicatorStates: [:],
+            statuses: [:],
             sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
         )
 
@@ -421,7 +444,7 @@ final class RecentsListViewTests: XCTestCase {
         // disagree here.
         let archive = RecentsListView.archiveSessions(
             from: [twoHoursAgo, fiveMinAgo, oneHourAgo],
-            indicatorStates: [:],
+            statuses: [:],
             sessionIdsStartedThisLaunch: []
         )
 
@@ -442,7 +465,7 @@ final class RecentsListViewTests: XCTestCase {
         // noTimestamp is inserted FIRST, but must still render LAST.
         let archive = RecentsListView.archiveSessions(
             from: [noTimestamp, oneHourAgo, fiveMinAgo],
-            indicatorStates: [:],
+            statuses: [:],
             sessionIdsStartedThisLaunch: []
         )
 
@@ -474,7 +497,7 @@ final class RecentsListViewTests: XCTestCase {
 
         let archive = RecentsListView.archiveSessions(
             from: [staleOutputFreshFocus, freshOutput],
-            indicatorStates: [:],
+            statuses: [:],
             sessionIdsStartedThisLaunch: []
         )
 
@@ -504,7 +527,7 @@ final class RecentsListViewTests: XCTestCase {
 
         let archive = RecentsListView.archiveSessions(
             from: [migratedOlder, migratedRecent],
-            indicatorStates: [:],
+            statuses: [:],
             sessionIdsStartedThisLaunch: []
         )
 
@@ -525,7 +548,7 @@ final class RecentsListViewTests: XCTestCase {
 
         let archive = RecentsListView.archiveSessions(
             from: [first, second, third],
-            indicatorStates: [:],
+            statuses: [:],
             sessionIdsStartedThisLaunch: []
         )
 
@@ -538,11 +561,11 @@ final class RecentsListViewTests: XCTestCase {
         let first = session(name: "first")
         let second = session(name: "second")
         let third = session(name: "third")
-        let indicatorStates: [UUID: SessionIndicatorState] = [
-            first.id: .processing, second.id: .idle, third.id: .waiting,
+        let statuses: [UUID: SessionStatus] = [
+            first.id: .running, second.id: .running, third.id: .running,
         ]
 
-        let active = RecentsListView.activeSessions(from: [first, second, third], indicatorStates: indicatorStates)
+        let active = RecentsListView.activeSessions(from: [first, second, third], statuses: statuses)
 
         XCTAssertEqual(active.map(\.name), ["first", "second", "third"], "Active must keep append order")
     }
@@ -557,7 +580,7 @@ final class RecentsListViewTests: XCTestCase {
 
         let inactive = RecentsListView.inactiveSessions(
             from: [first, second, third],
-            indicatorStates: [:],
+            statuses: [:],
             sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch
         )
 
@@ -568,15 +591,15 @@ final class RecentsListViewTests: XCTestCase {
 
     /// `WorkspaceSidebarView.selectAdjacentLiveSession(offset:)` feeds the
     /// Sessions tab's Cmd+Shift+[/] cycle from
-    /// `RecentsListView.activeSessions(from:indicatorStates:)` — the exact
-    /// same static the tab renders the ACTIVE zone from — so cycle order can
-    /// never drift from render order. This does NOT exercise that
-    /// composition end to end (the production method is private on a
-    /// SwiftUI view and isn't called here); it builds the ACTIVE zone with
-    /// the same static and cycles it directly via
+    /// `RecentsListView.activeSessions(from:statuses:)` — the exact same
+    /// static the tab renders the ACTIVE zone from — so cycle order can never
+    /// drift from render order. This does NOT exercise that composition end
+    /// to end (the production method is private on a SwiftUI view and isn't
+    /// called here); it builds the ACTIVE zone with the same static and
+    /// cycles it directly via
     /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`, asserting
-    /// both forward and backward wraparound. Archive rows (no live
-    /// indicator state) must be skipped entirely.
+    /// both forward and backward wraparound. Archive rows (no live status)
+    /// must be skipped entirely.
     @MainActor
     func testSessionsTabCycleOrderMatchesActiveZoneRenderOrderWithWraparound() {
         let project = Project(name: "p", rootPath: "~/p")
@@ -585,17 +608,17 @@ final class RecentsListViewTests: XCTestCase {
         let c = AgentSession(name: "c", templateId: UUID(), projectId: project.id)
         let archived = AgentSession(name: "archived", templateId: UUID(), projectId: project.id)
 
-        let indicatorStates: [UUID: SessionIndicatorState] = [
-            a.id: .processing,
-            b.id: .waiting,
-            c.id: .idle,
-            // archived.id intentionally absent -> resolves .inactive -> Archive, not Active.
+        let statuses: [UUID: SessionStatus] = [
+            a.id: .running,
+            b.id: .running,
+            c.id: .running,
+            // archived.id intentionally absent -> not alive -> Archive, not Active.
         ]
 
         // Same call the Sessions tab renders from — the single shared source.
         let activeZone = RecentsListView.activeSessions(
             from: [a, b, c, archived],
-            indicatorStates: indicatorStates
+            statuses: statuses
         )
         XCTAssertEqual(activeZone.map(\.name), ["a", "b", "c"], "must match the ACTIVE zone RecentsListView renders")
 
@@ -617,14 +640,13 @@ final class RecentsListViewTests: XCTestCase {
     }
 
     /// Regression test for the dead-end-cycling bug: the ACTIVE zone
-    /// guarantees nothing about liveness (`RecentsListView.activeSessions`
-    /// filters only on indicator state, not on whether a session still has
-    /// a live surface), so a session can sit in ACTIVE with a stale
-    /// indicator after its surface has closed. `selectAdjacentLiveSession`
-    /// must filter the ACTIVE zone down to `coordinator.hasLiveSurface`
-    /// before cycling, matching what the Projects-tab branch already does
-    /// via `sessionsInVisualOrder`. Seeds live surfaces for `a` and `c` but
-    /// not `b`, so the production filter must drop `b` from the cycle.
+    /// guarantees nothing about liveness on its own if status and surface
+    /// ever disagree (`RecentsListView.activeSessions` filters on
+    /// `SessionStatus.isAlive`, which in production only ever holds while a
+    /// live surface exists — but `sessionsTabCycleOrder` keeps an explicit
+    /// `hasLiveSurface` filter as a belt-and-suspenders guard). Seeds live
+    /// surfaces for `a` and `c` but not `b`, so the production filter must
+    /// drop `b` from the cycle.
     ///
     /// Asserts on `coordinator.activeSessionId`, not on
     /// `focusAdjacentLiveSession`'s return value: `focusSession` bails via
@@ -638,14 +660,14 @@ final class RecentsListViewTests: XCTestCase {
         let b = AgentSession(name: "b", templateId: UUID(), projectId: project.id)
         let c = AgentSession(name: "c", templateId: UUID(), projectId: project.id)
 
-        let indicatorStates: [UUID: SessionIndicatorState] = [
-            a.id: .processing,
-            b.id: .waiting,
-            c.id: .idle,
+        let statuses: [UUID: SessionStatus] = [
+            a.id: .running,
+            b.id: .running,
+            c.id: .running,
         ]
 
         let coordinator = SessionCoordinator()
-        // b never gets a live surface -> stale indicator, exited session.
+        // b never gets a live surface -> stale status, exited session.
         coordinator.seedEmptySessionTreeForTesting(id: a.id)
         coordinator.seedEmptySessionTreeForTesting(id: c.id)
 
@@ -654,7 +676,7 @@ final class RecentsListViewTests: XCTestCase {
         // reimplementation of it.
         let liveSessions = WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: [a, b, c],
-            indicatorStates: indicatorStates,
+            statuses: statuses,
             coordinator: coordinator
         )
         XCTAssertEqual(liveSessions.map(\.name), ["a", "c"], "b has no live surface and must be excluded from the cycle")
@@ -711,8 +733,8 @@ final class RecentsListViewTests: XCTestCase {
     }
 
     /// Sessions-tab composition: Cmd+1..9 must index the ACTIVE zone only —
-    /// Archive rows (no live indicator state) are excluded, same source as
-    /// the Cmd+Shift+[/] cycle (`sessionsTabCycleOrder`).
+    /// Archive rows (no live status) are excluded, same source as the
+    /// Cmd+Shift+[/] cycle (`sessionsTabCycleOrder`).
     @MainActor
     func testSessionAtIndexExcludesArchiveRowsOnSessionsTab() {
         let project = Project(name: "p", rootPath: "~/p")
@@ -720,10 +742,10 @@ final class RecentsListViewTests: XCTestCase {
         let b = AgentSession(name: "b", templateId: UUID(), projectId: project.id)
         let archived = AgentSession(name: "archived", templateId: UUID(), projectId: project.id)
 
-        let indicatorStates: [UUID: SessionIndicatorState] = [
-            a.id: .processing,
-            b.id: .idle,
-            // archived.id intentionally absent -> resolves .inactive -> Archive.
+        let statuses: [UUID: SessionStatus] = [
+            a.id: .running,
+            b.id: .running,
+            // archived.id intentionally absent -> not alive -> Archive.
         ]
 
         let coordinator = SessionCoordinator()
@@ -733,7 +755,7 @@ final class RecentsListViewTests: XCTestCase {
 
         let visible = WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: [a, b, archived],
-            indicatorStates: indicatorStates,
+            statuses: statuses,
             coordinator: coordinator
         )
 

@@ -295,7 +295,7 @@ struct WorkspaceSidebarView: View {
         if sidebarTab == .sessions {
             return Self.sessionsTabCycleOrder(
                 sessions: store.sessions,
-                indicatorStates: store.globalIndicatorStates,
+                statuses: store.globalStatuses,
                 coordinator: coordinator
             )
         } else {
@@ -341,18 +341,19 @@ struct WorkspaceSidebarView: View {
     /// static so tests can call the exact composition `selectAdjacentLiveSession`
     /// uses without instantiating a view inside SwiftUI's environment.
     ///
-    /// `RecentsListView.activeSessions` guarantees nothing about liveness —
-    /// it filters on indicator state only, so an exited session can sit in
-    /// ACTIVE with a stale indicator (`handleSurfaceClose` doesn't clear it).
-    /// Without the `hasLiveSurface` filter, cycling onto such a session
-    /// bails inside `focusSession`'s live-tree guard while `activeSessionId`
+    /// `RecentsListView.activeSessions` already keys Active on `status.isAlive`
+    /// (a live surface with a running process), so in practice this filter is
+    /// redundant — kept as a belt-and-suspenders guard: if `hasLiveSurface`
+    /// and `status.isAlive` were ever to disagree (e.g. a surface torn down
+    /// out-of-band without a status update), cycling onto a dead entry would
+    /// bail inside `focusSession`'s live-tree guard while `activeSessionId`
     /// never moves, permanently dead-ending forward cycling.
     static func sessionsTabCycleOrder(
         sessions: [AgentSession],
-        indicatorStates: [UUID: SessionIndicatorState],
+        statuses: [UUID: SessionStatus],
         coordinator: SessionCoordinator
     ) -> [AgentSession] {
-        RecentsListView.activeSessions(from: sessions, indicatorStates: indicatorStates)
+        RecentsListView.activeSessions(from: sessions, statuses: statuses)
             .filter { coordinator.hasLiveSurface(id: $0.id) }
     }
 }

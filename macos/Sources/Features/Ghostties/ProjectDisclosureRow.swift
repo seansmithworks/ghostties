@@ -29,7 +29,8 @@ struct ProjectDisclosureRow: View {
             project: project,
             isExpanded: $isExpanded,
             selectedProjectId: $selectedProjectId,
-            activeSessionId: coordinator.activeSessionId
+            activeSessionId: coordinator.activeSessionId,
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
         )
         .equatable()
     }
@@ -42,6 +43,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     @Binding var isExpanded: Bool
     @Binding var selectedProjectId: UUID?
     let activeSessionId: UUID?
+    let sessionIdsStartedThisLaunch: Set<UUID>
 
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -53,6 +55,10 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     @State private var editingName: String = ""
     @State private var isHeaderHovered = false
     @State private var isNewSessionHovered = false
+    /// Archive is collapsed by default inside every expanded project — same
+    /// as the Sessions tab's Archive default. Active/Inactive have no
+    /// collapse state of their own; they're always visible when non-empty.
+    @State private var isArchiveExpanded = false
     @FocusState private var renameFieldFocused: Bool
 
     /// Snapshot of this project's session/indicator data, captured at
@@ -66,23 +72,28 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     /// `MenuBarDropdownView`/`SessionCoordinator`) rather than the
     /// `@EnvironmentObject`, which isn't resolved yet inside `init`.
     private let sessionSignature: [AgentSession]
-    private let indicatorSignature: [UUID: SessionIndicatorState]
+    private let indicatorSignature: [UUID: SessionStatus]
 
     init(
         project: Project,
         isExpanded: Binding<Bool>,
         selectedProjectId: Binding<UUID?>,
-        activeSessionId: UUID?
+        activeSessionId: UUID?,
+        sessionIdsStartedThisLaunch: Set<UUID>
     ) {
         self.project = project
         self._isExpanded = isExpanded
         self._selectedProjectId = selectedProjectId
         self.activeSessionId = activeSessionId
+        self.sessionIdsStartedThisLaunch = sessionIdsStartedThisLaunch
 
-        let flatSessions = WorkspaceStore.shared.sessionGroups(forProject: project.id).flatMap { $0.1 }
+        let flatSessions = WorkspaceStore.shared.sessionGroups(
+            forProject: project.id,
+            startedThisLaunch: sessionIdsStartedThisLaunch
+        ).flatMap { $0.1 }
         self.sessionSignature = flatSessions
         self.indicatorSignature = flatSessions.reduce(into: [:]) { result, session in
-            result[session.id] = WorkspaceStore.shared.globalIndicatorStates[session.id]
+            result[session.id] = WorkspaceStore.shared.globalStatuses[session.id]
         }
     }
 
@@ -106,6 +117,7 @@ private struct ProjectDisclosureRowContent: View, Equatable {
             && lhs.isExpanded == rhs.isExpanded
             && lhs.selectedProjectId == rhs.selectedProjectId
             && lhs.activeSessionId == rhs.activeSessionId
+            && lhs.sessionIdsStartedThisLaunch == rhs.sessionIdsStartedThisLaunch
             && lhs.sessionSignature == rhs.sessionSignature
             && lhs.indicatorSignature == rhs.indicatorSignature
     }
@@ -138,11 +150,12 @@ private struct ProjectDisclosureRowContent: View, Equatable {
 
     // MARK: - Expanded Session List
 
-    /// Sessions for this project, grouped into `.active` / `.recent` / `.idle`
-    /// buckets. Drag-drop reordering still respects the project's flat
-    /// `sortOrder` — drag is bucket-local for now (R-D requirements).
+    /// Sessions for this project, grouped into `.active` / `.inactive` /
+    /// `.archive` buckets — same rule as `RecentsListView`'s Sessions tab.
+    /// Drag-drop reordering still respects the project's flat `sortOrder` —
+    /// drag is bucket-local for now (R-D requirements).
     private var sessionGroups: [(SessionBucket, [AgentSession])] {
-        store.sessionGroups(forProject: project.id)
+        store.sessionGroups(forProject: project.id, startedThisLaunch: sessionIdsStartedThisLaunch)
     }
 
     @ViewBuilder
@@ -151,18 +164,28 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         let multipleBuckets = groups.count > 1
 
         ForEach(groups, id: \.0) { bucket, bucketSessions in
-            if multipleBuckets {
-                SessionGroupHeader(bucket: bucket)
-                    .padding(.leading, 20)
-                    .padding(.top, bucket == groups.first?.0 ? 2 : 6)
+            // Archive's header always renders (even as the sole bucket) —
+            // it's the only control that can expand it. Active/Inactive
+            // headers are label-only and skip rendering when they're the
+            // one and only bucket, same as before.
+            if multipleBuckets || bucket == .archive {
+                SessionGroupHeader(
+                    bucket: bucket,
+                    count: bucketSessions.count,
+                    isExpanded: bucket == .archive ? $isArchiveExpanded : .constant(true)
+                )
+                .padding(.leading, 20)
+                .padding(.top, bucket == groups.first?.0 ? 2 : 6)
             }
 
-            ForEach(Array(bucketSessions.enumerated()), id: \.element.id) { index, session in
-                sessionRowView(
-                    for: session,
-                    index: index,
-                    bucketSessions: bucketSessions
-                )
+            if bucket != .archive || isArchiveExpanded {
+                ForEach(Array(bucketSessions.enumerated()), id: \.element.id) { index, session in
+                    sessionRowView(
+                        for: session,
+                        index: index,
+                        bucketSessions: bucketSessions
+                    )
+                }
             }
         }
     }
@@ -550,43 +573,67 @@ private struct ProjectDisclosureRowContent: View, Equatable {
 /// but at a smaller scale because they're nested.
 private struct SessionGroupHeader: View {
     let bucket: SessionBucket
+    let count: Int
+    /// Only Archive is collapsible — Active/Inactive pass `.constant(true)`
+    /// and render as a plain label with no chevron/tap target.
+    @Binding var isExpanded: Bool
 
     @Environment(\.colorScheme) private var colorScheme
 
+    private var isCollapsible: Bool { bucket == .archive }
+
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: iconName)
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(Color(.tertiaryLabelColor))
-                .frame(width: 10, alignment: .center)
+        Button {
+            guard isCollapsible else { return }
+            let animation: Animation? = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                ? nil
+                : .easeInOut(duration: 0.2)
+            withAnimation(animation) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: iconName)
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(Color(.tertiaryLabelColor))
+                    .frame(width: 10, alignment: .center)
 
-            Text(label.uppercased())
-                .font(.system(size: 9, weight: .semibold))
-                .tracking(0.5)
-                .foregroundStyle(WorkspaceLayout.sessionGroupHeaderForeground(for: colorScheme))
+                Text("\(label.uppercased()) \(count)")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.5)
+                    .foregroundStyle(WorkspaceLayout.sessionGroupHeaderForeground(for: colorScheme))
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+
+                if isCollapsible {
+                    PixelChevronView(isExpanded: isExpanded)
+                        .frame(width: 10, height: 10)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
+        .disabled(!isCollapsible)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(label)
+        .accessibilityLabel(isCollapsible ? "\(label), \(count), \(isExpanded ? "expanded" : "collapsed")" : "\(label), \(count)")
         .accessibilityAddTraits(.isHeader)
     }
 
     private var label: String {
         switch bucket {
-        case .active: return "Active"
-        case .recent: return "Recent"
-        case .idle:   return "Idle"
+        case .active:   return "Active"
+        case .inactive: return "Inactive"
+        case .archive:  return "Archive"
         }
     }
 
     private var iconName: String {
         switch bucket {
-        case .active: return "bolt.fill"
-        case .recent: return "clock.fill"
-        case .idle:   return "moon.zzz.fill"
+        case .active:   return "bolt.fill"
+        case .inactive: return "stop.circle.fill"
+        case .archive:  return "archivebox.fill"
         }
     }
 }

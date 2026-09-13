@@ -68,7 +68,9 @@ final class WorkspaceStore: ObservableObject {
     /// Global session status — shared across all windows so that a session
     /// running in Window A shows a green dot in Window B's sidebar too.
     /// Coordinators write via `updateSessionStatus`; views read directly.
-    @Published private(set) var globalStatuses: [UUID: SessionStatus] = [:]
+    @Published private(set) var globalStatuses: [UUID: SessionStatus] = [:] {
+        didSet { sessionGroupsCache.removeAll() }
+    }
 
     /// Global indicator states — the view-layer state for each running session.
     /// Updated by SessionCoordinator's activity timer; consumed by MenuBarController
@@ -451,20 +453,22 @@ final class WorkspaceStore: ObservableObject {
 
     /// Memoized `sessionGroups(forProject:)` results, keyed by project id,
     /// each paired with the wall-clock time it was computed at. `computeSessionGroups`
-    /// buckets by `lastActiveAt` recency too, so — same as `sectionedProjectsCache`
-    /// above — an entry is also treated as stale once `cacheTTL` elapses since
-    /// its `cachedAt`, not just on `didSet`-driven invalidation.
-    /// `ProjectDisclosureRow.body` previously called this on every evaluation
-    /// for every expanded project — an uncached O(sessions) filter+sort each
-    /// time. Cleared wholesale (all projects, not just one) by the `sessions`
-    /// / `globalIndicatorStates` `didSet` observers above, since both are the
-    /// only inputs `computeSessionGroups` reads.
+    /// no longer buckets by wall-clock recency (Active/Inactive/Archive is a
+    /// pure function of session status + launch membership), but the TTL is
+    /// kept as a belt-and-suspenders bound in case a future input becomes
+    /// time-dependent again. `ProjectDisclosureRow.body` previously called
+    /// this on every evaluation for every expanded project — an uncached
+    /// O(sessions) filter+sort each time. Cleared wholesale (all projects,
+    /// not just one) by the `sessions` / `globalStatuses` `didSet` observers,
+    /// since both are the only inputs `computeSessionGroups` reads (plus
+    /// `startedThisLaunch`, passed in fresh on every call).
     private var sessionGroupsCache: [UUID: (result: [(SessionBucket, [AgentSession])], cachedAt: Date)] = [:]
 
     /// Session grouping for an expanded project. Returns `(bucket, sessions)`
-    /// pairs for the non-empty buckets, in order `.active` → `.recent` → `.idle`.
-    /// Sessions are alphabetical within each bucket.
-    func sessionGroups(forProject projectId: UUID) -> [(SessionBucket, [AgentSession])] {
+    /// pairs for the non-empty buckets, in order `.active` → `.inactive` →
+    /// `.archive`. Sessions are alphabetical within Active/Inactive; Archive
+    /// sorts newest-first. See `computeSessionGroups` for the rule.
+    func sessionGroups(forProject projectId: UUID, startedThisLaunch: Set<UUID> = []) -> [(SessionBucket, [AgentSession])] {
         let now = currentTime()
         if let cached = sessionGroupsCache[projectId],
            now.timeIntervalSince(cached.cachedAt) < Self.cacheTTL {
@@ -473,8 +477,8 @@ final class WorkspaceStore: ObservableObject {
         let computed = Self.computeSessionGroups(
             projectId: projectId,
             sessions: sessions,
-            indicatorStates: globalIndicatorStates,
-            now: { now }
+            statuses: globalStatuses,
+            startedThisLaunch: startedThisLaunch
         )
         sessionGroupsCache[projectId] = (computed, now)
         return computed
@@ -487,7 +491,7 @@ final class WorkspaceStore: ObservableObject {
     /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`.
     func sessionsInVisualOrder(coordinator: SessionCoordinator) -> [AgentSession] {
         flatProjectsInVisualOrder.flatMap { project in
-            sessionGroups(forProject: project.id).flatMap { $0.1 }
+            sessionGroups(forProject: project.id, startedThisLaunch: coordinator.sessionIdsStartedThisLaunch).flatMap { $0.1 }
         }.filter { coordinator.hasLiveSurface(id: $0.id) }
     }
 
@@ -513,13 +517,16 @@ final class WorkspaceStore: ObservableObject {
     /// session-creation triggers.
     ///
     /// Updates:
-    ///   - `session.lastActiveAt = now()` (project drives `.recent` bucket)
-    ///   - `project.lastActiveAt = now()`
+    ///   - `session.lastActiveAt = now()` — read by `AgentSession.displayTimestamp`
+    ///     as a fallback for sessions written before `lastOutputAt` existed;
+    ///     Active/Inactive/Archive bucketing does NOT use it (see
+    ///     `SessionBucket.membership(status:startedThisLaunch:)`)
+    ///   - `project.lastActiveAt = now()` (drives the project-level `.recent`
+    ///     section — a different rule, see `computeSectionedProjects`)
     ///   - `activeSinceTimestamps[projectId] = now()` **only if** the session's
     ///     current indicator state is one of the active states. Idle activity
     ///     (focus, output while at prompt) is a recency signal — it must update
-    ///     `lastActiveAt` for `.recent` bucketing but must NOT extend the
-    ///     `.activeNow` grace window.
+    ///     `lastActiveAt` but must NOT extend the `.activeNow` grace window.
     ///
     /// 5s granularity guard: `lastActiveAt` only advances when `now()` is at
     /// least 5s past the currently stored value (also enforces the old
@@ -1218,56 +1225,52 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Pure function that groups the sessions of a single project into the
-    /// three expanded-view buckets. Empty buckets are dropped.
+    /// three Active / Inactive / Archive buckets — the same rule and labels
+    /// `RecentsListView` uses for the flat Sessions tab. Empty buckets are
+    /// dropped. See `SessionBucket.membership(status:startedThisLaunch:)` for
+    /// the membership rule itself; this function never re-derives it.
     ///
-    /// Rules (highest-priority match wins):
-    /// - `.active` — indicator state is `.processing`/`.waiting`/`.longRunning`/`.needsAttention`
-    /// - `.recent` — not active and `lastActiveAt` within the past 24h (inclusive)
-    /// - `.idle`   — everything else
-    ///
-    /// Sessions are alphabetical (case-insensitive) within each bucket.
+    /// Sessions are alphabetical (case-insensitive) within Active and
+    /// Inactive — matching the project view's existing within-bucket order
+    /// and drag-reorder behavior. Archive sorts newest-first via
+    /// `AgentSession.sortedNewestFirst(_:)`, same as the Sessions tab.
     nonisolated static func computeSessionGroups(
         projectId: UUID,
         sessions: [AgentSession],
-        indicatorStates: [UUID: SessionIndicatorState],
-        now: () -> Date = Date.init
+        statuses: [UUID: SessionStatus],
+        startedThisLaunch: Set<UUID> = []
     ) -> [(SessionBucket, [AgentSession])] {
-        let currentDate = now()
-        let recentWindow: TimeInterval = 24 * 60 * 60
-
         var active: [AgentSession] = []
-        var recent: [AgentSession] = []
-        var idle: [AgentSession] = []
+        var inactive: [AgentSession] = []
+        var archive: [AgentSession] = []
 
         for session in sessions where session.projectId == projectId {
-            if isActiveIndicatorState(indicatorStates[session.id]) {
-                active.append(session)
-                continue
+            switch SessionBucket.membership(
+                status: statuses[session.id],
+                startedThisLaunch: startedThisLaunch.contains(session.id)
+            ) {
+            case .active:   active.append(session)
+            case .inactive: inactive.append(session)
+            case .archive:  archive.append(session)
             }
-            if let lastActiveAt = session.lastActiveAt,
-               currentDate.timeIntervalSince(lastActiveAt) <= recentWindow {
-                recent.append(session)
-                continue
-            }
-            idle.append(session)
         }
 
         let alpha: (AgentSession, AgentSession) -> Bool = { a, b in
             a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
         }
         active.sort(by: alpha)
-        recent.sort(by: alpha)
-        idle.sort(by: alpha)
+        inactive.sort(by: alpha)
+        archive = AgentSession.sortedNewestFirst(archive)
 
         var result: [(SessionBucket, [AgentSession])] = []
         if !active.isEmpty {
             result.append((.active, active))
         }
-        if !recent.isEmpty {
-            result.append((.recent, recent))
+        if !inactive.isEmpty {
+            result.append((.inactive, inactive))
         }
-        if !idle.isEmpty {
-            result.append((.idle, idle))
+        if !archive.isEmpty {
+            result.append((.archive, archive))
         }
         return result
     }
@@ -1330,9 +1333,3 @@ enum SidebarSection: String, CaseIterable, Hashable {
 /// sites start needing keyed access beyond "iterate in order".
 typealias SectionedProjects = [(SidebarSection, [Project])]
 
-/// The three buckets used to group sessions inside an expanded project row.
-enum SessionBucket: String, CaseIterable, Hashable {
-    case active
-    case recent
-    case idle
-}

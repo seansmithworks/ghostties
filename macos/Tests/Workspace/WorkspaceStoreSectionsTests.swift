@@ -6,7 +6,9 @@ import GhosttiesCore
 
 /// Tests for Unit 2 of the sidebar smart-sections plan:
 ///   - Four-section bucketing (`.pinned` / `.activeNow` / `.recent` / `.all`)
-///   - Per-session grouping (`.active` / `.recent` / `.idle`) inside an expanded project
+///   - Per-session grouping (`.active` / `.inactive` / `.archive`) inside an expanded
+///     project — the same rule and labels `RecentsListView` uses for the Sessions tab,
+///     see `SessionBucket.membership(status:startedThisLaunch:)`
 ///   - Grace-period anti-flap tracker
 ///   - Freeze/release snapshot for the layout
 ///
@@ -517,39 +519,32 @@ struct WorkspaceStoreSectionsTests {
         #expect(ids(in: .activeNow, of: result).isEmpty)
     }
 
-    // MARK: - Session Groups (expanded project)
+    // MARK: - Session Groups (expanded project) — Active / Inactive / Archive
 
     @Test func sessionGroupsSortSessionsIntoThreeBuckets() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
         let p = makeProject(name: "Host")
-        let running = makeSession(name: "Running", projectId: p.id, lastActiveAt: now)
-        let recent = makeSession(
-            name: "Recent",
-            projectId: p.id,
-            lastActiveAt: now.addingTimeInterval(-3600)
-        )
-        let idle = makeSession(
-            name: "Idle",
-            projectId: p.id,
-            lastActiveAt: now.addingTimeInterval(-48 * 3600)
-        )
-        let nilIdle = makeSession(name: "Blank", projectId: p.id, lastActiveAt: nil)
+        let running = makeSession(name: "Running", projectId: p.id)
+        let stopped = makeSession(name: "Stopped", projectId: p.id)
+        let neverStarted = makeSession(name: "NeverStarted", projectId: p.id)
+        let neverStartedToo = makeSession(name: "Blank", projectId: p.id)
 
         let groups = WorkspaceStore.computeSessionGroups(
             projectId: p.id,
-            sessions: [idle, recent, running, nilIdle],
-            indicatorStates: [running.id: .processing],
-            now: { now }
+            sessions: [neverStarted, stopped, running, neverStartedToo],
+            statuses: [running.id: .running],
+            startedThisLaunch: [running.id, stopped.id]
         )
 
         let active = groups.first(where: { $0.0 == .active })?.1.map(\.name) ?? []
-        let recentNames = groups.first(where: { $0.0 == .recent })?.1.map(\.name) ?? []
-        let idleNames = groups.first(where: { $0.0 == .idle })?.1.map(\.name) ?? []
+        let inactive = groups.first(where: { $0.0 == .inactive })?.1.map(\.name) ?? []
+        let archive = groups.first(where: { $0.0 == .archive })?.1.map(\.name) ?? []
 
         #expect(active == ["Running"])
-        #expect(recentNames == ["Recent"])
-        // Alphabetical within idle bucket: Blank, Idle.
-        #expect(idleNames == ["Blank", "Idle"])
+        #expect(inactive == ["Stopped"])
+        // Archive sorts newest-first by `displayTimestamp`; both are nil
+        // here, so ties fall back to original relative order (insertion
+        // order among just the archived subset): NeverStarted, then Blank.
+        #expect(archive == ["NeverStarted", "Blank"])
     }
 
     @Test func sessionGroupsOmitEmptyBuckets() {
@@ -560,8 +555,7 @@ struct WorkspaceStoreSectionsTests {
         let groups = WorkspaceStore.computeSessionGroups(
             projectId: p.id,
             sessions: [s1, s2],
-            indicatorStates: [s1.id: .processing, s2.id: .processing],
-            now: { Date(timeIntervalSince1970: 1_000_000) }
+            statuses: [s1.id: .running, s2.id: .running]
         )
         #expect(groups.map(\.0) == [.active])
     }
@@ -575,31 +569,61 @@ struct WorkspaceStoreSectionsTests {
         let groups = WorkspaceStore.computeSessionGroups(
             projectId: p.id,
             sessions: [s, notMine],
-            indicatorStates: [s.id: .processing, notMine.id: .processing],
-            now: { Date(timeIntervalSince1970: 1_000_000) }
+            statuses: [s.id: .running, notMine.id: .running]
         )
         let active = groups.first(where: { $0.0 == .active })?.1.map(\.name) ?? []
         #expect(active == ["Mine"])
     }
 
     @Test func sessionGroupsBucketsInRenderOrder() {
-        let now = Date(timeIntervalSince1970: 1_000_000)
         let p = makeProject(name: "Host")
         let active = makeSession(name: "Active", projectId: p.id)
-        let recent = makeSession(
-            name: "Recent",
-            projectId: p.id,
-            lastActiveAt: now.addingTimeInterval(-3600)
-        )
-        let idle = makeSession(name: "Idle", projectId: p.id, lastActiveAt: nil)
+        let inactive = makeSession(name: "Inactive", projectId: p.id)
+        let archived = makeSession(name: "Archived", projectId: p.id)
 
         let groups = WorkspaceStore.computeSessionGroups(
             projectId: p.id,
-            sessions: [idle, recent, active],
-            indicatorStates: [active.id: .processing],
-            now: { now }
+            sessions: [archived, inactive, active],
+            statuses: [active.id: .running],
+            startedThisLaunch: [active.id, inactive.id]
         )
-        #expect(groups.map(\.0) == [.active, .recent, .idle])
+        #expect(groups.map(\.0) == [.active, .inactive, .archive])
+    }
+
+    /// The bug the whole rewrite exists to fix, at the project-view layer
+    /// too: a session whose surface already closed with a non-zero exit code
+    /// must NOT count as Active, even though the OLD rule
+    /// (`isActiveIndicatorState`/`SessionIndicatorState != .inactive`) would
+    /// have kept it there.
+    @Test func sessionGroupsDoNotCountErroredSessionAsActive() {
+        let p = makeProject(name: "Host")
+        let errored = makeSession(name: "Errored", projectId: p.id)
+
+        let groups = WorkspaceStore.computeSessionGroups(
+            projectId: p.id,
+            sessions: [errored],
+            statuses: [errored.id: .error(exitCode: 1)],
+            startedThisLaunch: [errored.id]
+        )
+        #expect(groups.map(\.0) == [.inactive])
+    }
+
+    /// Archive sorts newest-first by `displayTimestamp` — same rule as the
+    /// Sessions tab's Archive section (`AgentSession.sortedNewestFirst(_:)`),
+    /// not the alphabetical order Active/Inactive keep.
+    @Test func sessionGroupsArchiveSortsNewestFirst() {
+        let p = makeProject(name: "Host")
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let older = makeSession(name: "Older", projectId: p.id, lastActiveAt: now.addingTimeInterval(-3600))
+        let newer = makeSession(name: "Newer", projectId: p.id, lastActiveAt: now.addingTimeInterval(-60))
+
+        let groups = WorkspaceStore.computeSessionGroups(
+            projectId: p.id,
+            sessions: [older, newer],
+            statuses: [:]
+        )
+        let archive = groups.first(where: { $0.0 == .archive })?.1.map(\.name) ?? []
+        #expect(archive == ["Newer", "Older"])
     }
 
     // MARK: - Session Groups Cache (instance-level, PR2 perf)
@@ -653,17 +677,17 @@ struct WorkspaceStoreSectionsTests {
     }
 
     @MainActor
-    @Test func sessionGroupsCacheReflectsIndicatorStateChange() {
+    @Test func sessionGroupsCacheReflectsStatusChange() {
         let p = makeProject(name: "Proj")
         let s = makeSession(name: "One", projectId: p.id)
         let store = WorkspaceStore(testingProjects: [p], testingSessions: [s])
 
         let before = store.sessionGroups(forProject: p.id)
-        #expect(before.map(\.0) == [.idle])
+        #expect(before.map(\.0) == [.archive])
 
-        store.updateIndicatorState(id: s.id, state: .processing)
+        store.updateSessionStatus(id: s.id, status: .running)
 
-        let after = store.sessionGroups(forProject: p.id)
+        let after = store.sessionGroups(forProject: p.id, startedThisLaunch: [s.id])
         #expect(after.map(\.0) == [.active])
     }
 
@@ -671,21 +695,21 @@ struct WorkspaceStoreSectionsTests {
     @Test func sessionGroupsCacheMatchesUncachedComputationAfterMutations() {
         // Regression guard: the memoized instance-level result must always
         // equal a fresh static computation over the same live state, even
-        // after a mix of add/rename/indicator mutations.
+        // after a mix of add/rename/status mutations.
         let p = makeProject(name: "Proj")
         let s1 = makeSession(name: "Alpha", projectId: p.id)
         let store = WorkspaceStore(testingProjects: [p], testingSessions: [s1])
 
         _ = store.sessionGroups(forProject: p.id)  // populate cache
         let s2 = store.addSession(name: "Beta", templateId: template.id, projectId: p.id)
-        store.updateIndicatorState(id: s2.id, state: .processing)
+        store.updateSessionStatus(id: s2.id, status: .running)
         store.renameSession(id: s1.id, name: "Zulu")
 
         let cached = store.sessionGroups(forProject: p.id)
         let fresh = WorkspaceStore.computeSessionGroups(
             projectId: p.id,
             sessions: store.sessions,
-            indicatorStates: store.globalIndicatorStates
+            statuses: store.globalStatuses
         )
         #expect(cached.map(\.0) == fresh.map(\.0))
         #expect(cached.flatMap(\.1) == fresh.flatMap(\.1))
@@ -693,15 +717,13 @@ struct WorkspaceStoreSectionsTests {
 
     // MARK: - Time-Only Cache Staleness (TTL, PR2 follow-up)
     //
-    // The tests above all exercise mutation-driven invalidation (`didSet`).
-    // None of them cover the gap an adversarial review flagged: both
-    // `sectionedProjects` and `sessionGroups(forProject:)` bucket by
-    // wall-clock time (grace period / 24h recency window), so a cached result
-    // can go stale purely because time elapsed — with ZERO mutating calls in
-    // between to trip `didSet`. These tests use `_setTestClock(_:)` to
-    // advance fake time with no intervening mutation and confirm the next
-    // read reflects the expired window rather than the frozen-at-cache-time
-    // bucket.
+    // `sectionedProjects` (project-level bucketing) still buckets by
+    // wall-clock time (grace period / 24h recency window), so its cached
+    // result can go stale purely because time elapsed — with ZERO mutating
+    // calls in between to trip `didSet`. `sessionGroups(forProject:)` no
+    // longer has this problem (Active/Inactive/Archive is a pure function of
+    // status + launch membership, both mutation-driven), so only the
+    // project-level test remains here.
 
     @MainActor
     @Test func sectionedProjectsCacheExpiresAfterTTLWithNoMutation() {
@@ -726,34 +748,6 @@ struct WorkspaceStoreSectionsTests {
     }
 
     @MainActor
-    @Test func sessionGroupsCacheExpiresAfterTTLWithNoMutation() {
-        let p = makeProject(name: "Host")
-        let s = makeSession(
-            name: "Recent",
-            projectId: p.id,
-            lastActiveAt: Date(timeIntervalSince1970: 1_000_000)
-        )
-        let store = WorkspaceStore(testingProjects: [p], testingSessions: [s])
-
-        let t0 = Date(timeIntervalSince1970: 1_000_000)
-        store._setTestClock { t0 }
-
-        // Populate the cache: session's `lastActiveAt` is "now" → `.active`
-        // bucket is empty, `.recent` holds it (within the 24h window).
-        let before = store.sessionGroups(forProject: p.id)
-        #expect(before.first(where: { $0.0 == .recent })?.1.map(\.id) == [s.id])
-        #expect(before.first(where: { $0.0 == .idle }) == nil)
-
-        // Advance fake time past both the 24h recency window and the cache
-        // TTL (2s) — no mutating calls happen between this and the read below.
-        store._setTestClock { t0.addingTimeInterval(25 * 60 * 60) }
-
-        let after = store.sessionGroups(forProject: p.id)
-        #expect(after.first(where: { $0.0 == .idle })?.1.map(\.id) == [s.id])
-        #expect(after.first(where: { $0.0 == .recent }) == nil)
-    }
-
-    @MainActor
     @Test func sessionGroupsCacheDoesNotLeakAcrossProjects() {
         // A mutation to one project's session must not affect a sibling
         // project's cached entry.
@@ -764,11 +758,58 @@ struct WorkspaceStoreSectionsTests {
         let store = WorkspaceStore(testingProjects: [p1, p2], testingSessions: [s1, s2])
 
         let p2Before = store.sessionGroups(forProject: p2.id)
-        store.updateIndicatorState(id: s1.id, state: .processing)
+        store.updateSessionStatus(id: s1.id, status: .running)
         let p2After = store.sessionGroups(forProject: p2.id)
 
         #expect(p2Before.map(\.0) == p2After.map(\.0))
         #expect(p2After.flatMap(\.1).map(\.id) == [s2.id])
+    }
+
+    // MARK: - Session View / Project View Parity
+
+    /// Acceptance criterion 4: session view (`RecentsListView`) and project
+    /// view (`WorkspaceStore.computeSessionGroups`) must bucket the SAME
+    /// fixture identically — they call the same `SessionBucket.membership`
+    /// rule, so a session's bucket can never disagree between the two.
+    @Test func sessionViewAndProjectViewBucketTheSameFixtureIdentically() {
+        let p = makeProject(name: "Host")
+        let running = makeSession(name: "Running", projectId: p.id)
+        let stoppedAfterRunning = makeSession(name: "Stopped", projectId: p.id)
+        let neverStarted = makeSession(name: "NeverStarted", projectId: p.id)
+        let errored = makeSession(name: "Errored", projectId: p.id)
+        let sessions = [running, stoppedAfterRunning, neverStarted, errored]
+
+        let statuses: [UUID: SessionStatus] = [
+            running.id: .running,
+            errored.id: .error(exitCode: 1),
+            // stoppedAfterRunning, neverStarted absent -> not alive.
+        ]
+        let startedThisLaunch: Set<UUID> = [running.id, stoppedAfterRunning.id, errored.id]
+
+        let sessionViewActive = RecentsListView.activeSessions(from: sessions, statuses: statuses)
+        let sessionViewInactive = RecentsListView.inactiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch)
+        let sessionViewArchive = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch)
+
+        let projectViewGroups = WorkspaceStore.computeSessionGroups(
+            projectId: p.id,
+            sessions: sessions,
+            statuses: statuses,
+            startedThisLaunch: startedThisLaunch
+        )
+        let projectViewActive = Set((projectViewGroups.first(where: { $0.0 == .active })?.1 ?? []).map(\.id))
+        let projectViewInactive = Set((projectViewGroups.first(where: { $0.0 == .inactive })?.1 ?? []).map(\.id))
+        let projectViewArchive = Set((projectViewGroups.first(where: { $0.0 == .archive })?.1 ?? []).map(\.id))
+
+        #expect(Set(sessionViewActive.map(\.id)) == projectViewActive)
+        #expect(Set(sessionViewInactive.map(\.id)) == projectViewInactive)
+        #expect(Set(sessionViewArchive.map(\.id)) == projectViewArchive)
+
+        // Concretely: running -> Active, stopped-after-running -> Inactive,
+        // never-started -> Archive, errored (surface closed) -> Inactive in
+        // BOTH views, never Active in either.
+        #expect(projectViewActive == [running.id])
+        #expect(projectViewInactive == [stoppedAfterRunning.id, errored.id])
+        #expect(projectViewArchive == [neverStarted.id])
     }
 
     // MARK: - Freeze / Release (instance-level integration)

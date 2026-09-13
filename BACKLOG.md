@@ -1,5 +1,18 @@
 # Ghostties — Backlog
 
+## 2026-09-12 — Sidebar section vocabulary
+
+- [x] (A) Align session view + project view on one Active/Inactive/Archive rule (this task)
+- [ ] (B) Session view gets a **Pinned** section above Active, like project view has. A pinned
+  session stays in Pinned whether its terminal is open or closed.
+- [ ] (C) Drag-reorder works within a section, and a session can also be dragged **up** out of
+  Archive or Inactive into Active or Pinned.
+  - Dropping on Pinned pins the session.
+  - Dropping on Active relaunches it, resuming the conversation where possible, because Active
+    means the terminal is open.
+  - Dragging down isn't supported; Stop does that job.
+- [ ] (D) Relaunch resumes the agent conversation (`claude --resume`)
+
 ## 2026-08-31 — Composer variant G session (carried)
 
 - [x] Composer variant G — centered-modal type-scale conformance. `.centered` section headers

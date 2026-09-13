@@ -6,7 +6,7 @@ import GhosttiesCore
 /// Layout:
 ///   + New Session (full-width row → native flyout menu for project selection)
 ///   ─────────────────────────────────
-///   ACTIVE    (sessions with a live indicator state)
+///   ACTIVE    (the session's terminal is open — see `SessionBucket.membership`)
 ///   INACTIVE  (started at some point this launch, currently not active — ran, then stopped)
 ///   ARCHIVE   (restored from disk, never started this launch)
 struct RecentsListView: View {
@@ -202,23 +202,22 @@ struct RecentsListView: View {
 
     // MARK: - Data
 
-    /// Sessions with a live indicator state — process is alive or actively
-    /// tracked. Membership depends ONLY on indicator state (see
-    /// `belongsInActive`) — it does NOT move when the user selects a row.
-    /// Visibility of a selected-but-inactive session is guaranteed instead by
-    /// the auto-expand override in `body` (`effectiveExpanded`), which expands
-    /// whichever section actually contains the selection without relocating
-    /// the row itself. A selection-based membership guard here would make
-    /// rows jump between sections — and everything below them shift ~38pt —
-    /// the instant the user clicks an Inactive/Archive row, reintroducing
-    /// exactly the "rows reshuffling under the cursor" problem this feature
-    /// set removed.
+    /// Sessions whose terminal is open — see `SessionBucket.membership`, the
+    /// one rule shared with project view. Membership does NOT move when the
+    /// user selects a row. Visibility of a selected-but-inactive session is
+    /// guaranteed instead by the auto-expand override in `body`
+    /// (`effectiveExpanded`), which expands whichever section actually
+    /// contains the selection without relocating the row itself. A
+    /// selection-based membership guard here would make rows jump between
+    /// sections — and everything below them shift ~38pt — the instant the
+    /// user clicks an Inactive/Archive row, reintroducing exactly the "rows
+    /// reshuffling under the cursor" problem this feature set removed.
     var activeSessions: [AgentSession] {
-        Self.activeSessions(from: store.sessions, indicatorStates: store.globalIndicatorStates)
+        Self.activeSessions(from: store.sessions, statuses: store.globalStatuses)
     }
 
-    /// Sessions that exited (or completed) THIS launch but were started at
-    /// some point this launch — `coordinator.sessionIdsStartedThisLaunch`
+    /// Sessions whose terminal closed THIS launch but were started at some
+    /// point this launch — `coordinator.sessionIdsStartedThisLaunch`
     /// contains the id. This is the "ran, then stopped" bucket: a session
     /// the user actually interacted with this run, as opposed to one
     /// restored from disk that never started. See `archiveSessions` for the
@@ -226,18 +225,18 @@ struct RecentsListView: View {
     var inactiveSessions: [AgentSession] {
         Self.inactiveSessions(
             from: store.sessions,
-            indicatorStates: store.globalIndicatorStates,
+            statuses: store.globalStatuses,
             sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
         )
     }
 
-    /// Sessions with no live indicator state AND never started this
-    /// launch — restored from `workspace.json`, never started this run.
-    /// Exact complement of `activeSessions` + `inactiveSessions` combined.
+    /// Sessions whose terminal is not open AND never started this launch —
+    /// restored from `workspace.json`, never started this run. Exact
+    /// complement of `activeSessions` + `inactiveSessions` combined.
     var archiveSessions: [AgentSession] {
         Self.archiveSessions(
             from: store.sessions,
-            indicatorStates: store.globalIndicatorStates,
+            statuses: store.globalStatuses,
             sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
         )
     }
@@ -300,79 +299,58 @@ struct RecentsListView: View {
     }
 
     // MARK: - Section Membership (static so tests can call without a view instance)
-
-    /// Whether a session belongs in the Active section: it has a live
-    /// indicator state. Membership depends ONLY on this — never on selection
-    /// (see the doc comment on the `activeSessions` instance property for why).
-    static func belongsInActive(indicatorState: SessionIndicatorState) -> Bool {
-        indicatorState != .inactive
-    }
+    //
+    // Bucketing here delegates entirely to `SessionBucket.membership(status:
+    // startedThisLaunch:)` — the one Active/Inactive/Archive rule shared with
+    // project view's `WorkspaceStore.computeSessionGroups`. Never re-derive
+    // membership locally; both views must call the same function.
 
     /// Pure, testable variant of the `activeSessions` instance property.
     static func activeSessions(
         from sessions: [AgentSession],
-        indicatorStates: [UUID: SessionIndicatorState]
+        statuses: [UUID: SessionStatus]
     ) -> [AgentSession] {
         sorted(sessions: sessions.filter {
-            belongsInActive(indicatorState: indicatorStates[$0.id] ?? .inactive)
+            SessionBucket.membership(status: statuses[$0.id], startedThisLaunch: false) == .active
         })
     }
 
-    /// Pure, testable variant of the `inactiveSessions` instance property:
-    /// not active (no live indicator state) AND was started at some point
-    /// this launch — `sessionIdsStartedThisLaunch` is passed in rather than
-    /// read from a coordinator so this stays a pure function callers can
-    /// test directly. Ordering matches `activeSessions` (append order) —
-    /// only `archiveSessions` reverses.
+    /// Pure, testable variant of the `inactiveSessions` instance property —
+    /// `sessionIdsStartedThisLaunch` is passed in rather than read from a
+    /// coordinator so this stays a pure function callers can test directly.
+    /// Ordering matches `activeSessions` (append order) — only
+    /// `archiveSessions` reverses.
     static func inactiveSessions(
         from sessions: [AgentSession],
-        indicatorStates: [UUID: SessionIndicatorState],
+        statuses: [UUID: SessionStatus],
         sessionIdsStartedThisLaunch: Set<UUID>
     ) -> [AgentSession] {
         sorted(sessions: sessions.filter {
-            !belongsInActive(indicatorState: indicatorStates[$0.id] ?? .inactive)
-                && sessionIdsStartedThisLaunch.contains($0.id)
+            SessionBucket.membership(
+                status: statuses[$0.id],
+                startedThisLaunch: sessionIdsStartedThisLaunch.contains($0.id)
+            ) == .inactive
         })
     }
 
-    /// Pure, testable variant of the `archiveSessions` instance property:
-    /// not active AND never started this launch — restored from disk,
-    /// never started. Together with `activeSessions` and `inactiveSessions`
-    /// this is an exact three-way partition — every session lands in
-    /// exactly one bucket. Sorted newest-first by `displayTimestamp` (last
-    /// real output, falling back to `lastActiveAt` for sessions that predate
-    /// `lastOutputAt`) — the one bucket that does NOT keep append order, per
-    /// Sean's call that Archive should read reverse-chronological. Sessions
-    /// with a `nil` `displayTimestamp` sort last, after every timestamped
-    /// session.
+    /// Pure, testable variant of the `archiveSessions` instance property.
+    /// Together with `activeSessions` and `inactiveSessions` this is an exact
+    /// three-way partition — every session lands in exactly one bucket.
+    /// Sorted newest-first via `AgentSession.sortedNewestFirst(_:)` — the one
+    /// bucket that does NOT keep append order, per Sean's call that Archive
+    /// should read reverse-chronological.
     static func archiveSessions(
         from sessions: [AgentSession],
-        indicatorStates: [UUID: SessionIndicatorState],
+        statuses: [UUID: SessionStatus],
         sessionIdsStartedThisLaunch: Set<UUID>
     ) -> [AgentSession] {
         let archived = sorted(sessions: sessions.filter {
-            !belongsInActive(indicatorState: indicatorStates[$0.id] ?? .inactive)
-                && !sessionIdsStartedThisLaunch.contains($0.id)
+            SessionBucket.membership(
+                status: statuses[$0.id],
+                startedThisLaunch: sessionIdsStartedThisLaunch.contains($0.id)
+            ) == .archive
         })
-        // Sort newest-first by `displayTimestamp`, nil last. `Array.sort` is
-        // not guaranteed stable, so ties (and nil-vs-nil) are broken on the
-        // original index to preserve incoming relative order.
-        return archived
-            .enumerated()
-            .sorted { lhs, rhs in
-                switch (lhs.element.displayTimestamp, rhs.element.displayTimestamp) {
-                case let (l?, r?):
-                    if l != r { return l > r }
-                case (nil, .some):
-                    return false
-                case (.some, nil):
-                    return true
-                case (nil, nil):
-                    break
-                }
-                return lhs.offset < rhs.offset
-            }
-            .map(\.element)
+        return AgentSession.sortedNewestFirst(archived)
     }
 
     // MARK: - Auto-Expand Override (static so tests can call without a view instance)
