@@ -166,4 +166,80 @@ final class ClaudeStateStoreTests: XCTestCase {
             "a directory that fails to list must be repaired back to 0700 by the failure-path ensureDirectory() call")
         XCTAssertNil(store.state(for: UUID()), "states must reset to empty on the failure path, not retain stale data")
     }
+
+    // MARK: - Resume record persisted before derive() filters
+
+    private func writeWrapperFile(
+        id: UUID,
+        dir: URL,
+        hookEventName: String = "Stop",
+        sessionId: String = "claude-x",
+        agent: String? = nil,
+        launcher: String? = nil,
+        transcriptPath: String = "/tmp/t.jsonl"
+    ) {
+        var fields = [#""ghosttiesSessionId":"\#(id.uuidString)""#, #""updatedAt":\#(Int(Date().timeIntervalSince1970))"#]
+        if let agent { fields.append(#""agent":"\#(agent)""#) }
+        if let launcher { fields.append(#""launcher":"\#(launcher)""#) }
+        fields.append(#""hook":{"cwd":"/tmp","hook_event_name":"\#(hookEventName)","session_id":"\#(sessionId)","transcript_path":"\#(transcriptPath)"}"#)
+        let json = "{\(fields.joined(separator: ","))}"
+        try? json.write(to: dir.appendingPathComponent("\(id.uuidString).json"), atomically: true, encoding: .utf8)
+    }
+
+    /// `refresh()` must call the resume writer even for an event `derive`
+    /// keeps (`Stop` -> `.idle`) — proving the write happens unconditionally,
+    /// not as a side effect of a particular `derive` outcome.
+    func testRefreshPersistsResumeRecordBeforeDeriveFilters() {
+        let (store, dir) = makeTempStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var captured: [UUID: AgentResume] = [:]
+        store.resumeWriterForTesting = { id, resume in captured[id] = resume }
+
+        let id = UUID()
+        writeWrapperFile(id: id, dir: dir, sessionId: "claude-abc", agent: "codex", launcher: "cco", transcriptPath: "/tmp/rollout.jsonl")
+        store.refreshForTesting()
+
+        let resume = captured[id]
+        XCTAssertEqual(resume?.sessionId, "claude-abc")
+        XCTAssertEqual(resume?.agent, .codex)
+        XCTAssertEqual(resume?.launcher, "cco")
+        XCTAssertEqual(resume?.transcriptPath, "/tmp/rollout.jsonl")
+    }
+
+    /// A wrapper with no `agent` key (every file written before this field
+    /// existed) must default to `.claude`, not fail to persist a record.
+    func testRefreshDefaultsMissingAgentToClaude() {
+        let (store, dir) = makeTempStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var captured: [UUID: AgentResume] = [:]
+        store.resumeWriterForTesting = { id, resume in captured[id] = resume }
+
+        let id = UUID()
+        writeWrapperFile(id: id, dir: dir, sessionId: "claude-abc")
+        store.refreshForTesting()
+
+        XCTAssertEqual(captured[id]?.agent, .claude)
+    }
+
+    /// A hook event with no `session_id` at all (shouldn't happen in
+    /// practice, but the payload key is optional) must not call the resume
+    /// writer — there's nothing to resume.
+    func testRefreshSkipsResumeWriteWhenSessionIdIsMissing() {
+        let (store, dir) = makeTempStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var writeCount = 0
+        store.resumeWriterForTesting = { _, _ in writeCount += 1 }
+
+        let id = UUID()
+        let json = #"""
+        {"ghosttiesSessionId":"\#(id.uuidString)","updatedAt":\#(Int(Date().timeIntervalSince1970)),"hook":{"cwd":"/tmp","hook_event_name":"Stop"}}
+        """#
+        try? json.write(to: dir.appendingPathComponent("\(id.uuidString).json"), atomically: true, encoding: .utf8)
+        store.refreshForTesting()
+
+        XCTAssertEqual(writeCount, 0)
+    }
 }
