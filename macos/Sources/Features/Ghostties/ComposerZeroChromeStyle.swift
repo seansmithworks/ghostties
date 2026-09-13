@@ -1867,22 +1867,90 @@ private final class ComposerDialKitCoordinatorBox {
     weak var coordinator: ComposerDialKitCoordinator?
 }
 
-/// Hosts the DialKit drawer (`DialRoot`'s own FAB is the "DEBUG button that
-/// opens the panel" the brief calls for — no separate button needed).
+/// Hosts DialKit **inline** (Session-7 brief, 2026-09-13) inside a narrow
+/// container we own — the vendored `.drawer` mode used to render at
+/// container-width-minus-inset (`dialResolvedDrawerWidth`), which covered
+/// the single-line composer card. `.inline` mode (`DialRoot.swift`) has no
+/// drawer chrome and no width opinion of its own beyond the panel's fixed
+/// 280pt (`DialPanelContainer.expandedPanel`, vendored, not ours to
+/// resize); everything about NOT covering the composer — width, corner
+/// anchor, max height, collapse — is this wrapper's job.
+///
 /// `@StateObject` keeps `ComposerDialKitCoordinator` (and the
 /// `DialPanelState` it owns) alive for this view's identity; letting it
-/// deinit would unregister the panel from `DialStore.shared` and the drawer
+/// deinit would unregister the panel from `DialStore.shared` and the panel
 /// would vanish.
 @available(macOS 14, *)
 private struct ComposerDialKitHost: View {
     @StateObject private var coordinator: ComposerDialKitCoordinator
 
+    /// UI-chrome state (not a composer tuning value — never round-trips
+    /// through `ComposerDialKitCoordinator.write(from:to:)`), but stored in
+    /// the SAME injected `defaults` the coordinator uses rather than
+    /// `UserDefaults.standard`. `feedback-test-run-never-touch-real-
+    /// defaults-domain` (`agent-build.md` Gotchas, 2026-09-10): a hardcoded
+    /// `.standard` store here would make any future test of the collapse
+    /// control write into the real app domain. `defaultsForTesting` at the
+    /// `SessionComposerOverlay` call site already gives tests a throwaway
+    /// store; this key rides along on it for free.
+    static let collapsedDefaultsKey = "ghostties.composerDialKitPanelCollapsed"
+
+    /// DESIGN.md §5: 320pt is a 4pt-scale multiple (80 × 4) and comfortably
+    /// exceeds DialKit's own fixed 280pt panel width, leaving the container
+    /// itself as the thing with headroom, not the panel content. The
+    /// top-trailing edge inset (DESIGN.md §5 spacing scale `md`, 12pt) is
+    /// applied at the call site's existing `.padding(12)`
+    /// (`SessionComposerOverlay.swift`) — not duplicated here.
+    private static let panelWidth: CGFloat = 320
+
+    @AppStorage private var isCollapsed: Bool
+
     init(defaults: UserDefaults, onChange: @escaping () -> Void) {
         _coordinator = StateObject(wrappedValue: ComposerDialKitCoordinator(defaults: defaults, onChange: onChange))
+        _isCollapsed = AppStorage(wrappedValue: false, Self.collapsedDefaultsKey, store: defaults)
     }
 
     var body: some View {
-        DialRoot(position: .bottomRight, mode: .drawer)
+        // `GeometryReader` reads the space this control's own `.overlay`
+        // slot has available (already reduced by the `.padding(12)` the
+        // call site applies — see `SessionComposerOverlay.swift`), so the
+        // scroll viewport below caps at "available height," not a fixed
+        // guess. An empty-space `VStack` with no background over most of
+        // its bounds does not intercept clicks on macOS, so this does not
+        // create a click-blocking layer over the composer beneath it.
+        GeometryReader { geometry in
+            VStack(alignment: .trailing, spacing: 8) {
+                collapseControl
+                if !isCollapsed {
+                    ScrollView(showsIndicators: false) {
+                        DialRoot(mode: .inline)
+                    }
+                    .frame(maxHeight: max(0, geometry.size.height - collapsedControlReservedHeight))
+                }
+            }
+            .frame(width: Self.panelWidth, alignment: .trailing)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        }
+    }
+
+    /// Collapse-control height (32pt circle) + the `VStack`'s 8pt spacing —
+    /// subtracted from the available height so the scroll viewport below it
+    /// never gets pushed past the container's own bottom edge.
+    private var collapsedControlReservedHeight: CGFloat { 40 }
+
+    private var collapseControl: some View {
+        Button {
+            isCollapsed.toggle()
+        } label: {
+            Image(systemName: isCollapsed ? "slider.horizontal.3" : "chevron.up")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Color(white: 0.13)))
+                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                .shadow(color: .black.opacity(0.45), radius: 18, y: 6)
+        }
+        .buttonStyle(.plain)
     }
 }
 #endif

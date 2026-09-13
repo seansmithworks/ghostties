@@ -226,7 +226,12 @@ struct SessionComposerOverlay: View {
         // hides it whenever the marketing capture rig is running — see that
         // property's own doc comment for why this doesn't just read
         // `CaptureFixture.isActive` directly.
-        .overlay(alignment: .bottomTrailing) {
+        .overlay(alignment: .topTrailing) {
+            // Session-7 brief (2026-09-13): moved from `.bottomTrailing` to
+            // `.topTrailing` — the panel used to render as a full-width
+            // bottom drawer that covered the single-line composer card;
+            // `ComposerDialKitHost` (inside `ComposerDebugTuningControl`'s
+            // macOS-14 branch) now owns staying narrow and out of the way.
             if !Self.isMarketingCaptureFixtureActive {
                 ComposerDebugTuningControl(
                     defaults: composerDefaultsForTesting ?? .standard,
