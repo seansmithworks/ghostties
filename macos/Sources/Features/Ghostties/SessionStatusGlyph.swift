@@ -39,20 +39,33 @@ extension SessionIndicatorState {
 /// This does NOT replace `GhostCharacterView` anywhere else — project rollup
 /// rows, empty states, the ghost picker, and app identity keep the ghost.
 ///
-/// The working state is a static `…` — Claude sessions stay busy for minutes
-/// at a time, so an animated spinner there reads as constantly cycling
-/// rather than as a truthful moment-to-moment signal (Sean 2026-09-13).
+/// The working-state spinner is isolated in its own `TimelineView` so only
+/// rows that are actually working redraw each frame; everything else in this
+/// view is a static `Text`. See `project_perf-contextmenu-render-cost`.
 struct SessionStatusGlyph: View {
     let kind: SessionStatusGlyphKind
     var size: CGFloat = WorkspaceLayout.sessionGhostSize
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
+
+    private static let spinnerFrames: [String] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"]
+    private static let spinnerFrameInterval: TimeInterval = 0.08
 
     var body: some View {
         Group {
             switch kind {
             case .working:
-                glyph("…", color: secondaryTextColor)
+                if reduceMotion {
+                    glyph("…", color: secondaryTextColor)
+                } else {
+                    TimelineView(.periodic(from: .now, by: Self.spinnerFrameInterval)) { context in
+                        let frameIndex = Int(
+                            context.date.timeIntervalSinceReferenceDate / Self.spinnerFrameInterval
+                        ) % Self.spinnerFrames.count
+                        glyph(Self.spinnerFrames[frameIndex], color: secondaryTextColor)
+                    }
+                }
             case .needsInput:
                 // The only emphasis glyph — primary text color, no accent.
                 glyph("?", color: .primary)
