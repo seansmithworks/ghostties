@@ -43,9 +43,9 @@ enum ComposerWitnessGhost: String, CaseIterable {
 
     /// 12×12 pixel grids, verbatim from `GHOSTS_DATA[*].pixels` in
     /// `ghost-field.js`. `X` = body cell (painted `colorHex`), `e` = eye
-    /// cell (painted `eyeColorHex`, or `colorHex` while blinking — see
-    /// `ComposerWitnessMotion`), `l` = lit/highlight cell (painted
-    /// `litColorHex`), `.` = empty.
+    /// cell (painted `eyeColorHex`; a blink turns the cell to `X` in the
+    /// grid data itself — see `ComposerWitnessFrames.blinkGrid`), `l` =
+    /// lit/highlight cell (painted `litColorHex`), `.` = empty.
     var pixels: [String] {
         switch self {
         case .flicker:
