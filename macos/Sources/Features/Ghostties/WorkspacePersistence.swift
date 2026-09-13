@@ -3,29 +3,68 @@ import OSLog
 import GhosttiesCore
 
 /// Reads and writes workspace state (projects) to a JSON file
-/// at ~/Library/Application Support/Ghostties/workspace.json (release) or
-/// ~/Library/Application Support/Ghostties Dev/workspace.json (dev build).
-/// Partitioning by bundle-ID suffix keeps dev and release state separate so
-/// they can coexist on the same machine.
+/// at ~/Library/Application Support/Ghostties/workspace.json (release),
+/// ~/Library/Application Support/Ghostties Dev/workspace.json (dev build), or
+/// ~/Library/Application Support/Ghostties Demo/workspace.json (demo build).
+/// Partitioning by bundle ID keeps dev, demo, and release state separate so
+/// they can coexist on the same machine. Any bundle ID this mapping doesn't
+/// recognize gets its own isolated folder rather than falling through to the
+/// release folder — see `directoryName(forBundleId:)`.
 struct WorkspacePersistence {
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.seansmithdesign.ghostties",
         category: "WorkspacePersistence"
     )
 
-    /// The directory name for workspace data. `Ghostties Dev` for debug/dev
-    /// builds (bundle ID ends in `.dev` or `.debug`), `Ghostties` otherwise.
-    private static var directoryName: String {
-        let bundleId = Bundle.main.bundleIdentifier ?? ""
+    /// The directory name for workspace data, derived from a bundle ID.
+    /// - Exact `com.seansmithdesign.ghostties` (or nil/empty) → `Ghostties`
+    ///   (the real release workspace).
+    /// - Suffix `.dev` or `.debug` → `Ghostties Dev`.
+    /// - Suffix `.demo` → `Ghostties Demo`.
+    /// - Any other bundle ID → an isolated `Ghostties (<bundleId>)` folder
+    ///   that is never the release folder. This is what keeps an unrecognized
+    ///   or future rebundled variant (e.g. a demo-capture build) from
+    ///   silently reading/writing Sean's real workspace.json.
+    static func directoryName(forBundleId bundleId: String?) -> String {
+        let bundleId = bundleId ?? ""
+        if bundleId.isEmpty || bundleId == "com.seansmithdesign.ghostties" {
+            return "Ghostties"
+        }
         if bundleId.hasSuffix(".dev") || bundleId.hasSuffix(".debug") {
             return "Ghostties Dev"
         }
-        return "Ghostties"
+        if bundleId.hasSuffix(".demo") {
+            return "Ghostties Demo"
+        }
+        return "Ghostties (\(bundleId))"
     }
 
-    /// The directory where workspace data is stored.
-    private static var directory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    private static var directoryName: String {
+        directoryName(forBundleId: Bundle.main.bundleIdentifier)
+    }
+
+    /// The directory where workspace data is stored. Honors
+    /// `GHOSTTIES_STATE_DIR` when set to a non-empty value, so a UI test or
+    /// lab launch can isolate `workspace.json` from the real user's state
+    /// without touching the shipping path. Unset/empty → unaffected, exactly
+    /// today's bundle-ID-derived Application Support path.
+    static var directory: URL {
+        if let raw = ProcessInfo.processInfo.environment["GHOSTTIES_STATE_DIR"],
+           !raw.isEmpty {
+            let expanded = (raw as NSString).expandingTildeInPath
+            let overrideURL = URL(fileURLWithPath: expanded, isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(
+                    at: overrideURL,
+                    withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700]
+                )
+                return overrideURL
+            } catch {
+                logger.error("GHOSTTIES_STATE_DIR override (\(expanded, privacy: .public)) unusable: \(error.localizedDescription) — falling back to default state directory")
+            }
+        }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(directoryName, isDirectory: true)
     }
 

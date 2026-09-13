@@ -499,6 +499,7 @@
 				819324572F24E74E00A9ED8F /* Copy DockTilePlugin */,
 				B0CEF0012F8A000100018CBF /* Embed CEF */,
 				55E1BED12F00000000000001 /* Embed Ghostty Resources */,
+				55E1BED12F00000000000002 /* Stamp Dev Build Info */,
 			);
 			buildRules = (
 			);
@@ -676,6 +677,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
 			shellScript = "\"${PROJECT_DIR}/../scripts/embed-ghostty-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		55E1BED12F00000000000002 /* Stamp Dev Build Info */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stamp Dev Build Info";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"${PROJECT_DIR}/../scripts/stamp-dev-build-info.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		B0CEF0012F8A000100018CBF /* Embed CEF */ = {
@@ -935,7 +956,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Ghostty;
+				TEST_TARGET_NAME = Ghostties;
 			};
 			name = Debug;
 		};
@@ -958,7 +979,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Ghostty;
+				TEST_TARGET_NAME = Ghostties;
 			};
 			name = Release;
 		};
@@ -981,7 +1002,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Ghostty;
+				TEST_TARGET_NAME = Ghostties;
 			};
 			name = ReleaseLocal;
 		};
@@ -1287,6 +1308,7 @@
 				ENABLE_PREVIEWS = YES;
 				EXECUTABLE_NAME = ghostty;
 				GENERATE_INFOPLIST_FILE = YES;
+				GHOSTTIES_DEV_BUNDLE_SUFFIX = .dev;
 				INFOPLIST_FILE = "Ghostties-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Ghostties Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -1318,7 +1340,7 @@
 					"-lstdc++",
 					"-lcef_dll_wrapper",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.ghostties.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.seansmithdesign.ghostties$(GHOSTTIES_DEV_BUNDLE_SUFFIX)";
 				PRODUCT_MODULE_NAME = Ghostty;
 				PRODUCT_NAME = "Ghostties Dev";
 				SWIFT_EMIT_LOC_STRINGS = YES;

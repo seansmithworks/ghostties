@@ -35,7 +35,13 @@
   - ~~treatment → Material~~ superseded 2026-09-13: Sean wants Liquid Glass visible; Glass stays default, tint None added
   - shadow radius 64 → 32 (the HTML bench's CSS blur is ~2× a SwiftUI shadow radius)
   - placeholder ghost → `secondaryLabelColor`, eyes kept
-- [ ] (carried) DECIDE OR KILL: a `ghostties-release.yml` dry run on this branch (`workflow_dispatch`, `dry_run=true`) to exercise the new "Assert DialKit absent" gate. The reviewer found no externally visible side effects. It needs Sean's explicit yes.
+- [x] (carried) DECIDE OR KILL: a `ghostties-release.yml` dry run on this branch (`workflow_dispatch`, `dry_run=true`) to exercise the new "Assert DialKit absent" gate. The reviewer found no externally visible side effects. It needs Sean's explicit yes.
+  - Sean approved it 2026-09-13
+  - Run: https://github.com/seansmithworks/ghostties/actions/runs/34782927958 on `79a151ffe`
+  - Result: success
+  - "Assert DialKit absent" logged `OK: no DialKit found in 17 Mach-O file(s)`
+  - Notarize app/DMG succeeded
+  - appcast/release/verify-release/homebrew-cask all skipped
 - [ ] (carried) Re-check the macOS input-source indicator (⊖) and the Witness launch dissolve (280ms of frames vs the overlay removal armed right after it at `SessionComposerPalette.swift:2929`; if most of it is cut, compress launch toward 200ms) live, after R18 is in Dev.
 - [x] (Sean's call, decided 2026-09-13) Tab-accept that also switches the project (`ComposerGhostTextField.swift:1018` sets the query before `:1024` fires `.acceptedGhost`): Sean's call was "always have transitions" — the hop (and unknown-branch's lean) no longer plays immediately on the new ghost with no morph; it now plays the resolve dither morph first, then the beat's own frames, as one sequence. Done in `ComposerWitnessTransition.next` (session-7, commit "ghost identity changes always transition").
 - [ ] (parked) DESIGN.md documents ghost-text opacity 0.50; the code uses 0.65. Update the doc once single-line settles.
@@ -2448,3 +2454,50 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 **Parked (off-objective):**
 - [ ] beta.25 tag — its own clean thread after #169 lands.
 - [ ] `SessionComposerSnapshotTests.typedUnknownBranchTokenRendersCreateBranchRowFirst` failed once in a full suite (`worktrees never settled`), passed 5/5 reruns alone and in-suite — same load-flake family as `SessionComposerWorktreeLaunchTests`/`GitWorktreeCreationTests`.
+
+## 2026-09-11 — demo rig + capture (Sparkle Demo thread)
+
+**Status 2026-09-12:** capture passes 2/2 on a real GUI run (run 5), PNGs inspected. **PR #172 open** @ `4f12f7f4c`, not merged. Closed below: capture defects 1–3, relaunch, hostname leak, PR.
+
+**Carried (on-objective):**
+- [x] **Merge PR #172** — merged to main as `8f0b1d450` (2026-09-13).
+- [ ] **Cleanup after merge:**
+  - old fixture repos `~/Library/Application Support/Ghostties Demo/repos` (1.5M)
+  - staged build inputs in worktree `demo-rig` (`GhosttyKit.xcframework`, `zig-out/`, `vendor/cef*`)
+  - untracked `output/demo-capture/`
+  - `~/.claude.json.bak-demo-*` backup
+  - [x] xcresult bundles containing full-screen recordings in `$TMPDIR/ghostties-demo-capture-result.*`, which are private screen content (Sean approved 2026-09-13; 6 bundles, 920M; Claude's `rm` was denied by permission mode, Sean ran it; verified 0 remain)
+  - `~/.ghostties-demo-wrappers` (per-session launcher wrapper scripts)
+  All deletions need Sean's OK.
+
+**Closed:**
+- [x] **Finish `DemoWorkspaceCaptureUITests` so captures are post-ready.** Three defects, all visible in `output/demo-capture/demo-projects-light.png`: (1) real hostname `seansmith@Seans-MacBook-Pro` in the terminal pane — privacy leak on any post; (2) dev build badge `0.1.0 (1) · built … · up 0m` bottom-left; (3) terminal pane empty, no agent output — the dark capture is 99.6% one byte and the blank-frame guard correctly fails the run. Fix (3) by relaunching the staged sessions in-test, which is ALSO the answer to "demo loops without hand-clicking."
+- [x] Separate bundle ID for capture builds — `Ghostties` target's Debug config now resolves `PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.ghostties$(GHOSTTIES_DEV_BUNDLE_SUFFIX)` (defaults to `.dev`); `demo-capture.sh` passes `GHOSTTIES_DEV_BUNDLE_SUFFIX=.democapture.dev` so a capture run no longer collides with a live Dev build in another worktree. Suffix must end in `.dev` — `WorkspacePersistence`'s fallback path only routes to `Ghostties Dev` (not the real release workspace) when the bundle ID ends in `.dev`/`.debug`; a bare `.democapture` suffix risked mutating Sean's real running workspace if the `GHOSTTIES_STATE_DIR` override ever failed.
+- [x] Capture run verifies B+C (dev build badge hidden via launch argument; staged sessions relaunched in-test before capture) — neither has been exercised against a real `demo-capture.sh` run yet. Review pass-with-notes; its AX-query risk fixed in `0d2fd1d82` (type-agnostic `descendants(matching: .any)`). Run needs Sean hands-off ~2 min (XCUITest clicks can land on a window on top) and spawns real `claude` sessions.
+- [x] Hostname/identity leak in pane (pending measurement capture) — defect (1) above, not fixed by this pass. Strawman: `ZDOTDIR` in the test's `launchEnvironment` → fixture `.zshrc` with a user/host-free `PROMPT` (unverified that spawned shells inherit the app env); also check the Claude Code header for `/Users/seansmith` paths or account email.
+- [x] **Open the PR for `feat/demo-capture`** once captures are clean. → PR #172.
+
+**Carried (needs Sean's call, each with a strawman to apply or redline):**
+- [x] Dev badge should say which Claude thread built it. **Built** (`05003c079`, not yet captured in a real screenshot): `0.1.0 · <thread name> @ <short sha> · built HH:MM · up Nm`, e.g. `0.1.0 · Demo Rig @ 8f0b1d4 · built 10:42 · up 1m`. Thread name is resolved at build time from `~/.claude/sessions/<pid>.json` (cwd match + live pid + newest updatedAt), falling back to the worktree directory name; Debug/Dev builds only, Release/CI never touch `~/.claude`.
+
+**Parked (off-objective):**
+- [ ] **Shared metrics folder across builds.** `macos/Sources/App/macOS/AppDelegate.swift:2010-2014` `metricsDirectory()` hardcodes `Ghostties/metrics` under Application Support, keyed on neither bundle ID nor `GHOSTTIES_STATE_DIR`. Dev, Demo and Release all write MXMetricManager payloads into the same folder. Diagnostics only, not workspace data. Pre-existing; flagged by review 2026-09-12.
+- [x] **Demo capture frame polish.** Four items from 2026-09-12 review, all resolved:
+  - (a) **dropped by Sean 2026-09-13** — "← N agents" is Claude Code's own footer (counts live sessions in `~/.claude/sessions`), not Ghostties UI; no setting hides it; left in frame.
+  - (b) `5fa3835aa` — each fixture repo's `.claude/settings.local.json` sets `remoteControlAtStartup: false` (merged, not clobbered); `demo-ready.sh --check` fails if any fixture is missing it. Built.
+  - (c) `05a34b695` — `DemoWorkspaceCaptureUITests` scrolls the sidebar's scroll view back to the top before the window screenshot. Built.
+  - (d) `d8bb4e54a` — staged sessions already carried a canned first prompt, but `WorkspacePersistence.sanitizeTemplate` was silently stripping it from `agent.additionalFlags`; fixed by staging a per-prompt executable wrapper script and pointing the template's `command` at it instead. Built.
+- [ ] **`demo-ready.sh --check` double message.** On an isolation failure it prints the specific reason, then also the generic "STALE: … does not match" line. Nit.
+
+**Parked (off-objective):**
+- [ ] `MarketingCaptureUITests` / `VisualPassUITests` still build `.dev`, so their `launch()` quits a sibling worktree's live Dev build; `VisualPassUITests.swift:353` also hardcodes the `.dev` defaults domain.
+
+**Parked (off-objective):**
+- [ ] Screen Recording grant for `com.seansmithdesign.ghostties` is revoked — I ran `tccutil reset` on a black-frame symptom without first confirming the csreq mismatch in the tccd log. `screencapture` from any agent shell fails until Sean re-adds it in System Settings. NOT needed for the XCUITest capture path, which runs through testmanagerd. Memo corrected: `reference_screencapture-responsible-app-is-the-terminal.md`.
+- [ ] `BACKLOG.md` is 220KB — memory says it stays open-items-only; it is well past that.
+- [x] **Overnight N1 — re-seed:** (2026-09-13 02:04 — reseed ran, `--check` all OK: isolation, trust 10/10, remote-control 10/10, 4/4 staged, beta.24 current) run `scripts/demo/demo-ready.sh`, then `scripts/demo/demo-ready.sh --check` passes (includes the new remote-control override and wrapper checks).
+- [x] **Overnight N2 — capture:** (2026-09-13 02:06 — attempt 1 of 3 passed, xcresult totals 2/2, both PNGs non-blank) run `scripts/demo/demo-capture.sh` from the main thread only, Mac awake and hands-off; max 3 attempts total.
+- [x] **Overnight N3 — inspect** (2026-09-13 — all five criteria pass in both PNGs; no defects, so N4 not needed) light + dark PNGs: no "/rc connecting…", sidebar at top (atlas-api header visible), agent mid-task with output in the pane, no hostname/`/Users/seansmith`/email, dev badge hidden. "← N agents" is expected.
+- [x] **Overnight N4 — on a defect:** (n/a — N3 found no defect) diagnose from the xcresult recording + `lsappinfo` (never guess), fix via a subagent on `feat/demo-frame-polish`, separate review, re-run (counts toward the 3).
+- [x] **Overnight N5 — PR:** (#173, merge approved by Sean 2026-09-13)
+- [ ] **Decision (Sean, 2026-09-13): demo fixtures = fake or open-source projects only?** Sean kept the canned "Read-only — do not modify any files." prompt visible in the capture frame, and raised verbatim: "yes, or we just have fake or open source projects only". Fixture set today (`examples/demo-workspace/`) reuses real project names: annotie, brukas, ghostties, switchboard alongside invented atlas-api, fieldwork, pendulum, silo, trove, wren. Not started.
