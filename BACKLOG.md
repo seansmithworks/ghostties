@@ -2,7 +2,7 @@
 
 ## 2026-09-13 — Composer thread checkpoint (PR #169)
 
-- [ ] (carried) Build the frame-based Witness ghost animation. Sean approved board B on 2026-09-13 ("ghost propsal looks good to me"), artifact https://claude.ai/code/artifact/74c0df2d-0d62-42e6-819c-692e3258fc9e.
+- [x] (carried) Build the frame-based Witness ghost animation. Sean approved board B on 2026-09-13 ("ghost propsal looks good to me"), artifact https://claude.ai/code/artifact/74c0df2d-0d62-42e6-819c-692e3258fc9e.
   - Motion is whole-cell sprite frames generated from each 12×12 grid, replacing the translate/fade poses in `ComposerWitness.swift`:
     - idle skirt ripple every 450ms, a 120ms blink every ~4s, a glance every ~6s
     - Tab: squash → stretch+2 cells → top → land, 60ms each
@@ -11,13 +11,15 @@
     - resolve: dither morph (~240ms)
     - open: dither materialise, bottom rows first (~240ms)
     - Reduce Motion: static, instant swap
-- [ ] (carried) Local verification once Sean quits Dev: full unfiltered suite plus red proofs for R15 (`df25c6023`, `6c25d8ef9`, `264222ea0`), R15b `e4257a247`, the Custom preset fix `01d3f1ef5`, and R18 `f9d454e2e`. The two R18 tests' tolerances (1pt Witness alignment, <3pt card width) are uncalibrated. The last full suite (at `911759a6e`) was 1147/1158, where 5 failures were pre-existing load flakes.
+  - Built 2026-09-13 in `ef496f46d` (port) + `204fc5bdb`/`3b94a1226`/`6e0f97c37` (review fixes: interrupted morphs start from the on-screen frame; launch is terminal and wins over a same-update identity change; initial-mount beat). Two independent reviews passed. Swift↔board JS parity dump: 0 diffs across all 9 ghosts + placeholder. build-for-testing green. **Tests compiled, NOT run** (Dev was open).
+- [ ] (carried) Local verification once Sean quits Dev: full unfiltered suite plus red proofs for R15 (`df25c6023`, `6c25d8ef9`, `264222ea0`), R15b `e4257a247`, the Custom preset fix `01d3f1ef5`, and R18 `f9d454e2e`. The two R18 tests' tolerances (1pt Witness alignment, <3pt card width) are uncalibrated. The last full suite (at `911759a6e`) was 1147/1158, where 5 failures were pre-existing load flakes. Also owed: a first run + red proofs for the Witness frame tests in `ComposerWitnessFramesTests.swift` (19) and the `ComposerWitnessTests.swift` transition tests added in `204fc5bdb`/`3b94a1226`/`6e0f97c37`. Exception: `tabPlusIdentityChange…` and `unknownBranchPlusIdentityChange…` are lock-in tests that pass on `3b94a1226` by design, so they get no red proof.
 - [ ] (carried) Single-line taste defaults, strawman set 2026-09-13, to apply unless Sean redlines:
   - treatment → Material (glass has nothing to refract over a flat terminal)
   - shadow radius 64 → 32 (the HTML bench's CSS blur is ~2× a SwiftUI shadow radius)
   - placeholder ghost → `secondaryLabelColor`, eyes kept
 - [ ] (carried) DECIDE OR KILL: a `ghostties-release.yml` dry run on this branch (`workflow_dispatch`, `dry_run=true`) to exercise the new "Assert DialKit absent" gate. The reviewer found no externally visible side effects. It needs Sean's explicit yes.
-- [ ] (carried) Re-check the macOS input-source indicator (⊖) and the Witness launch lift live, after R18 is in Dev. The launch lift may be hidden by the container's 0.2s overlay removal.
+- [ ] (carried) Re-check the macOS input-source indicator (⊖) and the Witness launch dissolve (280ms of frames vs the overlay removal armed right after it at `SessionComposerPalette.swift:2929`; if most of it is cut, compress launch toward 200ms) live, after R18 is in Dev.
+- [ ] (Sean's call) Tab-accept that also switches the project (`ComposerGhostTextField.swift:1018` sets the query before `:1024` fires `.acceptedGhost`): the hop plays immediately on the NEW ghost, with no morph first and no added latency on a keypress. The strawman shipped in `6e0f97c37`; keep it unless Sean redlines.
 - [ ] (parked) DESIGN.md documents ghost-text opacity 0.50; the code uses 0.65. Update the doc once single-line settles.
 - [ ] (parked) Sean 2026-09-13: "I don't expect to be using the classic composer anymore. Most likely we are going to keep the single line approach." Removing classic, and making single-line the Release default (currently off by default in `ComposerZeroChromeStyle.swift` ~27-33), waits for his go. Open question: does centered zero-chrome stay?
 - [ ] (parked) Throwaway spike worktree `.claude/worktrees/r17-dialkit-spike` has an uncommitted DialKit diff, already applied in `f3fdced38`. Safe to remove with `git worktree remove`, after confirming with Sean.
