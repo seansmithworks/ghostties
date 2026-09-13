@@ -2375,7 +2375,7 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
   - staged build inputs in worktree `demo-rig` (`GhosttyKit.xcframework`, `zig-out/`, `vendor/cef*`)
   - untracked `output/demo-capture/`
   - `~/.claude.json.bak-demo-*` backup
-  - xcresult bundles containing full-screen recordings in `$TMPDIR/ghostties-demo-capture-result.*`, which are private screen content
+  - [x] xcresult bundles containing full-screen recordings in `$TMPDIR/ghostties-demo-capture-result.*`, which are private screen content (Sean approved 2026-09-13; deleted)
   - `~/.ghostties-demo-wrappers` (per-session launcher wrapper scripts)
   All deletions need Sean's OK.
 
@@ -2408,4 +2408,5 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [x] **Overnight N2 — capture:** (2026-09-13 02:06 — attempt 1 of 3 passed, xcresult totals 2/2, both PNGs non-blank) run `scripts/demo/demo-capture.sh` from the main thread only, Mac awake and hands-off; max 3 attempts total.
 - [x] **Overnight N3 — inspect** (2026-09-13 — all five criteria pass in both PNGs; no defects, so N4 not needed) light + dark PNGs: no "/rc connecting…", sidebar at top (atlas-api header visible), agent mid-task with output in the pane, no hostname/`/Users/seansmith`/email, dev badge hidden. "← N agents" is expected.
 - [x] **Overnight N4 — on a defect:** (n/a — N3 found no defect) diagnose from the xcresult recording + `lsappinfo` (never guess), fix via a subagent on `feat/demo-frame-polish`, separate review, re-run (counts toward the 3).
-- [x] **Overnight N5 — PR:** (#173, open, not merged)
+- [x] **Overnight N5 — PR:** (#173, merge approved by Sean 2026-09-13)
+- [ ] **Decision (Sean, 2026-09-13): demo fixtures = fake or open-source projects only?** Sean kept the canned "Read-only — do not modify any files." prompt visible in the capture frame, and raised verbatim: "yes, or we just have fake or open source projects only". Fixture set today (`examples/demo-workspace/`) reuses real project names: annotie, brukas, ghostties, switchboard alongside invented atlas-api, fieldwork, pendulum, silo, trove, wren. Not started.
