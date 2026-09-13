@@ -118,6 +118,21 @@ enum ComposerWitness {
 /// any bundled identity change, and dissolves from `onScreen` — never
 /// rebuilt from `displayedIdentity`. Once locked, `identity` changes are a
 /// no-op until a later non-launch beat arrives.
+///
+/// Sean's decision (2026-09-13), "always have transitions": a non-launch
+/// beat that arrives bundled with an identity change (Tab-accept switching
+/// project, unknown-branch resolving to a different project) no longer
+/// plays its hop/lean immediately on the new ghost with no morph — it plays
+/// the SAME `.resolve` dither morph an identity change alone would (old
+/// ghost -> new ghost), then the beat's own frames on the new, already-
+/// settled grid, as one concatenated sequence. `resolveFromColors` and each
+/// frame's own `sourceIsB` only apply across the morph portion — every beat
+/// frame (`buildTabFrames`/`buildErrorFrames`/`buildOpenFrames`) already
+/// carries `sourceIsB: nil`, which `WitnessSprite.color(forCell:)` reads as
+/// "paint solid `primaryColor`" (the new identity's colour), so nothing
+/// extra is needed to gate that off once the morph portion has played.
+/// Launch is unaffected — handled by the early return above, unchanged: it
+/// is terminal and its own dissolve IS the transition.
 enum ComposerWitnessTransition {
     struct ViewState: Equatable {
         var currentBeat: ComposerWitness.Beat
@@ -220,13 +235,23 @@ enum ComposerWitnessTransition {
             // update immediately above, a fixed, deterministic order for
             // the rare case both change in the same update.
             beat = newBeat
-            frames = framesFor(
+            let hopFrames = framesFor(
                 kind: newBeat.kind,
                 targetGrid: pixelsFor(displayed),
                 sourceGrid: previous.map(pixelsFor),
                 seed: seed
             )
-            colors = nil
+            if identityChanged, !reduceMotion {
+                // "Always have transitions" (Sean, 2026-09-13): the morph
+                // built by the `identityChanged` branch above (`frames`,
+                // already starting from `onScreen`) plays first, then this
+                // beat's own frames on the new, settled grid — one
+                // sequence, never the hop alone on an un-morphed ghost.
+                frames += hopFrames
+            } else {
+                frames = hopFrames
+                colors = nil
+            }
         }
 
         return ViewState(

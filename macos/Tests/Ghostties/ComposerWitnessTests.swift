@@ -333,13 +333,17 @@ struct ComposerWitnessTests {
     /// `.acceptedGhost` — `SessionComposerPalette.swift:3018` arms
     /// `.tabAccept` from that same call, so a Tab-accept that completes a
     /// project name changes `commandProject` (and so `identity`) in the
-    /// SAME update as the beat. Rule: a non-launch beat plays IMMEDIATELY
-    /// on the NEW identity — no queued morph, no added latency on a
-    /// keyboard action.
-    @Test func tabPlusIdentityChangeInOneUpdatePlaysOnTheNewIdentityImmediately() {
+    /// SAME update as the beat. Sean's decision (2026-09-13), "always have
+    /// transitions": the hop no longer plays immediately on the new
+    /// identity with no morph — it plays the resolve dither morph (old
+    /// identity's on-screen frame -> new identity), THEN the tab-accept hop
+    /// on the new, settled grid, as one concatenated sequence, and the
+    /// total duration is the morph's plus the hop's.
+    @Test func tabPlusIdentityChangeInOneUpdatePlaysAMorphThenTheHopOnTheNewIdentity() {
         let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
+        let onScreenGrid = Self.pixelsFor(Self.identityA)
         let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
-            (Self.pixelsFor(Self.identityA), 0, nil)
+            (onScreenGrid, 0, nil)
 
         let resolved = ComposerWitnessTransition.next(
             state: startState,
@@ -352,18 +356,30 @@ struct ComposerWitnessTests {
             seed: 11
         )
 
-        let expectedFrames = ComposerWitnessFrames.buildTabFrames(grid: Self.pixelsFor(Self.identityB))
+        let expectedMorph = ComposerWitnessFrames.buildResolveFrames(
+            gridA: onScreenGrid, gridB: Self.pixelsFor(Self.identityB), seed: 11
+        )
+        let expectedHop = ComposerWitnessFrames.buildTabFrames(grid: Self.pixelsFor(Self.identityB))
+
         #expect(resolved.displayedIdentity == Self.identityB)
-        #expect(resolved.beatFrames.first?.grid == expectedFrames.first?.grid, "frame 0 must be squash(newGrid)")
-        #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "the rest frame must be the new grid")
-        #expect(resolved.resolveFromColors == nil, "no queued morph — a single flat colour (the new identity's) via primaryColor")
+        #expect(resolved.beatFrames.count == expectedMorph.count + expectedHop.count)
+        #expect(resolved.beatFrames.first?.grid == expectedMorph.first?.grid, "sequence starts with the resolve morph")
+        #expect(resolved.beatFrames.first?.sourceIsB == expectedMorph.first?.sourceIsB)
+        #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "sequence ends on the hop's rest frame")
+        #expect(resolved.resolveFromColors != nil, "morph colours are carried through the morph portion of the combined sequence")
+
+        let totalDuration = resolved.beatFrames.reduce(0) { $0 + $1.ms }
+        let expectedDuration = expectedMorph.reduce(0) { $0 + $1.ms } + expectedHop.reduce(0) { $0 + $1.ms }
+        #expect(totalDuration == expectedDuration, "total duration equals resolve + beat")
     }
 
-    /// Same rule for `.unknownBranch`.
-    @Test func unknownBranchPlusIdentityChangeInOneUpdatePlaysOnTheNewIdentityImmediately() {
+    /// Same rule for `.unknownBranch`: morph, then the error lean on the
+    /// new identity.
+    @Test func unknownBranchPlusIdentityChangeInOneUpdatePlaysAMorphThenTheLeanOnTheNewIdentity() {
         let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
+        let onScreenGrid = Self.pixelsFor(Self.identityA)
         let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
-            (Self.pixelsFor(Self.identityA), 0, nil)
+            (onScreenGrid, 0, nil)
 
         let resolved = ComposerWitnessTransition.next(
             state: startState,
@@ -376,11 +392,45 @@ struct ComposerWitnessTests {
             seed: 11
         )
 
-        let expectedFrames = ComposerWitnessFrames.buildErrorFrames(grid: Self.pixelsFor(Self.identityB))
+        let expectedMorph = ComposerWitnessFrames.buildResolveFrames(
+            gridA: onScreenGrid, gridB: Self.pixelsFor(Self.identityB), seed: 11
+        )
+        let expectedLean = ComposerWitnessFrames.buildErrorFrames(grid: Self.pixelsFor(Self.identityB))
+
         #expect(resolved.displayedIdentity == Self.identityB)
-        #expect(resolved.beatFrames.first?.grid == expectedFrames.first?.grid, "frame 0 must be lean(squint(newGrid))")
-        #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "the rest frame must be the new grid")
-        #expect(resolved.resolveFromColors == nil)
+        #expect(resolved.beatFrames.count == expectedMorph.count + expectedLean.count)
+        #expect(resolved.beatFrames.first?.grid == expectedMorph.first?.grid, "sequence starts with the resolve morph")
+        #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "sequence ends on the lean's rest frame")
+
+        let totalDuration = resolved.beatFrames.reduce(0) { $0 + $1.ms }
+        let expectedDuration = expectedMorph.reduce(0) { $0 + $1.ms } + expectedLean.reduce(0) { $0 + $1.ms }
+        #expect(totalDuration == expectedDuration, "total duration equals resolve + beat")
+    }
+
+    /// Reduce Motion floor: a beat bundled with an identity change is still
+    /// an instant swap with no morph — the beat itself still plays (on the
+    /// already-swapped identity), but nothing plays a dither sequence.
+    @Test func tabPlusIdentityChangeUnderReduceMotionIsAnInstantSwapWithNoMorph() {
+        let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
+        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
+            (Self.pixelsFor(Self.identityA), 0, nil)
+
+        let resolved = ComposerWitnessTransition.next(
+            state: startState,
+            newIdentity: Self.identityB,
+            newBeat: startState.currentBeat.next(.tabAccept),
+            onScreen: onScreen,
+            pixelsFor: Self.pixelsFor(_:),
+            colorFor: Self.testColor(for:),
+            reduceMotion: true,
+            seed: 11
+        )
+
+        let expectedHop = ComposerWitnessFrames.buildTabFrames(grid: Self.pixelsFor(Self.identityB))
+        #expect(resolved.displayedIdentity == Self.identityB, "identity swaps instantly")
+        #expect(resolved.beatFrames.allSatisfy { $0.sourceIsB == nil }, "no morph frames — nothing mixes two identities' colours")
+        #expect(resolved.resolveFromColors == nil, "no morph colours captured under Reduce Motion")
+        #expect(resolved.beatFrames.count == expectedHop.count, "the beat's own hop still plays, just with no morph ahead of it")
     }
 
     // MARK: - R4 review: initial-mount beat (onAppear feeding `next()`)
