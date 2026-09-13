@@ -530,8 +530,8 @@ enum ComposerWitnessSetting {
 /// with).
 enum ComposerWitnessGap {
     static let storageKey = "ghostties.composerWitnessGap"
-    /// Round 14 (session-7): Sean's Dev-tuned gap, up from 4.
-    static let defaultGap: CGFloat = 5
+    /// Round 15 (Sean's DialKit Copy output): Sean's Dev-tuned gap, up from 5.
+    static let defaultGap: CGFloat = 6
     static let range: ClosedRange<Double> = 0...12
 
     static func gap(defaults: UserDefaults = .standard) -> CGFloat {
@@ -546,7 +546,9 @@ enum ComposerWitnessGap {
 /// keeps every one of the 12 grid cells a whole Retina pixel at every step.
 enum ComposerWitnessSize {
     static let storageKey = "ghostties.composerWitnessSize"
-    static let defaultSize: CGFloat = 24
+    /// Round 15 (Sean's DialKit Copy output): Sean's Dev-tuned size, up
+    /// from 24 — cell size 2.5pt (5px), a whole Retina pixel.
+    static let defaultSize: CGFloat = 30
     static let range: ClosedRange<Double> = 12...48
 
     static func size(defaults: UserDefaults = .standard) -> CGFloat {
@@ -555,13 +557,14 @@ enum ComposerWitnessSize {
     }
 }
 
-/// Round 14: the Witness's idle vertical bob amplitude, in points — 0 (the
-/// default) is off, matching the shipped look exactly. Runs continuously,
-/// including during beats (`ComposerWitnessFrames.floatOffset`), driven by
-/// the same idle clock the blink/glance/ripple loop already uses.
+/// Round 14: the Witness's idle vertical bob amplitude, in points. Runs
+/// continuously, including during beats
+/// (`ComposerWitnessFrames.floatOffset`), driven by the same idle clock the
+/// blink/glance/ripple loop already uses. Round 15 (Sean's DialKit Copy
+/// output): default up from 0 (off) to 2 — the bob is now on by default.
 enum ComposerWitnessFloatAmplitude {
     static let storageKey = "ghostties.composerWitnessFloatAmplitude"
-    static let defaultAmplitude: Double = 0
+    static let defaultAmplitude: Double = 2
     static let range: ClosedRange<Double> = 0...4
 
     static func amplitude(defaults: UserDefaults = .standard) -> Double {
@@ -577,6 +580,21 @@ enum ComposerWitnessFloatPeriod {
 
     static func period(defaults: UserDefaults = .standard) -> Double {
         defaults.object(forKey: storageKey) as? Double ?? defaultPeriod
+    }
+}
+
+/// Round 15 (Sean's DialKit Copy output): the Witness's idle sideways sway
+/// amplitude, in points — reuses `ComposerWitnessFloatPeriod` at HALF
+/// frequency (no separate period dial), so combined with the vertical bob
+/// it traces a lazy figure-8 rather than a diagonal line.
+/// (`ComposerWitnessFrames.floatOffsetX`).
+enum ComposerWitnessFloatHorizontal {
+    static let storageKey = "ghostties.composerWitnessFloatHorizontal"
+    static let defaultAmplitude: Double = 2
+    static let range: ClosedRange<Double> = 0...4
+
+    static func amplitude(defaults: UserDefaults = .standard) -> Double {
+        defaults.object(forKey: storageKey) as? Double ?? defaultAmplitude
     }
 }
 
@@ -607,9 +625,10 @@ enum ComposerWitnessBeatSpeed {
 /// Session-7 brief §11: "Reset single-line" clears every single-line-only
 /// key back to its code default — field size, row size, width, corner
 /// radius, shadow preset + its three derived dials, treatment, glass tint,
-/// Witness, ghost gap, ghost size, float amplitude, float period, ghost
-/// opacity, and beat speed. Deliberately excludes `ComposerStyle` itself and
-/// every zero-chrome-only key (base blur, focal blur, fog, alignment) —
+/// Witness, ghost gap, ghost size, float amplitude, float horizontal
+/// amplitude, float period, ghost opacity, and beat speed. Deliberately
+/// excludes `ComposerStyle` itself and every zero-chrome-only key (base
+/// blur, focal blur, fog, alignment) —
 /// those aren't single-line keys. A single list, `resetKeys`, is the one
 /// place both `ComposerDialKitCoordinator`'s reset action and the legacy
 /// pill's fallback button read from, so the two can't drift on which keys
@@ -631,6 +650,7 @@ enum ComposerSingleLineReset {
             ComposerWitnessSetting.storageKey,
             ComposerWitnessSize.storageKey,
             ComposerWitnessFloatAmplitude.storageKey,
+            ComposerWitnessFloatHorizontal.storageKey,
             ComposerWitnessFloatPeriod.storageKey,
             ComposerWitnessOpacity.storageKey,
             ComposerWitnessBeatSpeed.storageKey
@@ -1169,6 +1189,7 @@ struct ComposerDebugTuningControl: View {
     @AppStorage private var witnessGap: Double
     @AppStorage private var witnessSize: Double
     @AppStorage private var witnessFloatAmplitude: Double
+    @AppStorage private var witnessFloatHorizontalAmplitude: Double
     @AppStorage private var witnessFloatPeriod: Double
     @AppStorage private var witnessOpacity: Double
     @AppStorage private var witnessBeatSpeed: Double
@@ -1208,6 +1229,7 @@ struct ComposerDebugTuningControl: View {
         _witnessGap = AppStorage(wrappedValue: Double(ComposerWitnessGap.defaultGap), ComposerWitnessGap.storageKey, store: defaults)
         _witnessSize = AppStorage(wrappedValue: Double(ComposerWitnessSize.defaultSize), ComposerWitnessSize.storageKey, store: defaults)
         _witnessFloatAmplitude = AppStorage(wrappedValue: ComposerWitnessFloatAmplitude.defaultAmplitude, ComposerWitnessFloatAmplitude.storageKey, store: defaults)
+        _witnessFloatHorizontalAmplitude = AppStorage(wrappedValue: ComposerWitnessFloatHorizontal.defaultAmplitude, ComposerWitnessFloatHorizontal.storageKey, store: defaults)
         _witnessFloatPeriod = AppStorage(wrappedValue: ComposerWitnessFloatPeriod.defaultPeriod, ComposerWitnessFloatPeriod.storageKey, store: defaults)
         _witnessOpacity = AppStorage(wrappedValue: ComposerWitnessOpacity.defaultOpacity, ComposerWitnessOpacity.storageKey, store: defaults)
         _witnessBeatSpeed = AppStorage(wrappedValue: ComposerWitnessBeatSpeed.defaultSpeed, ComposerWitnessBeatSpeed.storageKey, store: defaults)
@@ -1335,6 +1357,10 @@ struct ComposerDebugTuningControl: View {
         Binding(get: { witnessFloatAmplitude }, set: { witnessFloatAmplitude = $0; onChange() })
     }
 
+    var witnessFloatHorizontalAmplitudeBinding: Binding<Double> {
+        Binding(get: { witnessFloatHorizontalAmplitude }, set: { witnessFloatHorizontalAmplitude = $0; onChange() })
+    }
+
     var witnessFloatPeriodBinding: Binding<Double> {
         Binding(get: { witnessFloatPeriod }, set: { witnessFloatPeriod = $0; onChange() })
     }
@@ -1371,6 +1397,7 @@ struct ComposerDebugTuningControl: View {
         witnessGap = Double(ComposerWitnessGap.gap(defaults: defaults))
         witnessSize = Double(ComposerWitnessSize.size(defaults: defaults))
         witnessFloatAmplitude = ComposerWitnessFloatAmplitude.amplitude(defaults: defaults)
+        witnessFloatHorizontalAmplitude = ComposerWitnessFloatHorizontal.amplitude(defaults: defaults)
         witnessFloatPeriod = ComposerWitnessFloatPeriod.period(defaults: defaults)
         witnessOpacity = ComposerWitnessOpacity.opacity(defaults: defaults)
         witnessBeatSpeed = ComposerWitnessBeatSpeed.speed(defaults: defaults)
@@ -1483,7 +1510,8 @@ struct ComposerDebugTuningControl: View {
                 }
                 dialRow("Ghost size", value: witnessSizeBinding, range: ComposerWitnessSize.range, format: "%.0fpt")
                 dialRow("Ghost gap", value: witnessGapBinding, range: ComposerWitnessGap.range, format: "%.0fpt")
-                dialRow("Float", value: witnessFloatAmplitudeBinding, range: ComposerWitnessFloatAmplitude.range, format: "%.1fpt")
+                dialRow("Float vertical", value: witnessFloatAmplitudeBinding, range: ComposerWitnessFloatAmplitude.range, format: "%.1fpt")
+                dialRow("Float horizontal", value: witnessFloatHorizontalAmplitudeBinding, range: ComposerWitnessFloatHorizontal.range, format: "%.1fpt")
                 dialRow("Float period", value: witnessFloatPeriodBinding, range: ComposerWitnessFloatPeriod.range, format: "%.1fs")
                 dialRow("Ghost opacity", value: witnessOpacityBinding, range: ComposerWitnessOpacity.range, format: "%.2f")
                 dialRow("Beat speed", value: witnessBeatSpeedBinding, range: ComposerWitnessBeatSpeed.range, format: "%.2f×")
@@ -1534,6 +1562,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
     var witnessGap: Double
     var witnessSize: Double
     var witnessFloatAmplitude: Double
+    var witnessFloatHorizontalAmplitude: Double
     var witnessFloatPeriod: Double
     var witnessOpacity: Double
     var witnessBeatSpeed: Double
@@ -1589,6 +1618,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         witnessGap: Double,
         witnessSize: Double,
         witnessFloatAmplitude: Double,
+        witnessFloatHorizontalAmplitude: Double,
         witnessFloatPeriod: Double,
         witnessOpacity: Double,
         witnessBeatSpeed: Double
@@ -1618,6 +1648,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         self.witnessGap = witnessGap
         self.witnessSize = witnessSize
         self.witnessFloatAmplitude = witnessFloatAmplitude
+        self.witnessFloatHorizontalAmplitude = witnessFloatHorizontalAmplitude
         self.witnessFloatPeriod = witnessFloatPeriod
         self.witnessOpacity = witnessOpacity
         self.witnessBeatSpeed = witnessBeatSpeed
@@ -1629,7 +1660,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         case shadowPresetRawStorage = "shadowPresetRaw"
         case shadowRadius, shadowYOffset, shadowOpacity, treatmentRaw, glassTintRaw
         case witnessEnabled, witnessGap
-        case witnessSize, witnessFloatAmplitude, witnessFloatPeriod, witnessOpacity, witnessBeatSpeed
+        case witnessSize, witnessFloatAmplitude, witnessFloatHorizontalAmplitude, witnessFloatPeriod, witnessOpacity, witnessBeatSpeed
     }
 }
 
@@ -1794,6 +1825,7 @@ final class ComposerDialKitCoordinator: ObservableObject {
             witnessGap: Double(ComposerWitnessGap.gap(defaults: defaults)),
             witnessSize: Double(ComposerWitnessSize.size(defaults: defaults)),
             witnessFloatAmplitude: ComposerWitnessFloatAmplitude.amplitude(defaults: defaults),
+            witnessFloatHorizontalAmplitude: ComposerWitnessFloatHorizontal.amplitude(defaults: defaults),
             witnessFloatPeriod: ComposerWitnessFloatPeriod.period(defaults: defaults),
             witnessOpacity: ComposerWitnessOpacity.opacity(defaults: defaults),
             witnessBeatSpeed: ComposerWitnessBeatSpeed.speed(defaults: defaults)
@@ -1861,6 +1893,9 @@ final class ComposerDialKitCoordinator: ObservableObject {
         if model.witnessFloatAmplitude != previous.witnessFloatAmplitude {
             defaults.set(model.witnessFloatAmplitude, forKey: ComposerWitnessFloatAmplitude.storageKey)
         }
+        if model.witnessFloatHorizontalAmplitude != previous.witnessFloatHorizontalAmplitude {
+            defaults.set(model.witnessFloatHorizontalAmplitude, forKey: ComposerWitnessFloatHorizontal.storageKey)
+        }
         if model.witnessFloatPeriod != previous.witnessFloatPeriod {
             defaults.set(model.witnessFloatPeriod, forKey: ComposerWitnessFloatPeriod.storageKey)
         }
@@ -1920,9 +1955,9 @@ final class ComposerDialKitCoordinator: ObservableObject {
 
     /// Session-7 brief §"Strawman to build": single-line's own dial order —
     /// Treatment, Glass tint, Width, Corner radius, Field size, Row size,
-    /// Shadow (preset + 3 dials), Witness, Ghost size, Ghost gap, Float,
-    /// Float period, Ghost opacity, Beat speed, Reset — everything AFTER
-    /// `styleControl`, which every style shows.
+    /// Shadow (preset + 3 dials), Witness, Ghost size, Ghost gap, Float
+    /// vertical, Float horizontal, Float period, Ghost opacity, Beat speed,
+    /// Reset — everything AFTER `styleControl`, which every style shows.
     private static let singleLineOnlyControls: [DialControl<ComposerDialKitTuningModel>] = [
         .select(
             "treatment", keyPath: \.treatmentRaw, label: "Treatment",
@@ -1986,8 +2021,12 @@ final class ComposerDialKitCoordinator: ObservableObject {
             range: ComposerWitnessGap.range, unit: "pt"
         ),
         .slider(
-            "witnessFloatAmplitude", keyPath: \.witnessFloatAmplitude, label: "Float",
+            "witnessFloatAmplitude", keyPath: \.witnessFloatAmplitude, label: "Float vertical",
             range: ComposerWitnessFloatAmplitude.range, step: 0.5, unit: "pt"
+        ),
+        .slider(
+            "witnessFloatHorizontalAmplitude", keyPath: \.witnessFloatHorizontalAmplitude, label: "Float horizontal",
+            range: ComposerWitnessFloatHorizontal.range, step: 0.5, unit: "pt"
         ),
         .slider(
             "witnessFloatPeriod", keyPath: \.witnessFloatPeriod, label: "Float period",
@@ -2006,8 +2045,9 @@ final class ComposerDialKitCoordinator: ObservableObject {
 
     /// Session-7 brief: the single place that decides which knobs the panel
     /// shows for a given Style — Classic gets Style only, Zero chrome gets
-    /// Style + the 4 zero-chrome dials, Single line gets Style + the 18
-    /// single-line dials (round 14 added 5 Witness dials to round 13's 13).
+    /// Style + the 4 zero-chrome dials, Single line gets Style + the 19
+    /// single-line dials (round 15 added the Float horizontal dial to round
+    /// 14's 18, which added 5 Witness dials to round 13's 13).
     /// `ComposerDialKitCoordinator.handle` calls `state.configure(controls:)`
     /// (vendored, unmodified `DialPanelState` API) with this function's
     /// result whenever `styleRaw` changes — that's the whole "conditional

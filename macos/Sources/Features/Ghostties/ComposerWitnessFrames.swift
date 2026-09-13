@@ -331,4 +331,17 @@ enum ComposerWitnessFrames {
         guard !reduceMotion, amplitude != 0, periodMs > 0 else { return 0 }
         return -amplitude * sin(2 * Double.pi * Double(clockMs) / periodMs)
     }
+
+    /// Round 15 (Sean's DialKit Copy output): a sideways sway at HALF the
+    /// vertical float's frequency (`periodMs` is the SAME period dial
+    /// `floatOffset` uses, not a separate one) — combined with the vertical
+    /// bob above, this traces a lazy figure-8 rather than a diagonal line.
+    /// Pure and Foundation-only, same shape as `floatOffset`, so
+    /// `ComposerWitnessView` can apply both as a single `.offset(x:y:)`
+    /// transform inside its `TimelineView`. Returns 0 under Reduce Motion or
+    /// when the amplitude/period dial is 0.
+    static func floatOffsetX(clockMs: Int, amplitude: Double, periodMs: Double, reduceMotion: Bool) -> Double {
+        guard !reduceMotion, amplitude != 0, periodMs > 0 else { return 0 }
+        return amplitude * sin(2 * Double.pi * Double(clockMs) / (2 * periodMs))
+    }
 }

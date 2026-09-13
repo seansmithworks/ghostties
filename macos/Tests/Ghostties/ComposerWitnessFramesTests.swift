@@ -201,4 +201,25 @@ struct ComposerWitnessFramesTests {
     @Test func floatOffsetIsZeroAtZeroAmplitude() {
         #expect(ComposerWitnessFrames.floatOffset(clockMs: 750, amplitude: 0, periodMs: 3000, reduceMotion: false) == 0)
     }
+
+    // MARK: - Float horizontal (round 15)
+
+    @Test func floatOffsetXIsZeroAtTimeZero() {
+        #expect(ComposerWitnessFrames.floatOffsetX(clockMs: 0, amplitude: 2, periodMs: 3000, reduceMotion: false) == 0)
+    }
+
+    /// Half the vertical float's frequency — a quarter of the DOUBLED
+    /// cycle (2 · periodMs) lands at periodMs / 2.
+    @Test func floatOffsetXIsPositiveAmplitudeAtOneQuarterOfDoubledPeriod() {
+        let result = ComposerWitnessFrames.floatOffsetX(clockMs: 1500, amplitude: 2, periodMs: 3000, reduceMotion: false)
+        #expect(abs(result - 2) < 0.0001)
+    }
+
+    @Test func floatOffsetXIsZeroUnderReduceMotion() {
+        #expect(ComposerWitnessFrames.floatOffsetX(clockMs: 1500, amplitude: 2, periodMs: 3000, reduceMotion: true) == 0)
+    }
+
+    @Test func floatOffsetXIsZeroAtZeroAmplitude() {
+        #expect(ComposerWitnessFrames.floatOffsetX(clockMs: 1500, amplitude: 0, periodMs: 3000, reduceMotion: false) == 0)
+    }
 }

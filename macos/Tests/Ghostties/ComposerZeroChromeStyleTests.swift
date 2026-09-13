@@ -2258,9 +2258,9 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerSingleLineGlassTint.windowBackground.nsColor == NSColor.windowBackgroundColor)
     }
 
-    @Test func composerWitnessGapDefaultsToFive() {
+    @Test func composerWitnessGapDefaultsToSix() {
         let suite = UserDefaults(suiteName: "ghostties.witnessGap.default.test.\(UUID().uuidString)")!
-        #expect(ComposerWitnessGap.gap(defaults: suite) == 5)
+        #expect(ComposerWitnessGap.gap(defaults: suite) == 6)
     }
 
     @Test func composerWitnessGapReadsStoredValue() {
@@ -2271,9 +2271,9 @@ struct ComposerZeroChromeStyleTests {
 
     // MARK: - Round 14 (session-7): new Witness dials — fallback defaults
 
-    @Test func composerWitnessSizeDefaultsToTwentyFour() {
+    @Test func composerWitnessSizeDefaultsToThirty() {
         let suite = UserDefaults(suiteName: "ghostties.witnessSize.default.test.\(UUID().uuidString)")!
-        #expect(ComposerWitnessSize.size(defaults: suite) == 24)
+        #expect(ComposerWitnessSize.size(defaults: suite) == 30)
     }
 
     @Test func composerWitnessSizeReadsStoredValue() {
@@ -2282,15 +2282,26 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerWitnessSize.size(defaults: suite) == 36)
     }
 
-    @Test func composerWitnessFloatAmplitudeDefaultsToZero() {
+    @Test func composerWitnessFloatAmplitudeDefaultsToTwo() {
         let suite = UserDefaults(suiteName: "ghostties.witnessFloatAmplitude.default.test.\(UUID().uuidString)")!
-        #expect(ComposerWitnessFloatAmplitude.amplitude(defaults: suite) == 0)
+        #expect(ComposerWitnessFloatAmplitude.amplitude(defaults: suite) == 2)
     }
 
     @Test func composerWitnessFloatAmplitudeReadsStoredValue() {
         let suite = UserDefaults(suiteName: "ghostties.witnessFloatAmplitude.stored.test.\(UUID().uuidString)")!
         suite.set(2.5, forKey: ComposerWitnessFloatAmplitude.storageKey)
         #expect(ComposerWitnessFloatAmplitude.amplitude(defaults: suite) == 2.5)
+    }
+
+    @Test func composerWitnessFloatHorizontalDefaultsToTwo() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessFloatHorizontal.default.test.\(UUID().uuidString)")!
+        #expect(ComposerWitnessFloatHorizontal.amplitude(defaults: suite) == 2)
+    }
+
+    @Test func composerWitnessFloatHorizontalReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessFloatHorizontal.stored.test.\(UUID().uuidString)")!
+        suite.set(3.5, forKey: ComposerWitnessFloatHorizontal.storageKey)
+        #expect(ComposerWitnessFloatHorizontal.amplitude(defaults: suite) == 3.5)
     }
 
     @Test func composerWitnessFloatPeriodDefaultsToThree() {
@@ -2337,12 +2348,14 @@ struct ComposerZeroChromeStyleTests {
 
         coordinator.state.values.witnessSize = 42
         coordinator.state.values.witnessFloatAmplitude = 3
+        coordinator.state.values.witnessFloatHorizontalAmplitude = 3.5
         coordinator.state.values.witnessFloatPeriod = 4.5
         coordinator.state.values.witnessOpacity = 0.6
         coordinator.state.values.witnessBeatSpeed = 1.5
 
         #expect(suite.object(forKey: ComposerWitnessSize.storageKey) as? Double == 42)
         #expect(suite.object(forKey: ComposerWitnessFloatAmplitude.storageKey) as? Double == 3)
+        #expect(suite.object(forKey: ComposerWitnessFloatHorizontal.storageKey) as? Double == 3.5)
         #expect(suite.object(forKey: ComposerWitnessFloatPeriod.storageKey) as? Double == 4.5)
         #expect(suite.object(forKey: ComposerWitnessOpacity.storageKey) as? Double == 0.6)
         #expect(suite.object(forKey: ComposerWitnessBeatSpeed.storageKey) as? Double == 1.5)
@@ -2350,6 +2363,7 @@ struct ComposerZeroChromeStyleTests {
         let reread = ComposerDialKitCoordinator(defaults: suite, onChange: {})
         #expect(reread.state.values.witnessSize == 42)
         #expect(reread.state.values.witnessFloatAmplitude == 3)
+        #expect(reread.state.values.witnessFloatHorizontalAmplitude == 3.5)
         #expect(reread.state.values.witnessFloatPeriod == 4.5)
         #expect(reread.state.values.witnessOpacity == 0.6)
         #expect(reread.state.values.witnessBeatSpeed == 1.5)
@@ -2423,8 +2437,9 @@ struct ComposerZeroChromeStyleTests {
     // MARK: - DialKit panel: conditional visibility + reset action
 
     /// Acceptance item 1: exactly Style for Classic, Style + the 4
-    /// zero-chrome dials for Zero chrome, Style + the 18 single-line dials
-    /// for Single line (round 14 added 5 Witness dials to round 13's 13).
+    /// zero-chrome dials for Zero chrome, Style + the 19 single-line dials
+    /// for Single line (round 15 added the Float horizontal dial to round
+    /// 14's 18, which added 5 Witness dials to round 13's 13).
     /// `DialControl` doesn't expose its label/path outside the DialKit
     /// package, so this names the discriminator this test target CAN see —
     /// `state.controls.count`, the panel's actual visible control list. Red
@@ -2434,7 +2449,7 @@ struct ComposerZeroChromeStyleTests {
     @Test func dialKitVisibleControlCountsMatchEachStyle() {
         #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.classic.rawValue).count == 1)
         #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.zeroChrome.rawValue).count == 5)
-        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.singleLine.rawValue).count == 19)
+        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.singleLine.rawValue).count == 20)
     }
 
     /// Proves the LIVE panel (not just the pure function above) rebuilds
@@ -2451,7 +2466,7 @@ struct ComposerZeroChromeStyleTests {
         #expect(coordinator.state.controls.count == 1)
 
         coordinator.state.values.styleRaw = ComposerStyle.singleLine.rawValue
-        #expect(coordinator.state.controls.count == 19)
+        #expect(coordinator.state.controls.count == 20)
 
         coordinator.state.values.styleRaw = ComposerStyle.zeroChrome.rawValue
         #expect(coordinator.state.controls.count == 5)
@@ -2471,6 +2486,7 @@ struct ComposerZeroChromeStyleTests {
         coordinator.state.values.witnessGap = 12
         coordinator.state.values.witnessSize = 48
         coordinator.state.values.witnessFloatAmplitude = 4
+        coordinator.state.values.witnessFloatHorizontalAmplitude = 4
         coordinator.state.values.witnessFloatPeriod = 6
         coordinator.state.values.witnessOpacity = 0.2
         coordinator.state.values.witnessBeatSpeed = 2.0
@@ -2482,6 +2498,7 @@ struct ComposerZeroChromeStyleTests {
         #expect(coordinator.state.values.witnessGap == Double(ComposerWitnessGap.defaultGap))
         #expect(coordinator.state.values.witnessSize == Double(ComposerWitnessSize.defaultSize))
         #expect(coordinator.state.values.witnessFloatAmplitude == ComposerWitnessFloatAmplitude.defaultAmplitude)
+        #expect(coordinator.state.values.witnessFloatHorizontalAmplitude == ComposerWitnessFloatHorizontal.defaultAmplitude)
         #expect(coordinator.state.values.witnessFloatPeriod == ComposerWitnessFloatPeriod.defaultPeriod)
         #expect(coordinator.state.values.witnessOpacity == ComposerWitnessOpacity.defaultOpacity)
         #expect(coordinator.state.values.witnessBeatSpeed == ComposerWitnessBeatSpeed.defaultSpeed)

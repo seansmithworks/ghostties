@@ -2286,6 +2286,7 @@ struct SessionComposerPalette: View {
                     reduceMotion: reduceMotionEnabled,
                     size: ComposerWitnessSize.size(defaults: tuningDefaults),
                     floatAmplitude: ComposerWitnessFloatAmplitude.amplitude(defaults: tuningDefaults),
+                    floatHorizontalAmplitude: ComposerWitnessFloatHorizontal.amplitude(defaults: tuningDefaults),
                     floatPeriod: ComposerWitnessFloatPeriod.period(defaults: tuningDefaults),
                     opacity: ComposerWitnessOpacity.opacity(defaults: tuningDefaults),
                     beatSpeed: ComposerWitnessBeatSpeed.speed(defaults: tuningDefaults)

@@ -317,7 +317,7 @@ enum ComposerWitnessTransition {
     }
 }
 
-/// The 24×24 sprite view. `TimelineView` wraps ONLY this sprite (never the
+/// The sprite view. `TimelineView` wraps ONLY this sprite (never the
 /// palette around it — the palette re-parses `query` on every redraw, plan
 /// §4), so its clock never forces the whole composer to re-render.
 struct ComposerWitnessView: View {
@@ -336,6 +336,10 @@ struct ComposerWitnessView: View {
     let size: CGFloat
     /// Round 14: idle vertical bob amplitude, in points. 0 is off.
     let floatAmplitude: Double
+    /// Round 15: idle sideways sway amplitude, in points — half the
+    /// vertical bob's frequency, reusing `floatPeriod` (no separate period
+    /// dial). 0 is off.
+    let floatHorizontalAmplitude: Double
     /// Round 14: the float bob's full period, in seconds.
     let floatPeriod: Double
     /// Round 14: applied as one `.opacity` on the whole sprite, not per
@@ -360,6 +364,7 @@ struct ComposerWitnessView: View {
         reduceMotion: Bool,
         size: CGFloat = ComposerWitnessSize.defaultSize,
         floatAmplitude: Double = ComposerWitnessFloatAmplitude.defaultAmplitude,
+        floatHorizontalAmplitude: Double = ComposerWitnessFloatHorizontal.defaultAmplitude,
         floatPeriod: Double = ComposerWitnessFloatPeriod.defaultPeriod,
         opacity: Double = ComposerWitnessOpacity.defaultOpacity,
         beatSpeed: Double = ComposerWitnessBeatSpeed.defaultSpeed
@@ -369,6 +374,7 @@ struct ComposerWitnessView: View {
         self.reduceMotion = reduceMotion
         self.size = size
         self.floatAmplitude = floatAmplitude
+        self.floatHorizontalAmplitude = floatHorizontalAmplitude
         self.floatPeriod = floatPeriod
         self.opacity = opacity
         self.beatSpeed = beatSpeed
@@ -420,6 +426,15 @@ struct ComposerWitnessView: View {
                 periodMs: floatPeriod * 1000,
                 reduceMotion: reduceMotion
             )
+            // Round 15: the sideways sway, off the same idle clock, at half
+            // the vertical bob's frequency (see `floatOffsetX`'s doc) —
+            // combined with `floatOffsetY` via a single `.offset(x:y:)`.
+            let floatOffsetX = ComposerWitnessFrames.floatOffsetX(
+                clockMs: idleClockMs,
+                amplitude: floatHorizontalAmplitude,
+                periodMs: floatPeriod * 1000,
+                reduceMotion: reduceMotion
+            )
             WitnessSprite(
                 grid: display.grid,
                 cellOffsetY: display.cellOffsetY,
@@ -427,7 +442,7 @@ struct ComposerWitnessView: View {
                 secondaryColors: state.resolveFromColors,
                 sourceIsB: display.sourceIsB
             )
-            .offset(y: floatOffsetY)
+            .offset(x: floatOffsetX, y: floatOffsetY)
         }
         .frame(width: size, height: size)
         .opacity(opacity)
