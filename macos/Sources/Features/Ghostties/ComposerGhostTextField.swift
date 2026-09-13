@@ -1018,6 +1018,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
             parent.query = newText
             applyStyles()
             reportMeasuredHeightIfNeeded()
+            // R14: past both guards above — there was ghost text and a
+            // non-empty segment was actually accepted. Drives the Witness
+            // ghost's hop beat only.
+            parent.onEvent?(.acceptedGhost)
         }
 
         /// Round 10 (typewriter centered column): writes the field's

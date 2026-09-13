@@ -235,6 +235,31 @@ struct SessionComposerPalette: View {
     /// zero-crossing, letting back-to-back no-match Returns restart a clean
     /// shake instead of visibly jumping mid-cycle.
     @State private var shakeTrigger: CGFloat = 0
+
+    // MARK: - R14 Witness ghost (composer-only trial, single-line + centered only)
+
+    /// Bumped on the four finished-event beats the Witness view doesn't
+    /// detect on its own (`.resolve` is `ComposerWitnessView`'s own
+    /// `.onChange(of: identity)`, not here). See `ComposerWitness.Beat`
+    /// hook sites: open (`onAppear`/`onChange(focusSearchFieldTrigger)`
+    /// below), Tab accept (`handle(_:)` `.acceptedGhost` case above),
+    /// unknown branch (`commit(template:)`'s `.unresolved` branch), launch
+    /// (`commit(template:)`'s success branch).
+    @State private var witnessBeat: ComposerWitness.Beat = .idle
+
+    /// Placement gate (plan §1): single-line + centered + toggle on. Never
+    /// shown in `.zeroChrome` or `.classic`, and never in `.anchored`
+    /// presentation (the sidebar popover — content-sized, would clip).
+    private var showsWitness: Bool {
+        activeStyle == .singleLine
+            && request.presentation == .centered
+            && ComposerWitnessSetting.isEnabled(defaults: tuningDefaults)
+    }
+
+    private var witnessIdentity: ComposerWitness.Identity {
+        ComposerWitness.identity(commandProject: commandProject, binding: request.projectBinding)
+    }
+
     /// Reduce-motion fallback: a 400ms red border pulse instead of the
     /// shake, toggled true then back false after the duration.
     @State private var showNoMatchBorder = false
@@ -1421,6 +1446,10 @@ struct SessionComposerPalette: View {
                 // query is blank on first open (D1's cross-section ranking
                 // only applies once there's a query to rank against).
                 selectedIndex = bestSelectionIndex(in: flattenedOptions)
+                // R14: open beat. `onAppear` doesn't refire on a fast
+                // re-open of an already-mounted palette — see the matching
+                // `onChange(focusSearchFieldTrigger)` below.
+                witnessBeat = witnessBeat.next(.open)
             }
             .onChange(of: isPresented) { presented in
                 if !presented {
@@ -1583,6 +1612,10 @@ struct SessionComposerPalette: View {
                 // it stays `true` across the whole re-open.
                 guard triggered else { return }
                 clampSelectedIndex()
+                // R14: open beat, fast-re-open path — mirrors `onAppear`'s
+                // seed above for the same reason (`onAppear` doesn't
+                // reliably re-fire on a fast re-present).
+                witnessBeat = witnessBeat.next(.open)
             }
             .sheet(item: $newTemplateToEdit) { template in
                 TemplateEditForm(template: template, isNewlyCreated: newTemplateToEditIsFresh)
@@ -2185,6 +2218,23 @@ struct SessionComposerPalette: View {
             y: ComposerSingleLineShadowDials.yOffset()
         )
         .modifier(ShakeEffect(animatableData: shakeTrigger))
+        // R14: AFTER `ShakeEffect` so the card's own no-match shake never
+        // stacks a second shake onto the Witness (plan §1). Unclipped
+        // because the glass/material `.clipShape` above only wraps `Group`
+        // content, and `body`'s own `.padding(8)` doesn't clip either — see
+        // `r14-witness-plan.md` §1 for the full unclipped-overlay reasoning.
+        .overlay(alignment: .topLeading) {
+            if showsWitness {
+                ComposerWitnessView(
+                    identity: witnessIdentity,
+                    beatTrigger: witnessBeat,
+                    reduceMotion: reduceMotionEnabled
+                )
+                .offset(x: 20, y: -24)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
     }
 
     // MARK: - Query row (type-first field, model A rebuild)
@@ -2728,6 +2778,11 @@ struct SessionComposerPalette: View {
         switch typedBranchResolution {
         case .unresolved(let token):
             composerStore.rejectUnresolvedBranch(token: token)
+            // R14: unknown-branch beat, fired at THIS call site (not
+            // `onChange(writeError)` — a second Enter on the same
+            // unresolved token would write the same string and never fire
+            // `onChange` again). `.pending` (below) doesn't count.
+            witnessBeat = witnessBeat.next(.unknownBranch)
             return
         case .pending:
             composerStore.rejectUnresolvedBranch(message: "Still checking branches for this project — try again in a moment.")
@@ -2836,6 +2891,10 @@ struct SessionComposerPalette: View {
         // resolves the binary path (a 3s-timeout shell-out).
         let success = composerStore.precommit(template: template, coordinator: coordinator, workspaceStore: store)
         if success {
+            // R14: launch beat, before `isPresented = false` — the fade/
+            // removal that follows truncates the lift, but the beat itself
+            // must fire while the Witness is still mounted.
+            witnessBeat = witnessBeat.next(.launch)
             isPresented = false
             // F1: without this, a session created via the composer into a
             // collapsed project spawns with no visible sidebar row — see
@@ -2922,6 +2981,9 @@ struct SessionComposerPalette: View {
         // needed here at all.
         case .move:
             break
+
+        case .acceptedGhost:
+            witnessBeat = witnessBeat.next(.tabAccept)
         }
     }
 
@@ -3223,6 +3285,12 @@ struct ComposerQueryField: View {
         // rebuild): the field has no non-editable segment left to pop, so
         // backspace against an empty field is now ordinary, no-op text
         // editing with no event to dispatch.
+        /// R14: Tab accepted a ghost-text segment (`ComposerGhostTextField
+        /// .acceptGhost`, past both its guards — a Tab with nothing to
+        /// accept sends nothing). Drives the Witness ghost's hop beat only;
+        /// no other effect (the field already wrote the accepted text
+        /// itself).
+        case acceptedGhost
     }
 
     var body: some View {
