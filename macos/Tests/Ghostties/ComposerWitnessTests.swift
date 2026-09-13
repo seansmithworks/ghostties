@@ -325,4 +325,107 @@ struct ComposerWitnessTests {
         #expect(resolved.beatFrames.first?.grid == expectedFirstFrame.grid)
         #expect(resolved.beatFrames.first?.grid != fromNamedTarget.grid, "must not restart from B's pristine grid")
     }
+
+    // MARK: - R4 review: non-launch beat + identity change in one update
+
+    /// The real trigger: `ComposerGhostTextField.swift:1018` sets
+    /// `parent.query` synchronously, then `:1024` fires
+    /// `.acceptedGhost` — `SessionComposerPalette.swift:3018` arms
+    /// `.tabAccept` from that same call, so a Tab-accept that completes a
+    /// project name changes `commandProject` (and so `identity`) in the
+    /// SAME update as the beat. Rule: a non-launch beat plays IMMEDIATELY
+    /// on the NEW identity — no queued morph, no added latency on a
+    /// keyboard action.
+    @Test func tabPlusIdentityChangeInOneUpdatePlaysOnTheNewIdentityImmediately() {
+        let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
+        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
+            (Self.pixelsFor(Self.identityA), 0, nil)
+
+        let resolved = ComposerWitnessTransition.next(
+            state: startState,
+            newIdentity: Self.identityB,
+            newBeat: startState.currentBeat.next(.tabAccept),
+            onScreen: onScreen,
+            pixelsFor: Self.pixelsFor(_:),
+            colorFor: Self.testColor(for:),
+            reduceMotion: false,
+            seed: 11
+        )
+
+        let expectedFrames = ComposerWitnessFrames.buildTabFrames(grid: Self.pixelsFor(Self.identityB))
+        #expect(resolved.displayedIdentity == Self.identityB)
+        #expect(resolved.beatFrames.first?.grid == expectedFrames.first?.grid, "frame 0 must be squash(newGrid)")
+        #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "the rest frame must be the new grid")
+        #expect(resolved.resolveFromColors == nil, "no queued morph — a single flat colour (the new identity's) via primaryColor")
+    }
+
+    /// Same rule for `.unknownBranch`.
+    @Test func unknownBranchPlusIdentityChangeInOneUpdatePlaysOnTheNewIdentityImmediately() {
+        let startState = Self.makeState(beat: .idle, displayed: Self.identityA)
+        let onScreen: (grid: [String], cellOffsetY: Int, sourceIsB: [[Bool]]?) =
+            (Self.pixelsFor(Self.identityA), 0, nil)
+
+        let resolved = ComposerWitnessTransition.next(
+            state: startState,
+            newIdentity: Self.identityB,
+            newBeat: startState.currentBeat.next(.unknownBranch),
+            onScreen: onScreen,
+            pixelsFor: Self.pixelsFor(_:),
+            colorFor: Self.testColor(for:),
+            reduceMotion: false,
+            seed: 11
+        )
+
+        let expectedFrames = ComposerWitnessFrames.buildErrorFrames(grid: Self.pixelsFor(Self.identityB))
+        #expect(resolved.displayedIdentity == Self.identityB)
+        #expect(resolved.beatFrames.first?.grid == expectedFrames.first?.grid, "frame 0 must be lean(squint(newGrid))")
+        #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "the rest frame must be the new grid")
+        #expect(resolved.resolveFromColors == nil)
+    }
+
+    // MARK: - R4 review: initial-mount beat (onAppear feeding `next()`)
+
+    /// `ComposerWitnessView` now feeds its mount-time `(identity,
+    /// beatTrigger)` through the same `next(...)` its `onChange` uses (see
+    /// `ComposerWitnessView.apply(_:)`), covering the case where
+    /// `beatTrigger` is already `.open` the very first time the view's body
+    /// runs (the palette's `onAppear` — `SessionComposerPalette.swift
+    /// :1452` — can run before this view's subtree is even inserted).
+    /// Can't construct a View in a pure test, so this proves the property
+    /// that makes doing so at BOTH `onAppear` and `onChange` safe: applying
+    /// the SAME already-current `(identity, beat)` a second time is a
+    /// no-op, so whichever of the two call sites fires first does the real
+    /// work and the other can never double-play it.
+    ///
+    /// red mutation: hardcode `isLaunchLocked: false` unconditionally on
+    /// the shared (no beat/identity changed) return path instead of leaving
+    /// it — this test's second `#expect` would still pass (`false ==
+    /// false`), but drop the `!beatChanged` guard on the earlier
+    /// launch-locked early return and the FIRST `#expect` below fails
+    /// instead (a locked idle state stops being idempotent).
+    @Test func reapplyingTheSameIdentityAndBeatIsANoOp() {
+        let armed = ComposerWitnessTransition.next(
+            state: Self.makeState(beat: .idle, displayed: .placeholder),
+            newIdentity: Self.identityA,
+            newBeat: ComposerWitness.Beat.idle.next(.open),
+            onScreen: (Self.pixelsFor(.placeholder), 0, nil),
+            pixelsFor: Self.pixelsFor(_:),
+            colorFor: Self.testColor(for:),
+            reduceMotion: false,
+            seed: 11
+        )
+
+        let reapplied = ComposerWitnessTransition.next(
+            state: armed,
+            newIdentity: Self.identityA, // same identity `armed` already shows
+            newBeat: armed.currentBeat, // same beat `armed` already has
+            onScreen: (armed.beatFrames.first?.grid ?? Self.pixelsFor(Self.identityA), 0, nil),
+            pixelsFor: Self.pixelsFor(_:),
+            colorFor: Self.testColor(for:),
+            reduceMotion: false,
+            seed: 11
+        )
+
+        #expect(reapplied == armed, "re-delivering the same (identity, beat) must not re-arm or reset anything")
+    }
 }

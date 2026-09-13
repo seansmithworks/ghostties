@@ -389,38 +389,61 @@ struct ComposerWitnessView: View {
             )
         }
         .frame(width: frameSize, height: frameSize)
-        .onChange(of: currentUpdate) { newValue in
-            let now = Date.now
-            // What was ACTUALLY on screen a moment ago — every morph or
-            // dissolve `next(...)` produces starts from this, never from a
-            // named identity's resting grid.
-            let onScreen = ComposerWitnessFrames.displayGrid(
-                identityGrid: pixels(for: state.displayedIdentity),
-                isIdleBeat: state.currentBeat.kind == .idle,
-                isLaunchBeat: state.currentBeat.kind == .launch,
-                beatFrames: state.beatFrames,
-                beatElapsedMs: Int(now.timeIntervalSince(beatStartedAt) * 1000),
-                idleClockMs: Int(now.timeIntervalSince(mountedAt) * 1000),
-                reduceMotion: false
-            )
-            let resolved = ComposerWitnessTransition.next(
-                state: state,
-                newIdentity: newValue.identity,
-                newBeat: newValue.beat,
-                onScreen: onScreen,
-                pixelsFor: { pixels(for: $0) },
-                colorFor: { bodyColor(for: $0) },
-                reduceMotion: reduceMotion,
-                seed: Self.ditherSeed
-            )
-            // Only reset the beat clock when a beat ACTUALLY armed (by
-            // `seq`) — an ignored update (launch-locked) must leave the
-            // already-playing dissolve's clock alone.
-            if resolved.currentBeat != state.currentBeat {
-                beatStartedAt = now
-            }
-            state = resolved
+        // R4 review: `onChange` never fires for the value a view mounts
+        // with — the palette arms `.open` from its OWN `onAppear`
+        // (`SessionComposerPalette.swift:1452`), which can run before OR
+        // after this view's subtree is inserted (e.g. if `showsWitness`
+        // flips true, or this overlay mounts, slightly later). If
+        // `beatTrigger` is already `.open` the very first time this view's
+        // `body` runs, `onChange` never sees that transition and the
+        // materialise never plays. Feed the mount-time value through the
+        // SAME `apply(_:)` this view's `onChange` uses — `next(...)` is a
+        // no-op when its inputs already match `state` (see
+        // `ComposerWitnessFramesTests`' idempotence coverage), so if
+        // `onChange` ALSO fires for this same transition (the normal path,
+        // when `beatTrigger` was still `.idle` at mount and only changes
+        // afterward) there is no double-play: whichever of `onAppear`/
+        // `onChange` runs first does the real work, the other is a no-op.
+        .onAppear {
+            apply(currentUpdate)
         }
+        .onChange(of: currentUpdate) { newValue in
+            apply(newValue)
+        }
+    }
+
+    private func apply(_ update: Update) {
+        let now = Date.now
+        // What was ACTUALLY on screen a moment ago — every morph or
+        // dissolve `next(...)` produces starts from this, never from a
+        // named identity's resting grid.
+        let onScreen = ComposerWitnessFrames.displayGrid(
+            identityGrid: pixels(for: state.displayedIdentity),
+            isIdleBeat: state.currentBeat.kind == .idle,
+            isLaunchBeat: state.currentBeat.kind == .launch,
+            beatFrames: state.beatFrames,
+            beatElapsedMs: Int(now.timeIntervalSince(beatStartedAt) * 1000),
+            idleClockMs: Int(now.timeIntervalSince(mountedAt) * 1000),
+            reduceMotion: false
+        )
+        let resolved = ComposerWitnessTransition.next(
+            state: state,
+            newIdentity: update.identity,
+            newBeat: update.beat,
+            onScreen: onScreen,
+            pixelsFor: { pixels(for: $0) },
+            colorFor: { bodyColor(for: $0) },
+            reduceMotion: reduceMotion,
+            seed: Self.ditherSeed
+        )
+        // Only reset the beat clock when a beat ACTUALLY armed (by `seq`)
+        // — an ignored/no-op update (launch-locked, or a duplicate
+        // onAppear/onChange delivery of the same transition) must leave
+        // the already-playing dissolve's clock alone.
+        if resolved.currentBeat != state.currentBeat {
+            beatStartedAt = now
+        }
+        state = resolved
     }
 
     private func pixels(for identity: ComposerWitness.Identity) -> [String] {
