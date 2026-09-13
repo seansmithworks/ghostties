@@ -29,12 +29,22 @@ struct BuildInfoSnapshot {
     let buildDate: Date?
     let launchDate: Date
 
+    /// Which Claude Code thread produced this Dev build, and its short git
+    /// SHA — stamped into Info.plist by scripts/stamp-dev-build-info.sh
+    /// (Debug/Dev builds only; Release and CI builds never set these keys,
+    /// so they're nil there and the badge falls back to the plain
+    /// version/build-number label below).
+    let devThreadName: String?
+    let devBuildSHA: String?
+
     /// Resolved once per process.
     static let current: BuildInfoSnapshot = {
         let bundle = Bundle.main
         let shortVersion = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let buildNumber = bundle.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         let bundleIdentifier = bundle.bundleIdentifier ?? "?"
+        let devThreadName = bundle.infoDictionary?["GhosttyDevThreadName"] as? String
+        let devBuildSHA = bundle.infoDictionary?["GhosttyDevBuildSHA"] as? String
 
         var buildDate: Date?
         if let execURL = bundle.executableURL,
@@ -49,7 +59,9 @@ struct BuildInfoSnapshot {
             buildNumber: buildNumber,
             bundleIdentifier: bundleIdentifier,
             buildDate: buildDate,
-            launchDate: BuildInfoSnapshot.currentProcessStartDate()
+            launchDate: BuildInfoSnapshot.currentProcessStartDate(),
+            devThreadName: devThreadName,
+            devBuildSHA: devBuildSHA
         )
     }()
 
@@ -87,9 +99,18 @@ struct BuildInfoSnapshot {
     }()
 
     /// Glanceable one-liner for the always-visible label.
+    ///
+    /// Dev builds (where scripts/stamp-dev-build-info.sh ran) identify the
+    /// Claude Code thread and short SHA that produced them, e.g.
+    /// "0.1.0 · Demo Rig @ 8f0b1d4 · built 10:42 · up 1m". Falls back to the
+    /// plain version/build-number form when those keys are absent (Release,
+    /// CI, or any build the stamp script didn't run against).
     var shortLabel: String {
         let builtText = buildDate.map { Self.shortTimeFormatter.string(from: $0) } ?? "?"
         let upText = Self.durationFormatter.string(from: launchDate, to: Date()) ?? "0m"
+        if let devThreadName, let devBuildSHA {
+            return "\(shortVersion) · \(devThreadName) @ \(devBuildSHA) · built \(builtText) · up \(upText)"
+        }
         return "\(shortVersion) (\(buildNumber)) · built \(builtText) · up \(upText)"
     }
 
@@ -98,11 +119,13 @@ struct BuildInfoSnapshot {
         let builtText = buildDate.map { Self.fullTimeFormatter.string(from: $0) } ?? "unknown"
         let launchText = Self.fullTimeFormatter.string(from: launchDate)
         let upText = Self.durationFormatter.string(from: launchDate, to: Date()) ?? "0m"
+        let threadLine = devThreadName.map { "Thread: \($0)\n" } ?? ""
+        let shaLine = devBuildSHA.map { "SHA: \($0)\n" } ?? ""
         return """
             Ghostties build info
             Version: \(shortVersion) (\(buildNumber))
             Bundle: \(bundleIdentifier)
-            Built: \(builtText)
+            \(threadLine)\(shaLine)Built: \(builtText)
             Launched: \(launchText) (running \(upText))
             """
     }

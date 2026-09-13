@@ -497,6 +497,7 @@
 				819324572F24E74E00A9ED8F /* Copy DockTilePlugin */,
 				B0CEF0012F8A000100018CBF /* Embed CEF */,
 				55E1BED12F00000000000001 /* Embed Ghostty Resources */,
+				55E1BED12F00000000000002 /* Stamp Dev Build Info */,
 			);
 			buildRules = (
 			);
@@ -672,6 +673,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
 			shellScript = "\"${PROJECT_DIR}/../scripts/embed-ghostty-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		55E1BED12F00000000000002 /* Stamp Dev Build Info */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stamp Dev Build Info";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"${PROJECT_DIR}/../scripts/stamp-dev-build-info.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		B0CEF0012F8A000100018CBF /* Embed CEF */ = {

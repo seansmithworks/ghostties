@@ -174,6 +174,14 @@ automation is used anywhere, and the script never launches the app or runs
 (backed up first, validated as JSON, written atomically); re-running replaces
 the previously staged set rather than appending duplicates.
 
+Each template's `command` points at a small executable wrapper written to
+`~/.ghostties-demo-wrappers` — one per staged session, `chmod 700` — that
+execs the resolved `claude` binary with that session's prompt as a single
+argv entry (this sidesteps `WorkspacePersistence.sanitizeTemplate` stripping
+a plain-sentence prompt out of `agent.additionalFlags`). Re-staging clears
+and regenerates this directory along with the sessions themselves. Remove it
+with `rm -rf ~/.ghostties-demo-wrappers`.
+
 **Important:** Ghostties only spawns a process from a user-triggered UI
 action (a sidebar "Relaunch" click, a row click, or the composer) — there is
 no launch-time code path that replays persisted sessions automatically. A
