@@ -2375,7 +2375,7 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
   - staged build inputs in worktree `demo-rig` (`GhosttyKit.xcframework`, `zig-out/`, `vendor/cef*`)
   - untracked `output/demo-capture/`
   - `~/.claude.json.bak-demo-*` backup
-  - [x] xcresult bundles containing full-screen recordings in `$TMPDIR/ghostties-demo-capture-result.*`, which are private screen content (Sean approved 2026-09-13; deleted)
+  - xcresult bundles containing full-screen recordings in `$TMPDIR/ghostties-demo-capture-result.*`, which are private screen content (Sean approved 2026-09-13; 6 bundles, 920M; Claude's `rm` was denied by permission mode, so Sean runs the delete himself — NOT yet deleted)
   - `~/.ghostties-demo-wrappers` (per-session launcher wrapper scripts)
   All deletions need Sean's OK.
 
