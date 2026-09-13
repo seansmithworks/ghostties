@@ -317,6 +317,62 @@ print(f"OK: remoteControlAtStartup=false in {len(fixture_names)}/{len(fixture_na
 PYEOF
 }
 
+# ── Project MCP server check: any fixture repo shipping a checked-in
+#    .mcp.json must have every server it declares listed in that repo's
+#    settings.local.json disabledMcpjsonServers, or Claude Code stops the
+#    staged session at its "New MCP server found" approval dialog.
+check_fixture_mcp_disabled() {
+  python3 - "$REPOS_DIR" "$(demo_project_names)" <<'PYEOF'
+import sys, os, json
+
+repos_dir, names_raw = sys.argv[1:3]
+
+fixture_names = sorted(n for n in names_raw.splitlines() if n.strip())
+
+bad = []
+checked = 0
+for name in fixture_names:
+    mcp_path = os.path.join(repos_dir, name, ".mcp.json")
+    if not os.path.isfile(mcp_path):
+        continue
+    try:
+        with open(mcp_path) as f:
+            mcp = json.load(f)
+    except json.JSONDecodeError:
+        bad.append(f"{name} (invalid .mcp.json)")
+        continue
+    server_names = sorted((mcp.get("mcpServers") or {}).keys())
+    if not server_names:
+        continue
+    checked += 1
+
+    settings_path = os.path.join(repos_dir, name, ".claude", "settings.local.json")
+    if not os.path.isfile(settings_path):
+        bad.append(f"{name} (missing settings.local.json, servers: {', '.join(server_names)})")
+        continue
+    try:
+        with open(settings_path) as f:
+            settings = json.load(f)
+    except json.JSONDecodeError:
+        bad.append(f"{name} (invalid settings.local.json)")
+        continue
+    disabled = set(settings.get("disabledMcpjsonServers", []))
+    missing = [s for s in server_names if s not in disabled]
+    if missing:
+        bad.append(f"{name} (not disabled: {', '.join(missing)})")
+
+if bad:
+    print(f"NOT READY: fixture repo(s) with .mcp.json missing disabledMcpjsonServers entries: {', '.join(bad)}", file=sys.stderr)
+    print("           Fix: run ./scripts/demo/seed-demo-workspace.sh (or demo-ready.sh without --check).", file=sys.stderr)
+    sys.exit(1)
+
+if checked == 0:
+    print("OK: no fixture repos ship a .mcp.json.")
+else:
+    print(f"OK: project MCP servers disabled in {checked}/{checked} fixture repo(s) with .mcp.json")
+PYEOF
+}
+
 ensure_fixture_trust() {
   echo "==> Ensuring fixture repos are trusted in Claude Code config ($CLAUDE_CONFIG)..."
   python3 - "$CLAUDE_CONFIG" "$REPOS_DIR" "$(demo_project_names)" <<'PYEOF'
@@ -441,6 +497,9 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
       exit 1
     fi
     if ! check_fixture_remote_control; then
+      exit 1
+    fi
+    if ! check_fixture_mcp_disabled; then
       exit 1
     fi
     if ! check_staged_sessions; then

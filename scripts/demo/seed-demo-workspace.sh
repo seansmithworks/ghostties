@@ -131,10 +131,10 @@ for spec in "${DEMO_PROJECT_SPECS[@]}"; do
   # the tracked history a pinned SHA is supposed to reproduce exactly.
   mkdir -p "$dest/.claude"
   echo ".claude/settings.local.json" >> "$dest/.git/info/exclude"
-  python3 - "$dest/.claude/settings.local.json" <<'PYEOF'
+  python3 - "$dest/.claude/settings.local.json" "$dest/.mcp.json" <<'PYEOF'
 import sys, json, os
 
-path = sys.argv[1]
+path, mcp_path = sys.argv[1:3]
 settings = {}
 if os.path.isfile(path):
     with open(path) as f:
@@ -144,6 +144,23 @@ if os.path.isfile(path):
             settings = {}
 
 settings["remoteControlAtStartup"] = False
+
+# If this fixture repo ships a checked-in .mcp.json, Claude Code shows an
+# interactive "New MCP server found" approval dialog on first run of a
+# staged session, which blocks it from ever executing (see
+# reference_demo-capture-rig-gotchas.md). Disable every server it declares
+# so the staged agent runs unattended, without touching any other key.
+if os.path.isfile(mcp_path):
+    with open(mcp_path) as f:
+        try:
+            mcp = json.load(f)
+        except json.JSONDecodeError:
+            mcp = {}
+    server_names = sorted((mcp.get("mcpServers") or {}).keys())
+    if server_names:
+        disabled = set(settings.get("disabledMcpjsonServers", []))
+        disabled.update(server_names)
+        settings["disabledMcpjsonServers"] = sorted(disabled)
 
 with open(path, "w") as f:
     json.dump(settings, f, indent=2, sort_keys=True)

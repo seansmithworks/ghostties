@@ -141,6 +141,16 @@ the demo state dir) so a captured terminal pane's cwd never shows the real
 username. Idempotent; backs up any existing `workspace.json` before
 overwriting.
 
+Each clone also gets a per-repo `.claude/settings.local.json` (gitignored via
+`.git/info/exclude`, so the clone stays git-clean against its pinned SHA)
+that sets `remoteControlAtStartup: false`, suppressing Claude Code's "/rc
+connecting..." startup line in every captured pane. If the clone ships its
+own checked-in `.mcp.json`, the same file also gets that `.mcp.json`'s server
+names merged into `disabledMcpjsonServers`, so a staged session never stops
+at Claude Code's "New MCP server found" approval dialog — a real failure
+mode the first GUI capture run hit against the `surface-fx` fixture.
+`demo-ready.sh --check` verifies both overrides are present.
+
 ## Stage real agent sessions: `demo-drive.sh`
 
 ```bash
