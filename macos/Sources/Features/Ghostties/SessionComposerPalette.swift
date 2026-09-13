@@ -2237,7 +2237,7 @@ struct SessionComposerPalette: View {
     /// Current card chrome exactly as DESIGN.md §4 specifies
     /// (`.regularMaterial` + `windowBackgroundColor` blend, 12pt continuous
     /// radius, stroke, shadow tokens), sized to the field row only — no
-    /// results list ever (brief §3). Reuses `composerClipShape` and the
+    /// results list ever (brief §3). Reuses `singleLineClipShape` and the
     /// classic card's shadow tokens rather than re-deriving them. Round 12:
     /// width/padding are now dial-driven (see the two properties above and
     /// `newStyleFieldWidth`'s `.singleLine` case), and the whole chrome
