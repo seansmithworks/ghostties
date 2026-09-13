@@ -13,7 +13,8 @@
 - [x] PR #175 — https://github.com/seansmithworks/ghostties/pull/175. Screenshots on branch
   `pr-assets/sidebar-section-vocabulary` (`424c2ad76`); fixture fix `7ee2f6f89`.
 - [x] Spinner glyph reads very small at sidebar size (fixture screenshot) — design check.
-  Enlarged in `26dbc54b4` (Sean: "enlarge").
+  Enlarged in `26dbc54b4` (Sean: "enlarge"); still read small, redrawn as a dot grid in
+  `fix(sidebar): draw the working spinner as a dot grid sized to the slot`.
 - [x] Post-merge test plan: `docs/testing/sidebar-section-vocabulary-post-merge.md`
 - [ ] Live checks still unverified: drag released over empty space reverts; auto-scroll feel;
   Resume on a real Claude + Codex session; `?` on finished idle sessions (F); Esc-interrupt leaving

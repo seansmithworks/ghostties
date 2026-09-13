@@ -73,8 +73,9 @@ Each item: steps → expected result → pass/fail.
   Expected: before approval, row shows "Approve the Ghostties hook in Codex"; after approval,
   Resume works.
 - [ ] **Status glyphs** — verify all five slot states render: spinner (working), `?`
-  (needs input), `✓` (idle/waiting), `✕` (error), empty (stopped). The working spinner is sized
-  to match `✓`/`?` (`26dbc54b4`) — confirm it no longer reads as two faint dots.
+  (needs input), `✓` (idle/waiting), `✕` (error), empty (stopped). The working spinner is drawn
+  as a dot grid sized to the slot (`fix(sidebar): draw the working spinner as a dot grid sized
+  to the slot`) — confirm it no longer reads as two faint dots.
 - [ ] **VoiceOver status word** — with VoiceOver on, each glyph reads its status word (working /
   needs your input / idle / error / stopped).
 - [ ] **Reduce Motion** — with Reduce Motion on, the working state shows a static `…` instead of
