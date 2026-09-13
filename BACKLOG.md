@@ -1,5 +1,27 @@
 # Ghostties — Backlog
 
+## 2026-09-13 — Composer thread checkpoint (PR #169)
+
+- [ ] (carried) Build the frame-based Witness ghost animation. Sean approved board B on 2026-09-13 ("ghost propsal looks good to me"), artifact https://claude.ai/code/artifact/74c0df2d-0d62-42e6-819c-692e3258fc9e.
+  - Motion is whole-cell sprite frames generated from each 12×12 grid, replacing the translate/fade poses in `ComposerWitness.swift`:
+    - idle skirt ripple every 450ms, a 120ms blink every ~4s, a glance every ~6s
+    - Tab: squash → stretch+2 cells → top → land, 60ms each
+    - error: lean L/R/L at 70ms each, with squinted eyes
+    - launch: stretch, then dither dissolve (~200ms)
+    - resolve: dither morph (~240ms)
+    - open: dither materialise, bottom rows first (~240ms)
+    - Reduce Motion: static, instant swap
+- [ ] (carried) Local verification once Sean quits Dev: full unfiltered suite plus red proofs for R15 (`df25c6023`, `6c25d8ef9`, `264222ea0`), R15b `e4257a247`, the Custom preset fix `01d3f1ef5`, and R18 `f9d454e2e`. The two R18 tests' tolerances (1pt Witness alignment, <3pt card width) are uncalibrated. The last full suite (at `911759a6e`) was 1147/1158, where 5 failures were pre-existing load flakes.
+- [ ] (carried) Single-line taste defaults, strawman set 2026-09-13, to apply unless Sean redlines:
+  - treatment → Material (glass has nothing to refract over a flat terminal)
+  - shadow radius 64 → 32 (the HTML bench's CSS blur is ~2× a SwiftUI shadow radius)
+  - placeholder ghost → `secondaryLabelColor`, eyes kept
+- [ ] (carried) DECIDE OR KILL: a `ghostties-release.yml` dry run on this branch (`workflow_dispatch`, `dry_run=true`) to exercise the new "Assert DialKit absent" gate. The reviewer found no externally visible side effects. It needs Sean's explicit yes.
+- [ ] (carried) Re-check the macOS input-source indicator (⊖) and the Witness launch lift live, after R18 is in Dev. The launch lift may be hidden by the container's 0.2s overlay removal.
+- [ ] (parked) DESIGN.md documents ghost-text opacity 0.50; the code uses 0.65. Update the doc once single-line settles.
+- [ ] (parked) Sean 2026-09-13: "I don't expect to be using the classic composer anymore. Most likely we are going to keep the single line approach." Removing classic, and making single-line the Release default (currently off by default in `ComposerZeroChromeStyle.swift` ~27-33), waits for his go. Open question: does centered zero-chrome stay?
+- [ ] (parked) Throwaway spike worktree `.claude/worktrees/r17-dialkit-spike` has an uncommitted DialKit diff, already applied in `f3fdced38`. Safe to remove with `git worktree remove`, after confirming with Sean.
+
 ## 2026-09-13 — R18: single-line composer inset fix (PR #169)
 
 - [ ] R18: fixed the single-line card's field padding spilling outside the card instead of insetting the text (`newStyleFieldRenderWidth` in `SessionComposerPalette.swift`); Witness x-offset now derived from `singleLineHorizontalPadding` instead of a hardcoded 20. Build-for-testing GREEN at this fix's commit. **Runs owed** — no `xcodebuild test` run per this brief's constraints (Dev running); both new tests (`singleLineFieldTextIsInsetFromTheCardsLeftEdge`, `witnessGhostLeadingEdgeAlignsWithTypedTextLeadingEdge`) in `ComposerZeroChromeStyleTests.swift` need a real red/green pass, and the 1pt Witness-alignment tolerance is unverified against real pixels.
@@ -19,7 +41,7 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
 - [ ] DialKit links into Release (static, likely dead-stripped) — prove with Release `nm` once Dev closes
 - [x] R13c: DialKit preset dials fixed — root cause was a standalone `@Published` reentrancy probe. **Correction (round 13d):** the R13c entry here cited that probe's result as "final storage: 1, not 100"; an independent re-run got `final storage: 100` (the outer, stale write wins) — the OPPOSITE number, though the same mechanism (`DialPanelState.values` sends to its Combine subject BEFORE writing storage, so a synchronous nested `state.values = derived` write from inside the coordinator's own `$values` sink gets clobbered when the outer, still-in-flight setter finishes storing its own stale-dial value). R13c's fix deferred the corrective write via `DispatchQueue.main.async`; R13d replaces that deferral with a structural fix — see R13d entry below.
 - [x] R13d: replaced R13c's `DispatchQueue.main.async` deferral with a structural fix — `ComposerDialKitTuningModel.shadowPresetRaw` is now a computed property whose setter derives and assigns the three shadow dials as part of the SAME model mutation, so the `.select` control's one `state.values = updated` assignment (vendored `DialControlNode.resolve`) already carries the derived dials; the coordinator's `$values` sink no longer reassigns `state.values` at all, so there is nothing to race. `dialKitShadowPresetSelectionWritesAllThreeDialsAndUpdatesModel` is now synchronous (no `Task.yield()`). **Red proof observed (2026-09-12, Dev closed):** reverting `shadowPresetRaw`'s setter to store-only made this test FAILED (1/1); reverted, tree clean.
-- [x] R13d review: picking "Custom" in the DialKit shadow picker snaps hand-tuned dials to `ComposerSingleLineShadowPreset.custom.dialValues` (64/48/0.24) because the `shadowPresetRaw` setter derives dials for every preset including `.custom` (`ComposerZeroChromeStyle.swift` ~766-800, ~1252). Pre-existing since a3e268755. Fixed in be881296f, run owed.
+- [ ] R13d review: picking "Custom" in the DialKit shadow picker snaps hand-tuned dials to `ComposerSingleLineShadowPreset.custom.dialValues` (64/48/0.24) because the `shadowPresetRaw` setter derives dials for every preset including `.custom` (`ComposerZeroChromeStyle.swift` ~766-800, ~1252). Pre-existing since a3e268755. Fixed in be881296f, run owed.
 - [x] R13c: 3 suite failures at `b64621c98` classified — `singleLineRestStateHasCardChrome` and `singleLineFieldStaysAtTheOriginalFifteenPointScale` are an **intentional change**: `b64621c98` flipped `.singleLine`'s default treatment to `.glass` (`git log -S` confirms), and the glass background branch (`SessionComposerPalette.swift`, `singleLineComposerCard`) has no `.overlay(stroke(...))` at all, so both tests' `borderStrokePixelCount > 0` check no longer matches the new default look — a real coverage gap, not touched here (no test edited). `overlayResolvedStyleFollowsInjectedDefaultsWrite` — **classified 2026-09-12 (Dev closed): now passing.** Green in the full unfiltered suite at `911759a6e` (1147/1158) and green alone 3/3 reruns; not observed to fail at this commit. Not fixed — nothing to fix
 - [x] Sean's tuned single-line values (Composer Tuning Bench, 2026-09-12) are now the defaults — `b64621c98` (width slider step rounds 688→690 in the panel): field 28pt / rows 18pt / width 688pt, shadow radius 64 / length 48 / opacity 0.24, treatment Liquid Glass. Bench is CSS, so re-check live in Dev + DialKit
 - [ ] Keep zero-chrome centered alignment: Sean wants to keep trying it through the refinements (2026-09-12)
