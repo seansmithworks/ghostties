@@ -2004,7 +2004,7 @@ struct SessionComposerPalette: View {
     private var newStyleStatusStripSize: CGFloat {
         switch activeStyle {
         case .zeroChrome: return ComposerZeroChromeTypography.statusStripSize
-        case .singleLine: return ComposerSingleLineTuning.rowSize()
+        case .singleLine: return ComposerSingleLineTuning.rowSize(defaults: tuningDefaults)
         case .classic: return 11
         }
     }
@@ -2150,11 +2150,11 @@ struct SessionComposerPalette: View {
     /// comment has the exact ratio this preserves from the shipped 8pt/16pt
     /// constants.
     private var singleLineVerticalPadding: CGFloat {
-        ComposerSingleLineTuning.verticalPadding(fieldSize: ComposerSingleLineTuning.fieldSize())
+        ComposerSingleLineTuning.verticalPadding(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
     }
 
     private var singleLineHorizontalPadding: CGFloat {
-        ComposerSingleLineTuning.horizontalPadding(fieldSize: ComposerSingleLineTuning.fieldSize())
+        ComposerSingleLineTuning.horizontalPadding(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
     }
 
     /// Current card chrome exactly as DESIGN.md §4 specifies
