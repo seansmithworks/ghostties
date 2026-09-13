@@ -3,15 +3,20 @@
 ## 2026-09-12 — Sidebar section vocabulary
 
 - [x] (A) Align session view + project view on one Active/Inactive/Archive rule (this task)
-- [ ] (B) Session view gets a **Pinned** section above Active, like project view has. A pinned
+- [x] (B) Session view gets a **Pinned** section above Active, like project view has. A pinned
   session stays in Pinned whether its terminal is open or closed.
-- [ ] (C) Drag-reorder works within a section, and a session can also be dragged **up** out of
+- [x] (C) Drag-reorder works within a section, and a session can also be dragged **up** out of
   Archive or Inactive into Active or Pinned.
   - Dropping on Pinned pins the session.
   - Dropping on Active relaunches it, resuming the conversation where possible, because Active
     means the terminal is open.
   - Dragging down isn't supported; Stop does that job.
 - [ ] (D) Relaunch resumes the agent conversation (`claude --resume`)
+- [ ] (E) Cmd+W close dialog: `SessionCoordinator.closeCurrentSessionWithConfirmation()`'s inline
+  `isActive` check treats a closed `.error` session as active (same divergence fixed for the
+  sidebar in `1c0f78b2b`)
+- [ ] (F) Status: `ClaudeStateStore.swift:290` maps Notification `idle_prompt` → `.needsInput`, so a
+  finished session sitting idle reads as "needs you" — finished and blocked are indistinguishable
 
 ## 2026-08-31 — Composer variant G session (carried)
 

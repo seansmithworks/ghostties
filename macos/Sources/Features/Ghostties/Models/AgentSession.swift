@@ -51,6 +51,28 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// hash-derived ghost or a plain colored indicator — never re-rolled on render).
     var ghostCharacter: GhostCharacter?
 
+    /// Whether this session is pinned in the Sessions tab's Pinned section
+    /// (see `SessionSection`). Independent of whether the terminal is open —
+    /// a pinned session stays in Pinned whether `SessionBucket.membership`
+    /// would otherwise place it in Active, Inactive, or Archive; its ghost
+    /// glyph still reflects live state. Toggled via the Sessions-tab context
+    /// menu ("Pin"/"Unpin") and `WorkspaceStore.setSessionPinned(id:_:)` /
+    /// `toggleSessionPin(id:)`. Defaults to `false` so existing sessions are
+    /// unaffected. Project-view rows do not read this field.
+    var isPinned: Bool
+
+    /// Explicit ordering within whichever Sessions-tab section this session
+    /// currently belongs to (Pinned, Active, or Inactive — Archive always
+    /// sorts newest-first via `sortedNewestFirst` and ignores this field).
+    /// Cross-project, unlike `sortOrder` above, which is scoped per-project
+    /// for the Projects tab. Nil means this session predates Sessions-tab
+    /// drag-reorder and falls back to append/creation order. Values are only
+    /// ever compared WITHIN one section's filtered subset (see
+    /// `RecentsListView.orderedBySessionViewOrder`), so numbering assigned
+    /// while a session lived in a different section never collides with
+    /// another section's numbering.
+    var sessionViewOrder: Int?
+
     init(
         id: UUID = UUID(),
         name: String,
@@ -60,7 +82,9 @@ struct AgentSession: Identifiable, Codable, Hashable {
         lastActiveAt: Date? = nil,
         lastOutputAt: Date? = nil,
         isNamePinned: Bool = false,
-        ghostCharacter: GhostCharacter? = nil
+        ghostCharacter: GhostCharacter? = nil,
+        isPinned: Bool = false,
+        sessionViewOrder: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -71,10 +95,12 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.lastOutputAt = lastOutputAt
         self.isNamePinned = isNamePinned
         self.ghostCharacter = ghostCharacter
+        self.isPinned = isPinned
+        self.sessionViewOrder = sessionViewOrder
     }
 
     // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
-    // lastOutputAt/isNamePinned/ghostCharacter) load without error.
+    // lastOutputAt/isNamePinned/ghostCharacter/isPinned/sessionViewOrder) load without error.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -90,6 +116,8 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.lastOutputAt = try container.decodeIfPresent(Date.self, forKey: .lastOutputAt)
         self.isNamePinned = try container.decodeIfPresent(Bool.self, forKey: .isNamePinned) ?? false
         self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
+        self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        self.sessionViewOrder = try container.decodeIfPresent(Int.self, forKey: .sessionViewOrder)
     }
 
     /// The timestamp Sessions rows and the Archive sort should display and
@@ -265,5 +293,90 @@ extension AgentSession {
                 return lhs.offset < rhs.offset
             }
             .map(\.element)
+    }
+}
+
+// MARK: - Sessions-Tab Section (Pinned / Active / Inactive / Archive)
+
+/// The four groups the Sessions tab (`RecentsListView`) can display a session
+/// in. Pinning is layered ON TOP of `SessionBucket.membership` as a separate
+/// partition — it is never a second copy of the Active/Inactive/Archive rule.
+/// A pinned session always resolves to `.pinned` regardless of what bucket it
+/// would otherwise land in.
+enum SessionSection: String, CaseIterable, Hashable {
+    case pinned
+    case active
+    case inactive
+    case archive
+}
+
+extension SessionSection {
+    /// Pinning wins over bucket membership. See the type doc above — this is
+    /// the ONLY place pin status and `SessionBucket` combine.
+    static func section(isPinned: Bool, bucket: SessionBucket) -> SessionSection {
+        if isPinned { return .pinned }
+        switch bucket {
+        case .active:   return .active
+        case .inactive: return .inactive
+        case .archive:  return .archive
+        }
+    }
+}
+
+// MARK: - Sessions-Tab Drag/Drop Resolution
+
+/// The effect a drop should have, resolved purely from where a session came
+/// from and where it landed — see `SessionSectionDrop.resolve`.
+enum SessionDropAction: Equatable {
+    /// Reposition within the section the session already belongs to.
+    case reorder
+    /// Add to (or keep in) Pinned at the drop position.
+    case pin
+    /// Remove from Pinned at the drop position. `relaunchIfClosed` is true
+    /// when the session's terminal was NOT open — Active means the terminal
+    /// is open, so unpinning onto Active must also relaunch a closed session.
+    case unpin(relaunchIfClosed: Bool)
+    /// Relaunch a closed (Inactive/Archive) session at the drop position in
+    /// Active. Resume isn't built yet (BACKLOG item D) — this always does a
+    /// fresh relaunch.
+    case relaunch
+    /// No-op. Covers dragging DOWN into Inactive/Archive (Stop does that
+    /// job) and Archive as a drop target at all (it has no manual order).
+    case reject
+}
+
+/// Pure resolution of a Sessions-tab drag/drop, per Sean's decision 3.
+/// Takes no view/store state — only the dragged session's current section,
+/// whether its terminal is currently open, and the section it was dropped
+/// on. Every row of decision 3 has a corresponding test in
+/// `RecentsListViewTests`.
+enum SessionSectionDrop {
+    static func resolve(
+        draggedSection: SessionSection,
+        draggedIsOpen: Bool,
+        targetSection: SessionSection
+    ) -> SessionDropAction {
+        switch targetSection {
+        case .archive:
+            // Archive is newest-first with no manual order — never a drop target.
+            return .reject
+        case .pinned:
+            // Dropping ANY session on Pinned pins it at the drop position,
+            // whether it's already pinned (a same-section reorder) or not.
+            return .pin
+        case .active:
+            if draggedSection == .pinned {
+                return .unpin(relaunchIfClosed: !draggedIsOpen)
+            }
+            if draggedSection == .active {
+                return .reorder
+            }
+            // Inactive or Archive, closed — Active means the terminal is open.
+            return .relaunch
+        case .inactive:
+            // Reorder within Inactive is allowed; dragging DOWN into Inactive
+            // from anywhere else is not — Stop does that job.
+            return draggedSection == .inactive ? .reorder : .reject
+        }
     }
 }

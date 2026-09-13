@@ -810,6 +810,51 @@ final class WorkspaceStore: ObservableObject {
         persist()
     }
 
+    /// Set a session's Sessions-tab pinned state explicitly (idempotent —
+    /// unlike `toggleSessionPin`, safe to call from drop handling where the
+    /// desired end state, not a toggle, is known). No-ops (no write, no
+    /// `objectWillChange` fire) when already at the requested value.
+    func setSessionPinned(id: UUID, _ pinned: Bool) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }),
+              sessions[index].isPinned != pinned else { return }
+        sessions[index].isPinned = pinned
+        persist()
+    }
+
+    /// Toggle a session's Sessions-tab pinned state — reachable from the
+    /// Sessions-tab context menu's "Pin"/"Unpin" item.
+    func toggleSessionPin(id: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        setSessionPinned(id: id, !sessions[index].isPinned)
+    }
+
+    /// Reposition a session to `newIndex` within a Sessions-tab section,
+    /// renumbering `sessionViewOrder` for the resulting list.
+    ///
+    /// `sectionSessions` is the section's CURRENT rendered list (from
+    /// `RecentsListView.pinnedSessions`/`activeSessions`/`inactiveSessions`)
+    /// — the session being moved does not need to already be a member of it.
+    /// This single function handles both a same-section reorder (the session
+    /// IS in `sectionSessions`; it's removed and reinserted at `newIndex`)
+    /// and a cross-section move (the session is NOT in `sectionSessions`,
+    /// e.g. after `setSessionPinned`/a relaunch moved it into a new section;
+    /// it's simply inserted at `newIndex`), because filtering it out first is
+    /// a no-op in the reorder case and a correctness requirement in the
+    /// cross-section case.
+    func moveSessionInSessionsView(id: UUID, toIndex newIndex: Int, within sectionSessions: [AgentSession]) {
+        guard let session = sessions.first(where: { $0.id == id }) else { return }
+        var list = sectionSessions.filter { $0.id != id }
+        let clampedIndex = max(0, min(newIndex, list.count))
+        list.insert(session, at: clampedIndex)
+
+        for (order, s) in list.enumerated() {
+            if let globalIndex = sessions.firstIndex(where: { $0.id == s.id }) {
+                sessions[globalIndex].sessionViewOrder = order
+            }
+        }
+        persist()
+    }
+
     /// Move a session to a new position within its project.
     func moveSession(id: UUID, toIndex newIndex: Int, inProject projectId: UUID) {
         var projectSessions = sessions(for: projectId)

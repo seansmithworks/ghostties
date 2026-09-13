@@ -793,6 +793,144 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertEqual(WorkspaceSidebarView.lastSession(in: visible)?.name, "b")
     }
 
+    // MARK: - Pinned Section (BACKLOG item B)
+
+    /// A pinned session is excluded from Active/Inactive/Archive entirely,
+    /// regardless of what bucket `SessionBucket.membership` would otherwise
+    /// put it in — pinning is a separate partition layered on top, not a
+    /// second copy of the Active/Inactive/Archive rule (see `SessionSection`).
+    func testPinnedSessionExcludedFromAllThreeLifecycleBuckets() {
+        var pinnedAndRunning = session(name: "pinnedRunning")
+        pinnedAndRunning.isPinned = true
+        var pinnedAndClosed = session(name: "pinnedClosed")
+        pinnedAndClosed.isPinned = true
+        let sessions = [pinnedAndRunning, pinnedAndClosed]
+        let statuses: [UUID: SessionStatus] = [pinnedAndRunning.id: .running]
+
+        let pinned = RecentsListView.pinnedSessions(from: sessions)
+        let active = RecentsListView.activeSessions(from: sessions, statuses: statuses)
+        let inactive = RecentsListView.inactiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: [])
+        let archive = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: [])
+
+        XCTAssertEqual(pinned.map(\.name).sorted(), ["pinnedClosed", "pinnedRunning"], "both pinned sessions land in Pinned regardless of live status")
+        XCTAssertTrue(active.isEmpty, "a pinned+running session must not also appear in Active")
+        XCTAssertTrue(inactive.isEmpty)
+        XCTAssertTrue(archive.isEmpty, "a pinned+closed session must not fall through to Archive")
+    }
+
+    /// Pinned/Active/Inactive/Archive together are still an exact partition
+    /// once pinning is layered in — every session lands in exactly one of
+    /// the four sections.
+    func testPinnedActiveInactiveArchivePartitionIsExact() {
+        var pinned = session(name: "pinned")
+        pinned.isPinned = true
+        let active = session(name: "active")
+        let inactive = session(name: "inactive")
+        let archived = session(name: "archived")
+        let sessions = [pinned, active, inactive, archived]
+        let statuses: [UUID: SessionStatus] = [active.id: .running]
+        let startedThisLaunch: Set<UUID> = [inactive.id]
+
+        let pinnedList = RecentsListView.pinnedSessions(from: sessions)
+        let activeList = RecentsListView.activeSessions(from: sessions, statuses: statuses)
+        let inactiveList = RecentsListView.inactiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch)
+        let archiveList = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch)
+
+        for s in sessions {
+            let memberships = [pinnedList, activeList, inactiveList, archiveList].filter { bucket in bucket.contains { $0.id == s.id } }
+            XCTAssertEqual(memberships.count, 1, "\(s.name) must land in exactly one section")
+        }
+        XCTAssertEqual(pinnedList.count + activeList.count + inactiveList.count + archiveList.count, sessions.count)
+    }
+
+    /// `orderedBySessionViewOrder` sorts ascending on `sessionViewOrder`,
+    /// nil-last, falling back to append/creation position for ties/nils —
+    /// same shape as `AgentSession.sortedNewestFirst`'s tie-break, but
+    /// ascending on an explicit order instead of descending on a timestamp.
+    func testOrderedBySessionViewOrderSortsAscendingNilLast() {
+        var withOrder2 = session(name: "order2")
+        withOrder2.sessionViewOrder = 2
+        var withOrder0 = session(name: "order0")
+        withOrder0.sessionViewOrder = 0
+        let noOrder = session(name: "noOrder")
+        var withOrder1 = session(name: "order1")
+        withOrder1.sessionViewOrder = 1
+
+        let ordered = RecentsListView.orderedBySessionViewOrder([withOrder2, withOrder0, noOrder, withOrder1])
+
+        XCTAssertEqual(ordered.map(\.name), ["order0", "order1", "order2", "noOrder"])
+    }
+
+    func testOrderedBySessionViewOrderPreservesAppendOrderWhenAllNil() {
+        let sessions = (0..<4).map { session(name: "s\($0)") }
+        let ordered = RecentsListView.orderedBySessionViewOrder(sessions)
+        XCTAssertEqual(ordered.map(\.name), ["s0", "s1", "s2", "s3"])
+    }
+
+    /// `activeSessions`/`inactiveSessions`/`pinnedSessions` apply
+    /// `sessionViewOrder` on top of bucket membership — a drag-reorder
+    /// result must be visible in render order, not just append order.
+    func testActiveSessionsHonorsSessionViewOrder() {
+        var first = session(name: "first")
+        first.sessionViewOrder = 1
+        var second = session(name: "second")
+        second.sessionViewOrder = 0
+        let statuses: [UUID: SessionStatus] = [first.id: .running, second.id: .running]
+
+        let active = RecentsListView.activeSessions(from: [first, second], statuses: statuses)
+
+        XCTAssertEqual(active.map(\.name), ["second", "first"], "sessionViewOrder must reorder Active, not just append order")
+    }
+
+    /// Sessions-tab cycle order puts Pinned before Active — matching render
+    /// order (Pinned renders above Active in `RecentsListView.body`).
+    @MainActor
+    func testSessionsTabCycleOrderPutsPinnedFirst() {
+        let project = Project(name: "p", rootPath: "~/p")
+        var pinnedOpen = AgentSession(name: "pinnedOpen", templateId: UUID(), projectId: project.id)
+        pinnedOpen.isPinned = true
+        let activeOpen = AgentSession(name: "activeOpen", templateId: UUID(), projectId: project.id)
+
+        let statuses: [UUID: SessionStatus] = [pinnedOpen.id: .running, activeOpen.id: .running]
+
+        let coordinator = SessionCoordinator()
+        coordinator.seedEmptySessionTreeForTesting(id: pinnedOpen.id)
+        coordinator.seedEmptySessionTreeForTesting(id: activeOpen.id)
+
+        let cycleOrder = WorkspaceSidebarView.sessionsTabCycleOrder(
+            sessions: [activeOpen, pinnedOpen],
+            statuses: statuses,
+            coordinator: coordinator
+        )
+
+        XCTAssertEqual(cycleOrder.map(\.name), ["pinnedOpen", "activeOpen"], "Pinned must cycle before Active")
+    }
+
+    /// A pinned session with a CLOSED terminal has no live surface — it must
+    /// be excluded from the cycle even though it's in Pinned, because there's
+    /// nothing live to focus.
+    @MainActor
+    func testSessionsTabCycleOrderExcludesPinnedSessionWithClosedTerminal() {
+        let project = Project(name: "p", rootPath: "~/p")
+        var pinnedClosed = AgentSession(name: "pinnedClosed", templateId: UUID(), projectId: project.id)
+        pinnedClosed.isPinned = true
+        let activeOpen = AgentSession(name: "activeOpen", templateId: UUID(), projectId: project.id)
+
+        let statuses: [UUID: SessionStatus] = [activeOpen.id: .running]
+
+        let coordinator = SessionCoordinator()
+        // pinnedClosed never gets a live surface.
+        coordinator.seedEmptySessionTreeForTesting(id: activeOpen.id)
+
+        let cycleOrder = WorkspaceSidebarView.sessionsTabCycleOrder(
+            sessions: [pinnedClosed, activeOpen],
+            statuses: statuses,
+            coordinator: coordinator
+        )
+
+        XCTAssertEqual(cycleOrder.map(\.name), ["activeOpen"], "pinned-but-closed must not be cycled to")
+    }
+
     // MARK: - Relative Time Labels
 
     func testRelativeLabelJustNow() {

@@ -336,24 +336,31 @@ struct WorkspaceSidebarView: View {
         liveSessions.last
     }
 
-    /// The Sessions-tab cycle order: the ACTIVE zone in render order,
-    /// filtered to sessions that still have a live surface. Extracted as a
-    /// static so tests can call the exact composition `selectAdjacentLiveSession`
-    /// uses without instantiating a view inside SwiftUI's environment.
+    /// The Sessions-tab cycle order: Pinned then the ACTIVE zone, in that
+    /// render order — Pinned renders above Active in `RecentsListView`, so
+    /// cycling matches what's on screen — filtered to sessions that still
+    /// have a live surface. Extracted as a static so tests can call the
+    /// exact composition `selectAdjacentLiveSession` uses without
+    /// instantiating a view inside SwiftUI's environment.
     ///
+    /// `RecentsListView.pinnedSessions`/`activeSessions` never overlap
+    /// (`activeSessions` explicitly excludes pinned sessions — see
+    /// `SessionSection`), so concatenating them can't duplicate an entry.
     /// `RecentsListView.activeSessions` already keys Active on `status.isAlive`
-    /// (a live surface with a running process), so in practice this filter is
-    /// redundant — kept as a belt-and-suspenders guard: if `hasLiveSurface`
-    /// and `status.isAlive` were ever to disagree (e.g. a surface torn down
-    /// out-of-band without a status update), cycling onto a dead entry would
-    /// bail inside `focusSession`'s live-tree guard while `activeSessionId`
-    /// never moves, permanently dead-ending forward cycling.
+    /// (a live surface with a running process), so the `hasLiveSurface` filter
+    /// is redundant there — kept as a belt-and-suspenders guard: if
+    /// `hasLiveSurface` and `status.isAlive` were ever to disagree (e.g. a
+    /// surface torn down out-of-band without a status update), cycling onto a
+    /// dead entry would bail inside `focusSession`'s live-tree guard while
+    /// `activeSessionId` never moves, permanently dead-ending forward
+    /// cycling. For Pinned, the filter is load-bearing: a pinned session with
+    /// a CLOSED terminal has no live surface to cycle to at all.
     static func sessionsTabCycleOrder(
         sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
         coordinator: SessionCoordinator
     ) -> [AgentSession] {
-        RecentsListView.activeSessions(from: sessions, statuses: statuses)
+        (RecentsListView.pinnedSessions(from: sessions) + RecentsListView.activeSessions(from: sessions, statuses: statuses))
             .filter { coordinator.hasLiveSurface(id: $0.id) }
     }
 }

@@ -230,6 +230,45 @@ struct AgentSessionTests {
         #expect(decoded.resolvedGhostCharacter == .wraith)
     }
 
+    /// A legacy `workspace.json` predates `isPinned`/`sessionViewOrder`
+    /// entirely — the custom decoder must default them (`false`/`nil`)
+    /// rather than failing to decode the whole file.
+    @Test func sessionDecodingWithoutPinningFieldsDefaults() throws {
+        let projectId = UUID()
+        let templateId = AgentTemplate.shell.id
+        let id = UUID()
+        let json = """
+        {
+            "id": "\(id.uuidString)",
+            "name": "Legacy Session",
+            "templateId": "\(templateId.uuidString)",
+            "projectId": "\(projectId.uuidString)"
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
+
+        #expect(decoded.isPinned == false)
+        #expect(decoded.sessionViewOrder == nil)
+    }
+
+    @Test func sessionCodableRoundTripPreservesPinningFields() throws {
+        let original = AgentSession(
+            name: "Pinned Session",
+            templateId: AgentTemplate.claudeCode.id,
+            projectId: UUID(),
+            isPinned: true,
+            sessionViewOrder: 2
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
+
+        #expect(decoded.isPinned == true)
+        #expect(decoded.sessionViewOrder == 2)
+        #expect(decoded == original)
+    }
+
     @Test func sessionDecodingMalformedLastActiveAtThrows() {
         // A string where a numeric/date is expected should fail loudly rather than
         // silently becoming nil. Protects against over-use of `try?` in the decoder.

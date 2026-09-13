@@ -6,6 +6,7 @@ import GhosttiesCore
 /// Layout:
 ///   + New Session (full-width row → native flyout menu for project selection)
 ///   ─────────────────────────────────
+///   PINNED    (isPinned — hidden when empty; stays pinned whether open or closed)
 ///   ACTIVE    (the session's terminal is open — see `SessionBucket.membership`)
 ///   INACTIVE  (started at some point this launch, currently not active — ran, then stopped)
 ///   ARCHIVE   (restored from disk, never started this launch)
@@ -20,6 +21,7 @@ struct RecentsListView: View {
     /// Section-collapse state, persisted across launches. Active and
     /// Inactive default open (sessions the user is working with today, or
     /// just stopped); Archive defaults closed.
+    @AppStorage("ghostties.sessionsSection.pinned") private var isPinnedExpanded = true
     @AppStorage("ghostties.sessionsSection.active") private var isActiveExpanded = true
     @AppStorage("ghostties.sessionsSection.inactive") private var isInactiveExpanded = true
     @AppStorage("ghostties.sessionsSection.archive") private var isArchiveExpanded = false
@@ -29,6 +31,7 @@ struct RecentsListView: View {
         // `archiveSessions` each filter + build a Dictionary internally, and
         // were previously evaluated twice (once for an `isEmpty` check, once
         // for `ForEach`).
+        let pinned = pinnedSessions
         let active = activeSessions
         let inactive = inactiveSessions
         let archive = archiveSessions
@@ -42,6 +45,11 @@ struct RecentsListView: View {
                 // persisted `@AppStorage` preference below, so the user's
                 // stored preference reapplies untouched once the condition
                 // clears. See `effectiveExpanded(...)`.
+                let pinnedExpanded = Self.effectiveExpanded(
+                    storedPreference: isPinnedExpanded,
+                    section: .pinned,
+                    sectionContainsSelectedSession: selectedId.map { id in pinned.contains { $0.id == id } } ?? false
+                )
                 let activeExpanded = Self.effectiveExpanded(
                     storedPreference: isActiveExpanded,
                     section: .active,
@@ -76,11 +84,32 @@ struct RecentsListView: View {
                     // (e.g. `LazyVStack` keyed with `.id` forced to include a
                     // content hash), not a plain revert.
                     VStack(spacing: 2) {
-                        // All three headers always render (when there's at
-                        // least one session anywhere) — membership adapts,
-                        // but the ACTIVE/INACTIVE/ARCHIVE headers themselves
-                        // never disappear. Every header carries a count; a
-                        // collapsed header with no count is illegible.
+                        // Pinned is the one section that's hidden entirely
+                        // when empty — it's an opt-in section, not one of
+                        // the three lifecycle buckets every session always
+                        // belongs to. Pinning a first session (before any
+                        // are pinned) requires the context menu, since drag
+                        // needs a rendered drop target — see task report.
+                        if !pinned.isEmpty {
+                            SessionSectionHeader(
+                                title: "Pinned",
+                                count: pinned.count,
+                                isExpanded: $isPinnedExpanded,
+                                isEffectivelyExpanded: pinnedExpanded
+                            )
+                            if pinnedExpanded {
+                                ForEach(pinned) { session in
+                                    sessionRow(for: session, section: .pinned, sectionList: pinned)
+                                }
+                            }
+                        }
+
+                        // All three lifecycle headers always render (when
+                        // there's at least one session anywhere) —
+                        // membership adapts, but the ACTIVE/INACTIVE/ARCHIVE
+                        // headers themselves never disappear. Every header
+                        // carries a count; a collapsed header with no count
+                        // is illegible.
                         SessionSectionHeader(
                             title: "Active",
                             count: active.count,
@@ -101,7 +130,7 @@ struct RecentsListView: View {
                             // in `sessionRow(for:)` is a body-re-execution perf gate
                             // layered on top, not what makes rows fresh.
                             ForEach(active) { session in
-                                sessionRow(for: session)
+                                sessionRow(for: session, section: .active, sectionList: active)
                             }
                         }
 
@@ -115,7 +144,7 @@ struct RecentsListView: View {
                             // See the identity comment on the Active ForEach
                             // above — same reasoning applies here.
                             ForEach(inactive) { session in
-                                sessionRow(for: session)
+                                sessionRow(for: session, section: .inactive, sectionList: inactive)
                             }
                         }
 
@@ -129,7 +158,7 @@ struct RecentsListView: View {
                             // See the identity comment on the Active ForEach
                             // above — same reasoning applies here.
                             ForEach(archive) { session in
-                                sessionRow(for: session)
+                                sessionRow(for: session, section: .archive, sectionList: archive)
                             }
                         }
                     }
@@ -146,10 +175,17 @@ struct RecentsListView: View {
 
     // MARK: - Session Row
 
-    private func sessionRow(for session: AgentSession) -> some View {
+    private func sessionRow(for session: AgentSession, section: SessionSection, sectionList: [AgentSession]) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
+        // Archive has no manual order (always newest-first) — no reorder
+        // affordances (drop target, Move Up/Down) on its rows. It's still a
+        // valid DRAG SOURCE, since decision 3 lets it be dragged up into
+        // Active/Pinned; that's `.draggable` below, applied unconditionally.
+        let supportsReorder = section != .archive
+        let indexInSection = sectionList.firstIndex(where: { $0.id == session.id })
+
         return RecentsRowView(
             session: session,
             projectName: projectName,
@@ -167,6 +203,15 @@ struct RecentsListView: View {
             Button("Rename") {
                 beginRename(session: session)
             }
+            if session.isNamePinned {
+                Button("Sync name automatically") {
+                    store.resetNamePin(id: session.id)
+                }
+            }
+            Divider()
+            Button(session.isPinned ? "Unpin" : "Pin") {
+                store.toggleSessionPin(id: session.id)
+            }
             Divider()
             if coordinator.isRunning(id: session.id) {
                 Button("Stop") {
@@ -182,6 +227,91 @@ struct RecentsListView: View {
                 }
             }
         }
+        .draggable(session.id.uuidString) {
+            Text(session.name)
+                .font(.system(size: 12))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .dropDestination(for: String.self) { items, _ in
+            // Archive is never a drop target — `SessionSectionDrop.resolve`
+            // already rejects `.archive` as a target section, so this guard
+            // is belt-and-suspenders against attaching the affordance at all.
+            guard supportsReorder else { return false }
+            return handleSessionDrop(items: items, targetSection: section, targetList: sectionList, droppedOnSession: session)
+        }
+        .accessibilityAction(named: Text("Move Up")) {
+            guard supportsReorder else { return }
+            moveWithinSection(session: session, indexInSection: indexInSection, direction: -1, sectionList: sectionList)
+        }
+        .accessibilityAction(named: Text("Move Down")) {
+            guard supportsReorder else { return }
+            moveWithinSection(session: session, indexInSection: indexInSection, direction: 1, sectionList: sectionList)
+        }
+    }
+
+    // MARK: - Drag / Drop
+
+    /// Parses a drop, resolves the pure action via `SessionSectionDrop.resolve`,
+    /// and applies it. This is the ONE call site that turns a drop into a
+    /// store mutation — everything decision-related lives in the pure
+    /// resolver, tested directly in `RecentsListViewTests`.
+    private func handleSessionDrop(
+        items: [String],
+        targetSection: SessionSection,
+        targetList: [AgentSession],
+        droppedOnSession: AgentSession
+    ) -> Bool {
+        guard let raw = items.first,
+              let draggedId = UUID(uuidString: raw),
+              let draggedSession = store.sessions.first(where: { $0.id == draggedId }),
+              let targetIndex = targetList.firstIndex(where: { $0.id == droppedOnSession.id })
+        else { return false }
+
+        let draggedBucket = SessionBucket.membership(
+            status: store.globalStatuses[draggedId],
+            startedThisLaunch: coordinator.sessionIdsStartedThisLaunch.contains(draggedId)
+        )
+        let draggedSection = SessionSection.section(isPinned: draggedSession.isPinned, bucket: draggedBucket)
+        let draggedIsOpen = store.globalStatuses[draggedId]?.isAlive == true
+
+        let action = SessionSectionDrop.resolve(
+            draggedSection: draggedSection,
+            draggedIsOpen: draggedIsOpen,
+            targetSection: targetSection
+        )
+
+        switch action {
+        case .reject:
+            return false
+        case .reorder:
+            store.moveSessionInSessionsView(id: draggedId, toIndex: targetIndex, within: targetList)
+        case .pin:
+            store.setSessionPinned(id: draggedId, true)
+            store.moveSessionInSessionsView(id: draggedId, toIndex: targetIndex, within: targetList)
+        case .unpin(let relaunchIfClosed):
+            store.setSessionPinned(id: draggedId, false)
+            if relaunchIfClosed {
+                relaunchSession(draggedSession, project: store.projects.first { $0.id == draggedSession.projectId })
+            }
+            store.moveSessionInSessionsView(id: draggedId, toIndex: targetIndex, within: targetList)
+        case .relaunch:
+            relaunchSession(draggedSession, project: store.projects.first { $0.id == draggedSession.projectId })
+            store.moveSessionInSessionsView(id: draggedId, toIndex: targetIndex, within: targetList)
+        }
+        return true
+    }
+
+    /// VoiceOver/keyboard reorder within one section — the accessible
+    /// counterpart to drag-reorder. `direction` is -1 (up) or +1 (down); a
+    /// move past either end of the section is a no-op.
+    private func moveWithinSection(session: AgentSession, indexInSection: Int?, direction: Int, sectionList: [AgentSession]) {
+        guard let indexInSection else { return }
+        let target = indexInSection + direction
+        guard target >= 0, target < sectionList.count else { return }
+        store.moveSessionInSessionsView(id: session.id, toIndex: target, within: sectionList)
     }
 
     // MARK: - Empty State
@@ -201,6 +331,14 @@ struct RecentsListView: View {
     }
 
     // MARK: - Data
+
+    /// Sessions pinned to the top of the Sessions tab — see `SessionSection`.
+    /// Pinning wins over bucket membership entirely; a pinned session never
+    /// appears in `activeSessions`/`inactiveSessions`/`archiveSessions`
+    /// regardless of whether its terminal is open.
+    var pinnedSessions: [AgentSession] {
+        Self.pinnedSessions(from: store.sessions)
+    }
 
     /// Sessions whose terminal is open — see `SessionBucket.membership`, the
     /// one rule shared with project view. Membership does NOT move when the
@@ -305,47 +443,58 @@ struct RecentsListView: View {
     // project view's `WorkspaceStore.computeSessionGroups`. Never re-derive
     // membership locally; both views must call the same function.
 
+    /// Pure, testable variant of the `pinnedSessions` instance property.
+    /// Pinning is layered ON TOP of `SessionBucket.membership` (see
+    /// `SessionSection.section(isPinned:bucket:)`) — a pinned session is
+    /// excluded from `activeSessions`/`inactiveSessions`/`archiveSessions`
+    /// below regardless of its bucket.
+    static func pinnedSessions(from sessions: [AgentSession]) -> [AgentSession] {
+        orderedBySessionViewOrder(sorted(sessions: sessions.filter(\.isPinned)))
+    }
+
     /// Pure, testable variant of the `activeSessions` instance property.
     static func activeSessions(
         from sessions: [AgentSession],
         statuses: [UUID: SessionStatus]
     ) -> [AgentSession] {
-        sorted(sessions: sessions.filter {
-            SessionBucket.membership(status: statuses[$0.id], startedThisLaunch: false) == .active
-        })
+        orderedBySessionViewOrder(sorted(sessions: sessions.filter {
+            !$0.isPinned && SessionBucket.membership(status: statuses[$0.id], startedThisLaunch: false) == .active
+        }))
     }
 
     /// Pure, testable variant of the `inactiveSessions` instance property —
     /// `sessionIdsStartedThisLaunch` is passed in rather than read from a
     /// coordinator so this stays a pure function callers can test directly.
-    /// Ordering matches `activeSessions` (append order) — only
-    /// `archiveSessions` reverses.
+    /// Ordering matches `activeSessions` (append order, then
+    /// `sessionViewOrder`) — only `archiveSessions` reverses.
     static func inactiveSessions(
         from sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
         sessionIdsStartedThisLaunch: Set<UUID>
     ) -> [AgentSession] {
-        sorted(sessions: sessions.filter {
-            SessionBucket.membership(
+        orderedBySessionViewOrder(sorted(sessions: sessions.filter {
+            !$0.isPinned && SessionBucket.membership(
                 status: statuses[$0.id],
                 startedThisLaunch: sessionIdsStartedThisLaunch.contains($0.id)
             ) == .inactive
-        })
+        }))
     }
 
     /// Pure, testable variant of the `archiveSessions` instance property.
-    /// Together with `activeSessions` and `inactiveSessions` this is an exact
-    /// three-way partition — every session lands in exactly one bucket.
-    /// Sorted newest-first via `AgentSession.sortedNewestFirst(_:)` — the one
-    /// bucket that does NOT keep append order, per Sean's call that Archive
-    /// should read reverse-chronological.
+    /// Together with `pinnedSessions`, `activeSessions`, and
+    /// `inactiveSessions` this is an exact four-way partition — every
+    /// session lands in exactly one section. Sorted newest-first via
+    /// `AgentSession.sortedNewestFirst(_:)` — the one bucket that does NOT
+    /// keep append order and does NOT use `sessionViewOrder`, per Sean's
+    /// call that Archive should read reverse-chronological with no manual
+    /// order.
     static func archiveSessions(
         from sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
         sessionIdsStartedThisLaunch: Set<UUID>
     ) -> [AgentSession] {
         let archived = sorted(sessions: sessions.filter {
-            SessionBucket.membership(
+            !$0.isPinned && SessionBucket.membership(
                 status: statuses[$0.id],
                 startedThisLaunch: sessionIdsStartedThisLaunch.contains($0.id)
             ) == .archive
@@ -355,12 +504,12 @@ struct RecentsListView: View {
 
     // MARK: - Auto-Expand Override (static so tests can call without a view instance)
 
-    /// One of the three Sessions-tab sections. Used only to decide which
+    /// One of the four Sessions-tab sections. Used only to decide which
     /// sections get the selected-session force-expand override below — not
     /// a membership concept (see `belongsInActive`, `inactiveSessions`,
     /// `archiveSessions` for that).
     enum Section {
-        case active, inactive, archive
+        case pinned, active, inactive, archive
     }
 
     /// Whether a section renders expanded. This is a RENDER-TIME override
@@ -414,6 +563,32 @@ struct RecentsListView: View {
     /// `workspace.json`, a file written by multiple windows).
     static func sorted(sessions: [AgentSession]) -> [AgentSession] {
         sessions
+    }
+
+    /// Layers drag-reorder on top of the append-order base from `sorted(sessions:)`.
+    /// Sessions with an explicit `sessionViewOrder` sort ascending by it, ahead
+    /// of any session without one; sessions without one keep their relative
+    /// append/creation order. Only ever called on an already section-filtered
+    /// list (Pinned, Active, or Inactive — Archive doesn't call this, see
+    /// `archiveSessions`), so `sessionViewOrder` values are only ever compared
+    /// within the section they were assigned in.
+    static func orderedBySessionViewOrder(_ sessions: [AgentSession]) -> [AgentSession] {
+        sessions
+            .enumerated()
+            .sorted { lhs, rhs in
+                switch (lhs.element.sessionViewOrder, rhs.element.sessionViewOrder) {
+                case let (l?, r?):
+                    if l != r { return l < r }
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    break
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
     }
 }
 
