@@ -428,4 +428,90 @@ struct ComposerWitnessTests {
 
         #expect(reapplied == armed, "re-delivering the same (identity, beat) must not re-arm or reset anything")
     }
+
+    // MARK: - Witness sprite geometry (gray mesh-line fix)
+
+    /// red mutation: drop the `.rounded()` pixel-snap in
+    /// `WitnessSpriteGeometry.cellRect` (or widen a cell independently of
+    /// its neighbour's shared edge) — adjacent cells stop sharing an exact
+    /// edge and these tests fail.
+    private static let meshFixSizes: [CGFloat] = [12, 18, 24, 30, 36, 42, 48]
+    private static let gridDimension = 12
+
+    private static func isMultiple(of edge: CGFloat, scale: CGFloat, tolerance: CGFloat = 1e-9) -> Bool {
+        let scaled = edge * scale
+        return abs(scaled - scaled.rounded()) < tolerance
+    }
+
+    @Test func adjacentCellsShareExactEdgesAtEveryWitnessSize() {
+        for size in Self.meshFixSizes {
+            for scale: CGFloat in size == 30 ? [1, 2] : [2] {
+                let dim = Self.gridDimension
+                let sizeCG = CGSize(width: size, height: size)
+
+                // Horizontal adjacency, and every edge on the pixel grid.
+                for row in 0..<dim {
+                    for col in 0..<(dim - 1) {
+                        let a = WitnessSpriteGeometry.cellRect(
+                            row: row, col: col, rows: dim, cols: dim,
+                            size: sizeCG, cellOffsetY: 0, scale: scale
+                        )
+                        let b = WitnessSpriteGeometry.cellRect(
+                            row: row, col: col + 1, rows: dim, cols: dim,
+                            size: sizeCG, cellOffsetY: 0, scale: scale
+                        )
+                        #expect(a.maxX == b.minX, "size \(size) scale \(scale) row \(row) col \(col): horizontal seam gap/overlap")
+                        #expect(Self.isMultiple(of: a.minX, scale: scale))
+                        #expect(Self.isMultiple(of: a.maxX, scale: scale))
+                    }
+                }
+
+                // Vertical adjacency.
+                for row in 0..<(dim - 1) {
+                    for col in 0..<dim {
+                        let a = WitnessSpriteGeometry.cellRect(
+                            row: row, col: col, rows: dim, cols: dim,
+                            size: sizeCG, cellOffsetY: 0, scale: scale
+                        )
+                        let b = WitnessSpriteGeometry.cellRect(
+                            row: row + 1, col: col, rows: dim, cols: dim,
+                            size: sizeCG, cellOffsetY: 0, scale: scale
+                        )
+                        #expect(a.maxY == b.minY, "size \(size) scale \(scale) row \(row) col \(col): vertical seam gap/overlap")
+                        #expect(Self.isMultiple(of: a.minY, scale: scale))
+                        #expect(Self.isMultiple(of: a.maxY, scale: scale))
+                    }
+                }
+
+                // Union spans exactly 0...size on both axes.
+                let first = WitnessSpriteGeometry.cellRect(
+                    row: 0, col: 0, rows: dim, cols: dim, size: sizeCG, cellOffsetY: 0, scale: scale
+                )
+                let last = WitnessSpriteGeometry.cellRect(
+                    row: dim - 1, col: dim - 1, rows: dim, cols: dim, size: sizeCG, cellOffsetY: 0, scale: scale
+                )
+                #expect(first.minX == 0)
+                #expect(first.minY == 0)
+                #expect(last.maxX == size)
+                #expect(last.maxY == size)
+            }
+        }
+    }
+
+    /// At size 24 (24pt / 12 cols = exactly 2pt cells), snapping must be a
+    /// no-op — this pins pixel-for-pixel parity with the pre-fix output at
+    /// the one size that already happened to land on the pixel grid.
+    @Test func size24CellsAreExactlyTwoByTwoAtScaleTwo() {
+        let dim = Self.gridDimension
+        let sizeCG = CGSize(width: 24, height: 24)
+        for row in 0..<dim {
+            for col in 0..<dim {
+                let rect = WitnessSpriteGeometry.cellRect(
+                    row: row, col: col, rows: dim, cols: dim,
+                    size: sizeCG, cellOffsetY: 0, scale: 2
+                )
+                #expect(rect == CGRect(x: CGFloat(col * 2), y: CGFloat(row * 2), width: 2, height: 2))
+            }
+        }
+    }
 }

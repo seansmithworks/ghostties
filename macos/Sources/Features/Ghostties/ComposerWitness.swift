@@ -528,10 +528,43 @@ struct ComposerWitnessView: View {
     }
 }
 
+/// Pure geometry for one Witness grid cell, pixel-snapped so adjacent cells
+/// share an exact edge at any grid size and any display scale — no gaps,
+/// no overlaps.
+enum WitnessSpriteGeometry {
+    static func cellRect(
+        row: Int,
+        col: Int,
+        rows: Int,
+        cols: Int,
+        size: CGSize,
+        cellOffsetY: Int,
+        scale: CGFloat
+    ) -> CGRect {
+        let cellW = size.width / CGFloat(cols)
+        let cellH = size.height / CGFloat(rows)
+        let colF = CGFloat(col)
+        let rowF = CGFloat(row) + CGFloat(cellOffsetY)
+        let x0 = (colF * cellW * scale).rounded() / scale
+        let x1 = ((colF + 1) * cellW * scale).rounded() / scale
+        let y0 = (rowF * cellH * scale).rounded() / scale
+        let y1 = ((rowF + 1) * cellH * scale).rounded() / scale
+        return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
+    }
+}
+
 /// The sprite Canvas, isolated as its own `Equatable` view so SwiftUI skips
 /// repainting when the displayed frame hasn't actually changed — the only
 /// thing `TimelineView`'s clock should force is a diff, not a guaranteed
 /// redraw every tick.
+///
+/// Cells are grouped by resolved colour and each colour is filled with a
+/// single `Path` built from pixel-snapped, edge-sharing rects
+/// (`WitnessSpriteGeometry.cellRect`). Filling each colour exactly once
+/// avoids double-painting semi-transparent colours at the seams — the
+/// previous per-cell fill with `.rounded(.up)` widths overlapped by up to
+/// 0.5pt at some grid sizes, which double-applied alpha and showed as a
+/// mesh of darker grid lines.
 private struct WitnessSprite: View, Equatable {
     let grid: [String]
     let cellOffsetY: Int
@@ -541,6 +574,8 @@ private struct WitnessSprite: View, Equatable {
     /// `primaryColor` (see `color(forCell:row:col:)`).
     let secondaryColors: [[Color]]?
     let sourceIsB: [[Bool]]?
+
+    @Environment(\.displayScale) private var displayScale
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.grid == rhs.grid
@@ -555,19 +590,45 @@ private struct WitnessSprite: View, Equatable {
             let rows = grid.count
             let cols = grid.first?.count ?? 0
             guard rows > 0, cols > 0 else { return }
-            let cellW = size.width / CGFloat(cols)
-            let cellH = size.height / CGFloat(rows)
+            // Two passes: body cells ("X") first, then eyes/lit ("e"/"l")
+            // second, so a shared edge can never flip a highlight pixel
+            // back to body colour. Within each pass, cells are grouped by
+            // resolved colour into one Path per colour and filled once —
+            // snapped cells never overlap, so within-pass order doesn't
+            // matter, but the two-pass split keeps highlights on top.
+            var pathsByColor: [Color: Path] = [:]
+            var colorOrder: [Color] = []
+            func addCell(row: Int, col: Int, color: Color) {
+                let rect = WitnessSpriteGeometry.cellRect(
+                    row: row,
+                    col: col,
+                    rows: rows,
+                    cols: cols,
+                    size: size,
+                    cellOffsetY: cellOffsetY,
+                    scale: displayScale
+                )
+                if pathsByColor[color] == nil {
+                    pathsByColor[color] = Path()
+                    colorOrder.append(color)
+                }
+                pathsByColor[color]?.addRect(rect)
+            }
             for (row, line) in grid.enumerated() {
                 for (col, cell) in line.enumerated() {
-                    guard let color = color(forCell: cell, row: row, col: col) else { continue }
-                    let rect = CGRect(
-                        x: CGFloat(col) * cellW,
-                        y: (CGFloat(row) + CGFloat(cellOffsetY)) * cellH,
-                        width: cellW.rounded(.up),
-                        height: cellH.rounded(.up)
-                    )
-                    context.fill(Path(rect), with: .color(color))
+                    guard cell == "X", let color = color(forCell: cell, row: row, col: col) else { continue }
+                    addCell(row: row, col: col, color: color)
                 }
+            }
+            for (row, line) in grid.enumerated() {
+                for (col, cell) in line.enumerated() {
+                    guard cell == "e" || cell == "l", let color = color(forCell: cell, row: row, col: col) else { continue }
+                    addCell(row: row, col: col, color: color)
+                }
+            }
+            for color in colorOrder {
+                guard let path = pathsByColor[color] else { continue }
+                context.fill(path, with: .color(color))
             }
         }
     }
