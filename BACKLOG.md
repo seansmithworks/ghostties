@@ -2391,10 +2391,11 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 
 **Parked (off-objective):**
 - [ ] **Shared metrics folder across builds.** `macos/Sources/App/macOS/AppDelegate.swift:2010-2014` `metricsDirectory()` hardcodes `Ghostties/metrics` under Application Support, keyed on neither bundle ID nor `GHOSTTIES_STATE_DIR`. Dev, Demo and Release all write MXMetricManager payloads into the same folder. Diagnostics only, not workspace data. Pre-existing; flagged by review 2026-09-12.
-- [ ] **Demo capture frame polish.** Four items from 2026-09-12 review. (a) is still under research — no verified settings key turns off the "← N agents" status-line count; do not assume `agentCountInStatusLine` or similar exists without checking Claude Code's own settings schema. (b), (c), (d) are **built, not yet captured** in a real GUI run (`feat/demo-frame-polish`):
-  - (b) `5fa3835aa` — each fixture repo's `.claude/settings.local.json` sets `remoteControlAtStartup: false` (merged, not clobbered); `demo-ready.sh --check` fails if any fixture is missing it.
-  - (c) `05a34b695` — `DemoWorkspaceCaptureUITests` scrolls the sidebar's scroll view back to the top before the window screenshot.
-  - (d) `d8bb4e54a` — staged sessions already carried a canned first prompt, but `WorkspacePersistence.sanitizeTemplate` was silently stripping it from `agent.additionalFlags`; fixed by staging a per-prompt executable wrapper script and pointing the template's `command` at it instead.
+- [x] **Demo capture frame polish.** Four items from 2026-09-12 review, all resolved:
+  - (a) **dropped by Sean 2026-09-13** — "← N agents" is Claude Code's own footer (counts live sessions in `~/.claude/sessions`), not Ghostties UI; no setting hides it; left in frame.
+  - (b) `5fa3835aa` — each fixture repo's `.claude/settings.local.json` sets `remoteControlAtStartup: false` (merged, not clobbered); `demo-ready.sh --check` fails if any fixture is missing it. Built.
+  - (c) `05a34b695` — `DemoWorkspaceCaptureUITests` scrolls the sidebar's scroll view back to the top before the window screenshot. Built.
+  - (d) `d8bb4e54a` — staged sessions already carried a canned first prompt, but `WorkspacePersistence.sanitizeTemplate` was silently stripping it from `agent.additionalFlags`; fixed by staging a per-prompt executable wrapper script and pointing the template's `command` at it instead. Built.
 - [ ] **`demo-ready.sh --check` double message.** On an isolation failure it prints the specific reason, then also the generic "STALE: … does not match" line. Nit.
 
 **Parked (off-objective):**
@@ -2403,4 +2404,8 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 **Parked (off-objective):**
 - [ ] Screen Recording grant for `com.seansmithdesign.ghostties` is revoked — I ran `tccutil reset` on a black-frame symptom without first confirming the csreq mismatch in the tccd log. `screencapture` from any agent shell fails until Sean re-adds it in System Settings. NOT needed for the XCUITest capture path, which runs through testmanagerd. Memo corrected: `reference_screencapture-responsible-app-is-the-terminal.md`.
 - [ ] `BACKLOG.md` is 220KB — memory says it stays open-items-only; it is well past that.
-- [ ] Re-run capture from main thread when Sean flags bedtime (hands-off).
+- [ ] **Overnight N1 — re-seed:** run `scripts/demo/demo-ready.sh`, then `scripts/demo/demo-ready.sh --check` passes (includes the new remote-control override and wrapper checks).
+- [ ] **Overnight N2 — capture:** run `scripts/demo/demo-capture.sh` from the main thread only, Mac awake and hands-off; max 3 attempts total.
+- [ ] **Overnight N3 — inspect** light + dark PNGs: no "/rc connecting…", sidebar at top (atlas-api header visible), agent mid-task with output in the pane, no hostname/`/Users/seansmith`/email, dev badge hidden. "← N agents" is expected.
+- [ ] **Overnight N4 — on a defect:** diagnose from the xcresult recording + `lsappinfo` (never guess), fix via a subagent on `feat/demo-frame-polish`, separate review, re-run (counts toward the 3).
+- [ ] **Overnight N5 — PR:** push `feat/demo-frame-polish` and open a PR with `gh pr create --repo SeanSmithWorks/ghostties --base main` including before/after captures, only after N3 passes. Do not merge.
