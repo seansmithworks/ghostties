@@ -113,13 +113,15 @@ struct ComposerZeroChromeStyleTests {
         project: Project,
         workspaceStore: WorkspaceStore,
         composerStore: SessionComposerStore,
-        style: ComposerStyle? = nil
+        style: ComposerStyle? = nil,
+        tuningDefaults: UserDefaults? = nil
     ) -> some View {
         SessionComposerPalette(
             isPresented: .constant(true),
             request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
             composerStore: composerStore,
-            styleOverrideForTesting: style
+            styleOverrideForTesting: style,
+            tuningDefaultsForTesting: tuningDefaults
         )
         .environmentObject(workspaceStore)
         .environmentObject(SessionCoordinator())
@@ -418,7 +420,15 @@ struct ComposerZeroChromeStyleTests {
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
         let size = NSSize(width: 560, height: 100)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine)
+        // Step 0 (R14): isolated suite, treatment pinned to `.material` — the
+        // stroke this test asserts on only renders in the material branch of
+        // `singleLineComposerCard`; `.glass` has no `.stroke(` at all. Reading
+        // real `UserDefaults.standard` here (the R13 gap) let this test pass
+        // for the wrong reason whenever `.glass` fell back to material by
+        // availability rather than by explicit treatment.
+        let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
+        suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
         let png = renderPNG(view, size: size)
         writeScratchPNG(png, filename: "single-line-rest.png")
         #expect(png != nil)
@@ -876,7 +886,11 @@ struct ComposerZeroChromeStyleTests {
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine)
+        // Step 0 (R14): same isolated-suite/material pin as
+        // `singleLineRestStateHasCardChrome` — see that test's comment.
+        let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
+        suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
         let size = NSSize(width: 560, height: 100)
         let png = renderPNG(view, size: size)
         writeScratchPNG(png, filename: "single-line-unchanged-scale.png")

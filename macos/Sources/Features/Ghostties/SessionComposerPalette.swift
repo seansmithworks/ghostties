@@ -2164,7 +2164,7 @@ struct SessionComposerPalette: View {
         return Group {
             #if compiler(>=6.2)
             if ComposerSingleLineBackgroundChoice.resolve(
-                treatment: ComposerSingleLineTreatment.current(),
+                treatment: ComposerSingleLineTreatment.current(defaults: tuningDefaults),
                 glassAvailable: isGlassTreatmentAvailable
             ) == .glass, #available(macOS 26.0, *) {
                 content
