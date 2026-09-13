@@ -4,13 +4,15 @@
 
 - [x] Revert static working glyph (Sean: grid/spinner better) — a836dbc99
 - [x] Merge origin/main into branch — 61e09d692
-- [ ] Full GhosttyTests run on the merged HEAD (waiting on the Dev slot)
+- [x] Moved to `main`: Sean runs the full suite after merge (2026-09-13). Last branch run
+  1156/5/1 predates the glyph commits.
 - [x] Independent review of the status glyph change `9b1a6d735` — pass with notes; .waiting/label
   mismatch fixed in `fix(sidebar): silent fallback reads as idle, status words derive from the glyph`
 - [ ] Esc-interrupting Claude may leave hook state busy (no Stop) → spinner up to 30 min —
   inferred, unverified
-- [ ] PR on SeanSmithWorks/ghostties (base main) with FIXTURE-data screenshots (public repo — no
-  real session names)
+- [x] PR #175 — https://github.com/seansmithworks/ghostties/pull/175. Screenshots on branch
+  `pr-assets/sidebar-section-vocabulary` (`424c2ad76`); fixture fix `7ee2f6f89`.
+- [ ] Spinner glyph reads very small at sidebar size (fixture screenshot) — design check.
 - [ ] Live checks still unverified: drag released over empty space reverts; auto-scroll feel;
   Resume on a real Claude + Codex session; `?` on finished idle sessions (F); Esc-interrupt leaving
   a row "working" up to 30 min (inferred, unverified)
