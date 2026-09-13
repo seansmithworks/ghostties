@@ -199,7 +199,6 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         SessionRow(
             session: session,
             indicatorState: coordinator.indicatorState(for: session.id),
-            ghostCharacter: session.resolvedGhostCharacter,
             isActive: coordinator.activeSessionId == session.id,
             isEditing: editingSessionId == session.id,
             agentTemplateName: agentTemplateName(for: session),

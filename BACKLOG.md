@@ -27,6 +27,8 @@
   sidebar in `1c0f78b2b`)
 - [ ] (F) Status: `ClaudeStateStore.swift:290` maps Notification `idle_prompt` → `.needsInput`, so a
   finished session sitting idle reads as "needs you" — finished and blocked are indistinguishable
+- [ ] (F) now visible: `idle_prompt` → needsInput means a finished idle session shows `?` —
+  needs a decision.
 - [x] (G) Live-reflow drag + drop zones in session view — dragging a row opens a gap the height of
   one row at the proposed insertion point (top/bottom half of a row decides before/after), an
   end-of-section drop zone lands a drag after the last row, and an empty Pinned section shows a
@@ -42,13 +44,16 @@
   checks the headless renders can't prove: a drag released over empty space reverts (the
   `leftMouseUp` monitor is unverified), auto-scroll feel (row-stepped, not continuous), a Dev build
   screenshot. The Dev slot is held by the Composer review build, so coordinate. (carried)
-- [ ] (J) DECIDE OR KILL — status visual system. Canvases `d9ccb142…` (round 1) and `2cc82cb4…`
+- [x] (J) DECIDE OR KILL — status visual system. Canvases `d9ccb142…` (round 1) and `2cc82cb4…`
   (round 2, incl. "Row anatomy — name first"). Sean 2026-09-13: current colors + density are too much,
   yet wants more character. Strawman: #3 "Quiet, plus a hand" (grey ghosts, gold + raised hand only on
   needs-you), thread name kept on line 1, row layout C for Allow/Deny and A for "Answer in terminal",
-  Deny stays a word. Waiting on the sidebar inspiration board before picking. (carried)
-- [ ] (K) `DESIGN.md` status colors/type sizes are stale vs code (terracotta = waiting, 11pt) —
-  reconcile when (J) lands. (parked)
+  Deny stays a word. Waiting on the sidebar inspiration board before picking.
+  Picked D — type glyph replaces ghost in the row icon slot (Sean 2026-09-13, "for the moment").
+  This commit.
+- [x] (K) `DESIGN.md` status colors/type sizes are stale vs code (terracotta = waiting, 11pt) —
+  reconcile when (J) lands. Picked D — type glyph replaces ghost in the row icon slot
+  (Sean 2026-09-13, "for the moment"). This commit.
 
 ## 2026-08-31 — Composer variant G session (carried)
 

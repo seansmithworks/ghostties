@@ -55,9 +55,10 @@ struct RecentsRowView: View, Equatable {
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Per-session ghost character, tinted by status — same color mapping
-            // as MenuBarDropdownView.
-            GhostCharacterView(character: session.resolvedGhostCharacter, color: dotColor)
+            // Per-session status glyph — pattern D, "type is the icon"
+            // (BACKLOG J). Replaces the ghost as the status signal in this
+            // slot; see SessionStatusGlyph.
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind)
                 .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
                 .frame(width: WorkspaceLayout.sidebarIconColumnWidth, alignment: .center)
 
@@ -118,20 +119,6 @@ struct RecentsRowView: View, Equatable {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
-
-    // MARK: - Dot Color
-
-    private var dotColor: Color {
-        switch indicatorState {
-        case .error:          return Color(.systemRed)
-        case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
-        case .waiting:        return WorkspaceLayout.statusYourTurnBlue
-        case .longRunning:    return WorkspaceLayout.statusLongRunningOrange
-        case .processing:     return Color(.systemGreen)
-        case .idle:           return Color.primary.opacity(0.30)
-        case .inactive:       return Color.primary.opacity(0.12)
-        }
     }
 
     // MARK: - Row Background
