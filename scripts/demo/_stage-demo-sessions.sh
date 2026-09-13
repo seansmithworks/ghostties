@@ -53,6 +53,30 @@ if [[ ! -f "$TARGET" ]]; then
   exit 1
 fi
 
+# ── Resolve claude's absolute path now, at staging time ─────────────────────
+# Baking the resolved path into each wrapper means a staged session's launch
+# doesn't depend on the spawned process's PATH (which, inside the GUI app,
+# is minimal — see SessionCoordinator.resolveCommand's own PATH-recovery
+# fallback for the same reason).
+CLAUDE_BIN="$(command -v claude || true)"
+if [[ -z "$CLAUDE_BIN" ]]; then
+  echo "ERROR: 'claude' not found on PATH. Cannot stage sessions without a resolvable claude binary." >&2
+  exit 1
+fi
+
+# ── Wrapper scripts: WorkspacePersistence.sanitizeTemplate strips any
+#    agent.additionalFlags entry that isn't a CLI flag (^--?[a-zA-Z]...), so a
+#    plain prompt sentence placed there is silently dropped and `claude`
+#    launches with no prompt. Instead, stage one small executable wrapper per
+#    prompt and point the template's `command` at its absolute, space-free
+#    path; the wrapper execs the resolved claude binary with the prompt as a
+#    single argv entry. DEMO_WRAPPER_DIR (see _demo-paths.sh) is deliberately
+#    outside the space-containing demo state/repos dirs: SessionCoordinator
+#    extracts the base command by splitting on the first whitespace
+#    character, so a path containing a space would be truncated there.
+mkdir -p "$DEMO_WRAPPER_DIR"
+chmod 700 "$DEMO_WRAPPER_DIR"
+
 # ── Back up existing workspace.json ─────────────────────────────────────────
 BACKUP="$DEMO_STATE_DIR/workspace.json.bak-$(date +%Y%m%dT%H%M%S)"
 echo "==> Backing up existing workspace.json -> $(basename "$BACKUP")"
@@ -64,13 +88,14 @@ TMP_FILE="$(mktemp "${TMPDIR:-/tmp}/workspace.XXXXXX.json")"
 trap 'rm -f "$TMP_FILE"' EXIT
 
 echo "==> Rewriting workspace.json..."
-python3 - "$TARGET" "$TMP_FILE" "$REPOS_DIR" "$COUNT" "$RESET" "$DEMO_SESSION_MARKER" "$TEMPLATE_MARKER" <<'PYEOF'
+python3 - "$TARGET" "$TMP_FILE" "$REPOS_DIR" "$COUNT" "$RESET" "$DEMO_SESSION_MARKER" "$TEMPLATE_MARKER" "$DEMO_WRAPPER_DIR" "$CLAUDE_BIN" <<'PYEOF'
 import sys
 import json
 import subprocess
 import os
+import shlex
 
-target_path, tmp_path, repos_dir, count_str, reset_str, session_marker, template_marker = sys.argv[1:8]
+target_path, tmp_path, repos_dir, count_str, reset_str, session_marker, template_marker, wrapper_dir, claude_bin = sys.argv[1:10]
 count = int(count_str)
 reset = reset_str == "1"
 
@@ -100,6 +125,13 @@ kept_templates = [t for t in prior_templates if not t.get("name", "").startswith
 removed_sessions = len(prior_sessions) - len(kept_sessions)
 removed_templates = len(prior_templates) - len(kept_templates)
 print(f"    Removed {removed_sessions} previously staged session(s), {removed_templates} template(s).")
+
+# Clear previously staged wrapper scripts so re-running doesn't accumulate
+# stale wrappers pointing at a since-removed template.
+if os.path.isdir(wrapper_dir):
+    for name in os.listdir(wrapper_dir):
+        if name.startswith("demo-drive-"):
+            os.remove(os.path.join(wrapper_dir, name))
 
 if reset:
     state["sessions"] = kept_sessions
@@ -134,6 +166,21 @@ for i in range(count):
     template_id = new_uuid()
     session_id = new_uuid()
 
+    # Wrapper script: sanitizeTemplate strips a plain-sentence prompt out of
+    # agent.additionalFlags (only entries matching ^--?[a-zA-Z]... survive),
+    # so the prompt is baked into a small executable wrapper instead, and the
+    # template's `command` points at the wrapper's absolute path. The wrapper
+    # execs claude directly (no shell re-parsing) so the prompt always
+    # arrives as exactly one argv entry, regardless of spaces/punctuation.
+    wrapper_path = os.path.join(wrapper_dir, f"demo-drive-{template_id}.sh")
+    wrapper_script = (
+        "#!/bin/sh\n"
+        f"exec {shlex.quote(claude_bin)} {shlex.quote(prompt)}\n"
+    )
+    with open(wrapper_path, "w") as wf:
+        wf.write(wrapper_script)
+    os.chmod(wrapper_path, 0o700)
+
     template = {
         "id": template_id,
         "name": f"{template_marker}{project_name}",
@@ -141,12 +188,9 @@ for i in range(count):
         "isDefault": False,
         "isGlobal": False,
         "projectId": project["id"],
-        "command": "claude",
+        "command": wrapper_path,
         "environmentVariables": {},
         "workingDirectory": root_path,
-        "agent": {
-            "additionalFlags": [prompt],
-        },
         "templateDescription": "Demo-drive staged agent (read-only)",
     }
 

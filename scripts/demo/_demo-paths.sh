@@ -25,6 +25,14 @@ REPOS_DIR="/Users/Shared/Ghostties Demo/repos"
 DEMO_SESSION_MARKER="Demo Agent — "
 DEMO_DRIVE_DEFAULT_COUNT=4
 
+# Directory for per-prompt launcher wrapper scripts staged sessions point
+# their AgentTemplate.command at. Must contain NO whitespace: SessionCoordinator
+# extracts the base command by splitting on the first whitespace character
+# (see SessionCoordinator.swift createSession), so a path under
+# "/Users/Shared/Ghostties Demo/..." would truncate. This lives outside
+# DEMO_STATE_DIR/REPOS_DIR for that reason alone.
+DEMO_WRAPPER_DIR="$HOME/.ghostties-demo-wrappers"
+
 # ── Isolation check: LSEnvironment must pin GHOSTTIES_STATE_DIR ─────────────
 # `WorkspacePersistence.directoryName` maps the demo bundle ID
 # (com.seansmithdesign.ghostties.demo) to "Ghostties Demo" — but ONLY when
