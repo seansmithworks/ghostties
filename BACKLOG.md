@@ -1,5 +1,11 @@
 # Ghostties — Backlog
 
+## Before merging PR #169 (handoff, 2026-09-13)
+
+- [ ] (a) With Ghostties Dev quit for the duration, run the full unfiltered suite on the PR head via `xcodebuild test-without-building` with real totals from `xcresulttool`. Then do red proofs by minimal production mutation (not compile failures) for every test-bearing commit in `git log --first-parent --no-merges 911759a6e..HEAD`, including the carried R15/R15b/Custom-preset/R18/Witness items.
+- [ ] (b) Mark the PR ready and merge via `--repo SeanSmithWorks/ghostties`.
+- [ ] (c) PR visuals owed: before/after screenshots of the single-line composer and the Witness ghost, which the repo's PR rule requires.
+
 ## 2026-09-13 (later) — Composer live-look round (PR #169)
 
 - [x] Sean's Dev-tuned defaults applied to code (width 640, corner radius 16, field size 24, shadow 48/32/0.10, ghost gap 5) — session-7 brief, confirmed via `defaults read com.seansmithdesign.ghostties.dev`.
@@ -13,10 +19,10 @@
 - [x] DialKit single-line dial set rebuilt in `57b0fcd42` (independent review: pass). Order: Style, Treatment, Glass tint (new, default None), Width, Corner radius (new, default 10), Field size, Row size, Shadow ×4, Witness, Ghost gap (new, default 4), Reset single-line (new). Zero-chrome dials show only under Zero chrome; Classic shows Style only. Tests compiled, NOT run. The visible-controls test asserts counts only, because DialKit's control labels are `package`-scoped.
 - [x] DialKit panel moved from the full-width bottom drawer to a 320pt top-trailing inline card with a collapse pill (`83d796814`). No separate review (DEBUG-only). Not visually verified clear of the composer at narrow window widths.
 - [x] (carried) Sean's live tuning on Dev (running build `83d796814`): text size, ghost gap, glass tint, corner radius. Applied via `defaults read com.seansmithdesign.ghostties.dev`, session-7 brief (see the new item above) — not via DialKit Copy (Copy itself was broken on macOS, fixed this session).
-- [ ] (carried) Liquid Glass "not visible": inferred cause is the hardcoded `.windowBackgroundColor` glass tint. Glass tint None is now the default; confirm live that the glass reads as glass.
-- [ ] DECIDE OR KILL: the ⊖ bubble beside the caret is macOS's own cursor indicator, with no public per-NSTextView API (SDK headers checked). Sean checks whether it shows on focus in Spotlight/Raycast/TextEdit. Strawman: if it shows there, accept it (the only off switch is the system-wide, unsupported `redesigned_text_cursor` flag, Sean's machine-wide choice). If it doesn't, spike an NSTextField field-editor variant of the composer field.
-  - CORRECTION (session-7 round 2): a public hook was found — `NSTextInputClient.preferredTextAccessoryPlacement` (macOS 14+) → `.invisible`. Implemented this commit as an `override` on `ComposerGhostNSTextView`. Awaiting Sean's live look on Dev to confirm it actually hides the bubble.
-- [ ] (parked) Stale doc comment "Reuses `composerClipShape`" in `singleLineComposerCard` (`SessionComposerPalette.swift` ~2212); the card now uses `singleLineClipShape`.
+- [x] (carried) Liquid Glass "not visible": inferred cause is the hardcoded `.windowBackgroundColor` glass tint. Glass tint None is now the default; confirm live that the glass reads as glass. **Confirmed 2026-09-13** — Sean's live look on the merged build says it reads as glass with tint None.
+- [x] DECIDE OR KILL: the ⊖ bubble beside the caret is macOS's own cursor indicator, with no public per-NSTextView API (SDK headers checked). Sean checks whether it shows on focus in Spotlight/Raycast/TextEdit. Strawman: if it shows there, accept it (the only off switch is the system-wide, unsupported `redesigned_text_cursor` flag, Sean's machine-wide choice). If it doesn't, spike an NSTextField field-editor variant of the composer field.
+  - CORRECTION (session-7 round 2): a public hook was found — `NSTextInputClient.preferredTextAccessoryPlacement` (macOS 14+) → `.invisible`. Implemented this commit as an `override` on `ComposerGhostNSTextView` (`b3fa5809c`). **Confirmed 2026-09-13** — Sean's live look on the merged build shows no caret bubble.
+- [x] (parked) Stale doc comment "Reuses `composerClipShape`" in `singleLineComposerCard` (`SessionComposerPalette.swift` ~2212); the card now uses `singleLineClipShape`. Fixed session-7 (`fc549f34f`).
 
 ## 2026-09-13 — Composer thread checkpoint (PR #169)
 
@@ -31,7 +37,7 @@
     - Reduce Motion: static, instant swap
   - Built 2026-09-13 in `ef496f46d` (port) + `204fc5bdb`/`3b94a1226`/`6e0f97c37` (review fixes: interrupted morphs start from the on-screen frame; launch is terminal and wins over a same-update identity change; initial-mount beat). Two independent reviews passed. Swift↔board JS parity dump: 0 diffs across all 9 ghosts + placeholder. build-for-testing green. **Tests compiled, NOT run** (Dev was open).
 - [ ] (carried 2× since 2026-09-12) Local verification once Sean quits Dev: full unfiltered suite plus red proofs for R15 (`df25c6023`, `6c25d8ef9`, `264222ea0`), R15b `e4257a247`, the Custom preset fix `01d3f1ef5`, and R18 `f9d454e2e`. The two R18 tests' tolerances (1pt Witness alignment, <3pt card width) are uncalibrated. The last full suite (at `911759a6e`) was 1147/1158, where 5 failures were pre-existing load flakes. Also owed: a first run + red proofs for the Witness frame tests in `ComposerWitnessFramesTests.swift` (19) and the `ComposerWitnessTests.swift` transition tests added in `204fc5bdb`/`3b94a1226`/`6e0f97c37`. STALE: the "no red proof needed" exception for `tabPlusIdentityChange…`/`unknownBranchPlusIdentityChange…` no longer holds — `f0c9c5cf7` changed their asserted behaviour (always-transitions), so both now DO need red proofs against `e221d24d3^^` (i.e. `4e68b2c2c`, the commit before the behaviour change). Also owed: `57b0fcd42` (dial tests) and `83d796814`.
-- [ ] (carried) Single-line taste defaults, strawman set 2026-09-13, to apply unless Sean redlines:
+- [x] (carried) Single-line taste defaults, strawman set 2026-09-13, to apply unless Sean redlines: superseded 2026-09-13 by Sean's DialKit Copy-output defaults, applied in `a0eec0232`/`e9c922eb0`.
   - ~~treatment → Material~~ superseded 2026-09-13: Sean wants Liquid Glass visible; Glass stays default, tint None added
   - shadow radius 64 → 32 (the HTML bench's CSS blur is ~2× a SwiftUI shadow radius)
   - placeholder ghost → `secondaryLabelColor`, eyes kept
@@ -42,11 +48,11 @@
   - "Assert DialKit absent" logged `OK: no DialKit found in 17 Mach-O file(s)`
   - Notarize app/DMG succeeded
   - appcast/release/verify-release/homebrew-cask all skipped
-- [ ] (carried) Re-check the macOS input-source indicator (⊖) and the Witness launch dissolve (280ms of frames vs the overlay removal armed right after it at `SessionComposerPalette.swift:2929`; if most of it is cut, compress launch toward 200ms) live, after R18 is in Dev.
+- [x] (carried) Re-check the macOS input-source indicator (⊖) and the Witness launch dissolve (280ms of frames vs the overlay removal armed right after it at `SessionComposerPalette.swift:2929`; if most of it is cut, compress launch toward 200ms) live, after R18 is in Dev. **Confirmed 2026-09-13** — Sean's live look on the merged build (`057c19fed`) shows no caret bubble and the launch dissolve plays.
 - [x] (Sean's call, decided 2026-09-13) Tab-accept that also switches the project (`ComposerGhostTextField.swift:1018` sets the query before `:1024` fires `.acceptedGhost`): Sean's call was "always have transitions" — the hop (and unknown-branch's lean) no longer plays immediately on the new ghost with no morph; it now plays the resolve dither morph first, then the beat's own frames, as one sequence. Done in `ComposerWitnessTransition.next` (session-7, commit "ghost identity changes always transition").
-- [ ] (parked) DESIGN.md documents ghost-text opacity 0.50; the code uses 0.65. Update the doc once single-line settles.
+- [x] (parked) DESIGN.md documents ghost-text opacity 0.50; the code uses 0.65. Update the doc once single-line settles. **Checked session-7:** not a mismatch — DESIGN.md's 0.50 documents the in-field ghost placeholder (`ComposerGhostTextField.ghostOpacity`/`SessionComposerPalette.ghostPlaceholderOpacity`, both 0.50), which matches. The 0.65 belongs to an unrelated symbol, `ComposerZeroChromeTypography.ghostOpacity` (Witness sprite opacity), which DESIGN.md never documented. No doc edit made.
 - [x] (decided 2026-09-13 later) Sean decided single-line is the default composer style for everyone — done, `ComposerStyle.current(defaults:)` falls back to `.singleLine` (`ComposerZeroChromeStyle.swift` ~26-33), plus matching `@AppStorage` defaults. **Classic removal stays open and unconfirmed** — classic (and zero-chrome) remain fully intact and reachable via the flag; this was a default flip only. Open question: does centered zero-chrome stay?
-- [ ] (parked) Throwaway spike worktree `.claude/worktrees/r17-dialkit-spike` has an uncommitted DialKit diff, already applied in `f3fdced38`. Safe to remove with `git worktree remove`, after confirming with Sean.
+- [x] (parked) Throwaway spike worktree `.claude/worktrees/r17-dialkit-spike` has an uncommitted DialKit diff, already applied in `f3fdced38`. Safe to remove with `git worktree remove`, after confirming with Sean. **Removed session-7 (2026-09-13):** verified every hunk was already present at HEAD (`git apply --check -R` clean), then `git worktree remove --force` (only blocker was that verified diff plus untracked `vendor/cef`/`vendor/cef-build`/`zig-out` build artifacts).
 
 ## 2026-09-13 — R18: single-line composer inset fix (PR #169)
 
