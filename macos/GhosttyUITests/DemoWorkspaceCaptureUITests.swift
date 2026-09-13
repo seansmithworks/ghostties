@@ -316,6 +316,33 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
             "genuine content."
         )
 
+        // ── Scroll the sidebar back to the top before capturing ──
+        // The expand loop and relaunch loop above both click/right-click
+        // rows further down the project list, which leaves the sidebar
+        // scrolled past the first project's header (observed: atlas-api's
+        // header clipped off the top of a real capture). Scroll the
+        // sidebar's own scroll view back up with a scroll-wheel gesture
+        // (not `.any` descendant enumeration — see the AX-cost lesson
+        // above) rather than a fixed sleep or a guess at row height.
+        let sidebarScrollView = app.scrollViews.firstMatch
+        guard sidebarScrollView.waitForExistence(timeout: 5) else {
+            app.terminate()
+            XCTFail(
+                "No scroll view found for the sidebar — cannot scroll it " +
+                "back to the top before capturing. The screenshot would " +
+                "otherwise show whatever scroll position the expand/relaunch " +
+                "loops above left it at."
+            )
+            return
+        }
+        // A large positive deltaY scrolls content up toward the top; repeat
+        // several times since one gesture may not cover the full staged
+        // list (10 fixture projects, some with staged sessions expanded).
+        for _ in 0..<10 {
+            sidebarScrollView.scroll(byDeltaX: 0, deltaY: 2000)
+        }
+        Thread.sleep(forTimeInterval: 0.3)
+
         let window = app.windows.firstMatch
         let windowShot = window.screenshot()
         let outputPath = outputDir.appendingPathComponent("\(name).png")
