@@ -401,6 +401,7 @@ struct ComposerWitnessTests {
         #expect(resolved.beatFrames.count == expectedMorph.count + expectedLean.count)
         #expect(resolved.beatFrames.first?.grid == expectedMorph.first?.grid, "sequence starts with the resolve morph")
         #expect(resolved.beatFrames.last?.grid == Self.pixelsFor(Self.identityB), "sequence ends on the lean's rest frame")
+        #expect(resolved.resolveFromColors != nil, "morph colours are carried through the morph portion of the combined sequence")
 
         let totalDuration = resolved.beatFrames.reduce(0) { $0 + $1.ms }
         let expectedDuration = expectedMorph.reduce(0) { $0 + $1.ms } + expectedLean.reduce(0) { $0 + $1.ms }

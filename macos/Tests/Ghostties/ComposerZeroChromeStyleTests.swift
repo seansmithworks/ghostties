@@ -85,6 +85,33 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerZeroChromeMaterial.current(defaults: suite) == .thin)
     }
 
+    // MARK: - `.anchored` popover stays `.classic` under the single-line default
+    //
+    // `SessionComposerPalette.effectiveStyle` is the pure decision extracted
+    // from `activeStyle` — covers the sidebar popover (`ProjectDisclosureRow
+    // .swift`) never picking up `.singleLine`/`.zeroChrome`, which would
+    // silently drop `ComposerResultsTable` (only `classicComposerCard`
+    // renders it).
+
+    @Test(arguments: [ComposerStyle.classic, .zeroChrome, .singleLine])
+    func effectiveStyleForcesClassicWhenAnchoredRegardlessOfStored(stored: ComposerStyle) {
+        #expect(SessionComposerPalette.effectiveStyle(stored: stored, presentation: .anchored) == .classic)
+    }
+
+    @Test(arguments: [ComposerStyle.classic, .zeroChrome, .singleLine])
+    func effectiveStyleReturnsStoredValueUnchangedWhenCentered(stored: ComposerStyle) {
+        #expect(SessionComposerPalette.effectiveStyle(stored: stored, presentation: .centered) == stored)
+    }
+
+    /// No stored value → `ComposerStyle.current()` → `.singleLine`; centered
+    /// presentation passes it through unchanged.
+    @Test func effectiveStyleKeepsSingleLineDefaultWhenCentered() {
+        let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
+        let stored = ComposerStyle.current(defaults: suite)
+        #expect(stored == .singleLine)
+        #expect(SessionComposerPalette.effectiveStyle(stored: stored, presentation: .centered) == .singleLine)
+    }
+
     // MARK: - Snapshot evidence (real UserDefaults.standard, save/restore)
     //
     // `SessionComposerPalette.activeStyle` reads `ComposerStyle.current()`

@@ -1403,9 +1403,23 @@ struct SessionComposerPalette: View {
     /// without this gate would silently drop the popover's results list.
     /// Zero-chrome is unaffected either way — it's already opt-in via the
     /// flag, not the new default.
+    /// Pure decision extracted from `activeStyle` so the `.anchored` guard
+    /// is unit-testable without constructing a `SessionComposerPalette`
+    /// (`request`/`styleOverrideForTesting` are private view properties).
+    /// No behaviour change — `activeStyle` below just forwards to this.
+    static func effectiveStyle(
+        stored: ComposerStyle,
+        presentation: SessionComposerRequest.Presentation
+    ) -> ComposerStyle {
+        guard presentation != .anchored else { return .classic }
+        return stored
+    }
+
     private var activeStyle: ComposerStyle {
-        guard request.presentation != .anchored else { return .classic }
-        return styleOverrideForTesting ?? ComposerStyle.current()
+        Self.effectiveStyle(
+            stored: styleOverrideForTesting ?? ComposerStyle.current(),
+            presentation: request.presentation
+        )
     }
 
     private var reduceMotionEnabled: Bool {
