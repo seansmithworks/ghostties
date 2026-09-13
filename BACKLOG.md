@@ -1,5 +1,19 @@
 # Ghostties — Backlog
 
+## Merge prep (2026-09-13)
+
+- [x] Revert static working glyph (Sean: grid/spinner better) — a836dbc99
+- [x] Merge origin/main into branch — 61e09d692
+- [ ] Full GhosttyTests run on the merged HEAD (waiting on the Dev slot)
+- [ ] Independent review of the status glyph change `9b1a6d735`
+- [ ] PR on SeanSmithWorks/ghostties (base main) with FIXTURE-data screenshots (public repo — no
+  real session names)
+- [ ] Live checks still unverified: drag released over empty space reverts; auto-scroll feel;
+  Resume on a real Claude + Codex session; `?` on finished idle sessions (F); Esc-interrupt leaving
+  a row "working" up to 30 min (inferred, unverified)
+- [ ] `~/.claude` repo commit `69597fa` (zshrc `GHOSTTIES_LAUNCHER`) — separate repo, not part of
+  this PR
+
 ## 2026-09-12 — Sidebar section vocabulary
 
 - [x] (A) Align session view + project view on one Active/Inactive/Archive rule (this task)
