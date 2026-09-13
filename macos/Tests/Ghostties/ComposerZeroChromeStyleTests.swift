@@ -1728,11 +1728,26 @@ struct ComposerZeroChromeStyleTests {
     /// reads" change); reverting the deliberate break did NOT turn this
     /// green. Flagged, not fixed.
     @available(macOS 14, *)
-    @Test func dialKitShadowPresetSelectionWritesAllThreeDialsAndUpdatesModel() {
+    @Test func dialKitShadowPresetSelectionWritesAllThreeDialsAndUpdatesModel() async {
         let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.preset.test.\(UUID().uuidString)")!
         let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
 
         coordinator.state.values.shadowPresetRaw = ComposerSingleLineShadowPreset.lifted.rawValue
+
+        // `DialPanelState.values` is `@Published`, and `@Published`'s
+        // synthesized setter sends to its subject BEFORE writing storage —
+        // see `ComposerDialKitCoordinator.handle`'s doc comment. The
+        // coordinator's corrective `state.values = derived` write is
+        // therefore deferred a runloop turn (`DispatchQueue.main.async`) so
+        // it lands after the ABOVE line's own outer setter has finished
+        // storing its (stale-dial) value; otherwise it would just be
+        // clobbered. Yielding lets that queued main-queue block run before
+        // asserting.
+        // `GhosttiesCore.Task` (imported above) shadows `_Concurrency.Task`
+        // in this file — `Task.yield()` resolves to the wrong type without
+        // the explicit module prefix.
+        await _Concurrency.Task.yield()
+        await _Concurrency.Task.yield()
 
         let expected = ComposerSingleLineShadowPreset.lifted.dialValues
 

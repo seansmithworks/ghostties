@@ -1304,8 +1304,29 @@ final class ComposerDialKitCoordinator: ObservableObject {
     /// `ComposerSingleLineShadowDials.apply` on every selection) — so picking
     /// a preset here left the three sliders, and the persisted keys they
     /// write, exactly where they were. When the preset changes, derive its
-    /// dial values and push them back into `state.values` BEFORE diffing, so
-    /// both the panel's own sliders and the persisted keys update together.
+    /// dial values and persist them; the panel's own sliders are updated on
+    /// the next runloop turn (see the `state.values` reassignment below) —
+    /// NOT synchronously here.
+    ///
+    /// Round-13c root cause: `DialPanelState.values` is `@Published`, and
+    /// `@Published`'s synthesized setter sends the new value to its Combine
+    /// subject BEFORE writing to backing storage. Reassigning `state.values`
+    /// synchronously from inside this sink re-enters that same setter while
+    /// the OUTER assignment (the user's own preset pick) is still
+    /// in-progress: the outer setter's `subject.send(model)` call is what
+    /// invoked this sink in the first place, and it has not yet stored
+    /// `model` into `values`. The nested `state.values = derived` call runs
+    /// to completion — including storing `derived` — but then control
+    /// returns to the OUTER setter, which finishes by unconditionally
+    /// storing its own `model` (stale dials, e.g. radius 64) over whatever
+    /// the nested call just stored, clobbering `derived` back to `model`.
+    /// A trace of `handle`'s arguments/`lastKnownModel` never surfaces this
+    /// — every diff `write(from:to:)` computes is correct — because the
+    /// corruption happens to `state.values`' backing storage, one layer
+    /// below anything this function reads or logs. Deferring the
+    /// reassignment past the outer setter's return (`DispatchQueue.main
+    /// .async`) means it lands as its own top-level `values` assignment,
+    /// with no in-flight outer write left to stomp it.
     private func handle(_ model: ComposerDialKitTuningModel) {
         let previous = lastKnownModel
         if model.shadowPresetRaw != previous.shadowPresetRaw,
@@ -1316,13 +1337,10 @@ final class ComposerDialKitCoordinator: ObservableObject {
             derived.shadowYOffset = Double(values.yOffset)
             derived.shadowOpacity = values.opacity
             lastKnownModel = derived
-            // Reassigning `state.values` re-renders the panel's sliders with
-            // the derived numbers and re-enters this sink synchronously; by
-            // the time that nested call runs, `lastKnownModel` already
-            // equals `derived`, so it diffs to nothing and writes nothing —
-            // the single `write(from:to:)` below is the only persistence.
-            state.values = derived
             write(from: previous, to: derived)
+            DispatchQueue.main.async { [weak self] in
+                self?.state.values = derived
+            }
             return
         }
         lastKnownModel = model
@@ -1446,9 +1464,17 @@ final class ComposerDialKitCoordinator: ObservableObject {
                 "singleLineRowSize", keyPath: \.singleLineRowSize, label: "Row size",
                 range: ComposerSingleLineTuning.rowSizeRange, unit: "pt"
             ),
+            // R13c: the width range's inferred step (10, since the range
+            // spans 280pt: `DialTypes.dialInferredStep`) doesn't divide
+            // evenly from `widthRange.lowerBound` (480) to Sean's tuned
+            // 688pt default — `dialRound` rounded 688 to 690 the instant
+            // the panel opened. 8 does: (688 - 480) % 8 == 0 (208 / 8 ==
+            // 26), so 688 is itself an exact step position and the dial
+            // never nudges it, while still giving 35 steps across the
+            // 280pt range (finer than the inferred 10pt, still usable).
             .slider(
                 "singleLineWidth", keyPath: \.singleLineWidth, label: "Width",
-                range: ComposerSingleLineTuning.widthRange, unit: "pt"
+                range: ComposerSingleLineTuning.widthRange, step: 8, unit: "pt"
             ),
             .select(
                 "shadowPreset", keyPath: \.shadowPresetRaw, label: "Shadow",
