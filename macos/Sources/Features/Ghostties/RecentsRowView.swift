@@ -24,6 +24,11 @@ struct RecentsRowView: View, Equatable {
     let session: AgentSession
     let projectName: String
     let indicatorState: SessionIndicatorState
+    /// True while this session's Codex hook has never reported and the grace
+    /// period has elapsed — see `SessionCoordinator.codexHookUnconfirmed(for:)`.
+    /// Replaces the project-name subtitle with an explanatory hint; false is
+    /// the default so every other call site is unaffected.
+    var hookUnconfirmed: Bool = false
     let isActive: Bool
     var isEditing: Bool = false
     @Binding var editingName: String
@@ -43,6 +48,7 @@ struct RecentsRowView: View, Equatable {
         lhs.session == rhs.session
             && lhs.projectName == rhs.projectName
             && lhs.indicatorState == rhs.indicatorState
+            && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
     }
@@ -81,7 +87,7 @@ struct RecentsRowView: View, Equatable {
                         .lineLimit(1)
                 }
 
-                Text(projectName)
+                Text(hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName)
                     .font(.system(size: 10))
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
@@ -151,6 +157,9 @@ struct RecentsRowView: View, Equatable {
 
     private var accessibilityLabel: String {
         var parts = [session.name, "in \(projectName)"]
+        if hookUnconfirmed {
+            parts.append("Approve the Ghostties hook in Codex")
+        }
         if let ts = session.displayTimestamp {
             // "last output" — not a bare relative token — so a screen reader
             // has a noun for what this measures. Browsing (focus/selection)

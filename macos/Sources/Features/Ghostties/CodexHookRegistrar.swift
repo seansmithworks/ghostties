@@ -17,6 +17,13 @@ import OSLog
 /// created if the event has none yet). This type never writes a trust
 /// marker and never uses `--dangerously-bypass-hook-trust` — Sean approves
 /// the new entry once in Codex's own review UI.
+///
+/// The read-modify-write in `register(hooksJSONPath:scriptPath:)` takes no
+/// file lock. A Codex process writing to `hooks.json` concurrently (e.g.
+/// approving a hook in its own review UI) between this type's read and its
+/// atomic replace could have that write silently lost. Acceptable: Codex
+/// writes this file rarely (only on a trust decision), so the window is
+/// narrow and the loss is recoverable — the user re-approves.
 struct CodexHookRegistrar {
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "com.ghostties",

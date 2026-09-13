@@ -685,6 +685,7 @@ struct RecentsListView: View {
             session: session,
             projectName: projectName,
             indicatorState: indicatorState,
+            hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
             isActive: coordinator.activeSessionId == session.id,
             isEditing: editingSessionId == session.id,
             editingName: editingSessionId == session.id ? $editingName : .constant(""),

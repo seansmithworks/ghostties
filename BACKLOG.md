@@ -11,14 +11,17 @@
   - Dropping on Active relaunches it, resuming the conversation where possible, because Active
     means the terminal is open.
   - Dragging down isn't supported; Stop does that job.
-- [ ] (D1) Claude Code resume: Resume + Start Fresh menu — relaunch resumes the agent conversation
-  (`claude --resume`) instead of always starting fresh
-- [ ] (D2) Codex resume — spike 2026-09-13 says FEASIBLE: hooks inherit `GHOSTTIES_SESSION_ID`,
-  `codex resume -C '<cwd>' '<id>'` (Codex does not restore cwd). Ghostties appends its hook to
-  `~/.codex/hooks.json` automatically on the first Codex launch (append, never prepend — trust is
-  per position); user approves once in Codex's own review prompt; untrusted hooks fail silently, so
-  show a quiet "approve the Ghostties hook in Codex" hint. Build D1+D2 as one generalized
-  `AgentSession.resume` record. Full plan: memory `project_relaunch-resume-plan.md`. (carried)
+- [x] (D1) Claude Code resume: `AgentResume`, `ResumePlan`, persisted resume record, relaunch
+  collapsed into `SessionCoordinator.relaunch(session:)`. `bba1d1281`, `9580cc6c9`, `838b88b3c`.
+- [x] (D2) Codex resume: `CodexHookRegistrar` (append-only, trust-preserving), `ResumePlan`'s
+  `codex resume -C '<cwd>' '<id>'` path, and the "approve the Ghostties hook in Codex" hint
+  (`CodexHookConfirmation`, replaces the Sessions-tab row subtitle while unconfirmed).
+  `bba1d1281`, `9580cc6c9`, `838b88b3c`, this commit, and `~/.claude` `69597fa` (zshrc launcher
+  marker).
+  - [ ] Live check: Resume on a real Claude session and a real Codex session (approve hook
+    once) — not yet run.
+- [ ] Codex hook registers only for template-launched Codex sessions (`isCodexTemplate`); a
+  `codex` typed into a plain shell never registers.
 - [ ] (E) Cmd+W close dialog: `SessionCoordinator.closeCurrentSessionWithConfirmation()`'s inline
   `isActive` check treats a closed `.error` session as active (same divergence fixed for the
   sidebar in `1c0f78b2b`)
@@ -35,10 +38,10 @@
 - [x] (H) Project-view Archive header now matches session view's section headers — chevron moved
   to the leading side, and `.disabled(!isCollapsible)`'s automatic dimming (the actual cause of
   Archive reading darker than Active/Inactive) removed in favor of the existing tap-guard.
-- [ ] (I) Review `4e3a04419` (separate reviewer, not yet run) + live checks the headless renders can't
-  prove: a drag released over empty space reverts (the `leftMouseUp` monitor is unverified), auto-scroll
-  feel (row-stepped, not continuous), relaunch-on-drop holds its slot. Then a Dev build screenshot —
-  the Dev slot is held by the Composer review build, so coordinate. (carried)
+- [ ] (I) Review `4e3a04419` ran; the Stop-during-hold fix landed in `a02022f9c`. Still OPEN — live
+  checks the headless renders can't prove: a drag released over empty space reverts (the
+  `leftMouseUp` monitor is unverified), auto-scroll feel (row-stepped, not continuous), a Dev build
+  screenshot. The Dev slot is held by the Composer review build, so coordinate. (carried)
 - [ ] (J) DECIDE OR KILL — status visual system. Canvases `d9ccb142…` (round 1) and `2cc82cb4…`
   (round 2, incl. "Row anatomy — name first"). Sean 2026-09-13: current colors + density are too much,
   yet wants more character. Strawman: #3 "Quiet, plus a hand" (grey ghosts, gold + raised hand only on
@@ -1572,7 +1575,9 @@ proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fai
   from CI would need an npm automation token as a repo secret plus a publish step that doesn't
   exist. Doing this is what stops npx drifting behind every release, and it leaves the `npm publish`
   deny rule fully intact because publishing stops being a local action. | dist | not-started
-- [ ] **Resume-on-Relaunch — designed, not built.** Relaunch currently rebuilds from template
+- [ ] **Resume-on-Relaunch — designed, not built. SUPERSEDED by the 2026-09-13 two-item decision**
+  (Resume + Start Fresh — see `2026-09-12 — Sidebar section vocabulary` (D1)/(D2) above); left
+  here for the mechanism notes below, not as the active design. Relaunch currently rebuilds from template
   (`clearRuntime` + `createSession`), so the terminal returns and the conversation does not; the
   fork has **zero** references to `resume`/`--continue`/any Claude session identity. Design settled
   with Sean: **flat context menu with a `Relaunch` section title** (not a submenu — his call), three

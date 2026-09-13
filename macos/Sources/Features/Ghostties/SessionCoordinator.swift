@@ -54,6 +54,13 @@ final class SessionCoordinator: ObservableObject {
     /// never started this launch (ARCHIVE) — see `RecentsListView`.
     private(set) var sessionIdsStartedThisLaunch: Set<UUID> = []
 
+    /// When each Codex session was launched this run — stamped in
+    /// `createSession` when `isCodexTemplate(template)` is true, never
+    /// persisted. Feeds `codexHookUnconfirmed(for:)`; see
+    /// `CodexHookConfirmation` for why in-memory is sufficient (the hint is
+    /// only meaningful for a session actively launching this run).
+    private var codexSessionLaunchTimes: [UUID: Date] = [:]
+
     /// Bridges CEF callbacks to the browser UI. Keyed by session ID.
     private var browserBridges: [UUID: BrowserSessionBridge] = [:]
 
@@ -217,6 +224,12 @@ final class SessionCoordinator: ObservableObject {
         // "first" explicitly — is simplest and safe.
         if Self.isCodexTemplate(template) {
             CodexHookRegistrar.register(scriptPath: HookInstaller.scriptPath)
+            // Stamp launch time in-memory only — see `codexHookUnconfirmed(for:)`
+            // and `CodexHookConfirmation`. Never persisted: it resets on
+            // relaunch like `sessionIdsStartedThisLaunch`, which is correct —
+            // the hint is only meaningful for a session actively launching
+            // this run.
+            codexSessionLaunchTimes[session.id] = Date()
         }
 
         // Build the full command string and resolve the binary path, both off
@@ -1589,6 +1602,22 @@ final class SessionCoordinator: ObservableObject {
         case .error:
             return .error
         }
+    }
+
+    /// Whether `session`'s Codex hook has never reported and the row should
+    /// show the "approve the hook" hint — see `CodexHookConfirmation`.
+    /// `session.resume?.agent == .codex` is "has this session's Codex hook
+    /// ever reported" — `ClaudeStateStore.persistResumeIfPresent` writes an
+    /// `AgentResume` on the FIRST hook payload it decodes for a session, tagged
+    /// `agent: .codex` when `ghostties-status.sh` was invoked with the
+    /// `codex` argument (`CodexHookRegistrar.ghosttiesEntry`) — so its
+    /// presence is a true "reported at least once", never re-cleared.
+    func codexHookUnconfirmed(for session: AgentSession) -> Bool {
+        CodexHookConfirmation.isHookUnconfirmed(
+            isCodexSession: codexSessionLaunchTimes[session.id] != nil,
+            launchedAt: codexSessionLaunchTimes[session.id],
+            hasReported: session.resume?.agent == .codex
+        )
     }
 
     /// Whether a session's template is an agent CLI (Claude Code, custom) rather
