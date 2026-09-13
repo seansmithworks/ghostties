@@ -1,7 +1,6 @@
 # Sidebar Section Vocabulary — Post-Merge Test Plan
 
-PR #175. No existing `docs/testing/` convention — `docs/` only had `docs/plans/`, which is
-for feature plans, not test plans, so this is a new file/directory.
+Branch `feat/sidebar-section-vocabulary`, PR #175. Run after merging to `main`.
 
 ## Already verified on the branch
 
@@ -47,8 +46,11 @@ xcrun xcresulttool get test-results summary --path <path-to-.xcresult>
 
 Each item: steps → expected result → pass/fail.
 
-- [ ] **Sections in both views** — Session view and project view both show Pinned / Active /
-  Inactive / Archive under one rule. Expected: identical section set and ordering in both views.
+- [ ] **Sections in both views** — session view shows Pinned (when non-empty or during a drag) /
+  Active / Inactive / Archive; project view groups each project's sessions by the same
+  Active / Inactive / Archive rule, and its Archive header matches the session view's headers
+  (chevron on the leading side, same weight). Expected: a session sits in the same
+  Active/Inactive/Archive bucket in both views.
 - [ ] **Pin via drag onto empty Pinned** — drag a row onto an empty Pinned section. Expected:
   "Drop to pin" zone appears during the drag; drop pins the session.
 - [ ] **Drag reorder gap** — drag a row within a section. Expected: a one-row gap opens at the
@@ -61,15 +63,18 @@ Each item: steps → expected result → pass/fail.
 - [ ] **Drop onto Active relaunches** — drag a row onto Active. Expected: the session relaunches
   (resuming where possible) and holds its Active slot until alive or a 5s timeout. Stopping the
   session during the hold ends it immediately, without leaving a stale hold.
-- [ ] **Resume (Claude)** — right-click a session with a saved conversation. Expected: "Resume" +
-  "Start Fresh" both appear; Resume only appears when a saved conversation exists.
-- [ ] **Start Fresh (Claude)** — right-click a Claude session started from a shell opened after
-  `GHOSTTIES_LAUNCHER` landed. Expected: "Start Fresh" relaunches with no resume.
+- [ ] **Resume (Claude)** — start Claude from a shell opened AFTER `GHOSTTIES_LAUNCHER` landed in
+  `~/.claude/shell/zshrc` (via `cco`), send one prompt, Stop the session, right-click. Expected:
+  "Resume" and "Start Fresh" both appear; Resume reopens the same conversation. A session with no
+  saved conversation shows only "Start Fresh".
+- [ ] **Start Fresh (Claude)** — right-click the same stopped session → Start Fresh. Expected:
+  relaunches with a new conversation.
 - [ ] **Resume (Codex)** — right-click a Codex session, approve the Ghostties hook in Codex once.
   Expected: before approval, row shows "Approve the Ghostties hook in Codex"; after approval,
   Resume works.
 - [ ] **Status glyphs** — verify all five slot states render: spinner (working), `?`
-  (needs input), `✓` (idle/waiting), `✕` (error), empty (stopped).
+  (needs input), `✓` (idle/waiting), `✕` (error), empty (stopped). The working spinner is sized
+  to match `✓`/`?` (`26dbc54b4`) — confirm it no longer reads as two faint dots.
 - [ ] **VoiceOver status word** — with VoiceOver on, each glyph reads its status word (working /
   needs your input / idle / error / stopped).
 - [ ] **Reduce Motion** — with Reduce Motion on, the working state shows a static `…` instead of
