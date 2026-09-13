@@ -25,6 +25,28 @@ public enum SessionComposerCopy {
     public static func unresolvedBranchMessage(token: String) -> String {
         "No worktree found for branch \"\(token)\". Use the create-branch suggestion above, or retype/delete it."
     }
+
+    /// Zero-chrome/single-line composer styles (fix round 2, finding 2):
+    /// narrow, coordinator-approved exception to this file's read-only
+    /// status — ADDS a second constant beside `unresolvedBranchMessage`
+    /// above, does not edit it or any parsing logic. The classic message
+    /// says "Use the create-branch suggestion above" — true in the classic
+    /// results list, where the create-branch row is always visible right
+    /// there, but wrong in the new styles, where NOTHING is visible above
+    /// the status strip until `↓` reveals rows (zero-chrome) or the ghost
+    /// steps to it (single-line). "Press ↓" is accurate for BOTH: zero-chrome
+    /// reveals rows via `SessionComposerPalette`'s `.move(.down)` handler
+    /// (`zeroChromeRowsRevealedByArrow`), and single-line has no results
+    /// list at all but still routes `↓` through the same `flattenedOptions`-
+    /// backed `selectedIndex` step, which includes the create-branch offer
+    /// row (`typedBranchCreateOffer`/`bestSelectionIndex` — same list
+    /// `commandOptions` feeds both the classic table and the new styles'
+    /// row source) — confirmed against `SessionComposerPalette.swift`, not
+    /// re-derived here since this file has no view-layer access to verify
+    /// it directly.
+    public static func unresolvedBranchMessageForNewStyles(token: String) -> String {
+        "No worktree found for branch \"\(token)\". Press ↓ for the create-branch option, or retype/delete it."
+    }
 }
 
 /// Pure, testable command-grammar parsing for the session composer's

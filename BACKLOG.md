@@ -1,5 +1,27 @@
 # Ghostties — Backlog
 
+## 2026-09-12 — Composer round 12: single-line leads, tuning via DialKit (PR #169)
+
+Sean, after live-testing R11: typewriter position "just not landing"; single-line may be the best option for now, but feels small.
+
+- [ ] R12.1 DialKit (`mikelikesdesign/dialkit-ios`, MIT, macOS 14+) as the DEBUG tuning surface; app floor stays macOS 13 — NOT done in R12 (`2e4b44c59` extended the pill instead; blockers unproven per review) → R13
+- [x] R12.2 Single-line: bigger text + bigger container (dials) — `2e4b44c59`, 22/16/680pt strawman
+- [x] R12.3 Single-line: shadow presets + dials (radius, length/offset, opacity) — Soft = shipped tokens
+- [x] R12.4 Liquid Glass treatment option (macOS 26+, falls back to material) — single-line only, not zero-chrome
+- [x] R12.5 Zero-chrome: center-aligned text option — review: centered line re-centers on every keystroke (inherent), live look decides
+- [x] R12.6 Separate reviewer on the R12 diff — pass with notes; no test proves the palette consumes `ComposerSingleLineTuning` → R13
+- [ ] R13 Real DialKit integration + palette wiring test + stale "PR-facing note" comment — code pushed UNBUILT as `e08cda235` (DialKit vendored at `macos/Packages/DialKit/`, local package like GhosttiesCore, macOS 14 `@available`-gated; 13 falls back to the pill). CI RED on `e08cda235`: `compiling for macOS 13.0, but module 'DialKit' has a minimum deployment target of macOS 14.0` (`ComposerZeroChromeStyle.swift:5`) — `@available` can't gate an import; fixed in `d572fd995` (platform → `.v13` + `@available(macOS 14, *)` inside the vendored package), CI build-for-testing GREEN. Still owed once Dev closes: local build, suite totals, wiring-test red proof, Release `nm` proof of no DialKit symbols, separate reviewer
+- [x] R13 review (pass with notes): preset sets its dials + panel writes only changed fields + false red-proof comment corrected — `57b6b56ce`/`08bec654c`, CI 6/6 green; 2 new coordinator tests NOT yet run locally
+- [ ] DialKit links into Release (static, likely dead-stripped) — prove with Release `nm` once Dev closes
+- [x] R13c: DialKit preset dials fixed — root cause was a standalone `@Published` reentrancy probe. **Correction (round 13d):** the R13c entry here cited that probe's result as "final storage: 1, not 100"; an independent re-run got `final storage: 100` (the outer, stale write wins) — the OPPOSITE number, though the same mechanism (`DialPanelState.values` sends to its Combine subject BEFORE writing storage, so a synchronous nested `state.values = derived` write from inside the coordinator's own `$values` sink gets clobbered when the outer, still-in-flight setter finishes storing its own stale-dial value). R13c's fix deferred the corrective write via `DispatchQueue.main.async`; R13d replaces that deferral with a structural fix — see R13d entry below.
+- [x] R13d: replaced R13c's `DispatchQueue.main.async` deferral with a structural fix — `ComposerDialKitTuningModel.shadowPresetRaw` is now a computed property whose setter derives and assigns the three shadow dials as part of the SAME model mutation, so the `.select` control's one `state.values = updated` assignment (vendored `DialControlNode.resolve`) already carries the derived dials; the coordinator's `$values` sink no longer reassigns `state.values` at all, so there is nothing to race. `dialKitShadowPresetSelectionWritesAllThreeDialsAndUpdatesModel` is now synchronous (no `Task.yield()`). **Red proof observed (2026-09-12, Dev closed):** reverting `shadowPresetRaw`'s setter to store-only made this test FAILED (1/1); reverted, tree clean.
+- [ ] R13d review: picking "Custom" in the DialKit shadow picker snaps hand-tuned dials to `ComposerSingleLineShadowPreset.custom.dialValues` (64/48/0.24) because the `shadowPresetRaw` setter derives dials for every preset including `.custom` (`ComposerZeroChromeStyle.swift` ~766-800, ~1252). Pre-existing since a3e268755. Fix direction: exclude `.custom` from derivation.
+- [x] R13c: 3 suite failures at `b64621c98` classified — `singleLineRestStateHasCardChrome` and `singleLineFieldStaysAtTheOriginalFifteenPointScale` are an **intentional change**: `b64621c98` flipped `.singleLine`'s default treatment to `.glass` (`git log -S` confirms), and the glass background branch (`SessionComposerPalette.swift`, `singleLineComposerCard`) has no `.overlay(stroke(...))` at all, so both tests' `borderStrokePixelCount > 0` check no longer matches the new default look — a real coverage gap, not touched here (no test edited). `overlayResolvedStyleFollowsInjectedDefaultsWrite` — **classified 2026-09-12 (Dev closed): now passing.** Green in the full unfiltered suite at `911759a6e` (1147/1158) and green alone 3/3 reruns; not observed to fail at this commit. Not fixed — nothing to fix
+- [x] Sean's tuned single-line values (Composer Tuning Bench, 2026-09-12) are now the defaults — `b64621c98` (width slider step rounds 688→690 in the panel): field 28pt / rows 18pt / width 688pt, shadow radius 64 / length 48 / opacity 0.24, treatment Liquid Glass. Bench is CSS, so re-check live in Dev + DialKit
+- [ ] Keep zero-chrome centered alignment: Sean wants to keep trying it through the refinements (2026-09-12)
+- [ ] R14 ghost characters: Sean picked "Witness" — a single web-cast ghost (9-ghost `ComposerWitnessGhost` roster, ported verbatim from `web/assets/ghost-field.js`) standing on the single-line + centered composer card, reacting only to finished events (open/resolve/Tab-accept/unknown-branch/launch). Built in `ComposerWitnessCast.swift`/`ComposerWitness.swift` + wiring in `SessionComposerPalette.swift`/`ComposerGhostTextField.swift`/`ComposerZeroChromeStyle.swift`, toggle `ghostties.composerWitness` (default ON) in both DialKit and the legacy pill. Composer-only trial — does not touch `GhostCharacter`, still Pac-Man-shaped/named. **Local verification 2026-09-12 at `911759a6e` (Dev closed):** full unfiltered suite 1147 passed / 10 failed / 1 skipped / 1158 total. Every required new-test ID present and ran (`ComposerWitnessTests`, `ComposerWitnessCastParityTests`, `ComposerGhostTextFieldTests` acceptedGhost tests, `ComposerZeroChromeStyleTests` witness/dialKit tests). Mapping/pose-hop/parity/Tab-accept/blink/resolve-crossfade/DialKit-preset red proofs all confirmed FAILED under mutation, reverted clean. `launchLiftsFortyPointsAndFadesToZeroOpacityByTwoHundredMs` fails by 1pt (-41 vs -40) — genuine, unexplained, not investigated further (out of scope). `witnessGhostPixelsPresentAboveCardWhenToggleOn` fails (0 flicker-red pixels found) and its toggle-gate mutation (force-show) leaves the toggle-off sibling test falsely GREEN — the offscreen render harness appears not to render the Witness sprite's pixels at all in this fixture; **flag as vacuous/non-discriminating pixel coverage for the Witness gate**, not fixed. `singleLineRestStateHasCardChrome`/`singleLineFieldStaysAtTheOriginalFifteenPointScale` still fail (same R13c-classified glass-treatment coverage gap, unrelated to R14). Sean's live look still owed.
+- [ ] R13 gate: builders check Dev by bundle id, not process name (the name is `ghostty`)
+
 ## 2026-08-31 — Composer variant G session (carried)
 
 - [x] Composer variant G — centered-modal type-scale conformance. `.centered` section headers
@@ -2363,3 +2385,20 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [ ] `⚠ The EdDSA public key is not valid for Ghostties` toast — Sparkle update-signing key mismatch, visible bottom-right in every window. Never logged before 2026-09-02.
 - [ ] `feat/composer-variant-g` is now fully contained in `fix/composer-tab-space` (merged `origin/main` in at `2ad00cf05`). Merging variant-g separately is moot — retire the branch when the new one lands.
 - [ ] `BACKLOG.md:2108` item **D2** (Tab-to-complete) is arguably closed by Model-B being default-on. Sean's call.
+
+## 2026-09-11 — zero-chrome composer #169, rounds 7–11 (Composer thread)
+
+**Carried (on-objective):**
+- [ ] **Sean's live look on R11** `3f19d130c` (Dev app in `session-7`): a long ghost suggestion clips at the 640pt column edge; watch for a one-frame anchor jump on the first keystroke and when the field grows a line (reviewer: PLAUSIBLE, unverified).
+- [ ] **`career-ops > main >` + Enter launches a session** — asked every round, never reported live.
+- [ ] **Column width** — strawman: keep 640pt (≈36 chars at 32pt semibold). Apply or redline.
+- [ ] **Gap field → Run row** reads loose now that the field wraps (~1.5 lines). Strawman: `ComposerZeroChromeTypography.rowTopOffset` 24 → 12pt. Apply or redline.
+- [ ] **Double space after a Tab-completed project name** (R10 screenshot: `ghostties  cco`). Cause unverified — Tab's own space plus a typed one, or a wrap-mode insertion bug.
+- [ ] **Ghost at the column edge** — shipped a hard cut. Alternative: flow the overflow onto the next line. Strawman: keep the cut.
+- [ ] **⊖ glyph left of the caret** — no composer code draws it (grep); likely a macOS caret indicator. Check whether it appears in other apps.
+- [ ] Single-line A-F2 coverage rests on `step7ModelBGhostFieldRendersLightAndDark` — not red/green-proven.
+- [ ] Blur + fog together has no automated coverage (offscreen snapshot can't composite both) — live look only.
+
+**Parked (off-objective):**
+- [ ] beta.25 tag — its own clean thread after #169 lands.
+- [ ] `SessionComposerSnapshotTests.typedUnknownBranchTokenRendersCreateBranchRowFirst` failed once in a full suite (`worktrees never settled`), passed 5/5 reruns alone and in-suite — same load-flake family as `SessionComposerWorktreeLaunchTests`/`GitWorktreeCreationTests`.

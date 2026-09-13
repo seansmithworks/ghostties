@@ -111,7 +111,8 @@ struct ComposerGhostTextFieldTests {
     private func makeCoordinator(
         hasSelection: Bool,
         isPickerOpen: Bool,
-        events: Box<[String]>
+        events: Box<[String]>,
+        ghostFullPath: String = ""
     ) -> (ComposerGhostTextField.Coordinator, ComposerGhostNSTextView) {
         let queryBox = Box("")
         let focusBox = Box(false)
@@ -122,7 +123,7 @@ struct ComposerGhostTextFieldTests {
             focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
             hasSelection: hasSelection,
             isPickerOpen: isPickerOpen,
-            ghostFullPath: ""
+            ghostFullPath: ghostFullPath
         ) { event in
             switch event {
             case .exit: events.value.append("exit")
@@ -130,6 +131,11 @@ struct ComposerGhostTextFieldTests {
             case .submitNoMatch: events.value.append("submitNoMatch")
             case .move(.up): events.value.append("moveUp")
             case .move(.down): events.value.append("moveDown")
+            // R14: explicit case (was covered by `default:` below) — a
+            // recorder that silently folds a new event into "moveOther"
+            // would let `tabWithGhostTextFiresExactlyOneAcceptedGhostEvent`
+            // pass even if `acceptGhost` stopped sending the event.
+            case .acceptedGhost: events.value.append("acceptedGhost")
             default: events.value.append("moveOther")
             }
         }
@@ -282,6 +288,42 @@ struct ComposerGhostTextFieldTests {
         let thirdHandled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
         #expect(thirdHandled == true)
         #expect(textView.string == "Ghostties Default ")
+    }
+
+    // MARK: - R14 Witness Tab hook (plan §2/§6 test 5)
+
+    /// Tab with ghost text present accepts a segment AND fires exactly one
+    /// `.acceptedGhost` — the Witness ghost's only Tab hook.
+    /// red mutation: delete `parent.onEvent?(.acceptedGhost)` from
+    /// `acceptGhost` — `events.value` is then `[]`, not `["acceptedGhost"]`.
+    @Test func tabWithGhostTextFiresExactlyOneAcceptedGhostEvent() {
+        let events = Box<[String]>([])
+        let (coordinator, textView) = makeCoordinator(
+            hasSelection: true,
+            isPickerOpen: false,
+            events: events,
+            ghostFullPath: "Ghostties > Default > Orchestrator"
+        )
+        coordinator.installGhostLabel(in: textView)
+        textView.string = "Gho"
+        coordinator.applyStyles()
+        #expect(textView.currentGhostText == "stties > Default > Orchestrator")
+
+        let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(handled == true)
+        #expect(events.value == ["acceptedGhost"])
+    }
+
+    /// Tab with no ghost text (no ghost label installed, matching
+    /// `insertTabIsConsumedNoOpWithNoGhostLabel`) is a consumed no-op that
+    /// sends NO event at all — `acceptGhost`'s first guard (`ghostText`
+    /// non-empty) returns before either the segment slice or the send.
+    @Test func tabWithNoGhostTextFiresNoAcceptedGhostEvent() {
+        let events = Box<[String]>([])
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
+        #expect(handled == true)
+        #expect(events.value.isEmpty)
     }
 
     /// Acceptance criterion 1 (composer variant G): walks Sean's own

@@ -81,20 +81,92 @@ struct SessionComposerPalette: View {
     /// .isAddingTemplateClearsWhenAWriteErrorArrives`) has no other route
     /// in. Defaults `false`, matching every production call site
     /// unchanged.
+    /// Test seam for `ComposerStyle` (zero-chrome/single-line spike),
+    /// same shape as `initialIsAddingTemplateForTesting` above and for the
+    /// same reason: `activeStyle` reads real `UserDefaults.standard` at
+    /// every production call site (matching `ComposerGhostTextField
+    /// .modelBFieldStorageKey`'s existing flag-reading convention), and
+    /// `xcodebuild test`'s parallel test processes share that SAME on-disk
+    /// domain (same bundle id across processes) — a snapshot test that set
+    /// the real key directly raced other parallel snapshot tests and
+    /// intermittently poisoned unrelated `.classic` renders. `nil` (every
+    /// production call site) falls through to the real flag unchanged.
+    let styleOverrideForTesting: ComposerStyle?
+
+    /// Round 13 review finding: `.singleLine`'s `newStyleFieldFontSize`/
+    /// `newStyleFieldWidth` read `ComposerSingleLineTuning`'s `.standard`-
+    /// defaulting call sites with no injection point, so no test could
+    /// prove this palette actually consumes a non-default tuning without
+    /// writing the real `UserDefaults.standard` domain — off-limits to a
+    /// parallel `xcodebuild test` run for the same reason documented on
+    /// `styleOverrideForTesting` above. `nil` (every production call site)
+    /// falls through to `.standard`, unchanged.
+    let tuningDefaultsForTesting: UserDefaults?
+
+    /// Fix round 2: `SessionComposerOverlay` owns this — it's the only
+    /// thing that knows "one frame after mount" (summon) — and drives it
+    /// via a real `Binding` so this palette's own `commit(template:)` /
+    /// `.exit` handling can ALSO write `.committing`/`.dismissing` into the
+    /// SAME state without a second source of truth. Defaults to a
+    /// `.constant(.revealed)` binding, matching every OTHER test seam in
+    /// this file — every production call site outside
+    /// `SessionComposerOverlay`'s zero-chrome branch, and every existing
+    /// test, is unaffected and always settled.
+    var revealPhase: Binding<ComposerRevealPhase>
+
+    /// Fix round 2, item 8: `SessionComposerOverlay` computes its own
+    /// `GeometryReader` width via `ComposerZeroChromeTypography.columnFrame`
+    /// (round 10: centered, `min(640, overlayWidth − 96)`), and passes
+    /// it in — every OTHER
+    /// call site (every snapshot test, `.classic`/`.singleLine`) has no
+    /// overlay to measure from, so `zeroChromeMeasure` falls back to
+    /// `ComposerZeroChromeTypography.measureMin`. `.singleLine` never
+    /// reads this at all (its own field width is the unrelated, unchanged
+    /// 512pt constant).
+    let zeroChromeMeasureOverride: CGFloat?
+
+    /// Round 10 (typewriter centered column): `SessionComposerOverlay` owns
+    /// the field's live content height (feeds `fieldFrame(overlaySize:
+    /// lineCount:)`'s anchor math) — this palette writes into it whenever
+    /// its own measured field/descriptor height changes (see
+    /// `newStyleField`'s `.onChange`). Defaults to a `.constant` matching
+    /// every OTHER test seam in this file — every snapshot test and
+    /// `.classic`/`.singleLine` call site never reads or writes it.
+    let zeroChromeFieldHeight: Binding<CGFloat>
+
     init(
         isPresented: Binding<Bool>,
         request: SessionComposerRequest,
         composerStore: SessionComposerStore = .shared,
-        initialIsAddingTemplateForTesting: Bool = false
+        initialIsAddingTemplateForTesting: Bool = false,
+        styleOverrideForTesting: ComposerStyle? = nil,
+        tuningDefaultsForTesting: UserDefaults? = nil,
+        revealPhase: Binding<ComposerRevealPhase> = .constant(.revealed),
+        zeroChromeMeasureOverride: CGFloat? = nil,
+        zeroChromeFieldHeight: Binding<CGFloat> = .constant(ComposerZeroChromeTypography.fieldLineHeight)
     ) {
         self._isPresented = isPresented
         self.request = request
         self.composerStore = composerStore
+        self.styleOverrideForTesting = styleOverrideForTesting
+        self.tuningDefaultsForTesting = tuningDefaultsForTesting
+        self.revealPhase = revealPhase
+        self.zeroChromeMeasureOverride = zeroChromeMeasureOverride
+        self.zeroChromeFieldHeight = zeroChromeFieldHeight
         self._isAddingTemplate = State(initialValue: initialIsAddingTemplateForTesting)
+    }
+
+    private var zeroChromeMeasure: CGFloat {
+        zeroChromeMeasureOverride ?? ComposerZeroChromeTypography.measureMin
     }
 
     @State private var selectedIndex: UInt?
     @State private var hoveredOptionID: UUID?
+    /// Zero-chrome style only — `↓` on an empty field reveals the
+    /// candidate rows without requiring typed text (brief §4, fix round
+    /// finding 3). Cleared whenever the composer dismisses (`onChange(of:
+    /// isPresented)` below) so a later fresh summon starts collapsed again.
+    @State private var zeroChromeRowsRevealedByArrow = false
     /// Whether the inline project picker is expanded. Used to open from
     /// `projectControl` (Step 5; used to be the resolution line's project
     /// segment, before that the project chip's own click target, Slice
@@ -163,6 +235,31 @@ struct SessionComposerPalette: View {
     /// zero-crossing, letting back-to-back no-match Returns restart a clean
     /// shake instead of visibly jumping mid-cycle.
     @State private var shakeTrigger: CGFloat = 0
+
+    // MARK: - R14 Witness ghost (composer-only trial, single-line + centered only)
+
+    /// Bumped on the four finished-event beats the Witness view doesn't
+    /// detect on its own (`.resolve` is `ComposerWitnessView`'s own
+    /// `.onChange(of: identity)`, not here). See `ComposerWitness.Beat`
+    /// hook sites: open (`onAppear`/`onChange(focusSearchFieldTrigger)`
+    /// below), Tab accept (`handle(_:)` `.acceptedGhost` case above),
+    /// unknown branch (`commit(template:)`'s `.unresolved` branch), launch
+    /// (`commit(template:)`'s success branch).
+    @State private var witnessBeat: ComposerWitness.Beat = .idle
+
+    /// Placement gate (plan §1): single-line + centered + toggle on. Never
+    /// shown in `.zeroChrome` or `.classic`, and never in `.anchored`
+    /// presentation (the sidebar popover — content-sized, would clip).
+    private var showsWitness: Bool {
+        activeStyle == .singleLine
+            && request.presentation == .centered
+            && ComposerWitnessSetting.isEnabled(defaults: tuningDefaults)
+    }
+
+    private var witnessIdentity: ComposerWitness.Identity {
+        ComposerWitness.identity(commandProject: commandProject, binding: request.projectBinding)
+    }
+
     /// Reduce-motion fallback: a 400ms red border pulse instead of the
     /// shake, toggled true then back false after the duration.
     @State private var showNoMatchBorder = false
@@ -347,6 +444,15 @@ struct SessionComposerPalette: View {
 
     private var composerClipShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: cornerStyle)
+    }
+
+    /// Round 12: the one production call site that resolves `NSGlassEffect
+    /// View`'s real runtime availability — see `ComposerSingleLineBackground
+    /// Choice`'s doc comment for why the SELECTION rule itself lives in a
+    /// separate, unit-testable pure function instead of being inlined here.
+    private var isGlassTreatmentAvailable: Bool {
+        if #available(macOS 26.0, *) { return true }
+        return false
     }
 
     private var isProjectLocked: Bool {
@@ -1281,6 +1387,20 @@ struct SessionComposerPalette: View {
         return UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
     }
 
+    // MARK: - Style flag (spike, `ghostties.composerStyle`)
+
+    /// Unset/unrecognized = `.classic` — see `ComposerZeroChromeStyle.swift`.
+    /// Read once per render; SwiftUI re-evaluates `body` on every relevant
+    /// `@Published`/`@State` change already, so no extra invalidation wiring
+    /// is needed for `defaults write` changes to take effect on next launch.
+    private var activeStyle: ComposerStyle {
+        styleOverrideForTesting ?? ComposerStyle.current()
+    }
+
+    private var reduceMotionEnabled: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -1310,11 +1430,11 @@ struct SessionComposerPalette: View {
             // chrome/shadow instead; adding a second shadow there would
             // double up.
             .shadow(
-                color: request.presentation == .centered
+                color: request.presentation == .centered && activeStyle == .classic
                     ? .black.opacity(WorkspaceLayout.composerModalShadowOpacity)
                     : .clear,
-                radius: request.presentation == .centered ? WorkspaceLayout.composerModalShadowRadius : 0,
-                y: request.presentation == .centered ? WorkspaceLayout.composerModalShadowYOffset : 0
+                radius: request.presentation == .centered && activeStyle == .classic ? WorkspaceLayout.composerModalShadowRadius : 0,
+                y: request.presentation == .centered && activeStyle == .classic ? WorkspaceLayout.composerModalShadowYOffset : 0
             )
             .environment(\.colorScheme, scheme)
             .onAppear {
@@ -1326,6 +1446,10 @@ struct SessionComposerPalette: View {
                 // query is blank on first open (D1's cross-section ranking
                 // only applies once there's a query to rank against).
                 selectedIndex = bestSelectionIndex(in: flattenedOptions)
+                // R14: open beat. `onAppear` doesn't refire on a fast
+                // re-open of an already-mounted palette — see the matching
+                // `onChange(focusSearchFieldTrigger)` below.
+                witnessBeat = witnessBeat.next(.open)
             }
             .onChange(of: isPresented) { presented in
                 if !presented {
@@ -1342,6 +1466,10 @@ struct SessionComposerPalette: View {
                     // debounced refresh for whatever project was typed must
                     // not land after the composer has already closed.
                     commandProjectRefreshTask?.cancel()
+                    // Fix round (finding 3): a fresh summon should always
+                    // start with the zero-chrome rows collapsed, not
+                    // reopened from whatever `↓` left behind last time.
+                    zeroChromeRowsRevealedByArrow = false
                 }
             }
             .onDisappear {
@@ -1484,6 +1612,10 @@ struct SessionComposerPalette: View {
                 // it stays `true` across the whole re-open.
                 guard triggered else { return }
                 clampSelectedIndex()
+                // R14: open beat, fast-re-open path — mirrors `onAppear`'s
+                // seed above for the same reason (`onAppear` doesn't
+                // reliably re-fire on a fast re-present).
+                witnessBeat = witnessBeat.next(.open)
             }
             .sheet(item: $newTemplateToEdit) { template in
                 TemplateEditForm(template: template, isNewlyCreated: newTemplateToEditIsFresh)
@@ -1512,7 +1644,23 @@ struct SessionComposerPalette: View {
     /// it rather than the shake living on the true root, which
     /// left no room to translate inside an `.anchored` NSPopover sized
     /// exactly to its content.
+    /// Dispatches on `activeStyle`. `.classic` renders the exact, byte-for-
+    /// byte unchanged card this project has shipped since PR #132 —
+    /// `classicComposerCard` below is that same code, only renamed to make
+    /// room for the two new styles as siblings, never edited.
+    @ViewBuilder
     private var composerCard: some View {
+        switch activeStyle {
+        case .classic:
+            classicComposerCard
+        case .zeroChrome:
+            zeroChromeComposerCard
+        case .singleLine:
+            singleLineComposerCard
+        }
+    }
+
+    private var classicComposerCard: some View {
         let backgroundColor = Color(nsColor: .windowBackgroundColor)
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -1668,6 +1816,425 @@ struct SessionComposerPalette: View {
                 .opacity(showNoMatchBorder ? 1 : 0)
         )
         .modifier(ShakeEffect(animatableData: shakeTrigger))
+    }
+
+    // MARK: - Zero-chrome / single-line shared field (spike)
+
+    /// The one-line field both new styles share (brief §1): 15pt SF Pro
+    /// Text, 38pt tall, 480pt text measure via `Self.zeroChromeFieldWidth`
+    /// below, reusing the SAME Model-B ghost text field and `handle(_:)`
+    /// event routing the shipping card wires today — no new ghost/ranking
+    /// logic, just a different chrome around it. `ghostFullPath` is blanked
+    /// at rest (`query.isEmpty`) so `ComposerDescriptorGhostText` owns the
+    /// rest-state hint text instead of the field's own placeholder ghost
+    /// (which would otherwise always show the chevron path first, the
+    /// thing Sean's rule forbids).
+    /// Round 12: `.singleLine`'s field text size, row size, and container
+    /// width are now live dials (`ComposerSingleLineTuning`) — the prior
+    /// fixed 512pt width constant this replaced is gone; see that enum's
+    /// doc comment for the exact ratios it preserves from the old fixed
+    /// 15pt/512pt/8pt/16pt numbers.
+    ///
+    /// `.zeroChrome` reads `ComposerZeroChromeTypography` (32/44pt,
+    /// unchanged). `.singleLine` reads the round 12 tuning dial
+    /// (`ComposerSingleLineTuning`, default 22pt, strawman "bigger" per
+    /// Sean's round 11 debrief). `.classic` keeps the original 15pt
+    /// DESIGN.md §3 scale, unchanged.
+    private var tuningDefaults: UserDefaults {
+        tuningDefaultsForTesting ?? .standard
+    }
+
+    private var newStyleFieldFontSize: CGFloat {
+        switch activeStyle {
+        case .zeroChrome: return ComposerZeroChromeTypography.fieldSize
+        case .singleLine: return ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults)
+        case .classic: return 15
+        }
+    }
+
+    private var newStyleFieldLineHeight: CGFloat {
+        switch activeStyle {
+        case .zeroChrome: return ComposerZeroChromeTypography.fieldLineHeight
+        case .singleLine: return ComposerSingleLineTuning.lineHeight(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
+        case .classic: return 38
+        }
+    }
+
+    private var newStyleFieldWidth: CGFloat {
+        switch activeStyle {
+        case .zeroChrome: return zeroChromeMeasure
+        case .singleLine: return ComposerSingleLineTuning.width(defaults: tuningDefaults)
+        case .classic: return 480
+        }
+    }
+
+    /// Round 10: `.zeroChrome`'s field wraps and grows up to
+    /// `ComposerZeroChromeTypography.maxFieldLines` lines — its height is
+    /// whichever of `zeroChromeDescriptorHeight`/`zeroChromeFieldTextHeight`
+    /// is actually on screen right now (`zeroChromeFieldContentHeight`
+    /// below). `.singleLine`/`.classic` are unaffected — fixed
+    /// `newStyleFieldLineHeight`, exactly as before.
+    private var newStyleFieldHeight: CGFloat {
+        activeStyle == .zeroChrome ? zeroChromeFieldContentHeight : newStyleFieldLineHeight
+    }
+
+    /// Round 10: the rest-state descriptor's own wrapped height, measured
+    /// live (`updateZeroChromeDescriptorHeight`) rather than assumed to be
+    /// one line — a long descriptor (`Tab completes · ↓ next match ·
+    /// Return launches`) can wrap inside the 640pt column.
+    @State private var zeroChromeDescriptorHeight: CGFloat = ComposerZeroChromeTypography.fieldLineHeight
+
+    /// Round 10: `ComposerGhostTextField`'s own reported wrapped-content
+    /// height while `activeStyle == .zeroChrome` (`measuredHeight` binding
+    /// below) — meaningless (and never read) for `.singleLine`/`.classic`.
+    @State private var zeroChromeFieldTextHeight: CGFloat = ComposerZeroChromeTypography.fieldLineHeight
+
+    /// Round 10: which of the two measured heights above is actually on
+    /// screen right now — the descriptor while the field is empty (typed
+    /// text hides it), the field's own wrapped text once typing starts.
+    /// Picking rather than combining avoids a same-turn race where the
+    /// SIDE THAT JUST HID reports a stale/zero height after the other one
+    /// already reported the correct one.
+    private var zeroChromeFieldContentHeight: CGFloat {
+        query.isEmpty ? zeroChromeDescriptorHeight : zeroChromeFieldTextHeight
+    }
+
+    private func updateZeroChromeDescriptorHeight(_ height: CGFloat) {
+        let capped = min(height, ComposerZeroChromeTypography.fieldLineHeight * CGFloat(ComposerZeroChromeTypography.maxFieldLines))
+        guard abs(capped - zeroChromeDescriptorHeight) > 0.5 else { return }
+        zeroChromeDescriptorHeight = capped
+    }
+
+    /// Round 12 ("one last ditch effort"): `.zeroChrome` only — `.left`
+    /// (unchanged) or `.center`, tunable live via the DEBUG pill's
+    /// `Alignment` picker. `.singleLine`/`.classic` always render `.left`.
+    private var newStyleAlignment: ComposerZeroChromeAlignment {
+        activeStyle == .zeroChrome ? ComposerZeroChromeAlignment.current() : .left
+    }
+
+    private var newStyleField: some View {
+        ZStack(alignment: newStyleAlignment.zstackAlignment) {
+            ComposerDescriptorGhostText(
+                descriptors: ComposerDescriptorCycle.descriptors(
+                    mostRecentProjectName: currentProject?.name,
+                    ghostPlaceholderPath: ghostPlaceholder
+                ),
+                query: query,
+                opacity: activeStyle == .zeroChrome ? ComposerZeroChromeTypography.ghostOpacity : 0.65,
+                reduceMotion: reduceMotionEnabled
+            )
+            .font(
+                .system(
+                    size: newStyleFieldFontSize,
+                    weight: activeStyle == .zeroChrome ? ComposerZeroChromeTypography.fieldWeight : .regular
+                )
+            )
+            .multilineTextAlignment(newStyleAlignment.multilineAlignment)
+            .allowsHitTesting(false)
+            // Round 10: the descriptor wraps within the column width
+            // (plain SwiftUI `Text` word-wraps by default; no lineLimit
+            // is set anywhere on this view) instead of assuming one line —
+            // measured here so the anchor math above can react to it.
+            .frame(width: newStyleFieldWidth, alignment: newStyleAlignment.frameAlignment)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { updateZeroChromeDescriptorHeight(proxy.size.height) }
+                        .onChange(of: proxy.size.height) { updateZeroChromeDescriptorHeight($0) }
+                }
+            )
+
+            ComposerGhostTextField(
+                query: searchTextBinding,
+                fontSize: newStyleFieldFontSize,
+                fontWeight: activeStyle == .zeroChrome ? .semibold : .regular,
+                rowHeight: newStyleFieldLineHeight,
+                focusTrigger: $composerStore.focusSearchFieldTrigger,
+                hasSelection: selectedOption != nil,
+                isPickerOpen: false,
+                ghostFullPath: query.isEmpty ? "" : ghostFullPathForModelB,
+                // Round 10: wraps + grows in `.zeroChrome` only —
+                // `.singleLine`/`.classic` never set this, keeping their
+                // horizontally-scrolling single-line field byte-identical.
+                wrapsAndGrows: activeStyle == .zeroChrome,
+                // Round 12: `.center` only ever applies in `.zeroChrome`
+                // (`newStyleAlignment` above); `.singleLine`/`.classic`
+                // always pass `.left`, this field's prior, only alignment.
+                textAlignment: newStyleAlignment.nsTextAlignment,
+                measuredHeight: $zeroChromeFieldTextHeight
+            ) { event in
+                handle(event)
+            }
+            .accessibilityLabel(ComposerQueryField.accessibilityFieldLabel)
+        }
+        .frame(width: newStyleFieldWidth, height: newStyleFieldHeight)
+        .onChange(of: zeroChromeFieldContentHeight) { newValue in
+            guard activeStyle == .zeroChrome else { return }
+            zeroChromeFieldHeight.wrappedValue = newValue
+        }
+    }
+
+    /// Fix round 2 (finding 2): the classic "no worktree found" message
+    /// says "Use the create-branch suggestion above" — true in the
+    /// classic results list, where that row is always visible right
+    /// there, but wrong in the new styles (zero-chrome's rows are hidden
+    /// until `↓`/typing; single-line has no results list at all). Swaps in
+    /// `SessionComposerCopy.unresolvedBranchMessageForNewStyles`
+    /// (`cli/Sources/GhosttiesCore/SessionComposerCommandParser.swift`,
+    /// ADDED beside the existing constant, which is untouched — see that
+    /// file's doc comment) ONLY when we can confirm this IS that specific
+    /// message (`typedBranchResolution` is `.unresolved` for the same
+    /// token `writeError` was set from) — every OTHER `writeError` string
+    /// (e.g. the "still checking branches" pending message) passes through
+    /// `statusStripMessage` unchanged. Reconstructs from the LIVE typed
+    /// token rather than string-matching the classic text, since this view
+    /// already has `typedBranchResolution` and doesn't need to.
+    private var newStyleStatusStripMessage: String? {
+        if composerStore.writeError != nil,
+           case .unresolved(let token) = typedBranchResolution {
+            return SessionComposerCopy.unresolvedBranchMessageForNewStyles(token: token)
+        }
+        return statusStripMessage
+    }
+
+    /// Status strip: the one thing that stays loud in both new styles
+    /// (brief §1) — rendered only when non-nil, red, directly beneath the
+    /// field.
+    private var newStyleStatusStripSize: CGFloat {
+        switch activeStyle {
+        case .zeroChrome: return ComposerZeroChromeTypography.statusStripSize
+        case .singleLine: return ComposerSingleLineTuning.rowSize(defaults: tuningDefaults)
+        case .classic: return 11
+        }
+    }
+
+    @ViewBuilder
+    private var newStyleStatusStrip: some View {
+        if let newStyleStatusStripMessage {
+            // Round 12: `.singleLine`'s status/row text now reads the
+            // `ComposerSingleLineTuning.rowSize` dial (default 16pt, was
+            // the fixed 11pt this ternary used to fall through to) — the
+            // "row text 13→16pt" strawman from the brief's item 2.
+            Text(newStyleStatusStripMessage)
+                .font(.system(size: newStyleStatusStripSize))
+                .foregroundStyle(Color(nsColor: .systemRed))
+                .padding(.top, activeStyle == .zeroChrome ? ComposerZeroChromeTypography.statusStripTopOffset : 0)
+        }
+    }
+
+    /// Up to 5 ranked candidate rows, fixed slot count, crossfade in place
+    /// (zero-chrome typing state only, brief §2). Selected row uses
+    /// `composerSelectionAccent` text, never a filled bar. Fix round 2,
+    /// item 8: `.zeroChrome` rows read `ComposerZeroChromeTypography`
+    /// (20pt `.medium`, 30pt line height); `.singleLine` never renders
+    /// rows at all, so there's no other caller to preserve here.
+    private var newStyleCandidateRows: some View {
+        ForEach(Array(flattenedOptions.prefix(5).enumerated()), id: \.element.id) { pair in
+            let (offset, option) = pair
+            let isSelected = selectedOption?.id == option.id
+            Text(option.title)
+                .font(.system(size: ComposerZeroChromeTypography.rowSize, weight: ComposerZeroChromeTypography.rowWeight))
+                .lineSpacing(ComposerZeroChromeTypography.rowLineHeight - ComposerZeroChromeTypography.rowSize)
+                .foregroundStyle(isSelected ? WorkspaceLayout.composerSelectionAccent : Color(nsColor: .labelColor))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { option.action() }
+                .transition(
+                    reduceMotionEnabled
+                        ? .opacity
+                        : .asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 3))
+                                .animation(.easeOut(duration: 0.09).delay(Double(offset) * 0.02)),
+                            removal: .opacity.animation(.easeIn(duration: 0.18))
+                        )
+                )
+        }
+    }
+
+    /// Fix round (finding 3): `↓` on an empty field must reveal rows too,
+    /// not just typing — `zeroChromeRowsRevealedByArrow` covers that edge,
+    /// reset on every fresh summon (`onChange(of: isPresented)` above).
+    private var showNewStyleRows: Bool {
+        activeStyle == .zeroChrome && (!query.isEmpty || zeroChromeRowsRevealedByArrow)
+    }
+
+    // MARK: - Zero-chrome style (spike)
+
+    /// No card, no border, no radius, no shadow, no scrim (brief §2).
+    /// Fix round 2, item 5: the blur wash is no longer rendered HERE at
+    /// all — `SessionComposerOverlay` now paints it full-bleed, BEHIND
+    /// this whole content (field + rows), since it covers the entire
+    /// window rather than a patch sized to the field. Vertical placement
+    /// (38% of window height) is still `SessionComposerOverlay`'s job.
+    /// Fix round (independent review, BLOCKER 1): the earlier `onAppear`
+    /// implementation forced `zeroChromeRevealed = false` THEN animated it
+    /// back to `true` — contradicting that property's own settled-by-
+    /// default contract and guaranteeing a real (if brief) unrevealed first
+    /// frame on every mount, which the offscreen snapshot harness (no
+    /// animation pump) caught as a genuinely blank capture.
+    ///
+    /// An `AnyTransition`-based replacement was tried next and ALSO
+    /// rejected (broke the adjacent row list's rendering in the same
+    /// offscreen harness). Fix round 2 lands the reviewer's actual
+    /// prescribed mechanism: `revealPhase` is owned by
+    /// `SessionComposerOverlay` (the only thing that knows "one frame
+    /// after mount"), flows in as a `Binding`, and drives per-view
+    /// `.animation(_, value:)` curves computed from the destination phase
+    /// (`zeroChromeWashAnimation`/`zeroChromeTextAnimation`,
+    /// `ComposerZeroChromeStyle.swift`) — no `onAppear` reset, no
+    /// `AnyTransition`. The snapshot harness (and every other test/call
+    /// site) defaults to `.constant(.revealed)`, so first paint is never
+    /// blank there either.
+    private var zeroChromeComposerCard: some View {
+        // Fix round 2, item 6: the outer `VStack` had no explicit
+        // `alignment:`, defaulting to `.center` — with the field's own
+        // frame (480pt) narrower than this card's (512pt), the field sat
+        // CENTERED (16pt inset each side) while the rows block below
+        // declared `alignment: .leading` explicitly, starting flush at the
+        // card's left edge — the ~12-16pt gap Sean measured between rows
+        // and the field's typed text. `.leading` here makes both align to
+        // the SAME edge.
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
+                newStyleField
+                newStyleStatusStrip
+            }
+            .opacity(revealPhase.wrappedValue == .revealed ? 1 : 0)
+            // Fix round 4, item 1: summon (`.hidden`) starts offset +4pt,
+            // sliding to 0 on the same curve as the opacity fade below —
+            // the Timing board's summon text transition is opacity 0→1
+            // AND y 4→0, not opacity-only. `.committing` keeps its own
+            // -6pt offset; `.revealed`/`.dismissing` sit at 0.
+            .offset(y: {
+                switch revealPhase.wrappedValue {
+                case .hidden: return ComposerZeroChromeTiming.summonTextOffsetY
+                case .committing: return ComposerZeroChromeTiming.commitTextOffsetY
+                case .revealed, .dismissing: return 0
+                }
+            }())
+            .animation(
+                zeroChromeTextAnimation(for: revealPhase.wrappedValue, reduceMotion: reduceMotionEnabled),
+                value: revealPhase.wrappedValue
+            )
+
+            if showNewStyleRows {
+                VStack(alignment: .leading, spacing: 4) {
+                    newStyleCandidateRows
+                }
+                .padding(.top, ComposerZeroChromeTypography.rowTopOffset - 8) // outer VStack's own 8pt spacing already covers part of the gap
+                .frame(width: newStyleFieldWidth, alignment: .leading)
+                .transition(.opacity)
+                // B1 fix: `showNewStyleRows` tracks query/arrow state only,
+                // not `revealPhase` — on `.committing`/`.dismissing` the
+                // field+status stack above fades via its own `.opacity`
+                // binding, but this block had no such gate, so the rows
+                // stayed fully painted after the field and wash were gone.
+                // Same phase check, same curve as the text block immediately
+                // above (`zeroChromeTextAnimation`), so rows and text
+                // fade out together.
+                .opacity(revealPhase.wrappedValue == .revealed ? 1 : 0)
+                .animation(
+                    zeroChromeTextAnimation(for: revealPhase.wrappedValue, reduceMotion: reduceMotionEnabled),
+                    value: revealPhase.wrappedValue
+                )
+            }
+        }
+        .frame(width: newStyleFieldWidth)
+    }
+
+    // MARK: - Single-line style (spike)
+
+    /// Round 12: container padding scales off the field-size dial —
+    /// `ComposerSingleLineTuning.verticalPadding`/`horizontalPadding`'s doc
+    /// comment has the exact ratio this preserves from the shipped 8pt/16pt
+    /// constants.
+    private var singleLineVerticalPadding: CGFloat {
+        ComposerSingleLineTuning.verticalPadding(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
+    }
+
+    private var singleLineHorizontalPadding: CGFloat {
+        ComposerSingleLineTuning.horizontalPadding(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
+    }
+
+    /// Current card chrome exactly as DESIGN.md §4 specifies
+    /// (`.regularMaterial` + `windowBackgroundColor` blend, 12pt continuous
+    /// radius, stroke, shadow tokens), sized to the field row only — no
+    /// results list ever (brief §3). Reuses `composerClipShape` and the
+    /// classic card's shadow tokens rather than re-deriving them. Round 12:
+    /// width/padding are now dial-driven (see the two properties above and
+    /// `newStyleFieldWidth`'s `.singleLine` case), and the whole chrome
+    /// layer branches on `ComposerSingleLineTreatment` — `.material` is
+    /// this same background/clip/stroke, byte-identical; `.glass` swaps in
+    /// `NSGlassEffectView` (via `ComposerLiquidGlassBackground`) on macOS
+    /// 26+ only, falling back to `.material` below that (never raising the
+    /// macOS 13 floor for a fork feature, per
+    /// `decision_align-to-upstream-degrade-gracefully`).
+    private var singleLineComposerCard: some View {
+        let backgroundColor = Color(nsColor: .windowBackgroundColor)
+        let content = VStack(alignment: .leading, spacing: 8) {
+            newStyleField
+            newStyleStatusStrip
+        }
+        .padding(.vertical, singleLineVerticalPadding)
+        .padding(.horizontal, singleLineHorizontalPadding)
+        .frame(width: newStyleFieldWidth)
+
+        let materialBackground = content
+            .background(
+                ZStack {
+                    Rectangle().fill(.regularMaterial)
+                    Rectangle().fill(backgroundColor).blendMode(.color)
+                }
+                .compositingGroup()
+            )
+            .clipShape(composerClipShape)
+            .overlay(
+                composerClipShape
+                    .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
+            )
+
+        return Group {
+            #if compiler(>=6.2)
+            if ComposerSingleLineBackgroundChoice.resolve(
+                treatment: ComposerSingleLineTreatment.current(defaults: tuningDefaults),
+                glassAvailable: isGlassTreatmentAvailable
+            ) == .glass, #available(macOS 26.0, *) {
+                content
+                    .background(
+                        ComposerLiquidGlassBackground(cornerRadius: cornerRadius, tintColor: .windowBackgroundColor)
+                    )
+                    .clipShape(composerClipShape)
+            } else {
+                materialBackground
+            }
+            #else
+            materialBackground
+            #endif
+        }
+        .shadow(
+            color: .black.opacity(ComposerSingleLineShadowDials.opacity()),
+            radius: ComposerSingleLineShadowDials.radius(),
+            y: ComposerSingleLineShadowDials.yOffset()
+        )
+        .modifier(ShakeEffect(animatableData: shakeTrigger))
+        // R14: AFTER `ShakeEffect` so the card's own no-match shake never
+        // stacks a second shake onto the Witness (plan §1). Unclipped
+        // because the glass/material `.clipShape` above only wraps `Group`
+        // content, and `body`'s own `.padding(8)` doesn't clip either — see
+        // `r14-witness-plan.md` §1 for the full unclipped-overlay reasoning.
+        .overlay(alignment: .topLeading) {
+            if showsWitness {
+                ComposerWitnessView(
+                    identity: witnessIdentity,
+                    beatTrigger: witnessBeat,
+                    reduceMotion: reduceMotionEnabled
+                )
+                .offset(x: 20, y: -24)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
     }
 
     // MARK: - Query row (type-first field, model A rebuild)
@@ -2211,12 +2778,30 @@ struct SessionComposerPalette: View {
         switch typedBranchResolution {
         case .unresolved(let token):
             composerStore.rejectUnresolvedBranch(token: token)
+            // R14: unknown-branch beat, fired at THIS call site (not
+            // `onChange(writeError)` — a second Enter on the same
+            // unresolved token would write the same string and never fire
+            // `onChange` again). `.pending` (below) doesn't count.
+            witnessBeat = witnessBeat.next(.unknownBranch)
             return
         case .pending:
             composerStore.rejectUnresolvedBranch(message: "Still checking branches for this project — try again in a moment.")
             return
         case .notTyped, .resolved, .isDefaultBranch:
             break
+        }
+
+        // Fix round 2 (Timing board, commit exit): only meaningful for
+        // `.zeroChrome` — `revealPhase` defaults `.constant(.revealed)`
+        // everywhere else, so this write is a no-op there. Set BEFORE any
+        // of the state below in case a guard further down returns early;
+        // a commit that fails (write error) should not look like a
+        // successful launch's exit animation, but there's no cheap way to
+        // "undo" this from here, and the palette re-shows on failure
+        // anyway (S6, see `body`'s `onChange(of: isPresented)` chain) —
+        // acceptable for a spike, flagged rather than engineered around.
+        if activeStyle == .zeroChrome {
+            revealPhase.wrappedValue = .committing
         }
 
         // S1: reset the stale index up front. `recordRecent` (inside the
@@ -2278,6 +2863,15 @@ struct SessionComposerPalette: View {
         case .failure(let error):
             composerStore.rejectUnresolvedBranch(message: error.message)
             selectedIndex = bestSelectionIndex(in: flattenedOptions)
+            // Round 7 (open finding from the zero-chrome in-flight memo):
+            // `revealPhase` was already set to `.committing` above before
+            // this switch ran, same as the B2 fix below for a failed
+            // precommit. This early return skipped that restoration
+            // entirely, so a rejected typed-branch commit left the
+            // composer open but faded to invisible. Mirror B2's fix here.
+            if activeStyle == .zeroChrome {
+                revealPhase.wrappedValue = .revealed
+            }
             return
         }
 
@@ -2297,6 +2891,10 @@ struct SessionComposerPalette: View {
         // resolves the binary path (a 3s-timeout shell-out).
         let success = composerStore.precommit(template: template, coordinator: coordinator, workspaceStore: store)
         if success {
+            // R14: launch beat, before `isPresented = false` — the fade/
+            // removal that follows truncates the lift, but the beat itself
+            // must fire while the Witness is still mounted.
+            witnessBeat = witnessBeat.next(.launch)
             isPresented = false
             // F1: without this, a session created via the composer into a
             // collapsed project spawns with no visible sidebar row — see
@@ -2314,6 +2912,18 @@ struct SessionComposerPalette: View {
             // so Return is dead until the user types or arrows; re-seed the
             // best match (D1) so Return works again immediately.
             selectedIndex = bestSelectionIndex(in: flattenedOptions)
+            // B2 fix: `revealPhase` was set to `.committing` above before
+            // `precommit` ran. On failure the composer stays open (this is
+            // the whole point of `writeError`), but `.committing` fades the
+            // field/rows to invisible — leaving an open, unreadable
+            // composer with no visible error. Restore `.revealed` so the
+            // field, rows, and `writeError` are visible again. No-op
+            // outside `.zeroChrome` (`revealPhase` defaults
+            // `.constant(.revealed)` there, so this write matches the
+            // existing value).
+            if activeStyle == .zeroChrome {
+                revealPhase.wrappedValue = .revealed
+            }
         }
     }
 
@@ -2327,6 +2937,16 @@ struct SessionComposerPalette: View {
     private func handle(_ event: ComposerQueryField.KeyboardEvent) {
         switch event {
         case .exit:
+            // Fix round 2 (Timing board, esc exit) — no-op outside
+            // `.zeroChrome` (`revealPhase` defaults `.constant(.revealed)`).
+            // Only meaningful when this Esc actually dismisses (not when
+            // it's just closing an inline picker) — `.zeroChrome` never
+            // opens either picker, so this is always the dismiss branch in
+            // practice, but the guard matches `closeChipPickerOrDismiss`'s
+            // own condition rather than assuming that.
+            if activeStyle == .zeroChrome, !isBranchPickerOpen, !isProjectPickerOpen {
+                revealPhase.wrappedValue = .dismissing
+            }
             closeChipPickerOrDismiss()
 
         case .submit:
@@ -2341,6 +2961,13 @@ struct SessionComposerPalette: View {
             selectedIndex = (current == 0) ? UInt(flattenedOptions.count - 1) : current - 1
 
         case .move(.down):
+            // Fix round (finding 3, brief §4): `↓` on an EMPTY zero-chrome
+            // field must reveal the candidate rows even though there's no
+            // query to filter by yet — `showNewStyleRows` OR's this flag in
+            // alongside the existing `!query.isEmpty` gate. Set
+            // unconditionally (cheap, harmless for `.classic`/`.singleLine`,
+            // which never read it).
+            zeroChromeRowsRevealedByArrow = true
             if flattenedOptions.isEmpty { break }
             let current = selectedIndex ?? UInt.max
             selectedIndex = (current >= UInt(flattenedOptions.count - 1)) ? 0 : current + 1
@@ -2354,6 +2981,9 @@ struct SessionComposerPalette: View {
         // needed here at all.
         case .move:
             break
+
+        case .acceptedGhost:
+            witnessBeat = witnessBeat.next(.tabAccept)
         }
     }
 
@@ -2655,6 +3285,12 @@ struct ComposerQueryField: View {
         // rebuild): the field has no non-editable segment left to pop, so
         // backspace against an empty field is now ordinary, no-op text
         // editing with no event to dispatch.
+        /// R14: Tab accepted a ghost-text segment (`ComposerGhostTextField
+        /// .acceptGhost`, past both its guards — a Tab with nothing to
+        /// accept sends nothing). Drives the Witness ghost's hop beat only;
+        /// no other effect (the field already wrote the accepted text
+        /// itself).
+        case acceptedGhost
     }
 
     var body: some View {
