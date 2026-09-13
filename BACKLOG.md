@@ -1,10 +1,12 @@
 # Ghostties — Backlog
 
-## Before merging PR #169 (handoff, 2026-09-13)
+## PR #169 merge + post-merge verification (handoff, 2026-09-13)
 
-- [ ] (a) With Ghostties Dev quit for the duration, run the full unfiltered suite on the PR head via `xcodebuild test-without-building` with real totals from `xcresulttool`. Then do red proofs by minimal production mutation (not compile failures) for every test-bearing commit in `git log --first-parent --no-merges 911759a6e..HEAD`, including the carried R15/R15b/Custom-preset/R18/Witness items.
-- [ ] (b) Mark the PR ready and merge via `--repo SeanSmithWorks/ghostties`.
-- [ ] (c) PR visuals owed: before/after screenshots of the single-line composer and the Witness ghost, which the repo's PR rule requires.
+- [ ] (a) Mark PR #169 ready and merge it via `--repo SeanSmithWorks/ghostties`.
+- [ ] (b) After merge, on main, with Ghostties Dev quit for the duration: full unfiltered suite via `xcodebuild test-without-building` with real totals from `xcresulttool`. Also red proofs by minimal production mutation (a compile failure doesn't count) for every test-bearing commit in `git log --first-parent --no-merges 911759a6e..057c19fed`, including the carried R15/R15b/Custom-preset/R18/Witness items listed in the sections below.
+- [ ] (c) Sean's full manual run-through of the composer on a main build.
+- [ ] (d) PR screenshots owed: single-line composer + Witness ghost.
+- [ ] Until (b) is green, tag no beta from main.
 
 ## 2026-09-13 (later) — Composer live-look round (PR #169)
 
