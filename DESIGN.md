@@ -205,13 +205,14 @@ status icon per row, never a ghost plus a glyph.
 
 | Session state (`SessionIndicatorState`)      | Glyph          | Color              |
 | --------------------------------------------- | -------------- | ------------------- |
-| `.processing` / `.longRunning` / `.waiting`   | Braille spinner (⠋⠙⠹⠸⠼⠴⠦⠧, ~80ms/frame) | `textSecondaryLight/Dark` |
+| `.processing` / `.longRunning` / `.waiting`   | Static `…`     | `textSecondaryLight/Dark` |
 | `.needsAttention`                             | `?`            | `.primary` — the only emphasis; no accent color |
 | `.idle`                                       | `✓`            | `textSecondaryLight/Dark` |
 | `.error`                                      | `✕`            | `textSecondaryLight/Dark` |
 | `.inactive`                                   | (empty slot)   | —                    |
 
-Reduce Motion replaces the spinner with a static `…` in the same color; no other state animates.
+No glyph animates — Claude sessions stay busy for minutes at a time, so an animated
+working spinner read as constantly cycling rather than as a truthful signal.
 No new colors — glyph colors are the existing `WorkspaceLayout` text tokens, not the
 `waitingTerracotta`/gold/blue/orange status-dot palette used elsewhere in the sidebar.
 
