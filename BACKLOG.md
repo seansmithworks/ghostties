@@ -2408,4 +2408,4 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [x] **Overnight N2 — capture:** (2026-09-13 02:06 — attempt 1 of 3 passed, xcresult totals 2/2, both PNGs non-blank) run `scripts/demo/demo-capture.sh` from the main thread only, Mac awake and hands-off; max 3 attempts total.
 - [x] **Overnight N3 — inspect** (2026-09-13 — all five criteria pass in both PNGs; no defects, so N4 not needed) light + dark PNGs: no "/rc connecting…", sidebar at top (atlas-api header visible), agent mid-task with output in the pane, no hostname/`/Users/seansmith`/email, dev badge hidden. "← N agents" is expected.
 - [x] **Overnight N4 — on a defect:** (n/a — N3 found no defect) diagnose from the xcresult recording + `lsappinfo` (never guess), fix via a subagent on `feat/demo-frame-polish`, separate review, re-run (counts toward the 3).
-- [ ] **Overnight N5 — PR:** push `feat/demo-frame-polish` and open a PR with `gh pr create --repo SeanSmithWorks/ghostties --base main` including before/after captures, only after N3 passes. Do not merge.
+- [x] **Overnight N5 — PR:** (#173, open, not merged)
