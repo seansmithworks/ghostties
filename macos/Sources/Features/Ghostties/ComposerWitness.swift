@@ -184,9 +184,14 @@ enum ComposerWitnessMotion {
 
         case .launch:
             // Lift and fade: -40 offset, opacity 0, both reached at 200ms.
+            // An absolute departure, not a bob-relative motion like `.open`/
+            // `.tabAccept` — adding `restingY` here let the idle bob's ±1pt
+            // step land on top of the scripted -40 whenever `clockElapsed`
+            // fell on an odd 125ms step (e.g. exactly -41 at 200ms), which
+            // breaks the spec's whole-point-offset guarantee.
             let duration = 0.2
             let t = min(beatElapsed / duration, 1)
-            let offsetY = restingY + t * -40
+            let offsetY = t * -40
             let opacity = 1 - t
             return Pose(offsetY: offsetY, offsetX: 0, opacity: opacity, eyesOpen: true)
         }
