@@ -593,6 +593,14 @@ private struct SessionGroupHeader: View {
             }
         } label: {
             HStack(spacing: 5) {
+                // Only Archive is collapsible — its chevron sits leading,
+                // matching the Sessions-tab section headers
+                // (`SessionSectionHeader`), not trailing.
+                if isCollapsible {
+                    PixelChevronView(isExpanded: isExpanded)
+                        .frame(width: 10, height: 10)
+                }
+
                 Image(systemName: iconName)
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(Color(.tertiaryLabelColor))
@@ -604,18 +612,18 @@ private struct SessionGroupHeader: View {
                     .foregroundStyle(WorkspaceLayout.sessionGroupHeaderForeground(for: colorScheme))
 
                 Spacer(minLength: 0)
-
-                if isCollapsible {
-                    PixelChevronView(isExpanded: isExpanded)
-                        .frame(width: 10, height: 10)
-                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!isCollapsible)
+        // No `.disabled(!isCollapsible)` — the button action above already
+        // no-ops for a non-collapsible header, and `.disabled` was the actual
+        // cause of "Archive renders darker": SwiftUI dims a disabled plain
+        // button's label content by default, so Active/Inactive (disabled)
+        // rendered lighter than Archive (enabled) even though both read the
+        // same `sessionGroupHeaderForeground` color.
         .accessibilityElement(children: .combine)
         .accessibilityLabel(isCollapsible ? "\(label), \(count), \(isExpanded ? "expanded" : "collapsed")" : "\(label), \(count)")
         .accessibilityAddTraits(.isHeader)

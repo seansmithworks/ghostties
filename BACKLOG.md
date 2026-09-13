@@ -11,12 +11,25 @@
   - Dropping on Active relaunches it, resuming the conversation where possible, because Active
     means the terminal is open.
   - Dragging down isn't supported; Stop does that job.
-- [ ] (D) Relaunch resumes the agent conversation (`claude --resume`)
+- [ ] (D1) Claude Code resume: Resume + Start Fresh menu — relaunch resumes the agent conversation
+  (`claude --resume`) instead of always starting fresh
+- [ ] (D2) Codex resume (feasibility spike running)
 - [ ] (E) Cmd+W close dialog: `SessionCoordinator.closeCurrentSessionWithConfirmation()`'s inline
   `isActive` check treats a closed `.error` session as active (same divergence fixed for the
   sidebar in `1c0f78b2b`)
 - [ ] (F) Status: `ClaudeStateStore.swift:290` maps Notification `idle_prompt` → `.needsInput`, so a
   finished session sitting idle reads as "needs you" — finished and blocked are indistinguishable
+- [x] (G) Live-reflow drag + drop zones in session view — dragging a row opens a gap the height of
+  one row at the proposed insertion point (top/bottom half of a row decides before/after), an
+  end-of-section drop zone lands a drag after the last row, and an empty Pinned section shows a
+  "Drop to pin" zone during any drag. Pure insertion-point math in `SessionDragReflow`
+  (`SessionDragReflowTests`); transient `SessionDragState` lives only in `RecentsListView`, never
+  written to the model until a real drop. Auto-scroll near the sidebar's top/bottom edge; a
+  just-relaunched session (dropped onto Active) holds its Active slot until alive or a 5s timeout,
+  without touching `SessionBucket.membership`.
+- [x] (H) Project-view Archive header now matches session view's section headers — chevron moved
+  to the leading side, and `.disabled(!isCollapsible)`'s automatic dimming (the actual cause of
+  Archive reading darker than Active/Inactive) removed in favor of the existing tap-guard.
 
 ## 2026-08-31 — Composer variant G session (carried)
 
