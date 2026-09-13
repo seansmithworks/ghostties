@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Combine
 import Foundation
 
@@ -167,3 +168,5 @@ public final class DialPanelState<Model: Codable & Equatable>: ObservableObject,
         isApplyingInternalChange = false
     }
 }
+
+#endif

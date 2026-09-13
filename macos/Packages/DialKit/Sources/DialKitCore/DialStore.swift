@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Combine
 import Foundation
 
@@ -107,3 +108,5 @@ public final class DialStore: ObservableObject {
         panels.removeAll()
     }
 }
+
+#endif

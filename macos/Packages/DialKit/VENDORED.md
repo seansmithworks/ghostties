@@ -47,3 +47,13 @@
    ("Source files ... should be located under 'Tests/...'") independent of
    the platform floor. Since no test sources exist to vendor, the
    unpopulated target declarations were dropped rather than fabricated.
+
+4. **All 7 `Sources/**/*.swift` files wrapped in `#if DIALKIT_ENABLED` / `#endif`,
+   and `Package.swift` sets `swiftSettings: [.define("DIALKIT_ENABLED",
+   .when(configuration: .debug))]` on both targets.** Xcode builds a Swift
+   package in the `debug` configuration only when the active Xcode
+   configuration name contains "Debug" or "Development" — so Release and
+   ReleaseLocal compile both targets to empty modules, keeping DialKit out of
+   the shipped app while Debug (Ghostties Dev) keeps it live. Any file added
+   on a future re-vendor needs the same `#if DIALKIT_ENABLED` wrapper, or it
+   ships in Release unguarded.

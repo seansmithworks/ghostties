@@ -1,6 +1,9 @@
 // swift-tools-version: 5.10
 import PackageDescription
 
+// Ghostties: DialKit compiles to nothing outside the debug package configuration.
+let debugOnly: [SwiftSetting] = [.define("DIALKIT_ENABLED", .when(configuration: .debug))]
+
 let package = Package(
     name: "DialKit",
     platforms: [
@@ -15,11 +18,13 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "DialKitCore"
+            name: "DialKitCore",
+            swiftSettings: debugOnly
         ),
         .target(
             name: "DialKit",
-            dependencies: ["DialKitCore"]
+            dependencies: ["DialKitCore"],
+            swiftSettings: debugOnly
         )
     ]
 )

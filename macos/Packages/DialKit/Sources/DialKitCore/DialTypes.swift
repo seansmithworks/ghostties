@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import CoreGraphics
 import Foundation
 
@@ -298,3 +299,5 @@ package func dialInferredStep(for range: ClosedRange<Double>) -> Double {
     }
     return 10
 }
+
+#endif

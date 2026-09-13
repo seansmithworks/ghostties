@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import SwiftUI
 @_exported import DialKitCore
 
@@ -76,3 +77,5 @@ public struct DialRoot: View {
         }
     }
 }
+
+#endif

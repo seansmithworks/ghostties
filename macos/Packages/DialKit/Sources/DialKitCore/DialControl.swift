@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 
 package struct DialResolvedControl: Identifiable {
@@ -558,3 +559,5 @@ package extension DialControlNode where Model: Codable & Equatable {
         }
     }
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Combine
 import SwiftUI
 import DialKitCore
@@ -3130,3 +3131,5 @@ package func dialHexString(from color: Color, prefersAlphaOutput: Bool = false) 
     return nil
     #endif
 }
+
+#endif
