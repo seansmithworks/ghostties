@@ -76,8 +76,11 @@ struct RecentsListView: View {
     /// true, or 5s elapses, whichever comes first. Prevents the "flash in its
     /// old section while the terminal launches" flicker from item 6, without
     /// touching `SessionBucket.membership`. Purely a render-time overlay —
-    /// see `applyPendingLaunchOverride(active:inactive:archive:)`.
-    @State private var pendingLaunchSessionIds: Set<UUID> = []
+    /// see `applyPendingLaunchOverride(active:inactive:archive:)`. Keyed by a
+    /// per-session generation (BACKLOG I) rather than a plain `Set<UUID>`, so
+    /// a timeout only ever clears the hold it was scheduled for — see
+    /// `PendingLaunchHold`.
+    @State private var pendingLaunchGenerations: [UUID: Int] = [:]
 
     /// Section-collapse state, persisted across launches. Active and
     /// Inactive default open (sessions the user is working with today, or
@@ -613,8 +616,8 @@ struct RecentsListView: View {
 
     /// Holds a just-relaunched session (dropped onto Active) in its Active
     /// drop slot until `store.globalStatuses` reports it alive, or the 5s
-    /// timeout scheduled by `scheduleLaunchPendingTimeout` clears it —
-    /// whichever comes first. Render-time only: `SessionBucket.membership`
+    /// timeout scheduled by `beginPendingLaunch(for:)` clears it — whichever
+    /// comes first. Render-time only: `SessionBucket.membership`
     /// is untouched, and
     /// once a session is genuinely alive, real membership already agrees
     /// (the override becomes a no-op — see the `active.contains` check
@@ -624,15 +627,15 @@ struct RecentsListView: View {
         inactive: [AgentSession],
         archive: [AgentSession]
     ) -> (active: [AgentSession], inactive: [AgentSession], archive: [AgentSession]) {
-        guard !pendingLaunchSessionIds.isEmpty else { return (active, inactive, archive) }
+        guard !pendingLaunchGenerations.isEmpty else { return (active, inactive, archive) }
         var active = active
         var inactive = inactive
         var archive = archive
-        var stillPending = pendingLaunchSessionIds
-        for id in pendingLaunchSessionIds {
+        var stillPending = pendingLaunchGenerations
+        for id in pendingLaunchGenerations.keys {
             if active.contains(where: { $0.id == id }) {
                 // Already alive per real membership — override is done.
-                stillPending.remove(id)
+                stillPending.removeValue(forKey: id)
                 continue
             }
             if let idx = inactive.firstIndex(where: { $0.id == id }) {
@@ -641,18 +644,26 @@ struct RecentsListView: View {
                 active.append(archive.remove(at: idx))
             } else {
                 // Session removed/deleted mid-flight — nothing left to hold.
-                stillPending.remove(id)
+                stillPending.removeValue(forKey: id)
             }
         }
-        if stillPending != pendingLaunchSessionIds {
-            DispatchQueue.main.async { pendingLaunchSessionIds = stillPending }
+        if stillPending != pendingLaunchGenerations {
+            DispatchQueue.main.async { pendingLaunchGenerations = stillPending }
         }
         return (active, inactive, archive)
     }
 
-    private func scheduleLaunchPendingTimeout(for id: UUID) {
+    /// Begins (or restarts) a hold for `id` and schedules its 5s timeout,
+    /// tagged with the generation `PendingLaunchHold.begin` just minted so
+    /// the timeout only clears the hold it was scheduled for (BACKLOG I) —
+    /// see `PendingLaunchHold.timeoutShouldClear`.
+    private func beginPendingLaunch(for id: UUID) {
+        let started = PendingLaunchHold.begin(id: id, in: pendingLaunchGenerations)
+        pendingLaunchGenerations = started.generations
+        let token = started.token
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-            pendingLaunchSessionIds.remove(id)
+            guard PendingLaunchHold.timeoutShouldClear(id: id, token: token, in: pendingLaunchGenerations) else { return }
+            pendingLaunchGenerations.removeValue(forKey: id)
         }
     }
 
@@ -694,6 +705,10 @@ struct RecentsListView: View {
             Divider()
             if coordinator.isRunning(id: session.id) {
                 Button("Stop") {
+                    // A stopped session must never keep rendering as Active
+                    // for the rest of an open relaunch hold (BACKLOG I) —
+                    // end it outright rather than wait out the timeout.
+                    pendingLaunchGenerations = PendingLaunchHold.end(id: session.id, in: pendingLaunchGenerations)
                     coordinator.closeSession(id: session.id)
                 }
             } else {
@@ -757,14 +772,12 @@ struct RecentsListView: View {
         case .unpin(let relaunchIfClosed):
             store.setSessionPinned(id: draggedId, false)
             if relaunchIfClosed {
-                pendingLaunchSessionIds.insert(draggedId)
-                scheduleLaunchPendingTimeout(for: draggedId)
+                beginPendingLaunch(for: draggedId)
                 relaunchSession(draggedSession, project: store.projects.first { $0.id == draggedSession.projectId })
             }
             store.moveSessionInSessionsView(id: draggedId, before: beforeId, within: targetList)
         case .relaunch:
-            pendingLaunchSessionIds.insert(draggedId)
-            scheduleLaunchPendingTimeout(for: draggedId)
+            beginPendingLaunch(for: draggedId)
             relaunchSession(draggedSession, project: store.projects.first { $0.id == draggedSession.projectId })
             store.moveSessionInSessionsView(id: draggedId, before: beforeId, within: targetList)
         }

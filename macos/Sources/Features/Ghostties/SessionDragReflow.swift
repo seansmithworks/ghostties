@@ -270,6 +270,43 @@ struct SessionEndZoneDropDelegate: DropDelegate {
     }
 }
 
+/// Pure bookkeeping for `RecentsListView.pendingLaunchGenerations` (BACKLOG I)
+/// — a per-session generation counter that makes the 5s relaunch-hold timeout
+/// scoped to the drop that scheduled it, and lets Stop end a hold outright.
+/// A plain `Set<UUID>` (the original shape) can't tell "this timeout belongs
+/// to an earlier drop" from "this timeout belongs to the current one," so a
+/// second relaunch within 5s of the first had its hold cleared by the first
+/// drop's still-pending timeout. Free of any view/store state so it is
+/// directly unit-testable.
+enum PendingLaunchHold {
+    /// Starts (or restarts) a hold for `id`, bumping its generation. The
+    /// returned `token` must be threaded through to the timeout scheduled for
+    /// this drop — only a timeout whose token still matches `id`'s current
+    /// generation is allowed to clear the hold.
+    static func begin(id: UUID, in generations: [UUID: Int]) -> (generations: [UUID: Int], token: Int) {
+        let token = (generations[id] ?? 0) + 1
+        var generations = generations
+        generations[id] = token
+        return (generations, token)
+    }
+
+    /// Whether a timeout scheduled with `token` is still the current hold for
+    /// `id` — `false` means a later drop already replaced it, so this
+    /// (stale) timeout must not clear the newer hold.
+    static func timeoutShouldClear(id: UUID, token: Int, in generations: [UUID: Int]) -> Bool {
+        generations[id] == token
+    }
+
+    /// Ends the hold for `id` outright, regardless of generation — the Stop
+    /// path uses this, since a stopped session must never keep rendering as
+    /// Active while a hold (of any age) is still open.
+    static func end(id: UUID, in generations: [UUID: Int]) -> [UUID: Int] {
+        var generations = generations
+        generations.removeValue(forKey: id)
+        return generations
+    }
+}
+
 /// Drop delegate for the top/bottom auto-scroll edge zones (item 4) — never
 /// resolves a gap or claims a real drop, only starts/stops the scroll timer
 /// while a drag hovers it. Returning `false` from `performDrop` is
