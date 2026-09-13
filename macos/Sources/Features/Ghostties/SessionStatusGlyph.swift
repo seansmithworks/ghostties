@@ -78,13 +78,13 @@ struct SessionStatusGlyph: View {
             switch kind {
             case .working:
                 if reduceMotion {
-                    glyph("…", color: secondaryTextColor)
+                    spinnerGlyph("…", color: secondaryTextColor)
                 } else {
                     TimelineView(.periodic(from: .now, by: Self.spinnerFrameInterval)) { context in
                         let frameIndex = Int(
                             context.date.timeIntervalSinceReferenceDate / Self.spinnerFrameInterval
                         ) % Self.spinnerFrames.count
-                        glyph(Self.spinnerFrames[frameIndex], color: secondaryTextColor)
+                        spinnerGlyph(Self.spinnerFrames[frameIndex], color: secondaryTextColor)
                     }
                 }
             case .needsInput:
@@ -108,6 +108,22 @@ struct SessionStatusGlyph: View {
     private func glyph(_ symbol: String, color: Color) -> some View {
         Text(symbol)
             .font(.system(size: size * 0.8, weight: .medium, design: .monospaced))
+            .foregroundStyle(color)
+            .frame(width: size, height: size)
+            .minimumScaleFactor(0.6)
+    }
+
+    /// The braille spinner frames (and their Reduce Motion stand-in, `…`)
+    /// draw a small ink box within their character cell — the dots/ellipsis
+    /// only fill roughly 60% of the glyph's advance width, versus ~85% for
+    /// `✓`/`✕`. At the shared `size * 0.8` font size the spinner reads as two
+    /// faint dots next to the other glyphs' full marks. Scaling the font to
+    /// `size * 1.1` (~1.4x the base) and bumping the weight from `.medium` to
+    /// `.bold` brings the spinner's visual ink box in line with `✓`/`✕`
+    /// without changing the slot frame, so rows don't shift.
+    private func spinnerGlyph(_ symbol: String, color: Color) -> some View {
+        Text(symbol)
+            .font(.system(size: size * 1.1, weight: .bold, design: .monospaced))
             .foregroundStyle(color)
             .frame(width: size, height: size)
             .minimumScaleFactor(0.6)
