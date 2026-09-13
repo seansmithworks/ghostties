@@ -1,58 +1,41 @@
 # Demo Workspace
 
-Anonymized demo content for screen-recording, portfolio case studies, and social media promos. All project names, task titles, team references, and company names are fictional. Safe for public screenshots and video.
+Seed data for screen-recording, portfolio case studies, and social media promos.
 
 ## Projects
 
-Ten fictional projects across different domains:
+Seven real, public repos (`SeanSmithWorks/<name>` on GitHub), cloned at a
+pinned commit SHA — see `DEMO_PROJECT_SPECS` in `scripts/demo/_demo-paths.sh`
+for the exact repo/SHA/branch/ghost-character mapping.
 
-| Directory | Domain |
+| Repo | Domain |
 |---|---|
-| `atlas-api/` | Backend API service |
-| `pendulum/` | Time-tracking mobile app |
-| `silo/` | File storage and sync tool |
-| `wren/` | Note-taking and writing app |
-| `switchboard/` | Developer dashboard / webhook tool |
-| `fieldwork/` | Location and field data capture app |
-| `trove/` | Personal knowledge base app |
-| `brukas/` | Booking / quoting app |
-| `annotie/` | Document annotation and review tool |
-| `ghostties/` | Ghostties itself, dogfooded as a fixture |
+| `ghostties/` | This fork itself, dogfooded as a fixture |
+| `riff/` | (see repo) |
+| `surface-fx/` | (see repo) |
+| `colophon/` | (see repo) |
+| `impeccable-swift/` | (see repo) |
+| `agent-skills/` | (see repo) |
+| `vista-sheet/` | (see repo) |
 
 ## How to load in Ghostties
 
-These fixtures aren't opened directly from this checkout. `scripts/demo/seed-demo-workspace.sh`
-copies each one into `~/Library/Application Support/Ghostties Demo/repos/<name>/`, turns it into
-a real git repo, and points the demo app's `workspace.json` at those copies — so the demo doesn't
+These repos aren't opened directly from this checkout. `scripts/demo/seed-demo-workspace.sh`
+clones each one (from a persistent local cache, so re-seeding doesn't re-download once a SHA
+is cached) into `~/Library/Application Support/Ghostties Demo/repos/<name>/` at its pinned
+commit, and points the demo app's `workspace.json` at those clones — so the demo doesn't
 depend on this checkout's branch. See `scripts/demo/README.md` for the full refresh + seed
 procedure.
 
-## What this enables
+## Note on task-first fixtures
 
-| Capture moment | Coverage |
-|---|---|
-| Full ghost rail | 10 projects, each auto-assigned a named pixel-art ghost |
-| All six zones | Inbox, Backlog, Running, Needs You, Review, Graveyard all populated |
-| Terracotta Needs You cards | 4 tasks across 4 projects, each with a realistic blocking question |
-| Running tasks with branches | 5 tasks with `branch:`, `worktree:`, `files-staged:` fields |
-| Review tasks with PRs | 4 tasks with PR numbers, states, and URLs |
-| Mixed sources | Linear (`ATL-*`, `PND-*`, `SWB-*`, `TRV-*`, `FWK-*`, `SLO-*`, `WRN-*`), GitHub (`GH-*`), Shell |
-| Done / Graveyard | 4 completed tasks with timestamps |
-
-## Task count by zone
-
-| Zone | Count |
-|---|---|
-| Running | 5 |
-| Needs You | 4 |
-| Review | 4 |
-| Inbox | 3 |
-| Backlog | 2 |
-| Done / Graveyard | 4 |
-| **Total** | **22** |
-
-## Assumptions
-
-- The `worktree:` paths use `~` expansion (`~/Code/<project>`). If the app resolves these, they point to non-existent directories — this is expected for a fixture.
-- PR URLs point to `github.com/example-org/*` which are fictional. These will 404 if opened in a browser.
-- All dates are in the April–June 2026 range.
+Prior to 2026-09-13 this directory held 10 synthetic stub projects, each with a
+`.ghostties/tasks/*.md` overlay (`atlas-api`, `pendulum`, `silo`, `wren`,
+`switchboard`, `fieldwork`, `trove`, `brukas`, `annotie`, plus a copy of
+`ghostties`) that fed `choreograph.sh` / `terminal-flow.sh` and a task-first
+sidebar capture (Inbox/Backlog/Running/Needs You/Review/Graveyard zones).
+Those stub dirs were removed when the fixture set switched to the 7 real
+cloned repos above. **No replacement task-overlay content was authored for
+the new repos** — `choreograph.sh`, `terminal-flow.sh`, and any task-first
+zone capture are orphaned until someone decides whether to retire them or
+author real `.ghostties/tasks/` content against one of the 7 repos.

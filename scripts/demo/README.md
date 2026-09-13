@@ -48,7 +48,7 @@ to the exact build that produced it.
 Claude Code stops each staged session at its "Do you trust this folder?"
 screen unless the folder is already marked trusted, which would otherwise
 show a safety prompt instead of an agent in every capture. `demo-ready.sh`
-(the non-`--check` path) marks only the 10 seeded fixture repo paths as
+(the non-`--check` path) marks only the 7 seeded fixture repo paths as
 trusted by setting `projects["<fixture path>"].hasTrustDialogAccepted = true`
 in Sean's real `~/.claude.json` — no other key or entry is touched. It backs
 up the file first (`~/.claude.json.bak-demo-<timestamp>`), writes nothing if
@@ -128,11 +128,15 @@ the demo's update mechanism — re-run it to refresh to a new release.**
 ./scripts/demo/seed-demo-workspace.sh
 ```
 
-Copies the 10 fixtures in `examples/demo-workspace/` into
-`/Users/Shared/Ghostties Demo/repos/<name>/`, turns each into a real git repo
-(init + one commit; a few get an extra branch), and points `workspace.json`
-at those copies — not at this checkout, so the demo doesn't break when this
-repo changes branch. The repos root lives outside `$HOME` (unlike the rest of
+Clones the 7 real, public repos listed in `DEMO_PROJECT_SPECS`
+(`scripts/demo/_demo-paths.sh`) at their pinned commit SHAs into
+`/Users/Shared/Ghostties Demo/repos/<name>/` — each a normal, standalone git
+repo on branch `main` (a few also get a second branch) — and points
+`workspace.json` at those clones, not at this checkout, so the demo doesn't
+break when this repo changes branch. Clones are drawn from a persistent local
+cache (`~/Library/Caches/Ghostties Demo/clones/`) so re-seeding is fast and
+works offline once a SHA is cached; re-pin a repo by updating its SHA in
+`DEMO_PROJECT_SPECS`. The repos root lives outside `$HOME` (unlike the rest of
 the demo state dir) so a captured terminal pane's cwd never shows the real
 username. Idempotent; backs up any existing `workspace.json` before
 overwriting.
@@ -214,9 +218,10 @@ unless the bundle ID itself ends in `.dev` or `.debug` — a suffix like
 the override ever failed.
 
 The agent-facing entrypoint for producing marketing assets from the **real
-seeded fixture repos** — 10 real git repos with real branches — instead of
-`MarketingCaptureUITests`' hardcoded in-app cast (`switchboard`, `atlas-api`,
-`fieldwork`, `pendulum`, `silo`, `trove`, `wren`). It:
+seeded fixture repos** — 7 real, public, cloned repos with real history and
+branches — instead of `MarketingCaptureUITests`' hardcoded in-app cast
+(`switchboard`, `atlas-api`, `fieldwork`, `pendulum`, `silo`, `trove`,
+`wren`). It:
 
 1. Runs `demo-ready.sh --check` and aborts if the demo app / fixtures are stale.
 2. Copies `~/Library/Application Support/Ghostties Demo/` to a throwaway
@@ -270,11 +275,13 @@ attempt to suppress it.
 **falls back to the real state directory if the override path is unusable** —
 by design, so a shipping launch is never affected. That means a bad override
 here would silently point the app at Sean's real workspace. The test does not
-trust the env var being set as proof: before capturing anything, it asserts
-that `brukas` — a project name that exists only in
-`examples/demo-workspace/`, not in `MarketingCaptureUITests`' invented cast —
-is visibly rendered in the sidebar. If it isn't, the test fails loudly instead
-of capturing.
+trust the env var being set as proof: the seeded project names (`ghostties`,
+`riff`, ...) are real repo names that could plausibly also exist in Sean's
+real workspace, so before capturing anything it instead asserts that a
+staged session row named with the `"Demo Agent — "` prefix (written only by
+`_stage-demo-sessions.sh`, never present in a real workspace) is visibly
+rendered in the sidebar. If it isn't, the test fails loudly instead of
+capturing.
 
 This test is additive: it does not change `MarketingCaptureUITests`' behavior
 or output paths, and it never sets `GHOSTTIES_CAPTURE_FIXTURE` (that flag

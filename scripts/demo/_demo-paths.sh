@@ -33,6 +33,38 @@ DEMO_DRIVE_DEFAULT_COUNT=4
 # DEMO_STATE_DIR/REPOS_DIR for that reason alone.
 DEMO_WRAPPER_DIR="$HOME/.ghostties-demo-wrappers"
 
+# ── Seeded demo projects: name|owner/repo|pinned commit SHA|extra branch (or
+#    empty)|ghost character ──────────────────────────────────────────────────
+# Real, public, cloned repos (pinned 2026-09-13, replacing the prior 10
+# synthetic stub fixtures). Each SHA is that repo's `main` HEAD at pin time —
+# re-pin by updating the SHA here (see scripts/demo/README.md). Order matters:
+# `_stage-demo-sessions.sh` binds its default 4 staged sessions to the first
+# 4 entries (ghostties, riff, surface-fx, colophon); the remaining 3
+# (impeccable-swift, agent-skills, vista-sheet) get the extra-branch slot.
+declare -a DEMO_PROJECT_SPECS=(
+  "ghostties|SeanSmithWorks/ghostties|2ff4136567d3bf3d34e383e4de759bee0e364be2||banshee"
+  "riff|SeanSmithWorks/riff|e39b54fa571457f6603f0e1bae60d8944f7f5b12||clyde"
+  "surface-fx|SeanSmithWorks/surface-fx|11d865cf2c236ad7ba5da7444bd7ffac0e2e51ba||ember"
+  "colophon|SeanSmithWorks/colophon|4257dce4a22be7cd3f47e21bdb48135bb0855fad||haunt"
+  "impeccable-swift|SeanSmithWorks/impeccable-swift|ce30d92073addc806c904af8086d0b7d128c20d6|feat/theme-tokens|pinky"
+  "agent-skills|SeanSmithWorks/agent-skills|51e1fec66af02a2ef4deb3ca9006d26264901dd4|feat/skill-registry-v2|specter"
+  "vista-sheet|SeanSmithWorks/vista-sheet|973cc2f9754380197b18e2c28edb44def8c0adbd|fix/export-precision|wisp"
+)
+
+# Persistent local clone cache, outside the repo and outside DEMO_STATE_DIR/
+# REPOS_DIR, so re-seeding never re-downloads once a pinned SHA is cached and
+# works fully offline against that cache.
+DEMO_CLONE_CACHE_DIR="$HOME/Library/Caches/Ghostties Demo/clones"
+
+# Prints each seeded project's name, one per line, in DEMO_PROJECT_SPECS order.
+demo_project_names() {
+  local spec name
+  for spec in "${DEMO_PROJECT_SPECS[@]}"; do
+    IFS='|' read -r name _ <<< "$spec"
+    echo "$name"
+  done
+}
+
 # ── Isolation check: LSEnvironment must pin GHOSTTIES_STATE_DIR ─────────────
 # `WorkspacePersistence.directoryName` maps the demo bundle ID
 # (com.seansmithdesign.ghostties.demo) to "Ghostties Demo" — but ONLY when

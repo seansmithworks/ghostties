@@ -1,10 +1,11 @@
 import XCTest
 
-/// Captures marketing assets from the **seeded demo workspace** — 10 real
-/// fixture repos staged by `scripts/demo/demo-ready.sh` — instead of the
-/// hardcoded in-app cast `MarketingCaptureUITests` uses. Driven end to end by
-/// `scripts/demo/demo-capture.sh`; see that script and `scripts/demo/README.md`
-/// for the full pipeline this test's output feeds into.
+/// Captures marketing assets from the **seeded demo workspace** — 7 real,
+/// public, cloned repos staged by `scripts/demo/demo-ready.sh` — instead of
+/// the hardcoded in-app cast `MarketingCaptureUITests` uses. Driven end to
+/// end by `scripts/demo/demo-capture.sh`; see that script and
+/// `scripts/demo/README.md` for the full pipeline this test's output feeds
+/// into.
 ///
 /// Additive to `MarketingCaptureUITests`: does NOT replace it, does NOT
 /// change its behaviour or output paths, and does NOT set
@@ -26,19 +27,25 @@ import XCTest
 /// would silently capture Sean's real workspace and (via `WorkspaceStore`'s
 /// prune-on-load) mutate his real session list. This test never trusts that
 /// the env var was merely *set* — it asserts an **observable signal** that
-/// the app actually loaded from the override before it captures anything:
-/// the demo fixture seeds a project named `brukas`, which does not exist in
-/// `MarketingCaptureUITests`' invented cast (`switchboard`, `atlas-api`,
-/// `fieldwork`, `pendulum`, `silo`, `trove`, `wren`) and is not a project
-/// name Sean would plausibly have in his real workspace. If `brukas` is not
-/// visible in the sidebar within the timeout, the test fails loudly instead
-/// of proceeding to capture.
+/// the app actually loaded from the override before it captures anything.
+///
+/// The seeded demo projects are now real, public repo names (`ghostties`,
+/// `riff`, `agent-skills`, ...) that plausibly exist in Sean's real
+/// workspace too, so a bare project-name match is no longer proof of
+/// isolation. Instead this test keys on `demo-drive.sh`'s staged session
+/// rows, named with the `"Demo Agent — "` prefix
+/// (`DEMO_SESSION_MARKER` in `scripts/demo/_demo-paths.sh`) — those never
+/// exist in a real workspace, regardless of which project names collide.
+/// If no such row is visible in the sidebar within the timeout, the test
+/// fails loudly instead of proceeding to capture.
 final class DemoWorkspaceCaptureUITests: XCTestCase {
-    /// A project name unique to `examples/demo-workspace/` — present in
-    /// every demo capture, absent from `MarketingCaptureUITests`' fixture
-    /// cast. Doubles as the "override took effect" proof and the "this
-    /// capture came from the demo workspace, not the hardcoded cast" proof.
-    static let demoOnlyProjectName = "brukas"
+    /// Prefix `_stage-demo-sessions.sh` gives every staged session's name —
+    /// must match `DEMO_SESSION_MARKER` in `scripts/demo/_demo-paths.sh`.
+    /// Doubles as the "override took effect" proof and the "this capture
+    /// came from the demo workspace, not the hardcoded cast" proof — unlike
+    /// a project name, this prefix cannot collide with anything in Sean's
+    /// real workspace.
+    static let demoSessionMarker = "Demo Agent — "
 
     override class var defaultTestSuite: XCTestSuite {
         if ProcessInfo.processInfo.environment["GHOSTTIES_UI_CAPTURE"] == "1" {
@@ -154,43 +161,20 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
 
         // Switch to the Projects tab via the real keyboard shortcut
         // (Cmd+Shift+1 — see AppDelegate's "Sidebar View" submenu). Project
-        // rows like the fixture-only "brukas" only render on this tab;
-        // `ghostties.sidebarTab` is a persisted @AppStorage default that
-        // this machine's dev-build UserDefaults may already have set to
-        // `.sessions` from real use, and `-ApplePersistenceIgnoreState`
-        // does not reset UserDefaults. Same fix MarketingCaptureUITests
-        // already applies for the same reason.
+        // rows only render on this tab; `ghostties.sidebarTab` is a
+        // persisted @AppStorage default that this machine's dev-build
+        // UserDefaults may already have set to `.sessions` from real use,
+        // and `-ApplePersistenceIgnoreState` does not reset UserDefaults.
+        // Same fix MarketingCaptureUITests already applies for the same
+        // reason.
         app.typeKey("1", modifierFlags: [.command, .shift])
         Thread.sleep(forTimeInterval: 0.5)
 
-        // ── Fail-closed assert: prove the override actually took effect ──
-        // before capturing anything. Do not trust the env var being set;
-        // require the demo-only fixture project to be visibly rendered.
-        //
-        // `ProjectDisclosureRow` combines its whole header into one
-        // accessibility element (`.accessibilityElement(children: .combine)`)
-        // exposed as a Button labeled "<name> project, collapsed/expanded" —
-        // there is no separate StaticText named exactly the project name.
-        // Match on that Button's label instead of `app.staticTexts[...]`.
-        let demoProjectRow = app.buttons.matching(
-            NSPredicate(format: "label BEGINSWITH %@", "\(Self.demoOnlyProjectName) project")
-        ).firstMatch
-        guard demoProjectRow.waitForExistence(timeout: 10) else {
-            app.terminate()
-            XCTFail(
-                "GHOSTTIES_STATE_DIR override did not take effect — fixture " +
-                "project '\(Self.demoOnlyProjectName)' was never visible in " +
-                "the sidebar. Refusing to capture: this would otherwise risk " +
-                "silently capturing (and mutating) the real workspace."
-            )
-            return
-        }
-        Thread.sleep(forTimeInterval: 0.3)
-
         // ── Expand every project so all staged session rows are visible ──
         // Projects start collapsed on launch, same as a real user's first
-        // open; demo-drive.sh spreads staged sessions across every fixture
-        // repo, not just the demo-only "brukas" project confirmed above.
+        // open; demo-drive.sh spreads staged sessions across four of the
+        // seeded repos, so every project must be expanded before the
+        // fail-closed check below can find them.
         let collapsedProjects = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "project, collapsed")
         )
@@ -201,31 +185,32 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
             expandAttempts += 1
         }
 
-        // ── Relaunch every staged session so terminal panes show real
-        // activity ──
-        // Staged sessions restore as "Exited" (see demo-drive.sh's own doc
-        // comment) — nothing relaunches them at app launch, and there is no
-        // URL scheme to trigger it. Mirror MarketingCaptureUITests' real-UI
-        // idiom: right-click each staged row (named with the
-        // "Demo Agent — " prefix demo-drive.sh writes) and choose
-        // "Relaunch" from its context menu. NOT exercised against a real
-        // build — see class doc comment.
+        // ── Fail-closed assert: prove the override actually took effect ──
+        // before capturing anything. Do not trust the env var being set;
+        // require a demo-only staged session row to be visibly rendered.
+        //
+        // The seeded project names (`ghostties`, `riff`, ...) are real repo
+        // names that could plausibly also exist in Sean's real workspace, so
+        // a project-name match is no longer proof of isolation. Instead this
+        // keys on `_stage-demo-sessions.sh`'s staged session rows, named
+        // with the `"Demo Agent — "` prefix (`demoSessionMarker` above,
+        // matching `DEMO_SESSION_MARKER` in `scripts/demo/_demo-paths.sh`) —
+        // those never exist in a real workspace.
         //
         // `SessionRow` (SessionDetailView.swift:9-95) is a plain `HStack`
         // with `.accessibilityElement(children: .combine)` and no `Button`
-        // — unlike `ProjectDisclosureRow`'s header, which this file already
-        // matches via `app.buttons` for that reason (see the `brukas`
-        // assert above). `MarketingCaptureUITests` finds its fixture
-        // session ("Claude Code 4") via `app.staticTexts[...]` against that
-        // same `SessionRow` view (`CaptureFixture` seeds the real
-        // `WorkspaceStore`/`SessionCoordinator`, not a separate view), but
-        // there is no test in this repo that proves `.staticTexts` is the
-        // right element type for a `.combine`d row rather than an
+        // — unlike `ProjectDisclosureRow`'s header, which this file matches
+        // via `app.buttons` above. `MarketingCaptureUITests` finds its
+        // fixture session ("Claude Code 4") via `app.staticTexts[...]`
+        // against that same `SessionRow` view (`CaptureFixture` seeds the
+        // real `WorkspaceStore`/`SessionCoordinator`, not a separate view),
+        // but there is no test in this repo that proves `.staticTexts` is
+        // the right element type for a `.combine`d row rather than an
         // implementation detail of the current SwiftUI/AppKit hosting
         // bridge. Query type-agnostically instead of betting on one
         // `XCUIElementType`.
         let stagedSessionRows = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label BEGINSWITH %@", "Demo Agent — ")
+            NSPredicate(format: "label BEGINSWITH %@", Self.demoSessionMarker)
         )
         // `.any` may surface both a row's combined parent element and an
         // inner leaf with an overlapping label, double-counting one visual
@@ -233,35 +218,47 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         // already-relaunched row simply finds no "Relaunch" item and falls
         // through to the escape branch below.
         let stagedCount = stagedSessionRows.count
-        if stagedCount == 0 {
+        guard stagedCount > 0 else {
+            app.terminate()
             XCTFail(
-                "No staged sessions found (looked for rows labeled starting " +
-                "\"Demo Agent — \"). Run demo-drive.sh to stage sessions " +
-                "before capturing, or terminal panes will show an empty/" +
-                "exited state."
+                "GHOSTTIES_STATE_DIR override did not take effect, or no " +
+                "sessions are staged — no row labeled starting " +
+                "\"\(Self.demoSessionMarker)\" was visible in the sidebar. " +
+                "Refusing to capture: this would otherwise risk silently " +
+                "capturing (and mutating) the real workspace. Run " +
+                "demo-ready.sh to stage sessions before capturing."
             )
-        } else {
-            for i in 0..<stagedCount {
-                let row = stagedSessionRows.element(boundBy: i)
-                guard row.waitForExistence(timeout: 5) else {
-                    XCTFail(
-                        "Staged session row at index \(i) of \(stagedCount) " +
-                        "disappeared before it could be relaunched."
-                    )
-                    continue
-                }
-                row.rightClick()
-                let relaunch = app.menuItems["Relaunch"].firstMatch
-                if relaunch.waitForExistence(timeout: 2) {
-                    relaunch.click()
-                } else {
-                    // Already running (no Relaunch item in the menu) or the
-                    // context menu didn't appear — dismiss and move on
-                    // rather than get stuck on one row.
-                    app.typeKey(.escape, modifierFlags: [])
-                }
-                Thread.sleep(forTimeInterval: 0.3)
+            return
+        }
+
+        // ── Relaunch every staged session so terminal panes show real
+        // activity ──
+        // Staged sessions restore as "Exited" (see demo-drive.sh's own doc
+        // comment) — nothing relaunches them at app launch, and there is no
+        // URL scheme to trigger it. Mirror MarketingCaptureUITests' real-UI
+        // idiom: right-click each staged row and choose "Relaunch" from its
+        // context menu. NOT exercised against a real build — see class doc
+        // comment.
+        for i in 0..<stagedCount {
+            let row = stagedSessionRows.element(boundBy: i)
+            guard row.waitForExistence(timeout: 5) else {
+                XCTFail(
+                    "Staged session row at index \(i) of \(stagedCount) " +
+                    "disappeared before it could be relaunched."
+                )
+                continue
             }
+            row.rightClick()
+            let relaunch = app.menuItems["Relaunch"].firstMatch
+            if relaunch.waitForExistence(timeout: 2) {
+                relaunch.click()
+            } else {
+                // Already running (no Relaunch item in the menu) or the
+                // context menu didn't appear — dismiss and move on
+                // rather than get stuck on one row.
+                app.typeKey(.escape, modifierFlags: [])
+            }
+            Thread.sleep(forTimeInterval: 0.3)
         }
 
         // ── Wait until a terminal pane actually shows content ──
@@ -319,11 +316,14 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         // ── Scroll the sidebar back to the top before capturing ──
         // The expand loop and relaunch loop above both click/right-click
         // rows further down the project list, which leaves the sidebar
-        // scrolled past the first project's header (observed: atlas-api's
-        // header clipped off the top of a real capture). Scroll the
-        // sidebar's own scroll view back up with a scroll-wheel gesture
-        // (not `.any` descendant enumeration — see the AX-cost lesson
-        // above) rather than a fixed sleep or a guess at row height.
+        // scrolled past the first project's header (observed with the prior
+        // 10-fixture set: the first project's header clipped off the top of
+        // a real capture — the first seeded project's name changes with the
+        // fixture set, currently "ghostties", see DEMO_PROJECT_SPECS in
+        // scripts/demo/_demo-paths.sh). Scroll the sidebar's own scroll view
+        // back up with a scroll-wheel gesture (not `.any` descendant
+        // enumeration — see the AX-cost lesson above) rather than a fixed
+        // sleep or a guess at row height.
         let sidebarScrollView = app.scrollViews.firstMatch
         guard sidebarScrollView.waitForExistence(timeout: 5) else {
             app.terminate()
@@ -337,7 +337,7 @@ final class DemoWorkspaceCaptureUITests: XCTestCase {
         }
         // A large positive deltaY scrolls content up toward the top; repeat
         // several times since one gesture may not cover the full staged
-        // list (10 fixture projects, some with staged sessions expanded).
+        // list (7 seeded projects, some with staged sessions expanded).
         for _ in 0..<10 {
             sidebarScrollView.scroll(byDeltaX: 0, deltaY: 2000)
         }
