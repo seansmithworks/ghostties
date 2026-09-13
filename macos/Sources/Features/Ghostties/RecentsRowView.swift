@@ -143,7 +143,9 @@ struct RecentsRowView: View, Equatable {
     // MARK: - Accessibility
 
     private var accessibilityLabel: String {
-        var parts = [session.name, "in \(projectName)"]
+        // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
+        // renders from — this row previously stated no status at all.
+        var parts = [session.name, "in \(projectName)", indicatorState.statusGlyphKind.spokenStatus]
         if hookUnconfirmed {
             parts.append("Approve the Ghostties hook in Codex")
         }

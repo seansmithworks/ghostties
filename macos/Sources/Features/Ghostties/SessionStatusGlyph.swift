@@ -12,20 +12,41 @@ enum SessionStatusGlyphKind: Equatable {
     case done
     case error
     case stopped
+
+    /// The word this glyph speaks to VoiceOver — the single source of truth
+    /// for status wording, so a row's visible glyph and its accessibility
+    /// label can never disagree. `.done` also covers `.waiting`'s silent
+    /// fallback (see `SessionIndicatorState.statusGlyphKind`), so it speaks
+    /// "idle" rather than a done-specific word.
+    var spokenStatus: String {
+        switch self {
+        case .working:    return "working"
+        case .needsInput: return "needs your input"
+        case .done:       return "idle"
+        case .error:      return "error"
+        case .stopped:    return "stopped"
+        }
+    }
 }
 
 extension SessionIndicatorState {
     /// Maps this indicator state to the glyph that stands in for it in a
     /// session row's status slot (BACKLOG J/K, decision 2026-09-13, "for the
-    /// moment"). `.processing`/`.longRunning`/`.waiting` all read as "working"
-    /// — none of them are blocked on the user, so one spinner covers all three.
+    /// moment"). `.processing`/`.longRunning` read as "working" — observed
+    /// activity, not blocked on the user. `.waiting` is a FALLBACK returned
+    /// when there's no observed evidence either way (see
+    /// `SessionCoordinator.indicatorState(for:)`), not confirmed work, so it
+    /// reads as the same low-salience `.done` state as `.idle` rather than
+    /// spinning indefinitely — a silent shell session launched via `cco`
+    /// would otherwise show a permanent spinner once hook state goes stale.
     var statusGlyphKind: SessionStatusGlyphKind {
         switch self {
-        case .processing, .longRunning, .waiting: return .working
-        case .needsAttention:                     return .needsInput
-        case .idle:                               return .done
-        case .error:                               return .error
-        case .inactive:                            return .stopped
+        case .processing, .longRunning: return .working
+        case .waiting:                  return .done
+        case .needsAttention:           return .needsInput
+        case .idle:                     return .done
+        case .error:                    return .error
+        case .inactive:                 return .stopped
         }
     }
 }

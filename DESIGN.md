@@ -205,11 +205,15 @@ status icon per row, never a ghost plus a glyph.
 
 | Session state (`SessionIndicatorState`)      | Glyph          | Color              |
 | --------------------------------------------- | -------------- | ------------------- |
-| `.processing` / `.longRunning` / `.waiting`   | Braille spinner (⠋⠙⠹⠸⠼⠴⠦⠧, ~80ms/frame) | `textSecondaryLight/Dark` |
+| `.processing` / `.longRunning`                | Braille spinner (⠋⠙⠹⠸⠼⠴⠦⠧, ~80ms/frame) | `textSecondaryLight/Dark` |
 | `.needsAttention`                             | `?`            | `.primary` — the only emphasis; no accent color |
-| `.idle`                                       | `✓`            | `textSecondaryLight/Dark` |
+| `.idle` / `.waiting`                          | `✓`            | `textSecondaryLight/Dark` |
 | `.error`                                      | `✕`            | `textSecondaryLight/Dark` |
 | `.inactive`                                   | (empty slot)   | —                    |
+
+`✓` also covers `.waiting` — `SessionCoordinator`'s silent/unknown fallback when there's no
+observed evidence the session is doing anything, not confirmed work. It must not spin
+indefinitely, so it reads at the same low salience as a confirmed-idle session.
 
 Reduce Motion replaces the spinner with a static `…` in the same color; no other state animates.
 No new colors — glyph colors are the existing `WorkspaceLayout` text tokens, not the

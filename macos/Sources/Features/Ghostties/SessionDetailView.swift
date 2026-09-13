@@ -103,15 +103,11 @@ struct SessionRow: View {
         return .clear
     }
 
+    /// Derived from the same `SessionStatusGlyphKind` the visible glyph
+    /// renders — a parallel per-state switch here previously spoke "your
+    /// turn" for `.waiting` while the glyph showed a spinner, so VoiceOver
+    /// and sighted users disagreed about whether the session needed Sean.
     private var statusLabel: String {
-        switch indicatorState {
-        case .processing:     return "processing"
-        case .waiting:        return "your turn"
-        case .needsAttention: return "needs a decision"
-        case .longRunning:    return "running for a long time"
-        case .idle:           return "idle"
-        case .error:          return "error"
-        case .inactive:       return "inactive"
-        }
+        indicatorState.statusGlyphKind.spokenStatus
     }
 }

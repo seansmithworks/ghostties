@@ -5,7 +5,10 @@
 - [x] Revert static working glyph (Sean: grid/spinner better) — a836dbc99
 - [x] Merge origin/main into branch — 61e09d692
 - [ ] Full GhosttyTests run on the merged HEAD (waiting on the Dev slot)
-- [ ] Independent review of the status glyph change `9b1a6d735`
+- [x] Independent review of the status glyph change `9b1a6d735` — pass with notes; .waiting/label
+  mismatch fixed in `fix(sidebar): silent fallback reads as idle, status words derive from the glyph`
+- [ ] Esc-interrupting Claude may leave hook state busy (no Stop) → spinner up to 30 min —
+  inferred, unverified
 - [ ] PR on SeanSmithWorks/ghostties (base main) with FIXTURE-data screenshots (public repo — no
   real session names)
 - [ ] Live checks still unverified: drag released over empty space reverts; auto-scroll feel;

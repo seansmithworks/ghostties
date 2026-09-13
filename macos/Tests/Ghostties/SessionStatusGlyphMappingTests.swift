@@ -16,8 +16,12 @@ struct SessionStatusGlyphMappingTests {
         #expect(SessionIndicatorState.longRunning.statusGlyphKind == .working)
     }
 
-    @Test func waitingReadsAsWorking() {
-        #expect(SessionIndicatorState.waiting.statusGlyphKind == .working)
+    @Test func waitingReadsAsDone() {
+        // `.waiting` is the fallback SessionCoordinator returns when there's
+        // no observed evidence either way, not confirmed work — it must not
+        // spin. If `statusGlyphKind` regresses `.waiting` back to `.working`,
+        // this assertion is the one that goes red.
+        #expect(SessionIndicatorState.waiting.statusGlyphKind == .done)
     }
 
     @Test func needsAttentionReadsAsNeedsInput() {
@@ -42,7 +46,7 @@ struct SessionStatusGlyphMappingTests {
         let mapping: [(SessionIndicatorState, SessionStatusGlyphKind)] = [
             (.processing, .working),
             (.longRunning, .working),
-            (.waiting, .working),
+            (.waiting, .done),
             (.needsAttention, .needsInput),
             (.idle, .done),
             (.error, .error),
@@ -51,5 +55,22 @@ struct SessionStatusGlyphMappingTests {
         for (state, expectedKind) in mapping {
             #expect(state.statusGlyphKind == expectedKind)
         }
+    }
+
+    // MARK: - Spoken status
+
+    @Test func everyGlyphKindHasANonEmptySpokenStatus() {
+        let kinds: [SessionStatusGlyphKind] = [.working, .needsInput, .done, .error, .stopped]
+        for kind in kinds {
+            #expect(!kind.spokenStatus.isEmpty)
+        }
+    }
+
+    @Test func waitingAndIdleSpeakTheSameStatus() {
+        // Both collapse to `.done` — a silent fallback and a confirmed idle
+        // session must not be distinguishable to VoiceOver, since neither
+        // is blocked on the user.
+        #expect(SessionIndicatorState.waiting.statusGlyphKind.spokenStatus
+                == SessionIndicatorState.idle.statusGlyphKind.spokenStatus)
     }
 }
