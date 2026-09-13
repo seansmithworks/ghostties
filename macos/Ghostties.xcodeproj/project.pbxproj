@@ -1283,6 +1283,7 @@
 				ENABLE_PREVIEWS = YES;
 				EXECUTABLE_NAME = ghostty;
 				GENERATE_INFOPLIST_FILE = YES;
+				GHOSTTIES_DEV_BUNDLE_SUFFIX = .dev;
 				INFOPLIST_FILE = "Ghostties-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Ghostties Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -1314,7 +1315,7 @@
 					"-lstdc++",
 					"-lcef_dll_wrapper",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.seansmithdesign.ghostties.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.seansmithdesign.ghostties$(GHOSTTIES_DEV_BUNDLE_SUFFIX)";
 				PRODUCT_MODULE_NAME = Ghostty;
 				PRODUCT_NAME = "Ghostties Dev";
 				SWIFT_EMIT_LOC_STRINGS = YES;
