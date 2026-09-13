@@ -521,6 +521,58 @@ enum ComposerWitnessSetting {
     }
 }
 
+/// Session-7 brief: the gap between the Witness sprite's bottom edge and the
+/// single-line card's top edge — today it's flush (the sprite is 24pt tall,
+/// `singleLineComposerCard`'s overlay offset is a hardcoded `y: -24`). The
+/// overlay's actual offset becomes `y: -(24 + gap)`; this enum only owns the
+/// dial, not the offset math (that stays in `SessionComposerPalette
+/// .singleLineComposerCard`, next to the sprite-height constant it composes
+/// with).
+enum ComposerWitnessGap {
+    static let storageKey = "ghostties.composerWitnessGap"
+    static let defaultGap: CGFloat = 4
+    static let range: ClosedRange<Double> = 0...12
+
+    static func gap(defaults: UserDefaults = .standard) -> CGFloat {
+        let stored = defaults.object(forKey: storageKey) as? Double
+        return CGFloat(stored ?? Double(defaultGap))
+    }
+}
+
+/// Session-7 brief §11: "Reset single-line" clears every single-line-only
+/// key back to its code default — field size, row size, width, corner
+/// radius, shadow preset + its three derived dials, treatment, glass tint,
+/// ghost gap, and Witness. Deliberately excludes `ComposerStyle` itself and
+/// every zero-chrome-only key (base blur, focal blur, fog, alignment) —
+/// those aren't single-line keys. A single list, `resetKeys`, is the one
+/// place both `ComposerDialKitCoordinator`'s reset action and the legacy
+/// pill's fallback button read from, so the two can't drift on which keys
+/// "reset" covers.
+enum ComposerSingleLineReset {
+    static var resetKeys: [String] {
+        [
+            ComposerSingleLineTuning.fieldSizeStorageKey,
+            ComposerSingleLineTuning.rowSizeStorageKey,
+            ComposerSingleLineTuning.widthStorageKey,
+            ComposerSingleLineTuning.cornerRadiusStorageKey,
+            ComposerSingleLineShadowPreset.storageKey,
+            ComposerSingleLineShadowDials.radiusStorageKey,
+            ComposerSingleLineShadowDials.yOffsetStorageKey,
+            ComposerSingleLineShadowDials.opacityStorageKey,
+            ComposerSingleLineTreatment.storageKey,
+            ComposerSingleLineGlassTint.storageKey,
+            ComposerWitnessGap.storageKey,
+            ComposerWitnessSetting.storageKey
+        ]
+    }
+
+    static func reset(defaults: UserDefaults = .standard) {
+        for key in resetKeys {
+            defaults.removeObject(forKey: key)
+        }
+    }
+}
+
 /// Full-bleed animated fog, composited over the base/focal blur layers in
 /// `ComposerZeroChromeWash`. `allowsHitTesting(false)` throughout (inherited
 /// from the wash's own call site) — this view claims no clicks.
@@ -724,6 +776,7 @@ enum ComposerSingleLineTuning {
     static let fieldSizeStorageKey = "ghostties.composerSingleLineFieldSize"
     static let rowSizeStorageKey = "ghostties.composerSingleLineRowSize"
     static let widthStorageKey = "ghostties.composerSingleLineWidth"
+    static let cornerRadiusStorageKey = "ghostties.composerSingleLineCornerRadius"
 
     /// Strawman defaults (brief §2, round 12, "feels small" → bigger):
     /// 15→22pt field text, 13→16pt row/status text, 512→680pt width. The
@@ -737,10 +790,16 @@ enum ComposerSingleLineTuning {
     static let defaultFieldSize: CGFloat = 28
     static let defaultRowSize: CGFloat = 18
     static let defaultWidth: CGFloat = 688
+    /// Session-7 brief: the corner-radius dial's default is the EXISTING
+    /// `.anchored` card radius (`SessionComposerPalette.cornerRadius`'s
+    /// `.anchored` case) — a literal 10, not derived from that switch, so
+    /// this enum has no dependency on `SessionComposerPalette`.
+    static let defaultCornerRadius: CGFloat = 10
 
     static let fieldSizeRange: ClosedRange<Double> = 15...28
     static let rowSizeRange: ClosedRange<Double> = 11...20
     static let widthRange: ClosedRange<Double> = 480...760
+    static let cornerRadiusRange: ClosedRange<Double> = 6...20
 
     static func fieldSize(defaults: UserDefaults = .standard) -> CGFloat {
         let stored = defaults.object(forKey: fieldSizeStorageKey) as? Double
@@ -755,6 +814,11 @@ enum ComposerSingleLineTuning {
     static func width(defaults: UserDefaults = .standard) -> CGFloat {
         let stored = defaults.object(forKey: widthStorageKey) as? Double
         return CGFloat(stored ?? Double(defaultWidth))
+    }
+
+    static func cornerRadius(defaults: UserDefaults = .standard) -> CGFloat {
+        let stored = defaults.object(forKey: cornerRadiusStorageKey) as? Double
+        return CGFloat(stored ?? Double(defaultCornerRadius))
     }
 
     /// Preserves the shipped 15pt→38pt relationship (a fixed +23pt) rather
@@ -898,6 +962,36 @@ enum ComposerSingleLineTreatment: String, CaseIterable {
     }
 }
 
+/// `.singleLine`'s Liquid Glass tint (session-7 brief §3): the hardcoded
+/// `.windowBackgroundColor` tint `singleLineComposerCard` always passed to
+/// `NSGlassEffectView` made the glass read as a flat opaque panel rather than
+/// translucent — `.none` passes `nil` (`NSGlassEffectView.tintColor` is a
+/// nullable `NSColor?`, per the AppKit header) so the glass shows through
+/// untinted. Only meaningful when `ComposerSingleLineTreatment.glass` is
+/// actually resolved (see `ComposerSingleLineBackgroundChoice`); `.material`
+/// never reads this.
+enum ComposerSingleLineGlassTint: String, CaseIterable {
+    case none
+    case windowBackground
+
+    static let storageKey = "ghostties.composerSingleLineGlassTint"
+
+    static func current(defaults: UserDefaults = .standard) -> ComposerSingleLineGlassTint {
+        guard let raw = defaults.string(forKey: storageKey),
+              let tint = ComposerSingleLineGlassTint(rawValue: raw) else {
+            return .none
+        }
+        return tint
+    }
+
+    var nsColor: NSColor? {
+        switch self {
+        case .none: return nil
+        case .windowBackground: return .windowBackgroundColor
+        }
+    }
+}
+
 /// Which background layer `.singleLine` actually paints, given the picked
 /// treatment AND whether `NSGlassEffectView` is available at runtime. Pulled
 /// out as a pure function (rather than inlining `treatment == .glass, #available(...)`
@@ -923,7 +1017,9 @@ enum ComposerSingleLineBackgroundChoice: Equatable {
 @available(macOS 26.0, *)
 struct ComposerLiquidGlassBackground: NSViewRepresentable {
     var cornerRadius: CGFloat
-    var tintColor: NSColor
+    /// `nil` renders untinted glass (`ComposerSingleLineGlassTint.none`) —
+    /// `NSGlassEffectView.tintColor` is itself a nullable `NSColor?`.
+    var tintColor: NSColor?
 
     func makeNSView(context: Context) -> NSGlassEffectView {
         let view = NSGlassEffectView()
@@ -988,12 +1084,15 @@ struct ComposerDebugTuningControl: View {
     @AppStorage private var singleLineFieldSize: Double
     @AppStorage private var singleLineRowSize: Double
     @AppStorage private var singleLineWidth: Double
+    @AppStorage private var singleLineCornerRadius: Double
     @AppStorage private var singleLineShadowPresetRaw: String
     @AppStorage private var singleLineShadowRadius: Double
     @AppStorage private var singleLineShadowYOffset: Double
     @AppStorage private var singleLineShadowOpacity: Double
     @AppStorage private var singleLineTreatmentRaw: String
+    @AppStorage private var singleLineGlassTintRaw: String
     @AppStorage private var witnessEnabled: Bool
+    @AppStorage private var witnessGap: Double
 
     /// Round 12: kept so `ComposerSingleLineShadowDials.apply` writes to the
     /// SAME `UserDefaults` instance this control's own `@AppStorage`
@@ -1019,12 +1118,15 @@ struct ComposerDebugTuningControl: View {
         _singleLineFieldSize = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultFieldSize), ComposerSingleLineTuning.fieldSizeStorageKey, store: defaults)
         _singleLineRowSize = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultRowSize), ComposerSingleLineTuning.rowSizeStorageKey, store: defaults)
         _singleLineWidth = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultWidth), ComposerSingleLineTuning.widthStorageKey, store: defaults)
+        _singleLineCornerRadius = AppStorage(wrappedValue: Double(ComposerSingleLineTuning.defaultCornerRadius), ComposerSingleLineTuning.cornerRadiusStorageKey, store: defaults)
         _singleLineShadowPresetRaw = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.custom.rawValue, ComposerSingleLineShadowPreset.storageKey, store: defaults)
         _singleLineShadowRadius = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.custom.dialValues.radius), ComposerSingleLineShadowDials.radiusStorageKey, store: defaults)
         _singleLineShadowYOffset = AppStorage(wrappedValue: Double(ComposerSingleLineShadowPreset.custom.dialValues.yOffset), ComposerSingleLineShadowDials.yOffsetStorageKey, store: defaults)
         _singleLineShadowOpacity = AppStorage(wrappedValue: ComposerSingleLineShadowPreset.custom.dialValues.opacity, ComposerSingleLineShadowDials.opacityStorageKey, store: defaults)
         _singleLineTreatmentRaw = AppStorage(wrappedValue: ComposerSingleLineTreatment.glass.rawValue, ComposerSingleLineTreatment.storageKey, store: defaults)
+        _singleLineGlassTintRaw = AppStorage(wrappedValue: ComposerSingleLineGlassTint.none.rawValue, ComposerSingleLineGlassTint.storageKey, store: defaults)
         _witnessEnabled = AppStorage(wrappedValue: true, ComposerWitnessSetting.storageKey, store: defaults)
+        _witnessGap = AppStorage(wrappedValue: Double(ComposerWitnessGap.defaultGap), ComposerWitnessGap.storageKey, store: defaults)
         self.defaults = defaults
         self.onChange = onChange
     }
@@ -1083,6 +1185,10 @@ struct ComposerDebugTuningControl: View {
         Binding(get: { singleLineWidth }, set: { singleLineWidth = $0; onChange() })
     }
 
+    var singleLineCornerRadiusBinding: Binding<Double> {
+        Binding(get: { singleLineCornerRadius }, set: { singleLineCornerRadius = $0; onChange() })
+    }
+
     /// Round 12: selecting a preset WRITES the three shadow dials once
     /// (`ComposerSingleLineShadowDials.apply`) — it does not stay "live
     /// bound" to the preset afterward, so tuning a dial post-selection
@@ -1121,9 +1227,45 @@ struct ComposerDebugTuningControl: View {
         )
     }
 
+    var singleLineGlassTint: Binding<ComposerSingleLineGlassTint> {
+        Binding(
+            get: { ComposerSingleLineGlassTint(rawValue: singleLineGlassTintRaw) ?? .none },
+            set: { singleLineGlassTintRaw = $0.rawValue; onChange() }
+        )
+    }
+
     /// R14: not `private`, same testability pattern as `fog` above.
     var witness: Binding<Bool> {
         Binding(get: { witnessEnabled }, set: { witnessEnabled = $0; onChange() })
+    }
+
+    var witnessGapBinding: Binding<Double> {
+        Binding(get: { witnessGap }, set: { witnessGap = $0; onChange() })
+    }
+
+    /// Session-7 brief §11: clears every single-line key
+    /// (`ComposerSingleLineReset.resetKeys`) back to its code default, then
+    /// re-reads each `@AppStorage` property from the now-empty keys so the
+    /// pill reflects the reset immediately — `@AppStorage` doesn't notice an
+    /// external `removeObject` on its own store reference until the next
+    /// read, so each property is reassigned explicitly here rather than
+    /// left to redraw on its own.
+    func resetSingleLine() {
+        ComposerSingleLineReset.reset(defaults: defaults)
+        singleLineFieldSize = Double(ComposerSingleLineTuning.defaultFieldSize)
+        singleLineRowSize = Double(ComposerSingleLineTuning.defaultRowSize)
+        singleLineWidth = Double(ComposerSingleLineTuning.defaultWidth)
+        singleLineCornerRadius = Double(ComposerSingleLineTuning.defaultCornerRadius)
+        let preset = ComposerSingleLineShadowPreset.current(defaults: defaults)
+        singleLineShadowPresetRaw = preset.rawValue
+        singleLineShadowRadius = Double(ComposerSingleLineShadowDials.radius(defaults: defaults))
+        singleLineShadowYOffset = Double(ComposerSingleLineShadowDials.yOffset(defaults: defaults))
+        singleLineShadowOpacity = ComposerSingleLineShadowDials.opacity(defaults: defaults)
+        singleLineTreatmentRaw = ComposerSingleLineTreatment.current(defaults: defaults).rawValue
+        singleLineGlassTintRaw = ComposerSingleLineGlassTint.current(defaults: defaults).rawValue
+        witnessEnabled = ComposerWitnessSetting.isEnabled(defaults: defaults)
+        witnessGap = Double(ComposerWitnessGap.gap(defaults: defaults))
+        onChange()
     }
 
     /// Round 12: a labeled `Slider` row, the DEBUG pill's stand-in for a
@@ -1197,12 +1339,25 @@ struct ComposerDebugTuningControl: View {
                     Text("Center").tag(ComposerZeroChromeAlignment.center)
                 }
             }
-            // Round 12: single-line-only dials, same show/hide pattern as
-            // the zero-chrome-only pickers above.
+            // Session-7 brief: single-line-only dials, same show/hide
+            // pattern as the zero-chrome-only pickers above, reordered to
+            // match `ComposerDialKitCoordinator.controls(for:)`'s single-
+            // line order (Treatment moved up next to Style, glass tint next
+            // to it, corner radius after width, ghost gap after Witness,
+            // Reset last).
             if style.wrappedValue == .singleLine {
+                Picker("Treatment", selection: singleLineTreatment) {
+                    Text("Material").tag(ComposerSingleLineTreatment.material)
+                    Text("Liquid Glass").tag(ComposerSingleLineTreatment.glass)
+                }
+                Picker("Glass tint", selection: singleLineGlassTint) {
+                    Text("None").tag(ComposerSingleLineGlassTint.none)
+                    Text("Window background").tag(ComposerSingleLineGlassTint.windowBackground)
+                }
+                dialRow("Width", value: singleLineWidthBinding, range: ComposerSingleLineTuning.widthRange, format: "%.0fpt")
+                dialRow("Corner radius", value: singleLineCornerRadiusBinding, range: ComposerSingleLineTuning.cornerRadiusRange, format: "%.0fpt")
                 dialRow("Field size", value: singleLineFieldSizeBinding, range: ComposerSingleLineTuning.fieldSizeRange, format: "%.0fpt")
                 dialRow("Row size", value: singleLineRowSizeBinding, range: ComposerSingleLineTuning.rowSizeRange, format: "%.0fpt")
-                dialRow("Width", value: singleLineWidthBinding, range: ComposerSingleLineTuning.widthRange, format: "%.0fpt")
                 Picker("Shadow", selection: singleLineShadowPreset) {
                     Text("None").tag(ComposerSingleLineShadowPreset.none)
                     Text("Soft").tag(ComposerSingleLineShadowPreset.soft)
@@ -1213,14 +1368,12 @@ struct ComposerDebugTuningControl: View {
                 dialRow("Shadow radius", value: singleLineShadowRadiusBinding, range: 0...64, format: "%.0f")
                 dialRow("Shadow length", value: singleLineShadowYOffsetBinding, range: 0...64, format: "%.0f")
                 dialRow("Shadow opacity", value: singleLineShadowOpacityBinding, range: 0...0.6, format: "%.2f")
-                Picker("Treatment", selection: singleLineTreatment) {
-                    Text("Material").tag(ComposerSingleLineTreatment.material)
-                    Text("Liquid Glass").tag(ComposerSingleLineTreatment.glass)
-                }
                 Picker("Witness", selection: witness) {
                     Text("On").tag(true)
                     Text("Off").tag(false)
                 }
+                dialRow("Ghost gap", value: witnessGapBinding, range: ComposerWitnessGap.range, format: "%.0fpt")
+                Button("Reset single-line") { resetSingleLine() }
             }
         }
         .pickerStyle(.menu)
@@ -1256,12 +1409,15 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
     var singleLineFieldSize: Double
     var singleLineRowSize: Double
     var singleLineWidth: Double
+    var singleLineCornerRadius: Double
     private var shadowPresetRawStorage: String
     var shadowRadius: Double
     var shadowYOffset: Double
     var shadowOpacity: Double
     var treatmentRaw: String
+    var glassTintRaw: String
     var witnessEnabled: Bool
+    var witnessGap: Double
 
     /// The `shadowPreset` `.select` control (in `ComposerDialKitCoordinator
     /// .controls`) writes through this keyPath via DialKit's generic
@@ -1303,12 +1459,15 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         singleLineFieldSize: Double,
         singleLineRowSize: Double,
         singleLineWidth: Double,
+        singleLineCornerRadius: Double,
         shadowPresetRaw: String,
         shadowRadius: Double,
         shadowYOffset: Double,
         shadowOpacity: Double,
         treatmentRaw: String,
-        witnessEnabled: Bool
+        glassTintRaw: String,
+        witnessEnabled: Bool,
+        witnessGap: Double
     ) {
         self.styleRaw = styleRaw
         self.materialRaw = materialRaw
@@ -1318,6 +1477,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         self.singleLineFieldSize = singleLineFieldSize
         self.singleLineRowSize = singleLineRowSize
         self.singleLineWidth = singleLineWidth
+        self.singleLineCornerRadius = singleLineCornerRadius
         // Direct storage assignment, NOT the computed setter above: the
         // caller (`ComposerDialKitCoordinator.readModel`) already reads
         // `shadowRadius`/`shadowYOffset`/`shadowOpacity` independently from
@@ -1329,14 +1489,17 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         self.shadowYOffset = shadowYOffset
         self.shadowOpacity = shadowOpacity
         self.treatmentRaw = treatmentRaw
+        self.glassTintRaw = glassTintRaw
         self.witnessEnabled = witnessEnabled
+        self.witnessGap = witnessGap
     }
 
     private enum CodingKeys: String, CodingKey {
         case styleRaw, materialRaw, focalBlurRaw, fogEnabled, alignmentRaw
-        case singleLineFieldSize, singleLineRowSize, singleLineWidth
+        case singleLineFieldSize, singleLineRowSize, singleLineWidth, singleLineCornerRadius
         case shadowPresetRawStorage = "shadowPresetRaw"
-        case shadowRadius, shadowYOffset, shadowOpacity, treatmentRaw, witnessEnabled
+        case shadowRadius, shadowYOffset, shadowOpacity, treatmentRaw, glassTintRaw
+        case witnessEnabled, witnessGap
     }
 }
 
@@ -1373,10 +1536,19 @@ final class ComposerDialKitCoordinator: ObservableObject {
         self.onChange = onChange
         let initial = Self.readModel(defaults: defaults)
         lastKnownModel = initial
+        // `DialPanelState.onAction` is set once, at construction, and
+        // needs to call back into this coordinator's `handleAction` — but
+        // `self` isn't a valid class instance yet at this point in `init`
+        // (Swift forbids capturing `self` in a closure before every stored
+        // property is assigned). `selfBox` is a tiny already-fully-formed
+        // object the closure can capture instead; `self` is dropped into it
+        // once `state`/`cancellable` are both set below.
+        let selfBox = ComposerDialKitCoordinatorBox()
         state = DialPanelState(
             name: "Composer Tuning",
             initial: initial,
-            controls: Self.controls
+            controls: Self.controls(for: initial.styleRaw),
+            onAction: { path in selfBox.coordinator?.handleAction(path) }
         )
         // `DialPanelState.init` normalizes `initial` against each control's
         // range/step (e.g. rounds a width to the nearest 10) BEFORE storing
@@ -1395,6 +1567,7 @@ final class ComposerDialKitCoordinator: ObservableObject {
             .sink { [weak self] newValue in
                 self?.handle(newValue)
             }
+        selfBox.coordinator = self
     }
 
     /// Round-13 review finding #1: the `shadowPreset` `.select` control only
@@ -1429,6 +1602,44 @@ final class ComposerDialKitCoordinator: ObservableObject {
         let previous = lastKnownModel
         lastKnownModel = model
         write(from: previous, to: model)
+        // Session-7 brief: rebuild the panel's own control list whenever
+        // Style changes, rather than showing every knob at once or forking
+        // vendored DialKit to add per-control visibility — `configure`
+        // (`DialPanelState`, vendored, unmodified) already exists for
+        // exactly this ("swap the control list a panel presents"), so no
+        // DialKit source edit is needed.
+        if model.styleRaw != previous.styleRaw {
+            state.configure(controls: Self.controls(for: model.styleRaw))
+        }
+    }
+
+    /// Session-7 brief §11: "Reset single-line" — the only `.action`
+    /// control in this panel, routed here via `DialPanelState`'s
+    /// `onAction` (see the `selfBox` doc comment in `init`). Not `private`
+    /// — `DialPanelState.triggerAction`, the real trigger path, is
+    /// `package`-scoped inside the vendored DialKit package and unreachable
+    /// from `ComposerZeroChromeStyleTests` (a different module), so tests
+    /// call this directly instead, the same testability pattern as
+    /// `ComposerDebugTuningControl.style`/`witness` above.
+    func handleAction(_ path: String) {
+        guard path == Self.resetActionPath else { return }
+        resetSingleLine()
+    }
+
+    /// Clears every single-line key in `UserDefaults`
+    /// (`ComposerSingleLineReset.resetKeys`), then re-reads the model from
+    /// those now-empty keys and pushes it straight into `state.values` so
+    /// the panel's own sliders/pickers reflect the reset on the same frame
+    /// — `write(from:to:)` is a no-op here because `lastKnownModel` is set
+    /// to the fresh model BEFORE `state.values` is reassigned, so the
+    /// diff it would compute is empty and it never re-writes the keys this
+    /// just cleared.
+    private func resetSingleLine() {
+        ComposerSingleLineReset.reset(defaults: defaults)
+        let freshModel = Self.readModel(defaults: defaults)
+        lastKnownModel = freshModel
+        state.values = freshModel
+        onChange()
     }
 
     private static func readModel(defaults: UserDefaults) -> ComposerDialKitTuningModel {
@@ -1441,12 +1652,15 @@ final class ComposerDialKitCoordinator: ObservableObject {
             singleLineFieldSize: Double(ComposerSingleLineTuning.fieldSize(defaults: defaults)),
             singleLineRowSize: Double(ComposerSingleLineTuning.rowSize(defaults: defaults)),
             singleLineWidth: Double(ComposerSingleLineTuning.width(defaults: defaults)),
+            singleLineCornerRadius: Double(ComposerSingleLineTuning.cornerRadius(defaults: defaults)),
             shadowPresetRaw: ComposerSingleLineShadowPreset.current(defaults: defaults).rawValue,
             shadowRadius: Double(ComposerSingleLineShadowDials.radius(defaults: defaults)),
             shadowYOffset: Double(ComposerSingleLineShadowDials.yOffset(defaults: defaults)),
             shadowOpacity: ComposerSingleLineShadowDials.opacity(defaults: defaults),
             treatmentRaw: ComposerSingleLineTreatment.current(defaults: defaults).rawValue,
-            witnessEnabled: ComposerWitnessSetting.isEnabled(defaults: defaults)
+            glassTintRaw: ComposerSingleLineGlassTint.current(defaults: defaults).rawValue,
+            witnessEnabled: ComposerWitnessSetting.isEnabled(defaults: defaults),
+            witnessGap: Double(ComposerWitnessGap.gap(defaults: defaults))
         )
     }
 
@@ -1478,6 +1692,9 @@ final class ComposerDialKitCoordinator: ObservableObject {
         if model.singleLineWidth != previous.singleLineWidth {
             defaults.set(model.singleLineWidth, forKey: ComposerSingleLineTuning.widthStorageKey)
         }
+        if model.singleLineCornerRadius != previous.singleLineCornerRadius {
+            defaults.set(model.singleLineCornerRadius, forKey: ComposerSingleLineTuning.cornerRadiusStorageKey)
+        }
         if model.shadowPresetRaw != previous.shadowPresetRaw {
             defaults.set(model.shadowPresetRaw, forKey: ComposerSingleLineShadowPreset.storageKey)
         }
@@ -1493,100 +1710,161 @@ final class ComposerDialKitCoordinator: ObservableObject {
         if model.treatmentRaw != previous.treatmentRaw {
             defaults.set(model.treatmentRaw, forKey: ComposerSingleLineTreatment.storageKey)
         }
+        if model.glassTintRaw != previous.glassTintRaw {
+            defaults.set(model.glassTintRaw, forKey: ComposerSingleLineGlassTint.storageKey)
+        }
         if model.witnessEnabled != previous.witnessEnabled {
             defaults.set(model.witnessEnabled, forKey: ComposerWitnessSetting.storageKey)
+        }
+        if model.witnessGap != previous.witnessGap {
+            defaults.set(model.witnessGap, forKey: ComposerWitnessGap.storageKey)
         }
         onChange()
     }
 
-    /// One panel, every knob from `ComposerDebugTuningControl.legacyBody` —
-    /// Style included (brief: "keep the Style picker"; here that means the
-    /// Style knob stays reachable, now as this panel's own `.select`
-    /// control rather than a second, separately-bound `Picker` living
-    /// beside DialKit — two live copies of the same key is exactly the
-    /// "two-cache coupling" class of bug this project's memory warns about
-    /// elsewhere).
-    private static var controls: [DialControl<ComposerDialKitTuningModel>] {
-        [
-            .select(
-                "style", keyPath: \.styleRaw, label: "Style",
-                options: [
-                    DialOption(ComposerStyle.classic.rawValue, label: "Classic"),
-                    DialOption(ComposerStyle.singleLine.rawValue, label: "Single line"),
-                    DialOption(ComposerStyle.zeroChrome.rawValue, label: "Zero chrome")
-                ]
-            ),
-            .select(
-                "baseBlur", keyPath: \.materialRaw, label: "Base blur",
-                options: [
-                    DialOption(ComposerZeroChromeMaterial.ultraThin.rawValue, label: "Ultra thin"),
-                    DialOption(ComposerZeroChromeMaterial.thin.rawValue, label: "Thin"),
-                    DialOption(ComposerZeroChromeMaterial.medium.rawValue, label: "Medium"),
-                    DialOption(ComposerZeroChromeMaterial.regular.rawValue, label: "Regular"),
-                    DialOption(ComposerZeroChromeMaterial.thick.rawValue, label: "Thick")
-                ]
-            ),
-            .select(
-                "focalBlur", keyPath: \.focalBlurRaw, label: "Focal blur",
-                options: [
-                    DialOption(ComposerZeroChromeFocalBlurStyle.off.rawValue, label: "Off"),
-                    DialOption(ComposerZeroChromeFocalBlurStyle.ultraThin.rawValue, label: "Ultra thin"),
-                    DialOption(ComposerZeroChromeFocalBlurStyle.thin.rawValue, label: "Thin"),
-                    DialOption(ComposerZeroChromeFocalBlurStyle.regular.rawValue, label: "Regular"),
-                    DialOption(ComposerZeroChromeFocalBlurStyle.thick.rawValue, label: "Thick")
-                ]
-            ),
-            .toggle("fog", keyPath: \.fogEnabled, label: "Fog"),
-            .select(
-                "alignment", keyPath: \.alignmentRaw, label: "Alignment",
-                options: [
-                    DialOption(ComposerZeroChromeAlignment.left.rawValue, label: "Left"),
-                    DialOption(ComposerZeroChromeAlignment.center.rawValue, label: "Center")
-                ]
-            ),
-            .slider(
-                "singleLineFieldSize", keyPath: \.singleLineFieldSize, label: "Field size",
-                range: ComposerSingleLineTuning.fieldSizeRange, unit: "pt"
-            ),
-            .slider(
-                "singleLineRowSize", keyPath: \.singleLineRowSize, label: "Row size",
-                range: ComposerSingleLineTuning.rowSizeRange, unit: "pt"
-            ),
-            // R13c: the width range's inferred step (10, since the range
-            // spans 280pt: `DialTypes.dialInferredStep`) doesn't divide
-            // evenly from `widthRange.lowerBound` (480) to Sean's tuned
-            // 688pt default — `dialRound` rounded 688 to 690 the instant
-            // the panel opened. 8 does: (688 - 480) % 8 == 0 (208 / 8 ==
-            // 26), so 688 is itself an exact step position and the dial
-            // never nudges it, while still giving 35 steps across the
-            // 280pt range (finer than the inferred 10pt, still usable).
-            .slider(
-                "singleLineWidth", keyPath: \.singleLineWidth, label: "Width",
-                range: ComposerSingleLineTuning.widthRange, step: 8, unit: "pt"
-            ),
-            .select(
-                "shadowPreset", keyPath: \.shadowPresetRaw, label: "Shadow",
-                options: [
-                    DialOption(ComposerSingleLineShadowPreset.none.rawValue, label: "None"),
-                    DialOption(ComposerSingleLineShadowPreset.soft.rawValue, label: "Soft"),
-                    DialOption(ComposerSingleLineShadowPreset.lifted.rawValue, label: "Lifted"),
-                    DialOption(ComposerSingleLineShadowPreset.long.rawValue, label: "Long"),
-                    DialOption(ComposerSingleLineShadowPreset.custom.rawValue, label: "Custom")
-                ]
-            ),
-            .slider("shadowRadius", keyPath: \.shadowRadius, label: "Shadow radius", range: 0...64),
-            .slider("shadowYOffset", keyPath: \.shadowYOffset, label: "Shadow length", range: 0...64),
-            .slider("shadowOpacity", keyPath: \.shadowOpacity, label: "Shadow opacity", range: 0...0.6),
-            .select(
-                "treatment", keyPath: \.treatmentRaw, label: "Treatment",
-                options: [
-                    DialOption(ComposerSingleLineTreatment.material.rawValue, label: "Material"),
-                    DialOption(ComposerSingleLineTreatment.glass.rawValue, label: "Liquid Glass")
-                ]
-            ),
-            .toggle("witness", keyPath: \.witnessEnabled, label: "Witness")
+    /// Session-7 brief: path of the single `.action` control — checked by
+    /// `handleAction` against `DialResolvedControl.path`'s value for an
+    /// unprefixed (not-in-a-group) control, which equals its own `path`.
+    private static let resetActionPath = "resetSingleLine"
+
+    private static let styleControl = DialControl<ComposerDialKitTuningModel>.select(
+        "style", keyPath: \.styleRaw, label: "Style",
+        options: [
+            DialOption(ComposerStyle.classic.rawValue, label: "Classic"),
+            DialOption(ComposerStyle.singleLine.rawValue, label: "Single line"),
+            DialOption(ComposerStyle.zeroChrome.rawValue, label: "Zero chrome")
         ]
+    )
+
+    private static let zeroChromeOnlyControls: [DialControl<ComposerDialKitTuningModel>] = [
+        .select(
+            "baseBlur", keyPath: \.materialRaw, label: "Base blur",
+            options: [
+                DialOption(ComposerZeroChromeMaterial.ultraThin.rawValue, label: "Ultra thin"),
+                DialOption(ComposerZeroChromeMaterial.thin.rawValue, label: "Thin"),
+                DialOption(ComposerZeroChromeMaterial.medium.rawValue, label: "Medium"),
+                DialOption(ComposerZeroChromeMaterial.regular.rawValue, label: "Regular"),
+                DialOption(ComposerZeroChromeMaterial.thick.rawValue, label: "Thick")
+            ]
+        ),
+        .select(
+            "focalBlur", keyPath: \.focalBlurRaw, label: "Focal blur",
+            options: [
+                DialOption(ComposerZeroChromeFocalBlurStyle.off.rawValue, label: "Off"),
+                DialOption(ComposerZeroChromeFocalBlurStyle.ultraThin.rawValue, label: "Ultra thin"),
+                DialOption(ComposerZeroChromeFocalBlurStyle.thin.rawValue, label: "Thin"),
+                DialOption(ComposerZeroChromeFocalBlurStyle.regular.rawValue, label: "Regular"),
+                DialOption(ComposerZeroChromeFocalBlurStyle.thick.rawValue, label: "Thick")
+            ]
+        ),
+        .toggle("fog", keyPath: \.fogEnabled, label: "Fog"),
+        .select(
+            "alignment", keyPath: \.alignmentRaw, label: "Alignment",
+            options: [
+                DialOption(ComposerZeroChromeAlignment.left.rawValue, label: "Left"),
+                DialOption(ComposerZeroChromeAlignment.center.rawValue, label: "Center")
+            ]
+        )
+    ]
+
+    /// Session-7 brief §"Strawman to build": single-line's own dial order —
+    /// Treatment, Glass tint, Width, Corner radius, Field size, Row size,
+    /// Shadow (preset + 3 dials), Witness, Ghost gap, Reset — everything
+    /// AFTER `styleControl`, which every style shows.
+    private static let singleLineOnlyControls: [DialControl<ComposerDialKitTuningModel>] = [
+        .select(
+            "treatment", keyPath: \.treatmentRaw, label: "Treatment",
+            options: [
+                DialOption(ComposerSingleLineTreatment.material.rawValue, label: "Material"),
+                DialOption(ComposerSingleLineTreatment.glass.rawValue, label: "Liquid Glass")
+            ]
+        ),
+        .select(
+            "glassTint", keyPath: \.glassTintRaw, label: "Glass tint",
+            options: [
+                DialOption(ComposerSingleLineGlassTint.none.rawValue, label: "None"),
+                DialOption(ComposerSingleLineGlassTint.windowBackground.rawValue, label: "Window background")
+            ]
+        ),
+        // R13c: the width range's inferred step (10, since the range
+        // spans 280pt: `DialTypes.dialInferredStep`) doesn't divide
+        // evenly from `widthRange.lowerBound` (480) to Sean's tuned
+        // 688pt default — `dialRound` rounded 688 to 690 the instant
+        // the panel opened. 8 does: (688 - 480) % 8 == 0 (208 / 8 ==
+        // 26), so 688 is itself an exact step position and the dial
+        // never nudges it, while still giving 35 steps across the
+        // 280pt range (finer than the inferred 10pt, still usable).
+        .slider(
+            "singleLineWidth", keyPath: \.singleLineWidth, label: "Width",
+            range: ComposerSingleLineTuning.widthRange, step: 8, unit: "pt"
+        ),
+        .slider(
+            "singleLineCornerRadius", keyPath: \.singleLineCornerRadius, label: "Corner radius",
+            range: ComposerSingleLineTuning.cornerRadiusRange, unit: "pt"
+        ),
+        .slider(
+            "singleLineFieldSize", keyPath: \.singleLineFieldSize, label: "Field size",
+            range: ComposerSingleLineTuning.fieldSizeRange, unit: "pt"
+        ),
+        .slider(
+            "singleLineRowSize", keyPath: \.singleLineRowSize, label: "Row size",
+            range: ComposerSingleLineTuning.rowSizeRange, unit: "pt"
+        ),
+        .select(
+            "shadowPreset", keyPath: \.shadowPresetRaw, label: "Shadow",
+            options: [
+                DialOption(ComposerSingleLineShadowPreset.none.rawValue, label: "None"),
+                DialOption(ComposerSingleLineShadowPreset.soft.rawValue, label: "Soft"),
+                DialOption(ComposerSingleLineShadowPreset.lifted.rawValue, label: "Lifted"),
+                DialOption(ComposerSingleLineShadowPreset.long.rawValue, label: "Long"),
+                DialOption(ComposerSingleLineShadowPreset.custom.rawValue, label: "Custom")
+            ]
+        ),
+        .slider("shadowRadius", keyPath: \.shadowRadius, label: "Shadow radius", range: 0...64),
+        .slider("shadowYOffset", keyPath: \.shadowYOffset, label: "Shadow length", range: 0...64),
+        .slider("shadowOpacity", keyPath: \.shadowOpacity, label: "Shadow opacity", range: 0...0.6),
+        .toggle("witness", keyPath: \.witnessEnabled, label: "Witness"),
+        .slider(
+            "witnessGap", keyPath: \.witnessGap, label: "Ghost gap",
+            range: ComposerWitnessGap.range, unit: "pt"
+        ),
+        .action(resetActionPath, label: "Reset single-line")
+    ]
+
+    /// Session-7 brief: the single place that decides which knobs the panel
+    /// shows for a given Style — Classic gets Style only, Zero chrome gets
+    /// Style + the 4 zero-chrome dials, Single line gets Style + the 13
+    /// single-line dials. `ComposerDialKitCoordinator.handle` calls
+    /// `state.configure(controls:)` (vendored, unmodified `DialPanelState`
+    /// API) with this function's result whenever `styleRaw` changes —
+    /// that's the whole "conditional visibility" mechanism; no DialKit
+    /// source is forked to add a per-control `isHidden`.
+    static func controls(for styleRaw: String) -> [DialControl<ComposerDialKitTuningModel>] {
+        var items: [DialControl<ComposerDialKitTuningModel>] = [styleControl]
+        switch ComposerStyle(rawValue: styleRaw) ?? .classic {
+        case .classic:
+            break
+        case .zeroChrome:
+            items.append(contentsOf: zeroChromeOnlyControls)
+        case .singleLine:
+            items.append(contentsOf: singleLineOnlyControls)
+        }
+        return items
     }
+}
+
+/// A separate, already-fully-initialized object `ComposerDialKitCoordinator
+/// .init` hands its `onAction` closure instead of capturing `self` — Swift
+/// forbids capturing `self` in a closure before every stored property of a
+/// class is assigned, but `DialPanelState.onAction` can only be supplied at
+/// construction time (it's an immutable `let`, no post-init setter). The box
+/// itself is a normal, fully-formed instance the moment it's created, so
+/// capturing IT is legal; `coordinator` is filled in at the very end of
+/// `init`, once `self` is safe to hand out.
+@available(macOS 14, *)
+@MainActor
+private final class ComposerDialKitCoordinatorBox {
+    weak var coordinator: ComposerDialKitCoordinator?
 }
 
 /// Hosts the DialKit drawer (`DialRoot`'s own FAB is the "DEBUG button that

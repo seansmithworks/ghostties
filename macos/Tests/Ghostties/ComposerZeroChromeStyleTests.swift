@@ -2219,4 +2219,146 @@ struct ComposerZeroChromeStyleTests {
             "expected the Witness ghost's leading edge to align with the typed text's leading edge, measured ghost=\(ghostLeftPt)pt text=\(textLeftPt)pt"
         )
     }
+
+    // MARK: - Session-7: new single-line dials (corner radius, glass tint,
+    // ghost gap) + conditional DialKit panel visibility + reset
+
+    @Test func composerSingleLineCornerRadiusDefaultsToAnchoredsExistingTen() {
+        let suite = UserDefaults(suiteName: "ghostties.singleLineCornerRadius.default.test.\(UUID().uuidString)")!
+        #expect(ComposerSingleLineTuning.cornerRadius(defaults: suite) == 10)
+    }
+
+    @Test func composerSingleLineCornerRadiusReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.singleLineCornerRadius.stored.test.\(UUID().uuidString)")!
+        suite.set(16.0, forKey: ComposerSingleLineTuning.cornerRadiusStorageKey)
+        #expect(ComposerSingleLineTuning.cornerRadius(defaults: suite) == 16)
+    }
+
+    @Test func composerSingleLineGlassTintDefaultsToNone() {
+        let suite = UserDefaults(suiteName: "ghostties.glassTint.default.test.\(UUID().uuidString)")!
+        #expect(ComposerSingleLineGlassTint.current(defaults: suite) == .none)
+    }
+
+    @Test func composerSingleLineGlassTintReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.glassTint.stored.test.\(UUID().uuidString)")!
+        suite.set(ComposerSingleLineGlassTint.windowBackground.rawValue, forKey: ComposerSingleLineGlassTint.storageKey)
+        #expect(ComposerSingleLineGlassTint.current(defaults: suite) == .windowBackground)
+    }
+
+    /// Acceptance item 3: `.none` must resolve to a `nil` tint —
+    /// `NSGlassEffectView.tintColor` is a nullable `NSColor?` per the AppKit
+    /// header, and passing `.windowBackgroundColor` unconditionally (the
+    /// pre-session-7 bug) is what read as an opaque flat panel.
+    @Test func composerSingleLineGlassTintNoneResolvesToNilColor() {
+        #expect(ComposerSingleLineGlassTint.none.nsColor == nil)
+    }
+
+    @Test func composerSingleLineGlassTintWindowBackgroundResolvesToWindowBackgroundColor() {
+        #expect(ComposerSingleLineGlassTint.windowBackground.nsColor == NSColor.windowBackgroundColor)
+    }
+
+    @Test func composerWitnessGapDefaultsToFour() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessGap.default.test.\(UUID().uuidString)")!
+        #expect(ComposerWitnessGap.gap(defaults: suite) == 4)
+    }
+
+    @Test func composerWitnessGapReadsStoredValue() {
+        let suite = UserDefaults(suiteName: "ghostties.witnessGap.stored.test.\(UUID().uuidString)")!
+        suite.set(9.0, forKey: ComposerWitnessGap.storageKey)
+        #expect(ComposerWitnessGap.gap(defaults: suite) == 9)
+    }
+
+    /// Acceptance item 2: the overlay's `y:` offset is driven by the gap —
+    /// extracted as `SessionComposerPalette.witnessOverlayYOffset(ghostGap:)`
+    /// specifically so this doesn't need a render. Red mutation: hardcoding
+    /// `-24` (dropping the `+ ghostGap` term) fails every assertion but the
+    /// `ghostGap: 0` one.
+    @Test func witnessOverlayYOffsetIsNegativeTwentyFourMinusGap() {
+        #expect(SessionComposerPalette.witnessOverlayYOffset(ghostGap: 0) == -24)
+        #expect(SessionComposerPalette.witnessOverlayYOffset(ghostGap: 4) == -28)
+        #expect(SessionComposerPalette.witnessOverlayYOffset(ghostGap: 12) == -36)
+    }
+
+    /// Acceptance item 4: reset clears every single-line key.
+    @Test func composerSingleLineResetClearsEveryListedKey() {
+        let suite = UserDefaults(suiteName: "ghostties.singleLineReset.test.\(UUID().uuidString)")!
+        for key in ComposerSingleLineReset.resetKeys {
+            suite.set(999, forKey: key)
+        }
+        ComposerSingleLineReset.reset(defaults: suite)
+        for key in ComposerSingleLineReset.resetKeys {
+            #expect(suite.object(forKey: key) == nil, "expected \(key) to be cleared by reset")
+        }
+    }
+
+    /// Companion to the above: reset must not touch Style itself or any
+    /// zero-chrome-only key — those aren't single-line keys.
+    @Test func composerSingleLineResetLeavesStyleAndZeroChromeKeysAlone() {
+        let suite = UserDefaults(suiteName: "ghostties.singleLineReset.scope.test.\(UUID().uuidString)")!
+        suite.set(ComposerStyle.singleLine.rawValue, forKey: ComposerStyle.storageKey)
+        suite.set(ComposerZeroChromeMaterial.thick.rawValue, forKey: ComposerZeroChromeMaterial.storageKey)
+        ComposerSingleLineReset.reset(defaults: suite)
+        #expect(suite.string(forKey: ComposerStyle.storageKey) == ComposerStyle.singleLine.rawValue)
+        #expect(suite.string(forKey: ComposerZeroChromeMaterial.storageKey) == ComposerZeroChromeMaterial.thick.rawValue)
+    }
+
+    // MARK: - DialKit panel: conditional visibility + reset action
+
+    /// Acceptance item 1: exactly Style for Classic, Style + the 4
+    /// zero-chrome dials for Zero chrome, Style + the 13 single-line dials
+    /// for Single line. `DialControl` doesn't expose its label/path outside
+    /// the DialKit package, so this names the discriminator this test
+    /// target CAN see — `state.controls.count`, the panel's actual visible
+    /// control list. Red mutation: showing every control for every style
+    /// (the "just don't hide anything" shortcut) fails all three.
+    @available(macOS 14, *)
+    @Test func dialKitVisibleControlCountsMatchEachStyle() {
+        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.classic.rawValue).count == 1)
+        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.zeroChrome.rawValue).count == 5)
+        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.singleLine.rawValue).count == 14)
+    }
+
+    /// Proves the LIVE panel (not just the pure function above) rebuilds
+    /// its control list when Style changes — the actual "conditional
+    /// visibility" mechanism (`ComposerDialKitCoordinator.handle` calling
+    /// `state.configure(controls:)`). Red mutation: removing the
+    /// `styleRaw != previous.styleRaw` branch in `handle` fails this since
+    /// `state.controls` would stay frozen at whatever it started at.
+    @available(macOS 14, *)
+    @Test func dialKitPanelRebuildsControlsWhenStyleChanges() {
+        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.visibility.test.\(UUID().uuidString)")!
+        suite.set(ComposerStyle.classic.rawValue, forKey: ComposerStyle.storageKey)
+        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+        #expect(coordinator.state.controls.count == 1)
+
+        coordinator.state.values.styleRaw = ComposerStyle.singleLine.rawValue
+        #expect(coordinator.state.controls.count == 14)
+
+        coordinator.state.values.styleRaw = ComposerStyle.zeroChrome.rawValue
+        #expect(coordinator.state.controls.count == 5)
+    }
+
+    /// Acceptance item 4 (panel side): triggering the panel's reset action
+    /// clears every single-line key AND the panel's own in-memory model
+    /// reflects the reset immediately (no stale sliders).
+    @available(macOS 14, *)
+    @Test func dialKitResetActionClearsKeysAndUpdatesPanelImmediately() {
+        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.reset.test.\(UUID().uuidString)")!
+        suite.set(ComposerStyle.singleLine.rawValue, forKey: ComposerStyle.storageKey)
+        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+
+        coordinator.state.values.singleLineWidth = 512
+        coordinator.state.values.singleLineCornerRadius = 20
+        coordinator.state.values.witnessGap = 12
+
+        coordinator.handleAction("resetSingleLine")
+
+        #expect(coordinator.state.values.singleLineWidth == Double(ComposerSingleLineTuning.defaultWidth))
+        #expect(coordinator.state.values.singleLineCornerRadius == Double(ComposerSingleLineTuning.defaultCornerRadius))
+        #expect(coordinator.state.values.witnessGap == Double(ComposerWitnessGap.defaultGap))
+
+        for key in ComposerSingleLineReset.resetKeys {
+            #expect(suite.object(forKey: key) == nil, "expected \(key) to be cleared by the panel's reset action")
+        }
+    }
 }

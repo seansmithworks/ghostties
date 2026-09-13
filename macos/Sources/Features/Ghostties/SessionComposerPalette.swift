@@ -2182,6 +2182,30 @@ struct SessionComposerPalette: View {
         ComposerSingleLineTuning.horizontalPadding(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
     }
 
+    /// Session-7 brief: the single-line card's OWN corner-radius dial —
+    /// independent of `cornerRadius`/`composerClipShape` above, which stay
+    /// exactly as they were for classic/`.centered`. Default matches the
+    /// existing `.anchored` radius (10) as a literal, not a read of that
+    /// switch, per `ComposerSingleLineTuning.defaultCornerRadius`'s doc
+    /// comment.
+    private var singleLineCornerRadius: CGFloat {
+        ComposerSingleLineTuning.cornerRadius(defaults: tuningDefaults)
+    }
+
+    private var singleLineClipShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: singleLineCornerRadius, style: cornerStyle)
+    }
+
+    /// Pure function extracted from the overlay modifier below so it's
+    /// directly testable without rendering (`ComposerZeroChromeStyleTests
+    /// .witnessOverlayYOffsetIsNegativeTwentyFourMinusGap`) — the Witness
+    /// sprite is a fixed 24pt tall; `ghostGap` is the tunable space between
+    /// its bottom edge and the card's top edge, so the overlay must rise an
+    /// additional `ghostGap` points beyond the sprite's own height.
+    static func witnessOverlayYOffset(ghostGap: CGFloat) -> CGFloat {
+        -(24 + ghostGap)
+    }
+
     /// Current card chrome exactly as DESIGN.md §4 specifies
     /// (`.regularMaterial` + `windowBackgroundColor` blend, 12pt continuous
     /// radius, stroke, shadow tokens), sized to the field row only — no
@@ -2213,9 +2237,9 @@ struct SessionComposerPalette: View {
                 }
                 .compositingGroup()
             )
-            .clipShape(composerClipShape)
+            .clipShape(singleLineClipShape)
             .overlay(
-                composerClipShape
+                singleLineClipShape
                     .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
             )
 
@@ -2227,9 +2251,12 @@ struct SessionComposerPalette: View {
             ) == .glass, #available(macOS 26.0, *) {
                 content
                     .background(
-                        ComposerLiquidGlassBackground(cornerRadius: cornerRadius, tintColor: .windowBackgroundColor)
+                        ComposerLiquidGlassBackground(
+                            cornerRadius: singleLineCornerRadius,
+                            tintColor: ComposerSingleLineGlassTint.current(defaults: tuningDefaults).nsColor
+                        )
                     )
-                    .clipShape(composerClipShape)
+                    .clipShape(singleLineClipShape)
             } else {
                 materialBackground
             }
@@ -2260,9 +2287,13 @@ struct SessionComposerPalette: View {
                 // is inset by (`newStyleFieldRenderWidth`'s doc comment),
                 // so the ghost's leading edge lines up with the typed
                 // text's leading edge instead of sitting ~10pt off it.
-                // `y: -24` (Witness motion, unrelated to this fix) is
-                // unchanged.
-                .offset(x: singleLineHorizontalPadding, y: -24)
+                // Session-7 brief: `y: -24` was flush against the 24pt-tall
+                // sprite's own bottom edge — `ComposerWitnessGap` adds the
+                // tunable gap on top of that same 24pt constant, default 4.
+                .offset(
+                    x: singleLineHorizontalPadding,
+                    y: Self.witnessOverlayYOffset(ghostGap: ComposerWitnessGap.gap(defaults: tuningDefaults))
+                )
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
