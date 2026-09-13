@@ -284,6 +284,46 @@ print(f"OK: trusted {len(fixture_names)}/{len(fixture_names)} fixture paths in {
 PYEOF
 }
 
+# ── Remote-control startup check: each fixture repo must have
+#    .claude/settings.local.json with remoteControlAtStartup: false, or
+#    Claude Code prints "/rc connecting..." in every captured pane (Sean's
+#    user settings have remoteControlAtStartup: true; a project-level
+#    settings.local.json may override to false, never to true).
+check_fixture_remote_control() {
+  python3 - "$FIXTURES_DIR" "$REPOS_DIR" <<'PYEOF'
+import sys, os, json
+
+fixtures_dir, repos_dir = sys.argv[1:3]
+
+fixture_names = sorted(
+    n for n in os.listdir(fixtures_dir)
+    if os.path.isdir(os.path.join(fixtures_dir, n))
+)
+
+bad = []
+for name in fixture_names:
+    settings_path = os.path.join(repos_dir, name, ".claude", "settings.local.json")
+    if not os.path.isfile(settings_path):
+        bad.append(f"{name} (missing settings.local.json)")
+        continue
+    try:
+        with open(settings_path) as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        bad.append(f"{name} (invalid JSON)")
+        continue
+    if data.get("remoteControlAtStartup") is not False:
+        bad.append(f"{name} (remoteControlAtStartup != false)")
+
+if bad:
+    print(f"NOT READY: fixture repo(s) missing remoteControlAtStartup override: {', '.join(bad)}", file=sys.stderr)
+    print("           Fix: run ./scripts/demo/seed-demo-workspace.sh (or demo-ready.sh without --check).", file=sys.stderr)
+    sys.exit(1)
+
+print(f"OK: remoteControlAtStartup=false in {len(fixture_names)}/{len(fixture_names)} fixture repos.")
+PYEOF
+}
+
 ensure_fixture_trust() {
   echo "==> Ensuring fixture repos are trusted in Claude Code config ($CLAUDE_CONFIG)..."
   python3 - "$CLAUDE_CONFIG" "$FIXTURES_DIR" "$REPOS_DIR" <<'PYEOF'
@@ -408,6 +448,9 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
       exit 1
     fi
     if ! check_fixture_trust; then
+      exit 1
+    fi
+    if ! check_fixture_remote_control; then
       exit 1
     fi
     if ! check_staged_sessions; then

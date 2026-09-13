@@ -105,6 +105,31 @@ for spec in "${PROJECT_SPECS[@]}"; do
     git -C "$dest" checkout -q main
   fi
 
+  # Suppress Claude Code's "/rc connecting..." startup line, which otherwise
+  # shows in every captured pane because Sean's user settings have
+  # remoteControlAtStartup: true. A project-level settings.local.json may
+  # override to false (never to true). Merge the key rather than clobbering
+  # any existing fixture settings file.
+  mkdir -p "$dest/.claude"
+  python3 - "$dest/.claude/settings.local.json" <<'PYEOF'
+import sys, json, os
+
+path = sys.argv[1]
+settings = {}
+if os.path.isfile(path):
+    with open(path) as f:
+        try:
+            settings = json.load(f)
+        except json.JSONDecodeError:
+            settings = {}
+
+settings["remoteControlAtStartup"] = False
+
+with open(path, "w") as f:
+    json.dump(settings, f, indent=2, sort_keys=True)
+    f.write("\n")
+PYEOF
+
   echo "    $name -> $dest ($(git -C "$dest" branch --show-current))"
 done
 echo ""
