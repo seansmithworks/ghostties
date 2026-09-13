@@ -1708,46 +1708,19 @@ struct ComposerZeroChromeStyleTests {
     /// coordinator/model directly (not a re-implementation) so a regression
     /// that goes back to writing only the raw key fails this.
     ///
-    /// Red proof performed 2026-09-12: temporarily disabled the
-    /// preset→dials derivation in `handle(_:)` (`if false, ...`) — failed
-    /// identically to the unmodified baseline below. THIS TEST IS CURRENTLY
-    /// RED ON THE UNMODIFIED CODE, independent of that derivation: `handle`
-    /// reassigns `state.values = derived` from inside the Combine sink on
-    /// `state.$values` — since `@Published` publishes in `willSet` (before
-    /// the property's backing storage commits), that nested reentrant
-    /// assignment finishes and commits `derived` first, but then the
-    /// OUTER, still-in-flight assignment (the raw, un-derived model) commits
-    /// its own value right after, clobbering the derivation. Confirmed with
-    /// a standalone Combine repro (nested `@Published` set inside a `sink`
-    /// gets overwritten by the outer set every time). Observed failure both
-    /// with and without the temporary break: "(coordinator.state.values
-    /// .shadowRadius → 64.0) == (Double(expected.radius) → 32.0)". This is
-    /// a pre-existing round-13 bug in `ComposerDialKitCoordinator.handle`,
-    /// unrelated to round 13b's default-value changes — fixing the
-    /// reentrancy is out of this round's scope (not an "initial model
-    /// reads" change); reverting the deliberate break did NOT turn this
-    /// green. Flagged, not fixed.
+    /// Round 13d: `ComposerDialKitTuningModel.shadowPresetRaw` is now a
+    /// computed property whose setter derives and assigns the three shadow
+    /// dials as part of the SAME model mutation, so `coordinator.state
+    /// .values.shadowPresetRaw = ...` below produces a single, already-
+    /// derived `state.values` write with no reentrant reassignment from the
+    /// coordinator's `$values` sink — the write is synchronous, no runloop
+    /// turn to wait out.
     @available(macOS 14, *)
-    @Test func dialKitShadowPresetSelectionWritesAllThreeDialsAndUpdatesModel() async {
+    @Test func dialKitShadowPresetSelectionWritesAllThreeDialsAndUpdatesModel() {
         let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.preset.test.\(UUID().uuidString)")!
         let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
 
         coordinator.state.values.shadowPresetRaw = ComposerSingleLineShadowPreset.lifted.rawValue
-
-        // `DialPanelState.values` is `@Published`, and `@Published`'s
-        // synthesized setter sends to its subject BEFORE writing storage —
-        // see `ComposerDialKitCoordinator.handle`'s doc comment. The
-        // coordinator's corrective `state.values = derived` write is
-        // therefore deferred a runloop turn (`DispatchQueue.main.async`) so
-        // it lands after the ABOVE line's own outer setter has finished
-        // storing its (stale-dial) value; otherwise it would just be
-        // clobbered. Yielding lets that queued main-queue block run before
-        // asserting.
-        // `GhosttiesCore.Task` (imported above) shadows `_Concurrency.Task`
-        // in this file — `Task.yield()` resolves to the wrong type without
-        // the explicit module prefix.
-        await _Concurrency.Task.yield()
-        await _Concurrency.Task.yield()
 
         let expected = ComposerSingleLineShadowPreset.lifted.dialValues
 

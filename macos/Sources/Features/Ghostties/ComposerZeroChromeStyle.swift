@@ -1233,11 +1233,78 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
     var singleLineFieldSize: Double
     var singleLineRowSize: Double
     var singleLineWidth: Double
-    var shadowPresetRaw: String
+    private var shadowPresetRawStorage: String
     var shadowRadius: Double
     var shadowYOffset: Double
     var shadowOpacity: Double
     var treatmentRaw: String
+
+    /// The `shadowPreset` `.select` control (in `ComposerDialKitCoordinator
+    /// .controls`) writes through this keyPath via DialKit's generic
+    /// `{ model, newValue in model[keyPath: keyPath] = newValue }` setter,
+    /// which then assigns the WHOLE mutated model to `state.values` in a
+    /// single call (`DialControlNode.resolve`'s `.select` case, vendored,
+    /// unread here). Expanding the preset into the three derived dials
+    /// INSIDE this setter — rather than after, in the coordinator's
+    /// `state.$values` sink — means that single outer assignment already
+    /// carries the derived dials, so nothing needs to re-enter or reassign
+    /// `state.values` at all. See `ComposerDialKitCoordinator.handle` for
+    /// why a second, later write to `state.values` from inside its own
+    /// change sink cannot be made to stick synchronously.
+    var shadowPresetRaw: String {
+        get { shadowPresetRawStorage }
+        set {
+            shadowPresetRawStorage = newValue
+            guard let preset = ComposerSingleLineShadowPreset(rawValue: newValue) else { return }
+            let values = preset.dialValues
+            shadowRadius = Double(values.radius)
+            shadowYOffset = Double(values.yOffset)
+            shadowOpacity = values.opacity
+        }
+    }
+
+    init(
+        styleRaw: String,
+        materialRaw: String,
+        focalBlurRaw: String,
+        fogEnabled: Bool,
+        alignmentRaw: String,
+        singleLineFieldSize: Double,
+        singleLineRowSize: Double,
+        singleLineWidth: Double,
+        shadowPresetRaw: String,
+        shadowRadius: Double,
+        shadowYOffset: Double,
+        shadowOpacity: Double,
+        treatmentRaw: String
+    ) {
+        self.styleRaw = styleRaw
+        self.materialRaw = materialRaw
+        self.focalBlurRaw = focalBlurRaw
+        self.fogEnabled = fogEnabled
+        self.alignmentRaw = alignmentRaw
+        self.singleLineFieldSize = singleLineFieldSize
+        self.singleLineRowSize = singleLineRowSize
+        self.singleLineWidth = singleLineWidth
+        // Direct storage assignment, NOT the computed setter above: the
+        // caller (`ComposerDialKitCoordinator.readModel`) already reads
+        // `shadowRadius`/`shadowYOffset`/`shadowOpacity` independently from
+        // `UserDefaults`, so re-deriving them from `shadowPresetRaw` here
+        // would discard an independently-tuned dial that happens to not
+        // match its labeled preset (round 13b's "custom" case).
+        self.shadowPresetRawStorage = shadowPresetRaw
+        self.shadowRadius = shadowRadius
+        self.shadowYOffset = shadowYOffset
+        self.shadowOpacity = shadowOpacity
+        self.treatmentRaw = treatmentRaw
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case styleRaw, materialRaw, focalBlurRaw, fogEnabled, alignmentRaw
+        case singleLineFieldSize, singleLineRowSize, singleLineWidth
+        case shadowPresetRawStorage = "shadowPresetRaw"
+        case shadowRadius, shadowYOffset, shadowOpacity, treatmentRaw
+    }
 }
 
 /// Owns the `DialPanelState` and mirrors every change back into the same
@@ -1303,46 +1370,30 @@ final class ComposerDialKitCoordinator: ObservableObject {
     /// `singleLineShadowPreset` binding, which calls
     /// `ComposerSingleLineShadowDials.apply` on every selection) — so picking
     /// a preset here left the three sliders, and the persisted keys they
-    /// write, exactly where they were. When the preset changes, derive its
-    /// dial values and persist them; the panel's own sliders are updated on
-    /// the next runloop turn (see the `state.values` reassignment below) —
-    /// NOT synchronously here.
+    /// write, exactly where they were.
     ///
-    /// Round-13c root cause: `DialPanelState.values` is `@Published`, and
-    /// `@Published`'s synthesized setter sends the new value to its Combine
-    /// subject BEFORE writing to backing storage. Reassigning `state.values`
-    /// synchronously from inside this sink re-enters that same setter while
-    /// the OUTER assignment (the user's own preset pick) is still
-    /// in-progress: the outer setter's `subject.send(model)` call is what
-    /// invoked this sink in the first place, and it has not yet stored
-    /// `model` into `values`. The nested `state.values = derived` call runs
-    /// to completion — including storing `derived` — but then control
-    /// returns to the OUTER setter, which finishes by unconditionally
-    /// storing its own `model` (stale dials, e.g. radius 64) over whatever
-    /// the nested call just stored, clobbering `derived` back to `model`.
-    /// A trace of `handle`'s arguments/`lastKnownModel` never surfaces this
-    /// — every diff `write(from:to:)` computes is correct — because the
-    /// corruption happens to `state.values`' backing storage, one layer
-    /// below anything this function reads or logs. Deferring the
-    /// reassignment past the outer setter's return (`DispatchQueue.main
-    /// .async`) means it lands as its own top-level `values` assignment,
-    /// with no in-flight outer write left to stomp it.
+    /// Round-13c found that deriving the three dials HERE, inside this sink,
+    /// and reassigning them back onto `state.values` doesn't work: `@Published`
+    /// publishes in `willSet`, before its backing storage commits, so a
+    /// synchronous reassignment from inside this sink re-enters the still-
+    /// in-flight outer setter, which then overwrites the reassignment with
+    /// its own (stale, un-derived) value the moment it returns. A queued
+    /// `DispatchQueue.main.async` reassignment "fixed" that by landing after
+    /// the outer setter returned, but left the model briefly inconsistent
+    /// (persisted keys already had the derived dials; the panel's own
+    /// sliders didn't, for one runloop turn) and was fragile to any other
+    /// main-queue write landing in between.
+    ///
+    /// Round-13d fixes this structurally instead: `ComposerDialKitTuningModel
+    /// .shadowPresetRaw` is a computed property whose setter derives and
+    /// writes the three dials as part of the SAME model mutation. The
+    /// `.select` control's generic keyPath setter (`DialControlNode.resolve`,
+    /// vendored DialKit) calls that computed setter, then performs its one
+    /// and only `state.values = updated` assignment — already carrying the
+    /// derived dials. This sink never needs to write `state.values` at all;
+    /// it only diffs and persists whatever arrived.
     private func handle(_ model: ComposerDialKitTuningModel) {
         let previous = lastKnownModel
-        if model.shadowPresetRaw != previous.shadowPresetRaw,
-           let preset = ComposerSingleLineShadowPreset(rawValue: model.shadowPresetRaw) {
-            var derived = model
-            let values = preset.dialValues
-            derived.shadowRadius = Double(values.radius)
-            derived.shadowYOffset = Double(values.yOffset)
-            derived.shadowOpacity = values.opacity
-            lastKnownModel = derived
-            write(from: previous, to: derived)
-            DispatchQueue.main.async { [weak self] in
-                self?.state.values = derived
-            }
-            return
-        }
         lastKnownModel = model
         write(from: previous, to: model)
     }
