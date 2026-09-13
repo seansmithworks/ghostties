@@ -254,8 +254,13 @@ private struct ProjectDisclosureRowContent: View, Equatable {
                     coordinator.closeSession(id: session.id)
                 }
             } else {
-                Button("Relaunch") {
-                    relaunchSession(session)
+                if session.resume != nil {
+                    Button("Resume") {
+                        relaunchSession(session, mode: .resume)
+                    }
+                }
+                Button("Start Fresh") {
+                    relaunchSession(session, mode: .fresh)
                 }
                 Button("Delete", role: .destructive) {
                     coordinator.clearRuntime(id: session.id)
@@ -510,18 +515,9 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         }
     }
 
-    private func relaunchSession(_ session: AgentSession) {
-        guard let template = store.templates.first(where: { $0.id == session.templateId }) else {
-            // Template was deleted — cannot relaunch.
-            print("Warning: Template for session '\(session.name)' not found (templateId: \(session.templateId))")
-            return
-        }
-
-        // No pre-check needed — SessionCoordinator.createSession() calls
-        // buildCommand() itself and handles missing prompt files gracefully.
-        coordinator.clearRuntime(id: session.id)
+    private func relaunchSession(_ session: AgentSession, mode: SessionCoordinator.RelaunchMode) {
         _Concurrency.Task {
-            await coordinator.createSession(session: session, template: template, project: project)
+            await coordinator.relaunch(session: session, mode: mode)
         }
     }
 

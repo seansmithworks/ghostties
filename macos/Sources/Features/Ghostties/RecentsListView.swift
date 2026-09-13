@@ -712,8 +712,13 @@ struct RecentsListView: View {
                     coordinator.closeSession(id: session.id)
                 }
             } else {
-                Button("Relaunch") {
-                    relaunchSession(session, project: project)
+                if session.resume != nil {
+                    Button("Resume") {
+                        relaunchSession(session, mode: .resume)
+                    }
+                }
+                Button("Start Fresh") {
+                    relaunchSession(session, mode: .fresh)
                 }
                 Button("Delete", role: .destructive) {
                     coordinator.clearRuntime(id: session.id)
@@ -773,12 +778,12 @@ struct RecentsListView: View {
             store.setSessionPinned(id: draggedId, false)
             if relaunchIfClosed {
                 beginPendingLaunch(for: draggedId)
-                relaunchSession(draggedSession, project: store.projects.first { $0.id == draggedSession.projectId })
+                relaunchSession(draggedSession, mode: draggedSession.resume != nil ? .resume : .fresh)
             }
             store.moveSessionInSessionsView(id: draggedId, before: beforeId, within: targetList)
         case .relaunch:
             beginPendingLaunch(for: draggedId)
-            relaunchSession(draggedSession, project: store.projects.first { $0.id == draggedSession.projectId })
+            relaunchSession(draggedSession, mode: draggedSession.resume != nil ? .resume : .fresh)
             store.moveSessionInSessionsView(id: draggedId, before: beforeId, within: targetList)
         }
     }
@@ -913,19 +918,9 @@ struct RecentsListView: View {
 
     // MARK: - Relaunch
 
-    private func relaunchSession(_ session: AgentSession, project: Project?) {
-        guard let project,
-              let template = store.templates.first(where: { $0.id == session.templateId }) else {
-            // Template or project was deleted — cannot relaunch.
-            print("Warning: Template or project for session '\(session.name)' not found (templateId: \(session.templateId))")
-            return
-        }
-
-        // No pre-check needed — SessionCoordinator.createSession() calls
-        // buildCommand() itself and handles missing prompt files gracefully.
-        coordinator.clearRuntime(id: session.id)
+    private func relaunchSession(_ session: AgentSession, mode: SessionCoordinator.RelaunchMode) {
         _Concurrency.Task {
-            await coordinator.createSession(session: session, template: template, project: project)
+            await coordinator.relaunch(session: session, mode: mode)
         }
     }
 

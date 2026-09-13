@@ -3,6 +3,7 @@ import Combine
 import SwiftUI
 import GhosttyKit
 import GhosttiesCore
+import OSLog
 
 /// Bridges the SwiftUI sidebar to Ghostty's terminal surface system.
 ///
@@ -66,6 +67,11 @@ final class SessionCoordinator: ObservableObject {
     /// `resolveCommand` method can access these; the lock provides actual safety.
     nonisolated(unsafe) private static let resolvedPathsLock = NSLock()
     nonisolated(unsafe) private static var _resolvedPaths: [String: String] = [:]
+
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.ghostties",
+        category: "SessionCoordinator"
+    )
 
     /// Tracks the last focused session per project per window, so clicking a
     /// project in the icon rail can restore the correct terminal session.
@@ -195,7 +201,8 @@ final class SessionCoordinator: ObservableObject {
         project: Project,
         sourceTaskId: String? = nil,
         sourceTaskFilePath: String? = nil,
-        extraEnvironment: [String: String] = [:]
+        extraEnvironment: [String: String] = [:],
+        commandOverride: String? = nil
     ) async -> Bool {
         // Browser sessions bypass the terminal path entirely.
         if template.kind == .browser {
@@ -204,11 +211,25 @@ final class SessionCoordinator: ObservableObject {
 
         guard let ghosttyApp = ghostty?.app else { return false }
 
+        // Register Ghostties' status hook with Codex on the first Codex
+        // session launch. Cheap (one file read when already registered) and
+        // idempotent, so calling it every launch — rather than tracking
+        // "first" explicitly — is simplest and safe.
+        if Self.isCodexTemplate(template) {
+            CodexHookRegistrar.register(scriptPath: HookInstaller.scriptPath)
+        }
+
         // Build the full command string and resolve the binary path, both off
         // the main thread. buildCommand() may write prompt cache files and
         // resolveCommand() may spawn a login shell — neither should block UI.
         // For shell templates (no command), resolvedCommand stays nil -> default shell.
         let resolvedCommand: String? = await {
+            // A resume/full command line was already built by `ResumePlan`
+            // — e.g. `cco --resume '<id>'`, a shell function name that
+            // `resolveCommand`'s PATH lookup would never find as a binary.
+            // Use it verbatim, bypassing both `buildCommand()` and
+            // `resolveCommand`.
+            if let commandOverride { return commandOverride }
             guard template.command != nil else { return nil }
 
             let buildAndResolveTask = _Concurrency.Task.detached(priority: .userInitiated) { () -> String? in
@@ -347,6 +368,66 @@ final class SessionCoordinator: ObservableObject {
             sourceTaskFilePath: sourceTaskFilePath,
             extraEnvironment: extraEnvironment
         )
+    }
+
+    // MARK: - Relaunch
+
+    /// Resume a prior agent conversation, or start over — the single path
+    /// both `RecentsListView` and `ProjectDisclosureRow` call, replacing
+    /// their formerly-duplicated `relaunchSession` bodies.
+    enum RelaunchMode {
+        /// Use `session.resume` if present and (for Claude) its transcript
+        /// still exists. Falls back to `.fresh` silently otherwise — there
+        /// is no third UI state for "tried to resume, couldn't".
+        case resume
+        /// Always a plain relaunch from the template, ignoring any resume
+        /// record.
+        case fresh
+    }
+
+    @discardableResult
+    func relaunch(session: AgentSession, mode: RelaunchMode) async -> Bool {
+        let store = WorkspaceStore.shared
+        guard let project = store.projects.first(where: { $0.id == session.projectId }),
+              let template = store.templates.first(where: { $0.id == session.templateId }) else {
+            Self.logger.warning("Cannot relaunch '\(session.name, privacy: .public)': template or project not found")
+            return false
+        }
+
+        let override = mode == .resume ? Self.resumeCommandOverride(session: session, template: template) : nil
+
+        clearRuntime(id: session.id)
+        return await createSession(
+            session: session,
+            template: template,
+            project: project,
+            commandOverride: override
+        )
+    }
+
+    /// `ResumePlan.command`, gated at click time (not menu render — see
+    /// `agent-build.md`'s contextMenu perf note) on the Claude transcript
+    /// actually existing. Codex is not gated — Codex is migrating rollouts
+    /// to a DB, so a missing path at this file isn't a reliable "gone"
+    /// signal (`project_relaunch-resume-plan.md`). Falls back to nil (a
+    /// fresh launch) rather than surfacing an error — Sean decided both
+    /// outcomes are fine, there's no failure state to show.
+    private static func resumeCommandOverride(session: AgentSession, template: AgentTemplate) -> String? {
+        guard let resume = session.resume else { return nil }
+
+        if resume.agent == .claude {
+            guard let transcriptPath = resume.transcriptPath else {
+                logger.notice("No transcript path for '\(session.name, privacy: .public)' — falling back to Start Fresh")
+                return nil
+            }
+            let expanded = (transcriptPath as NSString).expandingTildeInPath
+            guard FileManager.default.fileExists(atPath: expanded) else {
+                logger.notice("Transcript missing for '\(session.name, privacy: .public)' — falling back to Start Fresh")
+                return nil
+            }
+        }
+
+        return ResumePlan.command(resume: resume, template: template)
     }
 
     // MARK: - Browser Sessions
@@ -932,6 +1013,16 @@ final class SessionCoordinator: ObservableObject {
     /// user's PATH from shell profiles isn't available. This spawns a login shell to
     /// get the full PATH, then searches for the binary. Returns the original command
     /// if resolution fails or the command is already absolute.
+    /// Whether `template` launches the Codex CLI — matched by base command
+    /// name rather than `template.id == AgentTemplate.codex.id`, so a
+    /// user-duplicated or hand-edited Codex template (still `.custom` kind,
+    /// still `command: "codex"`) is recognized too.
+    nonisolated static func isCodexTemplate(_ template: AgentTemplate) -> Bool {
+        guard let command = template.command else { return false }
+        let base = command.split(separator: " ").first.map(String.init) ?? command
+        return base == "codex"
+    }
+
     nonisolated private static func resolveCommand(_ command: String) -> String {
         guard !command.hasPrefix("/") else { return command }
 

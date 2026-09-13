@@ -26,7 +26,7 @@ struct HookInstaller {
 
     /// Current seed version. Bump this when `ghostties-status.sh` changes to
     /// trigger re-seeding (and overwrite any previously-seeded copy).
-    static let seedVersion = 2
+    static let seedVersion = 3
 
     /// Name of the bundled/seeded hook script.
     static let scriptName = "ghostties-status.sh"
