@@ -9,18 +9,20 @@ import DialKit
 //
 // Zero-chrome + single-line composer redesign, behind `ghostties.composerStyle`.
 // Sean's decision (2026-09-13): single-line is now the default composer style
-// for everyone. Unset or unrecognized value = `.singleLine`; `.classic` (the
-// pre-single-line shipping composer) and `.zeroChrome` both remain fully
-// intact and reachable via the flag — this is a default flip, not a removal.
+// for everyone, and Classic (the pre-single-line shipping composer) stops
+// existing as a composer style — removed, not just defaulted away from.
+// `.zeroChrome` remains fully intact and reachable via the flag. Unset or
+// unrecognized value (including a stale stored `"classic"`) = `.singleLine`.
 // `SessionComposerPalette.composerCard` and `SessionComposerOverlay`'s
-// vertical placement branch on `ComposerStyle.current()`. `.anchored`
-// presentation (the sidebar popover) is gated back to `.classic` regardless
-// of this default — see `SessionComposerPalette.activeStyle`'s doc comment.
+// vertical placement branch on `ComposerStyle.current()`. The sidebar
+// popover (`.anchored` presentation) keeps its own dedicated card
+// (`SessionComposerPalette.popoverComposerCard`), selected by presentation,
+// not by this style — see `SessionComposerPalette.cardKind(style:
+// presentation:)`.
 
 /// Which composer visual style renders. Read once per render pass via
 /// `UserDefaults`, same pattern as `ComposerGhostTextField.modelBFieldStorageKey`.
 enum ComposerStyle: String {
-    case classic
     case zeroChrome
     case singleLine
 
@@ -757,8 +759,8 @@ struct ComposerZeroChromeFogLayer: View {
 // Sean, live look: "make the no chrome text larger as well. Almost like a
 // functional graphic design layout. more expressive, larger, bolder." A
 // strawman he'll tune — every number lives HERE, nowhere else, so tuning
-// means editing this enum only. Applies to `.zeroChrome` ONLY;
-// `.singleLine`/`.classic` keep DESIGN.md §3's 15/13/11pt scale untouched.
+// means editing this enum only. Applies to `.zeroChrome` ONLY; `.singleLine`
+// keeps DESIGN.md §3's 15/13/11pt scale untouched.
 // `fieldWeight` (`.semibold`) and `fieldSize` (32pt, above DESIGN.md §3's
 // 15pt ceiling for a floating surface) are BOTH deviations from DESIGN.md —
 // recorded in the PR body under "DESIGN.md follow-ups", not written back
@@ -858,7 +860,7 @@ enum ComposerZeroChromeTypography {
 // "feels small." These three dials (field text size, row/status text size,
 // container width) are Sean-tunable STRAWMEN, not DESIGN.md values — see
 // this file's header MARK for why they live behind `@AppStorage` instead of
-// a DESIGN.md edit. `.zeroChrome`/`.classic` never read any of these keys.
+// a DESIGN.md edit. `.zeroChrome` never reads any of these keys.
 
 /// `.singleLine`'s field text size, row/status text size, and container
 /// width — each independently tunable. Container height and horizontal/
@@ -1246,7 +1248,7 @@ struct ComposerDebugTuningControl: View {
     /// right key" without simulating a menu click.
     var style: Binding<ComposerStyle> {
         Binding(
-            get: { ComposerStyle(rawValue: styleRaw) ?? .classic },
+            get: { ComposerStyle(rawValue: styleRaw) ?? .singleLine },
             set: { styleRaw = $0.rawValue; onChange() }
         )
     }
@@ -1448,7 +1450,6 @@ struct ComposerDebugTuningControl: View {
     private var legacyBody: some View {
         VStack(alignment: .leading, spacing: 4) {
             Picker("Style", selection: style) {
-                Text("Classic").tag(ComposerStyle.classic)
                 Text("Single line").tag(ComposerStyle.singleLine)
                 Text("Zero chrome").tag(ComposerStyle.zeroChrome)
             }
@@ -1919,7 +1920,6 @@ final class ComposerDialKitCoordinator: ObservableObject {
     private static let styleControl = DialControl<ComposerDialKitTuningModel>.select(
         "style", keyPath: \.styleRaw, label: "Style",
         options: [
-            DialOption(ComposerStyle.classic.rawValue, label: "Classic"),
             DialOption(ComposerStyle.singleLine.rawValue, label: "Single line"),
             DialOption(ComposerStyle.zeroChrome.rawValue, label: "Zero chrome")
         ]
@@ -2047,20 +2047,17 @@ final class ComposerDialKitCoordinator: ObservableObject {
     ]
 
     /// Session-7 brief: the single place that decides which knobs the panel
-    /// shows for a given Style — Classic gets Style only, Zero chrome gets
-    /// Style + the 4 zero-chrome dials, Single line gets Style + the 19
-    /// single-line dials (round 15 added the Float horizontal dial to round
-    /// 14's 18, which added 5 Witness dials to round 13's 13).
-    /// `ComposerDialKitCoordinator.handle` calls `state.configure(controls:)`
-    /// (vendored, unmodified `DialPanelState` API) with this function's
-    /// result whenever `styleRaw` changes — that's the whole "conditional
-    /// visibility" mechanism; no DialKit source is forked to add a
-    /// per-control `isHidden`.
+    /// shows for a given Style — Zero chrome gets Style + the 4 zero-chrome
+    /// dials, Single line gets Style + the 19 single-line dials (round 15
+    /// added the Float horizontal dial to round 14's 18, which added 5
+    /// Witness dials to round 13's 13). `ComposerDialKitCoordinator.handle`
+    /// calls `state.configure(controls:)` (vendored, unmodified
+    /// `DialPanelState` API) with this function's result whenever `styleRaw`
+    /// changes — that's the whole "conditional visibility" mechanism; no
+    /// DialKit source is forked to add a per-control `isHidden`.
     static func controls(for styleRaw: String) -> [DialControl<ComposerDialKitTuningModel>] {
         var items: [DialControl<ComposerDialKitTuningModel>] = [styleControl]
-        switch ComposerStyle(rawValue: styleRaw) ?? .classic {
-        case .classic:
-            break
+        switch ComposerStyle(rawValue: styleRaw) ?? .singleLine {
         case .zeroChrome:
             items.append(contentsOf: zeroChromeOnlyControls)
         case .singleLine:

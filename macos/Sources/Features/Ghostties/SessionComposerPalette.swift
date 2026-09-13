@@ -54,6 +54,19 @@ import GhosttiesCore
 /// (`SessionComposerCommandParser`) and the store-layer cascade/undo
 /// (`SessionComposerStore`) are UNCHANGED; only the chip rendering and the
 /// field-text transform that fed it are gone.
+/// Which composer card actually renders — decided by presentation, not by
+/// `ComposerStyle` alone. `.popover` is the sidebar popover's dedicated
+/// card (`SessionComposerPalette.popoverComposerCard`, the only one with a
+/// results list); it exists in EVERY `.anchored` presentation regardless of
+/// the stored `ComposerStyle`. `.singleLine`/`.zeroChrome` mirror the two
+/// remaining `ComposerStyle` cases, for `.centered` only. See
+/// `SessionComposerPalette.cardKind(style:presentation:)`.
+enum ComposerCardKind: Equatable {
+    case popover
+    case singleLine
+    case zeroChrome
+}
+
 struct SessionComposerPalette: View {
     @Binding var isPresented: Bool
     let request: SessionComposerRequest
@@ -89,7 +102,7 @@ struct SessionComposerPalette: View {
     /// `xcodebuild test`'s parallel test processes share that SAME on-disk
     /// domain (same bundle id across processes) — a snapshot test that set
     /// the real key directly raced other parallel snapshot tests and
-    /// intermittently poisoned unrelated `.classic` renders. `nil` (every
+    /// intermittently poisoned unrelated renders. `nil` (every
     /// production call site) falls through to the real flag unchanged.
     let styleOverrideForTesting: ComposerStyle?
 
@@ -118,8 +131,8 @@ struct SessionComposerPalette: View {
     /// `GeometryReader` width via `ComposerZeroChromeTypography.columnFrame`
     /// (round 10: centered, `min(640, overlayWidth − 96)`), and passes
     /// it in — every OTHER
-    /// call site (every snapshot test, `.classic`/`.singleLine`) has no
-    /// overlay to measure from, so `zeroChromeMeasure` falls back to
+    /// call site (every snapshot test, the popover card, `.singleLine`) has
+    /// no overlay to measure from, so `zeroChromeMeasure` falls back to
     /// `ComposerZeroChromeTypography.measureMin`. `.singleLine` never
     /// reads this at all (its own field width is the unrelated, unchanged
     /// 512pt constant).
@@ -130,8 +143,8 @@ struct SessionComposerPalette: View {
     /// lineCount:)`'s anchor math) — this palette writes into it whenever
     /// its own measured field/descriptor height changes (see
     /// `newStyleField`'s `.onChange`). Defaults to a `.constant` matching
-    /// every OTHER test seam in this file — every snapshot test and
-    /// `.classic`/`.singleLine` call site never reads or writes it.
+    /// every OTHER test seam in this file — every snapshot test, the
+    /// popover card, and `.singleLine` never read or write it.
     let zeroChromeFieldHeight: Binding<CGFloat>
 
     init(
@@ -248,8 +261,8 @@ struct SessionComposerPalette: View {
     @State private var witnessBeat: ComposerWitness.Beat = .idle
 
     /// Placement gate (plan §1): single-line + centered + toggle on. Never
-    /// shown in `.zeroChrome` or `.classic`, and never in `.anchored`
-    /// presentation (the sidebar popover — content-sized, would clip).
+    /// shown in `.zeroChrome`, and never in `.anchored` presentation (the
+    /// sidebar popover — content-sized, would clip).
     private var showsWitness: Bool {
         activeStyle == .singleLine
             && request.presentation == .centered
@@ -1395,31 +1408,45 @@ struct SessionComposerPalette: View {
     /// already, so no extra invalidation wiring is needed for `defaults
     /// write` changes to take effect on next launch.
     ///
-    /// `.anchored` (the sidebar popover, `ProjectDisclosureRow.swift`) is
-    /// gated to `.classic` here regardless of the stored style: single-line
-    /// was only ever built for `.centered` and never renders
-    /// `ComposerResultsTable` (only `classicComposerCard` does — the
-    /// results dropdown the popover exists to show). Flipping the default
-    /// without this gate would silently drop the popover's results list.
-    /// Zero-chrome is unaffected either way — it's already opt-in via the
-    /// flag, not the new default.
-    /// Pure decision extracted from `activeStyle` so the `.anchored` guard
-    /// is unit-testable without constructing a `SessionComposerPalette`
-    /// (`request`/`styleOverrideForTesting` are private view properties).
-    /// No behaviour change — `activeStyle` below just forwards to this.
-    static func effectiveStyle(
-        stored: ComposerStyle,
+    /// `.anchored` (the sidebar popover, `ProjectDisclosureRow.swift`)
+    /// always gets `popoverComposerCard` here, regardless of the stored
+    /// style: single-line and zero-chrome were only ever built for
+    /// `.centered`, and neither renders `ComposerResultsTable` (only
+    /// `popoverComposerCard` does — the results dropdown the popover exists
+    /// to show). Card selection is keyed off PRESENTATION, not off
+    /// `ComposerStyle` — the enum has no popover case; that would let an
+    /// invalid state (a stored style trying to select the popover card in
+    /// `.centered`) exist at all.
+    /// Pure decision, unit-testable without constructing a
+    /// `SessionComposerPalette` (`request`/`styleOverrideForTesting` are
+    /// private view properties). No behaviour change — `activeCardKind`
+    /// below just forwards to this.
+    static func cardKind(
+        style: ComposerStyle,
         presentation: SessionComposerRequest.Presentation
-    ) -> ComposerStyle {
-        guard presentation != .anchored else { return .classic }
-        return stored
+    ) -> ComposerCardKind {
+        guard presentation != .anchored else { return .popover }
+        switch style {
+        case .singleLine: return .singleLine
+        case .zeroChrome: return .zeroChrome
+        }
     }
 
+    /// The real, resolved composer style (test override, else
+    /// `UserDefaults`) — independent of presentation. Every reader of this
+    /// property outside `activeCardKind` (font sizes, alignment, reveal-
+    /// phase transitions in `newStyleField`/`commit(template:)`) is only
+    /// ever reached from inside `zeroChromeComposerCard`/
+    /// `singleLineComposerCard`'s own view tree, which `.anchored` never
+    /// mounts — see `activeCardKind` — so this never needs its own
+    /// presentation gate.
     private var activeStyle: ComposerStyle {
-        Self.effectiveStyle(
-            stored: styleOverrideForTesting ?? ComposerStyle.current(),
-            presentation: request.presentation
-        )
+        styleOverrideForTesting ?? ComposerStyle.current()
+    }
+
+    /// Which card actually renders — see `cardKind(style:presentation:)`.
+    private var activeCardKind: ComposerCardKind {
+        Self.cardKind(style: activeStyle, presentation: request.presentation)
     }
 
     private var reduceMotionEnabled: Bool {
@@ -1446,21 +1473,16 @@ struct SessionComposerPalette: View {
         // popover width still matches the sidebar exactly; `.centered`'s
         // card width (`composerOverlayWidth`) is unaffected since only
         // the outer padding grows.
+        // Sean's decision (2026-09-13): Classic is gone, so there is no
+        // longer a `.centered` card that wants this top-level modal shadow
+        // — `.singleLine`/`.zeroChrome` each own their own shadow treatment
+        // inside their card bodies (`ComposerSingleLineShadowDials`, the
+        // zero-chrome wash), and `.anchored` relies on the native NSPopover
+        // chrome/shadow instead. A prior `.shadow(...)` modifier here only
+        // ever fired for `.centered && .classic` — deleted, not defaulted
+        // to a no-op, since that combination can no longer exist.
         composerCard
             .padding(8)
-            // Overlay shadow (DESIGN.md §6, `.centered` only — Phase 3
-            // review fix, retuned in PR #132 (shadow-only elevation) now
-            // that the shadow carries the "on top of" read alone, with no
-            // scrim behind it). `.anchored` relies on the native NSPopover
-            // chrome/shadow instead; adding a second shadow there would
-            // double up.
-            .shadow(
-                color: request.presentation == .centered && activeStyle == .classic
-                    ? .black.opacity(WorkspaceLayout.composerModalShadowOpacity)
-                    : .clear,
-                radius: request.presentation == .centered && activeStyle == .classic ? WorkspaceLayout.composerModalShadowRadius : 0,
-                y: request.presentation == .centered && activeStyle == .classic ? WorkspaceLayout.composerModalShadowYOffset : 0
-            )
             .environment(\.colorScheme, scheme)
             .onAppear {
                 composerStore.open(projectBinding: request.projectBinding, workspaceStore: store)
@@ -1669,15 +1691,15 @@ struct SessionComposerPalette: View {
     /// it rather than the shake living on the true root, which
     /// left no room to translate inside an `.anchored` NSPopover sized
     /// exactly to its content.
-    /// Dispatches on `activeStyle`. `.classic` renders the exact, byte-for-
-    /// byte unchanged card this project has shipped since PR #132 —
-    /// `classicComposerCard` below is that same code, only renamed to make
-    /// room for the two new styles as siblings, never edited.
+    /// Dispatches on `activeCardKind`, not `activeStyle` — `.popover`
+    /// renders the exact, byte-for-byte unchanged card this project has
+    /// shipped since PR #132 — `popoverComposerCard` below is that same
+    /// code (formerly `classicComposerCard`), renamed only, never edited.
     @ViewBuilder
     private var composerCard: some View {
-        switch activeStyle {
-        case .classic:
-            classicComposerCard
+        switch activeCardKind {
+        case .popover:
+            popoverComposerCard
         case .zeroChrome:
             zeroChromeComposerCard
         case .singleLine:
@@ -1685,7 +1707,7 @@ struct SessionComposerPalette: View {
         }
     }
 
-    private var classicComposerCard: some View {
+    private var popoverComposerCard: some View {
         let backgroundColor = Color(nsColor: .windowBackgroundColor)
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -1863,8 +1885,9 @@ struct SessionComposerPalette: View {
     /// `.zeroChrome` reads `ComposerZeroChromeTypography` (32/44pt,
     /// unchanged). `.singleLine` reads the round 12 tuning dial
     /// (`ComposerSingleLineTuning`, default 22pt, strawman "bigger" per
-    /// Sean's round 11 debrief). `.classic` keeps the original 15pt
-    /// DESIGN.md §3 scale, unchanged.
+    /// Sean's round 11 debrief). Only ever read from
+    /// `zeroChromeComposerCard`/`singleLineComposerCard` — `popoverComposerCard`
+    /// (`.anchored`) never reaches these.
     private var tuningDefaults: UserDefaults {
         tuningDefaultsForTesting ?? .standard
     }
@@ -1873,7 +1896,6 @@ struct SessionComposerPalette: View {
         switch activeStyle {
         case .zeroChrome: return ComposerZeroChromeTypography.fieldSize
         case .singleLine: return ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults)
-        case .classic: return 15
         }
     }
 
@@ -1881,7 +1903,6 @@ struct SessionComposerPalette: View {
         switch activeStyle {
         case .zeroChrome: return ComposerZeroChromeTypography.fieldLineHeight
         case .singleLine: return ComposerSingleLineTuning.lineHeight(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
-        case .classic: return 38
         }
     }
 
@@ -1889,16 +1910,15 @@ struct SessionComposerPalette: View {
         switch activeStyle {
         case .zeroChrome: return zeroChromeMeasure
         case .singleLine: return ComposerSingleLineTuning.width(defaults: tuningDefaults)
-        case .classic: return 480
         }
     }
 
     /// R18 fix: the width `newStyleField` actually renders its content at.
-    /// `.zeroChrome`/`.classic` are unchanged (`newStyleField` there is the
-    /// only frame in play — nothing wraps it in additional horizontal
-    /// padding, so `newStyleFieldWidth` alone is already correct).
-    /// `.singleLine` is different: `singleLineComposerCard` wraps the field
-    /// in `singleLineHorizontalPadding` on each side and then re-frames the
+    /// `.zeroChrome` is unchanged (`newStyleField` there is the only frame
+    /// in play — nothing wraps it in additional horizontal padding, so
+    /// `newStyleFieldWidth` alone is already correct). `.singleLine` is
+    /// different: `singleLineComposerCard` wraps the field in
+    /// `singleLineHorizontalPadding` on each side and then re-frames the
     /// WHOLE padded stack back to `newStyleFieldWidth` (the card's own
     /// tuned width, e.g. 688pt) so the card itself never grows past that
     /// value. Framing the field at the FULL `newStyleFieldWidth` on top of
@@ -1913,7 +1933,7 @@ struct SessionComposerPalette: View {
     /// its content.
     private var newStyleFieldRenderWidth: CGFloat {
         switch activeStyle {
-        case .zeroChrome, .classic: return newStyleFieldWidth
+        case .zeroChrome: return newStyleFieldWidth
         case .singleLine: return newStyleFieldWidth - (2 * singleLineHorizontalPadding)
         }
     }
@@ -1922,7 +1942,7 @@ struct SessionComposerPalette: View {
     /// `ComposerZeroChromeTypography.maxFieldLines` lines — its height is
     /// whichever of `zeroChromeDescriptorHeight`/`zeroChromeFieldTextHeight`
     /// is actually on screen right now (`zeroChromeFieldContentHeight`
-    /// below). `.singleLine`/`.classic` are unaffected — fixed
+    /// below). `.singleLine` is unaffected — fixed
     /// `newStyleFieldLineHeight`, exactly as before.
     private var newStyleFieldHeight: CGFloat {
         activeStyle == .zeroChrome ? zeroChromeFieldContentHeight : newStyleFieldLineHeight
@@ -1936,7 +1956,7 @@ struct SessionComposerPalette: View {
 
     /// Round 10: `ComposerGhostTextField`'s own reported wrapped-content
     /// height while `activeStyle == .zeroChrome` (`measuredHeight` binding
-    /// below) — meaningless (and never read) for `.singleLine`/`.classic`.
+    /// below) — meaningless (and never read) for `.singleLine`.
     @State private var zeroChromeFieldTextHeight: CGFloat = ComposerZeroChromeTypography.fieldLineHeight
 
     /// Round 10: which of the two measured heights above is actually on
@@ -1957,7 +1977,7 @@ struct SessionComposerPalette: View {
 
     /// Round 12 ("one last ditch effort"): `.zeroChrome` only — `.left`
     /// (unchanged) or `.center`, tunable live via the DEBUG pill's
-    /// `Alignment` picker. `.singleLine`/`.classic` always render `.left`.
+    /// `Alignment` picker. `.singleLine` always renders `.left`.
     private var newStyleAlignment: ComposerZeroChromeAlignment {
         activeStyle == .zeroChrome ? ComposerZeroChromeAlignment.current() : .left
     }
@@ -2005,11 +2025,11 @@ struct SessionComposerPalette: View {
                 isPickerOpen: false,
                 ghostFullPath: query.isEmpty ? "" : ghostFullPathForModelB,
                 // Round 10: wraps + grows in `.zeroChrome` only —
-                // `.singleLine`/`.classic` never set this, keeping their
+                // `.singleLine` never sets this, keeping its
                 // horizontally-scrolling single-line field byte-identical.
                 wrapsAndGrows: activeStyle == .zeroChrome,
                 // Round 12: `.center` only ever applies in `.zeroChrome`
-                // (`newStyleAlignment` above); `.singleLine`/`.classic`
+                // (`newStyleAlignment` above); `.singleLine`
                 // always pass `.left`, this field's prior, only alignment.
                 textAlignment: newStyleAlignment.nsTextAlignment,
                 measuredHeight: $zeroChromeFieldTextHeight
@@ -2055,7 +2075,6 @@ struct SessionComposerPalette: View {
         switch activeStyle {
         case .zeroChrome: return ComposerZeroChromeTypography.statusStripSize
         case .singleLine: return ComposerSingleLineTuning.rowSize(defaults: tuningDefaults)
-        case .classic: return 11
         }
     }
 
@@ -3065,7 +3084,7 @@ struct SessionComposerPalette: View {
             // field must reveal the candidate rows even though there's no
             // query to filter by yet — `showNewStyleRows` OR's this flag in
             // alongside the existing `!query.isEmpty` gate. Set
-            // unconditionally (cheap, harmless for `.classic`/`.singleLine`,
+            // unconditionally (cheap, harmless for `.singleLine`,
             // which never read it).
             zeroChromeRowsRevealedByArrow = true
             if flattenedOptions.isEmpty { break }

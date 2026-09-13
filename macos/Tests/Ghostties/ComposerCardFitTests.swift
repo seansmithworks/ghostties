@@ -62,6 +62,12 @@ struct ComposerCardFitTests {
     /// Copy of `SessionComposerOverlay.body`'s structure — the real type
     /// hardcodes `SessionComposerStore.shared`, the per-process
     /// UserDefaults-backed singleton, which is unsafe to touch from a test.
+    ///
+    /// This test exercises `ComposerResultsTable` — the results list only
+    /// `popoverComposerCard` renders (Classic's removal, 2026-09-13). That
+    /// card is selected by PRESENTATION, not by `ComposerStyle` (see
+    /// `SessionComposerPalette.cardKind(style:presentation:)`), so `styleOverrideForTesting`
+    /// is gone — `presentation: .anchored` alone is what reaches it now.
     private func composerOverlayHarness(
         project: Project,
         workspaceStore: WorkspaceStore,
@@ -76,8 +82,7 @@ struct ComposerCardFitTests {
             SessionComposerPalette(
                 isPresented: .constant(true),
                 request: SessionComposerRequest(presentation: presentation, projectBinding: .locked(project)),
-                composerStore: composerStore,
-                styleOverrideForTesting: .classic
+                composerStore: composerStore
             )
             .environmentObject(workspaceStore)
             .environmentObject(SessionCoordinator())
@@ -142,7 +147,7 @@ struct ComposerCardFitTests {
         window.backgroundColor = .clear
 
         let view = composerOverlayHarness(
-            project: project, workspaceStore: workspaceStore, composerStore: composerStore, presentation: .centered
+            project: project, workspaceStore: workspaceStore, composerStore: composerStore, presentation: .anchored
         )
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: size)

@@ -106,7 +106,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
     @Binding var query: String
     var fontSize: CGFloat
     /// Fix round 2, item 8 (zero-chrome type scale): default `.regular`
-    /// keeps every existing call site (classic Model B, `.singleLine`)
+    /// keeps every existing call site (the popover's Model B field, `.singleLine`)
     /// byte-identical — only `.zeroChrome`'s field passes `.semibold`.
     var fontWeight: NSFont.Weight = .regular
     /// The row height the field renders inside (`.centered` only tonight,
@@ -145,7 +145,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// at word boundaries within its own width instead of scrolling
     /// horizontally, growing vertically up to
     /// `ComposerZeroChromeTypography.maxFieldLines` lines before scrolling
-    /// internally. `.classic`/`.singleLine` never set this — both keep the
+    /// internally. `.singleLine` never sets this — it keeps the
     /// original single-line, horizontally-scrolling configuration
     /// byte-for-byte (see `makeNSView`'s branch below).
     var wrapsAndGrows: Bool = false
@@ -156,8 +156,8 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// this: in `wrapsAndGrows` mode it already reads the caret's real
     /// on-screen position via `firstRect(forCharacterRange:)`, which
     /// reflects whatever alignment TextKit actually laid the line out
-    /// with — see that method's doc comment. `.classic`/`.singleLine`
-    /// always pass `.left`, this field's only alignment before this round.
+    /// with — see that method's doc comment. `.singleLine`
+    /// always passes `.left`, this field's only alignment before this round.
     var textAlignment: NSTextAlignment = .left
 
     /// Round 10: the field's own laid-out content height — one
@@ -416,7 +416,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         // `NSScrollView` has nothing to scroll, and typed text past the
         // field's edge simply clips instead of scrolling into view.
         // Round 10: `wrapsAndGrows` (zero-chrome only) overrides this whole
-        // block below — `.classic`/`.singleLine` never set it, so this
+        // block below — `.singleLine` never sets it, so this
         // stays byte-for-byte their existing single-line, horizontally-
         // scrolling configuration.
         textView.isHorizontallyResizable = true
@@ -1031,7 +1031,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// the "report the laid-out used height back to SwiftUI" mechanism
         /// this file's caller (`SessionComposerPalette`) uses to grow its
         /// own frame upward from a fixed bottom anchor. No-op when
-        /// `wrapsAndGrows` is false — `.classic`/`.singleLine` never read
+        /// `wrapsAndGrows` is false — `.singleLine` never reads
         /// `measuredHeight`, so this never touches their bindings. Also
         /// keeps the caret's own line visible once content exceeds the cap
         /// (`scrollRangeToVisible`), per the brief's "scrolls internally,

@@ -157,10 +157,10 @@ struct SessionComposerOverlay: View {
         // Fix round (finding 4): the earlier version of this file wrapped
         // EVERY style's body in a `GeometryReader` to reach the window
         // height for zero-chrome's 38%-from-top placement — that changed
-        // the `.classic`/`.singleLine` view tree from what shipped on
+        // the `.singleLine` view tree from what shipped on
         // `main` (a plain `ZStack`) for no reason those styles need.
         // `GeometryReader` now applies ONLY on the `.zeroChrome` branch;
-        // `.classic`/`.singleLine` render the exact, unwrapped `ZStack`
+        // `.singleLine` renders the exact, unwrapped `ZStack`
         // this file had before this spike touched it.
         Group {
             if resolvedStyle == .zeroChrome {
@@ -338,7 +338,7 @@ struct SessionComposerOverlay: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// The exact `.classic`/`.singleLine` tree this file shipped with on
+    /// The exact `.singleLine` tree this file shipped with on
     /// `main` before this spike — dismiss layer + centered
     /// `SessionComposerPalette`, unchanged. `.zeroChrome` no longer uses
     /// this at all (see `zeroChromeFullBleedWash` above, which is now its
@@ -364,7 +364,7 @@ struct SessionComposerOverlay: View {
                     .onTapGesture {
                         // Fix round 2 (Timing board, click-outside exit) —
                         // only zero-chrome reads `zeroChromeRevealPhase`;
-                        // harmless write for `.classic`/`.singleLine`.
+                        // harmless write for `.singleLine`.
                         if resolvedStyle == .zeroChrome {
                             zeroChromeRevealPhase = .dismissing
                         }

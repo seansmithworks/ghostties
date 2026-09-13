@@ -46,7 +46,7 @@ struct ComposerZeroChromeStyleTests {
     // MARK: - Style flag
 
     /// Sean's decision (2026-09-13): single-line is the default composer
-    /// style for everyone. Unset reads `.singleLine`, not `.classic`.
+    /// style for everyone. Unset reads `.singleLine`.
     @Test func composerStyleDefaultsToSingleLineWhenUnset() {
         let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
         #expect(ComposerStyle.current(defaults: suite) == .singleLine)
@@ -58,10 +58,14 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerStyle.current(defaults: suite) == .zeroChrome)
     }
 
-    @Test func composerStyleReadsClassic() {
+    /// Sean's decision (2026-09-13): Classic no longer exists as a
+    /// `ComposerStyle` case — a stale stored `"classic"` (from a build
+    /// before this commit) is just another unrecognized raw value, and must
+    /// fall back to the same default as unset/typo: `.singleLine`.
+    @Test func composerStyleReadsStaleClassicRawValueAsSingleLine() {
         let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
         suite.set("classic", forKey: ComposerStyle.storageKey)
-        #expect(ComposerStyle.current(defaults: suite) == .classic)
+        #expect(ComposerStyle.current(defaults: suite) == .singleLine)
     }
 
     /// An unrecognized value (typo, stale build) falls back to the same
@@ -85,31 +89,34 @@ struct ComposerZeroChromeStyleTests {
         #expect(ComposerZeroChromeMaterial.current(defaults: suite) == .thin)
     }
 
-    // MARK: - `.anchored` popover stays `.classic` under the single-line default
+    // MARK: - `.anchored` popover keeps its own card under the single-line default
     //
-    // `SessionComposerPalette.effectiveStyle` is the pure decision extracted
-    // from `activeStyle` — covers the sidebar popover (`ProjectDisclosureRow
-    // .swift`) never picking up `.singleLine`/`.zeroChrome`, which would
-    // silently drop `ComposerResultsTable` (only `classicComposerCard`
-    // renders it).
+    // `SessionComposerPalette.cardKind(style:presentation:)` is the pure
+    // decision extracted from `activeCardKind` — covers the sidebar popover
+    // (`ProjectDisclosureRow.swift`) never picking up `.singleLine`/
+    // `.zeroChrome`'s card, which would silently drop `ComposerResultsTable`
+    // (only `popoverComposerCard` renders it). Classic's removal
+    // (2026-09-13) means the popover card is no longer a `ComposerStyle`
+    // case at all — it's a `ComposerCardKind` selected by presentation.
 
-    @Test(arguments: [ComposerStyle.classic, .zeroChrome, .singleLine])
-    func effectiveStyleForcesClassicWhenAnchoredRegardlessOfStored(stored: ComposerStyle) {
-        #expect(SessionComposerPalette.effectiveStyle(stored: stored, presentation: .anchored) == .classic)
+    @Test(arguments: [ComposerStyle.zeroChrome, .singleLine])
+    func cardKindIsPopoverWhenAnchoredRegardlessOfStored(stored: ComposerStyle) {
+        #expect(SessionComposerPalette.cardKind(style: stored, presentation: .anchored) == .popover)
     }
 
-    @Test(arguments: [ComposerStyle.classic, .zeroChrome, .singleLine])
-    func effectiveStyleReturnsStoredValueUnchangedWhenCentered(stored: ComposerStyle) {
-        #expect(SessionComposerPalette.effectiveStyle(stored: stored, presentation: .centered) == stored)
+    @Test(arguments: [ComposerStyle.zeroChrome, .singleLine])
+    func cardKindMatchesStoredStyleWhenCentered(stored: ComposerStyle) {
+        let expected: ComposerCardKind = stored == .zeroChrome ? .zeroChrome : .singleLine
+        #expect(SessionComposerPalette.cardKind(style: stored, presentation: .centered) == expected)
     }
 
     /// No stored value → `ComposerStyle.current()` → `.singleLine`; centered
-    /// presentation passes it through unchanged.
-    @Test func effectiveStyleKeepsSingleLineDefaultWhenCentered() {
+    /// presentation resolves it to the `.singleLine` card.
+    @Test func cardKindKeepsSingleLineDefaultWhenCentered() {
         let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
         let stored = ComposerStyle.current(defaults: suite)
         #expect(stored == .singleLine)
-        #expect(SessionComposerPalette.effectiveStyle(stored: stored, presentation: .centered) == .singleLine)
+        #expect(SessionComposerPalette.cardKind(style: stored, presentation: .centered) == .singleLine)
     }
 
     // MARK: - Snapshot evidence (real UserDefaults.standard, save/restore)
@@ -123,7 +130,7 @@ struct ComposerZeroChromeStyleTests {
     // `UserDefaults.standard` key directly — `xcodebuild test`'s parallel
     // test processes share that on-disk domain across processes, so a
     // direct set/restore raced other parallel snapshot tests in this same
-    // file's early draft and intermittently poisoned unrelated `.classic`
+    // file's early draft and intermittently poisoned unrelated
     // renders (caught by `SessionComposerSnapshotTests` regressing on the
     // same run).
 
@@ -209,9 +216,9 @@ struct ComposerZeroChromeStyleTests {
         try? data.write(to: dir.appendingPathComponent(filename))
     }
 
-    /// Counts pixels matching the classic/single-line card's border-stroke
+    /// Counts pixels matching the popover/single-line card's border-stroke
     /// color (`.tertiaryLabelColor` at 0.75 opacity) — present on the
-    /// classic and single-line cards, must be ~0 on zero-chrome (no card,
+    /// popover and single-line cards, must be ~0 on zero-chrome (no card,
     /// no border, brief §2).
     private func borderStrokePixelCount(in data: Data) -> Int {
         guard let rep = NSBitmapImageRep(data: data) else { return 0 }
@@ -230,20 +237,6 @@ struct ComposerZeroChromeStyleTests {
         return count
     }
 
-    @Test func flagUnsetRendersClassicCardWithBorder() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .classic)
-        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
-        let png = renderPNG(view, size: size)
-        #expect(png != nil)
-        if let png {
-            // Classic card has a visible border stroke around it.
-            #expect(borderStrokePixelCount(in: png) > 0)
-        }
-    }
-
     /// Fix round 2, item 5: since the wash moved OUT of the palette (it's
     /// full-bleed now, painted by `SessionComposerOverlay`, which this
     /// palette-only harness never constructs), this fixture's canvas is
@@ -258,7 +251,7 @@ struct ComposerZeroChromeStyleTests {
     /// wants: `zeroChromeComposerCard`
     /// (`SessionComposerPalette.swift`) has no `.stroke(`, `.overlay(...
     /// shape.stroke...)`, `.clipShape`, or `.background` call anywhere in
-    /// its body — grep confirms zero matches, vs. `classicComposerCard`'s
+    /// its body — grep confirms zero matches, vs. `popoverComposerCard`'s
     /// and `singleLineComposerCard`'s each having exactly one `.stroke(`.
     @Test func zeroChromeRestStateHasNoCardBorderDrawingCode() {
         let project = makeProject()
@@ -292,7 +285,7 @@ struct ComposerZeroChromeStyleTests {
     /// calls `open()` again on first mount, silently wiping the pre-seeded
     /// query the instant the view actually appeared. Same defect (and same
     /// documented fix) `SessionComposerSnapshotTests
-    /// .renderMountedPaletteAfterTyping` already covers for the classic
+    /// .renderMountedPaletteAfterTyping` already covers for the popover
     /// path: mount first (let `.onAppear` settle), THEN set `searchText`,
     /// spin the run loop briefly, THEN render.
     @Test func zeroChromeTypingRevealsSelectedCandidateRow() {
@@ -425,7 +418,7 @@ struct ComposerZeroChromeStyleTests {
     }
 
     /// Same accent-tint detection `SessionComposerSnapshotTests
-    /// .selectionHighlightPixelCount` uses for the classic list's
+    /// .selectionHighlightPixelCount` uses for the popover list's
     /// selection highlight, reimplemented here (that helper is `private`
     /// to the other file) against `newStyleCandidateRows`' own selected-row
     /// text color, `WorkspaceLayout.composerSelectionAccent`
@@ -1553,9 +1546,10 @@ struct ComposerZeroChromeStyleTests {
     /// "The overlay's resolved style/material follows it" — writes directly
     /// to the SAME injected suite `SessionComposerOverlay(defaultsForTesting:)`
     /// reads via `@AppStorage`, then re-renders and confirms the view
-    /// switched from the classic bordered card to the zero-chrome branch
-    /// (no border-stroke drawing code, `zeroChromeRestStateHasNoCardBorderDrawingCode`'s
-    /// same reasoning) — proving observation, not just a one-time read.
+    /// switched from the default `.singleLine`'s bordered card to the
+    /// zero-chrome branch (no border-stroke drawing code,
+    /// `zeroChromeRestStateHasNoCardBorderDrawingCode`'s same reasoning) —
+    /// proving observation, not just a one-time read.
     @Test func overlayResolvedStyleFollowsInjectedDefaultsWrite() {
         let defaults = makeTuningDefaults()
         let project = makeProject()
@@ -1594,7 +1588,7 @@ struct ComposerZeroChromeStyleTests {
         }
         hosting.cacheDisplay(in: hosting.bounds, to: before)
         if let beforeData = before.representation(using: .png, properties: [:]) {
-            #expect(borderStrokePixelCount(in: beforeData) > 0, "expected the default (.classic) style to render a bordered card")
+            #expect(borderStrokePixelCount(in: beforeData) > 0, "expected the default (.singleLine) style to render a bordered card")
         }
 
         defaults.set(ComposerStyle.zeroChrome.rawValue, forKey: ComposerStyle.storageKey)
@@ -1716,7 +1710,7 @@ struct ComposerZeroChromeStyleTests {
         #expect(textView.string.hasPrefix("brukas"))
     }
 
-    /// `.classic`/`.singleLine` never set `wrapsAndGrows` — asserts the
+    /// The popover card / `.singleLine` never set `wrapsAndGrows` — asserts the
     /// PRODUCTION default (`wrapsAndGrows: false`) keeps the field's
     /// original horizontally-scrolling single-line `NSTextContainer`/
     /// `NSTextView` configuration, unaffected by the round-10 wrap branch.
@@ -2465,7 +2459,8 @@ struct ComposerZeroChromeStyleTests {
 
     // MARK: - DialKit panel: conditional visibility + reset action
 
-    /// Acceptance item 1: exactly Style for Classic, Style + the 4
+    /// Acceptance item 1 (Classic removed, 2026-09-13 — the "Style only"
+    /// count this used to assert no longer exists): Style + the 4
     /// zero-chrome dials for Zero chrome, Style + the 19 single-line dials
     /// for Single line (round 15 added the Float horizontal dial to round
     /// 14's 18, which added 5 Witness dials to round 13's 13).
@@ -2473,12 +2468,20 @@ struct ComposerZeroChromeStyleTests {
     /// package, so this names the discriminator this test target CAN see —
     /// `state.controls.count`, the panel's actual visible control list. Red
     /// mutation: showing every control for every style (the "just don't
-    /// hide anything" shortcut) fails all three.
+    /// hide anything" shortcut) fails both.
     @available(macOS 14, *)
     @Test func dialKitVisibleControlCountsMatchEachStyle() {
-        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.classic.rawValue).count == 1)
         #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.zeroChrome.rawValue).count == 5)
         #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.singleLine.rawValue).count == 20)
+    }
+
+    /// A stale stored `"classic"` (or any other unrecognized raw value)
+    /// falls back to `.singleLine`'s control list, same as
+    /// `ComposerStyle.current` itself — not the removed "Style only" list.
+    @available(macOS 14, *)
+    @Test func dialKitVisibleControlCountFallsBackToSingleLineForUnrecognizedRawValue() {
+        #expect(ComposerDialKitCoordinator.controls(for: "classic").count == 20)
+        #expect(ComposerDialKitCoordinator.controls(for: "bogus").count == 20)
     }
 
     /// Proves the LIVE panel (not just the pure function above) rebuilds
@@ -2490,9 +2493,9 @@ struct ComposerZeroChromeStyleTests {
     @available(macOS 14, *)
     @Test func dialKitPanelRebuildsControlsWhenStyleChanges() {
         let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.visibility.test.\(UUID().uuidString)")!
-        suite.set(ComposerStyle.classic.rawValue, forKey: ComposerStyle.storageKey)
+        suite.set(ComposerStyle.zeroChrome.rawValue, forKey: ComposerStyle.storageKey)
         let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
-        #expect(coordinator.state.controls.count == 1)
+        #expect(coordinator.state.controls.count == 5)
 
         coordinator.state.values.styleRaw = ComposerStyle.singleLine.rawValue
         #expect(coordinator.state.controls.count == 20)
