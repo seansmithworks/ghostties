@@ -2376,6 +2376,7 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
   - untracked `output/demo-capture/`
   - `~/.claude.json.bak-demo-*` backup
   - xcresult bundles containing full-screen recordings in `$TMPDIR/ghostties-demo-capture-result.*`, which are private screen content
+  - `~/.ghostties-demo-wrappers` (per-session launcher wrapper scripts)
   All deletions need Sean's OK.
 
 **Closed:**
