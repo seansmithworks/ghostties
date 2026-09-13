@@ -1859,6 +1859,59 @@ struct ComposerZeroChromeStyleTests {
         #expect(suite.object(forKey: ComposerSingleLineShadowDials.opacityStorageKey) as? Double == expected.opacity)
     }
 
+    /// `shadowPresetRaw`'s computed setter (round 13d) derived all three
+    /// shadow dials for EVERY preset, including `.custom` — so selecting
+    /// "Custom" after hand-tuning the sliders snapped them to
+    /// `ComposerSingleLineShadowPreset.custom.dialValues` (64/48/0.24)
+    /// instead of leaving the hand-tuned numbers alone. `.custom` has no
+    /// fixed values of its own; it is the label for "whatever the dials
+    /// currently read." Selecting it must be a no-op on the three dials.
+    /// Red mutation: remove the `preset != .custom` exclusion from the
+    /// setter's guard.
+    @available(macOS 14, *)
+    @Test func dialKitShadowPresetCustomSelectionLeavesHandTunedDialsUntouched() {
+        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.preset.custom.test.\(UUID().uuidString)")!
+        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+
+        coordinator.state.values.shadowRadius = 40
+        coordinator.state.values.shadowYOffset = 12
+        coordinator.state.values.shadowOpacity = 0.5
+
+        coordinator.state.values.shadowPresetRaw = ComposerSingleLineShadowPreset.custom.rawValue
+
+        #expect(coordinator.state.values.shadowRadius == 40)
+        #expect(coordinator.state.values.shadowYOffset == 12)
+        #expect(coordinator.state.values.shadowOpacity == 0.5)
+
+        #expect(suite.string(forKey: ComposerSingleLineShadowPreset.storageKey) == ComposerSingleLineShadowPreset.custom.rawValue)
+        #expect(suite.object(forKey: ComposerSingleLineShadowDials.radiusStorageKey) as? Double == 40)
+        #expect(suite.object(forKey: ComposerSingleLineShadowDials.yOffsetStorageKey) as? Double == 12)
+        #expect(suite.object(forKey: ComposerSingleLineShadowDials.opacityStorageKey) as? Double == 0.5)
+    }
+
+    /// Companion to the above: fixed presets must still derive all three
+    /// dials in a single mutation even when the panel is currently on
+    /// `.custom` with hand-tuned values — the `.custom` exclusion above
+    /// must not become a blanket skip. Red mutation: exclude every preset
+    /// (`guard let preset = ... else { return }` with no derivation at all).
+    @available(macOS 14, *)
+    @Test func dialKitShadowPresetSelectionFromCustomStillDerivesAllThreeDials() {
+        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.preset.fromCustom.test.\(UUID().uuidString)")!
+        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+
+        coordinator.state.values.shadowRadius = 40
+        coordinator.state.values.shadowYOffset = 12
+        coordinator.state.values.shadowOpacity = 0.5
+        coordinator.state.values.shadowPresetRaw = ComposerSingleLineShadowPreset.custom.rawValue
+
+        coordinator.state.values.shadowPresetRaw = ComposerSingleLineShadowPreset.lifted.rawValue
+
+        let expected = ComposerSingleLineShadowPreset.lifted.dialValues
+        #expect(coordinator.state.values.shadowRadius == Double(expected.radius))
+        #expect(coordinator.state.values.shadowYOffset == Double(expected.yOffset))
+        #expect(coordinator.state.values.shadowOpacity == expected.opacity)
+    }
+
     /// Finding #2: the coordinator used to write its ENTIRE model on every
     /// change, so a panel whose own snapshot of an unrelated key was stale
     /// would silently stomp that key back to its stale value the moment the

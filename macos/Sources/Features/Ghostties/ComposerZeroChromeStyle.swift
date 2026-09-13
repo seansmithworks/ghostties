@@ -1279,7 +1279,14 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         get { shadowPresetRawStorage }
         set {
             shadowPresetRawStorage = newValue
-            guard let preset = ComposerSingleLineShadowPreset(rawValue: newValue) else { return }
+            // `.custom` has no fixed dial values of its own — it is the
+            // label for "whatever the three dials currently read," so
+            // selecting it must leave them exactly where the user hand-
+            // tuned them. Deriving from `.custom.dialValues` here would
+            // snap a hand-tuned shadow to that placeholder triple on every
+            // selection (the bug this guard fixes).
+            guard let preset = ComposerSingleLineShadowPreset(rawValue: newValue),
+                  preset != .custom else { return }
             let values = preset.dialValues
             shadowRadius = Double(values.radius)
             shadowYOffset = Double(values.yOffset)
