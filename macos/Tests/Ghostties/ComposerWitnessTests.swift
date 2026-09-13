@@ -122,4 +122,63 @@ struct ComposerWitnessTests {
             #expect(pose == resting, "\(beat) did not hold the resting pose under Reduce Motion: \(pose)")
         }
     }
+
+    // MARK: - R14b fix 1: blink reaches the eye layer
+
+    /// red mutation: revert `eyesOpenColor(eyesOpen:bodyColor:)` in
+    /// `ComposerWitnessView` to always return the eye color regardless of
+    /// `eyesOpen` — this test then fails the closed-eye assertion.
+    @Test func blinkClosesTheEyeByReturningTheBodyColor() {
+        let ghostColor = ComposerWitnessGhost.flicker.colorHex
+        #expect(ComposerWitness.eyeLayerColorHex(eyesOpen: true, bodyColorHex: ghostColor) == ComposerWitnessGhost.eyeColorHex)
+        #expect(ComposerWitness.eyeLayerColorHex(eyesOpen: false, bodyColorHex: ghostColor) == ghostColor)
+    }
+
+    /// red mutation: remove the `isBlinking` check from `.idle`/`.resolve`
+    /// in `ComposerWitnessMotion.pose` — `eyesOpen` would then always be
+    /// `true` and this test would fail at the blink-window sample.
+    @Test func poseReportsClosedEyesInsideTheBlinkWindow() {
+        let blinking = ComposerWitnessMotion.pose(beat: .idle, beatElapsed: 0, clockElapsed: 4.05, reduceMotion: false)
+        #expect(blinking.eyesOpen == false, "expected a closed blink at 4.05s (period 4s, 130ms window)")
+
+        let open = ComposerWitnessMotion.pose(beat: .idle, beatElapsed: 0, clockElapsed: 4.5, reduceMotion: false)
+        #expect(open.eyesOpen == true, "expected eyes open outside the blink window")
+    }
+
+    // MARK: - R14b fix 2: resolve crossfade
+
+    /// red mutation: swap the outgoing/incoming offset formulas in
+    /// `ComposerWitness.resolveCrossfade` — the f=0.5 assertions below then
+    /// fail (both would read 10pt instead of one at 0/20 flipped).
+    @Test func resolveCrossfadeAtStartMidpointAndEnd() {
+        let start = ComposerWitnessMotion.resolveCrossfade(elapsed: 0, reduceMotion: false)
+        #expect(start.outgoing.offsetY == 0)
+        #expect(start.outgoing.opacity == 1)
+        #expect(start.incoming.offsetY == 20)
+        #expect(start.incoming.opacity == 0)
+
+        let mid = ComposerWitnessMotion.resolveCrossfade(elapsed: 0.15, reduceMotion: false)
+        #expect(mid.outgoing.offsetY == 10)
+        #expect(mid.outgoing.opacity == 0.5)
+        #expect(mid.incoming.offsetY == 10)
+        #expect(mid.incoming.opacity == 0.5)
+
+        let end = ComposerWitnessMotion.resolveCrossfade(elapsed: 0.3, reduceMotion: false)
+        #expect(end.outgoing.offsetY == 20)
+        #expect(end.outgoing.opacity == 0)
+        #expect(end.incoming.offsetY == 0)
+        #expect(end.incoming.opacity == 1)
+    }
+
+    /// red mutation: drop the `reduceMotion` early-return in
+    /// `ComposerWitnessMotion.resolveCrossfade` — the instant-swap case
+    /// would then animate instead of jumping straight to the incoming
+    /// sprite.
+    @Test func resolveCrossfadeUnderReduceMotionIsAnInstantSwap() {
+        let pose = ComposerWitnessMotion.resolveCrossfade(elapsed: 0.15, reduceMotion: true)
+        #expect(pose.outgoing.opacity == 0)
+        #expect(pose.outgoing.offsetY == 0)
+        #expect(pose.incoming.opacity == 1)
+        #expect(pose.incoming.offsetY == 0)
+    }
 }

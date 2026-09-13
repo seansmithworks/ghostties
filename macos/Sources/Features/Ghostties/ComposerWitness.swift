@@ -66,6 +66,16 @@ enum ComposerWitness {
         }
     }
 
+    // MARK: - Blink (R14b fix 1)
+
+    /// The `e` (eye) pixel layer's fill color, as a `#rrggbb` hex string —
+    /// pure, no `Color`/view dependency so it's directly testable. A closed
+    /// blink paints the eye layer the ghost's own body color (closes the
+    /// eye); open paints the shared eye color.
+    static func eyeLayerColorHex(eyesOpen: Bool, bodyColorHex: String) -> String {
+        eyesOpen ? ComposerWitnessGhost.eyeColorHex : bodyColorHex
+    }
+
     // MARK: - Beats (plan §2 event hooks)
 
     /// A finished-event the Witness reacts to. `.idle` is the resting
@@ -181,6 +191,38 @@ enum ComposerWitnessMotion {
             return Pose(offsetY: offsetY, offsetX: 0, opacity: opacity, eyesOpen: true)
         }
     }
+
+    // MARK: - Resolve crossfade (R14b fix 2)
+
+    /// Both sprites' pose during an identity swap (project resolves to a
+    /// different ghost, or placeholder -> ghost). `elapsed` is seconds
+    /// since the swap was detected; linear progress `f = elapsed / 300ms`.
+    /// Offsets are rounded to whole points. Reduce Motion: instant swap —
+    /// outgoing fully transparent, incoming fully opaque, no motion — the
+    /// view drops the outgoing sprite entirely in that case (no double
+    /// render).
+    static let resolveCrossfadeDuration: TimeInterval = 0.3
+
+    struct ResolvePose: Equatable {
+        var outgoing: Pose
+        var incoming: Pose
+    }
+
+    static func resolveCrossfade(elapsed: TimeInterval, reduceMotion: Bool) -> ResolvePose {
+        if reduceMotion {
+            return ResolvePose(
+                outgoing: Pose(offsetY: 0, offsetX: 0, opacity: 0, eyesOpen: true),
+                incoming: Pose(offsetY: 0, offsetX: 0, opacity: 1, eyesOpen: true)
+            )
+        }
+        let f = min(max(elapsed / resolveCrossfadeDuration, 0), 1)
+        let outgoingY = (f * 20).rounded()
+        let incomingY = ((1 - f) * 20).rounded()
+        return ResolvePose(
+            outgoing: Pose(offsetY: outgoingY, offsetX: 0, opacity: 1 - f, eyesOpen: true),
+            incoming: Pose(offsetY: incomingY, offsetX: 0, opacity: f, eyesOpen: true)
+        )
+    }
 }
 
 /// The 24×24 sprite view. `TimelineView` wraps ONLY this sprite (never the
@@ -200,7 +242,23 @@ struct ComposerWitnessView: View {
     @State private var beatStartedAt: Date = .now
     @State private var mountedAt: Date = .now
 
+    /// The identity actually on screen. Diverges from `identity` only
+    /// while a resolve crossfade is in flight — `identity` is the new
+    /// (incoming) value the moment the palette reports it; `displayedIdentity`
+    /// catches up once the crossfade starts, so `previousIdentity` can still
+    /// render the outgoing sprite for the window's duration.
+    @State private var displayedIdentity: ComposerWitness.Identity
+    @State private var previousIdentity: ComposerWitness.Identity?
+    @State private var resolveStartedAt: Date?
+
     private let frameSize: CGFloat = 24
+
+    init(identity: ComposerWitness.Identity, beatTrigger: ComposerWitness.Beat, reduceMotion: Bool) {
+        self.identity = identity
+        self.beatTrigger = beatTrigger
+        self.reduceMotion = reduceMotion
+        _displayedIdentity = State(initialValue: identity)
+    }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 0.125, paused: reduceMotion)) { context in
@@ -212,29 +270,62 @@ struct ComposerWitnessView: View {
                 clockElapsed: clockElapsed,
                 reduceMotion: reduceMotion
             )
-            sprite
-                .offset(x: pose.offsetX, y: pose.offsetY)
-                .opacity(pose.opacity)
+            let resolveElapsed = resolveStartedAt.map { context.date.timeIntervalSince($0) }
+            // `beatInFlight`: true only for the resolve crossfade's own
+            // 300ms window — outside it we render a single sprite, same as
+            // before this fix.
+            let beatInFlight = !reduceMotion
+                && previousIdentity != nil
+                && (resolveElapsed.map { $0 < ComposerWitnessMotion.resolveCrossfadeDuration } ?? false)
+
+            if beatInFlight, let outgoingIdentity = previousIdentity, let elapsed = resolveElapsed {
+                let crossfade = ComposerWitnessMotion.resolveCrossfade(elapsed: elapsed, reduceMotion: false)
+                ZStack {
+                    sprite(for: outgoingIdentity, eyesOpen: crossfade.outgoing.eyesOpen)
+                        .offset(x: crossfade.outgoing.offsetX, y: crossfade.outgoing.offsetY)
+                        .opacity(crossfade.outgoing.opacity)
+                    sprite(for: displayedIdentity, eyesOpen: crossfade.incoming.eyesOpen)
+                        .offset(x: pose.offsetX + crossfade.incoming.offsetX, y: pose.offsetY + crossfade.incoming.offsetY)
+                        .opacity(crossfade.incoming.opacity)
+                }
+            } else {
+                sprite(for: displayedIdentity, eyesOpen: pose.eyesOpen)
+                    .offset(x: pose.offsetX, y: pose.offsetY)
+                    .opacity(pose.opacity)
+            }
         }
         .frame(width: frameSize, height: frameSize)
         .onChange(of: beatTrigger) { newValue in
             currentBeat = newValue
             beatStartedAt = .now
         }
-        .onChange(of: identity) { _ in
+        .onChange(of: identity) { newValue in
+            guard newValue != displayedIdentity else { return }
+            if reduceMotion {
+                // Instant swap, no double render.
+                displayedIdentity = newValue
+                previousIdentity = nil
+                resolveStartedAt = nil
+            } else {
+                previousIdentity = displayedIdentity
+                displayedIdentity = newValue
+                resolveStartedAt = .now
+            }
+            // `.resolve` is an identity swap, not a replay of `.open` —
+            // it must never re-arm the open settle-in.
             currentBeat = currentBeat.next(.resolve)
             beatStartedAt = .now
         }
     }
 
-    private var pixels: [String] {
+    private func pixels(for identity: ComposerWitness.Identity) -> [String] {
         switch identity {
         case .placeholder: return ComposerWitnessPlaceholder.pixels
         case .ghost(let ghost): return ghost.pixels
         }
     }
 
-    private var bodyColor: Color {
+    private func bodyColor(for identity: ComposerWitness.Identity) -> Color {
         switch identity {
         case .placeholder: return ComposerWitnessPlaceholder.color
         case .ghost(let ghost): return Color(hex: ghost.colorHex)
@@ -242,9 +333,9 @@ struct ComposerWitnessView: View {
     }
 
     @ViewBuilder
-    private var sprite: some View {
-        // Reduce Motion: instant swap, no blink — `eyesOpen` from `pose` is
-        // always `true` there (see `ComposerWitnessMotion.pose`).
+    private func sprite(for identity: ComposerWitness.Identity, eyesOpen: Bool) -> some View {
+        let pixels = pixels(for: identity)
+        let bodyColor = bodyColor(for: identity)
         Canvas { context, size in
             let rows = pixels.count
             let cols = pixels.first?.count ?? 0
@@ -263,7 +354,10 @@ struct ComposerWitnessView: View {
                     case "X":
                         context.fill(Path(rect), with: .color(bodyColor))
                     case "e":
-                        let eyeColor = eyesOpenColor
+                        // Blinking paints the eye layer body colour (closes
+                        // the eye), per plan §4 — `eyesOpen` (from `pose`)
+                        // decides which color the `e` cells get this frame.
+                        let eyeColor = eyesOpenColor(eyesOpen: eyesOpen, bodyColor: bodyColor)
                         context.fill(Path(rect), with: .color(eyeColor))
                     case "l":
                         context.fill(Path(rect), with: .color(Color(hex: ComposerWitnessGhost.litColorHex)))
@@ -275,16 +369,8 @@ struct ComposerWitnessView: View {
         }
     }
 
-    /// Blinking paints the eye layer body colour (closes the eye), per
-    /// plan §4 — the pose's `eyesOpen` flag decides which color the `e`
-    /// cells get this frame.
-    private var eyesOpenColor: Color {
-        // Re-derive from the same clock the sprite's `Canvas` closure
-        // already redraws on; `Canvas` has no `context.date`, so this reads
-        // the identical `TimelineView` cadence via `Date()` at draw time —
-        // acceptable here because the frame that calls this IS the frame
-        // `TimelineView` just requested.
-        Color(hex: ComposerWitnessGhost.eyeColorHex)
+    private func eyesOpenColor(eyesOpen: Bool, bodyColor: Color) -> Color {
+        eyesOpen ? Color(hex: ComposerWitnessGhost.eyeColorHex) : bodyColor
     }
 }
 
