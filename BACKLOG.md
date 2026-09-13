@@ -1,5 +1,9 @@
 # Ghostties — Backlog
 
+## 2026-09-13 — R18: single-line composer inset fix (PR #169)
+
+- [ ] R18: fixed the single-line card's field padding spilling outside the card instead of insetting the text (`newStyleFieldRenderWidth` in `SessionComposerPalette.swift`); Witness x-offset now derived from `singleLineHorizontalPadding` instead of a hardcoded 20. Build-for-testing GREEN at this fix's commit. **Runs owed** — no `xcodebuild test` run per this brief's constraints (Dev running); both new tests (`singleLineFieldTextIsInsetFromTheCardsLeftEdge`, `witnessGhostLeadingEdgeAlignsWithTypedTextLeadingEdge`) in `ComposerZeroChromeStyleTests.swift` need a real red/green pass, and the 1pt Witness-alignment tolerance is unverified against real pixels.
+
 ## 2026-09-12 — Composer round 12: single-line leads, tuning via DialKit (PR #169)
 
 Sean, after live-testing R11: typewriter position "just not landing"; single-line may be the best option for now, but feels small.

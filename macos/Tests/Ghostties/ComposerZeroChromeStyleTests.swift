@@ -1977,4 +1977,246 @@ struct ComposerZeroChromeStyleTests {
             "the witness toggle write must not clobber a key this panel didn't touch"
         )
     }
+
+    // MARK: - R18: single-line inset fix
+    //
+    // `singleLineComposerCard` used to frame the field at the FULL card
+    // width, then wrap it in `singleLineHorizontalPadding` and re-frame the
+    // whole padded stack back to that same width — the padding spilled
+    // outside the card (measured live: ~1.5pt of inset against a ~29.9pt
+    // intended one) instead of insetting the text. `newStyleFieldRenderWidth`
+    // (`SessionComposerPalette.swift`) fixes this by sizing the field to the
+    // card's width MINUS both paddings. These tests render real pixels
+    // rather than arguing from source, per
+    // `reference_rigid-frame-harness-recenters-a-hugging-card`'s and
+    // `reference_swiftui-frame-maxwidth-is-greedy`'s shared lesson: a layout
+    // claim needs a capture, not a read of the modifier chain.
+
+    /// Backing-pixel horizontal extent of any opaque content within
+    /// `yRange` — the horizontal analog of `ComposerCardFitTests
+    /// .opaqueVerticalExtent`. The single-line card's `.regularMaterial`
+    /// background (plus its border stroke) is opaque; the window around it
+    /// is `.clear` (alpha 0), so this finds the card's own left/right edges.
+    private func opaqueHorizontalExtent(in data: Data, yRange: Range<Int>) -> (left: Int, right: Int)? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        var minX: Int?
+        var maxX: Int?
+        for x in 0..<rep.pixelsWide {
+            for y in stride(from: yRange.lowerBound, to: yRange.upperBound, by: 2) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                minX = min(minX ?? x, x)
+                maxX = max(maxX ?? x, x)
+            }
+        }
+        guard let minX, let maxX else { return nil }
+        return (minX, maxX)
+    }
+
+    /// Leftmost column carrying genuinely dark, user-TYPED ink within
+    /// `yRange`, starting from `xStart` — distinguishes a real typed
+    /// character (`ComposerGhostTextField` sets `textView.textColor =
+    /// .labelColor` at full alpha; that file's own doc comment measures the
+    /// darkest typed pixel at rgb(39,39,39)) from the lighter ghost/
+    /// placeholder text, which blends `.labelColor` at a fractional
+    /// `ghostOpacity` over the card's light background and reads
+    /// meaningfully brighter.
+    private func firstDarkInkColumn(in data: Data, xStart: Int, yRange: Range<Int>) -> Int? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        for x in stride(from: xStart, to: rep.pixelsWide, by: 1) {
+            for y in stride(from: yRange.lowerBound, to: yRange.upperBound, by: 1) {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if (r + g + b) / 3 < 100 { return x }
+            }
+        }
+        return nil
+    }
+
+    /// Leftmost column carrying the Witness's own flicker-red ink
+    /// (`ComposerWitnessGhost.flicker`, `#ff3b3b`) — same color band
+    /// `flickerRedPixelCount` above already uses, just reporting the
+    /// leftmost match instead of a count.
+    private func leftmostFlickerRedColumn(in data: Data) -> Int? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        for x in 0..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.5 else { continue }
+                let r = Int((color.redComponent * 255).rounded())
+                let g = Int((color.greenComponent * 255).rounded())
+                let b = Int((color.blueComponent * 255).rounded())
+                if r > 150, r - g > 60, r - b > 60 { return x }
+            }
+        }
+        return nil
+    }
+
+    /// Renders the single-line card with real typed text (`isolated`
+    /// defaults + `SessionComposerStore`, matching this file's other
+    /// fixtures) and proves the first typed-ink column sits at least
+    /// `singleLineHorizontalPadding − 2pt` inside the card's own left edge
+    /// — i.e. the padding insets the text instead of spilling outside the
+    /// card — and that the card itself stayed at its tuned width (688pt),
+    /// not narrowed to make the inset "work" by shrinking the card instead
+    /// of insetting the field.
+    ///
+    /// Red mutation: reverting `newStyleFieldRenderWidth`'s `.singleLine`
+    /// case back to the un-reduced `newStyleFieldWidth` reproduces the
+    /// original bug and fails the inset assertion (measured pre-fix: ~1.5pt
+    /// of inset against a ~29.9pt expectation).
+    @Test func singleLineFieldTextIsInsetFromTheCardsLeftEdge() {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+        let suite = UserDefaults(suiteName: "ghostties.composerSingleLineInset.test.\(UUID().uuidString)")!
+        suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+        let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 100)
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        composerStore.noteSearchTextEditedByTyping()
+        composerStore.searchText = "hello"
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the single-line inset fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            Issue.record("failed to encode the single-line inset fixture")
+            return
+        }
+        writeScratchPNG(png, filename: "single-line-inset.png")
+
+        guard let dataRep = NSBitmapImageRep(data: png) else {
+            Issue.record("failed to decode the single-line inset fixture")
+            return
+        }
+        let scale = CGFloat(dataRep.pixelsWide) / size.width
+        let fullBand = 0..<dataRep.pixelsHigh
+        guard let horizontalExtent = opaqueHorizontalExtent(in: png, yRange: fullBand) else {
+            Issue.record("no opaque card content rendered")
+            return
+        }
+        let cardLeftPt = CGFloat(horizontalExtent.left) / scale
+        let cardWidthPt = CGFloat(horizontalExtent.right - horizontalExtent.left) / scale
+
+        guard let inkColumn = firstDarkInkColumn(in: png, xStart: horizontalExtent.left, yRange: fullBand) else {
+            Issue.record("no typed-text ink found in the single-line fixture")
+            return
+        }
+        let inkLeftPt = CGFloat(inkColumn) / scale
+        let measuredInset = inkLeftPt - cardLeftPt
+        let expectedPadding = ComposerSingleLineTuning.horizontalPadding(
+            fieldSize: ComposerSingleLineTuning.fieldSize(defaults: suite)
+        )
+
+        print("singleLineFieldTextIsInsetFromTheCardsLeftEdge: cardLeft=\(cardLeftPt)pt cardWidth=\(cardWidthPt)pt inkLeft=\(inkLeftPt)pt inset=\(measuredInset)pt expected>=\(expectedPadding - 2)pt")
+
+        #expect(
+            measuredInset >= expectedPadding - 2,
+            "expected the typed text to sit inside the card's own horizontal padding (\(expectedPadding)pt), measured \(measuredInset)pt"
+        )
+        #expect(
+            abs(cardWidthPt - ComposerSingleLineTuning.defaultWidth) < 3,
+            "expected the card to stay at its tuned width (\(ComposerSingleLineTuning.defaultWidth)pt), measured \(cardWidthPt)pt"
+        )
+    }
+
+    /// Companion to the inset test above: with real typed text AND the
+    /// Witness ghost both on screen, proves the ghost's own leading edge
+    /// lines up with the typed text's leading edge — the hardcoded `.offset(
+    /// x: 20, ...)` this replaced sat ~10pt off that alignment once the
+    /// inset fix landed (`singleLineHorizontalPadding` defaults to ~29.9pt,
+    /// not 20).
+    ///
+    /// Red mutation: restoring the hardcoded `x: 20` offset fails this
+    /// assertion.
+    @Test func witnessGhostLeadingEdgeAlignsWithTypedTextLeadingEdge() {
+        let project = Project(name: "Demo", rootPath: "/tmp/composer-witness-alignment-\(UUID().uuidString)", ghostCharacter: .blinky)
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+        let suite = UserDefaults(suiteName: "ghostties.composerWitnessAlignment.test.\(UUID().uuidString)")!
+        suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+        suite.set(true, forKey: ComposerWitnessSetting.storageKey)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+        let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 140)
+
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.appearance = NSAppearance(named: .aqua)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        hosting.layoutSubtreeIfNeeded()
+        defer { window.orderOut(nil) }
+
+        composerStore.noteSearchTextEditedByTyping()
+        composerStore.searchText = "hello"
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        hosting.layoutSubtreeIfNeeded()
+        hosting.layoutSubtreeIfNeeded()
+
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+            Issue.record("failed to render the witness alignment fixture")
+            return
+        }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            Issue.record("failed to encode the witness alignment fixture")
+            return
+        }
+        writeScratchPNG(png, filename: "witness-alignment.png")
+
+        guard let dataRep = NSBitmapImageRep(data: png) else {
+            Issue.record("failed to decode the witness alignment fixture")
+            return
+        }
+        let scale = CGFloat(dataRep.pixelsWide) / size.width
+        let fullBand = 0..<dataRep.pixelsHigh
+
+        guard let ghostColumn = leftmostFlickerRedColumn(in: png) else {
+            Issue.record("no Witness ghost pixels found")
+            return
+        }
+        guard let textColumn = firstDarkInkColumn(in: png, xStart: 0, yRange: fullBand) else {
+            Issue.record("no typed-text ink found in the witness alignment fixture")
+            return
+        }
+        let ghostLeftPt = CGFloat(ghostColumn) / scale
+        let textLeftPt = CGFloat(textColumn) / scale
+
+        print("witnessGhostLeadingEdgeAlignsWithTypedTextLeadingEdge: ghostLeft=\(ghostLeftPt)pt textLeft=\(textLeftPt)pt")
+
+        #expect(
+            abs(ghostLeftPt - textLeftPt) <= 1,
+            "expected the Witness ghost's leading edge to align with the typed text's leading edge, measured ghost=\(ghostLeftPt)pt text=\(textLeftPt)pt"
+        )
+    }
 }

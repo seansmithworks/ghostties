@@ -1868,6 +1868,31 @@ struct SessionComposerPalette: View {
         }
     }
 
+    /// R18 fix: the width `newStyleField` actually renders its content at.
+    /// `.zeroChrome`/`.classic` are unchanged (`newStyleField` there is the
+    /// only frame in play — nothing wraps it in additional horizontal
+    /// padding, so `newStyleFieldWidth` alone is already correct).
+    /// `.singleLine` is different: `singleLineComposerCard` wraps the field
+    /// in `singleLineHorizontalPadding` on each side and then re-frames the
+    /// WHOLE padded stack back to `newStyleFieldWidth` (the card's own
+    /// tuned width, e.g. 688pt) so the card itself never grows past that
+    /// value. Framing the field at the FULL `newStyleFieldWidth` on top of
+    /// that padding made the padded stack's ideal width `newStyleFieldWidth
+    /// + 2 * padding`, which the card's fixed-width re-frame then centred
+    /// and clipped — the padding spilled outside the card instead of
+    /// insetting the text (see this commit's message for the pixel
+    /// diagnosis: ~1.5pt of inset measured live against a ~29.9pt intended
+    /// one). Subtracting both paddings here is the ONE inner-content-width
+    /// value that makes the padded stack's ideal width exactly
+    /// `newStyleFieldWidth` again, so the card's own frame stops fighting
+    /// its content.
+    private var newStyleFieldRenderWidth: CGFloat {
+        switch activeStyle {
+        case .zeroChrome, .classic: return newStyleFieldWidth
+        case .singleLine: return newStyleFieldWidth - (2 * singleLineHorizontalPadding)
+        }
+    }
+
     /// Round 10: `.zeroChrome`'s field wraps and grows up to
     /// `ComposerZeroChromeTypography.maxFieldLines` lines — its height is
     /// whichever of `zeroChromeDescriptorHeight`/`zeroChromeFieldTextHeight`
@@ -1935,7 +1960,7 @@ struct SessionComposerPalette: View {
             // (plain SwiftUI `Text` word-wraps by default; no lineLimit
             // is set anywhere on this view) instead of assuming one line —
             // measured here so the anchor math above can react to it.
-            .frame(width: newStyleFieldWidth, alignment: newStyleAlignment.frameAlignment)
+            .frame(width: newStyleFieldRenderWidth, alignment: newStyleAlignment.frameAlignment)
             .fixedSize(horizontal: false, vertical: true)
             .background(
                 GeometryReader { proxy in
@@ -1968,7 +1993,7 @@ struct SessionComposerPalette: View {
             }
             .accessibilityLabel(ComposerQueryField.accessibilityFieldLabel)
         }
-        .frame(width: newStyleFieldWidth, height: newStyleFieldHeight)
+        .frame(width: newStyleFieldRenderWidth, height: newStyleFieldHeight)
         .onChange(of: zeroChromeFieldContentHeight) { newValue in
             guard activeStyle == .zeroChrome else { return }
             zeroChromeFieldHeight.wrappedValue = newValue
@@ -2230,7 +2255,14 @@ struct SessionComposerPalette: View {
                     beatTrigger: witnessBeat,
                     reduceMotion: reduceMotionEnabled
                 )
-                .offset(x: 20, y: -24)
+                // R18 fix: was a hardcoded 20 — now the SAME
+                // `singleLineHorizontalPadding` value the field's own text
+                // is inset by (`newStyleFieldRenderWidth`'s doc comment),
+                // so the ghost's leading edge lines up with the typed
+                // text's leading edge instead of sitting ~10pt off it.
+                // `y: -24` (Witness motion, unrelated to this fix) is
+                // unchanged.
+                .offset(x: singleLineHorizontalPadding, y: -24)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
