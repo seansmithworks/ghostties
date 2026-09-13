@@ -81,14 +81,26 @@ for spec in "${DEMO_PROJECT_SPECS[@]}"; do
     continue
   fi
 
-  echo "    $name: cache miss — cloning $repo @ ${sha:0:7} (depth 50)..."
-  rm -rf "$cache_dir"
-  git clone -q --depth 50 --no-tags "https://github.com/$repo.git" "$cache_dir"
+  if [[ ! -d "$cache_dir/.git" ]]; then
+    echo "    $name: cache miss — cloning $repo @ ${sha:0:7} (depth 50)..."
+    git clone -q --depth 50 --no-tags "https://github.com/$repo.git" "$cache_dir"
+  fi
 
   if ! git -C "$cache_dir" cat-file -e "${sha}^{commit}" 2>/dev/null; then
-    echo "ERROR: pinned sha $sha not found in $repo after clone. The pin in" \
-         "_demo-paths.sh (DEMO_PROJECT_SPECS) may be stale, or $repo's history" \
-         "moved past the 50-commit shallow window." >&2
+    # Pinned sha is older than the default-branch tip's 50-commit shallow
+    # window (e.g. a re-pin to an older, more marketing-suitable commit).
+    # Fetch that one commit directly by sha instead of widening the whole
+    # clone — GitHub allows fetching an arbitrary reachable sha.
+    echo "    $name: pinned sha ${sha:0:7} not in the depth-50 window — fetching it directly..."
+    if ! git -C "$cache_dir" fetch -q --depth 1 origin "$sha" 2>/dev/null; then
+      echo "ERROR: pinned sha $sha not found in $repo, and fetching it directly" \
+           "failed. The pin in _demo-paths.sh (DEMO_PROJECT_SPECS) may be stale." >&2
+      exit 1
+    fi
+  fi
+
+  if ! git -C "$cache_dir" cat-file -e "${sha}^{commit}" 2>/dev/null; then
+    echo "ERROR: pinned sha $sha still not found in $repo after a direct fetch." >&2
     exit 1
   fi
 done

@@ -36,16 +36,26 @@ DEMO_WRAPPER_DIR="$HOME/.ghostties-demo-wrappers"
 # ── Seeded demo projects: name|owner/repo|pinned commit SHA|extra branch (or
 #    empty)|ghost character ──────────────────────────────────────────────────
 # Real, public, cloned repos (pinned 2026-09-13, replacing the prior 10
-# synthetic stub fixtures). Each SHA is that repo's `main` HEAD at pin time —
-# re-pin by updating the SHA here (see scripts/demo/README.md). Order matters:
-# `_stage-demo-sessions.sh` binds its default 4 staged sessions to the first
-# 4 entries (ghostties, riff, surface-fx, colophon); the remaining 3
-# (impeccable-swift, agent-skills, vista-sheet) get the extra-branch slot.
+# synthetic stub fixtures). Order matters: `_stage-demo-sessions.sh` binds
+# its default 4 staged sessions to the first 4 entries (ghostties, riff,
+# surface-fx, colophon); the remaining 3 (impeccable-swift, agent-skills,
+# vista-sheet) get the extra-branch slot.
+#
+# The 4 staged repos are re-pinned (2026-09-13, follow-up) to each repo's
+# most recent substantive feat/fix commit touching source — NOT a merge,
+# docs, backlog, license, chore, or CI commit — since staged agents are
+# prompted to "explain the most recent git commit". `riff`'s original pin
+# already satisfied this; `ghostties`/`surface-fx`/`colophon` did not (their
+# tips were a backlog-doc merge, a license-add, and a backlog note). The
+# 3 non-staged repos keep their original default-branch-HEAD pin, since no
+# agent explains their history. Re-pin by updating the SHA here (see
+# scripts/demo/README.md); each pin's `git show` diff must not contain
+# `/Users/seansmith`, `seansmith@`, `sean@`, or a hostname.
 declare -a DEMO_PROJECT_SPECS=(
-  "ghostties|SeanSmithWorks/ghostties|2ff4136567d3bf3d34e383e4de759bee0e364be2||banshee"
+  "ghostties|SeanSmithWorks/ghostties|05003c07949229d4f25fbfbf6324bd1bc69988b1||banshee"
   "riff|SeanSmithWorks/riff|e39b54fa571457f6603f0e1bae60d8944f7f5b12||clyde"
-  "surface-fx|SeanSmithWorks/surface-fx|11d865cf2c236ad7ba5da7444bd7ffac0e2e51ba||ember"
-  "colophon|SeanSmithWorks/colophon|4257dce4a22be7cd3f47e21bdb48135bb0855fad||haunt"
+  "surface-fx|SeanSmithWorks/surface-fx|9bcf3df97507e744c5b40599b5e541c4d00d7edc||ember"
+  "colophon|SeanSmithWorks/colophon|66b55fee296b9e23f8e6a6020a3da80cb48442e1||haunt"
   "impeccable-swift|SeanSmithWorks/impeccable-swift|ce30d92073addc806c904af8086d0b7d128c20d6|feat/theme-tokens|pinky"
   "agent-skills|SeanSmithWorks/agent-skills|51e1fec66af02a2ef4deb3ca9006d26264901dd4|feat/skill-registry-v2|specter"
   "vista-sheet|SeanSmithWorks/vista-sheet|973cc2f9754380197b18e2c28edb44def8c0adbd|fix/export-precision|wisp"
