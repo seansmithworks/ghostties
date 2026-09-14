@@ -173,7 +173,13 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
   - Done: the automated suite is GREEN on main after #181. Run 8: 1341 test IDs, the run-7 baseline of 1342 minus 2 deletions Sean approved. The 6 failures were load flakes, and all passed on an isolated re-run (36/36).
   - #181 fixed: a macOS 27 hang (a test's unrecognized selector was swallowed by AppKit, and the Swift Testing host stalled); a real DialKit style-switch re-entrancy bug; 10 tests left stale by the popover retarget. It also added `-NSApplicationCrashOnExceptions YES`.
   - Remaining:
-    - [ ] #169 post-merge plan Part 2: 17 red-proof mutations
+    - [x] #169 post-merge plan Part 2: 17 red-proof mutations
+      - All 17 went red (each test catches its bug). A reviewer confirmed every result against its xcresult bundle.
+      - Also red-proved the step3 vacuity row: it was vacuous. It measured only the `.anchored` placeholder, and G-F28 hides the path there by design.
+      - Found: 3 border-pixel tests (plus a 4th assertion) passed or failed with the Mac's auto light/dark switch. The expected color resolved to black in Light (matching nothing) and white in Dark (matching the background). So run 8's green for them was false.
+      - Fixed in PR #183: appearance-independent edge detection, and the step3 test renamed to `anchoredRestStateShowsGenericHintNotPath`. Every check is red-proved under all 4 window × ambient appearance cases.
+      - Run 9 on the #183 head (Light): 1341 IDs. The only changes are the 4 renames. 5 load flakes passed an isolated re-run (35/35).
+      - Evidence: local, gitignored (`macos/build/beta25-artifacts/` in the beta25-suite worktree).
     - [ ] #175 live checks (`docs/testing/sidebar-section-vocabulary-post-merge.md`)
     - [ ] Sean's manual checklist (`docs/testing/beta-25-merge-checklist.md`)
     - [ ] demo test plan
@@ -187,12 +193,19 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
     - [ ] `backlog/migrate-ghostties`: 1 unmerged commit
     - [ ] `Default` worktree/branch: purpose unknown
     - [ ] local-only branches never pushed: `fix/composer-modelb-default-on`, `feat/demo-capture-instance`, `findings/composer-dev-pass-2026-08-20`
+      - `fix/composer-modelb-default-on` and `findings/composer-dev-pass-2026-08-20`: archive tags pushed and local branches deleted 2026-09-14; `findings/…` still exists on origin.
 - [ ] Phase 5: rewrite CHANGELOG [0.1.0-beta.25] entry before any tag — draft PR #179 awaits Sean's review; no tag until Phase 3 is green.
 
 **Found during Beta 25 verification:**
 - [ ] `ComposerZeroChromeStyleTests/singleLineFieldTextIsInsetFromTheCardsLeftEdge()` flaked intermittently during the #181 builder's targeted runs. It passed in full runs 7 and 8. Unverified whether it predates #181.
-- [ ] `SessionComposerSnapshotTests/step3RestStateGhostPathLightAndDark` might be vacuous in the popover. The triage and the #181 builder disagree: triage says it measures only the placeholder; the builder says it checks real ghost opacity. Settle it with a red proof.
+- [x] `SessionComposerSnapshotTests/step3RestStateGhostPathLightAndDark` might be vacuous in the popover. The triage and the #181 builder disagree: triage says it measures only the placeholder; the builder says it checks real ghost opacity. Settle it with a red proof. Settled: the triage was right; fixed in #183.
 - [ ] Model-B mounted test margin: with the fix reverted it measured 43 against a pass bar of 50. Re-check the margin if it flakes.
+- [ ] `ComposerZeroChromeStyleTests` `writeScratchPNG` hardcodes a local Claude scratchpad path and session UUID into this public repo, and 17 call sites write there each suite run. Replace it with a temp-dir path.
+- [ ] Test runs leak UserDefaults suite domains: ~148 `ghostties.composerDebugTuning.test.*` + ~90 `ghostties.composerZeroChrome.test.*`, never removed. Add teardown.
+- [ ] `SessionComposerSnapshotTests` ~L1752–1777 uses a fixed RGB band and renders `.aqua` only. Same risk class as the #183 fix; red-prove it under dark.
+- [ ] `ComposerZeroChromeStyleTests` dark-pixel counts (~L698/862/910) may follow system appearance via the palette scheme lookup (inferred, unverified).
+- [ ] `anchoredRestStateShowsGenericHintNotPath` check (a): the darkAqua peak measured 0.551 against a 0.60 ceiling. A thin margin; re-measure if hint styling changes.
+- [ ] Record `AppleInterfaceStyle` with every full-suite run. Results are only comparable at the same system appearance.
 
 ## 2026-08-31 — Composer variant G session (carried)
 
