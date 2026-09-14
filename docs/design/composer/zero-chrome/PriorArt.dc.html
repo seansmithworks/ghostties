@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 720px; line-height: 1.5; }
+    .finds { display: flex; flex-direction: column; gap: 0; }
+    .find { display: grid; grid-template-columns: 22px 1fr; gap: 12px; padding: 14px 0; border-top: 1px solid #2a2a2a; align-items: start; }
+    .n { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: #5B8DEF; padding-top: 1px; }
+    .body { display: flex; flex-direction: column; gap: 5px; }
+    .h { font-size: 12px; font-weight: 600; color: #f0efed; line-height: 1.4; }
+    .p { font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .p b { color: #f0efed; font-weight: 500; }
+    .src { font-size: 10px; color: #636363; }
+    .blurhd { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #636363; margin-bottom: 8px; }
+    .bcols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .bcell { display: flex; flex-direction: column; gap: 6px; }
+    .bl { font-size: 10px; color: #9a9a9a; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .stage { position: relative; height: 120px; border-radius: 6px; overflow: hidden; background: #2D2D2D; }
+    .bd { position: absolute; inset: 0; padding: 10px 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; line-height: 16px; color: #f0efed; opacity: 0.8; white-space: pre; }
+    .hot { color: #6fcf97; }
+    .warn2 { color: #C97350; }
+    .b6  { position: absolute; inset: 0; backdrop-filter: blur(6px);  -webkit-backdrop-filter: blur(6px); }
+    .b24 { position: absolute; inset: 0; backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+    .b48 { position: absolute; inset: 0; backdrop-filter: blur(48px); -webkit-backdrop-filter: blur(48px); }
+    .txt { position: absolute; left: 0; right: 0; top: 48px; text-align: center; font-size: 14px; color: #f0efed; opacity: 0.65; }
+    .cap { font-size: 10px; color: #636363; line-height: 1.45; }
+    .cap b { color: #9a9a9a; font-weight: 500; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Prior art — what the field actually does</div>
+    <div class="ttl">Nobody ships this. That is worth knowing before you commit, not after.</div>
+    <div class="sub">Four findings from Mobbin's pattern set, Raycast's 2026 rebuild, and the terminal-native tools that solved this problem first.</div>
+  </div>
+
+  <div class="finds">
+    <div class="find"><div class="n">01</div><div class="body">
+      <div class="h">Mobbin studied 120+ command-palette patterns. Not one is chromeless.</div>
+      <div class="p">Every variant they name — keyboard shortcuts, tabs, chips — assumes a card. There is no "borderless" or "minimal surface" variant in the taxonomy at all. That is not a reason to abandon the direction; it means there is no pattern to lean on and every detail is yours to invent. Worth noting too: <b>chips are one of their three named variants</b>, and you already built and rejected that in the Model A rebuild.</div>
+      <div class="src">mobbin.com/glossary/command-palette</div>
+    </div></div>
+
+    <div class="find"><div class="n">02</div><div class="body">
+      <div class="h">Raycast's 2026 rebuild went the other way — and their blur is 8× yours.</div>
+      <div class="p">Raycast v2 redesigned for Liquid Glass: <b>backdrop-filter blur(48px)</b>, 1px border, 8px radius. The nearest incumbent is <em>adding</em> chrome, not removing it. But the number is the useful part — variant 09 proposes 6px. If blur is going to carry the whole boundary job on its own, 6px is not in the right order of magnitude.</div>
+      <div class="src">manual.raycast.com/new-in-v2 · styles.refero.design</div>
+    </div></div>
+
+    <div class="find"><div class="n">03</div><div class="body">
+      <div class="h">Fig put its terminal overlay at the cursor, IDE-style. Not floating centre.</div>
+      <div class="p">The one product that solved "UI over a live terminal" at scale chose <b>adjacency</b> — the popup tracks the cursor position and context, the way an IDE completion does. It never floats over the middle of the scrollback.</div>
+      <div class="src">fig.io/user-manual/autocomplete</div>
+    </div></div>
+
+    <div class="find"><div class="n">04</div><div class="body">
+      <div class="h">The terminal-native tools dodge the problem entirely: they reserve space.</div>
+      <div class="p">vim's command line owns the last row. fzf takes a reserved region or the alternate screen. Emacs' minibuffer grows the bottom. <b>None of them overlap live output — so none of them have a legibility problem to solve.</b> Variant 09 floats over the centre of the scrollback, which is the one configuration none of the prior art picked. See the next board.</div>
+      <div class="src">structural, verified against fzf.vim and vim-floaterm docs</div>
+    </div></div>
+  </div>
+
+  <div>
+    <div class="blurhd">Finding 02, made literal — same terminal, same 65% text</div>
+    <div class="bcols">
+      <div class="bcell"><div class="bl">blur(6px) — variant 09</div>
+        <div class="stage">
+          <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+<span class="warn2">  warn  2 peer deps unmet</span>
+  ready in 1.2s
+$ git push origin HEAD</div>
+          <div class="b6"></div><div class="txt">ghostties &gt; main &gt; claude</div>
+        </div>
+        <div class="cap"><b>Scrollback still legible.</b> Which is the problem — it competes.</div>
+      </div>
+      <div class="bcell"><div class="bl">blur(24px)</div>
+        <div class="stage">
+          <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+<span class="warn2">  warn  2 peer deps unmet</span>
+  ready in 1.2s
+$ git push origin HEAD</div>
+          <div class="b24"></div><div class="txt">ghostties &gt; main &gt; claude</div>
+        </div>
+        <div class="cap"><b>Colour survives, glyphs don't.</b> Reads as atmosphere.</div>
+      </div>
+      <div class="bcell"><div class="bl">blur(48px) — Raycast v2</div>
+        <div class="stage">
+          <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+<span class="warn2">  warn  2 peer deps unmet</span>
+  ready in 1.2s
+$ git push origin HEAD</div>
+          <div class="b48"></div><div class="txt">ghostties &gt; main &gt; claude</div>
+        </div>
+        <div class="cap"><b>A surface, effectively.</b> Honest question: is this still zero-chrome?</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 720px; line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .colhd { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: #636363; }
+    .cell { display: flex; flex-direction: column; gap: 6px; }
+    .stage { position: relative; height: 128px; border-radius: 6px; overflow: hidden; }
+    .stage.dk { background: #2D2D2D; }
+    .stage.lt { background: #FAF7F3; }
+    .bd { position: absolute; inset: 0; padding: 10px 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; line-height: 16px; white-space: pre; opacity: 0.85; }
+    .stage.dk .bd { color: #f0efed; }
+    .stage.lt .bd { color: #1a1a1a; }
+    .hot { color: #6fcf97; }
+    .stage.lt .hot { color: #2d7d46; }
+    .bl { position: absolute; inset: 0; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .floor { position: absolute; left: 0; right: 0; top: 42px; height: 44px; }
+    .stage.dk .floor { background: radial-gradient(ellipse 70% 100% at 50% 50%, rgba(45,45,45,0.92) 0%, rgba(45,45,45,0.55) 55%, rgba(45,45,45,0) 100%); }
+    .stage.lt .floor { background: radial-gradient(ellipse 70% 100% at 50% 50%, rgba(250,247,243,0.94) 0%, rgba(250,247,243,0.6) 55%, rgba(250,247,243,0) 100%); }
+    .txt { position: absolute; left: 0; right: 0; top: 54px; text-align: center; font-size: 15px; }
+    .stage.dk .txt { color: #f0efed; }
+    .stage.lt .txt { color: #1a1a1a; }
+    .o50 { opacity: 0.50; }
+    .o65 { opacity: 0.65; }
+    .cap { font-size: 10px; color: #636363; line-height: 1.45; }
+    .cap b { color: #9a9a9a; font-weight: 500; }
+    .pass { color: #6fcf97; }
+    .fail { color: #FF6B6B; }
+    .verdict { display: flex; gap: 10px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.55; background: #2a2a2a; border-radius: 6px; padding: 14px 16px; }
+    .verdict strong { color: #f0efed; }
+    .bar { width: 2px; align-self: stretch; background: #5B8DEF; border-radius: 1px; flex: none; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Hints — the legibility cost, measured</div>
+    <div class="ttl">Zero-chrome forces the contrast fix that has been deferred twice</div>
+    <div class="sub">The 50% ghost grey is a knowingly-accepted WCAG failure — DESIGN.md records ≈3.0:1 in light mode against the 4.5:1 floor, and notes 65% clears it at 4.74:1. On a card that was a defensible tradeoff. Over live terminal output it stops being defensible, because the background is no longer under our control.</div>
+  </div>
+
+  <div class="grid">
+    <div class="cell"><div class="colhd">50% — as shipped</div>
+      <div class="stage dk">
+        <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+  ready in 1.2s
+$ git push origin HEAD
+  everything up-to-date</div>
+        <div class="bl"></div>
+        <div class="txt o50">ghostties &gt; main &gt; claude</div>
+      </div>
+      <div class="cap"><b class="fail">Loses.</b> Bright build output punches straight through 6px of blur and competes glyph-for-glyph.</div>
+    </div>
+
+    <div class="cell"><div class="colhd">65% — AA-clearing</div>
+      <div class="stage dk">
+        <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+  ready in 1.2s
+$ git push origin HEAD
+  everything up-to-date</div>
+        <div class="bl"></div>
+        <div class="txt o65">ghostties &gt; main &gt; claude</div>
+      </div>
+      <div class="cap"><b>Better, not solved.</b> Readable against dim rows; still contends with the green line.</div>
+    </div>
+
+    <div class="cell"><div class="colhd">65% + local floor</div>
+      <div class="stage dk">
+        <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+  ready in 1.2s
+$ git push origin HEAD
+  everything up-to-date</div>
+        <div class="bl"></div>
+        <div class="floor"></div>
+        <div class="txt o65">ghostties &gt; main &gt; claude</div>
+      </div>
+      <div class="cap"><b class="pass">Holds.</b> A soft radial wash of the canvas colour, following the text block — no edge, no rectangle, no scrim.</div>
+    </div>
+
+    <div class="cell">
+      <div class="stage lt">
+        <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+  ready in 1.2s
+$ git push origin HEAD
+  everything up-to-date</div>
+        <div class="bl"></div>
+        <div class="txt o50">ghostties &gt; main &gt; claude</div>
+      </div>
+      <div class="cap"><b class="fail">Worst case.</b> Light mode at 50% is the measured ≈3.0:1 failure, now with live text under it.</div>
+    </div>
+
+    <div class="cell">
+      <div class="stage lt">
+        <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+  ready in 1.2s
+$ git push origin HEAD
+  everything up-to-date</div>
+        <div class="bl"></div>
+        <div class="txt o65">ghostties &gt; main &gt; claude</div>
+      </div>
+      <div class="cap"><b>4.74:1</b> against a flat canvas — but the canvas is not flat here.</div>
+    </div>
+
+    <div class="cell">
+      <div class="stage lt">
+        <div class="bd">$ npm run build
+<span class="hot">  ✓ compiled 1284 modules</span>
+  ready in 1.2s
+$ git push origin HEAD
+  everything up-to-date</div>
+        <div class="bl"></div>
+        <div class="floor"></div>
+        <div class="txt o65">ghostties &gt; main &gt; claude</div>
+      </div>
+      <div class="cap"><b class="pass">Holds.</b> Same wash, canvas colour swapped. This is the recommended pair.</div>
+    </div>
+  </div>
+
+  <div class="verdict"><div class="bar"></div><div><strong>Is the local floor still "zero-chrome"?</strong> That is the question this direction turns on, and it is yours. It has no edge, no radius, no shadow and no fixed bounds — it is a gradient that follows text. But it is a surface, and if the answer is that any surface disqualifies the direction, then zero-chrome ships with a known contrast failure over uncontrolled backgrounds. Both answers are legitimate; only one of them is currently written down.</div></div>
+</div>
+</x-dc>
+</body>
+</html>

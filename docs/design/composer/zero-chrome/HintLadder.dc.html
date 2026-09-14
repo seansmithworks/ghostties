@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 700px; line-height: 1.5; }
+    .ladder { display: flex; flex-direction: column; gap: 12px; }
+    .rung { display: grid; grid-template-columns: 84px 300px minmax(0, 1fr); gap: 16px; align-items: start; padding: 12px 0; border-top: 1px solid #2a2a2a; }
+    .when { font-size: 11px; font-weight: 500; color: #5B8DEF; line-height: 1.4; }
+    .when em { display: block; font-style: normal; color: #9a9a9a; font-weight: 400; margin-top: 2px; }
+    .demo { background: #2D2D2D; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-height: 34px; justify-content: center; }
+    .q { font-size: 15px; color: #f0efed; display: flex; align-items: center; }
+    .g50 { color: #f0efed; opacity: 0.50; }
+    .g65 { color: #f0efed; opacity: 0.65; }
+    .caret { display: inline-block; width: 1.5px; height: 17px; background: #f0efed; }
+    .r { font-size: 13px; font-weight: 500; color: #f0efed; opacity: 0.55; }
+    .r.on { opacity: 1; color: #5B8DEF; }
+    .keys { display: flex; gap: 14px; font-size: 11px; color: #f0efed; opacity: 0.35; }
+    .err { font-size: 11px; color: #FF6B6B; }
+    .exp { font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .exp strong { color: #f0efed; font-weight: 500; }
+    .tag { display: inline-block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; margin-bottom: 6px; }
+    .ships { background: #1f3a2a; color: #6fcf97; }
+    .new { background: #1f2f4a; color: #5B8DEF; }
+    .risk { background: #3a2a1f; color: #C97350; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Hints — the affordance ladder</div>
+    <div class="ttl">Four moments teach the whole grammar. Three of them already ship.</div>
+    <div class="sub">Zero-chrome does not need new teaching surfaces — it needs the existing ones to stop being decoration and start being load-bearing. Only rung 2 has a genuine hole, and it was opened by PR #155, not by this direction.</div>
+  </div>
+  <div class="ladder">
+
+    <div class="rung">
+      <div class="when">t = 0<em>empty, focused</em></div>
+      <div class="demo">
+        <div class="q"><span class="caret"></span><span class="g50">ghostties &gt; main &gt; claude</span></div>
+      </div>
+      <div class="exp"><span class="tag ships">Ships today</span><br><strong>The ghost placeholder is the best hint in the product.</strong> It renders the exact path Return would commit — sourced from the same computation a commit reads, so it can never name a destination Return would not launch. It teaches the grammar by demonstrating it, with zero instructional copy. Keep it untouched.</div>
+    </div>
+
+    <div class="rung">
+      <div class="when">first keystroke<em>— or ↓</em></div>
+      <div class="demo">
+        <div class="q">ghos<span class="g50">ties</span><span class="caret"></span></div>
+        <div class="r on">ghostties</div>
+        <div class="r">ghostties-web</div>
+      </div>
+      <div class="exp"><span class="tag risk">Real hole</span><br><strong>Type-to-reveal removes the last browse path.</strong> PR #155 deleted the project and branch picker controls; the results list is now the only mouse entry point into browsing. If rows appear only while typing, a user who does not know what to type has nothing to look at.<br><br>Fix, and it is small: <strong>↓ reveals the list too.</strong> Arrow-down on an empty field shows the lanes without committing to a query. Keeps rest state clean, keeps discovery alive.</div>
+    </div>
+
+    <div class="rung">
+      <div class="when">first runs<em>decays away</em></div>
+      <div class="demo">
+        <div class="q"><span class="caret"></span><span class="g50">ghostties &gt; main &gt; claude</span></div>
+        <div class="keys"><span>⏎ launch</span><span>⇥ complete</span><span>&gt; branch</span><span>esc dismiss</span></div>
+      </div>
+      <div class="exp"><span class="tag new">Proposed</span><br><strong>A key line that expires.</strong> One 11pt row at 35%, shown on the first few summons and faded permanently after ~5 successful launches. It is not chrome because it does not persist — it is onboarding that removes itself. This is the only new element this direction adds, and it exists purely to cover the moment before the ghost placeholder has taught anything.</div>
+    </div>
+
+    <div class="rung">
+      <div class="when">on failure<em>any time</em></div>
+      <div class="demo">
+        <div class="q">ghostties &gt; mian<span class="caret"></span></div>
+        <div class="err">branch "mian" not found</div>
+      </div>
+      <div class="exp"><span class="tag ships">Ships today</span><br><strong>The status strip stays exactly as it is.</strong> One occupant, rendered only when non-nil, red. Everything else in this direction gets quieter; this does not. Over a live terminal a quiet failure is invisible.</div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

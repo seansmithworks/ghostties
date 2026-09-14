@@ -1,0 +1,40 @@
+You are an adversarial plan reviewer. Your ONLY job is to refute the plan below. Default to skepticism: assume the plan is flawed and prove how. Do not be agreeable, do not summarize, do not compliment.
+
+You have read access to the repository at /Users/seansmith/Code/ghostties/.claude/worktrees/session-12 (target ref: origin/main @ 89e6dfb945e2d2a3622268adb6328555f574c8f5). READ THE ACTUAL FILES. Do not take the plan's description of the codebase on faith, including its description of anything the planner authored. Verify its claims and cite path:line when you attack one.
+
+ORIGINAL REQUEST (verbatim):
+Sean, 2026-08-26: "I had asked about having basically the thread status in the sidebar. more than just the icon, but like if you have to do, how do you see that what is done and not done? If the thread has an action for you to take, how do we display that action? And so this should go apply into the project view, but largely the session view. session view would be the priority."
+Then, after reviewing the spec and settling six decisions: "lets make a /adversarial-plan ... and pick up building in a clean thread."
+Task given to the planner: "Build the session-row status vocabulary from docs/plans/session-row-status-spec.html — all six decisions settled."
+
+KEY RESEARCH FINDINGS the plan rests on:
+- Seven indicator states + priority ordering: `macos/Sources/Features/Ghostties/Models/AgentSession.swift:175-195`. Shipped colour map in two identical places: `RecentsRowView.swift:120-128` and `WorkspaceStore.swift:1060-1067`; `needsAttention` = `WorkspaceLayout.statusNeedsDecisionGold` `#FFC400` (`WorkspaceLayout.swift:178`), `waiting` = `#5B8DEF` (`:170`). The spec mock uses terracotta, which `WorkspaceLayout.swift:155-158` says is NOT a status colour.
+- `AgentSession` has no `pid`/`sessionId` (`AgentSession.swift:10-51`). Join route is the launcher UUID in argv via `~/.ghostties/cache/launchers/<uuid>.sh`, written only when `template.launchBanner != nil` (`SessionCoordinator.swift:225`), deleted at teardown (`:997-1000`) plus a 24h sweep (`:1007-1025`). 4 scripts exist vs 10 live `~/.claude/sessions/*.json`.
+- `~/.claude/sessions/<pid>.json` observed `status` values across all 10 live files: `idle` and `busy` only. No field indicates a permission prompt vs a freeform question. Keys include `messagingSocketPath`, `peerProtocol`, `peerFeatures: ["notify_idle","artifact_yield"]`.
+- `~/.claude/todos/` newest non-empty file 2026-02-02, nothing modified since 2026-08-20. `~/.claude/tasks/<sessionId>/<n>.json` is newer (27 dirs in 2026-08) with keys `activeForm, blockedBy, blocks, description, id, subject, status`. 0 of 10 live sessionIds have data in either.
+- Two indicator caches: `WorkspaceStore.globalIndicatorStates` and `SessionCoordinator.cachedIndicatorStates` (`:135`), published via `Perf.publishIfChanged` (`PerfSignpost.swift:25-38`) from the 1Hz tick `performActivityTick()` (`SessionCoordinator.swift:1279-1320`). `indicatorState(for:)` `.running` branch at `:1345-1375`; polarity fix shipped, silent agent sessions return `.idle` (`:1362-1371`).
+- `SessionCoordinator` is per-window (`:19-20`, built at `WorkspaceViewContainer.swift:453`). `isRunning(id:)` at `:605-606` is per-instance.
+- Surface input: `sendText` `Ghostty.Surface.swift:41`, `sendKeyEvent` `:59`; `sessionTrees` is `SplitTree<Ghostty.SurfaceView>` (`SessionCoordinator.swift:39`); `SurfaceView.surfaceModel` at `SurfaceView_AppKit.swift:180`. `macos/Sources/Ghostty/` is the upstream seam, consume only.
+- Rows: `RecentsRowView` fixed `.frame(height: 36)`, two-line VStack name over `projectName` (`RecentsRowView.swift:59-88,104`). Projects-tab `SessionRow` fixed height 28, single line, trailing ghost (`SessionDetailView.swift:32-75`). `ProjectDisclosureRow` header `.frame(height: 32)` (`:339-359`); `projectHeaderIndicator` reads `coordinator.indicatorState(for:)` (`:406-410`) while `projectGhostColor` reads the store (`:332`, `WorkspaceStore.swift:1049-1073`).
+- Test seams: `seedRunningSessionForTesting` (`SessionCoordinator.swift:1537`), `runActivityTickForTesting` (`:1544`), pattern in `macos/Tests/Ghostties/SessionCoordinatorIndicatorCacheTests.swift:115-158`. Deployment target 13.0; `Backport.onKeyPress` is a no-op below 14.
+- Repo rules: never `killall ghostty`; CLI `xcodebuild` needs `ONLY_ACTIVE_ARCH=YES ARCHS=arm64 -derivedDataPath macos/build`; UI fixes here have regressed each other six-for-six, so layout claims need pixels.
+
+STATED ASSUMPTIONS:
+The planner's numbered ASSUMPTIONS 1 through 10 are in the draft under "## ASSUMPTIONS". Read them there. Headline: (1) sessions `status` may have values beyond idle/busy, unverified; a binary scan found a separate fleet vocabulary `worker_status` running/requires_action/idle which is NOT evidence about the local file; (2) the peer socket exposes richer state, unverified; (3) `~/.claude/tasks/` is the current TodoWrite destination, inferred; (4) `KERN_PROCARGS2` works under the app's sandbox/hardened-runtime entitlements, entitlements NOT read; (5) `SplitTree.root` reaches one leaf, traversal not read; (6) suite count not measured; (7) `AgentTemplate.swift` not opened; (8) other readers of `globalIndicatorStates` not swept; (9) `DESIGN.md` not opened; (10) `.key` files not opened.
+
+DRAFT PLAN TO REFUTE:
+The full draft is on disk at `/Users/seansmith/Code/ghostties/.claude/worktrees/session-12/docs/plans/session-row-status/draft-plan.md` (132 lines). Read it in full before writing a single finding. The spec it plans from is `docs/plans/session-row-status-spec.html`. Its five phases: (1) close the launchBanner gate, port a `KERN_PROCARGS2` ancestor walk, read `~/.claude/sessions/` via `TaskFileWatcher`, feed the read into `indicatorState(for:)`'s `.running` branch so both caches stay coherent, mapping busy→processing and idle→idle only; (2) screenshot pass + fix the spec's colours; (3) breakdown line, blocked until a live task store shows non-zero, strawman replaces `projectName` on the Sessions row; (4) project "N need you" as a trailing gold badge read from the store, with a true-size legibility gate and fallback to a plain number; (5) inline Approve specified but NOT scheduled because no prompt-shape source exists, only "Answer in terminal" ships.
+
+Return numbered findings (F1, F2, ...) under these exact headings:
+
+1. WRONG. Claims, steps, or assumptions that are incorrect, risky, or will break. For each: what is wrong, the evidence, and the consequence if it ships as-is.
+2. MISSING. Edge cases, dependencies, failure modes, constraints, surfaces, or steps that are absent. For each: what is missing and why it matters.
+3. OVERVALUED / GOLD-PLATED. Parts that cost more than they are worth or buy scope the task does not need. For each: what to cut and why.
+4. EVIDENCE. Attack how the plan gathered its facts, not only its logic. Which claims were never verified against a file? Which measurement could not have seen the thing it claims to have checked? Which stale source (memory file, summary, comment, prior report) is being trusted?
+5. WEAKEST ASSUMPTION. The single load-bearing assumption most likely to be false, and what happens to the plan if it is.
+
+Rules:
+- Be specific. Cite the exact step or claim you are attacking. Vague criticism is useless.
+- A few load-bearing kills beat a long list of nitpicks.
+- A section may end "no material findings", but only after a real attempt to break it, never as a default.
+- End with VERDICT: ship-as-is / revise / rethink, plus the single most important change.
