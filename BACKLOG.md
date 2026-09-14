@@ -166,12 +166,33 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
   reconcile when (J) lands. Picked D — type glyph replaces ghost in the row icon slot
   (Sean 2026-09-13, "for the moment"). This commit.
 ## Beta 25 merge (dispatched 2026-09-14, merge coordinator thread)
-- [ ] Phase 0: carry retired-branch backlog lines (this PR) · ignored-file survey, unique worktree content copied to ~/Code/_archive · real-data scan of wave-1 files
-- [ ] Phase 1: merge #175 → #169 → feat/demo-open-source-fixtures → #170 (each: re-verify head sha, BACKLOG union, CI build green before merge)
-- [ ] Phase 2: docs branches docs/session-row-status-spec (add "superseded by pattern D, 2026-09-13" note) + docs/design-system-site-plan. No website branches, per Sean.
-- [ ] Phase 3: tests in a fresh worktree at merged main: #169 post-merge test plan + #175 post-merge doc + demo test plan · manual checklist docs/testing/beta-25-merge-checklist.md
-- [ ] Phase 4: cleanup: archive tags pushed first; never delete upstream-main, pr-assets/sidebar-section-vocabulary, website branches or worktrees, feat/ghostties-animation, claude/happy-morse-62ea22; remove no worktree a running process uses
-- [ ] Phase 5: rewrite CHANGELOG [0.1.0-beta.25] entry before any tag
+- [x] Phase 0: carry retired-branch backlog lines (this PR) · ignored-file survey, unique worktree content copied to ~/Code/_archive · real-data scan of wave-1 files. Outcome: retired-branch lines carried (#176, landed via #180); unique worktree content archived to `~/Code/_archive/ghostties-worktrees-2026-09-14`.
+- [x] Phase 1: merge #175 → #169 → feat/demo-open-source-fixtures → #170 (each: re-verify head sha, BACKLOG union, CI build green before merge). Outcome: merged #175 sidebar, #169 composer, #177 demo fixtures; #170 closed, its content landed via #180.
+- [x] Phase 2: docs branches docs/session-row-status-spec (add "superseded by pattern D, 2026-09-13" note) + docs/design-system-site-plan. No website branches, per Sean. Outcome: both docs branches landed via the #180 integration branch.
+- [ ] Phase 3 (PARTIAL): tests in a fresh worktree at merged main: #169 post-merge test plan + #175 post-merge doc + demo test plan · manual checklist docs/testing/beta-25-merge-checklist.md
+  - Done: the automated suite is GREEN on main after #181. Run 8: 1341 test IDs, the run-7 baseline of 1342 minus 2 deletions Sean approved. The 6 failures were load flakes, and all passed on an isolated re-run (36/36).
+  - #181 fixed: a macOS 27 hang (a test's unrecognized selector was swallowed by AppKit, and the Swift Testing host stalled); a real DialKit style-switch re-entrancy bug; 10 tests left stale by the popover retarget. It also added `-NSApplicationCrashOnExceptions YES`.
+  - Remaining:
+    - [ ] #169 post-merge plan Part 2: 17 red-proof mutations
+    - [ ] #175 live checks (`docs/testing/sidebar-section-vocabulary-post-merge.md`)
+    - [ ] Sean's manual checklist (`docs/testing/beta-25-merge-checklist.md`)
+    - [ ] demo test plan
+- [x] Phase 4: cleanup: archive tags pushed first; never delete upstream-main, pr-assets/sidebar-section-vocabulary, website branches or worktrees, feat/ghostties-animation, claude/happy-morse-62ea22; remove no worktree a running process uses. Outcome: cleanup 2026-09-14. 78 `archive/<branch>` tags on origin (restore with `git branch <name> archive/<name>`), 76 local and 34 origin branches deleted, 10 worktrees removed.
+  - Held for Sean:
+    - [ ] worktrees `composer-g`, `sidebar-vocab`, `session-5` (the stale `main` checkout), each holding only untracked `vendor/cef`
+    - [ ] `agent-abdc9d9bfba62cfd5`: one untracked test file
+    - [ ] `session-task-progress`: real uncommitted edits on `feat/session-task-progress`, so don't discard
+    - [ ] `demo-rig` and `session-7`: had live shells
+    - [ ] branch `feat/composer-create-worktree-launch`: merged and tagged, but local delete was blocked
+    - [ ] `backlog/migrate-ghostties`: 1 unmerged commit
+    - [ ] `Default` worktree/branch: purpose unknown
+    - [ ] local-only branches never pushed: `fix/composer-modelb-default-on`, `feat/demo-capture-instance`, `findings/composer-dev-pass-2026-08-20`
+- [ ] Phase 5: rewrite CHANGELOG [0.1.0-beta.25] entry before any tag — draft PR #179 awaits Sean's review; no tag until Phase 3 is green.
+
+**Found during Beta 25 verification:**
+- [ ] `ComposerZeroChromeStyleTests/singleLineFieldTextIsInsetFromTheCardsLeftEdge()` flaked intermittently during the #181 builder's targeted runs. It passed in full runs 7 and 8. Unverified whether it predates #181.
+- [ ] `SessionComposerSnapshotTests/step3RestStateGhostPathLightAndDark` might be vacuous in the popover. The triage and the #181 builder disagree: triage says it measures only the placeholder; the builder says it checks real ghost opacity. Settle it with a red proof.
+- [ ] Model-B mounted test margin: with the fix reverted it measured 43 against a pass bar of 50. Re-check the margin if it flakes.
 
 ## 2026-08-31 — Composer variant G session (carried)
 
@@ -199,6 +220,8 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
   the ghost stays blank until the next keystroke. Fix direction: make the test drive
   `applyStyles` deterministically with a bounded retry, or assert against
   `textView.currentGhostText` (set before every bail-out) rather than pixels.
+  #181 took the bounded-retry direction (up to 3 fresh renders, `.centered` single-line); the
+  suspected user-visible blank-ghost symptom in the app is still unverified.
 - [ ] The unresolved-branch error says `use the "Create worktree" suggestion below`, but the
   status strip is the last child of `composerCard`'s VStack while `commandOptions`' create row
   is the fourth section of the results table — always **above** the message, never below. And
