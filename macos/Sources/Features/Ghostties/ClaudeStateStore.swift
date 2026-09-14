@@ -8,6 +8,17 @@ struct ClaudeHookWrapper: Decodable {
     let ghosttiesSessionId: String
     let updatedAt: Double
     let hook: ClaudeHookPayload
+
+    /// `"claude"` or `"codex"` — written by `ghostties-status.sh` from its
+    /// invocation argument (`ghostties-status.sh codex` for a Codex hook,
+    /// unset/absent for Claude). Absent on every file written before this
+    /// field existed, which is always a Claude session.
+    let agent: String?
+
+    /// `$GHOSTTIES_LAUNCHER` at spawn time (e.g. `cco`, `ccob`), written by
+    /// `ghostties-status.sh`. Absent for a shell-hosted `claude` with no
+    /// wrapper, or a state file predating this field.
+    let launcher: String?
 }
 
 /// The union of hook payload keys `ClaudeStateStore.derive(from:)` cares
@@ -22,6 +33,11 @@ struct ClaudeHookPayload: Decodable {
     let notificationType: String?
     let sessionId: String?
     let cwd: String?
+    /// The agent CLI's own transcript/rollout file for this conversation.
+    /// Claude Code always includes it; Codex's hook payload includes it too
+    /// (`gate-evidence.md`/spike 2026-09-13). Used by `AgentResume` to
+    /// gate a Claude resume on the transcript still existing.
+    let transcriptPath: String?
 
     enum CodingKeys: String, CodingKey {
         case hookEventName = "hook_event_name"
@@ -29,6 +45,7 @@ struct ClaudeHookPayload: Decodable {
         case notificationType = "notification_type"
         case sessionId = "session_id"
         case cwd
+        case transcriptPath = "transcript_path"
     }
 }
 
@@ -221,9 +238,17 @@ final class ClaudeStateStore {
             let name = url.lastPathComponent
             guard name.hasSuffix(".json"), !name.hasSuffix(".todos.json") else { continue }
             let stem = String(name.dropLast(".json".count))
-            guard UUID(uuidString: stem) != nil else { continue }
+            guard let ghosttiesSessionId = UUID(uuidString: stem) else { continue }
             guard let data = try? Data(contentsOf: url) else { continue }
             guard let wrapper = try? JSONDecoder().decode(ClaudeHookWrapper.self, from: data) else { continue }
+
+            // Persist the resume record BEFORE `derive`'s event filtering —
+            // every event carries the agent's own session id, and a resume
+            // record must survive event kinds `derive` doesn't act on (and
+            // `Stop`, which `derive` keeps but which deletes this same file
+            // via `removeState(for:)` afterward). See `AgentResume`.
+            persistResumeIfPresent(ghosttiesSessionId: ghosttiesSessionId, wrapper: wrapper)
+
             guard let state = Self.derive(from: wrapper) else { continue }
             newStates[state.ghosttiesSessionId] = state
         }
@@ -259,6 +284,32 @@ final class ClaudeStateStore {
                 attributes: [.posixPermissions: 0o700]
             )
         }
+    }
+
+    // MARK: - Resume record (writes to WorkspaceStore, not `states`)
+
+    /// Build an `AgentResume` from `wrapper` and hand it to
+    /// `WorkspaceStore.updateResume(id:resume:)` (or the test seam), unless
+    /// the hook payload carries no session id to resume. `updateResume`
+    /// itself is the no-op guard for "replace only when it changed" — this
+    /// method always calls it, on every refresh, for every file.
+    private func persistResumeIfPresent(ghosttiesSessionId: UUID, wrapper: ClaudeHookWrapper) {
+        guard let claudeSessionId = wrapper.hook.sessionId, !claudeSessionId.isEmpty else { return }
+        let agent = AgentResume.Agent(rawValue: wrapper.agent ?? "claude") ?? .claude
+        let resume = AgentResume(
+            agent: agent,
+            sessionId: claudeSessionId,
+            transcriptPath: wrapper.hook.transcriptPath,
+            cwd: wrapper.hook.cwd,
+            launcher: wrapper.launcher
+        )
+#if DEBUG
+        if let resumeWriterForTesting {
+            resumeWriterForTesting(ghosttiesSessionId, resume)
+            return
+        }
+#endif
+        WorkspaceStore.shared.updateResume(id: ghosttiesSessionId, resume: resume)
     }
 
     // MARK: - Pure mapping (no filesystem — testable directly)
@@ -308,7 +359,13 @@ final class ClaudeStateStore {
         )
     }
 
+    /// Test-only override for where `refresh()` persists a resume record,
+    /// so tests never touch `WorkspaceStore.shared` / the real
+    /// `workspace.json`. nil (production behavior — write to
+    /// `WorkspaceStore.shared`) outside DEBUG builds and by default.
 #if DEBUG
+    var resumeWriterForTesting: ((UUID, AgentResume) -> Void)?
+
     /// Test-only: force a synchronous refresh from `directoryURL`, bypassing
     /// the watcher's 150ms debounce. Never used in production.
     func refreshForTesting() {

@@ -117,8 +117,10 @@ enum CaptureFixture {
         FixtureSession(name: "Claude Code 2", project: "switchboard", ghost: .polter, state: .waiting, hoursAgo: 0.05),
         FixtureSession(name: "Claude Code 1", project: "switchboard", ghost: .wraith, state: .waiting, hoursAgo: 0.07),
         FixtureSession(name: "Claude Code 1", project: "fieldwork", ghost: .shade, state: .waiting, hoursAgo: 0.1),
+        FixtureSession(name: "Claude Code 6", project: "atlas-api", ghost: .hex, state: .needsAttention, hoursAgo: 0.03),
         FixtureSession(name: "Claude Code 5", project: "pendulum", ghost: .spike, state: .inactive, hoursAgo: 2),
         FixtureSession(name: "docs pass", project: "silo", ghost: .drift, state: .inactive, hoursAgo: 24),
+        FixtureSession(name: "build fix", project: "trove", ghost: .chill, state: .error, hoursAgo: 48),
         FixtureSession(name: "release notes", project: "trove", ghost: .clyde, state: .inactive, hoursAgo: 72),
         FixtureSession(name: "icon pass", project: "wren", ghost: .pinky, state: .inactive, hoursAgo: 168),
     ]
@@ -142,6 +144,17 @@ enum CaptureFixture {
     /// states — indicator state is separate, ephemeral, non-persisted
     /// per-window state, so it can't be baked into the `AgentSession`
     /// records above and has to be pushed in after construction.
+    ///
+    /// `SessionBucket.membership` (the Active/Inactive/Archive rule, see
+    /// `git show 1c0f78b2b`) keys off `SessionStatus.isAlive`, NOT indicator
+    /// state — so a fixture session also needs a `SessionStatus` pushed in,
+    /// or every session lands in Archive regardless of indicator state. The
+    /// status reported mirrors what the real app would set for that
+    /// indicator state, so the fixture honors the rule rather than
+    /// special-casing it: `.error` reports a non-alive status (a real error
+    /// means the process already exited) and lands wherever the rule sends
+    /// a non-alive session; every other non-`.inactive` state reports
+    /// `.running` (a real open terminal), landing in Active.
     @MainActor
     static func makeStore() -> WorkspaceStore {
         let store = WorkspaceStore(
@@ -152,6 +165,14 @@ enum CaptureFixture {
         )
         for (fs, session) in zip(fixtureSessions, sessions) {
             store.updateIndicatorState(id: session.id, state: fs.state)
+            switch fs.state {
+            case .inactive:
+                break
+            case .error:
+                store.updateSessionStatus(id: session.id, status: .error(exitCode: 1))
+            default:
+                store.updateSessionStatus(id: session.id, status: .running)
+            }
         }
         return store
     }

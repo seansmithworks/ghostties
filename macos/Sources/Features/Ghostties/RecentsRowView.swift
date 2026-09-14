@@ -24,6 +24,11 @@ struct RecentsRowView: View, Equatable {
     let session: AgentSession
     let projectName: String
     let indicatorState: SessionIndicatorState
+    /// True while this session's Codex hook has never reported and the grace
+    /// period has elapsed — see `SessionCoordinator.codexHookUnconfirmed(for:)`.
+    /// Replaces the project-name subtitle with an explanatory hint; false is
+    /// the default so every other call site is unaffected.
+    var hookUnconfirmed: Bool = false
     let isActive: Bool
     var isEditing: Bool = false
     @Binding var editingName: String
@@ -43,15 +48,17 @@ struct RecentsRowView: View, Equatable {
         lhs.session == rhs.session
             && lhs.projectName == rhs.projectName
             && lhs.indicatorState == rhs.indicatorState
+            && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
     }
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Per-session ghost character, tinted by status — same color mapping
-            // as MenuBarDropdownView.
-            GhostCharacterView(character: session.resolvedGhostCharacter, color: dotColor)
+            // Per-session status glyph — pattern D, "type is the icon"
+            // (BACKLOG J). Replaces the ghost as the status signal in this
+            // slot; see SessionStatusGlyph.
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind)
                 .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
                 .frame(width: WorkspaceLayout.sidebarIconColumnWidth, alignment: .center)
 
@@ -81,7 +88,7 @@ struct RecentsRowView: View, Equatable {
                         .lineLimit(1)
                 }
 
-                Text(projectName)
+                Text(hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName)
                     .font(.system(size: 10))
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
@@ -114,20 +121,6 @@ struct RecentsRowView: View, Equatable {
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
-    // MARK: - Dot Color
-
-    private var dotColor: Color {
-        switch indicatorState {
-        case .error:          return Color(.systemRed)
-        case .needsAttention: return WorkspaceLayout.statusNeedsDecisionGold
-        case .waiting:        return WorkspaceLayout.statusYourTurnBlue
-        case .longRunning:    return WorkspaceLayout.statusLongRunningOrange
-        case .processing:     return Color(.systemGreen)
-        case .idle:           return Color.primary.opacity(0.30)
-        case .inactive:       return Color.primary.opacity(0.12)
-        }
-    }
-
     // MARK: - Row Background
 
     private var rowBackground: some View {
@@ -150,7 +143,12 @@ struct RecentsRowView: View, Equatable {
     // MARK: - Accessibility
 
     private var accessibilityLabel: String {
-        var parts = [session.name, "in \(projectName)"]
+        // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
+        // renders from — this row previously stated no status at all.
+        var parts = [session.name, "in \(projectName)", indicatorState.statusGlyphKind.spokenStatus]
+        if hookUnconfirmed {
+            parts.append("Approve the Ghostties hook in Codex")
+        }
         if let ts = session.displayTimestamp {
             // "last output" — not a bare relative token — so a screen reader
             // has a noun for what this measures. Browsing (focus/selection)
