@@ -1,5 +1,7 @@
 # Session row status: implementation plan
 
+> Superseded 2026-09-13: row status visual is now pattern D (type glyph), shipped in PR #175. Kept for history.
+
 Re-draft after an adversarial gate returned `rethink` twice. The previous draft's foundation (a launcher-UUID argv join plus `~/.claude/sessions/<pid>.json`) is dead and is not patched here. Target ref `origin/main` @ `89e6dfb945e2d2a3622268adb6328555f574c8f5`; every `macos/` citation was read from that object store via `git show`, and every line number is an `origin/main` line number. Origin `SeanSmithWorks/ghostties` only, never upstream.
 
 ## 1. The plan in one screen

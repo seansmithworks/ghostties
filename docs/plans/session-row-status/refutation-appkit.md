@@ -1,5 +1,7 @@
 # Refutation — session-row-status draft plan (AppKit / macOS-systems lens)
 
+> Superseded 2026-09-13: row status visual is now pattern D (type glyph), shipped in PR #175. Kept for history.
+
 Target ref `origin/main` @ `89e6dfb945e2d2a3622268adb6328555f574c8f5`. All `macos/` citations read from the `origin/main` object store. Live-machine measurements taken 2026-08-26 with Ghostties.app running as pid 1288.
 
 ---

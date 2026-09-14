@@ -1,5 +1,7 @@
 # Refutation: session-row-status draft plan
 
+> Superseded 2026-09-13: row status visual is now pattern D (type glyph), shipped in PR #175. Kept for history.
+
 Target: `origin/main` @ `89e6dfb945e2d2a3622268adb6328555f574c8f5`. Draft: `docs/plans/session-row-status/draft-plan.md`. All `macos/`, `src/`, `include/` citations read via `git show origin/main:<path>`. Live data under `~/.claude/` and `~/.ghostties/` cited by field name and count only. Observed = I ran it; inferred = marked.
 
 ## 1. WRONG

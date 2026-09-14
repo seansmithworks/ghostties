@@ -1,5 +1,7 @@
 # Findings ledger: session-row-status
 
+> Superseded 2026-09-13: row status visual is now pattern D (type glyph), shipped in PR #175. Kept for history.
+
 51 rows: 28 from the generalist refutation (`refutation.md`, G-F1 to G-F28, verdict rethink), 22 from the AppKit/macOS-systems refutation (`refutation-appkit.md`, A-F1 to A-F22, verdict rethink), plus one row for the change both refuters named as their single most important. Neither refuter was the drafter. Evidence unedited on disk.
 
 **"Superseded"** means the finding is about the dead join (launcher-UUID argv, or `~/.claude/sessions/<pid>.json`) and the new foundation makes it moot, not that it was wrong. Those findings were correct; the thing they were correct about no longer exists in the plan.

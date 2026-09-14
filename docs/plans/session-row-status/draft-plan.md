@@ -1,5 +1,7 @@
 # Session row status: implementation plan (draft)
 
+> Superseded 2026-09-13: row status visual is now pattern D (type glyph), shipped in PR #175. Kept for history.
+
 Branch from `origin/main` @ `89e6dfb945e2d2a3622268adb6328555f574c8f5`. PR #138 is merged (it is that SHA's merge commit), so there is nothing to sequence around. This worktree's branch `docs/session-row-status-spec` is 60 behind / 3 ahead of that ref; every source citation below was read from the `origin/main` object store, not from the checkout.
 
 ## Three findings that hit the spec before any code
