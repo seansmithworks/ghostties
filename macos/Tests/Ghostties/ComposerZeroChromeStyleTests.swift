@@ -179,14 +179,20 @@ struct ComposerZeroChromeStyleTests {
         .environmentObject(SessionCoordinator())
     }
 
-    private func renderPNG<Content: View>(_ content: Content, size: NSSize) -> Data? {
+    /// `appearance` names the WINDOW's own appearance — independent of
+    /// whichever appearance is ambient (`NSAppearance.current`) when this
+    /// is called. `reference_pixel-tests-follow-system-dark-mode`: pinning
+    /// the window alone does not pin what SwiftUI resolves colors against,
+    /// which is why callers also wrap the render in
+    /// `NSAppearance(named:).performAsCurrentDrawingAppearance`.
+    private func renderPNG<Content: View>(_ content: Content, size: NSSize, appearance: NSAppearance.Name = .aqua) -> Data? {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
-        window.appearance = NSAppearance(named: .aqua)
+        window.appearance = NSAppearance(named: appearance)
         window.isOpaque = false
         window.backgroundColor = .clear
 
@@ -216,25 +222,96 @@ struct ComposerZeroChromeStyleTests {
         try? data.write(to: dir.appendingPathComponent(filename))
     }
 
-    /// Counts pixels matching the popover/single-line card's border-stroke
-    /// color (`.tertiaryLabelColor` at 0.75 opacity) — present on the
-    /// popover and single-line cards, must be ~0 on zero-chrome (no card,
-    /// no border, brief §2).
-    private func borderStrokePixelCount(in data: Data) -> Int {
+    /// `windowAppearance`/`ambientAppearance` test arguments name an
+    /// `NSAppearance.Name` as a plain string (`"aqua"`/`"darkAqua"`) —
+    /// see `border-helper-fix-design.md` §3 for why raw strings, not the
+    /// type itself, are the test-argument shape here.
+    private func appearanceName(_ key: String) -> NSAppearance.Name {
+        key == "darkAqua" ? .darkAqua : .aqua
+    }
+
+    /// Structural border-stroke detector: locates the card by scanning for
+    /// its opaque bounds, then measures edge-vs-inset luma contrast along
+    /// the middle 50% of each of the 4 edges (skips corners and the witness
+    /// sprite). Returns the minimum hit fraction across the 4 edges, or
+    /// `nil` if no card could be located. Resolves no `NSColor`, so neither
+    /// the window's pinned appearance nor the ambient appearance can shift
+    /// what it matches against — replaces the RGB-match
+    /// `borderStrokePixelCount`, which passed/failed by the Mac's light/dark
+    /// clock (`reference_pixel-tests-follow-system-dark-mode`).
+    private func strokeEdgeCoverage(in data: Data) -> Double? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        let scale = rep.size.width > 0 ? CGFloat(rep.pixelsWide) / rep.size.width : 1
+
+        func isOpaque(_ x: Int, _ y: Int) -> Bool {
+            guard x >= 0, x < rep.pixelsWide, y >= 0, y < rep.pixelsHigh else { return false }
+            guard let color = rep.colorAt(x: x, y: y) else { return false }
+            return color.alphaComponent >= 0.98
+        }
+
+        func luma(_ x: Int, _ y: Int) -> Double? {
+            guard let color = rep.colorAt(x: x, y: y) else { return nil }
+            return Double(color.redComponent + color.greenComponent + color.blueComponent) / 3
+        }
+
+        let centerX = rep.pixelsWide / 2
+        let centerY = rep.pixelsHigh / 2
+        guard centerX > 0, centerY > 0 else { return nil }
+
+        guard let cardTop = (0..<rep.pixelsHigh).first(where: { isOpaque(centerX, $0) }),
+              let cardBottom = (0..<rep.pixelsHigh).reversed().first(where: { isOpaque(centerX, $0) }),
+              cardTop < cardBottom else { return nil }
+
+        let midY = (cardTop + cardBottom) / 2
+        guard let cardLeft = (0..<rep.pixelsWide).first(where: { isOpaque($0, midY) }),
+              let cardRight = (0..<rep.pixelsWide).reversed().first(where: { isOpaque($0, midY) }),
+              cardLeft < cardRight else { return nil }
+
+        let inset = max(1, Int((2 * scale).rounded()))
+        let width = cardRight - cardLeft
+        let height = cardBottom - cardTop
+        let xStart = cardLeft + width / 4
+        let xEnd = cardLeft + (3 * width) / 4
+        let yStart = cardTop + height / 4
+        let yEnd = cardTop + (3 * height) / 4
+        guard xStart <= xEnd, yStart <= yEnd else { return nil }
+
+        func edgeHitFraction(_ range: ClosedRange<Int>, edge: (Int) -> (Int, Int), inside: (Int) -> (Int, Int)) -> Double {
+            var hits = 0
+            var total = 0
+            for i in range {
+                let (ex, ey) = edge(i)
+                let (ix, iy) = inside(i)
+                total += 1
+                guard isOpaque(ex, ey), isOpaque(ix, iy),
+                      let edgeLuma = luma(ex, ey), let insideLuma = luma(ix, iy) else { continue }
+                if abs(edgeLuma - insideLuma) >= 0.04 { hits += 1 }
+            }
+            return total > 0 ? Double(hits) / Double(total) : 0
+        }
+
+        let top = edgeHitFraction(xStart...xEnd, edge: { ($0, cardTop) }, inside: { ($0, cardTop + inset) })
+        let bottom = edgeHitFraction(xStart...xEnd, edge: { ($0, cardBottom) }, inside: { ($0, cardBottom - inset) })
+        let left = edgeHitFraction(yStart...yEnd, edge: { (cardLeft, $0) }, inside: { (cardLeft + inset, $0) })
+        let right = edgeHitFraction(yStart...yEnd, edge: { (cardRight, $0) }, inside: { (cardRight - inset, $0) })
+        return min(top, bottom, left, right)
+    }
+
+    /// Fraction of pixels with `alpha > 0.3` — used only alongside
+    /// `strokeEdgeCoverage`'s low-coverage check, to prove a render is a
+    /// real (mostly-opaque) wash rather than an accidentally blank canvas
+    /// that would also score a low stroke coverage.
+    private func opaqueishPixelFraction(in data: Data) -> Double {
         guard let rep = NSBitmapImageRep(data: data) else { return 0 }
-        let border = NSColor.tertiaryLabelColor.withAlphaComponent(0.75)
-        guard let borderRGB = border.usingColorSpace(.deviceRGB) else { return 0 }
+        let total = rep.pixelsWide * rep.pixelsHigh
+        guard total > 0 else { return 0 }
         var count = 0
-        for x in stride(from: 0, to: rep.pixelsWide, by: 1) {
-            for y in stride(from: 0, to: rep.pixelsHigh, by: 1) {
-                guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.3 else { continue }
-                let dr = abs(color.redComponent - borderRGB.redComponent)
-                let dg = abs(color.greenComponent - borderRGB.greenComponent)
-                let db = abs(color.blueComponent - borderRGB.blueComponent)
-                if dr < 0.04 && dg < 0.04 && db < 0.04 { count += 1 }
+        for x in 0..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                if let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.3 { count += 1 }
             }
         }
-        return count
+        return Double(count) / Double(total)
     }
 
     /// Fix round 2, item 5: since the wash moved OUT of the palette (it's
@@ -453,32 +530,41 @@ struct ComposerZeroChromeStyleTests {
         return false
     }
 
-    @Test func singleLineRestStateHasCardChrome() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        // R15: 560pt was sized for the pre-R13b 512pt default width. The
-        // isolated suite below has no stored width override, so it resolves
-        // `ComposerSingleLineTuning.defaultWidth` (688pt, round-13b's tuned
-        // default) — a 560pt-wide capture puts both border-stroke edges
-        // off-canvas, sampling nothing but interior card fill. R15b: see
-        // `derivedRenderCanvasWidth` for why 800pt is the right value, not
-        // just a wider guess.
-        let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 100)
-        // Step 0 (R14): isolated suite, treatment pinned to `.material` — the
-        // stroke this test asserts on only renders in the material branch of
-        // `singleLineComposerCard`; `.glass` has no `.stroke(` at all. Reading
-        // real `UserDefaults.standard` here (the R13 gap) let this test pass
-        // for the wrong reason whenever `.glass` fell back to material by
-        // availability rather than by explicit treatment.
-        let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
-        suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
-        let png = renderPNG(view, size: size)
-        writeScratchPNG(png, filename: "single-line-rest.png")
-        #expect(png != nil)
-        if let png {
-            #expect(borderStrokePixelCount(in: png) > 0)
+    /// Parameterized over window appearance × ambient appearance
+    /// (`reference_pixel-tests-follow-system-dark-mode`): a stroke-detection
+    /// test must hold under every combination the Mac's auto light/dark
+    /// switch can produce, not just whichever one happened to be active
+    /// when the suite ran.
+    @Test(arguments: ["aqua", "darkAqua"], ["aqua", "darkAqua"])
+    func singleLineRestStateHasCardChrome(windowAppearance: String, ambientAppearance: String) {
+        NSAppearance(named: appearanceName(ambientAppearance))!.performAsCurrentDrawingAppearance {
+            let project = makeProject()
+            let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+            let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+            // R15: 560pt was sized for the pre-R13b 512pt default width. The
+            // isolated suite below has no stored width override, so it resolves
+            // `ComposerSingleLineTuning.defaultWidth` (688pt, round-13b's tuned
+            // default) — a 560pt-wide capture puts both border-stroke edges
+            // off-canvas, sampling nothing but interior card fill. R15b: see
+            // `derivedRenderCanvasWidth` for why 800pt is the right value, not
+            // just a wider guess.
+            let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 100)
+            // Step 0 (R14): isolated suite, treatment pinned to `.material` — the
+            // stroke this test asserts on only renders in the material branch of
+            // `singleLineComposerCard`; `.glass` has no `.stroke(` at all. Reading
+            // real `UserDefaults.standard` here (the R13 gap) let this test pass
+            // for the wrong reason whenever `.glass` fell back to material by
+            // availability rather than by explicit treatment.
+            let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
+            suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+            let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+            let png = renderPNG(view, size: size, appearance: appearanceName(windowAppearance))
+            writeScratchPNG(png, filename: "single-line-rest.png")
+            #expect(png != nil)
+            if let png {
+                let coverage = strokeEdgeCoverage(in: png) ?? 0
+                #expect(coverage >= 0.9, "measured strokeEdgeCoverage=\(coverage)")
+            }
         }
     }
 
@@ -1007,28 +1093,34 @@ struct ComposerZeroChromeStyleTests {
     /// `ComposerZeroChromeTypography`'s 32pt — checked by rendering a
     /// single-line fixture and confirming it fits comfortably inside the
     /// unchanged 512pt card (a 32pt field would overflow it).
-    @Test func singleLineFieldStaysAtTheOriginalFifteenPointScale() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        // Step 0 (R14): same isolated-suite/material pin as
-        // `singleLineRestStateHasCardChrome` — see that test's comment.
-        let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
-        suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
-        // R15: see `singleLineRestStateHasCardChrome`'s comment — the
-        // isolated suite resolves the 688pt round-13b width default, not
-        // the pre-R13b 512pt this canvas was originally sized for. R15b:
-        // see `derivedRenderCanvasWidth` for why 800pt is the right value.
-        let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 100)
-        let png = renderPNG(view, size: size)
-        writeScratchPNG(png, filename: "single-line-unchanged-scale.png")
-        #expect(png != nil)
-        if let png {
-            // Same border-stroke check as `singleLineRestStateHasCardChrome`
-            // — a 32pt field would have blown out the fixed-height card and
-            // very likely pushed/clipped the border out of this capture.
-            #expect(borderStrokePixelCount(in: png) > 0)
+    /// Parameterized over window appearance × ambient appearance — see
+    /// `singleLineRestStateHasCardChrome`'s comment.
+    @Test(arguments: ["aqua", "darkAqua"], ["aqua", "darkAqua"])
+    func singleLineFieldStaysAtTheOriginalFifteenPointScale(windowAppearance: String, ambientAppearance: String) {
+        NSAppearance(named: appearanceName(ambientAppearance))!.performAsCurrentDrawingAppearance {
+            let project = makeProject()
+            let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+            let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+            // Step 0 (R14): same isolated-suite/material pin as
+            // `singleLineRestStateHasCardChrome` — see that test's comment.
+            let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
+            suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+            let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+            // R15: see `singleLineRestStateHasCardChrome`'s comment — the
+            // isolated suite resolves the 688pt round-13b width default, not
+            // the pre-R13b 512pt this canvas was originally sized for. R15b:
+            // see `derivedRenderCanvasWidth` for why 800pt is the right value.
+            let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 100)
+            let png = renderPNG(view, size: size, appearance: appearanceName(windowAppearance))
+            writeScratchPNG(png, filename: "single-line-unchanged-scale.png")
+            #expect(png != nil)
+            if let png {
+                // Same border-stroke check as `singleLineRestStateHasCardChrome`
+                // — a 32pt field would have blown out the fixed-height card and
+                // very likely pushed/clipped the border out of this capture.
+                let coverage = strokeEdgeCoverage(in: png) ?? 0
+                #expect(coverage >= 0.9, "measured strokeEdgeCoverage=\(coverage)")
+            }
         }
     }
 
@@ -1550,98 +1642,110 @@ struct ComposerZeroChromeStyleTests {
     /// zero-chrome branch (no border-stroke drawing code,
     /// `zeroChromeRestStateHasNoCardBorderDrawingCode`'s same reasoning) —
     /// proving observation, not just a one-time read.
-    @Test func overlayResolvedStyleFollowsInjectedDefaultsWrite() {
-        // `SessionComposerOverlay.body`'s `#if DEBUG` `ComposerDebugTuningControl`
-        // overlay (rendered whenever `isMarketingCaptureFixtureActive` is
-        // false — true for every Debug test run) is a whole dark panel of
-        // pill/row dividers close enough to `.tertiaryLabelColor` to swamp
-        // `borderStrokePixelCount` (measured 1691, an order of magnitude
-        // over the composer card's own border) — a real regression in the
-        // card underneath would be invisible next to it. Matches the
-        // marketing capture rig's own env var to hide it, the same gate
-        // `debugTuningControlGateReflectsCaptureFixtureEnvVar` above tests
-        // directly.
-        setenv("GHOSTTIES_CAPTURE_FIXTURE", "1", 1)
-        defer { unsetenv("GHOSTTIES_CAPTURE_FIXTURE") }
+    /// Parameterized over window appearance × ambient appearance — see
+    /// `singleLineRestStateHasCardChrome`'s comment.
+    @Test(arguments: ["aqua", "darkAqua"], ["aqua", "darkAqua"])
+    func overlayResolvedStyleFollowsInjectedDefaultsWrite(windowAppearance: String, ambientAppearance: String) {
+        NSAppearance(named: appearanceName(ambientAppearance))!.performAsCurrentDrawingAppearance {
+            // `SessionComposerOverlay.body`'s `#if DEBUG` `ComposerDebugTuningControl`
+            // overlay (rendered whenever `isMarketingCaptureFixtureActive` is
+            // false — true for every Debug test run) is a whole dark panel of
+            // pill/row dividers close enough to `.tertiaryLabelColor` to swamp
+            // the old RGB-match border check (measured 1691, an order of
+            // magnitude over the composer card's own border) — a real
+            // regression in the card underneath would be invisible next to
+            // it. Matches the marketing capture rig's own env var to hide
+            // it, the same gate `debugTuningControlGateReflectsCaptureFixtureEnvVar`
+            // above tests directly.
+            setenv("GHOSTTIES_CAPTURE_FIXTURE", "1", 1)
+            defer { unsetenv("GHOSTTIES_CAPTURE_FIXTURE") }
 
-        let defaults = makeTuningDefaults()
-        // Fog off: `ComposerZeroChromeWash`'s own doc comment (round 8)
-        // flags that its fog shader defeats `Material`'s live blur
-        // sampling specifically in this offscreen `cacheDisplay` snapshot
-        // path on this machine, producing a flat fill that reads close
-        // enough to `.tertiaryLabelColor` at 0.75 alpha to false-positive
-        // `borderStrokePixelCount` across nearly the whole canvas — not a
-        // border, the wash. `ComposerBlurCompositingTests` pins the same
-        // flag off for the same documented reason.
-        defaults.set(false, forKey: ComposerZeroChromeFogSetting.storageKey)
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let centeringModel = ComposerCenteringModel()
-        let size = NSSize(width: 700, height: 400)
+            let defaults = makeTuningDefaults()
+            // Fog off: `ComposerZeroChromeWash`'s own doc comment (round 8)
+            // flags that its fog shader defeats `Material`'s live blur
+            // sampling specifically in this offscreen `cacheDisplay` snapshot
+            // path on this machine, producing a flat fill. `ComposerBlurCompositingTests`
+            // pins the same flag off for the same documented reason.
+            defaults.set(false, forKey: ComposerZeroChromeFogSetting.storageKey)
+            // Step 0 (R14): same isolated-suite/material pin as
+            // `singleLineRestStateHasCardChrome` — unpinned, this suite
+            // resolves the default `.glass` treatment, which has no
+            // `.stroke(` at all, so the "before" render would never have a
+            // border to measure regardless of style.
+            defaults.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+            let project = makeProject()
+            let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+            let centeringModel = ComposerCenteringModel()
+            let size = NSSize(width: 700, height: 400)
 
-        let view = SessionComposerOverlay(
-            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-            revealPhaseOverrideForTesting: .revealed,
-            defaultsForTesting: defaults,
-            centeringModel: centeringModel
-        )
-        .environmentObject(workspaceStore)
-        .environmentObject(SessionCoordinator())
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .aqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        guard let before = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the pre-write fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: before)
-        if let beforeData = before.representation(using: .png, properties: [:]) {
-            #expect(borderStrokePixelCount(in: beforeData) > 0, "expected the default (.singleLine) style to render a bordered card")
-        }
-
-        defaults.set(ComposerStyle.zeroChrome.rawValue, forKey: ComposerStyle.storageKey)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-
-        guard let after = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the post-write fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: after)
-        let afterData = after.representation(using: .png, properties: [:])
-        writeScratchPNG(afterData, filename: "overlay-follows-injected-defaults-write.png")
-        #expect(afterData != nil)
-        if let afterData {
-            // Not a strict `== 0`: `zeroChromeFullBleedWash`'s own concentric
-            // ripple gradient (`ComposerZeroChromeWash`) occasionally paints
-            // a handful of pixels that land within `borderStrokePixelCount`'s
-            // color-proximity match by coincidence — measured 324 on this
-            // fixture with fog disabled, zero border-drawing code anywhere
-            // in `zeroChromeComposerCard` (verified by inspection, this
-            // test's own doc comment). The `.singleLine` card's REAL border
-            // stroke measures 181299 on the same fixture (`beforeData`
-            // above) — three orders of magnitude higher — so 1000 catches
-            // any real regression back to a bordered card with enormous
-            // margin while tolerating the wash's own gradient noise.
-            #expect(
-                borderStrokePixelCount(in: afterData) < 1000,
-                "expected writing ComposerStyle.zeroChrome into the injected suite to switch the LIVE overlay to the zero-chrome (borderless) branch"
+            let view = SessionComposerOverlay(
+                request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+                revealPhaseOverrideForTesting: .revealed,
+                defaultsForTesting: defaults,
+                centeringModel: centeringModel
             )
+            .environmentObject(workspaceStore)
+            .environmentObject(SessionCoordinator())
+
+            let window = NSWindow(
+                contentRect: NSRect(origin: .zero, size: size),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            window.appearance = NSAppearance(named: appearanceName(windowAppearance))
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+            hosting.frame = NSRect(origin: .zero, size: size)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            hosting.layoutSubtreeIfNeeded()
+            defer { window.orderOut(nil) }
+
+            guard let before = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+                Issue.record("failed to render the pre-write fixture")
+                return
+            }
+            hosting.cacheDisplay(in: hosting.bounds, to: before)
+            if let beforeData = before.representation(using: .png, properties: [:]) {
+                let coverage = strokeEdgeCoverage(in: beforeData) ?? 0
+                #expect(coverage >= 0.9, "expected the .singleLine card (treatment pinned .material) to render its stroke; measured strokeEdgeCoverage=\(coverage)")
+            }
+
+            defaults.set(ComposerStyle.zeroChrome.rawValue, forKey: ComposerStyle.storageKey)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            hosting.layoutSubtreeIfNeeded()
+            hosting.layoutSubtreeIfNeeded()
+
+            guard let after = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+                Issue.record("failed to render the post-write fixture")
+                return
+            }
+            hosting.cacheDisplay(in: hosting.bounds, to: after)
+            let afterData = after.representation(using: .png, properties: [:])
+            writeScratchPNG(afterData, filename: "overlay-follows-injected-defaults-write.png")
+            #expect(afterData != nil)
+            if let afterData {
+                // Not a strict `coverage == 0`: `zeroChromeFullBleedWash`'s
+                // own concentric ripple gradient (`ComposerZeroChromeWash`)
+                // can still produce a stray high-contrast edge pair by
+                // coincidence, so this checks BOTH that stroke coverage
+                // dropped well below the bordered-card threshold above AND
+                // that the render is a real (mostly-opaque) wash rather than
+                // an accidental blank canvas, which would also score a low
+                // stroke coverage.
+                let coverage = strokeEdgeCoverage(in: afterData) ?? 0
+                let opaqueFraction = opaqueishPixelFraction(in: afterData)
+                #expect(
+                    coverage < 0.5,
+                    "expected writing ComposerStyle.zeroChrome into the injected suite to switch the LIVE overlay to the zero-chrome (borderless) branch; measured strokeEdgeCoverage=\(coverage)"
+                )
+                #expect(
+                    opaqueFraction >= 0.5,
+                    "expected the zero-chrome wash to actually render, not a blank canvas; measured opaqueishPixelFraction=\(opaqueFraction)"
+                )
+            }
         }
     }
 
