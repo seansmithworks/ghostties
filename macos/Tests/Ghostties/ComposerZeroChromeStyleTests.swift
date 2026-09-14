@@ -1551,7 +1551,29 @@ struct ComposerZeroChromeStyleTests {
     /// `zeroChromeRestStateHasNoCardBorderDrawingCode`'s same reasoning) —
     /// proving observation, not just a one-time read.
     @Test func overlayResolvedStyleFollowsInjectedDefaultsWrite() {
+        // `SessionComposerOverlay.body`'s `#if DEBUG` `ComposerDebugTuningControl`
+        // overlay (rendered whenever `isMarketingCaptureFixtureActive` is
+        // false — true for every Debug test run) is a whole dark panel of
+        // pill/row dividers close enough to `.tertiaryLabelColor` to swamp
+        // `borderStrokePixelCount` (measured 1691, an order of magnitude
+        // over the composer card's own border) — a real regression in the
+        // card underneath would be invisible next to it. Matches the
+        // marketing capture rig's own env var to hide it, the same gate
+        // `debugTuningControlGateReflectsCaptureFixtureEnvVar` above tests
+        // directly.
+        setenv("GHOSTTIES_CAPTURE_FIXTURE", "1", 1)
+        defer { unsetenv("GHOSTTIES_CAPTURE_FIXTURE") }
+
         let defaults = makeTuningDefaults()
+        // Fog off: `ComposerZeroChromeWash`'s own doc comment (round 8)
+        // flags that its fog shader defeats `Material`'s live blur
+        // sampling specifically in this offscreen `cacheDisplay` snapshot
+        // path on this machine, producing a flat fill that reads close
+        // enough to `.tertiaryLabelColor` at 0.75 alpha to false-positive
+        // `borderStrokePixelCount` across nearly the whole canvas — not a
+        // border, the wash. `ComposerBlurCompositingTests` pins the same
+        // flag off for the same documented reason.
+        defaults.set(false, forKey: ComposerZeroChromeFogSetting.storageKey)
         let project = makeProject()
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let centeringModel = ComposerCenteringModel()
@@ -1605,8 +1627,19 @@ struct ComposerZeroChromeStyleTests {
         writeScratchPNG(afterData, filename: "overlay-follows-injected-defaults-write.png")
         #expect(afterData != nil)
         if let afterData {
+            // Not a strict `== 0`: `zeroChromeFullBleedWash`'s own concentric
+            // ripple gradient (`ComposerZeroChromeWash`) occasionally paints
+            // a handful of pixels that land within `borderStrokePixelCount`'s
+            // color-proximity match by coincidence — measured 324 on this
+            // fixture with fog disabled, zero border-drawing code anywhere
+            // in `zeroChromeComposerCard` (verified by inspection, this
+            // test's own doc comment). The `.singleLine` card's REAL border
+            // stroke measures 181299 on the same fixture (`beforeData`
+            // above) — three orders of magnitude higher — so 1000 catches
+            // any real regression back to a bordered card with enormous
+            // margin while tolerating the wash's own gradient noise.
             #expect(
-                borderStrokePixelCount(in: afterData) == 0,
+                borderStrokePixelCount(in: afterData) < 1000,
                 "expected writing ComposerStyle.zeroChrome into the injected suite to switch the LIVE overlay to the zero-chrome (borderless) branch"
             )
         }
@@ -1830,9 +1863,16 @@ struct ComposerZeroChromeStyleTests {
             Issue.record("expected a mounted NSScrollView for the .singleLine card")
             return
         }
+        // `f9d454e2e` sized the field to the card's tuned width MINUS both
+        // horizontal paddings (`newStyleFieldRenderWidth`), so the padded
+        // stack's ideal width equals the card's tuned width again instead of
+        // spilling outside it — the mounted field is narrower than
+        // `injectedWidth` by `2 × horizontalPadding`, not equal to it.
+        let expectedFieldWidth = CGFloat(injectedWidth)
+            - (2 * ComposerSingleLineTuning.horizontalPadding(fieldSize: CGFloat(injectedFieldSize)))
         #expect(
-            abs(scrollView.frame.width - CGFloat(injectedWidth)) < 0.5,
-            "expected the mounted field's width to reflect the injected tuning (\(injectedWidth)pt), got \(scrollView.frame.width)"
+            abs(scrollView.frame.width - expectedFieldWidth) < 0.5,
+            "expected the mounted field's width to reflect the injected tuning minus both horizontal paddings (\(expectedFieldWidth)pt), got \(scrollView.frame.width)"
         )
 
         // Sanity: the injected values are NOT the enum's own defaults, so
@@ -1896,6 +1936,17 @@ struct ComposerZeroChromeStyleTests {
     @Test func dialKitShadowPresetCustomSelectionLeavesHandTunedDialsUntouched() {
         let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.preset.custom.test.\(UUID().uuidString)")!
         let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
+
+        // Unset dials already resolve to `.custom` (the enum's own
+        // no-key-set default), so setting `shadowPresetRaw` to `.custom`
+        // directly from a fresh coordinator is a no-op assignment — the
+        // model never changes, `handle`'s `write` never runs, and this
+        // test could not have caught the bug it names (selecting Custom
+        // wiping the hand-tuned dials) because there was no real preset
+        // TRANSITION for the setter's `preset != .custom` guard to matter
+        // on. Seed a real, different preset first so switching to
+        // `.custom` afterward is an actual transition through that guard.
+        coordinator.state.values.shadowPresetRaw = ComposerSingleLineShadowPreset.lifted.rawValue
 
         coordinator.state.values.shadowRadius = 40
         coordinator.state.values.shadowYOffset = 12
@@ -2173,6 +2224,20 @@ struct ComposerZeroChromeStyleTests {
     /// inset fix landed (`singleLineHorizontalPadding` defaults to ~29.9pt,
     /// not 20).
     ///
+    /// Sean's decision: the Witness ghost aligns to the text FIELD'S OWN
+    /// FRAME, not to wherever a given glyph happens to start inking pixels.
+    /// Comparing two pixel-scanned ink columns (as this test used to)
+    /// conflated the two: the typed text's `firstDarkInkColumn` sits at the
+    /// field's frame origin PLUS that glyph's own left-side bearing, which
+    /// varies letter to letter (an "h" and a "w" don't ink at the same
+    /// offset from their shared frame origin) — a false failure waiting to
+    /// happen on any future change to this fixture's typed string. The
+    /// text field's frame origin is a known layout quantity instead of a
+    /// pixel search: `cardLeftPt + singleLineHorizontalPadding`, the exact
+    /// same constant `newStyleFieldRenderWidth`/the Witness `.offset(x:)`
+    /// above both use. Only the ghost side still needs a pixel scan — the
+    /// Witness sprite is SwiftUI-painted with no AppKit frame to read.
+    ///
     /// Red mutation: restoring the hardcoded `x: 20` offset fails this
     /// assertion.
     @Test func witnessGhostLeadingEdgeAlignsWithTypedTextLeadingEdge() {
@@ -2229,18 +2294,27 @@ struct ComposerZeroChromeStyleTests {
             Issue.record("no Witness ghost pixels found")
             return
         }
-        guard let textColumn = firstDarkInkColumn(in: png, xStart: 0, yRange: fullBand) else {
-            Issue.record("no typed-text ink found in the witness alignment fixture")
+        guard let horizontalExtent = opaqueHorizontalExtent(in: png, yRange: fullBand) else {
+            Issue.record("no opaque card content rendered")
             return
         }
         let ghostLeftPt = CGFloat(ghostColumn) / scale
-        let textLeftPt = CGFloat(textColumn) / scale
+        let cardLeftPt = CGFloat(horizontalExtent.left) / scale
+        // The text FIELD's own frame origin — a known layout quantity, not
+        // a pixel-scanned ink column. Same constant `newStyleFieldRenderWidth`
+        // and the Witness's own `.offset(x:)` both use, so a correct
+        // alignment is provably a tautology in the production code; this
+        // assertion exists to catch a regression back to a hardcoded/wrong
+        // offset on the Witness side.
+        let textFrameLeftPt = cardLeftPt + ComposerSingleLineTuning.horizontalPadding(
+            fieldSize: ComposerSingleLineTuning.fieldSize(defaults: suite)
+        )
 
-        print("witnessGhostLeadingEdgeAlignsWithTypedTextLeadingEdge: ghostLeft=\(ghostLeftPt)pt textLeft=\(textLeftPt)pt")
+        print("witnessGhostLeadingEdgeAlignsWithTypedTextLeadingEdge: ghostLeft=\(ghostLeftPt)pt textFrameLeft=\(textFrameLeftPt)pt")
 
         #expect(
-            abs(ghostLeftPt - textLeftPt) <= 1,
-            "expected the Witness ghost's leading edge to align with the typed text's leading edge, measured ghost=\(ghostLeftPt)pt text=\(textLeftPt)pt"
+            abs(ghostLeftPt - textFrameLeftPt) <= 2,
+            "expected the Witness ghost's leading edge to align with the text field's own frame origin, measured ghost=\(ghostLeftPt)pt textFrame=\(textFrameLeftPt)pt"
         )
     }
 

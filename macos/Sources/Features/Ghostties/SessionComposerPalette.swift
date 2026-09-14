@@ -1441,7 +1441,7 @@ struct SessionComposerPalette: View {
     /// mounts — see `activeCardKind` — so this never needs its own
     /// presentation gate.
     private var activeStyle: ComposerStyle {
-        styleOverrideForTesting ?? ComposerStyle.current()
+        styleOverrideForTesting ?? ComposerStyle.current(defaults: tuningDefaultsForTesting ?? .standard)
     }
 
     /// Which card actually renders — see `cardKind(style:presentation:)`.
