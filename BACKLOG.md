@@ -1,5 +1,13 @@
 # Ghostties — Backlog
 
+## Beta 25 merge (dispatched 2026-09-14, merge coordinator thread)
+- [ ] Phase 0: carry retired-branch backlog lines (this PR) · ignored-file survey, unique worktree content copied to ~/Code/_archive · real-data scan of wave-1 files
+- [ ] Phase 1: merge #175 → #169 → feat/demo-open-source-fixtures → #170 (each: re-verify head sha, BACKLOG union, CI build green before merge)
+- [ ] Phase 2: docs branches docs/session-row-status-spec (add "superseded by pattern D, 2026-09-13" note) + docs/design-system-site-plan. No website branches, per Sean.
+- [ ] Phase 3: tests in a fresh worktree at merged main: #169 post-merge test plan + #175 post-merge doc + demo test plan · manual checklist docs/testing/beta-25-merge-checklist.md
+- [ ] Phase 4: cleanup: archive tags pushed first; never delete upstream-main, pr-assets/sidebar-section-vocabulary, website branches or worktrees, feat/ghostties-animation, claude/happy-morse-62ea22; remove no worktree a running process uses
+- [ ] Phase 5: rewrite CHANGELOG [0.1.0-beta.25] entry before any tag
+
 ## 2026-08-31 — Composer variant G session (carried)
 
 - [x] Composer variant G — centered-modal type-scale conformance. `.centered` section headers
@@ -2410,3 +2418,133 @@ Branch `feat/composer-variant-g`, 10 commits pushed to origin, UNMERGED.
 - [x] **Overnight N4 — on a defect:** (n/a — N3 found no defect) diagnose from the xcresult recording + `lsappinfo` (never guess), fix via a subagent on `feat/demo-frame-polish`, separate review, re-run (counts toward the 3).
 - [x] **Overnight N5 — PR:** (#173, merge approved by Sean 2026-09-13)
 - [ ] **Decision (Sean, 2026-09-13): demo fixtures = fake or open-source projects only?** Sean kept the canned "Read-only — do not modify any files." prompt visible in the capture frame, and raised verbatim: "yes, or we just have fake or open source projects only". Fixture set today (`examples/demo-workspace/`) reuses real project names: annotie, brukas, ghostties, switchboard alongside invented atlas-api, fieldwork, pendulum, silo, trove, wren. Not started.
+
+## Carried from retired branches (unreviewed, 2026-09-14)
+
+### feat/composer-ui-11
+## 2026-08-26 — composer UI 11 MERGED to main (PR #138)
+`main` @ `89e6dfb94`, merge commit, CI green (6/6). Verified `6e9bb6836` is a true ancestor of
+`origin/main`, not just an API "merged" claim. **Carries 28 commits of Slice B** (branch→worktree)
+that had been frozen at `a1daa6608` awaiting Sean's hands-on pass — it merged WITHOUT that pass,
+by his explicit call. Suite 962/1 known flake/1 skipped.
+Shipped in it: 11.1 rest ghost path, 11.2 inline completion with Spotlight+Raycast semantics
+(ghost previews the full destination, Tab drills one segment, Enter commits the visible path),
+headerless list, template pinning, resolution line deleted, **View → Experimental Composer Field**
+toggle (Release-reachable), two mutant-proven regression tests, adversarial-gate evidence at
+`docs/plans/composer-qa/`.
+- [ ] **CARRIED — render the four visual design calls for Sean.** He asked to *see* them, not read
+  them again. Ghost contrast (board's 49% ≈ 2.5:1, under AA, and it is content), system vs brand
+  accent on row selection, the fixed 220pt results well vs hugging, and whether `.anchored` should
+  have inherited the headerless list + two trailing controls. Use the existing snapshot harness;
+  PNGs are gitignored now, so attach them rather than committing.
+- [ ] **DECIDE — alpha conversion policy (not renderable, answer directly).** `labelColor.opacity(x)`
+  MULTIPLIES against the system label's built-in 0.85, so every board grey lands ~15% light.
+  Strawman: use `NSColor.withAlphaComponent`, which replaces. Affects every future grey spec'd
+  off a board.
+- [ ] **Slice B has never been exercised by Sean** and is now on `main`, so it ships in the next
+  beta regardless. If he wants a look, it has to happen before that beta.
+- [ ] **beta.24 HELD** by Sean 2026-08-26 — "hold b24 still, we need to merge to main and clean
+  everything up when we are ready." Nothing tagged, no release run.
+- [ ] **Model B remains UNVERIFIED for interaction.** All keyboard/mouse feel, IME, undo scope.
+  macOS 13 key routing IS verified from source: model B routes all six keys through native
+  AppKit `doCommandBySelector`, zero `Backport` dependency, making it SAFER on the floor OS
+  than model A. Drive it via View → Experimental Composer Field.
+
+### findings/composer-dev-pass-2026-08-20
+## 2026-08-20 — Dev-pass findings (Sean, live on `df0c1b8de` build)
+First runtime pass on a build containing all five composer phases. Two long-open checks CLOSED by observation, two new defects found.
+**CLOSED — composer focus lands correctly.** "+ New Project" → native panel → pick folder → panel closes → composer opens with the new project locked. Typing three characters without clicking put them in the composer field, not the shell behind it. This was the check carried since Phase 3 and never settleable by source-tracing. Filtering works as specced (templates + projects, match bolded).
+**CLOSED — dismiss-on-app-switch is deliberate, not a bug.** Clicking out of the Ghostties window dismisses the composer. That is `applicationDidResignActive()` in `WorkspaceViewContainer.swift`, added as a Phase 3 round-3 blocker fix specifically so app-deactivation dismisses while another *Ghostties window* taking key does not. Matches Spotlight/Raycast convention.
+**CORRECTION to a claim made this session:** "Pinned will be empty after Phase 5" was WRONG. Phase 5 is not retroactive — it stops future auto-registers from pinning but never unpins existing records. Sean's six projects stay pinned until manually unpinned. The code is right; the prediction was not.
+- [ ] **Enter on a no-match state is a silent dead key.** `SessionComposerPalette.swift:714` — `.submit` does `selectedOption?.action()`; with no matches `selectedOption` is nil, so Enter does nothing with zero feedback: no shake, no disabled affordance, no "nothing to run" copy. Sean's words: "it doesn't give any error or feedback, a shake not allowed like password or text for an error state." Independent of the grammar work — worth fixing on its own. | design | new
+- [ ] **Trailing command text has nowhere to go — the grammar gap, now demonstrated live.** Typing `ghostties cco -n "test"` resolves the *project* correctly (selector flips to `ghostties`) and then treats the remaining `cco -n "test"` as filter text → "No matches". This is exactly the case the composer command-grammar spec addresses, and it is the concrete repro to build against. Sean expected this to work from prior discussion — the grammar was scoped but never built; the composer today is strictly a filter. See the grammar-spec Artifact item below (three decisions open; tokenizing alone is the recommended first slice and needs none of them settled). | app | new
+- [ ] **STILL UNTESTED: locked-label truncation.** Every Dev-pass attempt so far used short project names (Snippost, ghostties, Brukas). Needs one run with a genuinely long multi-word folder name to see whether the locked label truncates cleanly or wraps and pushes the card header around. | design | needs-Sean
+### Command grammar slice 1 — PLANNED, NOT BUILT (carried)
+An implementer was dispatched and killed at wrap **before creating its branch** — no branch, no files, nothing to verify. Re-dispatch from this brief.
+**Parsing rule.** Split on whitespace honoring double quotes. Tokenize ONLY when there are ≥2 tokens AND token 1 exactly matches a project `name` or folder basename (case-insensitive) AND the binding is not `.locked`. Otherwise today's whole-string filter, byte-identical — that is what protects the fast path. (Correction: `bru`+Return does **not** start a session today; `SessionComposerPalette.swift:202-206` only re-scopes and clears. The real fast path is `bru`+Return+Return.)
+**The remainder does NOT blanket-run.** It still filters that project's templates AND appends a `Run "<remainder>"` row in a new COMMAND section; matching templates rank first. Blanket-running would break `ghostties orchestrator` — execing a nonexistent binary instead of reaching the Orchestrator template. **Never claim `-n`** as an app flag; it belongs to Sean's own `cco` function.
+**Two silent runtime blockers** (detail: `reference_composer-adhoc-command-two-blockers.md` in project memory): `AgentTemplate.shellEscape` (`AgentTemplate.swift:180`) single-quotes the ENTIRE `command` string, so a multi-word command becomes one argv word; and `cco` is a zsh **function** that dies under `/bin/sh -c` because zshrc is never sourced. Synthesize exactly `AgentTemplate(id: AgentTemplate.shell.id, name: <tok1>, kind: .custom, command: <tok1>, agent: .init(additionalFlags: <rest>))` — `agent:` buys the login-shell wrapper (`SessionCoordinator.swift:223-244`), and reusing `shell.id` stops `WorkspacePersistence.validate` (`:228-230`) deleting the session on relaunch. Accepted degradation: relaunching an ad-hoc session relaunches plain Shell.
+**Files:** NEW `SessionComposerCommandParser.swift` (pure, testable) + NEW `SessionComposerCommandParserTests.swift`; EDIT `SessionComposerPalette.swift` only (filter chain at `:241`/`:245`/`:258`/`:295`/`:311-315`, COMMAND section, shake). **Off-limits:** `createSession`/`createQuickSession` bodies, `buildCommand`/`shellEscape`, `CommandPalette.swift` (upstream), both indicator caches, any new `AgentTemplate` field, any `store.addTemplate` call.
+**Acceptance, each with evidence:** (1) the repro spawns a ghostties session running `cco -n test` — proof is the `exec 'cco' '-n' 'test'` line in the generated wrapper under `SessionCoordinator.launcherScriptDir`, read from disk, not a screenshot; (2) single-token parse returns `projectId == nil`; (3) quoted arg survives; (4) synthesized id `== AgentTemplate.shell.id`; (5) no-match Enter shakes (3 cycles / 6pt / 0.25s; red 400ms border under reduce-motion); (6) `grep -c createQuickSession` unchanged from `df0c1b8de`.
+- [ ] **Sean's calls once it's on screen:** COMMAND section label and row copy · whether the launch banner still prints (it will show the command name) · the shake's feel. | design | needs-Sean
+- [ ] **Unverified by the planner:** whether `.onSubmit` and `.onKeyPress` both fire on macOS 14+ (pre-existing, documented at `SessionComposerPalette.swift:820-836`). | app | new
+
+### origin/docs/backlog-2026-09-06
+## 2026-09-06 — Composer Tab flow shipped; exit-to-shell fixed; ten redesign directions
+- [x] **PR #164 MERGED** — Tab accepts a segment + space, never a chevron. `main` @ `a0297a9d9`.
+  Verified by Sean in a real build: `ghostt` Tab `cco -n "testing"` Return runs clean.
+- [ ] **PR #165 open, UNVERIFIED — carried.** `fix/composer-return-to-shell` @ `d32fb32b6`.
+  Diff reviewed by hand, but no test run exists anywhere: agent worktrees lack
+  `GhosttyKit.xcframework`, `zig-out/`, `vendor/cef`. Build it and run the ⌘T flow before merge.
+- [ ] **PARKED — `design-shotfun` skill is broken.** It calls `mcp__paper__*`; the server on
+  this machine is `pencil`, which refuses every call without a `.pen` file open in the GUI.
+  Skill also caps at 6 variants. Routed around by hand this session.
+- [ ] **PARKED — three fragments were authored broken** (05/06/07): section is `display:flex`
+  with no `flex-direction`, and both boards sit in an unclassed wrapper with no CSS, so
+  `.board{flex:1}` is inert and the boards collapse to ~0 width. Corrected in the page
+  wrapper, not in the fragments.
+## 2026-09-05 — Composer-launched sessions die on exit instead of dropping to a shell
+Sean: after `wrap-continue` + exiting a Claude session launched from the composer, the
+surface shows "Process exited. Press any key to close the terminal." instead of returning
+to a live prompt — so the terminal has to be closed and reopened.
+**Diagnosed, not a regression from the composer stack.** `SessionCoordinator` writes a
+wrapper script per session and sets it as Ghostty's `command`, which *replaces* the shell.
+The script ends in `exec <cmd>` (`SessionCoordinator.swift:255`), so nothing survives the
+agent's exit. `exec` has been there since `dffde628d` (2026-03-24) and was deliberately
+restored in `e8dbf6ed7` (2026-04-27). What changed is Sean's habit: the old flow was a blank
+shell he typed `cco` into (child process, shell survives), the new flow is composer-launched.
+No `cco` template or preset exists — `workspace.json` holds 3 empty "New Template" rows and
+`~/.ghostties/presets/` has only `disk-cleanup.md` and `linear-sync`. `cco` is ad-hoc text.
+- [x] **Decided 2026-09-06 (Sean): yes, default to a shell.** "If I want to go to orchestrator
+  template I would specify that." Implemented in PR #165 — the launcher script now runs the
+  agent in the foreground and ends `exec /bin/zsh -l`. **Tests never executed** (no build
+  inputs in any agent worktree) — needs a real lab build before merge.
+- [ ] ~~Decide~~ (superseded): land back on an interactive shell after the agent exits (replace
+  `exec \(cmd)` with `\(cmd)` + `exec zsh -i`), or leave as-is.
+  **Risk if changed:** the surface staying alive after the agent exits decouples "process
+  running" from "session running" — `setStatus(.running,)` and `subscribeToOutput` both
+  assume the surface dies with the agent, and indicator state lives in two caches. Not a
+  one-liner; needs the status engine checked.
+
+### visual-pass-2026-09-05 (local only)
+## 2026-09-09 — rig PR #166 open, concept-lab folded (carried from the "Ghostties Concepts" thread)
+- [x] PR #166 merged to main `45b2053ec` (2026-09-10) after a server-side update-branch onto main and green CI; `rig-pr` worktree removed with `--force` (1.4 GB freed), branch `test/visual-pass-rig` kept.
+- [x] concept-lab promoted to https://ghostties-concept-lab.vercel.app (2026-09-10, bundle `index-C8be9qcg.js`: 22 concepts, sketches in the app frame, scoring). 
+- [ ] parked — CI visual pass: the macos-15 runner launches the app but XCUITest never loads
+  accessibility (60s per test, 11/12 failed, no captures). Next experiment: ad-hoc signing
+  (`CODE_SIGN_IDENTITY=-`) via `gh workflow run test-ghostties.yml --ref <branch> -f visual_pass=true`.
+- [ ] carried — map Sean's kept concepts / personal scores to the avenue numbering in memory `project_avenues-review-site-2026-09-05` once he pastes the export or the kept titles. Nothing received yet.
+- [ ] parked — concept-lab `.mobile-picker` `<select>` overflows to 414px at a 390px viewport (native intrinsic width follows the longest option). Pre-existing, seen by two reviewers, not touched.
+- [ ] parked — this file's 2026-09-05 → 09-09 entries live only on `visual-pass-2026-09-05`, which
+  is never pushed; port them to `main` as a docs-only commit once Sean decides on the audit
+  source (owner-only traffic numbers).
+- [ ] parked — `MarketingCaptureUITests.swift:101` still queries `staticTexts["Claude Code 4"]`,
+  stale against the compound accessibility labels.
+## 2026-09-05 — audit follow-ups (carried from the "Ghostties Concepts" thread)
+Audit + 23 avenues + visual-pass re-rank live at
+(Vercel project `ghostties-avenues` deleted 2026-09-11; source still in
+`docs/audits/avenues-2026-09-05/`). Codex's concept lab
+(`concept-lab/`, https://ghostties-concept-lab.vercel.app) has the better review format;
+this page has the audit numbers and cost/traction. Sean leaned toward the lab.
+- [ ] **carried — fixture gains a "needs you" session** before any hero-film or site-capture
+  work; capture on an empty Space so no other window leaks in.
+- [ ] parked — ghostties.org: ghosts drift over the brew button and the product still at load;
+  the page is three sections with no explanation of status, `gt`, or the composer; the
+  product still shows five identical dots and generic "Claude Code N" rows.
+- [ ] parked — delete `docs/audits/avenues-2026-09-05/.env.local` (a `VERCEL_OIDC_TOKEN`
+  `vercel link` dropped; gitignored, permission mode blocked removal from the thread).
+- [ ] parked — `browser.png` from the visual pass is deliberately uncommitted (second Dev
+  window with the real hostname); regenerate on an empty Space if it is ever needed.
+## 2026-09-05 — visual pass findings (fixture-mode XCUITest captures, branch `visual-pass-2026-09-05`)
+Seventeen of eighteen app states captured with `VisualPassUITests` over the cherry-picked
+capture fixture. Captures and `RUN.md` are untracked in `docs/audits/visual-pass-2026-09-05/`.
+The branch also carries the three-line `TEST_TARGET_NAME = Ghostties` pbxproj fix; every
+GUI-driving UI class was verified gated behind the IDE env check, but a reviewer should
+re-check that list before the hunk reaches `main`.
+- [ ] Title-bar collision on sidebar overlay and on browser open: traffic lights over "New Project", terminal shifted under the title bar.
+- [ ] Tab after an accepted completion renders a chevron and drops the branch segment. Verify against the 2 Sep decision that Tab inserts a space.
+- [ ] Browser opens as a separate floating window; the process cannot terminate after opening it (Debug, fresh CEF profile, 3/3).
+- [ ] Task-first capture was a false positive; the Dev-domain defaults key did not take under XCUITest, or the forced ⌘⇧1 switched away.
+- [ ] Capture fixture has no "needs you" session, and window captures include overlapping windows.
+- [ ] Ghost colour on project rows (black vs blue) carries meaning that nothing explains.
+- [ ] Two composer checks for Sean, in a real repo: does Tab after `swi` type a chevron; does `switchboard > feat/demo` offer to create the branch.
