@@ -49,11 +49,17 @@
 #   1. No-op if GHOSTTIES_SESSION_ID is unset/empty, or contains anything
 #      other than [A-Za-z0-9-] (it becomes part of a filename).
 #   2. Reads the hook JSON payload from stdin.
-#   3. Writes {"ghosttiesSessionId","updatedAt","hook"} to
+#   3. Writes {"ghosttiesSessionId","updatedAt","agent","launcher","hook"} to
 #      ~/.ghostties/state/<id>.json (or <id>.todos.json for a
 #      PostToolUse/TodoWrite payload), via a same-directory temp file +
 #      rename so directory watchers see a real rename(2), not an in-place
-#      write.
+#      write. "agent" and "launcher" are omitted when empty, not written as
+#      null/"" — ClaudeHookWrapper.agent/launcher are Decodable optionals.
+#
+# Invocation: registered plainly for Claude Code
+# ("$HOME"/.ghostties/hooks/ghostties-status.sh). CodexHookRegistrar
+# registers it with a trailing "codex" argument instead, which tags every
+# state file this script writes with "agent":"codex".
 
 trap 'exit 0' EXIT
 
@@ -61,6 +67,16 @@ trap 'exit 0' EXIT
 
 case "$GHOSTTIES_SESSION_ID" in
     *[!A-Za-z0-9-]*) exit 0 ;;
+esac
+
+agent="claude"
+if [ "$1" = "codex" ]; then
+    agent="codex"
+fi
+
+launcher="$GHOSTTIES_LAUNCHER"
+case "$launcher" in
+    *[!A-Za-z0-9_-]*) launcher="" ;;
 esac
 
 [ -z "$HOME" ] && exit 0
@@ -97,8 +113,13 @@ esac
 
 tmp="$dest.$$.tmp"
 
-printf '{"ghosttiesSessionId":"%s","updatedAt":%s,"hook":%s}' \
-    "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$payload" > "$tmp" || exit 0
+if [ -n "$launcher" ]; then
+    printf '{"ghosttiesSessionId":"%s","updatedAt":%s,"agent":"%s","launcher":"%s","hook":%s}' \
+        "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$agent" "$launcher" "$payload" > "$tmp" || exit 0
+else
+    printf '{"ghosttiesSessionId":"%s","updatedAt":%s,"agent":"%s","hook":%s}' \
+        "$GHOSTTIES_SESSION_ID" "$(date +%s)" "$agent" "$payload" > "$tmp" || exit 0
+fi
 
 mv -f "$tmp" "$dest" || { rm -f "$tmp"; exit 0; }
 

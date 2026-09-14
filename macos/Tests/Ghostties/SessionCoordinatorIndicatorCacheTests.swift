@@ -56,8 +56,12 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
             .inactive,
             "a closed session's indicator must fall back to .inactive, not the last live value"
         )
-        XCTAssertFalse(
-            RecentsListView.belongsInActive(indicatorState: indicatorState),
+        XCTAssertNotEqual(
+            SessionBucket.membership(
+                status: WorkspaceStore.shared.globalStatuses[id],
+                startedThisLaunch: true
+            ),
+            .active,
             "a closed session must leave the ACTIVE zone"
         )
     }
@@ -90,10 +94,19 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
     }
 
     /// `.error` must write a distinct `.error` indicator (not silently retain
-    /// whatever live value the session held before failing) and the session
-    /// must stay in the ACTIVE zone so failed sessions keep nagging until the
-    /// user relaunches or Removes them.
-    func testErrorSessionIndicatorStateIsErrorAndStaysActive() {
+    /// whatever live value the session held before failing).
+    ///
+    /// Sidebar bucketing (`SessionBucket.membership`) intentionally does NOT
+    /// follow this indicator: `.error` is a terminal `SessionStatus` —
+    /// `handleSurfaceClose` sets it only AFTER removing the surface from
+    /// `sessionTrees` — so `SessionStatus.isAlive` is `false` and the session
+    /// correctly leaves Active for Inactive/Archive. (The OLD rule,
+    /// `SessionIndicatorState != .inactive`, read `.error` as "not inactive"
+    /// and left a closed, errored session stuck in Active forever — the
+    /// divergence `SessionBucket.membership` was introduced to fix.) The
+    /// `.error` indicator itself still renders (red ghost) wherever a session
+    /// row shows its indicator state, independent of which bucket it's in.
+    func testErrorSessionIndicatorStateIsErrorButLeavesActiveBucket() {
         let id = UUID()
         let (store, dir) = makeStore()
         let coordinator = SessionCoordinator()
@@ -116,9 +129,13 @@ final class SessionCoordinatorIndicatorCacheTests: XCTestCase {
             .error,
             "an errored session's indicator must become .error, not keep its last live value"
         )
-        XCTAssertTrue(
-            RecentsListView.belongsInActive(indicatorState: indicatorState),
-            "an errored session must stay in the ACTIVE zone until relaunched or removed"
+        XCTAssertEqual(
+            SessionBucket.membership(
+                status: WorkspaceStore.shared.globalStatuses[id],
+                startedThisLaunch: true
+            ),
+            .inactive,
+            "an errored session's terminal has closed — it must leave the ACTIVE bucket for Inactive"
         )
     }
 

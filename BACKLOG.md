@@ -1,5 +1,82 @@
 # Ghostties — Backlog
 
+## Merge prep (2026-09-13)
+
+- [x] Revert static working glyph (Sean: grid/spinner better) — a836dbc99
+- [x] Merge origin/main into branch — 61e09d692
+- [x] Moved to `main`: Sean runs the full suite after merge (2026-09-13). Last branch run
+  1156/5/1 predates the glyph commits.
+- [x] Independent review of the status glyph change `9b1a6d735` — pass with notes; .waiting/label
+  mismatch fixed in `fix(sidebar): silent fallback reads as idle, status words derive from the glyph`
+- [ ] Esc-interrupting Claude may leave hook state busy (no Stop) → spinner up to 30 min —
+  inferred, unverified
+- [x] PR #175 — https://github.com/seansmithworks/ghostties/pull/175. Screenshots on branch
+  `pr-assets/sidebar-section-vocabulary` (`424c2ad76`); fixture fix `7ee2f6f89`.
+- [x] Spinner glyph reads very small at sidebar size (fixture screenshot) — design check.
+  Enlarged in `26dbc54b4` (Sean: "enlarge"); still read small, redrawn as a dot grid in
+  `fix(sidebar): draw the working spinner as a dot grid sized to the slot`.
+- [x] Post-merge test plan: `docs/testing/sidebar-section-vocabulary-post-merge.md`
+- [ ] Live checks still unverified: drag released over empty space reverts; auto-scroll feel;
+  Resume on a real Claude + Codex session; `?` on finished idle sessions (F); Esc-interrupt leaving
+  a row "working" up to 30 min (inferred, unverified)
+- [ ] `~/.claude` repo commit `69597fa` (zshrc `GHOSTTIES_LAUNCHER`) — separate repo, not part of
+  this PR
+
+## 2026-09-12 — Sidebar section vocabulary
+
+- [x] (A) Align session view + project view on one Active/Inactive/Archive rule (this task)
+- [x] (B) Session view gets a **Pinned** section above Active, like project view has. A pinned
+  session stays in Pinned whether its terminal is open or closed.
+- [x] (C) Drag-reorder works within a section, and a session can also be dragged **up** out of
+  Archive or Inactive into Active or Pinned.
+  - Dropping on Pinned pins the session.
+  - Dropping on Active relaunches it, resuming the conversation where possible, because Active
+    means the terminal is open.
+  - Dragging down isn't supported; Stop does that job.
+- [x] (D1) Claude Code resume: `AgentResume`, `ResumePlan`, persisted resume record, relaunch
+  collapsed into `SessionCoordinator.relaunch(session:)`. `bba1d1281`, `9580cc6c9`, `838b88b3c`.
+- [x] (D2) Codex resume: `CodexHookRegistrar` (append-only, trust-preserving), `ResumePlan`'s
+  `codex resume -C '<cwd>' '<id>'` path, and the "approve the Ghostties hook in Codex" hint
+  (`CodexHookConfirmation`, replaces the Sessions-tab row subtitle while unconfirmed).
+  `bba1d1281`, `9580cc6c9`, `838b88b3c`, this commit, and `~/.claude` `69597fa` (zshrc launcher
+  marker).
+  - [ ] Live check: Resume on a real Claude session and a real Codex session (approve hook
+    once) — not yet run.
+- [ ] Codex hook registers only for template-launched Codex sessions (`isCodexTemplate`); a
+  `codex` typed into a plain shell never registers.
+- [ ] (E) Cmd+W close dialog: `SessionCoordinator.closeCurrentSessionWithConfirmation()`'s inline
+  `isActive` check treats a closed `.error` session as active (same divergence fixed for the
+  sidebar in `1c0f78b2b`)
+- [ ] (F) Status: `ClaudeStateStore.swift:290` maps Notification `idle_prompt` → `.needsInput`, so a
+  finished session sitting idle reads as "needs you" — finished and blocked are indistinguishable
+- [ ] (F) now visible: `idle_prompt` → needsInput means a finished idle session shows `?` —
+  needs a decision.
+- [x] (G) Live-reflow drag + drop zones in session view — dragging a row opens a gap the height of
+  one row at the proposed insertion point (top/bottom half of a row decides before/after), an
+  end-of-section drop zone lands a drag after the last row, and an empty Pinned section shows a
+  "Drop to pin" zone during any drag. Pure insertion-point math in `SessionDragReflow`
+  (`SessionDragReflowTests`); transient `SessionDragState` lives only in `RecentsListView`, never
+  written to the model until a real drop. Auto-scroll near the sidebar's top/bottom edge; a
+  just-relaunched session (dropped onto Active) holds its Active slot until alive or a 5s timeout,
+  without touching `SessionBucket.membership`.
+- [x] (H) Project-view Archive header now matches session view's section headers — chevron moved
+  to the leading side, and `.disabled(!isCollapsible)`'s automatic dimming (the actual cause of
+  Archive reading darker than Active/Inactive) removed in favor of the existing tap-guard.
+- [ ] (I) Review `4e3a04419` ran; the Stop-during-hold fix landed in `a02022f9c`. Still OPEN — live
+  checks the headless renders can't prove: a drag released over empty space reverts (the
+  `leftMouseUp` monitor is unverified), auto-scroll feel (row-stepped, not continuous), a Dev build
+  screenshot. The Dev slot is held by the Composer review build, so coordinate. (carried)
+- [x] (J) DECIDE OR KILL — status visual system. Canvases `d9ccb142…` (round 1) and `2cc82cb4…`
+  (round 2, incl. "Row anatomy — name first"). Sean 2026-09-13: current colors + density are too much,
+  yet wants more character. Strawman: #3 "Quiet, plus a hand" (grey ghosts, gold + raised hand only on
+  needs-you), thread name kept on line 1, row layout C for Allow/Deny and A for "Answer in terminal",
+  Deny stays a word. Waiting on the sidebar inspiration board before picking.
+  Picked D — type glyph replaces ghost in the row icon slot (Sean 2026-09-13, "for the moment").
+  This commit.
+- [x] (K) `DESIGN.md` status colors/type sizes are stale vs code (terracotta = waiting, 11pt) —
+  reconcile when (J) lands. Picked D — type glyph replaces ghost in the row icon slot
+  (Sean 2026-09-13, "for the moment"). This commit.
+
 ## 2026-08-31 — Composer variant G session (carried)
 
 - [x] Composer variant G — centered-modal type-scale conformance. `.centered` section headers
@@ -1525,7 +1602,9 @@ proven fresh by launch-time-vs-binary-mtime. Full suite **674 / 673 pass / 0 fai
   from CI would need an npm automation token as a repo secret plus a publish step that doesn't
   exist. Doing this is what stops npx drifting behind every release, and it leaves the `npm publish`
   deny rule fully intact because publishing stops being a local action. | dist | not-started
-- [ ] **Resume-on-Relaunch — designed, not built.** Relaunch currently rebuilds from template
+- [ ] **Resume-on-Relaunch — designed, not built. SUPERSEDED by the 2026-09-13 two-item decision**
+  (Resume + Start Fresh — see `2026-09-12 — Sidebar section vocabulary` (D1)/(D2) above); left
+  here for the mechanism notes below, not as the active design. Relaunch currently rebuilds from template
   (`clearRuntime` + `createSession`), so the terminal returns and the conversation does not; the
   fork has **zero** references to `resume`/`--continue`/any Claude session identity. Design settled
   with Sean: **flat context menu with a `Relaunch` section title** (not a submenu — his call), three

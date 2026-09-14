@@ -197,13 +197,27 @@ Background is layered `.regularMaterial` (a translucent system blur) with the su
 
 Use `cardBackgroundLight/Dark`, `expandedContainerLight/Dark`, `activeRowLight/Dark` tokens from `WorkspaceLayout.swift`. Do not create new hover colors.
 
-### Activity indicator states
+### Session status glyph (pattern D, "type is the icon" — BACKLOG J/K, 2026-09-13)
 
-| State       | Color                         |
-| ----------- | ----------------------------- |
-| Waiting     | `waitingTerracotta` `#C97350` |
-| Running     | — (system)                    |
-| Idle / done | — (muted)                     |
+A session row's status slot holds one monospaced type glyph, replacing the ghost as the status
+signal there (the ghost still appears elsewhere — project rollups, empty states, identity). One
+status icon per row, never a ghost plus a glyph.
+
+| Session state (`SessionIndicatorState`)      | Glyph          | Color              |
+| --------------------------------------------- | -------------- | ------------------- |
+| `.processing` / `.longRunning`                | Braille spinner (⠋⠙⠹⠸⠼⠴⠦⠧, ~80ms/frame) | `textSecondaryLight/Dark` |
+| `.needsAttention`                             | `?`            | `.primary` — the only emphasis; no accent color |
+| `.idle` / `.waiting`                          | `✓`            | `textSecondaryLight/Dark` |
+| `.error`                                      | `✕`            | `textSecondaryLight/Dark` |
+| `.inactive`                                   | (empty slot)   | —                    |
+
+`✓` also covers `.waiting` — `SessionCoordinator`'s silent/unknown fallback when there's no
+observed evidence the session is doing anything, not confirmed work. It must not spin
+indefinitely, so it reads at the same low salience as a confirmed-idle session.
+
+Reduce Motion replaces the spinner with a static `…` in the same color; no other state animates.
+No new colors — glyph colors are the existing `WorkspaceLayout` text tokens, not the
+`waitingTerracotta`/gold/blue/orange status-dot palette used elsewhere in the sidebar.
 
 ## 5. Layout Tokens
 

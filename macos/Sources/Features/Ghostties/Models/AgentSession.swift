@@ -1,6 +1,38 @@
 import Foundation
 import GhosttiesCore
 
+/// A persisted record of the underlying agent CLI's own conversation, so a
+/// closed session's terminal can be relaunched with `--resume`/`resume`
+/// instead of starting over. Written by `ClaudeStateStore.refresh()` from
+/// the hook payload (before `derive`'s event filtering, so it survives
+/// events `derive` doesn't act on) and read by `ResumePlan.command(for:)` at
+/// relaunch time. Unlike the hook status files in `~/.ghostties/state/`
+/// (deleted on `Stop`/`SessionEnd`), this lives on `AgentSession` in
+/// `workspace.json` — it must outlive the process that reported it.
+struct AgentResume: Codable, Hashable {
+    enum Agent: String, Codable {
+        case claude
+        case codex
+    }
+
+    var agent: Agent
+    /// The agent CLI's own session id (Claude's `session_id`, Codex's
+    /// rollout id) — NOT `AgentSession.id` (the Ghostties row identity).
+    var sessionId: String
+    /// Claude's transcript file, or Codex's rollout file. Existence is
+    /// checked at relaunch time for Claude only — Codex is migrating
+    /// rollouts to a DB and its path isn't a reliable existence proxy.
+    var transcriptPath: String?
+    /// Working directory at the time this record was last written. Codex's
+    /// `resume` does not restore cwd on its own — `ResumePlan` passes this
+    /// explicitly via `-C`.
+    var cwd: String?
+    /// `$GHOSTTIES_LAUNCHER` at spawn time (e.g. `cco`, `ccob`), or nil for
+    /// a shell-hosted `claude` with no wrapper. Only meaningful for
+    /// `.claude` — Codex has no equivalent wrapper convention.
+    var launcher: String?
+}
+
 /// Persistent metadata for a terminal session.
 ///
 /// This is the Codable record stored in workspace.json. Runtime state (the actual
@@ -51,6 +83,34 @@ struct AgentSession: Identifiable, Codable, Hashable {
     /// hash-derived ghost or a plain colored indicator — never re-rolled on render).
     var ghostCharacter: GhostCharacter?
 
+    /// Whether this session is pinned in the Sessions tab's Pinned section
+    /// (see `SessionSection`). Independent of whether the terminal is open —
+    /// a pinned session stays in Pinned whether `SessionBucket.membership`
+    /// would otherwise place it in Active, Inactive, or Archive; its ghost
+    /// glyph still reflects live state. Toggled via the Sessions-tab context
+    /// menu ("Pin"/"Unpin") and `WorkspaceStore.setSessionPinned(id:_:)` /
+    /// `toggleSessionPin(id:)`. Defaults to `false` so existing sessions are
+    /// unaffected. Project-view rows do not read this field.
+    var isPinned: Bool
+
+    /// Explicit ordering within whichever Sessions-tab section this session
+    /// currently belongs to (Pinned, Active, or Inactive — Archive always
+    /// sorts newest-first via `sortedNewestFirst` and ignores this field).
+    /// Cross-project, unlike `sortOrder` above, which is scoped per-project
+    /// for the Projects tab. Nil means this session predates Sessions-tab
+    /// drag-reorder and falls back to append/creation order. Values are only
+    /// ever compared WITHIN one section's filtered subset (see
+    /// `RecentsListView.orderedBySessionViewOrder`), so numbering assigned
+    /// while a session lived in a different section never collides with
+    /// another section's numbering.
+    var sessionViewOrder: Int?
+
+    /// This session's underlying agent conversation, if one has been
+    /// reported — see `AgentResume`. Nil for a session that predates this
+    /// field, one that never reported (pre-hook, or an untrusted Codex
+    /// hook), or a Shell/Browser session with no agent conversation.
+    var resume: AgentResume?
+
     init(
         id: UUID = UUID(),
         name: String,
@@ -60,7 +120,10 @@ struct AgentSession: Identifiable, Codable, Hashable {
         lastActiveAt: Date? = nil,
         lastOutputAt: Date? = nil,
         isNamePinned: Bool = false,
-        ghostCharacter: GhostCharacter? = nil
+        ghostCharacter: GhostCharacter? = nil,
+        isPinned: Bool = false,
+        sessionViewOrder: Int? = nil,
+        resume: AgentResume? = nil
     ) {
         self.id = id
         self.name = name
@@ -71,10 +134,13 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.lastOutputAt = lastOutputAt
         self.isNamePinned = isNamePinned
         self.ghostCharacter = ghostCharacter
+        self.isPinned = isPinned
+        self.sessionViewOrder = sessionViewOrder
+        self.resume = resume
     }
 
     // Custom decoder so existing workspace.json files (without sortOrder/lastActiveAt/
-    // lastOutputAt/isNamePinned/ghostCharacter) load without error.
+    // lastOutputAt/isNamePinned/ghostCharacter/isPinned/sessionViewOrder) load without error.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(UUID.self, forKey: .id)
@@ -90,6 +156,9 @@ struct AgentSession: Identifiable, Codable, Hashable {
         self.lastOutputAt = try container.decodeIfPresent(Date.self, forKey: .lastOutputAt)
         self.isNamePinned = try container.decodeIfPresent(Bool.self, forKey: .isNamePinned) ?? false
         self.ghostCharacter = try container.decodeIfPresent(GhostCharacter.self, forKey: .ghostCharacter)
+        self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        self.sessionViewOrder = try container.decodeIfPresent(Int.self, forKey: .sessionViewOrder)
+        self.resume = try container.decodeIfPresent(AgentResume.self, forKey: .resume)
     }
 
     /// The timestamp Sessions rows and the Archive sort should display and
@@ -197,5 +266,158 @@ enum SessionIndicatorState: Comparable {
 
     static func < (lhs: SessionIndicatorState, rhs: SessionIndicatorState) -> Bool {
         lhs.priority < rhs.priority
+    }
+}
+
+// MARK: - Lifecycle Bucket (Active / Inactive / Archive)
+
+/// The three groups every session bucket into — shared by the Sessions tab
+/// (`RecentsListView`) and each project's expanded session list
+/// (`WorkspaceStore.computeSessionGroups`). One rule, one set of labels, in
+/// both views.
+enum SessionBucket: String, CaseIterable, Hashable {
+    case active
+    case inactive
+    case archive
+}
+
+extension SessionBucket {
+    /// The single Active/Inactive/Archive membership rule.
+    ///
+    /// Active means the session's terminal is open: a live surface exists
+    /// and its process is running (`SessionStatus.isAlive`). This is
+    /// deliberately `status.isAlive` (i.e. `status == .running`), NOT
+    /// `SessionIndicatorState != .inactive` — indicator state reports
+    /// `.error` as "not inactive" for a session whose surface has ALREADY
+    /// closed (`SessionCoordinator.handleSurfaceClose` sets
+    /// `.error`/`.exited`/`.completed` only AFTER removing the surface from
+    /// `sessionTrees`), which would leave a closed, errored session stuck in
+    /// Active forever. `status.isAlive` is true only while a live surface
+    /// exists.
+    ///
+    /// - Inactive: not open, but `startedThisLaunch` — its terminal was open
+    ///   at some point this launch (Stop, or the shell it fell back to
+    ///   exited) and then closed.
+    /// - Archive: not open, and never started this launch — restored from
+    ///   `workspace.json`, untouched this run.
+    static func membership(
+        status: SessionStatus?,
+        startedThisLaunch: Bool
+    ) -> SessionBucket {
+        if status?.isAlive == true { return .active }
+        return startedThisLaunch ? .inactive : .archive
+    }
+}
+
+extension AgentSession {
+    /// Sorts sessions newest-first by `displayTimestamp`, nil last. Shared by
+    /// the Sessions tab's Archive section (`RecentsListView`) and each
+    /// project's expanded Archive bucket (`WorkspaceStore.computeSessionGroups`)
+    /// — the one bucket that does NOT keep append/alphabetical order, per
+    /// Sean's call that Archive should read reverse-chronological everywhere.
+    /// `Array.sort` is not guaranteed stable, so ties (and nil-vs-nil) break
+    /// on the original index to preserve incoming relative order.
+    static func sortedNewestFirst(_ sessions: [AgentSession]) -> [AgentSession] {
+        sessions
+            .enumerated()
+            .sorted { lhs, rhs in
+                switch (lhs.element.displayTimestamp, rhs.element.displayTimestamp) {
+                case let (l?, r?):
+                    if l != r { return l > r }
+                case (nil, .some):
+                    return false
+                case (.some, nil):
+                    return true
+                case (nil, nil):
+                    break
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+}
+
+// MARK: - Sessions-Tab Section (Pinned / Active / Inactive / Archive)
+
+/// The four groups the Sessions tab (`RecentsListView`) can display a session
+/// in. Pinning is layered ON TOP of `SessionBucket.membership` as a separate
+/// partition — it is never a second copy of the Active/Inactive/Archive rule.
+/// A pinned session always resolves to `.pinned` regardless of what bucket it
+/// would otherwise land in.
+enum SessionSection: String, CaseIterable, Hashable {
+    case pinned
+    case active
+    case inactive
+    case archive
+}
+
+extension SessionSection {
+    /// Pinning wins over bucket membership. See the type doc above — this is
+    /// the ONLY place pin status and `SessionBucket` combine.
+    static func section(isPinned: Bool, bucket: SessionBucket) -> SessionSection {
+        if isPinned { return .pinned }
+        switch bucket {
+        case .active:   return .active
+        case .inactive: return .inactive
+        case .archive:  return .archive
+        }
+    }
+}
+
+// MARK: - Sessions-Tab Drag/Drop Resolution
+
+/// The effect a drop should have, resolved purely from where a session came
+/// from and where it landed — see `SessionSectionDrop.resolve`.
+enum SessionDropAction: Equatable {
+    /// Reposition within the section the session already belongs to.
+    case reorder
+    /// Add to (or keep in) Pinned at the drop position.
+    case pin
+    /// Remove from Pinned at the drop position. `relaunchIfClosed` is true
+    /// when the session's terminal was NOT open — Active means the terminal
+    /// is open, so unpinning onto Active must also relaunch a closed session.
+    case unpin(relaunchIfClosed: Bool)
+    /// Relaunch a closed (Inactive/Archive) session at the drop position in
+    /// Active. Resume isn't built yet (BACKLOG item D) — this always does a
+    /// fresh relaunch.
+    case relaunch
+    /// No-op. Covers dragging DOWN into Inactive/Archive (Stop does that
+    /// job) and Archive as a drop target at all (it has no manual order).
+    case reject
+}
+
+/// Pure resolution of a Sessions-tab drag/drop, per Sean's decision 3.
+/// Takes no view/store state — only the dragged session's current section,
+/// whether its terminal is currently open, and the section it was dropped
+/// on. Every row of decision 3 has a corresponding test in
+/// `RecentsListViewTests`.
+enum SessionSectionDrop {
+    static func resolve(
+        draggedSection: SessionSection,
+        draggedIsOpen: Bool,
+        targetSection: SessionSection
+    ) -> SessionDropAction {
+        switch targetSection {
+        case .archive:
+            // Archive is newest-first with no manual order — never a drop target.
+            return .reject
+        case .pinned:
+            // Dropping ANY session on Pinned pins it at the drop position,
+            // whether it's already pinned (a same-section reorder) or not.
+            return .pin
+        case .active:
+            if draggedSection == .pinned {
+                return .unpin(relaunchIfClosed: !draggedIsOpen)
+            }
+            if draggedSection == .active {
+                return .reorder
+            }
+            // Inactive or Archive, closed — Active means the terminal is open.
+            return .relaunch
+        case .inactive:
+            // Reorder within Inactive is allowed; dragging DOWN into Inactive
+            // from anywhere else is not — Stop does that job.
+            return draggedSection == .inactive ? .reorder : .reject
+        }
     }
 }

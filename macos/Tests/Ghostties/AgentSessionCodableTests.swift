@@ -55,5 +55,54 @@ final class AgentSessionCodableTests: XCTestCase {
         XCTAssertNil(decoded.lastActiveAt)
         XCTAssertNil(decoded.lastOutputAt, "legacy sessions with no lastOutputAt key must decode to nil, not fail or default to now()")
         XCTAssertFalse(decoded.isNamePinned, "legacy sessions with no isNamePinned key must default to false")
+        XCTAssertNil(decoded.resume, "legacy sessions with no resume key must decode to nil, not fail")
+    }
+
+    /// A `workspace.json` written before `AgentResume` existed (this PR) —
+    /// same shape as `testLegacyJSONWithoutIsNamePinnedKeyDecodes` but named
+    /// for the acceptance criterion this feature adds: old workspace.json
+    /// decodes unchanged.
+    func testOldWorkspaceJSONWithoutResumeKeyDecodes() throws {
+        let id = UUID()
+        let templateId = UUID()
+        let projectId = UUID()
+        let json = """
+        {
+            "id": "\(id.uuidString)",
+            "name": "Pre-resume session",
+            "templateId": "\(templateId.uuidString)",
+            "projectId": "\(projectId.uuidString)",
+            "sortOrder": 3,
+            "isNamePinned": true,
+            "isPinned": true
+        }
+        """
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: Data(json.utf8))
+
+        XCTAssertNil(decoded.resume)
+        XCTAssertEqual(decoded.sortOrder, 3)
+        XCTAssertTrue(decoded.isNamePinned)
+        XCTAssertTrue(decoded.isPinned)
+    }
+
+    func testResumeRoundTrips() throws {
+        let original = AgentSession(
+            id: UUID(),
+            name: "Resumable",
+            templateId: UUID(),
+            projectId: UUID(),
+            resume: AgentResume(
+                agent: .claude,
+                sessionId: "claude-session-1",
+                transcriptPath: "/tmp/t.jsonl",
+                cwd: "/Users/sean/proj",
+                launcher: "cco"
+            )
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AgentSession.self, from: data)
+
+        XCTAssertEqual(decoded.resume, original.resume)
     }
 }
