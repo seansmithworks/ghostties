@@ -188,6 +188,7 @@ struct SessionComposerOverlay: View {
                             SessionComposerPalette(
                                 isPresented: isPresented,
                                 request: request,
+                                tuningDefaultsForTesting: composerDefaultsForTesting,
                                 revealPhase: revealPhaseBinding,
                                 zeroChromeMeasureOverride: column.width,
                                 zeroChromeFieldHeight: $zeroChromeFieldContentHeight
@@ -376,7 +377,11 @@ struct SessionComposerOverlay: View {
             }
 
             if resolvedStyle != .zeroChrome {
-                SessionComposerPalette(isPresented: isPresented, request: request)
+                SessionComposerPalette(
+                    isPresented: isPresented,
+                    request: request,
+                    tuningDefaultsForTesting: composerDefaultsForTesting
+                )
             }
         }
     }
