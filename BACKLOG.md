@@ -2,12 +2,18 @@
 
 ## PR #169 merge + post-merge verification (handoff, 2026-09-13)
 
+- Handoff: owned by Sean's separate merge-coordinator thread. Test plan: `docs/plans/pr169-composer-post-merge-test-plan.html`. Adversarial review evidence: `docs/plans/pr169-test-plan-gate/`.
 - [x] Stale default assertions and vacuous stored-value tests fixed pre-merge in this commit, found by the adversarial test-plan review.
+- [x] Release dry run #2 on `484cdca00` passed: https://github.com/seansmithworks/ghostties/actions/runs/34790997324 — "Assert DialKit absent" and Notarize app/DMG succeeded; appcast, release, homebrew-cask and verify-release were skipped. (The plan's first screen still says "result pending"; the merge thread confirms it.)
 - [ ] (a) Mark PR #169 ready and merge it via `--repo SeanSmithWorks/ghostties`.
 - [ ] (b) After merge, on main, with Ghostties Dev quit for the duration: full unfiltered suite via `xcodebuild test-without-building` with real totals from `xcresulttool`. Also red proofs by minimal production mutation (a compile failure doesn't count) for every test-bearing commit in `git log --first-parent --no-merges 911759a6e..057c19fed`, including the carried R15/R15b/Custom-preset/R18/Witness items listed in the sections below, and (session-7, Classic removal commit) `SessionComposerSnapshotTests.swift`'s 21 retargeted `.centered`→`.anchored` sites plus `twentySevenProjectsScrollCleanlyInPopover` — red proof: re-route `.anchored` to the single-line card in `cardKind(style:presentation:)` and confirm the popover-card tests go red.
 - [ ] (c) Sean's full manual run-through of the composer on a main build.
 - [ ] (d) PR screenshots owed: single-line composer + Witness ghost.
 - [ ] Until (b) is green, tag no beta from main.
+- [ ] Sidebar "+ New Session" popover never looked at live since Classic removal (`275c37d69`). Covered by the manual checklist item 10 in the plan.
+- [ ] 21 popover snapshot sites retargeted in `275c37d69` have pixel thresholds calibrated at the old 360pt centered card, unverified at the 204pt popover. Expect possible threshold-recalibration failures, not regressions.
+- [ ] (noticed, not pursued) `ComposerResultsTable.resultsWellMaxHeight` in `SessionComposerPalette.swift` still has a `.centered` branch that is unreachable since `275c37d69` (dead-code removal candidate). Decide or kill — strawman: delete in a follow-up.
+- [ ] (noticed, not pursued) Ghost frame test coverage: 26 of 27 `ComposerWitnessFramesTests` have no red proof. The plan labels them a known gap.
 
 ## 2026-09-13 (later) — Composer live-look round (PR #169)
 
