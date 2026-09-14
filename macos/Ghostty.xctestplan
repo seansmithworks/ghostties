@@ -12,6 +12,9 @@
     "commandLineArgumentEntries" : [
       {
         "argument" : "-NS🐞 YES"
+      },
+      {
+        "argument" : "-NSApplicationCrashOnExceptions YES"
       }
     ],
     "environmentVariableEntries" : [
