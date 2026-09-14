@@ -12,7 +12,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [0.1.0-beta.25] — 2026-09-10
 
-The session composer goes ultra-minimal: no trailing buttons on the field, section headers and a contextual footer replace them, and the ghost-text field is on by default for everyone. A session's terminal now survives its agent exiting.
+The session composer goes ultra-minimal: no trailing buttons on the field, section headers and a contextual footer replace them, and the ghost-text field is on by default for everyone. A session's terminal now survives its agent exiting. The sidebar gets a rebuilt session view: unified Active / Inactive / Archive sections, pinning and drag-reorder, Resume alongside Start Fresh, and a quieter status glyph in place of the ghost icon.
+
+### Added
+
+- **Pin sessions in the sidebar, and drag between sections.** Dropping a session on Active relaunches it; drop zones and auto-scroll make reordering visible as you drag.
+- **Resume picks up where a session left off.** The row's context menu offers Resume (when a saved conversation exists) alongside Start Fresh, for both Claude Code and Codex sessions.
 
 ### Changed
 
@@ -21,6 +26,8 @@ The session composer goes ultra-minimal: no trailing buttons on the field, secti
 - **A thin footer strip shows only the key chords that are live right now** (Return, Tab, arrows, Undo), replacing the old static four-chord row — and it never doubles up with an error message or the new-template naming prompt.
 - **The ghost-text composer field is now on for everyone**, previewing your destination — project, branch, template — as you type instead of requiring you to turn it on first. The old toggle in View → Experimental Composer Field still exists if you want it off.
 - **Tab in the composer accepts one segment plus a space**, never a chevron. Typing a name and hitting Tab used to insert `>`, which could get read as an explicit branch declaration you didn't intend.
+- **Active, Inactive, and Archive now follow one rule everywhere** — a session or project counts as Active exactly when its terminal is alive, in both the session and project views.
+- **A row's status now shows as a single glyph** — a spinner while it's working, `?` when it needs you, `✓` when it's idle or done, `✕` on error — replacing the ghost-based indicator.
 
 ### Fixed
 
