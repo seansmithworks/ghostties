@@ -51,7 +51,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REFRESH_SCRIPT="$REPO_ROOT/scripts/demo/refresh-demo.sh"
 SEED_SCRIPT="$REPO_ROOT/scripts/demo/seed-demo-workspace.sh"
 STAGE_SCRIPT="$REPO_ROOT/scripts/demo/_stage-demo-sessions.sh"
-FIXTURES_DIR="$REPO_ROOT/examples/demo-workspace"
 RELEASE_REPO="SeanSmithWorks/ghostties"
 ASSET_NAME="ghostties-macos-arm64.zip"
 
@@ -205,7 +204,7 @@ write_manifest() {
   dest_app_resolved="$(cd "$(dirname "$DEST_APP")" && pwd)/$(basename "$DEST_APP")"
 
   local fixture_count app_mtime_epoch app_mtime_iso refreshed_at installed_version_now
-  fixture_count=$(find "$FIXTURES_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+  fixture_count="${#DEMO_PROJECT_SPECS[@]}"
   app_mtime_epoch=$(stat -f%m "$dest_app_resolved")
   app_mtime_iso=$(date -u -r "$app_mtime_epoch" +"%Y-%m-%dT%H:%M:%SZ")
   refreshed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -246,10 +245,10 @@ PYEOF
 #    the "Do you trust this folder?" screen during capture. Never touches
 #    any other key or project entry. See scripts/demo/README.md.
 check_fixture_trust() {
-  python3 - "$CLAUDE_CONFIG" "$FIXTURES_DIR" "$REPOS_DIR" <<'PYEOF'
+  python3 - "$CLAUDE_CONFIG" "$REPOS_DIR" "$(demo_project_names)" <<'PYEOF'
 import sys, os, json
 
-config_path, fixtures_dir, repos_dir = sys.argv[1:4]
+config_path, repos_dir, names_raw = sys.argv[1:4]
 
 if not os.path.isfile(config_path):
     print(f"ERROR: Claude config not found at {config_path}", file=sys.stderr)
@@ -263,10 +262,7 @@ with open(config_path) as f:
         sys.exit(1)
 
 projects = data.get("projects", {})
-fixture_names = sorted(
-    n for n in os.listdir(fixtures_dir)
-    if os.path.isdir(os.path.join(fixtures_dir, n))
-)
+fixture_names = sorted(n for n in names_raw.splitlines() if n.strip())
 
 untrusted = []
 for name in fixture_names:
@@ -290,15 +286,12 @@ PYEOF
 #    user settings have remoteControlAtStartup: true; a project-level
 #    settings.local.json may override to false, never to true).
 check_fixture_remote_control() {
-  python3 - "$FIXTURES_DIR" "$REPOS_DIR" <<'PYEOF'
+  python3 - "$REPOS_DIR" "$(demo_project_names)" <<'PYEOF'
 import sys, os, json
 
-fixtures_dir, repos_dir = sys.argv[1:3]
+repos_dir, names_raw = sys.argv[1:3]
 
-fixture_names = sorted(
-    n for n in os.listdir(fixtures_dir)
-    if os.path.isdir(os.path.join(fixtures_dir, n))
-)
+fixture_names = sorted(n for n in names_raw.splitlines() if n.strip())
 
 bad = []
 for name in fixture_names:
@@ -324,12 +317,68 @@ print(f"OK: remoteControlAtStartup=false in {len(fixture_names)}/{len(fixture_na
 PYEOF
 }
 
+# ── Project MCP server check: any fixture repo shipping a checked-in
+#    .mcp.json must have every server it declares listed in that repo's
+#    settings.local.json disabledMcpjsonServers, or Claude Code stops the
+#    staged session at its "New MCP server found" approval dialog.
+check_fixture_mcp_disabled() {
+  python3 - "$REPOS_DIR" "$(demo_project_names)" <<'PYEOF'
+import sys, os, json
+
+repos_dir, names_raw = sys.argv[1:3]
+
+fixture_names = sorted(n for n in names_raw.splitlines() if n.strip())
+
+bad = []
+checked = 0
+for name in fixture_names:
+    mcp_path = os.path.join(repos_dir, name, ".mcp.json")
+    if not os.path.isfile(mcp_path):
+        continue
+    try:
+        with open(mcp_path) as f:
+            mcp = json.load(f)
+    except json.JSONDecodeError:
+        bad.append(f"{name} (invalid .mcp.json)")
+        continue
+    server_names = sorted((mcp.get("mcpServers") or {}).keys())
+    if not server_names:
+        continue
+    checked += 1
+
+    settings_path = os.path.join(repos_dir, name, ".claude", "settings.local.json")
+    if not os.path.isfile(settings_path):
+        bad.append(f"{name} (missing settings.local.json, servers: {', '.join(server_names)})")
+        continue
+    try:
+        with open(settings_path) as f:
+            settings = json.load(f)
+    except json.JSONDecodeError:
+        bad.append(f"{name} (invalid settings.local.json)")
+        continue
+    disabled = set(settings.get("disabledMcpjsonServers", []))
+    missing = [s for s in server_names if s not in disabled]
+    if missing:
+        bad.append(f"{name} (not disabled: {', '.join(missing)})")
+
+if bad:
+    print(f"NOT READY: fixture repo(s) with .mcp.json missing disabledMcpjsonServers entries: {', '.join(bad)}", file=sys.stderr)
+    print("           Fix: run ./scripts/demo/seed-demo-workspace.sh (or demo-ready.sh without --check).", file=sys.stderr)
+    sys.exit(1)
+
+if checked == 0:
+    print("OK: no fixture repos ship a .mcp.json.")
+else:
+    print(f"OK: project MCP servers disabled in {checked}/{checked} fixture repo(s) with .mcp.json")
+PYEOF
+}
+
 ensure_fixture_trust() {
   echo "==> Ensuring fixture repos are trusted in Claude Code config ($CLAUDE_CONFIG)..."
-  python3 - "$CLAUDE_CONFIG" "$FIXTURES_DIR" "$REPOS_DIR" <<'PYEOF'
+  python3 - "$CLAUDE_CONFIG" "$REPOS_DIR" "$(demo_project_names)" <<'PYEOF'
 import sys, os, json, time, shutil
 
-config_path, fixtures_dir, repos_dir = sys.argv[1:4]
+config_path, repos_dir, names_raw = sys.argv[1:4]
 
 if not os.path.isfile(config_path):
     print(f"ERROR: Claude config not found at {config_path}", file=sys.stderr)
@@ -356,10 +405,7 @@ for line in raw.split("\n")[1:]:
         break
 trailing_newline = raw.endswith("\n")
 
-fixture_names = sorted(
-    n for n in os.listdir(fixtures_dir)
-    if os.path.isdir(os.path.join(fixtures_dir, n))
-)
+fixture_names = sorted(n for n in names_raw.splitlines() if n.strip())
 
 projects = data["projects"]
 before_count = len(projects)
@@ -451,6 +497,9 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
       exit 1
     fi
     if ! check_fixture_remote_control; then
+      exit 1
+    fi
+    if ! check_fixture_mcp_disabled; then
       exit 1
     fi
     if ! check_staged_sessions; then
