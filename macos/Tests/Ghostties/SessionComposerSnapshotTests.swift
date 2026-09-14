@@ -403,6 +403,86 @@ struct SessionComposerSnapshotTests {
         return maxY - minY
     }
 
+    /// `windowAppearance`/`ambientAppearance` test arguments name an
+    /// `NSAppearance.Name` as a plain string (`"aqua"`/`"darkAqua"`) — same
+    /// shape as `ComposerZeroChromeStyleTests.appearanceName`, kept local to
+    /// this file rather than shared (private, `@testable` structs don't
+    /// share test-file internals).
+    private func appearanceName(_ key: String) -> NSAppearance.Name {
+        key == "darkAqua" ? .darkAqua : .aqua
+    }
+
+    /// Structural rest-hint-ink detector for `anchoredRestStateShowsGenericHintNotPath`
+    /// (row18-fix-design.md §2): locates the card by opaque bounds (same
+    /// technique as `cardTopEdge`/`cardBottomEdge`), then measures ink
+    /// (contrast-against-background) pixels in the field row —
+    /// `cardTopEdge+8 ..< cardTopEdge+100`, the same window
+    /// `ghostGrayBandPixelCount` scans. `peak` is the strongest luma
+    /// contrast found (as a fraction of the background's own distance from
+    /// full black/white — the "ghost opacity" signal); `ink` is the count
+    /// of pixels clearing the contrast floor; `minX`/`maxX` bound the
+    /// x-span the hint text actually occupies, used to distinguish the
+    /// short generic hint from the (much wider) real resolved path.
+    private func restHintInk(in data: Data) -> (peak: Double, ink: Int, minX: Int, maxX: Int)? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        guard let cardTop = cardTopEdge(in: data) else { return nil }
+
+        func isOpaque(_ x: Int, _ y: Int) -> Bool {
+            guard x >= 0, x < rep.pixelsWide, y >= 0, y < rep.pixelsHigh else { return false }
+            guard let color = rep.colorAt(x: x, y: y) else { return false }
+            return color.alphaComponent >= 0.98
+        }
+
+        func luma(_ x: Int, _ y: Int) -> Double? {
+            guard let color = rep.colorAt(x: x, y: y) else { return nil }
+            return Double(color.redComponent + color.greenComponent + color.blueComponent) / 3
+        }
+
+        let midRow = cardTop + 50
+        guard midRow >= 0, midRow < rep.pixelsHigh else { return nil }
+        guard let cardLeft = (0..<rep.pixelsWide).first(where: { isOpaque($0, midRow) }),
+              let cardRight = (0..<rep.pixelsWide).reversed().first(where: { isOpaque($0, midRow) }),
+              cardLeft < cardRight else { return nil }
+
+        let xStart = cardLeft + 6
+        let xEnd = cardRight - 6
+        guard xStart <= xEnd else { return nil }
+        let yStart = cardTop + 8
+        let yEnd = min(cardTop + 100, rep.pixelsHigh - 1)
+        guard yStart <= yEnd else { return nil }
+
+        var lumas: [Double] = []
+        for x in stride(from: xStart, through: xEnd, by: 2) {
+            for y in stride(from: yStart, through: yEnd, by: 2) {
+                guard isOpaque(x, y), let l = luma(x, y) else { continue }
+                lumas.append(l)
+            }
+        }
+        guard !lumas.isEmpty else { return nil }
+        lumas.sort()
+        let bg = lumas[lumas.count / 2]
+        let full = bg > 0.5 ? bg : 1 - bg
+        guard full > 0 else { return nil }
+
+        var ink = 0
+        var peak = 0.0
+        var minX: Int?
+        var maxX: Int?
+        for x in stride(from: xStart, through: xEnd, by: 2) {
+            for y in stride(from: yStart, through: yEnd, by: 2) {
+                guard isOpaque(x, y), let l = luma(x, y) else { continue }
+                let delta = abs(l - bg)
+                guard delta >= 0.15 * full else { continue }
+                ink += 1
+                peak = max(peak, delta / full)
+                minX = min(minX ?? x, x)
+                maxX = max(maxX ?? x, x)
+            }
+        }
+        guard let minX, let maxX else { return nil }
+        return (peak: peak, ink: ink, minX: minX, maxX: maxX)
+    }
+
     /// DEFECT 6 fix (review round 2): round 1 added `assertEvidenceMatchesDisk`
     /// (below `writeEvidence` originally) claiming to guard against the
     /// stale-PNG class (`fb09ce9c9`'s PNGs were committed without being
@@ -532,46 +612,75 @@ struct SessionComposerSnapshotTests {
 
     // MARK: - Step 3: rest-state ghost path (11.1)
 
-    /// A fresh, empty-search composer against a resolvable, unlocked
-    /// project — `onAppear`'s S5 seed selects the project's default
-    /// template, so the ghost placeholder renders the FULL path (rule 1),
-    /// comparable side-by-side with `V02Quieted22.dc.html`'s rest state
-    /// (one grey, full path, no sub-ranges).
-    ///
-    /// LIMITATION: this repo's HEAD already has Step 5 (resolution-line
-    /// deletion) landed, so this capture necessarily shows the
-    /// post-Step-5 layout — there is no pre-deletion build left to render
-    /// against. It still evidences Step 3's actual subject, the ghost
-    /// path's rendering/opacity, which Step 5 doesn't touch; it just isn't
-    /// a capture of "Step 3 layout in isolation" as the original plan
-    /// framed it. Do not read the resolution line's absence here as new
-    /// information about Step 3.
-    @Test func step3RestStateGhostPathRendersLightAndDark() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore)
-        let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
+    /// `.anchored` showing the generic hint, not the resolved path, is
+    /// INTENDED (G-F28, `docs/plans/composer-ui-11/plan.md:69`,
+    /// `findings-ledger.md:58`): `.anchored` is 11pt/30pt at sidebar width
+    /// and cannot fit the path, so `ghostPlaceholder` (`SessionComposerPalette.swift`)
+    /// keeps the generic placeholder unconditionally, gated on
+    /// `request.presentation == .centered`. This fixture uses `.anchored`
+    /// (`paletteView` above), so it can only ever render that generic
+    /// hint — never the real resolved path, which is covered separately at
+    /// this file's typed-state test. Renamed from
+    /// `step3RestStateGhostPathRendersLightAndDark`, whose doc comment
+    /// (claiming it captured "the FULL path") was stale
+    /// (`feedback_vacuous-tests-pass-green`) and whose fixed-band RGB match
+    /// followed the Mac's light/dark clock
+    /// (`reference_pixel-tests-follow-system-dark-mode`).
+    @Test(arguments: ["aqua", "darkAqua"], ["aqua", "darkAqua"])
+    func anchoredRestStateShowsGenericHintNotPath(windowAppearance: String, ambientAppearance: String) {
+        NSAppearance(named: appearanceName(ambientAppearance))!.performAsCurrentDrawingAppearance {
+            let project = makeProject()
+            let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+            let composerStore = makePlainComposer(project: project, workspaceStore: workspaceStore)
+            let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore)
+            let size = NSSize(width: WorkspaceLayout.composerOverlayWidth + 16, height: 420)
 
-        let light = renderPNG(view, appearance: .aqua, size: size)
-        writeEvidence(light, filename: "step3-rest-ghost-path-light.png")
-        #expect(light != nil)
-        // Fix 7 (review): asserts the ghost actually renders IN the correct
-        // gray band (`rgb(147,147,147)` at the shipped 0.50 opacity,
-        // measured — see `ghostGrayBandPixelCount`'s doc comment), not just
-        // that some PNG came back. The threshold (50) is a wide margin
-        // under the actual matching-pixel count at this exact render
-        // size/stride, catching a missing/wrong-opacity ghost without being
-        // brittle to minor layout drift.
-        if let light {
-            let bandCount = ghostGrayBandPixelCount(in: light)
-            #expect(bandCount > 50, "expected the rest-state ghost's rgb(147,147,147) band, found \(bandCount) matching pixels")
+            let png = renderPNG(view, appearance: appearanceName(windowAppearance), size: size)
+            if windowAppearance == ambientAppearance {
+                writeEvidence(png, filename: windowAppearance == "aqua" ? "step3-rest-ghost-path-light.png" : "step3-rest-ghost-path-dark.png")
+            }
+            #expect(png != nil)
+            guard let png else { return }
+            guard let hint = restHintInk(in: png) else {
+                Issue.record("could not locate the rest-state hint in the rendered card")
+                return
+            }
+            // (a) the hint renders at ghost opacity (`ghostPlaceholderOpacity`,
+            // 0.50) — measured baseline peak 0.498 (aqua ambient) / 0.551
+            // (darkAqua ambient) across all 4 window x ambient cases.
+            #expect(
+                hint.peak >= 0.30 && hint.peak <= 0.60,
+                "expected the generic hint to render at ghost opacity; measured peak=\(hint.peak)"
+            )
+            // (b) the hint is actually present — half the measured baseline
+            // ink count across the 4 appearance cases (min 540: aqua/aqua
+            // and aqua/darkAqua; max 630: darkAqua/aqua and darkAqua/darkAqua).
+            #expect(
+                hint.ink >= 270,
+                "expected the generic hint text to render, found ink=\(hint.ink)"
+            )
+            // (c) the G-F28 guard: `.anchored` renders the generic hint, not
+            // the resolved path — checked as a width comparison, direction
+            // taken from measurement rather than row18-fix-design.md's
+            // premise (which assumed the resolved path is the WIDER of the
+            // two; on this fixture it's the opposite). Measured, all 4
+            // window x ambient cases identical in each state:
+            //   baseline hint: "Type a project, branch, and command…", 352px
+            //   mutation C (guard removed) resolved path: "Demo Project >
+            //   Browser", 250px
+            // Threshold = (352 + 250) / 2 = 301; the hint is the LONGER of
+            // the two here, so the check asserts width is ABOVE threshold.
+            // Fixture-specific: a longer project/branch/template name would
+            // make the resolved path the wider string and invert this: the
+            // guard's product reason is still G-F28 (`.anchored` cannot fit
+            // the path), this check just happens to read "hint is longer,
+            // not shorter" on Demo Project's short default template name.
+            let width = hint.maxX - hint.minX
+            #expect(
+                width > 301,
+                "expected the generic hint (352px on this fixture), not the resolved path (250px); measured width=\(width)"
+            )
         }
-
-        let dark = renderPNG(view, appearance: .darkAqua, size: size)
-        writeEvidence(dark, filename: "step3-rest-ghost-path-dark.png")
-        #expect(dark != nil)
-        if let dark { #expect(containsRenderedContent(in: dark, isDark: true), "expected the rest-state ghost/card content to render, got a near-blank card") }
     }
 
     // MARK: - Step 5 / ultra-minimal: resolution line AND trailing controls gone
