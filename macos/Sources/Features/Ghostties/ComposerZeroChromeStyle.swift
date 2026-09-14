@@ -1785,11 +1785,6 @@ final class ComposerDialKitCoordinator: ObservableObject {
         // returning. Bail out immediately so that re-entrant call neither
         // persists the stale model nor reconfigures the controls a second
         // time.
-        // See `isRebuildingControls`'s doc comment: `state.configure(...)`
-        // below re-enters this method with a stale, old-style model before
-        // returning. Bail out immediately so that re-entrant call neither
-        // persists the stale model nor reconfigures the controls a second
-        // time.
         guard !isRebuildingControls else { return }
         let previous = lastKnownModel
         lastKnownModel = model
