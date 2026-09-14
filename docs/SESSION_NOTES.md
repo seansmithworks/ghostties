@@ -1,5 +1,33 @@
 # Session Notes — Ghostties
 
+## Sep 13, 2026 — Composer PR #169 refinement closed; handed to merge coordinator
+
+**What shipped.** All on `feat/composer-zero-chrome`, pushed, PR #169 still draft, nothing
+merged: Sean's DialKit-tuned defaults plus DialKit Copy fixed on macOS and 5 Witness ghost
+dials (`a0eec0232`); copy-output defaults plus horizontal float (`e9c922eb0`); caret
+cursor-accessory bubble hidden via `preferredTextAccessoryPlacement` to `.invisible`
+(`b3fa5809c`); Witness mesh-line double-paint fixed with pixel-snapped cells (`79a151ffe`);
+single-line made the default (`4e68b2c2c`); ghost identity changes always transition, morph
+then beat (`f0c9c5cf7`); review gaps closed (`8579f6420`); origin/main merged (`057c19fed`);
+cleanup (`fc549f34f`, `5650f42bb`, `a46a6b972`); Classic style deleted, with the sidebar
+popover's card selected by presentation (`275c37d69`); stale default assertions and vacuous
+stored-value tests fixed (`484cdca00`); post-merge test plan, revised after an adversarial
+review (`2fb82f208`, `d7ae37c32`).
+
+**Verified.** Independent reviews passed with notes on `a0eec0232`, `4e68b2c2c`/`f0c9c5cf7`,
+and `275c37d69`. Release dry runs #34782927958 (`79a151ffe`) and #34790997324 (`484cdca00`)
+both passed the DialKit-absent gate. Sean's live look passed on `057c19fed`.
+
+**Not verified.** No local test run since `911759a6e` (1147 passed / 10 failed). Sean moved
+the suite, red proofs, and his manual run-through to after merge, on main, with no beta tag
+until green.
+
+**What was wrong along the way.** The first test plan attributed tests to the wrong commits,
+because its writer read a working tree another agent was mid-edit on. The adversarial review
+also found the suite already red on stale default assertions.
+
+**Open.** See `BACKLOG.md` top section.
+
 ## Sep 13, 2026 — Demo rig: fixture review closed, capture not postable, beta.25 test plan red-teamed
 
 **Review and fixes.** A separate reviewer passed the 7-public-repo fixture swap with notes. Both notes are fixed and pushed to `origin/feat/demo-open-source-fixtures`:
