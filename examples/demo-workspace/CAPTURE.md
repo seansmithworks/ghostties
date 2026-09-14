@@ -2,6 +2,19 @@
 
 Concrete, copy-paste instructions for recording the Ghostties demo workspace. Designed to be executed in ~30 minutes and reshootable on any future session. This same setup and shotlist feeds both the portfolio case study and social-media promo clips.
 
+> **STALE (2026-09-13): the task-first shot list below is orphaned.** The
+> fixture set moved from 10 synthetic stub projects to 7 real, public, cloned
+> repos (`ghostties`, `riff`, `surface-fx`, `colophon`, `impeccable-swift`,
+> `agent-skills`, `vista-sheet` — see `scripts/demo/_demo-paths.sh`), and no
+> `.ghostties/tasks/*.md` overlay was authored for the new set (per explicit
+> instruction not to invent fake task content). Every shot below that
+> references `switchboard`, task-first zones (Inbox/Backlog/Running/Needs
+> You/Review/Graveyard), or the 10-ghost rail is describing content that no
+> longer exists. The **project-rail/general-workspace shots still apply**
+> (7 ghosts now, not 10); the **task-first zone shots do not** until someone
+> decides whether to retire task-first capture or author real task content
+> against one of the 7 repos.
+
 ---
 
 ## 1. Scene Setup

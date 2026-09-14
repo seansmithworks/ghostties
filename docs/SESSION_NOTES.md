@@ -1,5 +1,26 @@
 # Session Notes — Ghostties
 
+## Sep 13, 2026 — Demo rig: fixture review closed, capture not postable, beta.25 test plan red-teamed
+
+**Review and fixes.** A separate reviewer passed the 7-public-repo fixture swap with notes. Both notes are fixed and pushed to `origin/feat/demo-open-source-fixtures`:
+- `cab4bab34` binds each staged prompt to its repo in `DEMO_PROJECT_SPECS`. Index cycling had given the "explain the commit" prompt to colophon only, while the pins assumed all four got it. It also fixes a stale clone path in `examples/demo-workspace/README.md`.
+- `b0f4b76e2` seeds `disabledMcpjsonServers` from each clone's `.mcp.json`, plus a `--check` line for it.
+
+`demo-ready.sh` and `--check` exited 0 after each fix.
+
+**Capture.** Sean ran it, because the permission classifier blocked Claude twice. It passed 2/2 but isn't postable: the surface-fx pane in frame sat at Claude Code's "New MCP server found" dialog. The MCP fix hasn't been re-captured.
+
+**Test plan for after beta.25.** A separate planner-tier refuter returned "rethink" with 21 findings, and the plan was rebuilt around them. It lives outside the repo at `~/.claude/plans-html/ghostties-demo-test-plan.html`, with the critique files beside it. The rebuilt plan:
+- defines "new" from the beta.25 tag;
+- covers the composer with the existing `VisualPassUITests`;
+- lists seven rig fixes to make before the next demo capture.
+
+Two breaks were verified along the way:
+- #175 renames "Relaunch" and restores sessions into a collapsed Archive, so the capture test will find no rows.
+- The old content wait passes on the login banner alone.
+
+**Open.** F3 clean capture, F4 PR, and four decisions for Sean are in `BACKLOG.md` under 2026-09-11. Durable gotchas were added to `reference_demo-capture-rig-gotchas.md`.
+
 ## Aug 23, 2026 — Linear→Ghostties sync run; preset's MCP binary is uninstalled
 
 Sean asked for a Linear sync from a plain `~/Code` session. It ran, but only after working

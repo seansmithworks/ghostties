@@ -74,8 +74,22 @@ fi
 #    outside the space-containing demo state/repos dirs: SessionCoordinator
 #    extracts the base command by splitting on the first whitespace
 #    character, so a path containing a space would be truncated there.
+#
+#    Each staged repo's prompt is looked up from its own `promptkey` field in
+#    DEMO_PROJECT_SPECS (_demo-paths.sh), never picked by cycling an index —
+#    see PROJECT_PROMPT_KEYS_ARG below and PROMPT_BY_KEY in the python block.
 mkdir -p "$DEMO_WRAPPER_DIR"
 chmod 700 "$DEMO_WRAPPER_DIR"
+
+# ── Reduce DEMO_PROJECT_SPECS (name|repo|sha|branch|ghost|promptkey) to
+#    "name|promptkey" pairs for the python generator below, so the prompt a
+#    staged agent gets travels with its own repo row instead of being picked
+#    by array-cycling index (see _demo-paths.sh for the key meanings).
+PROJECT_PROMPT_KEYS_ARG=""
+for spec in "${DEMO_PROJECT_SPECS[@]}"; do
+  IFS='|' read -r spec_name _repo _sha _branch _ghost spec_prompt_key <<< "$spec"
+  PROJECT_PROMPT_KEYS_ARG+="$spec_name|$spec_prompt_key"$'\n'
+done
 
 # ── Back up existing workspace.json ─────────────────────────────────────────
 BACKUP="$DEMO_STATE_DIR/workspace.json.bak-$(date +%Y%m%dT%H%M%S)"
@@ -88,16 +102,24 @@ TMP_FILE="$(mktemp "${TMPDIR:-/tmp}/workspace.XXXXXX.json")"
 trap 'rm -f "$TMP_FILE"' EXIT
 
 echo "==> Rewriting workspace.json..."
-python3 - "$TARGET" "$TMP_FILE" "$REPOS_DIR" "$COUNT" "$RESET" "$DEMO_SESSION_MARKER" "$TEMPLATE_MARKER" "$DEMO_WRAPPER_DIR" "$CLAUDE_BIN" <<'PYEOF'
+python3 - "$TARGET" "$TMP_FILE" "$REPOS_DIR" "$COUNT" "$RESET" "$DEMO_SESSION_MARKER" "$TEMPLATE_MARKER" "$DEMO_WRAPPER_DIR" "$CLAUDE_BIN" "$PROJECT_PROMPT_KEYS_ARG" <<'PYEOF'
 import sys
 import json
 import subprocess
 import os
 import shlex
 
-target_path, tmp_path, repos_dir, count_str, reset_str, session_marker, template_marker, wrapper_dir, claude_bin = sys.argv[1:10]
+target_path, tmp_path, repos_dir, count_str, reset_str, session_marker, template_marker, wrapper_dir, claude_bin, project_prompt_keys_raw = sys.argv[1:11]
 count = int(count_str)
 reset = reset_str == "1"
+
+# name -> prompt key, from DEMO_PROJECT_SPECS (see _demo-paths.sh). Empty
+# value means "not a staged repo" and is not a valid lookup target below.
+project_prompt_keys = dict(
+    line.split("|", 1)
+    for line in project_prompt_keys_raw.splitlines()
+    if line.strip()
+)
 
 with open(target_path) as f:
     state = json.load(f)
@@ -144,24 +166,42 @@ if reset:
 def new_uuid():
     return subprocess.run(["uuidgen"], capture_output=True, text=True, check=True).stdout.strip().upper()
 
-# Short, harmless, read-only prompts — cycled across staged sessions. Each
-# is a plain positional argument to `claude`, never a flag that could touch
-# the filesystem.
-PROMPTS = [
-    "Summarize this repository's README in 3 bullet points. Read-only — do not modify any files.",
-    "List any TODO or FIXME comments you can find in this repository. Read-only — do not modify any files.",
-    "Describe this repository's directory structure in a few sentences. Read-only — do not modify any files.",
-    "Explain what the most recent git commit in this repository changed. Read-only — do not modify any files.",
-]
+# Short, harmless, read-only prompts, keyed by the prompt key each staged
+# repo carries in DEMO_PROJECT_SPECS (see _demo-paths.sh). Each is a plain
+# positional argument to `claude`, never a flag that could touch the
+# filesystem.
+PROMPT_BY_KEY = {
+    "readme": "Summarize this repository's README in 3 bullet points. Read-only — do not modify any files.",
+    "todos": "List any TODO or FIXME comments you can find in this repository. Read-only — do not modify any files.",
+    "structure": "Describe this repository's directory structure in a few sentences. Read-only — do not modify any files.",
+    "commit": "Explain what the most recent git commit in this repository changed. Read-only — do not modify any files.",
+}
 
 new_sessions = []
 new_templates = []
 
 for i in range(count):
     project = eligible_projects[i % len(eligible_projects)]
-    prompt = PROMPTS[i % len(PROMPTS)]
     project_name = project["name"]
     root_path = project["rootPath"]
+
+    prompt_key = project_prompt_keys.get(project_name)
+    if not prompt_key:
+        print(
+            f"ERROR: project '{project_name}' has no prompt key in DEMO_PROJECT_SPECS "
+            "(_demo-paths.sh) — it is not a staged repo and cannot be assigned a "
+            "prompt. Fix DEMO_PROJECT_SPECS or stage a different set of repos.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if prompt_key not in PROMPT_BY_KEY:
+        print(
+            f"ERROR: project '{project_name}' has unknown prompt key '{prompt_key}' "
+            f"— expected one of {sorted(PROMPT_BY_KEY)}.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    prompt = PROMPT_BY_KEY[prompt_key]
 
     template_id = new_uuid()
     session_id = new_uuid()
