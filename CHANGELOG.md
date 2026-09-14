@@ -12,16 +12,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [0.1.0-beta.25] — 2026-09-10
 
-The session composer goes ultra-minimal: no trailing buttons on the field, section headers and a contextual footer replace them, and the ghost-text field is on by default for everyone. A session's terminal now survives its agent exiting. The sidebar gets a rebuilt session view: unified Active / Inactive / Archive sections, pinning and drag-reorder, Resume alongside Start Fresh, and a quieter status glyph in place of the ghost icon.
+The composer gets a new single-line look, on by default: a floating field with no card chrome, previewing your destination as ghost text. A zero-chrome style is also available for anyone who wants the field with nothing else on screen. The ghost-text field itself is on for everyone. A session's terminal now survives its agent exiting. The sidebar gets a rebuilt session view: unified Active / Inactive / Archive sections, pinning and drag-reorder, Resume alongside Start Fresh, and a quieter status glyph in place of the ghost icon.
 
 ### Added
 
 - **Pin sessions in the sidebar, and drag between sections.** Dropping a session on Active relaunches it; drop zones and auto-scroll make reordering visible as you drag.
 - **Resume picks up where a session left off.** The row's context menu offers Resume (when a saved conversation exists) alongside Start Fresh, for both Claude Code and Codex sessions.
+- **A zero-chrome composer style** — the field alone, no card, no results list until you type — for anyone who wants the minimum possible surface.
 
 ### Changed
 
-- **The composer field row drops its trailing project/branch buttons too** — the results list below the field is now the only way to browse projects and templates. No mouse route into a branch or project picker remains on the field row itself.
+- **Single-line is now the composer's default look**, replacing the card-based style: a floating field that previews your destination as ghost text, with results appearing only once you start typing or press ↓. The old card-based composer is gone.
 - **RECENT / TEMPLATES / PROJECTS / COMMAND section headers are back** above the composer's results list, so the list reads as browseable groups again instead of one flat stack.
 - **A thin footer strip shows only the key chords that are live right now** (Return, Tab, arrows, Undo), replacing the old static four-chord row — and it never doubles up with an error message or the new-template naming prompt.
 - **The ghost-text composer field is now on for everyone**, previewing your destination — project, branch, template — as you type instead of requiring you to turn it on first. The old toggle in View → Experimental Composer Field still exists if you want it off.
