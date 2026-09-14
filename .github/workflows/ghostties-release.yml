@@ -208,6 +208,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_ENTITLEMENTS=
 
+      - name: Assert DialKit absent
+        run: bash scripts/assert-no-dialkit.sh macos/build/Release/Ghostties.app
+
       # Inject version metadata and Sparkle public key into Info.plist.
       # SUPublicEDKey is NOT secret — it's the public half of the EdDSA keypair.
       - name: Update Info.plist

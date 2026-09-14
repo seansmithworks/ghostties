@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PR #169 composer (post-merge test plan)</title>
+    <link rel="stylesheet" href="http://localhost:4849/assets/plan.css" />
+  </head>
+  <body>
+    <h1>PR #169 composer (post-merge test plan)</h1>
+
+    <div class="doc-meta">
+      <span>Ghostties</span>
+      <span>2026-09-13</span>
+      <span class="badge badge--draft">Revised after adversarial review</span>
+    </div>
+
+    <div class="summary">
+      <strong>Decision</strong>
+      <p>Full verification runs AFTER #169 merges to main, on a main build, with no beta tag until green. Screenshots and the release dry run happen in the merge thread, before merge. Three parts after merge: automated suite, red proofs, Sean's manual pass. Branch tip verified at <code>484cdca00</code>; all test names below are grepped at that commit, not read from commit messages.</p>
+    </div>
+
+    <h2 id="part-0">0. Before merge (merge thread)</h2>
+    <ul>
+      <li>Attach PR screenshots (single-line composer + Witness ghost) to #169 before it closes.</li>
+      <li>Confirm release dry run <a href="https://github.com/seansmithworks/ghostties/actions/runs/34790997324">run 34790997324</a> (on <code>484cdca00</code>) is green. Result pending as of this writing; the prior green run (<code>34782927958</code>) was on <code>79a151ffe</code>, before Classic removal, and does not clear this branch.</li>
+      <li>Confirm a Dev-free window with the sidebar PR #175 thread, which also uses Ghostties Dev: both threads touch the same bundle id and real Dev defaults.</li>
+    </ul>
+
+    <h2 id="part-1">1. Suite on main</h2>
+    <ol>
+      <li>Back up Sean's tuning: <code>defaults export com.seansmithdesign.ghostties.dev ~/Desktop/ghostties-dev-defaults-&lt;date&gt;.plist</code>. Composer tests write real keys via the shared suite (<code>SessionComposerSnapshotTests</code> saves/restores around lines 641, 1262, 1680, 1784, 1839, 1921, 2385) and the host is Ghostties Dev.app itself, so a killed run leaves his tuning mutated.</li>
+      <li>Quit Ghostties Dev.</li>
+      <li><code>xcodebuild build-for-testing</code> into a fresh <code>-derivedDataPath</code>, then <code>xcodebuild test-without-building</code> against that build, unfiltered (no <code>-only-testing</code>).</li>
+      <li>Real totals from <code>xcrun xcresulttool get test-results summary</code>, never raw log lines (constant −49 offset) or the exit code.</li>
+      <li>After the run, diff Dev defaults against the backup; re-import if anything changed.</li>
+    </ol>
+    <blockquote class="callout">
+      <strong>Pass bar and triage:</strong> sort every failure into (a) known load flakes (<code>SessionComposerWorktreeLaunchTests</code>, <code>GitWorktreeCreationTests</code>), which must pass on an isolated re-run; (b) pixel-threshold recalibration in the 21 sites <code>275c37d69</code> retargeted from <code>.centered</code> to <code>.anchored</code> (calibrated at the old 360pt card, rendering a 204pt popover now); (c) real regressions. There is no known-good identifier set to diff against: this run's identifier set becomes the baseline. <strong>Red-main protocol:</strong> fixes land in a follow-up PR from main; no beta tag until this run is green.
+    </blockquote>
+    <p><strong>Baseline, quoted from BACKLOG.md at <code>484cdca00</code>:</strong> "Local verification 2026-09-12 at <code>911759a6e</code> (Dev closed): full unfiltered suite 1147 passed / 10 failed / 1 skipped / 1158 total." Not 5 flakes (the other 5 named there are real: launch lift off by 1pt, an unrendered Witness pixel test, and 2 glass-treatment tests). <code>484cdca00</code> already fixed the stale-default and vacuous-storage tests those numbers exposed (<code>ComposerRound12TuningTests</code> 28/18/688 to 24/18/640, shadow 64/48/0.24 to 48/32/0.10, corner-radius test renamed to expect 16).</p>
+
+    <h2 id="part-2">2. Red proofs</h2>
+    <p>17 behaviours below, keyed to what's true on main now, not to individual commits (a commit-keyed table breaks under renames and deletions: three rows in the prior draft didn't compile or pointed at dead tests). Rebuild before each mutation. A compile failure never counts as red.</p>
+    <blockquote class="callout">
+      <strong>Pass bar:</strong> every listed test goes red under its mutation. Anything that stays green is logged as vacuous, not silently skipped. Table below.
+    </blockquote>
+
+    <h2 id="part-3">3. Manual run-through</h2>
+    <p>On the main Dev build, once (1) and (2) are green. 12 items: see <a href="#manual-checklist">checklist below</a>.</p>
+
+    <h2 id="setup">Setup and gotchas</h2>
+    <ul>
+      <li>Every Dev build shares bundle id <code>com.seansmithdesign.ghostties.dev</code>. Check <code>lsappinfo info -only executablepath -app com.seansmithdesign.ghostties.dev</code> points at the main build, not a sibling worktree's.</li>
+      <li>Tests collide with a running Dev: quit it first, restore its defaults after.</li>
+      <li>Never touch <code>com.mitchellh.ghostty</code> (upstream Ghostty, Sean's daily driver).</li>
+      <li>Sean's Dev defaults (read 2026-09-13): <code>composerStyle=singleLine</code>, width 640, corner radius 16, field 24, row 18, shadow 48/32/0.1 preset <code>long</code>, glass, tint none, witness on, size 30, gap 6, float amplitude 2. A "single-line opens by default" manual check on his machine is not a real default check: a stored value drives it, not the fallback. Use the automated default test for that behaviour instead (manual item 1 below says so, no <code>defaults write</code> needed).</li>
+    </ul>
+
+    <details>
+      <summary>Verification so far (expand: each item names its commit)</summary>
+      <ul>
+        <li>PR CI green on <code>484cdca00</code> (<strong>compile-only</strong>, does not run tests).</li>
+        <li>Release dry run <a href="https://github.com/seansmithworks/ghostties/actions/runs/34782927958">34782927958</a> passed on <code>79a151ffe</code>, before Classic removal (<code>275c37d69</code>) edited DialKit's controls. Re-run owed on <code>484cdca00</code> (§0).</li>
+        <li>Sean's live look passed on <code>057c19fed</code>, before Classic removal changed the rendered card. The popover has never been looked at live.</li>
+        <li>Independent reviews passed with notes on <code>a0eec0232</code> and on <code>4e68b2c2c</code>/<code>f0c9c5cf7</code>.</li>
+      </ul>
+    </details>
+
+    <h2 id="red-proof-table-anchor">Behaviour-keyed red-proof table</h2>
+    <details open>
+      <summary id="red-proof-table"><strong>17 rows</strong>, verified against <code>484cdca00</code></summary>
+      <table>
+        <thead>
+          <tr><th>Behaviour</th><th>Mutation (compiles on main)</th><th>Tests that must go red</th><th>Source</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Default style resolves to single-line, including a stale stored "classic" value</td>
+            <td><code>ComposerStyle.current(defaults:)</code>: change the unset/unrecognized fallback from <code>.singleLine</code> to <code>.zeroChrome</code></td>
+            <td><code>composerStyleDefaultsToSingleLineWhenUnset</code>, <code>composerStyleReadsStaleClassicRawValueAsSingleLine</code>, <code>composerStyleFallsBackToSingleLineOnUnrecognizedValue</code></td>
+            <td><code>4e68b2c2c</code>, renamed by <code>275c37d69</code></td>
+          </tr>
+          <tr>
+            <td>Anchored presentation always gets the popover card, regardless of stored style; the popover still scrolls and fits</td>
+            <td><code>SessionComposerPalette.cardKind(style:presentation:)</code>: make the <code>.anchored</code> branch return the stored style's kind instead of forcing <code>.popover</code></td>
+            <td><code>cardKindIsPopoverWhenAnchoredRegardlessOfStored</code>, <code>cardKindMatchesStoredStyleWhenCentered</code>, <code>cardKindKeepsSingleLineDefaultWhenCentered</code>, <code>twentySevenProjectsScrollCleanlyInPopover</code>, <code>cardHeightIsWindowIndependent</code>, <code>cardHugsLastRow</code></td>
+            <td><code>275c37d69</code>. Note: this mutation doesn't exercise the 21 retargeted <code>SessionComposerSnapshotTests</code> pixel sites directly. Those are covered by triage bucket (b) in Part 1, not a red proof (pixel thresholds there are uncalibrated, not behaviour-negatable by a single mutation).</td>
+          </tr>
+          <tr>
+            <td>Tuned single-line defaults (field/row/width, shadow) read Sean's current values, not the old round-13b ones</td>
+            <td><code>ComposerSingleLineTuning</code> / <code>ComposerSingleLineShadowDials</code>: restore the old hardcoded fallback constants (28/18/688, shadow 64/48/0.24)</td>
+            <td><code>singleLineTuningDefaultsToTheBiggerStrawman</code>, <code>shadowDialsFallBackToTheTunedCustomDefaultWhenUnset</code>, <code>composerSingleLineCornerRadiusDefaultsToSixteen</code></td>
+            <td><code>484cdca00</code> (values), test names fixed same commit</td>
+          </tr>
+          <tr>
+            <td>A stored override is actually read, not silently ignored in favour of the default</td>
+            <td>Make <code>ComposerSingleLineTuning.rowSize(defaults:)</code> ignore the stored key and always return the default</td>
+            <td><code>singleLineTuningDialsReadTheirStoredOverride</code>, <code>composerSingleLineCornerRadiusReadsStoredValue</code></td>
+            <td><code>484cdca00</code> rewrote these to store a non-default value so this mutation is actually discriminating (the prior stored-16-vs-default-16 version was vacuous)</td>
+          </tr>
+          <tr>
+            <td>The macOS cursor-accessory bubble is hidden on the ghost field</td>
+            <td>Remove <code>preferredTextAccessoryPlacement</code> override on <code>ComposerGhostNSTextView</code></td>
+            <td><code>ghostTextViewHidesCursorAccessoryPlacementPlainNSTextViewDoesNot</code></td>
+            <td><code>b3fa5809c</code></td>
+          </tr>
+          <tr>
+            <td>Witness cell edges are pixel-snapped (no mesh-line double-paint)</td>
+            <td>Restore <code>.rounded(.up)</code> cell sizing in <code>WitnessSpriteGeometry.cellRect</code></td>
+            <td><code>adjacentCellsShareExactEdgesAtEveryWitnessSize</code>, <code>size24CellsAreExactlyTwoByTwoAtScaleTwo</code></td>
+            <td><code>79a151ffe</code></td>
+          </tr>
+          <tr>
+            <td>Identity change always plays a transition (morph then beat); Reduce Motion still swaps instantly</td>
+            <td>Restore the always-immediate-hop/lean branch, skipping the morph, on a non-launch beat plus identity change in the same update</td>
+            <td><code>tabPlusIdentityChangeInOneUpdatePlaysAMorphThenTheHopOnTheNewIdentity</code>, <code>unknownBranchPlusIdentityChangeInOneUpdatePlaysAMorphThenTheLeanOnTheNewIdentity</code>, <code>tabPlusIdentityChangeUnderReduceMotionIsAnInstantSwapWithNoMorph</code></td>
+            <td><code>f0c9c5cf7</code></td>
+          </tr>
+          <tr>
+            <td>Interrupted morphs and the launch/identity race resolve from the on-screen frame, and launch always wins and is terminal</td>
+            <td><code>ComposerWitnessTransition</code>: rebuild the resolve morph from the named target grid instead of the current on-screen grid</td>
+            <td><code>identityChangeMidMorphStartsFromTheOnScreenFrameNotTheNamedTarget</code>, <code>identityChangeMidShiftedBeatBlendsTheOffsetBackToZeroWithoutSnapping</code>, <code>identityChangeWhileLaunchLockedAndNoFreshBeatIsIgnored</code>, <code>identityAndLaunchInTheSameUpdateDissolveFromOnScreenNotTheNewIdentity</code>, <code>launchDissolveIsIdenticalWhetherOrNotIdentityAlsoChangedInTheSameUpdate</code>, <code>launchArmedMidResolveMorphDissolvesFromThePartiallyMorphedFrame</code>, <code>reapplyingTheSameIdentityAndBeatIsANoOp</code></td>
+            <td><code>204fc5bdb</code>, <code>3b94a1226</code>, <code>6e0f97c37</code>. Folds in <code>e4257a247</code>'s continuous-launch-lift behaviour: its own test, <code>launchBlendsFromRestingOffsetAtBeatStartToFortyAtTwoHundredMs</code>, was removed when <code>ef496f46d</code> rewrote the frame system and does not exist at <code>484cdca00</code>; coverage now rides these launch tests instead.</td>
+          </tr>
+          <tr>
+            <td>Witness ghost size defaults to Sean's tuned value and is read from storage</td>
+            <td>Restore one old hardcoded default (ghost size 24 instead of 30) in <code>ComposerZeroChromeStyle</code>'s Witness dial reads</td>
+            <td><code>composerWitnessSizeDefaultsToThirty</code></td>
+            <td><code>57b0fcd42</code>, <code>a0eec0232</code>, <code>e9c922eb0</code>. Narrowed from the prior draft's bundled row: this mutation only touches <code>ComposerWitnessSize</code>'s own default read, so it's the only test of the nine originally listed here that actually goes red under it. The gap, float, opacity, and beat-speed defaults, the stored-override tests, the overlay y-offset, and the DialKit round-trip are each backed by their own dial type and need their own mutation; see the rows below.</td>
+          </tr>
+          <tr>
+            <td>Witness ghost vertical float bob is driven by <code>floatOffset</code>, not a fixed value</td>
+            <td><code>ComposerWitnessFrames.floatOffset</code>: hardcode the return to 0</td>
+            <td><code>floatOffsetIsNegativeAmplitudeAtOneQuarterPeriod</code></td>
+            <td><code>ef496f46d</code>. Inferred: mutation traced to the function definition at <code>macos/Sources/Features/Ghostties/ComposerWitnessFrames.swift</code>, not to a specific line diff.</td>
+          </tr>
+          <tr>
+            <td>Witness ghost horizontal sway is driven by <code>floatOffsetX</code>, not a fixed value</td>
+            <td><code>ComposerWitnessFrames.floatOffsetX</code>: hardcode the return to 0</td>
+            <td><code>floatOffsetXIsPositiveAmplitudeAtOneQuarterOfDoubledPeriod</code></td>
+            <td><code>ef496f46d</code>. Inferred: mutation traced to the function definition at <code>macos/Sources/Features/Ghostties/ComposerWitnessFrames.swift</code>, not to a specific line diff.</td>
+          </tr>
+          <tr>
+            <td>Beat speed scales which animation frame is showing at a given elapsed time</td>
+            <td><code>ComposerWitnessFrames.frameIndex</code>: ignore <code>elapsedMs</code> and always return 0</td>
+            <td><code>beatSpeedTwoAdvancesFrameIndexAtHalfTheWallTime</code></td>
+            <td>Corrected from the task's suggested target: the test calls <code>frameIndex</code> directly with a pre-scaled elapsed value, not the private view-level <code>scaledBeatElapsedMs(now:)</code> in <code>ComposerWitness.swift:500</code>, which has no unit-test hook (it needs a live <code>TimelineView</code>). Mutating <code>scaledBeatElapsedMs</code> would compile but leave this test green. Inferred: no direct automated coverage exists for the production speed-scaling wiring itself, only for the frame-boundary arithmetic it depends on.</td>
+          </tr>
+          <tr>
+            <td>Witness overlay y-offset is size + gap, not a hardcoded size</td>
+            <td><code>SessionComposerPalette.witnessOverlayYOffset(size:ghostGap:)</code>: drop the <code>size:</code> parameter and hardcode 24 (per the test's own doc comment)</td>
+            <td><code>witnessOverlayYOffsetIsSizePlusGap</code>, <code>witnessOverlayYOffsetDiffersBySizeDeltaAtSameGap</code></td>
+            <td><code>a0eec0232</code></td>
+          </tr>
+          <tr>
+            <td>DialKit's coordinator round-trips every new Witness dial through <code>UserDefaults</code>, not just the pre-existing ones</td>
+            <td><code>ComposerDialKitCoordinator.write(from:to:)</code>: drop one new dial's write, e.g. <code>witnessBeatSpeed</code></td>
+            <td><code>dialKitCoordinatorRoundTripsEachNewWitnessDial</code></td>
+            <td><code>e9c922eb0</code></td>
+          </tr>
+          <tr>
+            <td>Single-line field text is inset from the card's left edge, and the Witness leading edge aligns with the typed text's leading edge</td>
+            <td><code>SessionComposerPalette</code>: restore the pre-fix hardcoded values, <code>newStyleFieldRenderWidth</code> returning <code>newStyleFieldWidth</code> unconditionally (dropping the <code>.singleLine</code> padding subtraction) and the Witness overlay's <code>.offset(x: 20, y: -24)</code> hardcoded 20</td>
+            <td><code>singleLineFieldTextIsInsetFromTheCardsLeftEdge</code>, <code>witnessGhostLeadingEdgeAlignsWithTypedTextLeadingEdge</code></td>
+            <td><code>f9d454e2e</code>. Uncalibrated tolerances (1pt alignment, &lt;3pt card width) per the fix's own doc comment: calibrated at the old 360pt <code>.centered</code> card, unverified at the current 204pt popover. Record the measured values from this run rather than trusting the thresholds.</td>
+          </tr>
+          <tr>
+            <td>Witness idle blink turns eye cells to body cells (<code>blinkGrid</code>)</td>
+            <td><code>ComposerWitnessFrames.blinkGrid</code>: return the input grid unchanged</td>
+            <td><code>blinkGridTurnsEyeCellsToBody</code></td>
+            <td><code>ef496f46d</code>. Targeted proof only: <code>ComposerWitnessFramesTests</code> has 27 tests at <code>484cdca00</code> (BACKLOG cites 19, the count at the time it was added; more landed since). This mutation is isolated to <code>blinkGrid</code> and doesn't touch the other 26 (squash, stretch, lean, skirt ripple, squint, glance, dither, beat-frame builders, frame-index boundaries, idle timing, Reduce Motion, or the float offsets proved in the rows above). The rest of the file stays uncovered by red proof here: a known gap, not a vacuous claim. If the suite run in Part 1 shows any of these red without a mutation, that's bucket (c), a real regression.</td>
+          </tr>
+          <tr>
+            <td>DialKit's Custom shadow preset leaves hand-tuned dials alone instead of re-deriving them</td>
+            <td>Remove the <code>.custom</code> case's early return in the shadow-preset setter so it derives dials unconditionally</td>
+            <td><code>dialKitShadowPresetCustomSelectionLeavesHandTunedDialsUntouched</code>, <code>dialKitShadowPresetSelectionFromCustomStillDerivesAllThreeDials</code></td>
+            <td><code>01d3f1ef5</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <p><strong>Manual only, no automated coverage:</strong> the DialKit Copy-button AppKit pasteboard fix, covered by manual item 12.</p>
+    </details>
+
+    <h2 id="manual-checklist-anchor">Manual checklist</h2>
+    <details open>
+      <summary id="manual-checklist"><strong>12 items</strong></summary>
+      <table>
+        <thead><tr><th>#</th><th>Do</th><th>Expect / pass bar</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Open a new composer on a fresh account, or just confirm the automated default-style tests above</td><td>Single-line opens. Skip live if the tests pass: Sean's own Dev defaults already store <code>singleLine</code>, so a live check on his machine proves nothing about the fallback.</td></tr>
+          <tr><td>2</td><td>Type a known repo at ghost size 30</td><td>Coloured ghost appears; before it resolves, the gray placeholder has no mesh lines</td></tr>
+          <tr><td>3</td><td>Tab into a different repo</td><td>Ghost dissolves into the new ghost, then hops</td></tr>
+          <tr><td>4</td><td>Type an unknown branch</td><td>Ghost dissolves, then shakes</td></tr>
+          <tr><td>5</td><td>Launch a session</td><td>Launch dissolve plays fully, not visibly cut off</td></tr>
+          <tr><td>6</td><td>Click into the field; try with caps lock on and while dictating</td><td>No cursor-accessory bubble in any case</td></tr>
+          <tr><td>7</td><td>Check the card in light and dark appearance</td><td>Matches Sean's 2026-09-13 reference screenshots of the card; reads as glass in both</td></tr>
+          <tr><td>8</td><td>Watch the idle ghost</td><td>Floats gently, up/down and side-to-side</td></tr>
+          <tr><td>9</td><td>Enable Reduce Motion</td><td>No float, instant ghost swaps, composer still usable</td></tr>
+          <tr><td>10</td><td>Open the sidebar "+ New Session" popover; compare side by side against the currently installed Release app at <code>/Applications/Ghostties.app</code> (inferred to still have the old popover card, not verified)</td><td>Results list opens and works</td></tr>
+          <tr><td>11</td><td>Click "add project" from the sidebar header</td><td>Opens the single-line composer locked to that project. No render test exists for this path (<code>WorkspaceSidebarView.presentFolderPicker</code> uses <code>.centered</code> presentation, which now defaults to single-line)</td></tr>
+          <tr><td>12</td><td>On a Dev build, open the Composer Tuning panel</td><td>Style list offers only Single line and Zero chrome, zero chrome still selectable; Copy puts JSON on the clipboard; Reset single-line works</td></tr>
+        </tbody>
+      </table>
+      <p>"Release has no tuning panel" is covered by the dry run's DialKit Mach-O gate in §0, not a manual item.</p>
+    </details>
+
+    <details>
+      <summary>Gate record: what the adversarial review changed</summary>
+      <p>A separate <code>planner</code> agent (Opus) refuted the first draft: <strong>revise</strong>. It found 3 red-proof rows that don't run on main (deleted/renamed tests, one non-compiling mutation), tests credited to the wrong commit, a Classic-removal row that mutated the wrong test and dropped every test BACKLOG.md names for that commit, a suite that was already red from stale default assertions the draft didn't know about (fixed pre-merge, this doc's own commit), stale "already verified" claims (dry run and live look both predate Classic removal), two manual items that can't be run as written, no plan for a red main, no coverage note for the sidebar header's locked-project composer, no defaults backup/restore around the test run, and an unbuildable "fresh build" instruction. All 21 findings accepted; the fix, in each case, was to re-derive from <code>git show &lt;sha&gt; -- macos/Tests</code> at the final tip instead of commit messages or BACKLOG summaries, and to key red proofs by behaviour instead of by commit.</p>
+      <p>Orchestrator check after revision: split a false one-mutation dial row, restored R18 and a Witness frames proof.</p>
+      <p>Evidence: <a href="pr169-test-plan-gate/refuter-prompt.txt">refuter-prompt.txt</a>, <a href="pr169-test-plan-gate/refutation.md">refutation.md</a>, <a href="pr169-test-plan-gate/findings-ledger.md">findings-ledger.md</a>.</p>
+    </details>
+
+  </body>
+</html>
