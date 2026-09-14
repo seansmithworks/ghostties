@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 700px; line-height: 1.5; }
+    .tbl { display: grid; grid-template-columns: 132px 1fr 1fr 64px; gap: 0; }
+    .th { font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; color: #636363; padding: 0 12px 8px 0; border-bottom: 1px solid #2a2a2a; }
+    .td { font-size: 11px; color: #9a9a9a; line-height: 1.5; padding: 12px 12px 12px 0; border-bottom: 1px solid #2a2a2a; }
+    .td.job { color: #f0efed; font-weight: 500; }
+    .td.own { color: #f0efed; }
+    .td.own em { font-style: normal; color: #5B8DEF; }
+    .lv { font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 6px; border-radius: 3px; display: inline-block; }
+    .ok { background: #1f3a2a; color: #6fcf97; }
+    .mid { background: #3a2a1f; color: #C97350; }
+    .bad { background: #3a1f1f; color: #FF6B6B; }
+    .verdict { display: flex; gap: 10px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.55; background: #2a2a2a; border-radius: 6px; padding: 14px 16px; }
+    .verdict strong { color: #f0efed; }
+    .bar { width: 2px; align-self: stretch; background: #5B8DEF; border-radius: 1px; flex: none; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Hints — what the card was actually doing</div>
+    <div class="ttl">The card holds six jobs. Removing it reassigns all six.</div>
+    <div class="sub">"Zero-chrome" sounds subtractive, and mostly it is. But four of these jobs are invisible until they are gone, and two of them do not have a free replacement.</div>
+  </div>
+
+  <div class="tbl">
+    <div class="th">Job</div><div class="th">How the card did it</div><div class="th">Zero-chrome owner</div><div class="th">Risk</div>
+
+    <div class="td job">Boundary</div>
+    <div class="td">12pt radius + edge — says "surface, not terminal output"</div>
+    <div class="td own">Backdrop blur alone. Detail drops out behind the text; luminance does not change.</div>
+    <div class="td"><span class="lv mid">Medium</span></div>
+
+    <div class="td job">Legibility floor</div>
+    <div class="td"><code>.regularMaterial</code> + windowBackgroundColor at <code>.blendMode(.color)</code>. <code>.ultraThinMaterial</code> was already too weak once the scrim went.</div>
+    <div class="td own">Blur, plus <em>raising ghost opacity 50% → 65%</em>. Nothing else. There is no material without a surface to apply it to.</div>
+    <div class="td"><span class="lv bad">High</span></div>
+
+    <div class="td job">Mode signal</div>
+    <div class="td">The card appearing. It cuts in instantly — there is no present animation in 3,401 lines.</div>
+    <div class="td own"><em>Caret morph</em> block → 1.5px bar, plus the blur ramp. Lands where the eye already is.</div>
+    <div class="td"><span class="lv ok">Low</span></div>
+
+    <div class="td job">Grouping</div>
+    <div class="td">The card's bounds bind field and rows into one object.</div>
+    <div class="td own">Alignment and rhythm only — <em>left-align the stack to the caret</em>, 16pt gap. Centring forfeits this.</div>
+    <div class="td"><span class="lv mid">Medium</span></div>
+
+    <div class="td job">Elevation</div>
+    <div class="td">Shadow 0.30 / 24 / y8 — tuned up in PR #132 specifically because no scrim backs it.</div>
+    <div class="td own">Blur depth carries the whole "on top of" read. No shadow exists without an edge to cast one.</div>
+    <div class="td"><span class="lv mid">Medium</span></div>
+
+    <div class="td job">Dismiss target</div>
+    <div class="td">Click outside the card.</div>
+    <div class="td own"><em>Unchanged.</em> <code>SessionComposerOverlay</code>'s invisible dismiss layer already spans the whole terminal, minus the titlebar band.</div>
+    <div class="td"><span class="lv ok">None</span></div>
+  </div>
+
+  <div class="verdict"><div class="bar"></div><div><strong>The honest summary:</strong> five of six jobs find a real owner. Legibility does not — it degrades, by design, and variant 09's own note admits it. That is the price of this direction and it should be paid knowingly, not discovered in review. The mitigation on the next board is the only one available that is not a card and not a scrim.</div></div>
+</div>
+</x-dc>
+</body>
+</html>

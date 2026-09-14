@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 720px; line-height: 1.5; }
+    .three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .cell { display: flex; flex-direction: column; gap: 8px; }
+    .ch { display: flex; flex-direction: column; gap: 2px; }
+    .cn { font-size: 12px; font-weight: 600; color: #f0efed; }
+    .cw { font-size: 10px; color: #636363; }
+    .stage { position: relative; height: 190px; border-radius: 8px; overflow: hidden; background: #2D2D2D; }
+    .bd { position: absolute; inset: 0; padding: 10px 12px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 9.5px; line-height: 15px; color: #f0efed; opacity: 0.72; white-space: pre; }
+    .hot { color: #6fcf97; }
+    .bl { position: absolute; inset: 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .q { position: absolute; font-size: 13px; color: #f0efed; }
+    .g { opacity: 0.65; }
+    .seg { color: #5B8DEF; }
+    .rows { font-size: 11px; line-height: 1.7; }
+    .on { color: #5B8DEF; }
+    .off { color: #f0efed; opacity: 0.55; }
+    /* A centre float */
+    .qA { left: 0; right: 0; top: 74px; text-align: center; }
+    /* B cursor adjacent */
+    .qB { left: 12px; top: 118px; }
+    /* C docked band */
+    .bandwrap { position: absolute; left: 0; right: 0; bottom: 0; height: 82px; background: #2D2D2D; border-top: 0; }
+    .qC { left: 12px; bottom: 54px; }
+    .rowsC { position: absolute; left: 12px; bottom: 10px; }
+    .verdict { display: flex; gap: 8px; align-items: flex-start; font-size: 10.5px; line-height: 1.5; }
+    .dot { width: 4px; height: 4px; border-radius: 50%; margin-top: 5px; flex: none; }
+    .bad { background: #FF6B6B; } .mid { background: #C97350; } .good { background: #6fcf97; }
+    .vt { color: #9a9a9a; }
+    .vt b { color: #f0efed; font-weight: 500; }
+    .box { background: #2a2a2a; border-radius: 6px; padding: 14px 16px; display: flex; gap: 10px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .bar { width: 2px; align-self: stretch; background: #6fcf97; border-radius: 1px; flex: none; }
+    .box strong { color: #f0efed; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Prior art — the placement question</div>
+    <div class="ttl">Where it sits decides whether legibility is a problem at all</div>
+    <div class="sub">This is the detail the first canvas did not question. Variant 09 inherits centre-float from the existing card, because that is where the card already is — but the card could afford to float. Text cannot.</div>
+  </div>
+
+  <div class="three">
+
+    <div class="cell">
+      <div class="ch"><div class="cn">A · Centre float</div><div class="cw">variant 09 as drawn</div></div>
+      <div class="stage">
+        <div class="bd">$ git log --oneline -4
+a0297a9  fix(composer): Tab
+d32fb32  fix(session): shell
+ef1267e  Merge PR #163
+$ npm run build
+<span class="hot">  ✓ 1284 modules</span>
+  ready in 1.2s
+$ git status
+  nothing to commit
+$ </div>
+        <div class="bl"></div>
+        <div class="q qA">ghostties <span class="g">&gt; main</span></div>
+      </div>
+      <div class="verdict"><div class="dot bad"></div><div class="vt"><b>Maximum overlap.</b> Sits over the densest part of the scrollback. Every legibility fix on the Hints page exists to service this one choice.</div></div>
+    </div>
+
+    <div class="cell">
+      <div class="ch"><div class="cn">B · At the prompt</div><div class="cw">Fig's answer</div></div>
+      <div class="stage">
+        <div class="bd">$ git log --oneline -4
+a0297a9  fix(composer): Tab
+d32fb32  fix(session): shell
+ef1267e  Merge PR #163
+$ npm run build
+<span class="hot">  ✓ 1284 modules</span>
+  ready in 1.2s
+$ git status
+  nothing to commit
+$ </div>
+        <div class="q qB">ghostties <span class="seg">&gt; main</span><br><span class="rows"><span class="on">main</span><br><span class="off">fix/composer…</span></span></div>
+      </div>
+      <div class="verdict"><div class="dot mid"></div><div class="vt"><b>Overlaps only what is below the cursor</b> — usually empty. No blur needed. But the composer is not a shell completion; it launches sessions, and anchoring it to a prompt implies otherwise.</div></div>
+    </div>
+
+    <div class="cell">
+      <div class="ch"><div class="cn">C · Docked band</div><div class="cw">vim · fzf · minibuffer</div></div>
+      <div class="stage">
+        <div class="bd">$ git log --oneline -4
+a0297a9  fix(composer): Tab
+d32fb32  fix(session): shell
+ef1267e  Merge PR #163
+$ npm run build
+<span class="hot">  ✓ 1284 modules</span>
+  ready in 1.2s</div>
+        <div class="bandwrap"></div>
+        <div class="q qC">ghostties <span class="seg">&gt; mai</span><span class="g">n</span></div>
+        <div class="rows rowsC"><span class="on">main</span> &nbsp; <span class="off">fix/composer-return-to-shell</span></div>
+      </div>
+      <div class="verdict"><div class="dot good"></div><div class="vt"><b>Nothing behind it.</b> Output is pushed up, the band is empty canvas. Truly zero chrome — no blur, no wash, no contrast tradeoff, because there is nothing to be legible against.</div></div>
+    </div>
+
+  </div>
+
+  <div class="box"><div class="bar"></div><div><strong>C is the version of this direction that actually works — and it is more minimal, not less.</strong> Every mitigation on the Hints page (raised ghost opacity, the local luminance wash, heavier blur) exists to defend text floating over content. Move the text somewhere nothing is, and all of it becomes unnecessary. The cost is that the terminal reflows when the composer opens, which is a real change and the thing to react to: vim, fzf and Emacs all decided that reflow was cheaper than the overlap it avoids. <em>The counter-argument is that Ghostties is a GUI app, not a TUI, and a reflowing terminal may read as broken rather than native — that judgement is yours.</em></div></div>
+</div>
+</x-dc>
+</body>
+</html>

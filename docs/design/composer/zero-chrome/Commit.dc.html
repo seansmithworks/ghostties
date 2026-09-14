@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 620px; line-height: 1.5; }
+    .term { position: relative; width: 672px; height: 336px; border-radius: 12px; overflow: hidden; background: #2D2D2D; }
+    .backdrop { position: absolute; inset: 0; padding: 16px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; line-height: 17px; color: #f0efed; opacity: 0.62; white-space: pre; }
+    .dim { color: #9a9a9a; }
+    .wash { position: absolute; inset: 0; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .stack { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); width: 360px; display: flex; flex-direction: column; gap: 16px; align-items: center; }
+    .query { font-size: 15px; font-weight: 400; color: #f0efed; display: flex; align-items: center; }
+    .ghost { color: #f0efed; opacity: 0.50; }
+    .caret { display: inline-block; width: 1.5px; height: 17px; background: #f0efed; }
+    .rows { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+    .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 500; color: #f0efed; opacity: 0.55; }
+    .row.on { opacity: 1; color: #5B8DEF; }
+    .meta { font-size: 11px; font-weight: 400; color: #9a9a9a; }
+    .note { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.5; max-width: 672px; }
+    .pin { width: 4px; height: 4px; border-radius: 50%; background: #5B8DEF; margin-top: 6px; flex: none; }
+    .warn { background: #C97350; }
+    .wash.half { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+    .stack.going { opacity: 0.28; transform: translateX(-50%) translateY(-6px); }
+    .seg { color: #5B8DEF; }
+    .arrow { font-size: 11px; color: #5B8DEF; letter-spacing: 0.04em; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">04 · Commit — Return pressed, mid-flight</div>
+    <div class="ttl">The terminal coming back into focus is the confirmation</div>
+    <div class="sub">Captured ~60ms after Return. Text has lifted 6px and dropped to 28%; the blur is unwinding 6px&nbsp;→&nbsp;0 behind it. There is no card to slide away, so the sharpening backdrop is what tells you the session took the command.</div>
+  </div>
+  <div class="term">
+    <div class="backdrop">$ git log --oneline -3
+<span class="dim">a0297a9  fix(composer): Tab inserts a segment and a space
+d32fb32  fix(session): drop back to a shell instead of closing
+ef1267e  Merge pull request #163 from seansmithworks/docs</span>
+$ zig build run -Doptimize=ReleaseFast
+<span class="dim">  compiling GhosttyKit ... 1.2s
+  linking Ghostties.app ... ok</span>
+$ </div>
+    <div class="wash half"></div>
+    <div class="stack going">
+      <div class="query">ghostties <span class="seg">&gt; main</span> claude</div>
+    </div>
+  </div>
+  <div class="note"><div class="pin"></div><div><strong style="color:#f0efed">Blur must lag the text.</strong> Text leaves first (100ms), blur unwinds behind it (160ms). Reverse that ordering and it reads as a popup closing; in this order it reads as a mode releasing. That single timing relationship is what makes zero-chrome feel deliberate rather than missing.</div></div>
+</div>
+</x-dc>
+</body>
+</html>

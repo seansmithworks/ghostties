@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 660px; line-height: 1.5; }
+    .tbl { display: grid; grid-template-columns: 108px 1fr 54px 84px; gap: 0; }
+    .th { font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; color: #636363; padding: 0 10px 8px 0; border-bottom: 1px solid #2a2a2a; }
+    .td { font-size: 11px; color: #9a9a9a; line-height: 1.45; padding: 9px 10px 9px 0; border-bottom: 1px solid #2a2a2a; }
+    .td.t { color: #f0efed; font-weight: 500; }
+    .td.n { color: #5B8DEF; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; }
+    .td.e { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; color: #636363; }
+    .grp { grid-column: 1 / -1; font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; color: #C97350; padding: 14px 0 6px; }
+    .laws { display: flex; flex-direction: column; gap: 10px; }
+    .law { display: flex; gap: 10px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .num { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; color: #5B8DEF; flex: none; width: 16px; padding-top: 1px; }
+    .law strong { color: #f0efed; }
+    .box { background: #2a2a2a; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .boxhd { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #636363; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Motion — full spec</div>
+    <div class="ttl">Every transition, in one place</div>
+    <div class="sub">Current state: two <code>withAnimation(.linear(0.25))</code> calls in 3,401 lines of <code>SessionComposerPalette.swift</code>, neither on present or dismiss. Everything below is new.</div>
+  </div>
+
+  <div class="tbl">
+    <div class="th">Trigger</div><div class="th">What moves</div><div class="th">Dur</div><div class="th">Curve · delay</div>
+
+    <div class="grp">Entering</div>
+    <div class="td t">⌘T summon</div><div class="td">Backdrop blur 0 → 6px</div><div class="td n">140ms</div><div class="td e">easeOut · 0</div>
+    <div class="td t"></div><div class="td">Caret block → 1.5px bar</div><div class="td n">80ms</div><div class="td e">easeOut · 20ms</div>
+    <div class="td t"></div><div class="td">Text block opacity 0→1, y 4→0</div><div class="td n">120ms</div><div class="td e">easeOut · 40ms</div>
+
+    <div class="grp">While typing</div>
+    <div class="td t">First keystroke <span style="color:#636363">or ↓</span></div><div class="td">Rows opacity 0→1, y 3→0</div><div class="td n">90ms</div><div class="td e">easeOut · 20ms stagger</div>
+    <div class="td t">Typed <code>&gt;</code></div><div class="td">Branch segment → #5B8DEF, no layout shift</div><div class="td n">100ms</div><div class="td e">easeInOut · 0</div>
+    <div class="td t">Query emptied</div><div class="td">Rows dissolve, no stagger</div><div class="td n">180ms</div><div class="td e">easeIn · 0</div>
+    <div class="td t">Result set changes</div><div class="td">Rows crossfade in place — never reflow</div><div class="td n">80ms</div><div class="td e">linear · 0</div>
+
+    <div class="grp">Leaving</div>
+    <div class="td t">⏎ commit</div><div class="td">Text lift y 0→−6, opacity 1→0</div><div class="td n">100ms</div><div class="td e">easeIn · 0</div>
+    <div class="td t"></div><div class="td">Blur 6 → 0</div><div class="td n">160ms</div><div class="td e">easeOut · 40ms</div>
+    <div class="td t">esc dismiss</div><div class="td">Text opacity 1→0, no lift</div><div class="td n">120ms</div><div class="td e">easeIn · 0</div>
+    <div class="td t"></div><div class="td">Blur 6 → 0</div><div class="td n">140ms</div><div class="td e">easeOut · 20ms</div>
+    <div class="td t">Click outside</div><div class="td">Identical to esc</div><div class="td n">—</div><div class="td e">—</div>
+
+    <div class="grp">Failure</div>
+    <div class="td t">Branch not found</div><div class="td">Status strip opacity 0→1</div><div class="td n">60ms</div><div class="td e">easeOut · 0</div>
+    <div class="td t">Write error</div><div class="td">Replaces strip contents, no re-animate</div><div class="td n">—</div><div class="td e">—</div>
+  </div>
+
+  <div class="box">
+    <div class="boxhd">Three rules that make the numbers work</div>
+    <div class="laws">
+      <div class="law"><span class="num">01</span><div><strong>Blur lags text on the way out, leads it on the way in.</strong> In: blur starts first, text lands before blur finishes. Out: text goes first, blur resolves behind it. This ordering is what separates "a mode" from "a popup" — get it backwards and every duration above stops helping.</div></div>
+      <div class="law"><span class="num">02</span><div><strong>Nothing above 180ms.</strong> The composer is on the keystroke path; Sean opens it, types four characters and commits. Anything slower than a fast blink becomes something to wait through on the fiftieth use of the day.</div></div>
+      <div class="law"><span class="num">03</span><div><strong>Rows crossfade, they never reflow.</strong> With no card bounding them, a row list that changes height pushes text around on a background it does not own. Fixed slot count, fade contents in place.</div></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

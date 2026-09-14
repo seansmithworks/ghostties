@@ -230,6 +230,88 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
   (`closedAdHocRange ?? …`), and fixing it there would have preserved the ruling at every
   chevron count without touching the grammar. Sean decides whether to keep the grammar fix or
   move it to the adapter.
+## 2026-09-10 — PR #165 + changelog merged; zero-chrome composer spike in review; beta.25 tag on hold
+
+- [x] **PR #165 exit-to-shell MERGED** `9d1c8710d` — 6/6 launcher-script tests executed
+  locally; full suite 1073, the 6 documented load flakes clean in isolation (35/35).
+- [x] **PR #168 beta.25 CHANGELOG section MERGED** `57b086d87`; `extract-release-notes.py
+  0.1.0-beta.25` passes on `main`.
+- [ ] **beta.25 tag ON HOLD** — Sean wants to see zero-chrome first, then decide whether
+  beta.25 ships today's composer or waits. Before tagging: full suite on `main` @
+  `57b086d87` (needs no `Ghostties Dev` instance running — the test host shares the `.dev`
+  bundle id), then `git tag -a v0.1.0-beta.25` from the orchestrator thread on his nod.
+- [ ] **Zero-chrome composer spike — draft PR #169** `feat/composer-zero-chrome` @
+  `01d2b8c3b`, behind `ghostties.composerStyle` = `zeroChrome` | `singleLine` (unset =
+  classic) and `ghostties.composerZeroChromeMaterial`. Sean's decisions 2026-09-10: centre
+  float, left-aligned text, wash takes over the full window, type larger/bolder (32pt
+  semibold field, 20pt rows, 75% measure 480–960pt); standard fallback = single line, no
+  list; descriptors cycle at rest with the chevron path never first. Three review rounds;
+  fourth (rounds 2–3) in progress. Dev app for Sean lives in the builder's agent worktree
+  `.claude/worktrees/agent-abdc9d9bfba62cfd5` — keep until he has reacted.
+- [ ] **DESIGN.md follow-ups if zero-chrome sticks:** semibold weight and 32pt on a floating
+  surface deviate from §3; a new "zero-chrome" surface class needs an entry; `ghostPlaceholder`
+  opacity 65% in new styles vs 50% classic.
+- [ ] **Stranded copy, pre-existing:** `SessionComposerCommandParser.swift:26` "Use the
+  create-branch suggestion above" was already wrong after PR #155 hid the pickers; PR #169
+  adds a second constant for the new styles, classic string still says "above".
+- [ ] **Test isolation:** app-hosted composer tests read the live
+  `com.seansmithdesign.ghostties.dev` defaults; PR #169 pins `styleOverrideForTesting:
+  .classic` at 24 call sites. Any future style flag needs the same seam. Subagents must
+  never `defaults write`/`delete` a real bundle id (one did, and wiped Sean's flag mid-review).
+- [ ] **Worktree cleanup after the tag:** `session-7` has a `macos/build` (GBs) plus
+  symlinked build inputs; the builder worktree above has its own `macos/build`. Disk was
+  15G → 13G free across the day.
+- [ ] **This docs branch (`worktree-session-7`) is not on `main`** — carries the zero-chrome
+  canvas sources (`docs/design/composer/zero-chrome/`) and three backlog entries. Merge via
+  this PR.
+
+## 2026-09-06 — Composer Tab flow shipped; exit-to-shell fixed; ten redesign directions
+
+- [x] **PR #164 MERGED** — Tab accepts a segment + space, never a chevron. `main` @ `a0297a9d9`.
+  Verified by Sean in a real build: `ghostt` Tab `cco -n "testing"` Return runs clean.
+- [ ] **PR #165 open, UNVERIFIED — carried.** `fix/composer-return-to-shell` @ `d32fb32b6`.
+  Diff reviewed by hand, but no test run exists anywhere: agent worktrees lack
+  `GhosttyKit.xcframework`, `zig-out/`, `vendor/cef`. Build it and run the ⌘T flow before merge.
+- [ ] **Ten composer directions published — Sean to pick.** Artifact:
+  `https://claude.ai/code/artifact/b9f2eb46-8d4e-41f6-a061-6533f63f89b3`.
+  Mild 01-04, middle 05-07, wild 08-10. Claude's read: 01/03/06 strongest against the
+  minimal constraint, all three subtractive; 02 is the best idea with the worst fit;
+  08 is build-to-learn, not pick-from-a-page. Sources in the session scratchpad
+  (`shotfun/variant-NN.html` + `.swift`) — **scratch, not committed anywhere.**
+- [ ] **PARKED — `design-shotfun` skill is broken.** It calls `mcp__paper__*`; the server on
+  this machine is `pencil`, which refuses every call without a `.pen` file open in the GUI.
+  Skill also caps at 6 variants. Routed around by hand this session.
+- [ ] **PARKED — three fragments were authored broken** (05/06/07): section is `display:flex`
+  with no `flex-direction`, and both boards sit in an unclassed wrapper with no CSS, so
+  `.board{flex:1}` is inert and the boards collapse to ~0 width. Corrected in the page
+  wrapper, not in the fragments.
+
+## 2026-09-05 — Composer-launched sessions die on exit instead of dropping to a shell
+
+Sean: after `wrap-continue` + exiting a Claude session launched from the composer, the
+surface shows "Process exited. Press any key to close the terminal." instead of returning
+to a live prompt — so the terminal has to be closed and reopened.
+
+**Diagnosed, not a regression from the composer stack.** `SessionCoordinator` writes a
+wrapper script per session and sets it as Ghostty's `command`, which *replaces* the shell.
+The script ends in `exec <cmd>` (`SessionCoordinator.swift:255`), so nothing survives the
+agent's exit. `exec` has been there since `dffde628d` (2026-03-24) and was deliberately
+restored in `e8dbf6ed7` (2026-04-27). What changed is Sean's habit: the old flow was a blank
+shell he typed `cco` into (child process, shell survives), the new flow is composer-launched.
+
+No `cco` template or preset exists — `workspace.json` holds 3 empty "New Template" rows and
+`~/.ghostties/presets/` has only `disk-cleanup.md` and `linear-sync`. `cco` is ad-hoc text.
+
+- [x] **Decided 2026-09-06 (Sean): yes, default to a shell.** "If I want to go to orchestrator
+  template I would specify that." Implemented in PR #165 — the launcher script now runs the
+  agent in the foreground and ends `exec /bin/zsh -l`. **Tests never executed** (no build
+  inputs in any agent worktree) — needs a real lab build before merge.
+- [ ] ~~Decide~~ (superseded): land back on an interactive shell after the agent exits (replace
+  `exec \(cmd)` with `\(cmd)` + `exec zsh -i`), or leave as-is.
+  **Risk if changed:** the surface staying alive after the agent exits decouples "process
+  running" from "session running" — `setStatus(.running,)` and `subscribeToOutput` both
+  assume the surface dies with the agent, and indicator state lives in two caches. Not a
+  one-liner; needs the status engine checked.
 
 ## 2026-09-02 — CEF crash root-caused (Chromium 150→144 profile downgrade); overnight fix dispatched
 
@@ -2753,3 +2835,27 @@ re-check that list before the hunk reaches `main`.
 - [ ] Capture fixture has no "needs you" session, and window captures include overlapping windows.
 - [ ] Ghost colour on project rows (black vs blue) carries meaning that nothing explains.
 - [ ] Two composer checks for Sean, in a real repo: does Tab after `swi` type a chevron; does `switchboard > feat/demo` offer to create the branch.
+## 2026-09-09 — Zero-chrome composer exploration (carried)
+
+Sean narrowed the ten directions to **zero-chrome (variant 09)** and asked for flow, hints and
+transition choreography, then for prior-art sourcing. Canvas:
+https://claude.ai/code/artifact/fbd31813-d56e-4a55-8f7a-3a9dea7239f9 · sources committed at
+`docs/design/composer/zero-chrome/`. **No direction is picked yet.**
+
+**Blocking on Sean (either can sink the direction):**
+- [ ] **Placement — centre-float vs docked band.** Every other open detail changes with the answer; the docked band deletes items 3–5 outright. Prior art is unanimous: vim's cmdline, fzf, Emacs' minibuffer and Fig all refuse to float over live content. See the `Placement` artboard. | experience | new
+- [ ] **Reduce Motion has no floor.** The direction rests on motion carrying the mode signal because nothing else is left. With Reduce Motion on there is no ramp, no lift, no stagger and no card — text simply exists. Every other direction in the set degrades gracefully; this one does not. If the static fallback needs a surface, the direction has a surface. | craft | new
+
+**Cheapest next move:**
+- [ ] Capture ~10s of the composer open with a build running, to see live output scrolling *under* stationary text. The card hid this completely; nobody has seen it. Static mockups cannot answer it. | craft | new
+
+**Remaining seven open details** — blur depth (6px proposed vs Raycast v2's 48px), user terminal
+themes breaking every contrast assumption, hover with no row background, nothing bounding width or
+row count, VoiceOver's lost container, and the armed-segment tint that
+[[reference_composer-field-cannot-tint-subranges]] says may not be buildable at the macOS 13 floor.
+All ten are written up worst-first on the canvas's **Unsolved** page; not duplicated here.
+
+**Also open (carried from 2026-09-06):**
+- [ ] PR #165 `fix/composer-return-to-shell` @ `d32fb32b6` — OPEN, MERGEABLE, CI green, but CI is
+  `build-for-testing` only and **its tests have never been executed anywhere**. Needs a build in the
+  main tree and Sean running the ⌘T flow. | build | carried 1×

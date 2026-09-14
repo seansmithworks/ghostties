@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 700px; line-height: 1.5; }
+    .cols { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 24px; align-items: start; }
+
+    .term { position: relative; width: 400px; height: 240px; border-radius: 8px; overflow: hidden; background: #2D2D2D; }
+    .bd { position: absolute; inset: 0; padding: 12px 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; line-height: 16px; color: #f0efed; opacity: 0.62; white-space: pre; }
+    .dim { color: #9a9a9a; }
+    .bl { position: absolute; inset: 0; animation: blurin 3600ms ease-out infinite; }
+    .st { position: absolute; top: 84px; left: 50%; width: 300px; margin-left: -150px; display: flex; flex-direction: column; gap: 12px; animation: textin 3600ms ease-out infinite; }
+    .q { font-size: 15px; color: #f0efed; display: flex; align-items: center; justify-content: center; }
+    .g { color: #f0efed; opacity: 0.65; }
+    .car { display: inline-block; width: 1.5px; height: 17px; background: #f0efed; }
+
+    @keyframes blurin {
+      0%     { backdrop-filter: blur(0px);  -webkit-backdrop-filter: blur(0px); }
+      3.9%   { backdrop-filter: blur(6px);  -webkit-backdrop-filter: blur(6px); }
+      62.8%  { backdrop-filter: blur(6px);  -webkit-backdrop-filter: blur(6px); }
+      66.7%  { backdrop-filter: blur(0px);  -webkit-backdrop-filter: blur(0px); }
+      100%   { backdrop-filter: blur(0px);  -webkit-backdrop-filter: blur(0px); }
+    }
+    @keyframes textin {
+      0%     { opacity: 0; transform: translateY(4px); }
+      1.1%   { opacity: 0; transform: translateY(4px); }
+      4.4%   { opacity: 1; transform: translateY(0); }
+      61.1%  { opacity: 1; transform: translateY(0); }
+      64.4%  { opacity: 0; transform: translateY(0); }
+      100%   { opacity: 0; transform: translateY(0); }
+    }
+
+    .tl { display: flex; flex-direction: column; gap: 14px; }
+    .tlhd { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: #636363; }
+    .track { position: relative; height: 34px; }
+    .tname { font-size: 11px; color: #f0efed; margin-bottom: 4px; }
+    .rail { position: relative; height: 16px; background: #2a2a2a; border-radius: 3px; }
+    .seg { position: absolute; top: 0; height: 16px; border-radius: 3px; font-size: 9px; color: #0e1a2e; display: flex; align-items: center; justify-content: center; letter-spacing: 0.02em; }
+    .b-blur { background: #5B8DEF; }
+    .b-text { background: #6fcf97; color: #0e2416; }
+    .b-car { background: #C97350; color: #2a150c; }
+    .scale { position: relative; height: 14px; margin-top: 2px; }
+    .tick { position: absolute; font-size: 9px; color: #636363; transform: translateX(-50%); }
+    .lede { font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .lede strong { color: #f0efed; }
+    .verdict { display: flex; gap: 10px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.55; background: #2a2a2a; border-radius: 6px; padding: 12px 14px; }
+    .bar { width: 2px; align-self: stretch; background: #5B8DEF; border-radius: 1px; flex: none; }
+    .verdict strong { color: #f0efed; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Motion — summon (⌘T)</div>
+    <div class="ttl">140ms of blur is the entire "a mode opened" signal</div>
+    <div class="sub">Today the composer cuts in with no animation at all — the card's sudden presence is the announcement. Remove the card and nothing announces anything, so the blur ramp has to. It is short enough to feel instant and long enough to be perceived as a change of state rather than a redraw.</div>
+  </div>
+
+  <div class="cols">
+    <div class="term">
+      <div class="bd">$ git log --oneline -3
+<span class="dim">a0297a9  fix(composer): Tab inserts a segment
+d32fb32  fix(session): drop back to a shell
+ef1267e  Merge pull request #163 from docs</span>
+$ zig build run -Doptimize=ReleaseFast
+<span class="dim">  compiling GhosttyKit ... 1.2s
+  linking Ghostties.app ... ok</span>
+$ </div>
+      <div class="bl"></div>
+      <div class="st">
+        <div class="q"><span class="car"></span><span class="g">ghostties &gt; main &gt; claude</span></div>
+      </div>
+    </div>
+
+    <div class="tl">
+      <div class="tlhd">Choreography · 0–300ms</div>
+
+      <div class="track">
+        <div class="tname">Backdrop blur &nbsp;<span style="color:#636363">0 → 6px, ease-out</span></div>
+        <div class="rail"><div class="seg b-blur" style="left: 0%; width: 46.7%;">140ms</div></div>
+      </div>
+
+      <div class="track">
+        <div class="tname">Caret morph &nbsp;<span style="color:#636363">block → 1.5px bar</span></div>
+        <div class="rail"><div class="seg b-car" style="left: 6.7%; width: 26.7%;">80ms</div></div>
+      </div>
+
+      <div class="track">
+        <div class="tname">Text block &nbsp;<span style="color:#636363">opacity 0→1, y 4→0</span></div>
+        <div class="rail"><div class="seg b-text" style="left: 13.3%; width: 40%;">120ms</div></div>
+      </div>
+
+      <div class="scale">
+        <span class="tick" style="left:0%">0</span>
+        <span class="tick" style="left:33.3%">100</span>
+        <span class="tick" style="left:66.7%">200</span>
+        <span class="tick" style="left:100%">300ms</span>
+      </div>
+
+      <div class="lede"><strong>The overlap is the point.</strong> Text starts before the blur finishes, so the two read as one gesture instead of a queue. Land them simultaneously and it feels mechanical; separate them and it feels slow.</div>
+    </div>
+  </div>
+
+  <div class="verdict"><div class="bar"></div><div><strong>Cost to build:</strong> the caret morph is the only piece that is not a stock SwiftUI transition, and it may not be reachable — the field cannot tint sub-ranges at the macOS 13 floor, and the caret is drawn by AppKit. If it turns out to be unavailable, the blur ramp alone still carries the state change; the caret is an amplifier, not the mechanism.</div></div>
+</div>
+</x-dc>
+</body>
+</html>

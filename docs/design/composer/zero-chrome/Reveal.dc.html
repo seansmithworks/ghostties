@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: -apple-system, "SF Pro Text", system-ui, sans-serif; background: #242424; }
+    a { color: #5B8DEF; } a:hover { color: #7BA5F2; }
+    .wrap { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .hdr { display: flex; flex-direction: column; gap: 4px; }
+    .step { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #9a9a9a; }
+    .ttl { font-size: 15px; font-weight: 600; color: #f0efed; }
+    .sub { font-size: 11px; color: #9a9a9a; max-width: 700px; line-height: 1.5; }
+    .cols { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 24px; align-items: start; }
+
+    .term { position: relative; width: 400px; height: 240px; border-radius: 8px; overflow: hidden; background: #2D2D2D; }
+    .bd { position: absolute; inset: 0; padding: 12px 14px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; line-height: 16px; color: #f0efed; opacity: 0.62; white-space: pre; }
+    .dim { color: #9a9a9a; }
+    .bl { position: absolute; inset: 0; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .st { position: absolute; top: 62px; left: 50%; width: 300px; margin-left: -150px; display: flex; flex-direction: column; gap: 12px; }
+    .q { font-size: 15px; color: #f0efed; display: flex; align-items: center; }
+    .typed { animation: typed 3600ms steps(1) infinite; }
+    .g { color: #f0efed; opacity: 0.65; }
+    .car { display: inline-block; width: 1.5px; height: 17px; background: #f0efed; }
+    .rows { display: flex; flex-direction: column; gap: 8px; }
+    .row { font-size: 13px; font-weight: 500; color: #f0efed; opacity: 0; display: flex; justify-content: space-between; }
+    .row.on { color: #5B8DEF; }
+    .mt { font-size: 11px; font-weight: 400; color: #9a9a9a; }
+    .r1 { animation: r1 3600ms ease-out infinite; }
+    .r2 { animation: r2 3600ms ease-out infinite; }
+    .r3 { animation: r3 3600ms ease-out infinite; }
+
+    @keyframes typed {
+      0%, 11.0% { opacity: 0; } 11.1%, 72.2% { opacity: 1; } 72.3%, 100% { opacity: 0; }
+    }
+    @keyframes r1 {
+      0%, 13.9% { opacity: 0; transform: translateY(3px); }
+      16.4%, 72.2% { opacity: 1; transform: translateY(0); }
+      77.2%, 100% { opacity: 0; transform: translateY(0); }
+    }
+    @keyframes r2 {
+      0%, 14.4% { opacity: 0; transform: translateY(3px); }
+      16.9%, 72.2% { opacity: 0.55; transform: translateY(0); }
+      77.2%, 100% { opacity: 0; transform: translateY(0); }
+    }
+    @keyframes r3 {
+      0%, 15.0% { opacity: 0; transform: translateY(3px); }
+      17.5%, 72.2% { opacity: 0.55; transform: translateY(0); }
+      77.2%, 100% { opacity: 0; transform: translateY(0); }
+    }
+
+    .tl { display: flex; flex-direction: column; gap: 14px; }
+    .tlhd { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: #636363; }
+    .track { position: relative; }
+    .tname { font-size: 11px; color: #f0efed; margin-bottom: 4px; }
+    .rail { position: relative; height: 14px; background: #2a2a2a; border-radius: 3px; }
+    .seg { position: absolute; top: 0; height: 14px; border-radius: 3px; font-size: 9px; display: flex; align-items: center; justify-content: center; }
+    .b-a { background: #5B8DEF; color: #0e1a2e; }
+    .b-b { background: #6fcf97; color: #0e2416; }
+    .scale { position: relative; height: 14px; margin-top: 2px; }
+    .tick { position: absolute; font-size: 9px; color: #636363; transform: translateX(-50%); }
+    .lede { font-size: 11px; color: #9a9a9a; line-height: 1.55; }
+    .lede strong { color: #f0efed; }
+    .verdict { display: flex; gap: 10px; align-items: flex-start; font-size: 11px; color: #9a9a9a; line-height: 1.55; background: #2a2a2a; border-radius: 6px; padding: 12px 14px; }
+    .bar { width: 2px; align-self: stretch; background: #C97350; border-radius: 1px; flex: none; }
+    .verdict strong { color: #C97350; }
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="hdr">
+    <div class="step">Motion — type-to-reveal</div>
+    <div class="ttl">A 20ms stagger is what makes rows read as arriving, not as popping</div>
+    <div class="sub">Rows have no background to fade, so the only things animating are opacity and 3px of rise. At zero stagger three rows appearing together read as a single block flashing on. Offset them and the eye tracks a sequence, which is what tells you the list is a response to your typing.</div>
+  </div>
+
+  <div class="cols">
+    <div class="term">
+      <div class="bd">$ git log --oneline -3
+<span class="dim">a0297a9  fix(composer): Tab inserts a segment
+d32fb32  fix(session): drop back to a shell
+ef1267e  Merge pull request #163 from docs</span>
+$ zig build run -Doptimize=ReleaseFast
+<span class="dim">  compiling GhosttyKit ... 1.2s
+  linking Ghostties.app ... ok</span>
+$ </div>
+      <div class="bl"></div>
+      <div class="st">
+        <div class="q"><span class="typed">ghos<span class="g">ties</span></span><span class="car"></span></div>
+        <div class="rows">
+          <div class="row on r1"><span>ghostties</span><span class="mt" style="color:#5B8DEF;opacity:.7">pinned</span></div>
+          <div class="row r2"><span>ghostties-web</span><span class="mt">recent</span></div>
+          <div class="row r3"><span>ghost-physics</span><span class="mt">recent</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl">
+      <div class="tlhd">Choreography · 0–200ms from keystroke</div>
+
+      <div class="track">
+        <div class="tname">Row 1 &nbsp;<span style="color:#636363">opacity 0→1, y 3→0</span></div>
+        <div class="rail"><div class="seg b-a" style="left: 0%; width: 45%;">90ms</div></div>
+      </div>
+      <div class="track">
+        <div class="tname">Row 2</div>
+        <div class="rail"><div class="seg b-a" style="left: 10%; width: 45%;">+20ms</div></div>
+      </div>
+      <div class="track">
+        <div class="tname">Row 3</div>
+        <div class="rail"><div class="seg b-a" style="left: 20%; width: 45%;">+40ms</div></div>
+      </div>
+      <div class="track">
+        <div class="tname">Dissolve at rest &nbsp;<span style="color:#636363">query emptied</span></div>
+        <div class="rail"><div class="seg b-b" style="left: 0%; width: 90%;">180ms · no stagger</div></div>
+      </div>
+
+      <div class="scale">
+        <span class="tick" style="left:0%">0</span>
+        <span class="tick" style="left:50%">100</span>
+        <span class="tick" style="left:100%">200ms</span>
+      </div>
+
+      <div class="lede"><strong>Out is slower than in, and unstaggered.</strong> Arrival wants to feel responsive; departure wants to feel unhurried, or it reads as the list being yanked away. Staggering the exit draws attention to something leaving, which is the opposite of what a rest state wants.</div>
+    </div>
+  </div>
+
+  <div class="verdict"><div class="bar"></div><div><strong>Open decision:</strong> what reveals the list. If it is typing alone, a user who does not know what to type never sees a list at all — and since PR #155 removed the picker controls, the list is the only browse path left. Recommend ↓ reveals it too, at the same 90/20 stagger.</div></div>
+</div>
+</x-dc>
+</body>
+</html>
