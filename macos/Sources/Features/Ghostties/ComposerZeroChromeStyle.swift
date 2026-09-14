@@ -1695,6 +1695,21 @@ final class ComposerDialKitCoordinator: ObservableObject {
     private let defaults: UserDefaults
     private let onChange: () -> Void
     private var lastKnownModel: ComposerDialKitTuningModel
+    /// Guards against re-entrant `handle(_:)` calls triggered by
+    /// `state.configure(controls:)` below. `DialPanelState.values` is
+    /// `@Published`, which — per Combine's documented `Published` semantics —
+    /// publishes to subscribers (this sink) BEFORE its own backing storage
+    /// commits the new value. So while this `handle(_:)` call is still on the
+    /// stack, `state.values` reads back the value from BEFORE the user's
+    /// change. `configure(controls:)` reads that stale `values` to seed its
+    /// renormalization, producing a model with the OLD `styleRaw`, then
+    /// assigns it back via `applyInternalValueChange` — which itself
+    /// re-publishes and re-enters this sink with that stale, old-style model.
+    /// Without this guard, that re-entrant call both persists the old style
+    /// back to `UserDefaults` and calls `state.configure` a second time with
+    /// the old style's controls, clobbering the correct new-style controls
+    /// this very call is in the middle of installing.
+    private var isRebuildingControls = false
 
     init(defaults: UserDefaults, onChange: @escaping () -> Void) {
         self.defaults = defaults
@@ -1765,6 +1780,17 @@ final class ComposerDialKitCoordinator: ObservableObject {
     /// derived dials. This sink never needs to write `state.values` at all;
     /// it only diffs and persists whatever arrived.
     private func handle(_ model: ComposerDialKitTuningModel) {
+        // See `isRebuildingControls`'s doc comment: `state.configure(...)`
+        // below re-enters this method with a stale, old-style model before
+        // returning. Bail out immediately so that re-entrant call neither
+        // persists the stale model nor reconfigures the controls a second
+        // time.
+        // See `isRebuildingControls`'s doc comment: `state.configure(...)`
+        // below re-enters this method with a stale, old-style model before
+        // returning. Bail out immediately so that re-entrant call neither
+        // persists the stale model nor reconfigures the controls a second
+        // time.
+        guard !isRebuildingControls else { return }
         let previous = lastKnownModel
         lastKnownModel = model
         write(from: previous, to: model)
@@ -1775,7 +1801,9 @@ final class ComposerDialKitCoordinator: ObservableObject {
         // exactly this ("swap the control list a panel presents"), so no
         // DialKit source edit is needed.
         if model.styleRaw != previous.styleRaw {
+            isRebuildingControls = true
             state.configure(controls: Self.controls(for: model.styleRaw))
+            isRebuildingControls = false
         }
     }
 
