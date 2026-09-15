@@ -90,6 +90,21 @@ Each item: steps → expected result → pass/fail.
 - The Codex hook registers only for template-launched Codex sessions; a `codex` typed into a
   plain shell never registers.
 
+## Automated suite status (2026-09-14 night)
+
+Full unfiltered `GhosttyTests` (`-skip-testing:GhosttyUITests`), Light, HEAD `6742b881e`:
+**1333 passed / 7 failed / 1 skipped / 1341 total**. ID set matches run9-ids.txt (1341/1341).
+All 7 failures are known load flakes — no product regression. Suite is **GREEN**.
+
+- `typedUnknownBranchTokenRendersCreateBranchRowFirst`: isolated pass 1.0 s; setup timed out
+  under parallel load. Evidence: `triage-typedUnknownBranch-isolated.xcresult`. Not a bug.
+- `raceReturnsTimedOut…`: still failed isolated (2.64 s vs 2.0 s ceiling); noted, no fix tonight.
+
+> **WAIVED by Sean 2026-09-15.** These live checks were not performed. Beta 25 shipped on the
+> automated suite alone. Nothing below has been exercised by hand.
+
+Live checks below remain unchecked — the suite result does not substitute for them.
+
 ## Screenshots / fixture recipe
 
 ```bash

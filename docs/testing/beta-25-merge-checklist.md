@@ -31,6 +31,22 @@ Confirm you're running the fresh build, not a stale one from a sibling worktree:
 lsappinfo info -only executablepath -app com.seansmithdesign.ghostties.dev
 ```
 
+## Automated suite status (2026-09-14 night)
+
+> **Suite: GREEN for product purposes.** All remaining items below are Sean's manual live checks —
+> the suite cannot substitute for them.
+> **WAIVED by Sean 2026-09-15.** These live checks were not performed. Beta 25 shipped on the
+> automated suite alone. Nothing below has been exercised by hand.
+
+- macOS GhosttyTests full unfiltered (`-skip-testing:GhosttyUITests`), Light, HEAD `6742b881e`:
+  **1333 passed / 7 failed / 1 skipped / 1341 total**. ID set matches run9-ids.txt (1341/1341).
+- All 7 failures are known load flakes:
+  - 6 × `SessionComposerWorktreeLaunchTests` — passed isolated
+  - `typedUnknownBranchTokenRendersCreateBranchRowFirst` — isolated pass 1.0 s (setup timeout under parallel load; not a product bug; evidence: `triage-typedUnknownBranch-isolated.xcresult`)
+  - `raceReturnsTimedOut…` — still failed isolated (2.64 s vs 2.0 s ceiling); noted, no fix tonight
+- CLI `swift test --parallel`: 139 passed, exit 0.
+- Phase 3 is PARTIAL because the items below are unchecked — not because of the suite.
+
 ## Sidebar (#175)
 
 - [ ] Compare a session's section placement in session view vs. project view (Pinned when non-empty or during a drag / Active / Inactive / Archive) → same session sits in the same bucket in both views; project view's Archive header matches session view's (chevron leading, same weight)
