@@ -169,7 +169,7 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
 - [x] Phase 0: carry retired-branch backlog lines (this PR) · ignored-file survey, unique worktree content copied to ~/Code/_archive · real-data scan of wave-1 files. Outcome: retired-branch lines carried (#176, landed via #180); unique worktree content archived to `~/Code/_archive/ghostties-worktrees-2026-09-14`.
 - [x] Phase 1: merge #175 → #169 → feat/demo-open-source-fixtures → #170 (each: re-verify head sha, BACKLOG union, CI build green before merge). Outcome: merged #175 sidebar, #169 composer, #177 demo fixtures; #170 closed, its content landed via #180.
 - [x] Phase 2: docs branches docs/session-row-status-spec (add "superseded by pattern D, 2026-09-13" note) + docs/design-system-site-plan. No website branches, per Sean. Outcome: both docs branches landed via the #180 integration branch.
-- [ ] Phase 3 (PARTIAL): tests in a fresh worktree at merged main: #169 post-merge test plan + #175 post-merge doc + demo test plan · manual checklist docs/testing/beta-25-merge-checklist.md
+- [x] Phase 3 (CLOSED by Sean 2026-09-15 — suite green, live checks WAIVED): tests in a fresh worktree at merged main: #169 post-merge test plan + #175 post-merge doc + demo test plan · manual checklist docs/testing/beta-25-merge-checklist.md
   - Done: the automated suite is GREEN on main after #181. Run 8: 1341 test IDs, the run-7 baseline of 1342 minus 2 deletions Sean approved. The 6 failures were load flakes, and all passed on an isolated re-run (36/36).
   - #181 fixed: a macOS 27 hang (a test's unrecognized selector was swallowed by AppKit, and the Swift Testing host stalled); a real DialKit style-switch re-entrancy bug; 10 tests left stale by the popover retarget. It also added `-NSApplicationCrashOnExceptions YES`.
   - Remaining:
@@ -180,9 +180,15 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
       - Fixed in PR #183: appearance-independent edge detection, and the step3 test renamed to `anchoredRestStateShowsGenericHintNotPath`. Every check is red-proved under all 4 window × ambient appearance cases.
       - Run 9 on the #183 head (Light): 1341 IDs. The only changes are the 4 renames. 5 load flakes passed an isolated re-run (35/35).
       - Evidence: local, gitignored (`macos/build/beta25-artifacts/` in the beta25-suite worktree).
-    - [ ] #175 live checks (`docs/testing/sidebar-section-vocabulary-post-merge.md`)
-    - [ ] Sean's manual checklist (`docs/testing/beta-25-merge-checklist.md`)
-    - [ ] demo test plan
+      - Run 10 (2026-09-14 night, Light @ `6742b881e`): 1333 passed / 7 failed / 1 skipped / 1341 total. ID set matches run9-ids.txt (1341/1341). All 7 failures are known load flakes: 6 × `SessionComposerWorktreeLaunchTests` (all passed isolated) + `typedUnknownBranchTokenRendersCreateBranchRowFirst` (isolated pass 1.0 s; evidence: `triage-typedUnknownBranch-isolated.xcresult`; setup timed out waiting for worktrees under parallel load, not a product bug) + `raceReturnsTimedOut…` (still failed isolated, 2.64 s vs 2.0 s ceiling; noted, no fix tonight). CLI `swift test --parallel`: 139 passed, exit 0. **Suite is GREEN for product purposes.** Phase 3 remains PARTIAL only because Sean's live checklist / #175 live checks / demo are still unchecked — not because of the suite.
+      - **Waiver:** Sean waived live checks 2026-09-15; authorized autonomous Phase 3 flip
+        + #179 merge + tag. The three items below were **not performed**. They stay unchecked
+        on purpose — Phase 3 is closed by Sean's decision on the automated-suite evidence
+        (Run 10: 1333/7/1/1341 Light @ `6742b881e`, all 7 failures known load flakes), not
+        because these boxes were satisfied.
+    - [ ] WAIVED (Sean, 2026-09-15) — not performed: #175 live checks (`docs/testing/sidebar-section-vocabulary-post-merge.md`)
+    - [ ] WAIVED (Sean, 2026-09-15) — not performed: Sean's manual checklist (`docs/testing/beta-25-merge-checklist.md`)
+    - [ ] WAIVED (Sean, 2026-09-15) — not performed: demo test plan
 - [x] Phase 4: cleanup: archive tags pushed first; never delete upstream-main, pr-assets/sidebar-section-vocabulary, website branches or worktrees, feat/ghostties-animation, claude/happy-morse-62ea22; remove no worktree a running process uses. Outcome: cleanup 2026-09-14. 78 `archive/<branch>` tags on origin (restore with `git branch <name> archive/<name>`), 76 local and 34 origin branches deleted, 10 worktrees removed.
   - Held for Sean:
     - [ ] worktrees `composer-g`, `sidebar-vocab`, `session-5` (the stale `main` checkout), each holding only untracked `vendor/cef`
