@@ -123,6 +123,46 @@
       <p><strong style="color:rgba(255,255,255,0.6)">Beta.15 and earlier:</strong> Auto-updates aren't reliable yet in early betas. Download the latest release manually from the <a href="/download">download page</a>.</p>
     </div>
 
+    <!-- beta.25 -->
+    <div class="release">
+      <div class="release-heading">
+        <h2>v0.1.0-beta.25</h2>
+        <span class="date">September 15, 2026</span>
+      </div>
+      <p class="release-summary">The composer gets a new single-line look, on by default: a floating field with no card chrome, previewing your destination as ghost text. A zero-chrome style is also available for anyone who wants the field with nothing else on screen. The ghost-text field itself is on for everyone. A session’s terminal now survives its agent exiting. The sidebar gets a rebuilt session view: unified Active / Inactive / Archive sections, pinning and drag-reorder, Resume alongside Start Fresh, and a quieter status glyph in place of the ghost icon.</p>
+
+      <div class="release-section">
+        <h3>Added</h3>
+        <ul>
+          <li><strong>Pin sessions in the sidebar, and drag between sections.</strong> Dropping a session on Active relaunches it; drop zones and auto-scroll make reordering visible as you drag.</li>
+          <li><strong>Resume picks up where a session left off.</strong> The row’s context menu offers Resume (when a saved conversation exists) alongside Start Fresh, for both Claude Code and Codex sessions.</li>
+          <li><strong>A zero-chrome composer style</strong> — the field alone, no card, no results list until you type — for anyone who wants the minimum possible surface.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Changed</h3>
+        <ul>
+          <li><strong>Single-line is now the composer’s default look</strong>, replacing the card-based style: a floating field that previews your destination as ghost text, with results appearing only once you start typing or press ↓. The old card-based composer is gone.</li>
+          <li><strong>RECENT / TEMPLATES / PROJECTS / COMMAND section headers are back</strong> above the composer’s results list, so the list reads as browseable groups again instead of one flat stack.</li>
+          <li><strong>A thin footer strip shows only the key chords that are live right now</strong> (Return, Tab, arrows, Undo), replacing the old static four-chord row — and it never doubles up with an error message or the new-template naming prompt.</li>
+          <li><strong>The ghost-text composer field is now on for everyone</strong>, previewing your destination — project, branch, template — as you type instead of requiring you to turn it on first. The old toggle in View → Experimental Composer Field still exists if you want it off.</li>
+          <li><strong>Tab in the composer accepts one segment plus a space</strong>, never a chevron. Typing a name and hitting Tab used to insert <code>&gt;</code>, which could get read as an explicit branch declaration you didn’t intend.</li>
+          <li><strong>Active, Inactive, and Archive now follow one rule everywhere</strong> — a session or project counts as Active exactly when its terminal is alive, in both the session and project views.</li>
+          <li><strong>A row’s status now shows as a single glyph</strong> — a spinner while it’s working, <code>?</code> when it needs you, <code>✓</code> when it’s idle or done, <code>✕</code> on error — replacing the ghost-based indicator.</li>
+        </ul>
+      </div>
+
+      <div class="release-section">
+        <h3>Fixed</h3>
+        <ul>
+          <li><strong>Typing a branch name that doesn’t exist now offers to create it</strong>, instead of silently trying to run it as a shell command. The “Run” reading still shows as a separate option alongside it.</li>
+          <li><strong>Abandoning a just-created template’s edit sheet no longer leaves a junk, unconfigured template behind.</strong> Opening “New template” and then dismissing without saving (Cancel, Esc, or clicking outside) used to persist an empty <code>command: nil</code> row forever.</li>
+          <li><strong>Closing a session after its agent exits works like closing any other shell.</strong> The terminal used to show “Process exited. Press any key to close the terminal.” the moment Claude Code (or another agent) quit; it now drops back to a normal shell prompt and closes the same way a plain terminal session does.</li>
+        </ul>
+      </div>
+    </div>
+
     <!-- beta.24 -->
     <div class="release">
       <div class="release-heading">
