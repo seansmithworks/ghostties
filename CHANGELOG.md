@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
-## [0.1.0-beta.25] — 2026-09-10
+## [0.1.0-beta.25] — 2026-09-15
 
 The composer gets a new single-line look, on by default: a floating field with no card chrome, previewing your destination as ghost text. A zero-chrome style is also available for anyone who wants the field with nothing else on screen. The ghost-text field itself is on for everyone. A session's terminal now survives its agent exiting. The sidebar gets a rebuilt session view: unified Active / Inactive / Archive sections, pinning and drag-reorder, Resume alongside Start Fresh, and a quieter status glyph in place of the ghost icon.
 
