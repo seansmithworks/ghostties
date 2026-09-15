@@ -200,7 +200,7 @@ Sean, after live-testing R11: typewriter position "just not landing"; single-lin
     - [ ] `Default` worktree/branch: purpose unknown
     - [ ] local-only branches never pushed: `fix/composer-modelb-default-on`, `feat/demo-capture-instance`, `findings/composer-dev-pass-2026-08-20`
       - `fix/composer-modelb-default-on` and `findings/composer-dev-pass-2026-08-20`: archive tags pushed and local branches deleted 2026-09-14; `findings/…` still exists on origin.
-- [ ] Phase 5: rewrite CHANGELOG [0.1.0-beta.25] entry before any tag — draft PR #179 awaits Sean's review; no tag until Phase 3 is green.
+- [x] Phase 5: rewrite CHANGELOG [0.1.0-beta.25] entry before any tag. Outcome: #179 merged 2026-09-15; heading dated to the tag date; `v0.1.0-beta.25` tagged at `34b6726291d0e48121a0c11af4976a01afee0ebe`.
 
 **Found during Beta 25 verification:**
 - [ ] `ComposerZeroChromeStyleTests/singleLineFieldTextIsInsetFromTheCardsLeftEdge()` flaked intermittently during the #181 builder's targeted runs. It passed in full runs 7 and 8. Unverified whether it predates #181.
