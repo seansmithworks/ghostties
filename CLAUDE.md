@@ -11,13 +11,15 @@ Fork of [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty). Adds mult
 ## Build
 
 ```bash
-zig build run -Doptimize=ReleaseFast   # Build + launch release app
-rm -rf macos/build && zig build run -Doptimize=ReleaseFast  # Clean rebuild
-open macos/Ghostties.xcodeproj         # Open in Xcode
+open macos/Ghostties.xcodeproj         # Open in Xcode, scheme "Ghostties"
 # Cmd+U in Xcode to run tests
 
 # Browser (CEF) — optional, needed for embedded browser
 bash scripts/download-cef.sh  # Downloads ~300MB CEF framework
+
+# zig build is broken on macOS 26 — all builds go through Xcode above.
+# zig build run -Doptimize=ReleaseFast   # Build + launch release app
+# rm -rf macos/build && zig build run -Doptimize=ReleaseFast  # Clean rebuild
 ```
 
 ## Xcode Project
