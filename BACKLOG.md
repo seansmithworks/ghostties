@@ -12,7 +12,7 @@
 - [ ] Until (b) is green, tag no beta from main.
 - [ ] Sidebar "+ New Session" popover never looked at live since Classic removal (`275c37d69`). Covered by the manual checklist item 10 in the plan.
 - [ ] 21 popover snapshot sites retargeted in `275c37d69` have pixel thresholds calibrated at the old 360pt centered card, unverified at the 204pt popover. Expect possible threshold-recalibration failures, not regressions.
-- [ ] (noticed, not pursued) `ComposerResultsTable.resultsWellMaxHeight` in `SessionComposerPalette.swift` still has a `.centered` branch that is unreachable since `275c37d69` (dead-code removal candidate). Decide or kill — strawman: delete in a follow-up.
+- [x] RESOLVED, NOT DEAD (hygiene audit, 2026-09-17): `ComposerResultsTable.resultsWellMaxHeight`'s `.centered` branch in `SessionComposerPalette.swift:451-456` is reachable — `WorkspaceViewContainer.swift:1637` still constructs `SessionComposerRequest(presentation: .centered, ...)` for the overlay composer. No deletion needed.
 - [ ] (noticed, not pursued) Ghost frame test coverage: 26 of 27 `ComposerWitnessFramesTests` have no red proof. The plan labels them a known gap.
 
 ## 2026-09-13 (later) — Composer live-look round (PR #169)
