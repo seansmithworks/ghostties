@@ -67,3 +67,10 @@ docs/plans/*/evidence/*.png
 
 # Python bytecode cache (scripts/generate-changelog-page.py)
 __pycache__/
+
+# Scratch output, playground, and design-tool files (hygiene audit 2026-09-17)
+output/
+concept-lab/
+.playwright-cli/
+*.glsl
+*.pen
