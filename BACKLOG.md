@@ -1,5 +1,34 @@
 # Ghostties — Backlog
 
+## 2026-09-19 — filed items (not yet started)
+
+- [ ] **BUG — renaming a Claude Code thread does not update all sidebars.** Renaming updates
+  some sidebar surfaces but not all of them. Project memory records terminal→sidebar naming as
+  deliberately ONE-WAY (`decision_session-naming-stays-one-way.md`, 2026-08-10, do not re-open)
+  and that an unpinned session's sidebar name IS the live terminal title — so the likely defect
+  is a stale/missed propagation to some surfaces, not the one-way policy itself. First
+  investigation step: inventory which sidebars miss the update; not yet known. | app | new
+- [ ] **FEATURE — composer needs better search/open.** Sean's stated starting shape, quoted:
+  start from the simple form that exists today; pressing arrow-key Up or Down expands the view
+  to show suggestions plus buttons to open; the buttons are liquid-glass icon buttons. Next
+  step: run design variations via the `shotfun` skill under `/design`. Not designed here — just
+  the requirement and the named next step. | experience | new
+- [ ] **BUG (RECURRING) — terminal drop shadow disappears.** The terminal drop shadow
+  intermittently drops or gets removed; Sean reports this has regressed and been "fixed"
+  several times. See also the shadow entry below (`project_canvas-shadow-disappears-during-use.md`
+  — no repro, bounds guard shipped in beta.23 for Sean to test). Repeated regression with no
+  failing test means **no test guards this** — a regression test is part of the fix, not
+  optional. | app | new
+- [ ] **BUG (RECURRING) + DESIGN PIVOT — terminal canvas header color does not match the
+  canvas.** Fixed multiple times before. Sean sampled the exact colors as evidence: dark mode
+  header `#2e2e2e` / canvas `#0a0300`; light mode header `#faf6f2` / canvas `#f7f7f7`. Same
+  recurring-with-no-test-guard note as the shadow item above — a pixel/color-equality test
+  belongs in the fix. Proposed pivot (design direction, NOT a decision): remove the header
+  entirely; put the sidebar icon and the browser icon into liquid-glass buttons floating over
+  the canvas. Known risk, in Sean's words: the position of the sidebar icon was a big problem
+  before, so the pivot must account for that impact. Next step: design variations via the
+  `shotfun` skill under `/design`. | craft | new
+
 ## PR #169 merge + post-merge verification (handoff, 2026-09-13)
 
 - Handoff: owned by Sean's separate merge-coordinator thread. Test plan: `docs/plans/pr169-composer-post-merge-test-plan.html`. Adversarial review evidence: `docs/plans/pr169-test-plan-gate/`.
@@ -1684,7 +1713,10 @@ git's own dirty check and stronger evidence than the sampled audit that preceded
   PAT — set `HOMEBREW_TAP_TOKEN` *before* `HOMEBREW_TAP_REPO` or the next release goes red at its
   final job). Manual: `bash scripts/update-cask-version.sh v0.1.0-beta.23`, then copy into the tap's
   `Casks/ghostties.rb`. | build | carried
-- [ ] **Canvas shadow fix shipped UNVERIFIED — needs a repro.** #125 guards the `shadowPath` rebuild
+- [ ] **Canvas shadow fix shipped UNVERIFIED — needs a repro.** (2026-09-19: still recurring —
+  see the filed BUG entry in "2026-09-19 — filed items" above. Regressed and been "fixed" several
+  times with no failing test guarding it; a regression test is part of the fix, not optional.)
+  #125 guards the `shadowPath` rebuild
   against zero-size bounds in both `terminalShadowHost` and `browserShadowHost`. The trigger was
   never reproduced, so the fix may be a no-op. Sean is testing against beta.23; the release notes ask
   for the trigger. If it still vanishes, the next move is a repro, **not** a second blind fix. Full
