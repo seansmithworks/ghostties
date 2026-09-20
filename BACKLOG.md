@@ -1,5 +1,30 @@
 # Ghostties — Backlog
 
+## 2026-09-20 — canvas-header pivot + distribution (carried)
+
+- [ ] **CARRIED — header pivot: pick a variant, then build.** Six design variants explored on the
+  pen.dev canvas (frames `shotfun-A/B/C/D/E`, briefs committed at `.shotfun/2026-09-20-canvas-header/`).
+  Round 3 (D/E/F) is the live one — sidebar drawn as it actually ships, Arc/Dia as the reference,
+  only the header strip changes. **D landed** (`shotfun-D-top-corners`, glass at 16pt inset from the
+  card's own corners). **E's brief exists but its canvas frame is UNVERIFIED** — the agent was killed
+  mid-run. **F was never built** (`variant-f/` is empty). Next: verify/rebuild E, build F, then Sean
+  picks. | craft | carried
+- [ ] **CARRIED — root cause is settled, do not re-litigate.** The header color "bug" is the token
+  rendering correctly; DESIGN.md §2 decouples chrome/canvas from the user's terminal theme so it can
+  never match. See `reference_header-color-is-decoupled-by-design.md`. Supersedes the color-equality
+  test proposed in the 2026-09-19 item below — that test would encode a promise the system doesn't make. | craft | carried
+- [ ] **CARRIED — Homebrew tap does not exist.** `HOMEBREW_TAP_REPO` unset, so the cask job skips on
+  every release while the build stays green; beta.25 never reached brew users. `verify-release` went
+  red on beta.25 flagging exactly this and publication continued anyway. Decide: create
+  `SeanSmithWorks/homebrew-tap` + set secret then variable, or drop brew from the distribution story
+  and correct the docs that claim it's live. | build | carried
+- [ ] **PARKED — composer search/open shotfun.** Second design wave, deliberately deferred until the
+  header pivot is picked so the two don't compete. Requirement already filed below. | experience | parked
+- [ ] **PARKED — `session-7` worktree holds 17G** behind a live shell; no unique commits. Close that
+  terminal and `git worktree remove` reclaims it. | ops | parked
+- [ ] **PARKED — `visual-pass-2026-09-05` pushed to origin** after a clean leak verification (25 PNGs
+  inspected, all fixture data). Merge or delete when convenient. | ops | parked
+
 ## 2026-09-19 — filed items (not yet started)
 
 - [ ] **BUG — renaming a Claude Code thread does not update all sidebars.** Renaming updates
