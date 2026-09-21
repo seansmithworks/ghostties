@@ -1,5 +1,14 @@
 # Ghostties — Backlog
 
+## AGENTS.md / CLAUDE.md consolidation (2026-09-20, decision open)
+
+Claude Code v2.1.277+ can read `AGENTS.md`; `~/.claude/settings.json` is now set to `claude-md-and-agents-md`, so this repo loads **both** root files every session, plus nested `AGENTS.md` on demand when Claude reads files in `macos/`, `example/`, `src/benchmark/`, `src/inspector/`, `src/terminal/c/`, `test/fuzz-libghostty/`.
+
+- [x] Consolidated 2026-09-20. `AGENTS.md` is canonical (2,877 chars) and absorbed the CEF download line and the `GhosttyTests`/`GhosttyUITests` target names; `CLAUDE.md` is now 425 chars — `@AGENTS.md` plus the Design Quality block. Duplication gone.
+- [x] `macos/AGENTS.md` fork block now defers to the root instead of restating scheme/module/test-target facts, and no longer names the broken `zig build` commands. Everything below the `---` is upstream's own content and was left byte-for-byte — editing there would conflict on every upstream pull.
+- [ ] Not chased: `example/`, `src/benchmark/`, `src/inspector/`, `src/terminal/c/`, `test/fuzz-libghostty/` each still carry an upstream `AGENTS.md`. They load on demand when Claude reads files in those dirs. Unreviewed — they are upstream's, and none of them mention the fork.
+- [x] Build order corrected in `AGENTS.md`. Xcode leads; the `zig build` commands are kept below a note saying they do not currently work. Evidence: zig is still `0.15.2` (the version `build-xcode-workaround.md` records as broken) and macOS is now `27.0`, so the memory's "re-check when Zig 0.16 ships" condition is unmet. **Not verified by an actual build this session** — if `zig build run` turns out to work again, the note at the top of AGENTS.md § Commands is what to delete.
+
 ## PR #169 merge + post-merge verification (handoff, 2026-09-13)
 
 - Handoff: owned by Sean's separate merge-coordinator thread. Test plan: `docs/plans/pr169-composer-post-merge-test-plan.html`. Adversarial review evidence: `docs/plans/pr169-test-plan-gate/`.

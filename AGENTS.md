@@ -14,15 +14,26 @@ shipped, or tested here.
 
 ## Commands
 
-- **Build + launch**: `zig build run -Doptimize=ReleaseFast`
-- **Clean rebuild**: `rm -rf macos/build && zig build run -Doptimize=ReleaseFast`
-- **Launch built app**: `open macos/build/ReleaseLocal/Ghostties.app`
-- **Build (Zig only)**: `zig build -Demit-macos-app=false` — skips the app bundle,
-  much faster when you don't need it
-- **Test (Swift package)**: `cd cli && swift test --parallel`
+> **`zig build` does not currently work on this machine.** Zig 0.15.2's linker
+> fails on macOS 26+ (can't find `_abort`, `_free`, `_malloc`). Still 0.15.2 and
+> now macOS 27.0 as of 2026-09-20, so nothing has changed that would fix it.
+> Build through Xcode until Zig 0.16 ships, then re-check.
+
+- **Build + launch**: open `macos/Ghostties.xcodeproj`, Cmd+R
+- **Build (release, CLI)**:
+  `xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration Release -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES`
+- **Clean rebuild**: `rm -rf macos/build`, then the command above
+- **Launch built app**: `open macos/build/Build/Products/Release/Ghostties.app`
 - **Test (macOS app)**: open `macos/Ghostties.xcodeproj`, Cmd+U
-- **Test (Zig)**: `zig build test` — slow; prefer `-Dtest-filter=<name>`
+- **Test (Swift package)**: `cd cli && swift test --parallel`
+- **Browser (CEF)**: `bash scripts/download-cef.sh` — ~300MB, only needed for
+  the embedded browser
 - **Formatting**: `zig fmt .` · `swiftlint lint --strict --fix` · `prettier -w .`
+
+Blocked on the Zig toolchain, kept for when it works again:
+`zig build run -Doptimize=ReleaseFast` (build + launch),
+`zig build -Demit-macos-app=false` (Zig only, skips the app bundle),
+`zig build test` (slow; prefer `-Dtest-filter=<name>`).
 
 See [TESTING.md](TESTING.md) for what each suite covers and the two xcodebuild
 flags you need from the command line.
@@ -44,7 +55,8 @@ document without answering the questions in it.
 
 - `PRODUCT_MODULE_NAME = Ghostty` — all Swift code uses `import Ghostty` (do NOT change)
 - `PRODUCT_NAME = Ghostties` — the `.app` bundle name
-- Xcode scheme: `Ghostties`
+- Xcode project, scheme and target: `Ghostties`
+- Test targets keep upstream's names: `GhosttyTests` / `GhosttyUITests`
 
 ## Issues and PRs
 

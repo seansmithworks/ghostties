@@ -1,31 +1,11 @@
-# Ghostties
+@AGENTS.md
 
-Fork of [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty). Adds multi-agent workspace sidebar on top of the upstream terminal.
+# Claude Code
 
-## Git & GitHub
-
-- **NEVER open PRs against upstream** (`ghostty-org/ghostty`). Only push/PR to `origin` (`SeanSmithWorks/ghostties`) unless the user explicitly says otherwise.
-- `origin` = `SeanSmithWorks/ghostties` (the fork)
-- `upstream` = `ghostty-org/ghostty` (read-only reference)
-
-## Build
-
-```bash
-zig build run -Doptimize=ReleaseFast   # Build + launch release app
-rm -rf macos/build && zig build run -Doptimize=ReleaseFast  # Clean rebuild
-open macos/Ghostties.xcodeproj         # Open in Xcode
-# Cmd+U in Xcode to run tests
-
-# Browser (CEF) — optional, needed for embedded browser
-bash scripts/download-cef.sh  # Downloads ~300MB CEF framework
-```
-
-## Xcode Project
-
-- Project/scheme/target renamed to **Ghostties**
-- `PRODUCT_MODULE_NAME = Ghostty` — all Swift code uses `import Ghostty` (do not change)
-- `PRODUCT_NAME = Ghostties` — the built .app bundle name
-- Test targets remain `GhosttyTests` / `GhosttyUITests`
+Everything above comes from `AGENTS.md`, which is canonical for this repo — the
+fork's git rules, build and test commands, directory structure and module
+naming. Put changes to any of those there, not here. This file is only for
+things that mean nothing to other coding agents.
 
 ## Design Quality
 
