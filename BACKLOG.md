@@ -2,13 +2,14 @@
 
 ## 2026-09-20 — canvas-header pivot + distribution (carried)
 
-- [ ] **CARRIED — header pivot: pick a variant, then build.** Six design variants explored on the
-  pen.dev canvas (frames `shotfun-A/B/C/D/E`, briefs committed at `.shotfun/2026-09-20-canvas-header/`).
-  Round 3 (D/E/F) is the live one — sidebar drawn as it actually ships, Arc/Dia as the reference,
-  only the header strip changes. **D landed** (`shotfun-D-top-corners`, glass at 16pt inset from the
-  card's own corners). **E's brief exists but its canvas frame is UNVERIFIED** — the agent was killed
-  mid-run. **F was never built** (`variant-f/` is empty). Next: verify/rebuild E, build F, then Sean
-  picks. | craft | carried
+- [ ] **CARRIED — header pivot: pick a variant, then build.** D/E/F all built and verified on the
+  pen.dev canvas (`id0Jm` / `Q30Ctk` / `T7PDwM`; F brief `1af199839`). Legibility pass (`861b79df4`,
+  frame `OJ88s`): D/F glass fails over htop, light themes and diffs — favours E. Cost note
+  (`3a3ba3b97`): E is the smallest diff (toggles already anchor to the window top). Next: Sean picks,
+  and decides what overlay mode shows (it already hides both toggles). | craft | carried 2× since 2026-09-20
+- [ ] **CARRIED — pen.dev canvas rescue.** Save silently failing; on-disk `.pen` == the 00:20
+  backup. 20 named frames exported to `~/pen-rescue-2026-09-21/` (PNG + HTML). Remaining frames
+  need Sean's Cmd+A so `get_app_state` reports their ids, then export. Don't quit pen.dev first. | ops | carried
 - [ ] **CARRIED — root cause is settled, do not re-litigate.** The header color "bug" is the token
   rendering correctly; DESIGN.md §2 decouples chrome/canvas from the user's terminal theme so it can
   never match. See `reference_header-color-is-decoupled-by-design.md`. Supersedes the color-equality
