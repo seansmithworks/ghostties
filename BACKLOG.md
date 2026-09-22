@@ -1,5 +1,15 @@
 # Ghostties — Backlog
 
+## Session-5 checkpoint — status skills, AGENTS.md, tooling census (2026-09-22)
+
+- [ ] **Carried** — Merge PR #187 (`worktree-session-5` → `main`, https://github.com/seansmithworks/ghostties/pull/187). Docs only; Sean's merge.
+- [ ] **Carried, DECIDE OR KILL** — Structural scope-check fix. `~/.claude/hooks/scope-check.py` diffs only the session's `Repo` root (`git -C root`), so cross-repo work (edits to `~/.claude`, `~/Code/agent-skills`) reads as DROPOUT. The prompt-rule patch (`b9a69a8`, in `~/.claude`) FAILED — a fifth false DROPOUT fired after it landed. Strawman: a PostToolUse hook on Edit/Write appends each touched absolute path to `~/.claude/scope/.touched/<session_id>`; scope-check.py resolves each path's repo root with `git rev-parse --show-toplevel` and adds that repo's diff under a `# repo: <root>` header. Lives in `~/.claude`, so commits there need a real terminal — a worktree-isolated session cannot run git outside its own tree.
+- [ ] **Parked** — 12 `.easeIn` uses in Swift sources vs emil-design-eng's "Never use ease-in for UI animations". Not checked one by one; some may be exits or non-UI.
+- [ ] **Parked** — Reduce Motion coverage: 18 `accessibilityReduceMotion` vs 44 `withAnimation`. A count, not an audit.
+- [ ] **Parked** — `framer-motion` (old name) still in 9 projects vs `motion` in 11; the PR-visuals rule names `agent-browser` (64 calls/90d) while claude-in-chrome (1,551) and playwright (681) do the real work.
+- [ ] **Parked** — The catching-up Review cap's `+<N> older` overflow has never run (max seen: 8 entries).
+- Census scripts (session scratchpad, will not survive): `skill_census.py`, `third_party_census.py`, `design_census.py`. Rebuild from this list if needed: they scan `~/.claude/projects/**/*.jsonl` (last 90 days, skipping subagents) for Skill tool_use, `<command-name>` tags, `mcp__<server>__` tool names and Bash CLI names, plus `package.json` deps under `~/Code`.
+
 ## AGENTS.md / CLAUDE.md consolidation (2026-09-20, decision open)
 
 Claude Code v2.1.277+ can read `AGENTS.md`; `~/.claude/settings.json` is now set to `claude-md-and-agents-md`, so this repo loads **both** root files every session, plus nested `AGENTS.md` on demand when Claude reads files in `macos/`, `example/`, `src/benchmark/`, `src/inspector/`, `src/terminal/c/`, `test/fuzz-libghostty/`.
