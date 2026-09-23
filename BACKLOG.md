@@ -1,5 +1,14 @@
 # Ghostties — Backlog
 
+## 2026-09-23 — DMG motion research
+
+- [ ] **DECIDE OR KILL — animated DMG install window.** Research found no real hack: Finder draws the
+  `.DS_Store` background as a static image (a GIF shows its first frame only; inferred from docs, not
+  tested locally). Real motion requires an "Install Ghostties" app inside the DMG with its own
+  SwiftUI window, at the cost of a double-click and a second notarized binary. Strawman: keep the
+  static DMG and put the motion in a drawn ghost-trail arrow; build the installer app only if
+  onboarding numbers justify it. Optional: a 5-min local GIF-background test to confirm. | build | new
+
 ## 2026-09-20 — canvas-header pivot + distribution (carried)
 
 - [ ] **CARRIED — header pivot: pick a variant, then build.** D/E/F all built and verified on the
