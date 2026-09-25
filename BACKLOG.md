@@ -9,12 +9,12 @@
   this pulls unreleased tip. Sean: "next week … you can just run at it and fan out." Full suite gate
   before any tag. | build | filed
   Overnight run dispatched 2026-09-24 on `sync/upstream-zig-0.16` (worktree `.claude/worktrees/upstream-sync`):
-  - [ ] P0 premise: pristine `upstream/main` builds GhosttyKit with brew Zig 0.16 on Xcode 27 SDK, no shim
-  - [ ] P1 conflict map + resolution strategy (planner)
-  - [ ] P2 merge + resolve 34 conflicts, commit
-  - [ ] P3 Zig 0.16 GhosttyKit build + Xcode Debug build green
-  - [ ] P4 full suite (skip UI tests) — identifier-set diff vs main baseline (1341 IDs)
-  - [ ] P5 independent review of the merge (reviewer ≠ builder); push branch to origin, NO PR/merge/tag
+  - [x] P0 premise: pristine `upstream/main` builds GhosttyKit with brew Zig 0.16 on Xcode 27 SDK, no shim
+  - [x] P1 conflict map + resolution strategy (planner)
+  - [x] P2 merge + resolve 34 conflicts, commit
+  - [x] P3 Zig 0.16 GhosttyKit build + Xcode Debug build green
+  - [x] P4 full suite (skip UI tests) — identifier-set diff vs main baseline (1341 IDs)
+  - [x] P5 independent review of the merge (reviewer ≠ builder); push branch to origin, NO PR/merge/tag
 
 ## 2026-09-20 — canvas-header pivot + distribution (carried)
 
@@ -2990,3 +2990,13 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 - [ ] PR #165 `fix/composer-return-to-shell` @ `d32fb32b6` — OPEN, MERGEABLE, CI green, but CI is
   `build-for-testing` only and **its tests have never been executed anywhere**. Needs a build in the
   main tree and Sean running the ⌘T flow. | build | carried 1×
+
+
+## Recovered from old Mac — uncommitted as of 2026-09-24 (merged 2026-09-25, review and fold in)
+
+### 2026-09-20 — canvas-header pivot + distribution (carried) (items missing from this section)
+- [ ] **DISPATCHED 2026-09-23 — flow 01, sidebar presence.** Variant E placement resolved into a
+  four-state build spec: `docs/design/sidebar-presence/flow-01-sidebar-presence.md` (+ reference PNGs).
+  244 expanded → 72 rail → 0 closed with a 24pt hot zone → opaque 244 reveal. New: a fourth
+  `SidebarMode` case, the bottom tray, and an opaque (un-blurred) overlay. Four decisions are Sean's,
+  listed at the end of the spec. Canvas `mkJau`. | craft | new
