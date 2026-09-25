@@ -1201,7 +1201,7 @@ pub const Surface = struct {
             // Remove Claude Code session markers so that spawned terminals
             // can launch their own Claude Code instances without the nested
             // session guard blocking them.
-            env.remove("CLAUDECODE");
+            _ = env.orderedRemove("CLAUDECODE");
 
             // If we were launched from the desktop then we want to
             // remove the LANGUAGE env var so that we don't inherit
