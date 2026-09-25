@@ -114,26 +114,18 @@ extension Ghostty {
         }
 
         /// The PID of the foreground process group attached to the PTY.
-        ///
-        /// Ghostties NOTE (upstream sync 2026-05): the underlying C symbol
-        /// `ghostty_surface_foreground_pid` was added upstream but isn't yet
-        /// present in our locally-built `GhosttyKit.xcframework` (zig 0.15.2
-        /// can't relink on macOS 26 — see `build-xcode-workaround.md`). Returning
-        /// nil keeps AppleScript / AppIntents callers safe until the xcframework
-        /// can be rebuilt; restore the original two-line implementation then.
         @MainActor
         var foregroundPID: Int? {
-            return nil
+            let pid = ghostty_surface_foreground_pid(surface)
+            guard pid != 0 else { return nil }
+            return Int(exactly: pid)
         }
 
         /// The PTY device name for this surface.
-        ///
-        /// Ghostties NOTE (upstream sync 2026-05): see foregroundPID above —
-        /// `ghostty_surface_tty_name` is missing from our local xcframework.
-        /// Returning nil is a temporary stub.
         @MainActor
         var ttyName: String? {
-            return nil
+            let ttyName = AllocatedString(ghostty_surface_tty_name(surface)).string
+            return ttyName.isEmpty ? nil : ttyName
         }
 
         /// Send a mouse button event to the terminal.

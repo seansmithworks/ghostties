@@ -657,13 +657,8 @@ extension Ghostty {
             case GHOSTTY_ACTION_SET_TITLE:
                 setTitle(app, target: target, v: action.action.set_title)
 
-            // Ghostties NOTE (upstream sync 2026-05): GHOSTTY_ACTION_SET_TAB_TITLE
-            // and `action.action.set_tab_title` were added upstream but aren't
-            // yet exposed by our locally-built GhosttyKit.xcframework (zig 0.15.2
-            // is broken on macOS 26 — see build-xcode-workaround.md). Restore
-            // this case once the xcframework is rebuilt.
-            // case GHOSTTY_ACTION_SET_TAB_TITLE:
-            //     return setTabTitle(app, target: target, v: action.action.set_tab_title)
+            case GHOSTTY_ACTION_SET_TAB_TITLE:
+                return setTabTitle(app, target: target, v: action.action.set_tab_title)
 
             case GHOSTTY_ACTION_PROMPT_TITLE:
                 return promptTitle(app, target: target, v: action.action.prompt_title)

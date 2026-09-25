@@ -1269,15 +1269,14 @@ class AppDelegate: NSObject,
         guard NSApp.mainWindow == nil else { return event }
 
         // If this event as-is would result in a key binding then we send it.
-        if let app = ghostty.app, let _ = ghostty.config.config {
+        if let app = ghostty.app, let config = ghostty.config.config {
             var ghosttyEvent = event.ghosttyKeyEvent(GHOSTTY_ACTION_PRESS)
             let match = (event.characters ?? "").withCString { ptr in
                 ghosttyEvent.text = ptr
-                // Ghostties NOTE (upstream sync 2026-05): the early-out check
-                // `ghostty_config_key_is_binding` is a new C API not yet in our
-                // local GhosttyKit.xcframework (zig 0.15.2 broken on macOS 26).
-                // We skip the fast-path and let `ghostty_app_key` decide. Restore
-                // the check after the xcframework is rebuilt.
+                if !ghostty_config_key_is_binding(config, ghosttyEvent) {
+                    return false
+                }
+
                 return ghostty_app_key(app, ghosttyEvent)
             }
 
