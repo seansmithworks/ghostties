@@ -8,6 +8,13 @@
   Zig 0.16 drops the Xcode 26.3 SDK pin (local + CI). Caveat: upstream has no release since the fork —
   this pulls unreleased tip. Sean: "next week … you can just run at it and fan out." Full suite gate
   before any tag. | build | filed
+  Overnight run dispatched 2026-09-24 on `sync/upstream-zig-0.16` (worktree `.claude/worktrees/upstream-sync`):
+  - [ ] P0 premise: pristine `upstream/main` builds GhosttyKit with brew Zig 0.16 on Xcode 27 SDK, no shim
+  - [ ] P1 conflict map + resolution strategy (planner)
+  - [ ] P2 merge + resolve 34 conflicts, commit
+  - [ ] P3 Zig 0.16 GhosttyKit build + Xcode Debug build green
+  - [ ] P4 full suite (skip UI tests) — identifier-set diff vs main baseline (1341 IDs)
+  - [ ] P5 independent review of the merge (reviewer ≠ builder); push branch to origin, NO PR/merge/tag
 
 ## 2026-09-20 — canvas-header pivot + distribution (carried)
 
