@@ -4,6 +4,12 @@
 
 - [ ] **App Settings screen (soon)** — Ghostties has no real settings UI; start with Appearance
   (System / Light / Dark) since the theme bug showed there's no user-facing control. | app | new
+- [ ] **HELD — default theme follows system (`91f1f1a9e`, branch `worktree-session-2`, unpushed).**
+  Unset `theme` → `light:Apple System Colors Light,dark:Apple System Colors` in `Config.zig` finalize.
+  Never built or tested: local zig 0.15.2 can't link on this macOS (CI pins macos-15 for the same reason,
+  `test-ghostties.yml:71`). Push blocked by GH007 — `134b83007` + `91f1f1a9e` carry the private email;
+  need a rewrite to noreply (Sean's call). Sean's own config already has the theme line, so his app is fixed.
+  Next: after the other thread fixes zig → rewrite emails, push, Dev build + zig test + light-mode screenshot. | build | new
 - [ ] **CARRIED — header pivot: pick a variant, then build.** D/E/F all built and verified on the
   pen.dev canvas (`id0Jm` / `Q30Ctk` / `T7PDwM`; F brief `1af199839`). Legibility pass (`861b79df4`,
   frame `OJ88s`): D/F glass fails over htop, light themes and diffs — favours E. Cost note
