@@ -5,6 +5,7 @@ const build_config = @import("../build_config.zig");
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const posix = std.posix;
+const compat_fd = @import("../lib/compat/fd.zig");
 
 const log = std.log.scoped(.passwd);
 
@@ -16,11 +17,7 @@ comptime {
 }
 
 /// Used to determine the default shell and directory on Unixes.
-const c = if (builtin.os.tag != .windows) @cImport({
-    @cInclude("sys/types.h");
-    @cInclude("unistd.h");
-    @cInclude("pwd.h");
-}) else {};
+const c = if (builtin.os.tag != .windows) @import("posix_c") else {};
 
 // Entry that is retrieved from the passwd API. This only contains the fields
 // we care about.
@@ -89,11 +86,11 @@ pub fn get(alloc: Allocator) !Entry {
         // Once started, we can close the child side. We do this after
         // wait right now but that is fine too. This lets us read the
         // parent and detect EOF.
-        _ = posix.close(pty.slave);
+        _ = compat_fd.close(pty.slave);
 
         // Read all of our output
         const output = output: {
-            var output: std.ArrayListUnmanaged(u8) = .{};
+            var output: std.ArrayListUnmanaged(u8) = .empty;
             while (true) {
                 const n = posix.read(pty.master, &buf) catch |err| {
                     switch (err) {
@@ -116,7 +113,7 @@ pub fn get(alloc: Allocator) !Entry {
         };
 
         // Shell and home are the last two entries
-        var it = std.mem.splitBackwardsScalar(u8, std.mem.trimRight(u8, output, " \r\n"), ':');
+        var it = std.mem.splitBackwardsScalar(u8, std.mem.trimEnd(u8, output, " \r\n"), ':');
         result.shell = if (it.next()) |v| try alloc.dupeZ(u8, v) else null;
         result.home = if (it.next()) |v| try alloc.dupeZ(u8, v) else null;
         return result;

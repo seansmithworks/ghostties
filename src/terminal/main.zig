@@ -10,6 +10,7 @@ pub const dcs = @import("dcs.zig");
 pub const osc = @import("osc.zig");
 pub const point = @import("point.zig");
 pub const color = @import("color.zig");
+pub const clipboard = @import("clipboard.zig");
 pub const device_attributes = @import("device_attributes.zig");
 pub const device_status = @import("device_status.zig");
 pub const focus = @import("focus.zig");
@@ -19,7 +20,9 @@ pub const kitty = @import("kitty.zig");
 pub const modes = @import("modes.zig");
 pub const page = @import("page.zig");
 pub const parse_table = @import("parse_table.zig");
+pub const paste = @import("paste.zig");
 pub const search = @import("search.zig");
+pub const snapshot = @import("snapshot/main.zig");
 pub const sgr = @import("sgr.zig");
 pub const size = @import("size.zig");
 pub const size_report = @import("size_report.zig");
@@ -49,6 +52,7 @@ pub const Screen = @import("Screen.zig");
 pub const ScreenSet = @import("ScreenSet.zig");
 pub const Scrollbar = PageList.Scrollbar;
 pub const Selection = @import("Selection.zig");
+pub const SelectionGesture = @import("SelectionGesture.zig");
 pub const SizeReportStyle = csi.SizeReportStyle;
 pub const StringMap = @import("StringMap.zig");
 pub const Style = style.Style;
@@ -56,6 +60,12 @@ pub const Terminal = @import("Terminal.zig");
 pub const TerminalStream = stream_terminal.Stream;
 pub const Stream = stream.Stream;
 pub const StreamAction = stream.Action;
+pub const UnknownSequence = stream_terminal.Handler.UnknownSequence;
+pub const Paste = paste.Request;
+pub const PasteContents = paste.Contents;
+pub const PasteSource = paste.Source;
+pub const MimeReader = clipboard.MimeReader;
+pub const PasteError = stream_terminal.Handler.PasteError;
 pub const Cursor = Screen.Cursor;
 pub const CursorStyle = Screen.CursorStyle;
 pub const CursorStyleReq = ansi.CursorStyle;
@@ -74,6 +84,9 @@ pub const Attribute = sgr.Attribute;
 pub const Options = @import("build_options.zig").Options;
 pub const options = @import("terminal_options");
 
+/// Whether this target supports terminal page compression.
+pub const compression_enabled = @import("mem.zig").canReclaim(.strict);
+
 /// This is set to true when we're building the C library.
 pub const c_api = if (options.c_abi) @import("c/main.zig") else void;
 
@@ -82,7 +95,10 @@ test {
 
     // Internals
     _ = @import("bitmap_allocator.zig");
+    _ = @import("compress.zig");
+    _ = @import("fraction.zig");
     _ = @import("hash_map.zig");
+    _ = @import("mem.zig");
     _ = @import("ref_counted_set.zig");
     _ = @import("size.zig");
 }

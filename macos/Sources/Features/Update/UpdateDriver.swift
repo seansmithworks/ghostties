@@ -98,14 +98,12 @@ class UpdateDriver: NSObject, SPUUserDriver {
                     delegate.checkForUpdates(self)
                 }
             },
-            dismiss: { [weak viewModel] in
-                viewModel?.state = .idle
+            dismiss: {
+                acknowledgement()
             }))
 
         if !hasUnobtrusiveTarget {
             standard.showUpdaterError(error, acknowledgement: acknowledgement)
-        } else {
-            acknowledgement()
         }
     }
 
@@ -176,10 +174,8 @@ class UpdateDriver: NSObject, SPUUserDriver {
 
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
         viewModel.state = .installing(.init(
+            appcastItem: nil,
             retryTerminatingApplication: retryTerminatingApplication,
-            dismiss: { [weak viewModel] in
-                viewModel?.state = .idle
-            }
         ))
 
         if !hasUnobtrusiveTarget {

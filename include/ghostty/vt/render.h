@@ -39,6 +39,18 @@ extern "C" {
  *   2. Update it from a terminal instance whenever you need.
  *   3. Read from the render state to get the data needed to draw your frame.
  *
+ * ## Two-Phase Updates
+ *
+ * For callers that synchronize terminal access (e.g. a renderer thread
+ * sharing a lock with an IO thread), the update can be split into two
+ * phases to minimize the time the terminal must be held exclusively:
+ * ghostty_render_state_begin_update requires terminal access, while
+ * ghostty_render_state_end_update completes any deferred work using only
+ * memory owned by the render state. A typical renderer would lock, begin
+ * the update, unlock, and then end the update while the IO thread is free
+ * to continue modifying the terminal. ghostty_render_state_update is a
+ * convenience that performs both phases in one call.
+ *
  * ## Dirty Tracking
  *
  * Dirty tracking is a key feature of the render state that allows renderers
@@ -51,12 +63,36 @@ extern "C" {
  * tracking which rows in a partially dirty frame have changed. 
  *
  * The user of the render state API is expected to unset both of these.
- * The `update` call does not unset dirty state, it only updates it.
+ * The `update` call does not unset dirty state, it only updates it. After
+ * successfully rendering a complete frame, use ghostty_render_state_clean()
+ * to unset both layers in one call. The granular setters remain available
+ * for callers that only consume part of a frame.
  *
  * An extremely important detail: setting one dirty state doesn't unset
  * the other. For example, setting the global dirty state to false does not
  * reset the row-level dirty flags. So, the caller of the render state API must
  * be careful to manage both layers of dirty state correctly. 
+ *
+ * ## Render Holds (Synchronized Output)
+ *
+ * A program can ask the terminal to stop updating the screen while it
+ * draws a frame, so the user never sees a half-drawn one. Today programs
+ * do this with synchronized output (DEC private mode 2026).
+ *
+ * ghostty_render_state_update() does not check for this. It always
+ * captures the terminal as it is right now, so a renderer that updates
+ * on every draw will show half-drawn frames. To avoid that:
+ *
+ *   1. Set a GHOSTTY_TERMINAL_OPT_RENDER_HOLD callback on the terminal.
+ *   2. When the callback reports that a hold began, update the render
+ *      state from within the callback. This captures the frame the
+ *      program wants left on screen.
+ *   3. Don't update the render state again until the callback reports
+ *      that the hold ended. You can keep drawing it in the meantime.
+ *   4. End the hold yourself if it lasts too long (one second is a
+ *      common limit) so a misbehaving program can't freeze the screen.
+ *
+ * See GhosttyTerminalRenderHoldFn for the details and a complete example.
  *
  * ## Examples
  *
@@ -187,6 +223,14 @@ typedef enum GHOSTTY_ENUM_TYPED {
   /** Whether the cursor is on the tail of a wide character (bool).
    *  Only valid when CURSOR_VIEWPORT_HAS_VALUE is true. */
   GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_WIDE_TAIL = 17,
+
+  /** All cursor state in one sized struct (GhosttyRenderStateCursor).
+   *  Initialize the output with GHOSTTY_INIT_SIZED before querying. */
+  GHOSTTY_RENDER_STATE_DATA_CURSOR = 18,
+
+  /** All render-state colors in one sized struct (GhosttyRenderStateColors).
+   *  Initialize the output with GHOSTTY_INIT_SIZED before querying. */
+  GHOSTTY_RENDER_STATE_DATA_COLORS = 19,
   GHOSTTY_RENDER_STATE_DATA_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyRenderStateData;
 
@@ -221,6 +265,25 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *  valid as long as the underlying render state is not updated. 
    *  It is unsafe to use cell data after updating the render state. */
   GHOSTTY_RENDER_STATE_ROW_DATA_CELLS = 3,
+
+  /** Row-local selected cell range (GhosttyRenderStateRowSelection). */
+  GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION = 4,
+
+  /** A borrowed view of the raw cell values for the current row
+   *  (GhosttyCellsView). One value per column, identical to querying
+   *  GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW for each cell. The view
+   *  is only valid as long as the underlying render state is not
+   *  updated; it is unsafe to use after updating the render state.
+   *
+   *  This is the bulk alternative to iterating cells one at a time.
+   *  It lets callers with expensive call boundaries (e.g. WebAssembly
+   *  embedders) read an entire row with a single call.
+   *
+   *  Bit positions aren't protected by ABI, so callers should parse them
+   *  out of the manifest from `ghostty_type_json`. Callers with access
+   *  to the C header or without high FFI costs should use `ghostty_cell_get`.
+   */
+  GHOSTTY_RENDER_STATE_ROW_DATA_CELLS_RAW = 5,
   GHOSTTY_RENDER_STATE_ROW_DATA_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyRenderStateRowData;
 
@@ -236,16 +299,81 @@ typedef enum GHOSTTY_ENUM_TYPED {
 } GhosttyRenderStateRowOption;
 
 /**
+ * Row-local selection range.
+ *
+ * This struct uses the sized-struct ABI pattern. Initialize with
+ * GHOSTTY_INIT_SIZED(GhosttyRenderStateRowSelection) before querying
+ * GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION.
+ *
+ * Querying GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION returns GHOSTTY_NO_VALUE
+ * if the current row does not intersect the current selection.
+ *
+ * @ingroup render
+ */
+typedef struct {
+  /** Size of this struct in bytes. Must be set to sizeof(GhosttyRenderStateRowSelection). */
+  size_t size;
+
+  /** Start column of the row-local selection range, inclusive. */
+  uint16_t start_x;
+
+  /** End column of the row-local selection range, inclusive. */
+  uint16_t end_x;
+} GhosttyRenderStateRowSelection;
+
+/**
+ * Render-state cursor information.
+ *
+ * This struct uses the sized-struct ABI pattern. Initialize with
+ * GHOSTTY_INIT_SIZED(GhosttyRenderStateCursor) before querying
+ * GHOSTTY_RENDER_STATE_DATA_CURSOR.
+ *
+ * When viewport_has_value is false, viewport_x, viewport_y, and wide_tail
+ * contain undefined data and must not be read.
+ *
+ * @ingroup render
+ */
+typedef struct {
+  /** Size of this struct in bytes. Must be set to sizeof(GhosttyRenderStateCursor). */
+  size_t size;
+
+  /** Whether the cursor is visible within the viewport. */
+  bool viewport_has_value;
+
+  /** Cursor viewport x position in cells. */
+  uint16_t viewport_x;
+
+  /** Cursor viewport y position in cells. */
+  uint16_t viewport_y;
+
+  /** Whether the cursor is on the tail of a wide character. */
+  bool wide_tail;
+
+  /** Whether the cursor is visible based on terminal modes. */
+  bool visible;
+
+  /** Whether the cursor should blink based on terminal modes. */
+  bool blinking;
+
+  /** Whether the cursor is at a password input field. */
+  bool password_input;
+
+  /** The visual style of the cursor. */
+  GhosttyRenderStateCursorVisualStyle visual_style;
+} GhosttyRenderStateCursor;
+
+/**
  * Render-state color information.
  *
  * This struct uses the sized-struct ABI pattern. Initialize with
- * GHOSTTY_INIT_SIZED(GhosttyRenderStateColors) before calling
- * ghostty_render_state_colors_get().
+ * GHOSTTY_INIT_SIZED(GhosttyRenderStateColors) before querying
+ * GHOSTTY_RENDER_STATE_DATA_COLORS.
  *
  * Example:
  * @code
  * GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
- * GhosttyResult result = ghostty_render_state_colors_get(state, &colors);
+ * GhosttyResult result = ghostty_render_state_get(
+ *     state, GHOSTTY_RENDER_STATE_DATA_COLORS, &colors);
  * @endcode
  *
  * @ingroup render
@@ -305,6 +433,12 @@ GHOSTTY_API void ghostty_render_state_free(GhosttyRenderState state);
  * This consumes terminal/screen dirty state in the same way as the internal
  * render state update path.
  *
+ * This is a convenience function that performs a full update in one call,
+ * equivalent to ghostty_render_state_begin_update immediately followed by
+ * ghostty_render_state_end_update. Callers that hold a lock over the
+ * terminal state should prefer calling the two phases directly so that the
+ * lock is only held for the begin phase.
+ *
  * @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
  * @param terminal The terminal handle to read from (NULL returns GHOSTTY_INVALID_VALUE)
  * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
@@ -317,6 +451,71 @@ GHOSTTY_API GhosttyResult ghostty_render_state_update(GhosttyRenderState state,
                                           GhosttyTerminal terminal);
 
 /**
+ * Begin an update of a render state instance from a terminal.
+ *
+ * Every begin must be completed with a ghostty_render_state_end_update call
+ * before the render state is read.
+ *
+ * This two-phase structure exists for callers that synchronize access to the
+ * terminal state (e.g. with a lock shared with an IO thread): only this
+ * function requires terminal access, so a caller can hold its lock for this
+ * call only and then call ghostty_render_state_end_update after releasing
+ * it. The end phase exclusively reads and writes memory owned by the render
+ * state, so it is safe to call while the terminal is being modified.
+ *
+ * Work that doesn't require terminal access may be deferred to the end phase
+ * to keep this call (and therefore lock hold time) as short as possible.
+ * Callers must treat the render state as incomplete until
+ * ghostty_render_state_end_update is called.
+ *
+ * This consumes terminal/screen dirty state in the same way as the internal
+ * render state update path.
+ *
+ * @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
+ * @param terminal The terminal handle to read from (NULL returns GHOSTTY_INVALID_VALUE)
+ * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
+ * `terminal` is NULL, GHOSTTY_OUT_OF_MEMORY if updating the state requires
+ * allocation and that allocation fails
+ *
+ * @ingroup render
+ */
+GHOSTTY_API GhosttyResult ghostty_render_state_begin_update(GhosttyRenderState state,
+                                                GhosttyTerminal terminal);
+
+/**
+ * Complete a prior ghostty_render_state_begin_update call by performing any
+ * deferred work.
+ *
+ * This only reads and writes memory owned by the render state, so it is safe
+ * to call while the terminal is being modified (no terminal synchronization
+ * is required). Calling this without a prior begin is a safe no-op.
+ *
+ * @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
+ * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` is
+ * NULL
+ *
+ * @ingroup render
+ */
+GHOSTTY_API GhosttyResult ghostty_render_state_end_update(GhosttyRenderState state);
+
+/**
+ * Mark all dirty render-state data as consumed.
+ *
+ * This sets the global dirty state to GHOSTTY_RENDER_STATE_DIRTY_FALSE and
+ * clears every per-row dirty flag. It is idempotent and does not modify cell
+ * contents or dirty state owned by the terminal. Call this only after a
+ * complete frame has been rendered successfully; partial consumers should
+ * use ghostty_render_state_set() and ghostty_render_state_row_set() instead.
+ *
+ * @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
+ * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` is
+ *         NULL
+ *
+ * @ingroup render
+ */
+GHOSTTY_API GhosttyResult ghostty_render_state_clean(GhosttyRenderState state);
+
+/**
  * Get a value from a render state.
  *
  * The `out` pointer must point to a value of the type corresponding to the
@@ -325,8 +524,9 @@ GHOSTTY_API GhosttyResult ghostty_render_state_update(GhosttyRenderState state,
  * @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
  * @param data The data kind to query
  * @param[out] out Pointer to receive the queried value
- * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` is
- *         NULL or `data` is not a recognized enum value
+ * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
+ *         `out` is NULL, `data` is not a recognized enum value, or a sized
+ *         output struct is smaller than `sizeof(size_t)`
  *
  * @ingroup render
  */
@@ -382,24 +582,6 @@ GHOSTTY_API GhosttyResult ghostty_render_state_set(GhosttyRenderState state,
                                        const void* value);
 
 /**
- * Get the current color information from a render state.
- *
- * This writes as many fields as fit in the caller-provided sized struct.
- * `out_colors->size` must be set by the caller (typically via
- * GHOSTTY_INIT_SIZED(GhosttyRenderStateColors)).
- *
- * @param state The render state handle (NULL returns GHOSTTY_INVALID_VALUE)
- * @param[out] out_colors Sized output struct to receive render-state colors
- * @return GHOSTTY_SUCCESS on success, GHOSTTY_INVALID_VALUE if `state` or
- *         `out_colors` is NULL, or if `out_colors->size` is smaller than
- *         `sizeof(size_t)`
- *
- * @ingroup render
- */
-GHOSTTY_API GhosttyResult ghostty_render_state_colors_get(GhosttyRenderState state,
-                                              GhosttyRenderStateColors* out_colors);
-
-/**
  * Create a new row iterator instance.
  *
  * All fields except the allocator are left undefined until populated
@@ -429,7 +611,8 @@ GHOSTTY_API void ghostty_render_state_row_iterator_free(GhosttyRenderStateRowIte
 /**
  * Move a render-state row iterator to the next row.
  *
- * Returns true if the iterator moved successfully and row data is
+ * Rows are visited contiguously in ascending viewport order, starting at
+ * y = 0. Returns true if the iterator moved successfully and row data is
  * available to read at the new position.
  *
  * @param iterator The iterator handle to advance (may be NULL)
@@ -441,11 +624,35 @@ GHOSTTY_API void ghostty_render_state_row_iterator_free(GhosttyRenderStateRowIte
 GHOSTTY_API bool ghostty_render_state_row_iterator_next(GhosttyRenderStateRowIterator iterator);
 
 /**
+ * Move a render-state row iterator to the next row requiring a redraw.
+ *
+ * If the global dirty state is GHOSTTY_RENDER_STATE_DIRTY_FALSE, this returns
+ * false. If it is GHOSTTY_RENDER_STATE_DIRTY_PARTIAL, clean rows are skipped.
+ * If it is GHOSTTY_RENDER_STATE_DIRTY_FULL, every remaining row is returned
+ * regardless of its per-row dirty flag. Rows are returned in ascending
+ * viewport order. This function does not clear any dirty state.
+ *
+ * @param iterator The iterator handle to advance (NULL returns false)
+ * @param[out] out_y Receives the viewport y coordinate when true is returned
+ *                   (NULL returns false); it is not modified when false is
+ *                   returned
+ * @return true if advanced to a row requiring a redraw, false if an argument
+ *         is NULL or the iterator has reached the end of the effective dirty
+ *         rows
+ *
+ * @ingroup render
+ */
+GHOSTTY_API bool ghostty_render_state_row_iterator_next_dirty(
+    GhosttyRenderStateRowIterator iterator,
+    uint16_t* out_y);
+
+/**
  * Get a value from the current row in a render-state row iterator.
  *
  * The `out` pointer must point to a value of the type corresponding to the
  * requested data kind (see GhosttyRenderStateRowData).
- * Call ghostty_render_state_row_iterator_next() at least once before
+ * Call ghostty_render_state_row_iterator_next() or
+ * ghostty_render_state_row_iterator_next_dirty() at least once before
  * calling this function.
  *
  * @param iterator The iterator handle to query (NULL returns GHOSTTY_INVALID_VALUE)
@@ -494,7 +701,8 @@ GHOSTTY_API GhosttyResult ghostty_render_state_row_get_multi(
  *
  * The `value` pointer must point to a value of the type corresponding to the
  * requested option kind (see GhosttyRenderStateRowOption).
- * Call ghostty_render_state_row_iterator_next() at least once before
+ * Call ghostty_render_state_row_iterator_next() or
+ * ghostty_render_state_row_iterator_next_dirty() at least once before
  * calling this function.
  *
  * @param iterator The iterator handle to update (NULL returns GHOSTTY_INVALID_VALUE)
@@ -571,6 +779,36 @@ typedef enum GHOSTTY_ENUM_TYPED {
    *  color, in which case the caller should use whatever default foreground
    *  color it wants (e.g. the terminal foreground). */
   GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR = 6,
+
+  /** Whether the cell is contained within the current selection (bool).
+   *  This returns true when the cell's column is within the current row's
+   *  row-local selection range, and false otherwise. Rendering policy for
+   *  selected cells (colors, inversion, etc.) is left to the caller.
+   *
+   *  Renderers that can draw cells in spans may be more efficient querying
+   *  GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION once per row and applying that
+   *  range directly, avoiding one C API call per cell for selection state. */
+  GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_SELECTED = 7,
+
+  /** Whether the cell has any explicit styling (bool).
+   *  This is equivalent to querying the raw cell's
+   *  GHOSTTY_CELL_DATA_HAS_STYLING value, but avoids materializing the raw
+   *  GhosttyCell for renderers that only need to know whether fetching the
+   *  full style is necessary. */
+  GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_HAS_STYLING = 8,
+
+  /**
+   * Encode the current cell's full grapheme cluster as UTF-8 into a
+   * caller-provided buffer (GhosttyBuffer).
+   *
+   * The base codepoint is encoded first, followed by any extra grapheme
+   * codepoints. Returns GHOSTTY_SUCCESS with len=0 when the cell has no text.
+   *
+   * If ptr is NULL or cap is too small for a non-empty cell, returns
+   * GHOSTTY_OUT_OF_SPACE without writing any bytes and sets len to the required
+   * buffer size in bytes.
+   */
+  GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_UTF8 = 9,
   GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyRenderStateRowCellsData;
 
