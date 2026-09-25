@@ -1,5 +1,14 @@
 # Ghostties — Backlog
 
+## 2026-09-24 — upstream sync to Zig 0.16 (next week, before sub renewal)
+
+- [ ] **Upstream sync: merge `upstream/main` (Zig 0.16).** Fork diverged 2026-05-03; upstream +1,828
+  commits, fork +1,044. Trial `git merge-tree`: 34 conflicted files (10 `macos/` incl. AppDelegate,
+  pbxproj, BaseTerminalController; 2 `src/`; rest CI/config). Wins: macOS 27 fixes, crash/leak fixes,
+  Zig 0.16 drops the Xcode 26.3 SDK pin (local + CI). Caveat: upstream has no release since the fork —
+  this pulls unreleased tip. Sean: "next week … you can just run at it and fan out." Full suite gate
+  before any tag. | build | filed
+
 ## 2026-09-20 — canvas-header pivot + distribution (carried)
 
 - [ ] **CARRIED — header pivot: pick a variant, then build.** D/E/F all built and verified on the
