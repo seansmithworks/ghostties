@@ -2,6 +2,8 @@
 
 ## 2026-09-20 — canvas-header pivot + distribution (carried)
 
+- [ ] **App Settings screen (soon)** — Ghostties has no real settings UI; start with Appearance
+  (System / Light / Dark) since the theme bug showed there's no user-facing control. | app | new
 - [ ] **CARRIED — header pivot: pick a variant, then build.** D/E/F all built and verified on the
   pen.dev canvas (`id0Jm` / `Q30Ctk` / `T7PDwM`; F brief `1af199839`). Legibility pass (`861b79df4`,
   frame `OJ88s`): D/F glass fails over htop, light themes and diffs — favours E. Cost note
