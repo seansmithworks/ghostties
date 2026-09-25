@@ -1575,7 +1575,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             return
         }
 
-        Task {
+        _Concurrency.Task {
             let alert = NSAlert.reviewWindowsAlert(
                 messageText: "You have \(confirmControllers.count) windows with running processes. Do you want to review these windows before closing?",
                 terminateNowButtonTitle: "Close"

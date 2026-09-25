@@ -2066,7 +2066,7 @@ extension AppDelegate {
         }
 
         if controllersNeedConfirmation.count == 1 {
-            Task {
+            _Concurrency.Task {
                 let response = await controllersNeedConfirmation[0].confirmCloseAsync(
                     messageText: "Quit Ghostty?",
                     informativeText: "The terminal still has a running process. If you quit, the process will be killed.",
@@ -2099,7 +2099,7 @@ extension AppDelegate {
     }
 
     private func reviewWindows(_ controllers: [BaseTerminalController]) {
-        Task {
+        _Concurrency.Task {
             for controller in controllers {
                 let response = await controller.confirmCloseAsync(
                     messageText: "Quit Ghostty?",
