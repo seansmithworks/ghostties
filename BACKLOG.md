@@ -1,5 +1,18 @@
 # Ghostties — Backlog
 
+## 2026-09-26 — overnight: recover the lost sidebar build (Flow 01) from transcripts
+
+Old Mac wipe lost the uncommitted sidebar build; the design survived (pen.dev canvas, now at
+iCloud `Pencil.Dev/Ghostties-Sidebar-26Sep2026.pen` + `~/Archive/rescue/pen/ghostties-sidebar-canvas-2026-09-26/`;
+spec `docs/design/sidebar-presence/flow-01-sidebar-presence.md`). Session transcripts survived.
+
+- [ ] S1 Reconstruct from transcripts: which session built it, files edited, Sean's feedback/decisions, where it stopped
+- [ ] S2 Replay/rebuild on branch `feat/sidebar-presence` off main (isolated worktree), Debug build green, commit locally
+- [ ] S3 Tests: full suite via xcresulttool totals, vs main baseline; new tests for SidebarMode.collapsed persistence
+- [ ] S4 Independent review (not the builder) against the spec + transcript decisions
+- [ ] S5 Fixture screenshots of the 4 states (capture fixture, throwaway state dir) for Sean's morning review
+- ⛔ Not overnight: push, PR, merge, #189 merge (held by Sean), anything in /Applications
+
 ## 2026-09-25 — review files rescued from the old (compromised, since wiped) Mac
 
 Scanned clean before copying. Old versions sit in `.rescued-2026-09-24/`, mirroring their real paths; nothing live was overwritten. Keep what you want, then delete the folder (do not commit it).
