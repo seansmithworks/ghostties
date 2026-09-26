@@ -3032,3 +3032,5 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
   244 expanded → 72 rail → 0 closed with a 24pt hot zone → opaque 244 reveal. New: a fourth
   `SidebarMode` case, the bottom tray, and an opaque (un-blurred) overlay. Four decisions are Sean's,
   listed at the end of the spec. Canvas `mkJau`. | craft | new
+
+- [ ] Tab title sometimes misses the Claude thread name set via /rename (seen 2026-09-25, "Jev adoption" thread). Statusline now reads `session_name` reliably; tab-title path should use the same source.
