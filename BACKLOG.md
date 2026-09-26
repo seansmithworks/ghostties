@@ -15,6 +15,19 @@
   - [x] P3 Zig 0.16 GhosttyKit build + Xcode Debug build green
   - [x] P4 full suite (skip UI tests) — identifier-set diff vs main baseline (1341 IDs)
   - [x] P5 independent review of the merge (reviewer ≠ builder); push branch to origin, NO PR/merge/tag
+  Status 2026-09-25: branch `sync/upstream-zig-0.16` @ `dd8633ec5` LOCAL ONLY (push rejected: commits carry
+  sean@seansmithdesign.com; GitHub email privacy). Suite 1421 IDs, 6 load flakes (Light + Dark identical).
+  Landing plan (each step needs Sean's nod where marked):
+  - [ ] L1 Rewrite author/committer email → `1028901+seansmithworks@users.noreply.github.com` on the 11 commits
+    (`^origin/main ^upstream/main`; trees must be byte-identical before/after). ⛔ Sean said "rewrite and push"? — not yet
+  - [ ] L2 Push branch to origin (fork only; upstream push URL is disabled). ⛔ Sean's nod
+  - [ ] L3 PR on SeanSmithWorks/ghostties (`--repo` explicit), CI green on the Zig 0.16 workflows
+  - [ ] L4 Sean hands-on pass on `Ghostties Dev.app` from the sync worktree (never /Applications) — tabs/windows,
+    quit prompt, sidebar, composer, browser, Sparkle "Check for Updates" wiring
+  - [ ] L5 Investigate `SessionComposerSnapshotTests/typedUnknownBranchTokenRendersCreateBranchRowFirst` — fails
+    only in branch full runs (2/2), passes isolated
+  - [ ] L6 Merge to main ⛔ Sean; then drop Xcode 26.3 pin in ghostties-release.yml (follow-up PR)
+  - [ ] L7 Next beta: verify Sparkle beta.25 → new build update end to end (Sparkle 2.9.4 → 2.9.6)
 
 ## 2026-09-20 — canvas-header pivot + distribution (carried)
 
