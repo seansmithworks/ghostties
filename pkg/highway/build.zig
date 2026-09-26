@@ -18,23 +18,29 @@ pub fn build(b: *std.Build) !void {
             .root_source_file = b.path("src/detect.zig"),
             .target = target,
             .optimize = optimize,
+            // Our highway package is free of libc at runtime (uses no symbols)
+            // but does require libc headers at compile time.
+            .link_libc = true,
         }),
         .linkage = .static,
     });
 
-    // Our highway package is free of libc at runtime (uses no symbols)
-    // but does require libc headers at compile time.
-    lib.linkLibC();
-
-    lib.addIncludePath(b.path("src/cpp"));
+    lib.root_module.addIncludePath(b.path("src/cpp"));
     if (upstream_) |upstream| {
-        lib.addIncludePath(upstream.path(""));
+        lib.root_module.addIncludePath(upstream.path(""));
         module.addIncludePath(upstream.path(""));
     }
 
     if (target.result.abi.isAndroid()) {
         const android_ndk = @import("android_ndk");
         try android_ndk.addPaths(b, lib);
+    }
+
+    // Mainly for iOS simulators, but we add for all Darwin target for
+    // consistency.
+    if (target.result.os.tag.isDarwin()) {
+        const apple_sdk = @import("apple_sdk");
+        try apple_sdk.addPaths(b, lib);
     }
 
     var flags: std.ArrayList([]const u8) = .empty;
@@ -93,9 +99,16 @@ pub fn build(b: *std.Build) !void {
             "-fmath-errno",
             "-fno-exceptions",
         });
+    } else if (target.result.abi == .msvc) {
+        try flags.appendSlice(b.allocator, &.{
+            // -fno-autolink also drops UCRT's /alternatename fallback.
+            "-D_Avx2WmemEnabledWeakValue=_Avx2WmemEnabled",
+            "-fno-autolink",
+            "-fno-stack-protector",
+        });
     }
 
-    lib.addCSourceFiles(.{ .flags = flags.items, .files = &.{
+    lib.root_module.addCSourceFiles(.{ .flags = flags.items, .files = &.{
         "src/cpp/abort.cc",
         "src/cpp/per_target.cc",
         "src/cpp/targets.cpp",
@@ -120,7 +133,7 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             }),
         });
-        test_exe.linkLibrary(lib);
+        test_exe.root_module.linkLibrary(lib);
 
         var it = module.import_table.iterator();
         while (it.next()) |entry| test_exe.root_module.addImport(entry.key_ptr.*, entry.value_ptr.*);

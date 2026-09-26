@@ -9,12 +9,12 @@
 .flatpak-builder/
 zig-cache/
 .zig-cache/
-zig-out/
 zig-pkg/
+zig-out/
 build-cmake/
 CMakeCache.txt
 CMakeFiles/
-/build.zig.zon.bak
+build.zig.zon.bak
 /result*
 /.nixos-test-history
 example/*.wasm
@@ -74,3 +74,5 @@ concept-lab/
 .playwright-cli/
 *.glsl
 *.pen
+
+/sprite_face_test*

@@ -53,11 +53,29 @@ fn utf8DecodeUntilControlSeqScalar(
     while (decode_offset < decode.len) {
         const b0 = decode[decode_offset];
 
-        // ASCII fast path
+        // ASCII fast path. Use vectorization if it is available. This
+        // path is only run when simd=false, but that only controls our C++
+        // simd builds. We can still rely on Zig intrinsics for platforms
+        // like wasm32+simd128.
         if (b0 < 0x80) {
-            output[decode_count] = b0;
-            decode_count += 1;
-            decode_offset += 1;
+            if (comptime std.simd.suggestVectorLength(u8)) |vl| {
+                const V = @Vector(vl, u8);
+                while (decode_offset + vl <= decode.len) {
+                    const v: V = decode[decode_offset..][0..vl].*;
+                    if (@reduce(.Or, v >= @as(V, @splat(0x80)))) break;
+                    const w: @Vector(vl, u32) = @intCast(v);
+                    output[decode_count..][0..vl].* = w;
+                    decode_count += vl;
+                    decode_offset += vl;
+                }
+            }
+            while (decode_offset < decode.len) {
+                const b = decode[decode_offset];
+                if (b >= 0x80) break;
+                output[decode_count] = b;
+                decode_count += 1;
+                decode_offset += 1;
+            }
             continue;
         }
 
@@ -70,48 +88,53 @@ fn utf8DecodeUntilControlSeqScalar(
             continue;
         }
 
-        // Multi-byte sequence. Determine expected length and the valid
-        // range for each continuation byte per Unicode Table 3-7.
-        const seq = utf8SeqInfo(b0);
+        // Multi-byte sequence. Only the first continuation byte has a
+        // lead-dependent valid range per Unicode Table 3-7; later
+        // continuation bytes are always 80-BF. Range validity per
+        // Table 3-7 excludes overlong, surrogate, and out-of-range
+        // encodings, so a fully valid sequence can be decoded by
+        // direct bit assembly with no further checks.
+        const seq_len: usize = if (b0 < 0xE0) 2 else if (b0 < 0xF0) 3 else 4;
+        const cb1_lo: u8, const cb1_hi: u8 = switch (b0) {
+            0xE0 => .{ 0xA0, 0xBF },
+            0xED => .{ 0x80, 0x9F },
+            0xF0 => .{ 0x90, 0xBF },
+            0xF4 => .{ 0x80, 0x8F },
+            else => .{ 0x80, 0xBF },
+        };
 
         // Check how many continuation bytes form a valid prefix (the
-        // maximal subpart). We check each byte against its specific
-        // valid range.
+        // maximal subpart), accumulating codepoint bits as we go. The
+        // lead byte contributes its low 7-len bits.
+        var cp: u32 = b0 & (@as(u32, 0x7F) >> @intCast(seq_len));
         var valid: usize = 1; // lead byte is valid
-        for (0..seq.len - 1) |ci| {
+        while (valid < seq_len) {
             if (decode_offset + valid >= decode.len) {
-                // Truncated at end of buffer: treat as incomplete
-                // input that may be completed later. Stop decoding
-                // without consuming these bytes.
-                return .{
+                // The sequence is cut off by the end of the decode
+                // region. If the region ends at the true end of the
+                // input then it may be completed by future input, so
+                // stop without consuming these bytes. If the region
+                // was bounded by an ESC then the sequence can never
+                // be completed; the valid-so-far prefix is a maximal
+                // subpart which maps to a single U+FFFD below.
+                if (decode.len == input.len) return .{
                     .consumed = decode_offset,
                     .decoded = decode_count,
                 };
-            }
-            const cb = decode[decode_offset + valid];
-            if (cb < seq.ranges[ci][0] or cb > seq.ranges[ci][1]) {
-                // Byte doesn't match expected range. The maximal
-                // subpart ends here.
                 break;
             }
+            const cb = decode[decode_offset + valid];
+            const lo: u8 = if (valid == 1) cb1_lo else 0x80;
+            const hi: u8 = if (valid == 1) cb1_hi else 0xBF;
+            if (cb < lo or cb > hi) break;
+            cp = (cp << 6) | (cb & 0x3F);
             valid += 1;
         }
 
-        if (valid == seq.len) {
-            // Full sequence present and structurally valid. Decode it.
-            // (Structural validity per Table 3-7 guarantees decode success.)
-            const cp_bytes = decode[decode_offset..][0..seq.len];
-            if (std.unicode.utf8Decode(cp_bytes)) |cp| {
-                output[decode_count] = @intCast(cp);
-                decode_count += 1;
-                decode_offset += seq.len;
-            } else |_| {
-                // Should not happen given Table 3-7 validation, but
-                // be safe: emit FFFD for the lead byte.
-                output[decode_count] = 0xFFFD;
-                decode_count += 1;
-                decode_offset += 1;
-            }
+        if (valid == seq_len) {
+            output[decode_count] = cp;
+            decode_count += 1;
+            decode_offset += seq_len;
         } else {
             // Incomplete/ill-formed: the maximal subpart (valid bytes)
             // maps to a single FFFD.
@@ -127,25 +150,56 @@ fn utf8DecodeUntilControlSeqScalar(
     };
 }
 
-const Utf8SeqInfo = struct {
-    len: u3,
-    ranges: [3][2]u8,
-};
+// Differential test: the SIMD implementation must agree with the
+// scalar implementation on any input. Exercises random mixtures of
+// ASCII, escapes, controls, valid and invalid UTF-8, at various
+// lengths (including chunk-boundary straddling cases).
+test "decode simd matches scalar" {
+    if (comptime !options.simd) return error.SkipZigTest;
 
-/// Returns the expected byte count and valid continuation byte ranges
-/// for a UTF-8 sequence based on its lead byte, per Unicode Table 3-7.
-fn utf8SeqInfo(lead: u8) Utf8SeqInfo {
-    return switch (lead) {
-        0xC2...0xDF => .{ .len = 2, .ranges = .{ .{ 0x80, 0xBF }, .{ 0, 0 }, .{ 0, 0 } } },
-        0xE0 => .{ .len = 3, .ranges = .{ .{ 0xA0, 0xBF }, .{ 0x80, 0xBF }, .{ 0, 0 } } },
-        0xE1...0xEC => .{ .len = 3, .ranges = .{ .{ 0x80, 0xBF }, .{ 0x80, 0xBF }, .{ 0, 0 } } },
-        0xED => .{ .len = 3, .ranges = .{ .{ 0x80, 0x9F }, .{ 0x80, 0xBF }, .{ 0, 0 } } },
-        0xEE...0xEF => .{ .len = 3, .ranges = .{ .{ 0x80, 0xBF }, .{ 0x80, 0xBF }, .{ 0, 0 } } },
-        0xF0 => .{ .len = 4, .ranges = .{ .{ 0x90, 0xBF }, .{ 0x80, 0xBF }, .{ 0x80, 0xBF } } },
-        0xF1...0xF3 => .{ .len = 4, .ranges = .{ .{ 0x80, 0xBF }, .{ 0x80, 0xBF }, .{ 0x80, 0xBF } } },
-        0xF4 => .{ .len = 4, .ranges = .{ .{ 0x80, 0x8F }, .{ 0x80, 0xBF }, .{ 0x80, 0xBF } } },
-        else => unreachable,
-    };
+    const testing = std.testing;
+    var prng = std.Random.DefaultPrng.init(0xf00dface);
+    const rand = prng.random();
+
+    var input: [257]u8 = undefined;
+    var out_simd: [input.len]u32 = undefined;
+    var out_scalar: [input.len]u32 = undefined;
+
+    for (0..10_000) |_| {
+        const len = rand.intRangeAtMost(usize, 0, input.len);
+        const style = rand.intRangeAtMost(u8, 0, 2);
+        for (input[0..len]) |*b| {
+            b.* = switch (style) {
+                // Mostly ASCII with occasional specials.
+                0 => switch (rand.intRangeAtMost(u8, 0, 20)) {
+                    0 => 0x1B,
+                    1 => rand.intRangeAtMost(u8, 0, 0x1F),
+                    2 => rand.int(u8),
+                    else => rand.intRangeAtMost(u8, 0x20, 0x7E),
+                },
+                // Heavy multi-byte/invalid UTF-8.
+                1 => switch (rand.intRangeAtMost(u8, 0, 3)) {
+                    0 => rand.intRangeAtMost(u8, 0x80, 0xBF),
+                    1 => rand.intRangeAtMost(u8, 0xC0, 0xFF),
+                    2 => 0x1B,
+                    else => rand.intRangeAtMost(u8, 0x20, 0x7E),
+                },
+                // Fully random bytes.
+                else => rand.int(u8),
+            };
+        }
+
+        const res_simd = utf8DecodeUntilControlSeq(input[0..len], &out_simd);
+        const res_scalar = utf8DecodeUntilControlSeqScalar(input[0..len], &out_scalar);
+        errdefer std.debug.print("input={x}\n", .{input[0..len]});
+        try testing.expectEqual(res_scalar.consumed, res_simd.consumed);
+        try testing.expectEqual(res_scalar.decoded, res_simd.decoded);
+        try testing.expectEqualSlices(
+            u32,
+            out_scalar[0..res_scalar.decoded],
+            out_simd[0..res_simd.decoded],
+        );
+    }
 }
 
 test "decode no escape" {
@@ -396,6 +450,35 @@ test "decode valid multibyte surrounded by invalid" {
         try testing.expectEqual(@as(u32, 0xFFFD), output[0]);
         try testing.expectEqual(@as(u32, 0x00E9), output[1]);
         try testing.expectEqual(@as(u32, 0xFFFD), output[2]);
+    }
+}
+
+test "decode partial UTF-8 before escape" {
+    const testing = std.testing;
+
+    // A valid-so-far but incomplete sequence cut off by an ESC can
+    // never be completed, so it is consumed and replaced by a single
+    // U+FFFD (maximal subpart) rather than left pending. Only
+    // sequences cut off by the true end of input are left pending.
+    var output: [64]u32 = undefined;
+
+    // 2-byte lead cut off by ESC.
+    {
+        const str = "hi\xc2\x1b[0m";
+        const result = utf8DecodeUntilControlSeq(str, &output);
+        try testing.expectEqual(@as(usize, 3), result.consumed);
+        try testing.expectEqual(@as(usize, 3), result.decoded);
+        try testing.expectEqual(@as(u32, 0xFFFD), output[2]);
+    }
+
+    // 3-byte lead plus one valid continuation cut off by ESC:
+    // the whole prefix is one maximal subpart, one U+FFFD.
+    {
+        const str = "\xe0\xa0\x1bX";
+        const result = utf8DecodeUntilControlSeq(str, &output);
+        try testing.expectEqual(@as(usize, 2), result.consumed);
+        try testing.expectEqual(@as(usize, 1), result.decoded);
+        try testing.expectEqual(@as(u32, 0xFFFD), output[0]);
     }
 }
 

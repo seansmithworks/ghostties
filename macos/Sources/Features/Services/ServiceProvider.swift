@@ -33,7 +33,7 @@ class ServiceProvider: NSObject {
     ) {
         guard let delegate = NSApp.delegate as? AppDelegate else { return }
 
-        guard let pathURLs = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL] else {
+        guard let pathURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] else {
             error.pointee = Self.errorNoString
             return
         }
@@ -42,13 +42,24 @@ class ServiceProvider: NSObject {
         // to their directories because that's the only thing we can open.
         let directoryURLs = Set(
             pathURLs.map { url -> URL in
-                url.hasDirectoryPath ? url : url.deletingLastPathComponent()
+                /// We check file system resources here because
+                /// NSURL doesn't append `/` when reading string contents from pasteboard
+                ///     ```
+                ///     NSURL(pasteboardPropertyList: "/System/Library".propertyList(), ofType: .fileURL)?.hasDirectoryPath
+                ///     ```
+                let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? url.hasDirectoryPath
+                return isDirectory ? url : url.deletingLastPathComponent()
             }
         )
 
+        guard !directoryURLs.isEmpty else {
+            error.pointee = Self.errorNoString
+            return
+        }
+
         for url in directoryURLs {
             var config = Ghostty.SurfaceConfiguration()
-            config.workingDirectory = url.path(percentEncoded: false)
+            config.workingDirectory = url.pathWithoutTrailingSlash
 
             switch target {
             case .window:

@@ -71,11 +71,29 @@ pub const Point = union(Tag) {
         @This(),
         // Padding: largest variant is Coordinate (u16 + u32 = 6 bytes).
         // Use [2]u64 (16 bytes) for future expansion.
-        [2]u64,
+        .{
+            .padding = [2]u64,
+            .field_renames = .{
+                .active = "coordinate",
+                .viewport = "coordinate",
+                .screen = "coordinate",
+                .history = "coordinate",
+            },
+        },
     );
     pub const C = c_union.C;
     pub const CValue = c_union.CValue;
     pub const cval = c_union.cval;
+
+    /// Convert a C ABI point into the native Zig tagged union.
+    pub fn fromC(pt: C) Point {
+        return switch (pt.tag) {
+            .active => .{ .active = pt.value.active },
+            .viewport => .{ .viewport = pt.value.viewport },
+            .screen => .{ .screen = pt.value.screen },
+            .history => .{ .history = pt.value.history },
+        };
+    }
 };
 
 pub const Coordinate = extern struct {
