@@ -6,7 +6,7 @@ Old Mac wipe lost the uncommitted sidebar build; the design survived (pen.dev ca
 iCloud `Pencil.Dev/Ghostties-Sidebar-26Sep2026.pen` + `~/Archive/rescue/pen/ghostties-sidebar-canvas-2026-09-26/`;
 spec `docs/design/sidebar-presence/flow-01-sidebar-presence.md`). Session transcripts survived.
 
-- [ ] S1 Reconstruct from transcripts: which session built it, files edited, Sean's feedback/decisions, where it stopped
+- [x] S1 Reconstruct — NO code was ever built (no sidebar edits in any transcript); old-Mac transcripts (Sep 20–23) were not rescued, only Sep 25+. Build is fresh from the spec.
 - [ ] S2 Replay/rebuild on branch `feat/sidebar-presence` off main (isolated worktree), Debug build green, commit locally
 - [ ] S3 Tests: full suite via xcresulttool totals, vs main baseline; new tests for SidebarMode.collapsed persistence
 - [ ] S4 Independent review (not the builder) against the spec + transcript decisions
