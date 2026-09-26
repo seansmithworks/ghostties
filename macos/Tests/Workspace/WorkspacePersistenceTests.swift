@@ -181,6 +181,58 @@ struct WorkspacePersistenceTests {
         #expect(decoded.sidebarMode == .closed)
     }
 
+    // MARK: - Collapsed Mode (Flow 01, sidebar-presence)
+
+    /// `.collapsed` must be raw value 3 — appended after `pinned/closed/overlay`
+    /// (0/1/2), never renumbered, since it's persisted by `Int` raw value.
+    @Test func collapsedRawValueIsThree() {
+        #expect(SidebarMode.collapsed.rawValue == 3)
+    }
+
+    @Test func collapsedModeRoundTripsThroughPersistence() throws {
+        let original = WorkspacePersistence.State(sidebarMode: .collapsed)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(original)
+        let decoded = try JSONDecoder().decode(WorkspacePersistence.State.self, from: data)
+        #expect(decoded.sidebarMode == .collapsed)
+    }
+
+    @Test func decodingRawValueThreeDecodesToCollapsed() throws {
+        let json = """
+        {
+            "projects": [],
+            "sessions": [],
+            "templates": [],
+            "sidebarMode": 3
+        }
+        """
+        let data = Data(json.utf8)
+        let decoded = try JSONDecoder().decode(WorkspacePersistence.State.self, from: data)
+        #expect(decoded.sidebarMode == .collapsed)
+    }
+
+    /// Older persisted values 0/1/2 must keep decoding to the same cases now
+    /// that a fourth case exists — adding `.collapsed` must not shift any
+    /// existing raw-value mapping.
+    @Test func olderRawValuesStillDecodeToTheSameCases() throws {
+        func decode(_ rawValue: Int) throws -> SidebarMode {
+            let json = """
+            {
+                "projects": [],
+                "sessions": [],
+                "templates": [],
+                "sidebarMode": \(rawValue)
+            }
+            """
+            let data = Data(json.utf8)
+            return try JSONDecoder().decode(WorkspacePersistence.State.self, from: data).sidebarMode
+        }
+        #expect(try decode(0) == .pinned)
+        #expect(try decode(1) == .closed)
+        #expect(try decode(2) == .overlay)
+    }
+
     @Test func decodingInvalidSidebarModeRawValueDefaultsToPinned() throws {
         // An out-of-range raw value should gracefully default to .pinned,
         // not throw a DecodingError that wipes all state.

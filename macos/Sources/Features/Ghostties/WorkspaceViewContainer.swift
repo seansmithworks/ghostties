@@ -67,16 +67,22 @@ private struct SidebarWidthFrame<Content: View>: View {
 ///
 /// ## Sidebar State Machine
 ///
-/// The sidebar operates in three modes (see `SidebarMode`):
+/// The sidebar operates in four modes (see `SidebarMode`):
 /// - **pinned**: Sidebar pushes terminal right (floating card with shadow/insets).
+/// - **collapsed**: Icon-only 72pt rail, same card treatment as pinned (Flow 01).
 /// - **closed**: Sidebar hidden, terminal fills window flush, traffic lights hidden.
 /// - **overlay**: Sidebar floats on top of full-width terminal (hover-to-reveal).
 class WorkspaceViewContainer: NSView {
-    private let backgroundEffectView: NSVisualEffectView = {
-        let view = NSVisualEffectView()
-        view.material = .sidebar
-        view.blendingMode = .behindWindow
-        view.state = .active
+    /// Shadow host for the overlay panel (Flow 01, sidebar-presence §04). No
+    /// fill of its own — `masksToBounds` stays false so its shadow isn't
+    /// clipped — it exists purely to cast the rightward shadow behind
+    /// `sidebarOverlayBackground`'s opaque, corner-clipped content. Named
+    /// `backgroundEffectView` from its pre-Flow-01 role as an
+    /// `NSVisualEffectView` blur; the reveal overlay is opaque now (supersedes
+    /// DESIGN.md §4 "Overlay sidebar" — no background blur), so it's a plain
+    /// `NSView`.
+    private let backgroundEffectView: NSView = {
+        let view = NSView()
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -230,15 +236,15 @@ class WorkspaceViewContainer: NSView {
         Self.newSessionOpensComposer(in: .standard)
     }
 
-    /// Sidebar material backing for overlay mode. In pinned mode the shared
-    /// `backgroundEffectView` already covers the sidebar area, so this is hidden.
-    /// In overlay mode it provides the .sidebar material behind the hosting view
-    /// with a right-edge shadow to separate from terminal content.
-    private let sidebarOverlayBackground: NSVisualEffectView = {
-        let view = NSVisualEffectView()
-        view.material = .sidebar
-        view.blendingMode = .behindWindow
-        view.state = .active
+    /// The overlay panel's opaque content (Flow 01, sidebar-presence §04):
+    /// fill `#1c1c1c`, radius 18, 1pt stroke `#00000026`. Only visible in
+    /// overlay mode — hidden in pinned/closed/collapsed, where the sidebar
+    /// is transparent chrome instead. `masksToBounds` is true here (to clip
+    /// the fill/stroke to the rounded rect), so its own shadow would get
+    /// clipped too — the shadow lives on the unclipped `backgroundEffectView`
+    /// sibling directly behind it instead.
+    private let sidebarOverlayBackground: NSView = {
+        let view = NSView()
         view.translatesAutoresizingMaskIntoConstraints = false
         view.alphaValue = 0
         view.isHidden = true
@@ -640,7 +646,7 @@ class WorkspaceViewContainer: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        guard sidebarMode == .pinned || sidebarMode == .closed else { return }
+        guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
         // Canvas still follows OS light/dark — it's Ghostties chrome, not
         // terminal content.
         layer?.backgroundColor = canvasBackgroundCGColor
@@ -667,6 +673,12 @@ class WorkspaceViewContainer: NSView {
                 width: termSize.width + currentSidebarWidth + inset * 2,
                 height: termSize.height + inset * 2
             )
+        case .collapsed:
+            let inset = WorkspaceLayout.terminalInset
+            return NSSize(
+                width: termSize.width + WorkspaceLayout.sidebarRailWidth + inset * 2,
+                height: termSize.height + inset * 2
+            )
         case .closed:
             let inset = WorkspaceLayout.terminalInset
             return NSSize(
@@ -691,7 +703,7 @@ class WorkspaceViewContainer: NSView {
     /// written when transitioning to `.closed`), which is fine because both
     /// consumers here gate on `sidebarMode == .pinned` anyway.
     private var resizableWidth: CGFloat {
-        let sidebarWidth = sidebarMode == .pinned ? widthModel.width : 0
+        let sidebarWidth = (sidebarMode == .pinned || sidebarMode == .collapsed) ? widthModel.width : 0
         let inset = WorkspaceLayout.terminalInset
         // Three inset slots: leading of terminal, gap between panels, trailing of browser.
         return bounds.width - sidebarWidth - inset * 3
@@ -784,10 +796,17 @@ class WorkspaceViewContainer: NSView {
                 transform: nil
             )
         }
-        sidebarOverlayBackground.layer?.shadowPath = CGPath(
-            rect: sidebarOverlayBackground.bounds,
-            transform: nil
-        )
+        // The shadow lives on `backgroundEffectView` now (see its declaration
+        // comment) — a rounded-rect path matching the panel it sits behind,
+        // same perf rationale as the two shadow paths above.
+        if !backgroundEffectView.bounds.isEmpty {
+            backgroundEffectView.layer?.shadowPath = CGPath(
+                roundedRect: backgroundEffectView.bounds,
+                cornerWidth: 18,
+                cornerHeight: 18,
+                transform: nil
+            )
+        }
 
         // Re-derive toolbar row position from live close-button frame.
         // This survives macOS version bumps and upstream titlebar refactors.
@@ -812,6 +831,19 @@ class WorkspaceViewContainer: NSView {
     /// traffic-light region stays consistent across modes.
     private func applySidebarView() {
         guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
+
+        // Collapsed rail (Flow 01, sidebar-presence §02) replaces whichever
+        // view mode (project-first/task-first) is otherwise active — it's a
+        // width state, not a third view mode, so it takes priority here.
+        if sidebarMode == .collapsed {
+            let content = SidebarRailView()
+                .environmentObject(WorkspaceStore.shared)
+                .environmentObject(coordinator)
+                .ignoresSafeArea(.container, edges: .top)
+            let view = SidebarWidthFrame(model: widthModel, content: content)
+            hostingView.rootView = AnyView(view)
+            return
+        }
 
         let mode = currentSidebarViewMode
         if mode == "taskFirst" {
@@ -876,6 +908,9 @@ class WorkspaceViewContainer: NSView {
             case .pinned, .overlay:
                 sidebarWidthConstraint.animator().constant = currentSidebarWidth
                 widthModel.width = currentSidebarWidth
+            case .collapsed:
+                sidebarWidthConstraint.animator().constant = WorkspaceLayout.sidebarRailWidth
+                widthModel.width = WorkspaceLayout.sidebarRailWidth
             case .closed:
                 break
             }
@@ -903,12 +938,28 @@ class WorkspaceViewContainer: NSView {
     // MARK: - Sidebar State Machine
 
     /// Toggle sidebar via keyboard shortcut (Cmd+Shift+E).
-    @objc func toggleSidebar() {
-        switch sidebarMode {
-        case .pinned:  transitionTo(.closed)
-        case .closed:  transitionTo(.pinned)
-        case .overlay: transitionTo(.pinned)  // promote overlay to pinned
+    /// Cycles `pinned → collapsed → closed → pinned` (Flow 01, sidebar-presence
+    /// decision 1) — one control walks all three persistent widths. The 24pt
+    /// hot zone at the window's left edge is the only way back from closed
+    /// (decision 2: no rail hover-reveal). Overlay isn't part of the cycle —
+    /// it's a transient hover state, not one of the persisted widths — so the
+    /// toggle promotes it straight to pinned, same as before Flow 01.
+    ///
+    /// Extracted to a testable static function, same pattern as
+    /// `newSessionOpensComposer(in:)` above — the cycle order is precisely
+    /// the kind of thing a silent regression could invert without a test
+    /// catching it.
+    static func nextSidebarMode(after mode: SidebarMode) -> SidebarMode {
+        switch mode {
+        case .pinned:    return .collapsed
+        case .collapsed: return .closed
+        case .closed:    return .pinned
+        case .overlay:   return .pinned
         }
+    }
+
+    @objc func toggleSidebar() {
+        transitionTo(Self.nextSidebarMode(after: sidebarMode))
     }
 
     // MARK: - Browser Toggle
@@ -1240,9 +1291,13 @@ class WorkspaceViewContainer: NSView {
 
         let inset = WorkspaceLayout.terminalInset
 
+        // Content differs by mode (rail vs. full sidebar) — mount it before
+        // the geometry animates so the swap isn't visible mid-transition.
+        applySidebarView()
+
         // 1. Swap leading constraints before animation.
         switch newMode {
-        case .pinned:
+        case .pinned, .collapsed:
             shadowHostLeadingToSuperview.isActive = false
             shadowHostLeadingToSidebar.isActive = true
         case .closed, .overlay:
@@ -1259,10 +1314,7 @@ class WorkspaceViewContainer: NSView {
         //    The background material is only visible in overlay mode (floating hover state).
         //    In pinned mode the sidebar is transparent — the window background shows through.
         switch newMode {
-        case .pinned:
-            backgroundEffectView.isHidden = true
-            sidebarOverlayBackground.isHidden = true
-        case .closed:
+        case .pinned, .closed, .collapsed:
             backgroundEffectView.isHidden = true
             sidebarOverlayBackground.isHidden = true
         case .overlay:
@@ -1286,6 +1338,26 @@ class WorkspaceViewContainer: NSView {
             case .pinned:
                 sidebarWidthConstraint.animator().constant = currentSidebarWidth
                 widthModel.width = currentSidebarWidth
+                sidebarHostingView.animator().alphaValue = 1
+                shadowHostTopConstraint.animator().constant = inset
+                shadowHostLeadingToSidebar.animator().constant = inset
+                if !isBrowserVisible {
+                    shadowHostTrailingConstraint.animator().constant = -inset
+                }
+                shadowHostBottomConstraint.animator().constant = -inset
+                terminalTopConstraint.animator().constant = WorkspaceLayout.terminalTitleBarHeight
+                titleLabel.animator().alphaValue = 1
+                sidebarToggleButton.animator().alphaValue = 1
+                browserToggleButton.animator().alphaValue = 1
+                sidebarOverlayBackground.animator().alphaValue = 0
+                // Browser insets match terminal.
+                browserShadowHostTopConstraint.animator().constant = inset
+                browserShadowHostBottomConstraint.animator().constant = -inset
+                browserShadowHostTrailingConstraint.animator().constant = -inset
+
+            case .collapsed:
+                sidebarWidthConstraint.animator().constant = WorkspaceLayout.sidebarRailWidth
+                widthModel.width = WorkspaceLayout.sidebarRailWidth
                 sidebarHostingView.animator().alphaValue = 1
                 shadowHostTopConstraint.animator().constant = inset
                 shadowHostLeadingToSidebar.animator().constant = inset
@@ -1364,7 +1436,7 @@ class WorkspaceViewContainer: NSView {
         })
         // 5. Non-animatable properties.
         switch newMode {
-        case .pinned:
+        case .pinned, .collapsed:
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
             terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
@@ -1374,7 +1446,7 @@ class WorkspaceViewContainer: NSView {
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
             browserShadowHost.layer?.shadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
             layer?.backgroundColor = canvasBackgroundCGColor
-            sidebarOverlayBackground.layer?.shadowOpacity = 0
+            backgroundEffectView.layer?.shadowOpacity = 0
         case .closed:
             terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
@@ -1385,7 +1457,7 @@ class WorkspaceViewContainer: NSView {
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
             browserShadowHost.layer?.shadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
             layer?.backgroundColor = canvasBackgroundCGColor
-            sidebarOverlayBackground.layer?.shadowOpacity = 0
+            backgroundEffectView.layer?.shadowOpacity = 0
         case .overlay:
             // Same carded canvas treatment as pinned/closed — the terminal
             // always reads as a floating card, even while the sidebar hovers.
@@ -1400,9 +1472,13 @@ class WorkspaceViewContainer: NSView {
             browserShadowHost.layer?.backgroundColor = nil
             browserShadowHost.layer?.shadowOpacity = 0
             layer?.backgroundColor = canvasBackgroundCGColor
-            // The sidebar keeps its own separate shadow — it still genuinely
-            // floats over the terminal card, distinct from the card's shadow.
-            sidebarOverlayBackground.layer?.shadowOpacity = 0.2
+            // The shadow lives on `backgroundEffectView`, not
+            // `sidebarOverlayBackground` — the latter is now the opaque,
+            // corner-clipped panel content (Flow 01 §04); a shadow defined on
+            // a `masksToBounds` layer gets clipped along with everything
+            // else outside its bounds, so it has to live on the unclipped
+            // sibling that sits directly behind it.
+            backgroundEffectView.layer?.shadowOpacity = 0.5
         }
 
         // 6. Traffic lights.
@@ -1461,8 +1537,10 @@ class WorkspaceViewContainer: NSView {
             addTrackingArea(area)
             activeTrackingArea = area
 
-        case .pinned:
-            // No tracking areas needed.
+        case .pinned, .collapsed:
+            // No tracking areas needed — decision 2: the rail gets no
+            // hover-reveal of its own; the only way back to 244pt from a
+            // non-pinned state is the closed-mode hot zone above.
             break
         }
     }
@@ -1878,10 +1956,23 @@ class WorkspaceViewContainer: NSView {
 
         // Enable layers for z-ordering in overlay mode.
         sidebarHostingView.wantsLayer = true
+
+        // Shadow host (Flow 01 §04): black, offset (12, 0), blur 16 — cast
+        // right, onto the terminal. Opacity is toggled per-mode in
+        // `transitionTo` (0 except in overlay, where it's 0.5 ≈ `#00000080`).
+        backgroundEffectView.wantsLayer = true
+        backgroundEffectView.layer?.shadowColor = NSColor.black.cgColor
+        backgroundEffectView.layer?.shadowRadius = 16
+        backgroundEffectView.layer?.shadowOffset = CGSize(width: 12, height: 0)
+
+        // Opaque panel content: fill `#1c1c1c`, radius 18, 1pt stroke
+        // `#00000026`, clipped to the rounded rect.
         sidebarOverlayBackground.wantsLayer = true
-        sidebarOverlayBackground.layer?.shadowColor = NSColor.black.cgColor
-        sidebarOverlayBackground.layer?.shadowRadius = 6
-        sidebarOverlayBackground.layer?.shadowOffset = CGSize(width: 2, height: 0)
+        sidebarOverlayBackground.layer?.backgroundColor = WorkspaceLayout.sidebarPresenceChromeFill.cgColor
+        sidebarOverlayBackground.layer?.cornerRadius = 18
+        sidebarOverlayBackground.layer?.masksToBounds = true
+        sidebarOverlayBackground.layer?.borderWidth = 1
+        sidebarOverlayBackground.layer?.borderColor = NSColor.black.withAlphaComponent(CGFloat(0x26) / 255.0).cgColor
 
         // Terminal lives inside the shadow host. The host carries the shadow;
         // the terminal clips its own corners via masksToBounds.
@@ -1899,10 +1990,13 @@ class WorkspaceViewContainer: NSView {
         let initialMode = WorkspaceStore.shared.sidebarMode
         self.sidebarMode = initialMode
         let isPinned = initialMode == .pinned
-        // All three modes show the floating card with insets — overlay floats
+        // Pinned and collapsed both push the terminal right and share space
+        // with the sidebar; closed/overlay don't.
+        let occupiesSpace = initialMode == .pinned || initialMode == .collapsed
+        // All four modes show the floating card with insets — overlay floats
         // the sidebar over the same carded terminal rather than a full-bleed one.
         let hasCardInset = true
-        let initialWidth: CGFloat = isPinned ? currentSidebarWidth : 0
+        let initialWidth: CGFloat = isPinned ? currentSidebarWidth : (initialMode == .collapsed ? WorkspaceLayout.sidebarRailWidth : 0)
         sidebarDragHandle.isHidden = !isPinned
 
         sidebarWidthConstraint = sidebarHostingView.widthAnchor.constraint(equalToConstant: initialWidth)
@@ -1936,8 +2030,8 @@ class WorkspaceViewContainer: NSView {
             equalTo: sidebarHostingView.trailingAnchor, constant: inset)
         shadowHostLeadingToSuperview = terminalShadowHost.leadingAnchor.constraint(
             equalTo: leadingAnchor, constant: hasCardInset ? inset : 0)
-        shadowHostLeadingToSidebar.isActive = isPinned
-        shadowHostLeadingToSuperview.isActive = !isPinned
+        shadowHostLeadingToSidebar.isActive = occupiesSpace
+        shadowHostLeadingToSuperview.isActive = !occupiesSpace
 
         // Terminal top offset inside the shadow host — reserves title bar space
         // when pinned or closed (those two card modes show title + toggle
@@ -1954,15 +2048,19 @@ class WorkspaceViewContainer: NSView {
             .constraint(equalTo: topAnchor, constant: 22)
 
         NSLayoutConstraint.activate([
-            backgroundEffectView.topAnchor.constraint(equalTo: topAnchor),
-            backgroundEffectView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            // Flow 01 §04: the overlay panel is inset 4pt from the window's
+            // top/left/bottom edges (its trailing edge isn't a window edge —
+            // it floats near the left, so it tracks the sidebar's own width
+            // instead, uninset).
+            backgroundEffectView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            backgroundEffectView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             backgroundEffectView.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
-            backgroundEffectView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            backgroundEffectView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
 
             // Overlay background tracks sidebar width via trailing edge.
-            sidebarOverlayBackground.topAnchor.constraint(equalTo: topAnchor),
-            sidebarOverlayBackground.leadingAnchor.constraint(equalTo: leadingAnchor),
-            sidebarOverlayBackground.bottomAnchor.constraint(equalTo: bottomAnchor),
+            sidebarOverlayBackground.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+            sidebarOverlayBackground.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            sidebarOverlayBackground.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
             sidebarOverlayBackground.trailingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
 
             sidebarHostingView.topAnchor.constraint(equalTo: topAnchor),

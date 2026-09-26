@@ -2,21 +2,31 @@ import AppKit
 import Foundation
 import SwiftUI
 
-/// Three-state sidebar visibility model.
+/// Four-state sidebar visibility model.
 ///
 /// - `pinned`: Sidebar open, terminal pushed right (floating card).
 /// - `closed`: Sidebar hidden, terminal fills window flush.
 /// - `overlay`: Sidebar floats on top of full-width terminal (hover-to-reveal).
+/// - `collapsed`: Sidebar shown as a narrow icon-only rail (Flow 01, sidebar-presence).
+///
+/// `Codable` by `Int` raw value and persisted in `WorkspaceStore` — new cases
+/// must always be APPENDED, never renumbered, or an old `workspace.json`
+/// decodes into the wrong mode.
 enum SidebarMode: Int, Codable {
     case pinned
     case closed
     case overlay
+    case collapsed
 }
 
 /// Shared layout constants for the workspace sidebar.
 enum WorkspaceLayout {
-    /// Width of the sidebar panel.
-    static let sidebarWidth: CGFloat = 220
+    /// Width of the sidebar panel (Flow 01: 220 → 244).
+    static let sidebarWidth: CGFloat = 244
+
+    /// Width of the collapsed icon-only rail (Flow 01, sidebar-presence §02).
+    /// Fixed — not drag-resizable, unlike `sidebarWidth`.
+    static let sidebarRailWidth: CGFloat = 72
 
     /// Width of the task-first sidebar panel (Concept F).
     /// Wider than `sidebarWidth` to accommodate the hero row's two-line typography.
@@ -113,7 +123,9 @@ enum WorkspaceLayout {
     static let terminalInset: CGFloat = 8
 
     /// Width of the invisible hover trigger strip at the left edge (closed mode).
-    static let overlayTriggerWidth: CGFloat = 10
+    /// Flow 01 (sidebar-presence): 10 → 24 — the hot zone is invisible in the
+    /// app; the `#ffffff08` fill on the design canvas is a diagram device only.
+    static let overlayTriggerWidth: CGFloat = 24
 
     /// Minimum width for the browser panel when visible.
     static let browserMinWidth: CGFloat = 320
@@ -140,6 +152,12 @@ enum WorkspaceLayout {
 
     /// Chrome background (dark mode). See `chromeBackgroundLight`.
     static let chromeBackgroundDark = NSColor(white: 0.14, alpha: 1)
+
+    /// Fill for the Flow 01 (sidebar-presence) reveal-overlay panel and
+    /// collapsed rail's window-shell chrome — `#1c1c1c`, a literal spec
+    /// value distinct from `chromeBackgroundDark` (see
+    /// `flow-01-sidebar-presence.md` "Window shell (every state)").
+    static let sidebarPresenceChromeFill = NSColor(white: 0x1c / 255.0, alpha: 1)
 
     /// Canvas background (light mode). Covers the terminal card background
     /// (internal header strip + card rim around the GPU-rendered terminal).

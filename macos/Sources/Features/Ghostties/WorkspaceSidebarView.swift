@@ -94,6 +94,8 @@ struct WorkspaceSidebarView: View {
             }
 
             Spacer(minLength: 0)
+
+            SidebarBottomTray()
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)
@@ -497,6 +499,81 @@ private struct EmptyStateAddButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(isHovered ? .primary : .secondary)
         .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Bottom Tray
+
+/// The sidebar's bottom tray (Flow 01, sidebar-presence §01): a hairline
+/// divider, then "New Session" and the sidebar toggle. Decision 4 (spec):
+/// no account row — no account model exists in the sidebar sources today,
+/// so the footer omits the "Sean Smith" affordance from the design canvas.
+private struct SidebarBottomTray: View {
+    @EnvironmentObject private var store: WorkspaceStore
+    @EnvironmentObject private var coordinator: SessionCoordinator
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 1)
+
+            TrayDockItem(systemName: "plus", label: "New Session") {
+                guard let container = coordinator.containerView as? WorkspaceViewContainer else {
+                    assertionFailure("SidebarBottomTray: coordinator.containerView is not a WorkspaceViewContainer")
+                    return
+                }
+                container.presentComposerOverlay(projectBinding: .open)
+            }
+
+            TrayDockItem(systemName: "sidebar.left", label: toggleLabel) {
+                (coordinator.containerView as? WorkspaceViewContainer)?.toggleSidebar()
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
+    }
+
+    /// "Close Sidebar" while pinned, "Open Sidebar" while overlaid — the
+    /// overlay's toggle promotes it to pinned (existing behavior, unchanged
+    /// by Flow 01). `store.sidebarMode` covers `.collapsed` too, but the
+    /// collapsed rail hosts `RailTray`, not this view, so that case never
+    /// actually renders here.
+    private var toggleLabel: String {
+        store.sidebarMode == .overlay ? "Open Sidebar" : "Close Sidebar"
+    }
+}
+
+/// A single 28pt-tall dock item: 14pt icon + label, matching
+/// `ToolbarLabelButton`'s hover styling below.
+private struct TrayDockItem: View {
+    let systemName: String
+    let label: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text(label)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel(label)
     }
 }
 
