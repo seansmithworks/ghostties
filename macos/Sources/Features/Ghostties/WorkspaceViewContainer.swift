@@ -2350,7 +2350,7 @@ class WorkspaceViewContainer: NSView {
     /// No-op in overlay mode, which intentionally clears all layers to let
     /// the vibrancy material show through.
     private func applyChromeColor() {
-        guard sidebarMode == .pinned || sidebarMode == .closed else { return }
+        guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
         terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
         browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
         layer?.backgroundColor = canvasBackgroundCGColor
