@@ -1,5 +1,11 @@
 # Ghostties — Backlog
 
+## 2026-09-25 — review files rescued from the old (compromised, since wiped) Mac
+
+Scanned clean before copying. Old versions sit in `.rescued-2026-09-24/`, mirroring their real paths; nothing live was overwritten. Keep what you want, then delete the folder (do not commit it).
+
+- [ ] **Dev app icon set (10 PNGs, `macos/Assets.xcassets/AppIcon-Dev.appiconset/`).** Old versions differ from the committed ones, same sizes. Compare visually; if the old art is the one you want, copy it over the live set.
+
 ## 2026-09-24 — upstream sync to Zig 0.16 (next week, before sub renewal)
 
 - [ ] **Upstream sync: merge `upstream/main` (Zig 0.16).** Fork diverged 2026-05-03; upstream +1,828
