@@ -18,10 +18,10 @@
   Status 2026-09-25: branch `sync/upstream-zig-0.16` @ `dd8633ec5` LOCAL ONLY (push rejected: commits carry
   sean@seansmithdesign.com; GitHub email privacy). Suite 1421 IDs, 6 load flakes (Light + Dark identical).
   Landing plan (each step needs Sean's nod where marked):
-  - [ ] L1 Rewrite author/committer email → `1028901+seansmithworks@users.noreply.github.com` on the 11 commits
+  - [x] L1 Rewrite author/committer email → `1028901+seansmithworks@users.noreply.github.com` on the 11 commits
     (`^origin/main ^upstream/main`; trees must be byte-identical before/after). ⛔ Sean said "rewrite and push"? — not yet
-  - [ ] L2 Push branch to origin (fork only; upstream push URL is disabled). ⛔ Sean's nod
-  - [ ] L3 PR on SeanSmithWorks/ghostties (`--repo` explicit), CI green on the Zig 0.16 workflows
+  - [x] L2 Push branch to origin (fork only; upstream push URL is disabled). ⛔ Sean's nod
+  - [x] L3 PR on SeanSmithWorks/ghostties (`--repo` explicit), CI green on the Zig 0.16 workflows — PR #188, CI green 2026-09-25
   - [ ] L4 Sean hands-on pass on `Ghostties Dev.app` from the sync worktree (never /Applications) — tabs/windows,
     quit prompt, sidebar, composer, browser, Sparkle "Check for Updates" wiring
   - [ ] L5 Investigate `SessionComposerSnapshotTests/typedUnknownBranchTokenRendersCreateBranchRowFirst` — fails
