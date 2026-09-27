@@ -1376,23 +1376,27 @@ class WorkspaceViewContainer: NSView {
                 browserShadowHostTrailingConstraint.animator().constant = -inset
 
             case .closed:
+                // Spec §03: no chrome at all — no header, no band, no
+                // floating buttons, no traffic lights. Terminal is full
+                // bleed (zero inset) at radius 18 (non-animatable block,
+                // below). The 24pt hot zone is the only affordance.
                 sidebarWidthConstraint.animator().constant = 0
                 sidebarHostingView.animator().alphaValue = 0
-                shadowHostTopConstraint.animator().constant = inset
-                shadowHostLeadingToSuperview.animator().constant = inset
+                shadowHostTopConstraint.animator().constant = 0
+                shadowHostLeadingToSuperview.animator().constant = 0
                 if !isBrowserVisible {
-                    shadowHostTrailingConstraint.animator().constant = -inset
+                    shadowHostTrailingConstraint.animator().constant = 0
                 }
-                shadowHostBottomConstraint.animator().constant = -inset
-                terminalTopConstraint.animator().constant = WorkspaceLayout.terminalTitleBarHeight
-                titleLabel.animator().alphaValue = 1
-                sidebarToggleButton.animator().alphaValue = 1
-                browserToggleButton.animator().alphaValue = 1
+                shadowHostBottomConstraint.animator().constant = 0
+                terminalTopConstraint.animator().constant = 0
+                titleLabel.animator().alphaValue = 0
+                sidebarToggleButton.animator().alphaValue = 0
+                browserToggleButton.animator().alphaValue = 0
                 sidebarOverlayBackground.animator().alphaValue = 0
-                // Browser insets match terminal.
-                browserShadowHostTopConstraint.animator().constant = inset
-                browserShadowHostBottomConstraint.animator().constant = -inset
-                browserShadowHostTrailingConstraint.animator().constant = -inset
+                // Browser insets match terminal (full bleed).
+                browserShadowHostTopConstraint.animator().constant = 0
+                browserShadowHostBottomConstraint.animator().constant = 0
+                browserShadowHostTrailingConstraint.animator().constant = 0
 
             case .overlay:
                 // If browser was visible, swap trailing constraint back to window edge.
@@ -1448,12 +1452,15 @@ class WorkspaceViewContainer: NSView {
             layer?.backgroundColor = canvasBackgroundCGColor
             backgroundEffectView.layer?.shadowOpacity = 0
         case .closed:
-            terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
+            // Spec §03: full bleed at radius 18 (states 03/04 meet the
+            // window edge; 01/02's inset card stays at 12 — see the
+            // `terminalCornerRadius` doc comment).
+            terminalContainer.layer?.cornerRadius = 18
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
             terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
-            terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
+            terminalShadowHost.layer?.cornerRadius = 18
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
-            browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
+            browserShadowHost.layer?.cornerRadius = 18
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
             browserShadowHost.layer?.shadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
             layer?.backgroundColor = canvasBackgroundCGColor
@@ -2001,7 +2008,9 @@ class WorkspaceViewContainer: NSView {
 
         sidebarWidthConstraint = sidebarHostingView.widthAnchor.constraint(equalToConstant: initialWidth)
 
-        let inset: CGFloat = hasCardInset ? WorkspaceLayout.terminalInset : 0
+        // Spec §03: closed launches full bleed (zero inset), same as the
+        // toggle transition into `.closed` — see `transitionTo`.
+        let inset: CGFloat = (hasCardInset && initialMode != .closed) ? WorkspaceLayout.terminalInset : 0
         // Inset constraints target the shadow host, not the terminal directly.
         shadowHostTopConstraint = terminalShadowHost.topAnchor.constraint(
             equalTo: topAnchor, constant: inset)
@@ -2038,7 +2047,8 @@ class WorkspaceViewContainer: NSView {
         // button). Overlay is carded now too, but keeps its title row hidden
         // (unchanged from before this pass), so it's keyed on mode, not
         // `hasCardInset`.
-        let titlebarInset: CGFloat = initialMode != .overlay ? WorkspaceLayout.terminalTitleBarHeight : 0
+        let titlebarInset: CGFloat = (initialMode != .overlay && initialMode != .closed)
+            ? WorkspaceLayout.terminalTitleBarHeight : 0
         terminalTopConstraint = terminalContainer.topAnchor.constraint(
             equalTo: terminalShadowHost.topAnchor, constant: titlebarInset)
 
@@ -2135,9 +2145,13 @@ class WorkspaceViewContainer: NSView {
             buildInfoBadgeHostingView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
         ])
 
+        // Spec §03: closed launches at radius 18 (full bleed), same as the
+        // toggle transition into `.closed` — see `transitionTo`.
+        let initialTerminalRadius: CGFloat = initialMode == .closed ? 18 : WorkspaceLayout.terminalCornerRadius
+
         // Terminal floating card: top corners rounded when in card mode (pinned/closed).
         terminalContainer.wantsLayer = true
-        terminalContainer.layer?.cornerRadius = hasCardInset ? WorkspaceLayout.terminalCornerRadius : 0
+        terminalContainer.layer?.cornerRadius = hasCardInset ? initialTerminalRadius : 0
         terminalContainer.layer?.cornerCurve = .continuous
         terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         terminalContainer.layer?.masksToBounds = true
@@ -2152,7 +2166,7 @@ class WorkspaceViewContainer: NSView {
 
         // Card background behind the title bar region. No masksToBounds — shadow
         // must render outside the layer bounds.
-        terminalShadowHost.layer?.cornerRadius = hasCardInset ? WorkspaceLayout.terminalCornerRadius : 0
+        terminalShadowHost.layer?.cornerRadius = hasCardInset ? initialTerminalRadius : 0
         terminalShadowHost.layer?.cornerCurve = .continuous
         terminalShadowHost.layer?.backgroundColor = hasCardInset ? cardBackgroundCGColor : nil
 
@@ -2162,7 +2176,7 @@ class WorkspaceViewContainer: NSView {
         browserShadowHost.layer?.shadowOpacity = 0  // hidden initially
         browserShadowHost.layer?.shadowRadius = WorkspaceLayout.canvasShadowRadius
         browserShadowHost.layer?.shadowOffset = WorkspaceLayout.canvasShadowOffset
-        browserShadowHost.layer?.cornerRadius = hasCardInset ? WorkspaceLayout.terminalCornerRadius : 0
+        browserShadowHost.layer?.cornerRadius = hasCardInset ? initialTerminalRadius : 0
         browserShadowHost.layer?.cornerCurve = .continuous
         browserShadowHost.layer?.backgroundColor = hasCardInset ? browserCardBackgroundCGColor : nil
         browserShadowHost.layer?.masksToBounds = false
@@ -2175,7 +2189,11 @@ class WorkspaceViewContainer: NSView {
         // In pinned mode the sidebar is transparent; in closed mode it's hidden entirely.
         backgroundEffectView.isHidden = true
         if initialMode == .closed {
+            // Spec §03: no chrome at all — no header, no floating buttons.
             sidebarHostingView.alphaValue = 0
+            titleLabel.alphaValue = 0
+            sidebarToggleButton.alphaValue = 0
+            browserToggleButton.alphaValue = 0
         } else if initialMode == .overlay {
             titleLabel.alphaValue = 0
             sidebarToggleButton.alphaValue = 0

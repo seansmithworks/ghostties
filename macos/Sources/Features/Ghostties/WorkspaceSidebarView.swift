@@ -170,14 +170,13 @@ struct WorkspaceSidebarView: View {
     private var titlebarToolbar: some View {
         HStack(spacing: 8) {
             Spacer()
-            // One labelled "new item" control per tab, right-aligned. Projects
-            // gets a plain action button; Sessions gets a button that opens
-            // the centered session composer overlay (Phase 3 of
-            // session-creation-unified) — see `NewSessionToolbarButton`.
+            // Projects keeps its header action (no tray equivalent exists
+            // for "New Project"). Sessions no longer does — Flow 01's
+            // bottom tray (`SidebarBottomTray`) owns "New Session" now, and
+            // this header button duplicated it (spec §01: top group is
+            // traffic lights → section header → rows, no header strip).
             if sidebarTab == .projects {
                 ToolbarLabelButton(systemName: "plus", label: "New Project", action: presentFolderPicker)
-            } else {
-                NewSessionToolbarButton()
             }
         }
         .padding(.horizontal, 12)
