@@ -47,16 +47,31 @@ enum WorkspaceLayout {
         max(sidebarRailWidth, zoomButtonMaxX + leadingInset)
     }
 
+    /// Pure fullscreen check shared by `titlebarRowTopAnchorConstant(in:)`
+    /// and `collapsedRailWidth(in:)` — both need to special-case fullscreen
+    /// (no titlebar row, traffic lights hidden), and this factors the check
+    /// out of the live `NSView`/`NSWindow` lookup so it's independently
+    /// testable without a real window.
+    static func isFullScreenLayout(styleMask: NSWindow.StyleMask) -> Bool {
+        styleMask.contains(.fullScreen)
+    }
+
     /// Live collapsed-rail width for the window containing `view`, derived
     /// from the real traffic-light button frames. Callers should recompute
     /// wherever `titlebarRowTopAnchorConstant(in:)` above is already
     /// recomputed — window attach, fullscreen enter/exit, and titlebar
     /// layout passes — since both derive from the same button geometry.
-    /// Returns the `sidebarRailWidth` floor before the window is on-screen
-    /// or if the buttons aren't available (mirrors
-    /// `titlebarRowTopAnchorConstant`'s guard, but returns a floor instead
-    /// of nil since a rail width is always needed, even in the fallback).
+    /// In fullscreen (traffic lights hidden, mirroring
+    /// `titlebarRowTopAnchorConstant`'s early return) returns the
+    /// `sidebarRailWidth` floor directly rather than measuring hidden
+    /// buttons. Also returns the floor before the window is on-screen or if
+    /// the buttons aren't available (mirrors `titlebarRowTopAnchorConstant`'s
+    /// guard, but returns a floor instead of nil since a rail width is
+    /// always needed, even in the fallback).
     static func collapsedRailWidth(in view: NSView) -> CGFloat {
+        if let styleMask = view.window?.styleMask, isFullScreenLayout(styleMask: styleMask) {
+            return sidebarRailWidth
+        }
         guard let win = view.window,
               let close = win.standardWindowButton(.closeButton),
               let zoom = win.standardWindowButton(.zoomButton),
@@ -126,7 +141,7 @@ enum WorkspaceLayout {
         // In fullscreen, there is no titlebar row — content extends edge-to-edge.
         // Return 0 so toolbar buttons park at the top edge (they will be hidden
         // by the fullscreen chrome).
-        if view.window?.styleMask.contains(.fullScreen) == true {
+        if let styleMask = view.window?.styleMask, isFullScreenLayout(styleMask: styleMask) {
             return 0
         }
         guard let win = view.window,

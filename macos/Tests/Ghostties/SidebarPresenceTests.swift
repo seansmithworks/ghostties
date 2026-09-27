@@ -112,4 +112,14 @@ struct SidebarPresenceTests {
         let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 62, leadingInset: 10)
         #expect(width == 72)
     }
+
+    /// `collapsedRailWidth(in:)` must special-case fullscreen the same way
+    /// `titlebarRowTopAnchorConstant(in:)` already does — traffic lights are
+    /// hidden there, so measuring their (stale/zero) frames would be wrong.
+    /// Covered via the pure style-mask check both functions share, since
+    /// `collapsedRailWidth(in:)` itself needs a live `NSWindow`.
+    @Test func fullScreenLayoutIsDetectedFromStyleMask() {
+        #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.fullScreen]) == true)
+        #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.titled, .closable, .resizable]) == false)
+    }
 }

@@ -1081,53 +1081,6 @@ struct RecentsListView: View {
     }
 }
 
-// MARK: - New Session Toolbar Button
-
-/// Labelled toolbar button for the Sessions tab, presented in
-/// `WorkspaceSidebarView.titlebarToolbar` right-aligned on the traffic-light
-/// row. Opens the centered session composer overlay (Phase 3 of
-/// session-creation-unified) instead of the old two-level project → template
-/// cascade menu (D7) — see `WorkspaceViewContainer.presentComposerOverlay(projectBinding:)`,
-/// reached via `coordinator.containerView` since this view has no direct
-/// reference to the AppKit container.
-struct NewSessionToolbarButton: View {
-    @EnvironmentObject private var coordinator: SessionCoordinator
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button {
-            // F9 (Phase 3 review): `coordinator.containerView` is always a
-            // `WorkspaceViewContainer` in practice — it's set exactly once,
-            // from `WorkspaceViewContainer.viewDidMoveToWindow()` — so this
-            // cast is a class invariant, not a real runtime branch. The old
-            // `Menu` silently did nothing if the invariant ever broke; assert
-            // instead so a regression is caught in development rather than
-            // shipping as a silently-dead button.
-            guard let container = coordinator.containerView as? WorkspaceViewContainer else {
-                assertionFailure("NewSessionToolbarButton: coordinator.containerView is not a WorkspaceViewContainer")
-                return
-            }
-            container.presentComposerOverlay(projectBinding: .open)
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .medium))
-                Text("New Session")
-                    .font(.system(size: 12, weight: .medium))
-            }
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(isHovered ? .primary : .secondary)
-        .onHover { isHovered = $0 }
-        // F9 (Phase 3 review): with zero projects, the composer's own
-        // "+ Add project…" row (in the open project dropdown) is the only
-        // way to add one from this tab — disabling the button that reaches
-        // it made that path unreachable.
-        .accessibilityLabel("New Session")
-    }
-}
-
 // MARK: - Section Header
 
 private struct SessionSectionHeader: View {

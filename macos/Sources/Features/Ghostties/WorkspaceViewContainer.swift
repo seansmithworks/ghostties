@@ -1699,9 +1699,8 @@ class WorkspaceViewContainer: NSView {
     }
 
     /// Opens the centered session composer overlay. Called from Cmd+T
-    /// (composer preference on, the default) and the sidebar toolbar's
-    /// "+ New Session" button (`NewSessionToolbarButton`, which reaches this
-    /// via `coordinator.containerView`).
+    /// (composer preference on, the default) and the sidebar's "+ New
+    /// Session" affordances, which reach this via `coordinator.containerView`.
     func presentComposerOverlay(projectBinding: SessionComposerRequest.ProjectBinding) {
         // Blocker 3 (Phase 3 review round 3): if a DIFFERENT window
         // currently owns an open composer, dismiss its overlay first — this
