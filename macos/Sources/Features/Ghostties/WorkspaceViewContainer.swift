@@ -396,6 +396,38 @@ class WorkspaceViewContainer: NSView {
         chromePaletteNSColor.cgColor
     }
 
+    /// The focused terminal session's live background color — same accessor
+    /// `TerminalWindow.preferredBackgroundColor` uses (`surface.backgroundColor`,
+    /// the post-OSC-11 live value, falling back to `derivedConfig.backgroundColor`,
+    /// the static theme default) — kept in sync with `observedSurface` by
+    /// `rebindFocusedSurfaceTheme()`. `nil` for a browser session or when
+    /// nothing is focused yet.
+    private var focusedTerminalBackgroundNSColor: NSColor? {
+        guard let surface = observedSurface else { return nil }
+        return NSColor(surface.backgroundColor ?? surface.derivedConfig.backgroundColor)
+    }
+
+    /// Overlay panel fill (Flow 01 §04, Sean's review): matches the focused
+    /// terminal session's own background — light over a light terminal
+    /// theme, dark over a dark one — rather than following OS appearance.
+    /// Falls back to the static canvas token (`canvasPaletteNSColor`) when
+    /// no terminal surface is focused, e.g. a browser pane.
+    private var overlayBackgroundNSColor: NSColor {
+        focusedTerminalBackgroundNSColor ?? canvasPaletteNSColor
+    }
+
+    /// Whether `overlayBackgroundNSColor` reads as dark, so the overlay's
+    /// SwiftUI content (`sidebarHostingView`) should render its dark-token
+    /// (light-on-dark) text/icon set instead of the light-token one — kept
+    /// legible against a dark terminal theme even when the OS is in light
+    /// mode. Threshold is the standard WCAG-adjacent 0.5 midpoint on
+    /// perceptual (ITU-R BT.601) luminance.
+    private var overlayBackgroundIsDark: Bool {
+        guard let rgb = overlayBackgroundNSColor.usingColorSpace(.deviceRGB) else { return !isLightAppearance }
+        let luminance = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
+        return luminance < 0.5
+    }
+
     init<ViewModel: TerminalViewModel>(ghostty: Ghostty.App, viewModel: ViewModel, delegate: (any TerminalViewDelegate)? = nil) {
         self.ghostty = ghostty
         self.terminalContainer = TerminalViewContainer {
@@ -1262,6 +1294,12 @@ class WorkspaceViewContainer: NSView {
         lastTransitionTime = now
         sidebarMode = newMode
 
+        // Re-derive the overlay's text/icon legibility override — only
+        // overlay mode needs `sidebarHostingView`'s appearance pinned to
+        // `overlayBackgroundNSColor`'s luminance; every other mode must
+        // clear it and fall back to the OS appearance.
+        applyChromeColor()
+
         let inset = WorkspaceLayout.terminalInset
 
         // Content differs by mode (rail vs. full sidebar) — mount it before
@@ -1935,13 +1973,16 @@ class WorkspaceViewContainer: NSView {
         backgroundEffectView.layer?.shadowRadius = 16
         backgroundEffectView.layer?.shadowOffset = CGSize(width: 12, height: 0)
 
-        // Opaque panel content: fills with the focused terminal's card
-        // background (same source as `cardBackgroundCGColor`, Sean's review
-        // — light over a light terminal theme, dark over a dark one) rather
-        // than a fixed dark literal. Radius 18, 1pt stroke `#00000026`,
+        // Opaque panel content: fills with `overlayBackgroundNSColor` — the
+        // focused terminal session's own background (Sean's review — light
+        // over a light terminal theme, dark over a dark one), falling back
+        // to the static canvas token before a surface is observed. This
+        // initial value is immediately superseded by `applyChromeColor()`
+        // below, which is the real source of truth and repaints on every
+        // session swap and theme reload. Radius 18, 1pt stroke `#00000026`,
         // clipped to the rounded rect.
         sidebarOverlayBackground.wantsLayer = true
-        sidebarOverlayBackground.layer?.backgroundColor = cardBackgroundCGColor
+        sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
         sidebarOverlayBackground.layer?.cornerRadius = 18
         sidebarOverlayBackground.layer?.masksToBounds = true
         sidebarOverlayBackground.layer?.borderWidth = 1
@@ -2266,25 +2307,37 @@ class WorkspaceViewContainer: NSView {
         return coordinator.sessionTrees[activeId]?.first
     }
 
-    /// Repaint the chrome and canvas layers with the current Ghostties design-
-    /// system palette (static, not theme-bound). The card + browser use the
-    /// canvas tone; the outer layer uses the chrome tone. The focused-surface
-    /// Combine subscription still drives this on session swaps and config
-    /// changes — after the theme-unbind refactor it's effectively a no-op
-    /// repaint with static tokens, but left in place to preserve the
-    /// session-swap invalidation path with minimal churn.
+    /// Repaint the chrome/canvas layers and the reveal overlay panel. The
+    /// terminal/browser cards and the outer layer use the static Ghostties
+    /// design-system palette (canvas/chrome tone) — terminal theme is
+    /// intentionally NOT bound there. The focused-surface Combine
+    /// subscription still drives this on session swaps and config changes —
+    /// for those three layers it's effectively a no-op repaint with static
+    /// tokens, but left in place to preserve the session-swap invalidation
+    /// path with minimal churn.
     ///
-    /// The reveal overlay panel (`sidebarOverlayBackground`) always repaints
-    /// here too, in every mode — it needs to track the focused terminal's
-    /// theme even while hidden/inactive so it's already correct the next
+    /// The reveal overlay panel (`sidebarOverlayBackground`) is the one
+    /// layer that IS theme-bound: it always repaints here, in every mode,
+    /// with `overlayBackgroundNSColor` — the focused terminal session's own
+    /// background (falling back to the static canvas token with no surface
+    /// focused, e.g. a browser pane) — so it's already correct the next
     /// time overlay mode shows it, matching light-terminal/light-panel,
-    /// dark-terminal/dark-panel (Sean's review).
+    /// dark-terminal/dark-panel (Sean's review). `sidebarHostingView`'s
+    /// appearance is overridden to match that same fill's luminance while
+    /// overlay mode is active, so its SwiftUI text/icon tokens
+    /// (`sectionHeaderForeground(for:)` and friends, which read
+    /// `@Environment(\.colorScheme)`) stay legible against it; outside
+    /// overlay mode the override is cleared so the sidebar follows the OS
+    /// appearance as usual.
     ///
     /// The rest of this function no-ops in overlay mode, which intentionally
     /// clears the card/canvas layers to let the vibrancy material show
     /// through.
     private func applyChromeColor() {
-        sidebarOverlayBackground.layer?.backgroundColor = cardBackgroundCGColor
+        sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
+        sidebarHostingView.appearance = sidebarMode == .overlay
+            ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
+            : nil
         guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
         terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
         browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
