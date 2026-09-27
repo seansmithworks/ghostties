@@ -4675,6 +4675,15 @@ fn loadTheme(self: *Config, theme: Theme) !void {
 pub fn finalize(self: *Config) !void {
     const alloc = self._arena.?.allocator();
 
+    // Ghostties: if the user hasn't set a theme, default to Apple's
+    // native light/dark pair so the terminal and window chrome follow
+    // system appearance live. Any explicit `background`/`foreground`/
+    // `palette` the user set is replayed on top by loadTheme below and
+    // still wins.
+    if (self.theme == null) {
+        self.theme = .{ .light = "Apple System Colors Light", .dark = "Apple System Colors" };
+    }
+
     // We always load the theme first because it may set other fields
     // in our config.
     if (self.theme) |*theme| {
@@ -10864,6 +10873,22 @@ test "theme loading" {
 
     // Not a conditional theme
     try testing.expect(!cfg._conditional_set.contains(.theme));
+}
+
+test "theme loading defaults to Apple System Colors when unset" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var cfg = try Config.default(alloc);
+    defer cfg.deinit();
+    try cfg.finalize();
+
+    try testing.expect(cfg.theme != null);
+    try testing.expectEqualStrings("Apple System Colors Light", cfg.theme.?.light);
+    try testing.expectEqualStrings("Apple System Colors", cfg.theme.?.dark);
+
+    // Window theme should follow the system since light/dark differ.
+    try testing.expect(cfg.@"window-theme" == .system);
 }
 
 test "theme loading preserves conditional state" {
