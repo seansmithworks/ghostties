@@ -77,23 +77,21 @@ private struct RailSessionRow: View {
 
 // MARK: - Rail Tray
 
-/// The 40pt-wide rounded pill holding the two icon buttons (New Session,
-/// toggle) — spec §02. Decision 4: no account circle, since there's no
-/// account model to show one for.
+/// The 40pt-wide rounded pill holding icon buttons laid out from
+/// `WorkspaceViewContainer.sidebarTrayItems` (spec §02) — currently New
+/// Session and the sidebar toggle, but the layout doesn't hardcode a count.
+/// Decision 4: no account circle, since there's no account model to show
+/// one for.
 private struct RailTray: View {
     @EnvironmentObject private var coordinator: SessionCoordinator
 
     var body: some View {
         VStack(spacing: 2) {
-            RailIconButton(systemName: "plus", accessibilityLabel: "New Session") {
-                guard let container = coordinator.containerView as? WorkspaceViewContainer else {
-                    assertionFailure("RailTray: coordinator.containerView is not a WorkspaceViewContainer")
-                    return
-                }
-                container.presentComposerOverlay(projectBinding: .open)
-            }
-            RailIconButton(systemName: "sidebar.left", accessibilityLabel: "Expand Sidebar") {
-                (coordinator.containerView as? WorkspaceViewContainer)?.toggleSidebar()
+            ForEach(WorkspaceViewContainer.sidebarTrayItems(
+                container: coordinator.containerView as? WorkspaceViewContainer,
+                toggleLabel: "Expand Sidebar"
+            )) { item in
+                RailIconButton(systemName: item.systemName, accessibilityLabel: item.label, action: item.action)
             }
         }
         .padding(4)

@@ -517,29 +517,25 @@ private struct SidebarBottomTray: View {
                 .fill(Color.white.opacity(0.08))
                 .frame(height: 1)
 
-            TrayDockItem(systemName: "plus", label: "New Session") {
-                guard let container = coordinator.containerView as? WorkspaceViewContainer else {
-                    assertionFailure("SidebarBottomTray: coordinator.containerView is not a WorkspaceViewContainer")
-                    return
-                }
-                container.presentComposerOverlay(projectBinding: .open)
-            }
-
-            TrayDockItem(systemName: "sidebar.left", label: toggleLabel) {
-                (coordinator.containerView as? WorkspaceViewContainer)?.toggleSidebar()
+            ForEach(WorkspaceViewContainer.sidebarTrayItems(
+                container: coordinator.containerView as? WorkspaceViewContainer,
+                toggleLabel: toggleLabel
+            )) { item in
+                TrayDockItem(systemName: item.systemName, label: item.label, action: item.action)
             }
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
     }
 
-    /// "Close Sidebar" while pinned, "Open Sidebar" while overlaid — the
-    /// overlay's toggle promotes it to pinned (existing behavior, unchanged
-    /// by Flow 01). `store.sidebarMode` covers `.collapsed` too, but the
-    /// collapsed rail hosts `RailTray`, not this view, so that case never
-    /// actually renders here.
+    /// "Collapse Sidebar" while pinned (toggle now flips full width ↔ rail,
+    /// not closed), "Open Sidebar" while overlaid — the overlay's toggle
+    /// promotes it to pinned (existing behavior, unchanged by Flow 01).
+    /// `store.sidebarMode` covers `.collapsed` too, but the collapsed rail
+    /// hosts `RailTray`, not this view, so that case never actually renders
+    /// here.
     private var toggleLabel: String {
-        store.sidebarMode == .overlay ? "Open Sidebar" : "Close Sidebar"
+        store.sidebarMode == .overlay ? "Open Sidebar" : "Collapse Sidebar"
     }
 }
 
