@@ -676,7 +676,7 @@ class WorkspaceViewContainer: NSView {
         case .collapsed:
             let inset = WorkspaceLayout.terminalInset
             return NSSize(
-                width: termSize.width + WorkspaceLayout.sidebarRailWidth + inset * 2,
+                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self) + inset * 2,
                 height: termSize.height + inset * 2
             )
         case .closed:
@@ -820,6 +820,21 @@ class WorkspaceViewContainer: NSView {
             }
         }
 
+        // Re-derive the collapsed rail width from the same live button
+        // frames — the rail must clear the traffic-light cluster, which can
+        // change width across macOS versions and titlebar layout passes
+        // (window attach, fullscreen enter/exit). Skipped mid-transition-
+        // animation for the same reason the sidebar resize reclamp above is:
+        // the animator drives `sidebarWidthConstraint` through intermediate
+        // values every frame, and reclamping against those would fight the
+        // open/collapse animation.
+        if sidebarMode == .collapsed && !isSidebarTransitionAnimating {
+            let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
+            if abs(sidebarWidthConstraint.constant - railWidth) > 0.5 {
+                sidebarWidthConstraint.constant = railWidth
+                widthModel.width = railWidth
+            }
+        }
     }
 
     // MARK: - Sidebar View Mode (v0 feature toggle)
@@ -909,8 +924,9 @@ class WorkspaceViewContainer: NSView {
                 sidebarWidthConstraint.animator().constant = currentSidebarWidth
                 widthModel.width = currentSidebarWidth
             case .collapsed:
-                sidebarWidthConstraint.animator().constant = WorkspaceLayout.sidebarRailWidth
-                widthModel.width = WorkspaceLayout.sidebarRailWidth
+                let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
+                sidebarWidthConstraint.animator().constant = railWidth
+                widthModel.width = railWidth
             case .closed:
                 break
             }
@@ -1359,8 +1375,9 @@ class WorkspaceViewContainer: NSView {
                 browserShadowHostTrailingConstraint.animator().constant = -inset
 
             case .collapsed:
-                sidebarWidthConstraint.animator().constant = WorkspaceLayout.sidebarRailWidth
-                widthModel.width = WorkspaceLayout.sidebarRailWidth
+                let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
+                sidebarWidthConstraint.animator().constant = railWidth
+                widthModel.width = railWidth
                 sidebarHostingView.animator().alphaValue = 1
                 shadowHostTopConstraint.animator().constant = inset
                 shadowHostLeadingToSidebar.animator().constant = inset
@@ -2009,7 +2026,7 @@ class WorkspaceViewContainer: NSView {
         // All four modes show the floating card with insets — overlay floats
         // the sidebar over the same carded terminal rather than a full-bleed one.
         let hasCardInset = true
-        let initialWidth: CGFloat = isPinned ? currentSidebarWidth : (initialMode == .collapsed ? WorkspaceLayout.sidebarRailWidth : 0)
+        let initialWidth: CGFloat = isPinned ? currentSidebarWidth : (initialMode == .collapsed ? WorkspaceLayout.collapsedRailWidth(in: self) : 0)
         sidebarDragHandle.isHidden = !isPinned
 
         sidebarWidthConstraint = sidebarHostingView.widthAnchor.constraint(equalToConstant: initialWidth)

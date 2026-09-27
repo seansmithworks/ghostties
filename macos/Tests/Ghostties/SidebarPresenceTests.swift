@@ -70,4 +70,30 @@ struct SidebarPresenceTests {
         let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "Expand Sidebar")
         #expect(items.last?.label == "Expand Sidebar")
     }
+
+    // MARK: - Collapsed Rail Width Clears Traffic Lights
+
+    /// macOS 26's traffic-light cluster reaches ~78pt from the window's left
+    /// edge — wider than the original fixed 72pt rail, so the buttons
+    /// overran into the terminal card. The rail width must grow to clear
+    /// whatever the live cluster measures, with a trailing gap matching its
+    /// leading inset.
+    @Test func railWidthClearsAWideTrafficLightCluster() {
+        // Cluster spans x=20...78 (macOS 26-shaped): leading inset 20, maxX 78.
+        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 78, leadingInset: 20)
+        #expect(width == 98)
+    }
+
+    /// A cluster narrower than the floor (e.g. an older macOS layout) must
+    /// not shrink the rail below the original 72pt design width.
+    @Test func railWidthFloorsAtSeventyTwo() {
+        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 40, leadingInset: 8)
+        #expect(width == 72)
+    }
+
+    /// A cluster that lands exactly on the floor's boundary still floors at 72.
+    @Test func railWidthAtExactFloorBoundary() {
+        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 62, leadingInset: 10)
+        #expect(width == 72)
+    }
 }

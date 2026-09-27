@@ -25,8 +25,48 @@ enum WorkspaceLayout {
     static let sidebarWidth: CGFloat = 244
 
     /// Width of the collapsed icon-only rail (Flow 01, sidebar-presence §02).
-    /// Fixed — not drag-resizable, unlike `sidebarWidth`.
+    /// Not drag-resizable, unlike `sidebarWidth` — this is now a FLOOR, not
+    /// the applied width. The applied width is `collapsedRailWidth(in:)`
+    /// below, which grows this floor to clear the window's traffic-light
+    /// cluster (see that function's doc comment).
     static let sidebarRailWidth: CGFloat = 72
+
+    /// Pure width calculation for the collapsed rail: the rail must clear the
+    /// macOS traffic-light cluster, which on macOS 26 reaches ~78pt from the
+    /// window's left edge — wider than the original fixed 72pt, so the
+    /// buttons overran into the terminal card. Takes the cluster's rightmost
+    /// edge (zoom button `maxX`) and its leading inset (close button `minX`,
+    /// the gap from the window edge to the first button), both in the same
+    /// coordinate space, and returns a width that clears the cluster with a
+    /// trailing gap equal to that same leading inset — keeping the cluster
+    /// visually centered in the rail rather than jammed against its trailing
+    /// edge. Never returns less than `sidebarRailWidth`, the original design
+    /// floor, so a shrunk or unusual cluster never regresses the rail
+    /// narrower than the spec width.
+    static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat) -> CGFloat {
+        max(sidebarRailWidth, zoomButtonMaxX + leadingInset)
+    }
+
+    /// Live collapsed-rail width for the window containing `view`, derived
+    /// from the real traffic-light button frames. Callers should recompute
+    /// wherever `titlebarRowTopAnchorConstant(in:)` above is already
+    /// recomputed — window attach, fullscreen enter/exit, and titlebar
+    /// layout passes — since both derive from the same button geometry.
+    /// Returns the `sidebarRailWidth` floor before the window is on-screen
+    /// or if the buttons aren't available (mirrors
+    /// `titlebarRowTopAnchorConstant`'s guard, but returns a floor instead
+    /// of nil since a rail width is always needed, even in the fallback).
+    static func collapsedRailWidth(in view: NSView) -> CGFloat {
+        guard let win = view.window,
+              let close = win.standardWindowButton(.closeButton),
+              let zoom = win.standardWindowButton(.zoomButton),
+              close.window === win, zoom.window === win else {
+            return sidebarRailWidth
+        }
+        let closeInView = close.convert(close.bounds, to: view)
+        let zoomInView = zoom.convert(zoom.bounds, to: view)
+        return collapsedRailWidth(zoomButtonMaxX: zoomInView.maxX, leadingInset: closeInView.minX)
+    }
 
     /// Width of the task-first sidebar panel (Concept F).
     /// Wider than `sidebarWidth` to accommodate the hero row's two-line typography.
