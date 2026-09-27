@@ -77,7 +77,7 @@ private struct RailSessionRow: View {
 
 // MARK: - Rail Tray
 
-/// The 40pt-wide rounded pill holding icon buttons laid out from
+/// The vertical `SidebarTrayPill` holding icon buttons laid out from
 /// `WorkspaceViewContainer.sidebarTrayItems` (spec §02) — currently New
 /// Session and the sidebar toggle, but the layout doesn't hardcode a count.
 /// Decision 4: no account circle, since there's no account model to show
@@ -86,41 +86,13 @@ private struct RailTray: View {
     @EnvironmentObject private var coordinator: SessionCoordinator
 
     var body: some View {
-        VStack(spacing: 2) {
+        SidebarTrayPill(axis: .vertical) {
             ForEach(WorkspaceViewContainer.sidebarTrayItems(
                 container: coordinator.containerView as? WorkspaceViewContainer,
                 toggleLabel: "Expand Sidebar"
             )) { item in
-                RailIconButton(systemName: item.systemName, accessibilityLabel: item.label, action: item.action)
+                TrayIconButton(systemName: item.systemName, label: item.label, action: item.action)
             }
         }
-        .padding(4)
-        .frame(width: 40)
-        .background(
-            Capsule().fill(Color.white.opacity(0.06))
-        )
-    }
-}
-
-private struct RailIconButton: View {
-    let systemName: String
-    let accessibilityLabel: String
-    let action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 32, height: 32)
-                .background(
-                    Circle().fill(isHovered ? Color.primary.opacity(0.10) : .clear)
-                )
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .accessibilityLabel(accessibilityLabel)
     }
 }

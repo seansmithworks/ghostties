@@ -14,6 +14,65 @@ struct SidebarTrayItem: Identifiable {
     let action: () -> Void
 }
 
+/// The floating rounded pill that houses tray icon buttons — opaque, no
+/// blur: a 5% black recess in light appearance, 4% white in dark (Flow 01
+/// reference, pen-t4 frames 01/02). Shared by the expanded sidebar's
+/// horizontal bottom tray and the collapsed rail's vertical tray pill, so
+/// both are one component that only changes axis.
+struct SidebarTrayPill<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let axis: Axis
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        pillStack
+            .padding(4)
+            .background(Capsule().fill(fill))
+    }
+
+    @ViewBuilder
+    private var pillStack: some View {
+        switch axis {
+        case .horizontal:
+            HStack(spacing: 2, content: content)
+        case .vertical:
+            VStack(spacing: 2, content: content)
+        }
+    }
+
+    private var fill: Color {
+        colorScheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.05)
+    }
+}
+
+/// A 32×32 icon-only button hosted inside `SidebarTrayPill`. The pill has
+/// no visible text, so the item's title carries over as a tooltip and an
+/// accessibility label instead.
+struct TrayIconButton: View {
+    let systemName: String
+    let label: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle().fill(isHovered ? Color.primary.opacity(0.10) : .clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(label)
+        .accessibilityLabel(label)
+    }
+}
+
 extension WorkspaceViewContainer {
     /// Builds the ordered tray item list shared by the expanded tray and the
     /// collapsed rail's tray pill.
