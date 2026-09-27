@@ -153,12 +153,6 @@ enum WorkspaceLayout {
     /// Chrome background (dark mode). See `chromeBackgroundLight`.
     static let chromeBackgroundDark = NSColor(white: 0.14, alpha: 1)
 
-    /// Fill for the Flow 01 (sidebar-presence) reveal-overlay panel and
-    /// collapsed rail's window-shell chrome — `#1c1c1c`, a literal spec
-    /// value distinct from `chromeBackgroundDark` (see
-    /// `flow-01-sidebar-presence.md` "Window shell (every state)").
-    static let sidebarPresenceChromeFill = NSColor(white: 0x1c / 255.0, alpha: 1)
-
     /// Canvas background (light mode). Covers the terminal card background
     /// (internal header strip + card rim around the GPU-rendered terminal).
     /// Slightly lighter and cooler than chrome — the inner of the two
