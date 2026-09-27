@@ -981,6 +981,20 @@ class WorkspaceViewContainer: NSView {
         transitionTo(Self.nextSidebarMode(after: sidebarMode))
     }
 
+    /// Full close ↔ reopen, bound to Cmd+Shift+S. Any visible mode (pinned,
+    /// collapsed, overlay) goes to `.closed`; `.closed` reopens to `.pinned`.
+    /// This is the toggle's only remaining path back into (and out of)
+    /// `.closed` now that `toggleSidebar()`/`nextSidebarMode(after:)` cycle
+    /// pinned ↔ collapsed and no longer visit it — the hot-zone reveal
+    /// overlay path is unaffected.
+    static func nextCloseToggleMode(after mode: SidebarMode) -> SidebarMode {
+        mode == .closed ? .pinned : .closed
+    }
+
+    @objc func toggleSidebarFullyClosed() {
+        transitionTo(Self.nextCloseToggleMode(after: sidebarMode))
+    }
+
     // MARK: - Browser Toggle
 
     /// Toggle browser panel visibility via keyboard shortcut (Cmd+B) or globe button.

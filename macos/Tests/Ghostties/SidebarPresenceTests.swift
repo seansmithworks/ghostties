@@ -50,6 +50,22 @@ struct SidebarPresenceTests {
         }
     }
 
+    // MARK: - Full Close ↔ Reopen (Cmd+Shift+S)
+
+    /// Any visible mode goes straight to `.closed` on Cmd+Shift+S, the
+    /// toggle `nextSidebarMode(after:)` no longer reaches.
+    @Test func closeToggleClosesFromAnyVisibleMode() {
+        for start: SidebarMode in [.pinned, .collapsed, .overlay] {
+            #expect(WorkspaceViewContainer.nextCloseToggleMode(after: start) == .closed)
+        }
+    }
+
+    /// `.closed` reopens to `.pinned`, mirroring the hot-zone → overlay →
+    /// promote-to-pinned path's destination.
+    @Test func closeToggleReopensClosedToPinned() {
+        #expect(WorkspaceViewContainer.nextCloseToggleMode(after: .closed) == .pinned)
+    }
+
     // MARK: - Tray Items — Single Source of Truth
 
     /// `sidebarTrayItems` is the one ordered list both `SidebarBottomTray`

@@ -707,25 +707,30 @@ class AppDelegate: NSObject,
         // Find the View menu by locating an item we know is there.
         guard let viewMenu = menuToggleFullScreen?.menu else { return }
 
-        // "Toggle Sidebar" — Cmd+Shift+E
-        let sidebarItem = NSMenuItem(
-            title: "Toggle Sidebar",
-            action: #selector(TerminalController.toggleWorkspaceSidebar(_:)),
-            keyEquivalent: "e"
-        )
-        sidebarItem.keyEquivalentModifierMask = [.command, .shift]
-        sidebarItem.setImageIfDesired(systemSymbolName: "sidebar.left")
-
-        // Hidden duplicate: Cmd+S also toggles the sidebar (Dia Browser convention).
+        // "Toggle Sidebar" — Cmd+S (full width ↔ rail; Dia Browser convention).
         // Terminals have no Save action, so this shortcut is safe to claim.
-        let sidebarItemCmdS = NSMenuItem(
+        // Formerly Cmd+Shift+E with a hidden Cmd+S duplicate for the same
+        // action — collapsed to the one visible shortcut (Flow 01 review);
+        // Cmd+Shift+E itself is unclaimed, not reassigned.
+        let sidebarItem = NSMenuItem(
             title: "Toggle Sidebar",
             action: #selector(TerminalController.toggleWorkspaceSidebar(_:)),
             keyEquivalent: "s"
         )
-        sidebarItemCmdS.keyEquivalentModifierMask = [.command]
-        sidebarItemCmdS.isHidden = true
-        sidebarItemCmdS.allowsKeyEquivalentWhenHidden = true
+        sidebarItem.keyEquivalentModifierMask = [.command]
+        sidebarItem.setImageIfDesired(systemSymbolName: "sidebar.left")
+
+        // "Close Sidebar" — Cmd+Shift+S: full close ↔ reopen. Any visible
+        // mode (pinned/collapsed/overlay) goes to `.closed`; `.closed`
+        // reopens to `.pinned`. The hot-zone reveal from `.closed` is
+        // unaffected.
+        let sidebarCloseItem = NSMenuItem(
+            title: "Close Sidebar",
+            action: #selector(TerminalController.toggleWorkspaceSidebarFullyClosed(_:)),
+            keyEquivalent: "s"
+        )
+        sidebarCloseItem.keyEquivalentModifierMask = [.command, .shift]
+        sidebarCloseItem.setImageIfDesired(systemSymbolName: "sidebar.left")
 
         // "Toggle Browser" — Cmd+B
         let browserItem = NSMenuItem(
@@ -830,7 +835,7 @@ class AppDelegate: NSObject,
 
         // Insert workspace group at the top of the View menu.
         viewMenu.insertItem(sidebarItem, at: 0)
-        viewMenu.insertItem(sidebarItemCmdS, at: 1)
+        viewMenu.insertItem(sidebarCloseItem, at: 1)
         viewMenu.insertItem(browserItem, at: 2)
         viewMenu.insertItem(nextItem, at: 3)
         viewMenu.insertItem(prevItem, at: 4)
