@@ -1364,10 +1364,13 @@ class WorkspaceViewContainer: NSView {
                     shadowHostTrailingConstraint.animator().constant = -inset
                 }
                 shadowHostBottomConstraint.animator().constant = -inset
-                terminalTopConstraint.animator().constant = WorkspaceLayout.terminalTitleBarHeight
-                titleLabel.animator().alphaValue = 1
-                sidebarToggleButton.animator().alphaValue = 1
-                browserToggleButton.animator().alphaValue = 1
+                // Reference states 01/02: no terminal-card top bar — no
+                // header band, no floating toggle/globe buttons. The sidebar
+                // toggle lives in the tray; the globe is reachable via Cmd+B.
+                terminalTopConstraint.animator().constant = 0
+                titleLabel.animator().alphaValue = 0
+                sidebarToggleButton.animator().alphaValue = 0
+                browserToggleButton.animator().alphaValue = 0
                 sidebarOverlayBackground.animator().alphaValue = 0
                 // Browser insets match terminal.
                 browserShadowHostTopConstraint.animator().constant = inset
@@ -1385,10 +1388,11 @@ class WorkspaceViewContainer: NSView {
                     shadowHostTrailingConstraint.animator().constant = -inset
                 }
                 shadowHostBottomConstraint.animator().constant = -inset
-                terminalTopConstraint.animator().constant = WorkspaceLayout.terminalTitleBarHeight
-                titleLabel.animator().alphaValue = 1
-                sidebarToggleButton.animator().alphaValue = 1
-                browserToggleButton.animator().alphaValue = 1
+                // Reference states 01/02: no terminal-card top bar (see .pinned above).
+                terminalTopConstraint.animator().constant = 0
+                titleLabel.animator().alphaValue = 0
+                sidebarToggleButton.animator().alphaValue = 0
+                browserToggleButton.animator().alphaValue = 0
                 sidebarOverlayBackground.animator().alphaValue = 0
                 // Browser insets match terminal.
                 browserShadowHostTopConstraint.animator().constant = inset
@@ -2065,15 +2069,11 @@ class WorkspaceViewContainer: NSView {
         shadowHostLeadingToSidebar.isActive = occupiesSpace
         shadowHostLeadingToSuperview.isActive = !occupiesSpace
 
-        // Terminal top offset inside the shadow host — reserves title bar space
-        // when pinned or closed (those two card modes show title + toggle
-        // button). Overlay is carded now too, but keeps its title row hidden
-        // (unchanged from before this pass), so it's keyed on mode, not
-        // `hasCardInset`.
-        let titlebarInset: CGFloat = (initialMode != .overlay && initialMode != .closed)
-            ? WorkspaceLayout.terminalTitleBarHeight : 0
+        // Terminal top offset inside the shadow host. Reference states 01-04
+        // all show no terminal-card top bar, so every mode starts at 0 —
+        // terminal content begins at the card's top inset directly.
         terminalTopConstraint = terminalContainer.topAnchor.constraint(
-            equalTo: terminalShadowHost.topAnchor, constant: titlebarInset)
+            equalTo: terminalShadowHost.topAnchor, constant: 0)
 
         // 22 is the initial guess before the window appears (breathingRoomBelowChrome is now 0);
         // updated each layout() pass from the live close-button frame.
@@ -2211,16 +2211,14 @@ class WorkspaceViewContainer: NSView {
         // Background material is only visible in overlay (floating hover) mode.
         // In pinned mode the sidebar is transparent; in closed mode it's hidden entirely.
         backgroundEffectView.isHidden = true
+        // Reference states 01-04: no terminal-card top bar in any mode — the
+        // sidebar toggle lives in the tray, the globe is reachable via Cmd+B.
+        titleLabel.alphaValue = 0
+        sidebarToggleButton.alphaValue = 0
+        browserToggleButton.alphaValue = 0
         if initialMode == .closed {
-            // Spec §03: no chrome at all — no header, no floating buttons.
+            // Spec §03: no chrome at all — sidebar itself is hidden too.
             sidebarHostingView.alphaValue = 0
-            titleLabel.alphaValue = 0
-            sidebarToggleButton.alphaValue = 0
-            browserToggleButton.alphaValue = 0
-        } else if initialMode == .overlay {
-            titleLabel.alphaValue = 0
-            sidebarToggleButton.alphaValue = 0
-            browserToggleButton.alphaValue = 0
         }
 
         // Dismiss the composer overlay's hosting view whenever the composer
