@@ -938,12 +938,15 @@ class WorkspaceViewContainer: NSView {
     // MARK: - Sidebar State Machine
 
     /// Toggle sidebar via keyboard shortcut (Cmd+Shift+E).
-    /// Cycles `pinned → collapsed → closed → pinned` (Flow 01, sidebar-presence
-    /// decision 1) — one control walks all three persistent widths. The 24pt
-    /// hot zone at the window's left edge is the only way back from closed
-    /// (decision 2: no rail hover-reveal). Overlay isn't part of the cycle —
-    /// it's a transient hover state, not one of the persisted widths — so the
-    /// toggle promotes it straight to pinned, same as before Flow 01.
+    /// Flips `pinned ↔ collapsed` (Sean, sidebar-presence review) — the
+    /// toggle no longer walks all the way to fully closed; it goes from full
+    /// width straight to the narrow rail. `closed` is left in the model
+    /// (persistence, the hot zone, and the overlay reveal all still work),
+    /// but the toggle can no longer reach or leave it — a persisted `closed`
+    /// state only exits via the hot zone → overlay → promote-to-pinned path.
+    /// Overlay isn't part of the cycle — it's a transient hover state, not
+    /// one of the persisted widths — so the toggle promotes it straight to
+    /// pinned, same as before Flow 01.
     ///
     /// Extracted to a testable static function, same pattern as
     /// `newSessionOpensComposer(in:)` above — the cycle order is precisely
@@ -952,7 +955,7 @@ class WorkspaceViewContainer: NSView {
     static func nextSidebarMode(after mode: SidebarMode) -> SidebarMode {
         switch mode {
         case .pinned:    return .collapsed
-        case .collapsed: return .closed
+        case .collapsed: return .pinned
         case .closed:    return .pinned
         case .overlay:   return .pinned
         }
@@ -1972,10 +1975,13 @@ class WorkspaceViewContainer: NSView {
         backgroundEffectView.layer?.shadowRadius = 16
         backgroundEffectView.layer?.shadowOffset = CGSize(width: 12, height: 0)
 
-        // Opaque panel content: fill `#1c1c1c`, radius 18, 1pt stroke
-        // `#00000026`, clipped to the rounded rect.
+        // Opaque panel content: fills with the focused terminal's card
+        // background (same source as `cardBackgroundCGColor`, Sean's review
+        // — light over a light terminal theme, dark over a dark one) rather
+        // than a fixed dark literal. Radius 18, 1pt stroke `#00000026`,
+        // clipped to the rounded rect.
         sidebarOverlayBackground.wantsLayer = true
-        sidebarOverlayBackground.layer?.backgroundColor = WorkspaceLayout.sidebarPresenceChromeFill.cgColor
+        sidebarOverlayBackground.layer?.backgroundColor = cardBackgroundCGColor
         sidebarOverlayBackground.layer?.cornerRadius = 18
         sidebarOverlayBackground.layer?.masksToBounds = true
         sidebarOverlayBackground.layer?.borderWidth = 1
@@ -2365,9 +2371,17 @@ class WorkspaceViewContainer: NSView {
     /// repaint with static tokens, but left in place to preserve the
     /// session-swap invalidation path with minimal churn.
     ///
-    /// No-op in overlay mode, which intentionally clears all layers to let
-    /// the vibrancy material show through.
+    /// The reveal overlay panel (`sidebarOverlayBackground`) always repaints
+    /// here too, in every mode — it needs to track the focused terminal's
+    /// theme even while hidden/inactive so it's already correct the next
+    /// time overlay mode shows it, matching light-terminal/light-panel,
+    /// dark-terminal/dark-panel (Sean's review).
+    ///
+    /// The rest of this function no-ops in overlay mode, which intentionally
+    /// clears the card/canvas layers to let the vibrancy material show
+    /// through.
     private func applyChromeColor() {
+        sidebarOverlayBackground.layer?.backgroundColor = cardBackgroundCGColor
         guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
         terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
         browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
