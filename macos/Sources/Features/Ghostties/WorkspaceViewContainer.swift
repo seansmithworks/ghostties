@@ -251,64 +251,6 @@ class WorkspaceViewContainer: NSView {
         return view
     }()
 
-    /// Session name centered at the top of the terminal card (titlebar region).
-    private let titleLabel: NSTextField = {
-        let label = NSTextField(labelWithString: "")
-        label.font = .systemFont(ofSize: 11, weight: .regular)
-        label.textColor = .secondaryLabelColor
-        label.alignment = .center
-        label.translatesAutoresizingMaskIntoConstraints = false
-        return label
-    }()
-
-    /// Sidebar toggle button in the terminal card's titlebar region (top-left).
-    /// Placed here (not in the sidebar) so it's accessible when the sidebar is closed.
-    private lazy var sidebarToggleButton: NSButton = {
-        let button = NSButton()
-        button.image = NSImage(
-            systemSymbolName: "sidebar.left",
-            accessibilityDescription: "Toggle Sidebar"
-        )
-        button.symbolConfiguration = NSImage.SymbolConfiguration(
-            pointSize: 13, weight: .medium
-        )
-        button.bezelStyle = .accessoryBarAction
-        button.isBordered = false
-        button.imagePosition = .imageOnly
-        button.contentTintColor = .secondaryLabelColor
-        button.target = self
-        button.action = #selector(toggleSidebar)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.setAccessibilityIdentifier("sidebarToggleButton")
-        button.setContentHuggingPriority(.required, for: .horizontal)
-        button.setContentHuggingPriority(.required, for: .vertical)
-        return button
-    }()
-
-    /// Browser toggle button in the terminal card's titlebar region (top-right).
-    /// Globe icon — tinted with accent color when browser is visible.
-    private lazy var browserToggleButton: NSButton = {
-        let button = NSButton()
-        button.image = NSImage(
-            systemSymbolName: "globe",
-            accessibilityDescription: "Toggle Browser"
-        )
-        button.symbolConfiguration = NSImage.SymbolConfiguration(
-            pointSize: 13, weight: .medium
-        )
-        button.bezelStyle = .accessoryBarAction
-        button.isBordered = false
-        button.imagePosition = .imageOnly
-        button.contentTintColor = .secondaryLabelColor
-        button.target = self
-        button.action = #selector(toggleBrowser)
-        button.translatesAutoresizingMaskIntoConstraints = false
-        button.setAccessibilityIdentifier("browserToggleButton")
-        button.setContentHuggingPriority(.required, for: .horizontal)
-        button.setContentHuggingPriority(.required, for: .vertical)
-        return button
-    }()
-
     /// Weak reference to the window whose fullscreen observers are currently registered.
     private weak var fullScreenObservedWindow: NSWindow?
 
@@ -327,10 +269,13 @@ class WorkspaceViewContainer: NSView {
     /// Current sidebar state — always kept in sync with `WorkspaceStore.shared.sidebarMode`.
     private var sidebarMode: SidebarMode = .pinned
 
-    /// Stored constraint for the sidebar toggle button's vertical position.
-    /// Updated in layout() from the live close-button frame so the toolbar row
-    /// survives macOS version bumps and upstream titlebar refactors.
-    private var sidebarToggleCenterYConstraint: NSLayoutConstraint!
+    /// Last published value of `WorkspaceStore.shared.toolbarRowTopAnchorConstant`.
+    /// Updated in layout() from the live close-button frame so the SwiftUI
+    /// sidebar's own toolbar row (the "+" button) survives macOS version
+    /// bumps and upstream titlebar refactors. There's no longer an AppKit
+    /// toggle button of our own to anchor to (Flow 01 removed the
+    /// terminal-card top bar) — this constant only feeds the publish below.
+    private var lastPublishedToolbarRowTopAnchorConstant: CGFloat = 22
 
     /// True while a sidebar mode-transition animation (`transitionTo` or
     /// `sidebarViewModeChanged`) is in flight. `layout()`'s resize reclamp
@@ -811,8 +756,8 @@ class WorkspaceViewContainer: NSView {
         // Re-derive toolbar row position from live close-button frame.
         // This survives macOS version bumps and upstream titlebar refactors.
         if let constant = WorkspaceLayout.titlebarRowTopAnchorConstant(in: self) {
-            if abs(sidebarToggleCenterYConstraint.constant - constant) > 0.5 {
-                sidebarToggleCenterYConstraint.constant = constant
+            if abs(lastPublishedToolbarRowTopAnchorConstant - constant) > 0.5 {
+                lastPublishedToolbarRowTopAnchorConstant = constant
             }
             // Publish to SwiftUI sidebar so the + button stays in sync.
             if abs(WorkspaceStore.shared.toolbarRowTopAnchorConstant - constant) > 0.5 {
@@ -1045,11 +990,6 @@ class WorkspaceViewContainer: NSView {
 
         // Show/hide the drag handle with the browser panel.
         browserDragHandle.isHidden = !visible
-
-        // Update globe button tint: accent color when open, secondary when closed.
-        browserToggleButton.contentTintColor = visible
-            ? WorkspaceLayout.waitingTerracottaNS
-            : .secondaryLabelColor
 
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         NSAnimationContext.runAnimationGroup { context in
@@ -1382,9 +1322,6 @@ class WorkspaceViewContainer: NSView {
                 // header band, no floating toggle/globe buttons. The sidebar
                 // toggle lives in the tray; the globe is reachable via Cmd+B.
                 terminalTopConstraint.animator().constant = 0
-                titleLabel.animator().alphaValue = 0
-                sidebarToggleButton.animator().alphaValue = 0
-                browserToggleButton.animator().alphaValue = 0
                 sidebarOverlayBackground.animator().alphaValue = 0
                 // Browser insets match terminal.
                 browserShadowHostTopConstraint.animator().constant = inset
@@ -1404,9 +1341,6 @@ class WorkspaceViewContainer: NSView {
                 shadowHostBottomConstraint.animator().constant = -inset
                 // Reference states 01/02: no terminal-card top bar (see .pinned above).
                 terminalTopConstraint.animator().constant = 0
-                titleLabel.animator().alphaValue = 0
-                sidebarToggleButton.animator().alphaValue = 0
-                browserToggleButton.animator().alphaValue = 0
                 sidebarOverlayBackground.animator().alphaValue = 0
                 // Browser insets match terminal.
                 browserShadowHostTopConstraint.animator().constant = inset
@@ -1427,9 +1361,6 @@ class WorkspaceViewContainer: NSView {
                 }
                 shadowHostBottomConstraint.animator().constant = 0
                 terminalTopConstraint.animator().constant = 0
-                titleLabel.animator().alphaValue = 0
-                sidebarToggleButton.animator().alphaValue = 0
-                browserToggleButton.animator().alphaValue = 0
                 sidebarOverlayBackground.animator().alphaValue = 0
                 // Browser insets match terminal (full bleed).
                 browserShadowHostTopConstraint.animator().constant = 0
@@ -1442,7 +1373,6 @@ class WorkspaceViewContainer: NSView {
                     shadowHostTrailingToBrowser.isActive = false
                     shadowHostTrailingConstraint.isActive = true
                     isBrowserVisible = false
-                    browserToggleButton.contentTintColor = .secondaryLabelColor
                     browserDragHandle.isHidden = true
                 }
                 sidebarWidthConstraint.animator().constant = currentSidebarWidth
@@ -1455,11 +1385,7 @@ class WorkspaceViewContainer: NSView {
                 shadowHostLeadingToSuperview.animator().constant = inset
                 shadowHostTrailingConstraint.animator().constant = -inset
                 shadowHostBottomConstraint.animator().constant = -inset
-                // Title row stays hidden in overlay — unchanged from before.
                 terminalTopConstraint.animator().constant = 0
-                titleLabel.animator().alphaValue = 0
-                sidebarToggleButton.animator().alphaValue = 0
-                browserToggleButton.animator().alphaValue = 0
                 sidebarOverlayBackground.animator().alphaValue = 1
                 // Collapse browser in overlay mode.
                 browserWidthConstraint.animator().constant = 0
@@ -2024,9 +1950,6 @@ class WorkspaceViewContainer: NSView {
         // Terminal lives inside the shadow host. The host carries the shadow;
         // the terminal clips its own corners via masksToBounds.
         terminalShadowHost.addSubview(terminalContainer)
-        terminalShadowHost.addSubview(titleLabel)
-        terminalShadowHost.addSubview(sidebarToggleButton)
-        terminalShadowHost.addSubview(browserToggleButton)
         terminalContainer.translatesAutoresizingMaskIntoConstraints = false
 
         // Browser panel lives inside browser shadow host.
@@ -2088,11 +2011,6 @@ class WorkspaceViewContainer: NSView {
         terminalTopConstraint = terminalContainer.topAnchor.constraint(
             equalTo: terminalShadowHost.topAnchor, constant: 0)
 
-        // 22 is the initial guess before the window appears (breathingRoomBelowChrome is now 0);
-        // updated each layout() pass from the live close-button frame.
-        sidebarToggleCenterYConstraint = sidebarToggleButton.centerYAnchor
-            .constraint(equalTo: topAnchor, constant: 22)
-
         NSLayoutConstraint.activate([
             // Flow 01 §04: the overlay panel is inset 4pt from the window's
             // top/left/bottom edges (its trailing edge isn't a window edge —
@@ -2123,28 +2041,6 @@ class WorkspaceViewContainer: NSView {
             terminalContainer.leadingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
             terminalContainer.trailingAnchor.constraint(equalTo: terminalShadowHost.trailingAnchor),
             terminalContainer.bottomAnchor.constraint(equalTo: terminalShadowHost.bottomAnchor),
-
-            // Sidebar toggle button — anchored to window top, not the terminal card.
-            // The terminal card (terminalShadowHost) sits ~387pt below the window top in the
-            // full layout, so terminalShadowHost.topAnchor is the wrong reference. Anchor
-            // directly to self.topAnchor + constant so the toggle sits on the same horizontal
-            // row as the traffic lights. The constant is updated from the live close-button
-            // frame in layout() — 22 is just the initial guess before the window appears.
-            sidebarToggleButton.leadingAnchor.constraint(
-                equalTo: terminalShadowHost.leadingAnchor, constant: 8),
-            sidebarToggleCenterYConstraint,
-
-            // Browser toggle button at top-right of the terminal card titlebar.
-            browserToggleButton.trailingAnchor.constraint(
-                equalTo: terminalShadowHost.trailingAnchor, constant: -8),
-            browserToggleButton.centerYAnchor.constraint(
-                equalTo: sidebarToggleButton.centerYAnchor),
-
-            // Title label centered in the titlebar region, vertically aligned
-            // with the sidebar toggle button.
-            titleLabel.centerXAnchor.constraint(equalTo: terminalShadowHost.centerXAnchor),
-            titleLabel.centerYAnchor.constraint(
-                equalTo: sidebarToggleButton.centerYAnchor),
 
             // Browser shadow host — positioned to the right of the terminal.
             browserShadowHostTopConstraint,
@@ -2224,11 +2120,6 @@ class WorkspaceViewContainer: NSView {
         // Background material is only visible in overlay (floating hover) mode.
         // In pinned mode the sidebar is transparent; in closed mode it's hidden entirely.
         backgroundEffectView.isHidden = true
-        // Reference states 01-04: no terminal-card top bar in any mode — the
-        // sidebar toggle lives in the tray, the globe is reachable via Cmd+B.
-        titleLabel.alphaValue = 0
-        sidebarToggleButton.alphaValue = 0
-        browserToggleButton.alphaValue = 0
         if initialMode == .closed {
             // Spec §03: no chrome at all — sidebar itself is hidden too.
             sidebarHostingView.alphaValue = 0
@@ -2304,22 +2195,6 @@ class WorkspaceViewContainer: NSView {
                     || SessionComposerStore.shared.owningWindow === self.window
                 else { return }
                 self.dismissComposerOverlayIfPresented()
-            }
-            .store(in: &cancellables)
-
-        // Bind title label to the active session name.
-        coordinator.$activeSessionId
-            .combineLatest(WorkspaceStore.shared.$sessions)
-            .map { activeId, sessions -> String in
-                guard let id = activeId,
-                      let session = sessions.first(where: { $0.id == id })
-                else { return "" }
-                return session.name
-            }
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] name in
-                self?.titleLabel.stringValue = name
             }
             .store(in: &cancellables)
 
