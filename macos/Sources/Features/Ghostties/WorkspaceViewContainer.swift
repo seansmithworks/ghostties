@@ -19,8 +19,23 @@ import GhosttiesCore
 final class SidebarWidthModel: ObservableObject {
     @Published var width: CGFloat
 
-    init(width: CGFloat) {
+    /// Flow 05 content choreography (sidebar-presence): which "presentation"
+    /// the pinned⇄collapsed row content should render toward — `true` once a
+    /// collapse has landed/is landing, `false` once an expand has
+    /// landed/is landing. Written by `WorkspaceViewContainer.transitionTo`
+    /// inside the SAME `withAnimation` block that drives the SwiftUI-side
+    /// cross-fade, so `RecentsRowView`/the transitional ZStack observe a
+    /// SINGLE change and let SwiftUI's own animation system interpolate the
+    /// resulting opacity/offset modifiers — never driven by a hand-rolled
+    /// per-frame progress value. Read unconditionally by `RecentsRowView`
+    /// (injected into every sidebar content tree, not just the transitional
+    /// one) so steady-state rendering (not mid-transition) still resolves to
+    /// the correct static appearance for whichever mode is settled.
+    @Published var isCollapsedPresentation: Bool
+
+    init(width: CGFloat, isCollapsedPresentation: Bool = false) {
         self.width = width
+        self.isCollapsedPresentation = isCollapsedPresentation
     }
 }
 
@@ -52,6 +67,29 @@ private struct SidebarWidthFrame<Content: View>: View {
         content
             .frame(width: model.width)
             .frame(maxHeight: .infinity)
+    }
+}
+
+/// Flow 05 (sidebar-presence) transitional content: cross-fades between the
+/// full sidebar content and the collapsed rail, both mounted at once, driven
+/// by `model.isCollapsedPresentation`. `@ObservedObject`, same pattern as
+/// `SidebarWidthFrame` above — this is the ONE view in the pair that
+/// re-evaluates `body` when the model publishes, so the opacity values below
+/// are a live binding, not a value snapshotted once at construction time (the
+/// mistake this struct exists to avoid: reading `model.isCollapsedPresentation`
+/// directly inside `WorkspaceViewContainer.applyCollapseCrossfadeSidebarView`,
+/// a plain function, would bake a STATIC opacity into the view graph that
+/// never updates on a later `withAnimation` write).
+private struct SidebarCollapseCrossfade: View {
+    @ObservedObject var model: SidebarWidthModel
+    let full: AnyView
+    let rail: AnyView
+
+    var body: some View {
+        ZStack {
+            full.opacity(model.isCollapsedPresentation ? 0 : 1)
+            rail.opacity(model.isCollapsedPresentation ? 1 : 0)
+        }
     }
 }
 
@@ -306,6 +344,16 @@ class WorkspaceViewContainer: NSView {
     /// of old/new geometry at rest. This is the mechanism behind the
     /// traffic-lights-over-terminal / narrow-card glitch caught in review.
     private var sidebarTransitionGeneration = 0
+
+    /// True while `applyCollapseCrossfadeSidebarView` has both
+    /// `fullSidebarContent()` and `railSidebarContent()` mounted at once
+    /// (Flow 05's pinned⇄collapsed cross-fade). Cleared by `transitionTo`'s
+    /// completion handler, which calls `applySidebarView()` to settle back
+    /// down to the cheap single-tree steady state. Guards
+    /// `applyCollapseCrossfadeSidebarView` against rebuilding
+    /// `hostingView.rootView` a second time on a rapid re-toggle mid-flight
+    /// — see that method's doc comment.
+    private var isCollapseCrossfadeHosted = false
 
     /// Stored constraints for animating sidebar show/hide and terminal insets.
     private var sidebarWidthConstraint: NSLayoutConstraint!
@@ -848,15 +896,40 @@ class WorkspaceViewContainer: NSView {
         // view mode (project-first/task-first) is otherwise active — it's a
         // width state, not a third view mode, so it takes priority here.
         if sidebarMode == .collapsed {
-            let content = SidebarRailView()
-                .environmentObject(WorkspaceStore.shared)
-                .environmentObject(coordinator)
-                .ignoresSafeArea(.container, edges: .top)
-            let view = SidebarWidthFrame(model: widthModel, content: content)
-            hostingView.rootView = AnyView(view)
+            hostingView.rootView = railSidebarContent()
             return
         }
 
+        hostingView.rootView = fullSidebarContent()
+    }
+
+    /// The collapsed rail's content (Flow 01, sidebar-presence §02),
+    /// extracted from `applySidebarView()` so the Flow 05 transitional
+    /// cross-fade (`applyCollapseCrossfadeSidebarView`) can mount the same
+    /// content alongside `fullSidebarContent()` during a pinned⇄collapsed
+    /// transition, instead of `applySidebarView()`'s instant single-tree
+    /// swap.
+    private func railSidebarContent() -> AnyView {
+        let content = SidebarRailView()
+            .environmentObject(WorkspaceStore.shared)
+            .environmentObject(coordinator)
+            .environmentObject(widthModel)
+            .ignoresSafeArea(.container, edges: .top)
+        return AnyView(SidebarWidthFrame(model: widthModel, content: content))
+    }
+
+    /// The pinned sidebar's content — whichever view mode (project-first/
+    /// task-first) is currently selected. Extracted from `applySidebarView()`
+    /// for the same reason as `railSidebarContent()` above: the Flow 05
+    /// transitional cross-fade needs to mount this alongside the rail, not
+    /// swap it out for the rail instantly.
+    ///
+    /// `.environmentObject(widthModel)` is injected here (new — it wasn't
+    /// needed before Flow 05) so `RecentsRowView` can read
+    /// `widthModel.isCollapsedPresentation` and run its own label-fade/
+    /// glyph-travel choreography without threading a new binding through
+    /// `WorkspaceSidebarView` → `RecentsListView` → `RecentsRowView`.
+    private func fullSidebarContent() -> AnyView {
         let mode = currentSidebarViewMode
         if mode == "taskFirst" {
             let content = VStack(spacing: 0) {
@@ -885,11 +958,12 @@ class WorkspaceViewContainer: NSView {
                 .environmentObject(coordinator)
                 .environmentObject(WorkspaceStore.shared)
                 .environmentObject(sessionDraftStore)
-            hostingView.rootView = AnyView(view)
+            return AnyView(view)
         } else {
             let content = WorkspaceSidebarView()
                 .environmentObject(WorkspaceStore.shared)
                 .environmentObject(coordinator)
+                .environmentObject(widthModel)
                 .ignoresSafeArea(.container, edges: .top)
             // Pin to a concrete width via `SidebarWidthFrame` so the nested
             // LazyVStack inside WorkspaceSidebarView receives a definite
@@ -900,11 +974,70 @@ class WorkspaceViewContainer: NSView {
             // `widthModel` so the user-resizable drag handle continues to
             // work without rebuilding this tree on every tick.
             let view = SidebarWidthFrame(model: widthModel, content: content)
+            return AnyView(view)
+        }
+    }
+
+    /// Flow 05 (sidebar-presence): mounts BOTH `fullSidebarContent()` and
+    /// `railSidebarContent()` at once, cross-fading between them via
+    /// `widthModel.isCollapsedPresentation`, instead of `applySidebarView()`'s
+    /// instant single-tree swap — the fix for "content swaps INSTANTLY"
+    /// between the expanded list and the rail. Only used for the
+    /// `.pinned`⇄`.collapsed` pair `transitionTo` names; every other pair
+    /// (anything through `.closed`/`.overlay`) keeps calling
+    /// `applySidebarView()` directly, unchanged.
+    ///
+    /// Mounted ONLY for the duration of the transition — `transitionTo`'s
+    /// completion handler calls `applySidebarView()` to collapse back down
+    /// to the cheap single-tree steady state once settled, so the full
+    /// (ScrollView + drag/drop + sections) content tree is never kept alive
+    /// forever alongside the rail (see `SidebarWidthModel`'s doc comment on
+    /// the render-cost history this file already guards against).
+    ///
+    /// Safe to call again mid-transition (a second toggle before the first
+    /// settles): if the cross-fade is already hosted, this only updates
+    /// `widthModel.isCollapsedPresentation`'s target inside a fresh
+    /// `withAnimation` — it does NOT rebuild `hostingView.rootView` a second
+    /// time, so the in-flight SwiftUI animation retargets smoothly from
+    /// wherever it currently sits (SwiftUI's own interruptible-transition
+    /// behavior — see the `Animation`s in `RecentsRowView`), instead of
+    /// snapping and replaying.
+    private func applyCollapseCrossfadeSidebarView(previousMode: SidebarMode, newMode: SidebarMode, timing: WorkspaceLayout.SidebarTransitionTiming, reduceMotion: Bool) {
+        guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
+        let targetIsCollapsed = newMode == .collapsed
+
+        if !isCollapseCrossfadeHosted {
+            let view = SidebarCollapseCrossfade(
+                model: widthModel,
+                full: fullSidebarContent(),
+                rail: railSidebarContent()
+            )
             hostingView.rootView = AnyView(view)
+            isCollapseCrossfadeHosted = true
+            // Starting presentation is whatever mode we're leaving — set
+            // directly (not animated) so the cross-fade animates FROM the
+            // correct starting opacities, not from whatever the model was
+            // last left at.
+            widthModel.isCollapsedPresentation = previousMode == .collapsed
+        }
+
+        let animation = reduceMotion
+            ? Animation.easeInOut(duration: WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: true, timing: timing))
+            : WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
+        withAnimation(animation) {
+            widthModel.isCollapsedPresentation = targetIsCollapsed
         }
     }
 
     @objc private func sidebarViewModeChanged() {
+        // If a Flow 05 pinned⇄collapsed cross-fade happened to be mid-flight
+        // (task-first/project-first toggled while the sidebar was also
+        // transitioning), `applySidebarView()` below replaces
+        // `hostingView.rootView` with a plain single-tree view for the new
+        // mode, abandoning the cross-fade — clear the flag here too, or the
+        // NEXT collapse-pair transition would wrongly believe a cross-fade
+        // is already hosted and skip remounting it.
+        isCollapseCrossfadeHosted = false
         applySidebarView()
 
         // Update width constraint + intrinsic size to reflect the new mode's
@@ -1332,9 +1465,29 @@ class WorkspaceViewContainer: NSView {
 
         let inset = WorkspaceLayout.terminalInset
 
-        // Content differs by mode (rail vs. full sidebar) — mount it before
-        // the geometry animates so the swap isn't visible mid-transition.
-        applySidebarView()
+        // Content differs by mode (rail vs. full sidebar). The pinned⇄
+        // collapsed pair — the ONLY pair Flow 05's content choreography
+        // covers — cross-fades both trees together instead of swapping
+        // instantly (see `applyCollapseCrossfadeSidebarView`'s doc
+        // comment); the timing/reduceMotion args mirror what's computed
+        // for the AppKit animation just below, so both stay in lockstep.
+        // Every other pair (anything through `.closed`/`.overlay`) keeps
+        // the original instant single-tree mount — the brief's "reveal
+        // overlay keeps its current animation."
+        let isCollapsePair = (previousMode == .pinned && newMode == .collapsed)
+            || (previousMode == .collapsed && newMode == .pinned)
+        if isCollapsePair {
+            let timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode)
+            applyCollapseCrossfadeSidebarView(
+                previousMode: previousMode,
+                newMode: newMode,
+                timing: timing,
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            )
+        } else {
+            isCollapseCrossfadeHosted = false
+            applySidebarView()
+        }
 
         // 1. Swap leading constraints before animation.
         switch newMode {
@@ -1389,6 +1542,14 @@ class WorkspaceViewContainer: NSView {
         let animationCompletion: () -> Void = { [weak self] in
             guard let self, self.sidebarTransitionGeneration == generation else { return }
             self.isSidebarTransitionAnimating = false
+            // Settle the Flow 05 collapse cross-fade (if this transition
+            // mounted one) back down to the cheap single-tree steady state —
+            // see `applyCollapseCrossfadeSidebarView`'s doc comment on why
+            // it's never left mounted permanently.
+            if self.isCollapseCrossfadeHosted {
+                self.isCollapseCrossfadeHosted = false
+                self.applySidebarView()
+            }
             // The resize reclamp in `layout()` was deferred for the duration of
             // this animation. Force one more layout pass now that the flag is
             // clear, or a window shrink that happened mid-animation may never

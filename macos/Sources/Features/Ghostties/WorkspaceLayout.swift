@@ -389,6 +389,23 @@ enum WorkspaceLayout {
                 return CAMediaTimingFunction(name: .easeInEaseOut)
             }
         }
+
+        /// SwiftUI-side equivalent of `mediaTimingFunction` above, for the
+        /// content cross-fade (`SidebarWidthModel.isCollapsedPresentation`)
+        /// that runs alongside — but independently of — the AppKit
+        /// `NSAnimationContext`/`CAMediaTimingFunction` pair that drives the
+        /// width constraint. Same control points; SwiftUI has no notion of
+        /// `CAMediaTimingFunction` to share directly.
+        var swiftUIAnimation: (Double, Double, Double, Double)? {
+            switch self {
+            case .drawer:
+                return (0.32, 0.72, 0, 1)
+            case .close:
+                return (0.23, 1, 0.32, 1)
+            case .legacyEaseInOut:
+                return nil
+            }
+        }
     }
 
     /// One row of the Flow 05 timing table: how long a `from → to` sidebar
@@ -421,6 +438,18 @@ enum WorkspaceLayout {
         }
     }
 
+    /// SwiftUI `Animation` matching a `SidebarTransitionTiming` row, for the
+    /// content cross-fade described above `SidebarTransitionCurveKind.
+    /// swiftUIAnimation`. Centralized here (not hand-built at each call
+    /// site) so the content cross-fade can never silently drift from the
+    /// AppKit width animation's own duration/curve.
+    static func sidebarTransitionSwiftUIAnimation(_ timing: SidebarTransitionTiming) -> Animation {
+        guard let points = timing.curve.swiftUIAnimation else {
+            return .easeInOut(duration: timing.duration)
+        }
+        return .timingCurve(points.0, points.1, points.2, points.3, duration: timing.duration)
+    }
+
     /// Reduced-motion crossfade duration replacing every translation-based
     /// sidebar transition (Flow 05 "Reduced motion": drop the translate,
     /// cross-fade the two widths over 120ms — gentler, never zero).
@@ -440,6 +469,85 @@ enum WorkspaceLayout {
     /// the toggle fires, so a fast mouse can't trigger the reveal overlay
     /// before the card has reached the edge.
     static let closedHotZoneActivationDelay: TimeInterval = 0.18
+
+    // MARK: - Flow 05 Content Choreography (row-level, sidebar-presence)
+
+    /// Duration of a session row's label (name/subtitle/timestamp) fade on
+    /// COLLAPSE — the canvas's "label opacity 1 → 0, window 0-100ms" row.
+    /// Runs from the very start of the collapse transition (no delay) —
+    /// labels leave first, before the panel/glyph motion below even starts.
+    static let sidebarRowLabelCollapseFadeDuration: TimeInterval = 0.1
+
+    /// Delay before a session row's glyph starts its inward travel on
+    /// COLLAPSE — the canvas's "glyph translateX +8 → +28px, window
+    /// 60-260ms" row. The panel itself is already moving at t=0 (driven by
+    /// `sidebarTransitionTiming`); the glyph's own small in-row shift waits
+    /// until the label has mostly cleared before it starts.
+    static let sidebarRowGlyphCollapseTravelDelay: TimeInterval = 0.06
+
+    /// Duration of the glyph's inward travel once it starts (260ms total
+    /// collapse window minus the 60ms delay above).
+    static let sidebarRowGlyphCollapseTravelDuration: TimeInterval = 0.2
+
+    /// Small in-row glyph shift toward the panel's centerline as a session
+    /// row collapses — NOT the full pinned→rail travel distance (that's
+    /// carried by the panel/card translateX in `sidebarTransitionTiming`).
+    /// Resting (expanded) is 0 — the row's EXISTING, unmodified trailing
+    /// position (`RecentsRowView`'s natural HStack flow) — so steady-state
+    /// layout is byte-for-byte unchanged by this choreography; traveled
+    /// carries the canvas's own +8→+28px DELTA (20pt) as a leftward nudge
+    /// once collapsed.
+    static let sidebarRowGlyphRestingOffset: CGFloat = 0
+    static let sidebarRowGlyphTraveledOffset: CGFloat = -20
+
+    /// Row corner radius on COLLAPSE — same 60-260ms window as the glyph
+    /// travel above. The canvas's own table names "8 → 16px", but this
+    /// row's EXISTING resting radius (`RecentsRowView.rowBackground`,
+    /// unrelated to Flow 05) is 6, not 8 — resting stays 6 so this
+    /// choreography never silently changes the settled row's appearance;
+    /// the traveled value keeps the canvas's ~2x ratio (6 → 12) rather than
+    /// importing its literal 16.
+    static let sidebarRowCornerRadiusResting: CGFloat = 6
+    static let sidebarRowCornerRadiusTraveled: CGFloat = 12
+
+    /// Duration a session row's glyph takes to travel back out on EXPAND —
+    /// the canvas's reopen note: "reverse at 240ms on the drawer curve...
+    /// session glyphs fade in 40ms apart, labels land 60ms after their
+    /// glyph." The glyph travels the FULL expand window; only the label is
+    /// delayed/staggered (see `expandLabelDelay(rowIndex:glyphLandDuration:)`).
+    static func sidebarRowGlyphExpandTravelDuration() -> TimeInterval {
+        sidebarTransitionTiming(from: .collapsed, to: .pinned).duration
+    }
+
+    /// Duration of a session row's label fade-in on EXPAND, once its delay
+    /// (`expandLabelDelay`) elapses. Deliberately shorter than a glyph's
+    /// travel — the label is arriving, not moving spatially — but still a
+    /// standard UI fade (Emil: tooltips/small popovers 125-200ms).
+    static let sidebarRowLabelExpandFadeDuration: TimeInterval = 0.12
+
+    /// Flow 05 expand stagger, exactly as spec'd on the canvas: "session
+    /// glyphs fade in 40ms apart, labels land 60ms after their glyph." Every
+    /// row's glyph travels the SAME full `glyphLandDuration` window (they
+    /// all start together, at t=0) — only each row's LABEL is delayed:
+    /// `glyphLandDuration` (wait for the glyph to land) + a flat 60ms, plus
+    /// 40ms more per row index (0-based, in the row's own rendered section).
+    /// Pure so the stagger schedule is directly unit-testable without
+    /// driving any real animation. Stagger is decorative — never gates
+    /// hit-testing, so rows stay clickable from frame 1 regardless of this
+    /// delay (per the canvas's own "controls are clickable from frame 1").
+    static func expandLabelDelay(rowIndex: Int, glyphLandDuration: TimeInterval) -> TimeInterval {
+        glyphLandDuration + 0.06 + 0.04 * TimeInterval(max(rowIndex, 0))
+    }
+
+    /// Whether a session row should run the Flow 05 windowed label-fade/
+    /// glyph-travel choreography above, or snap straight to its resting
+    /// state and let only the container-level cross-fade animate (Flow 05
+    /// "Reduced Motion: drop the translate entirely... layout snaps").
+    /// Pure selector, mirroring `sidebarTransitionAlphaDuration`'s pattern,
+    /// so the reduced-motion branch a row takes is covered directly.
+    static func sidebarRowChoreographyEnabled(reduceMotion: Bool) -> Bool {
+        !reduceMotion
+    }
 }
 
 // MARK: - Animation Tokens (D18)

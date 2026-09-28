@@ -692,7 +692,8 @@ struct RecentsListView: View {
             isRenameFocused: $renameFieldFocused,
             onTap: { coordinator.focusSession(id: session.id) },
             onCommitRename: { commitRename(session: session) },
-            onCancelRename: { cancelRename() }
+            onCancelRename: { cancelRename() },
+            staggerIndex: indexInSection ?? 0
         )
         .equatable()
         .contextMenu {
@@ -1147,6 +1148,7 @@ private struct SessionSectionHeader: View {
     return RecentsListView()
         .environmentObject(store)
         .environmentObject(coordinator)
+        .environmentObject(SidebarWidthModel(width: 220))
         .frame(width: 220, height: 500)
         .preferredColorScheme(.dark)
 }
@@ -1157,6 +1159,7 @@ private struct SessionSectionHeader: View {
     return RecentsListView()
         .environmentObject(store)
         .environmentObject(coordinator)
+        .environmentObject(SidebarWidthModel(width: 220))
         .frame(width: 220, height: 500)
         .preferredColorScheme(.dark)
 }

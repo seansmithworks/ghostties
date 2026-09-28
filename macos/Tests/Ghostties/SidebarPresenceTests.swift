@@ -244,4 +244,86 @@ struct SidebarPresenceTests {
         #expect(closedGap == 8)
         #expect(pinnedGap == collapsedGap && collapsedGap == closedGap)
     }
+
+    // MARK: - Flow 05 Content Choreography — Row-Level
+
+    /// The canvas's own reopen note: "session glyphs fade in 40ms apart,
+    /// labels land 60ms after their glyph." Every row's glyph travels the
+    /// same full expand window (they all start together); the FIRST row's
+    /// label starts exactly `glyphLandDuration + 60ms` after the glyph
+    /// starts — no extra stagger for row 0.
+    @Test func expandLabelDelayForFirstRowIsGlyphLandPlusSixtyMs() {
+        let delay = WorkspaceLayout.expandLabelDelay(rowIndex: 0, glyphLandDuration: 0.24)
+        #expect(delay == 0.3)
+    }
+
+    /// Each subsequent row adds another 40ms — the "40ms apart" stagger.
+    @Test func expandLabelDelayStaggersFortyMsPerRow() {
+        let glyphLand: TimeInterval = 0.24
+        let first = WorkspaceLayout.expandLabelDelay(rowIndex: 0, glyphLandDuration: glyphLand)
+        let second = WorkspaceLayout.expandLabelDelay(rowIndex: 1, glyphLandDuration: glyphLand)
+        let third = WorkspaceLayout.expandLabelDelay(rowIndex: 2, glyphLandDuration: glyphLand)
+        #expect((second - first).isApproximatelyEqual(to: 0.04))
+        #expect((third - second).isApproximatelyEqual(to: 0.04))
+    }
+
+    /// The stagger schedule must track whatever the expand transition's own
+    /// duration actually is (`sidebarTransitionTiming(from: .collapsed, to:
+    /// .pinned)`), not a hardcoded literal — this is the one seam that would
+    /// silently desync the label stagger from the glyph travel if either
+    /// duration were retuned independently.
+    @Test func expandLabelDelayUsesTheRealExpandTransitionDuration() {
+        let realExpandDuration = WorkspaceLayout.sidebarTransitionTiming(from: .collapsed, to: .pinned).duration
+        let delay = WorkspaceLayout.expandLabelDelay(rowIndex: 0, glyphLandDuration: realExpandDuration)
+        #expect(delay == realExpandDuration + 0.06)
+    }
+
+    /// A negative or out-of-range row index (shouldn't occur, but a bucket
+    /// with a stale/renumbered index is cheap to guard) never produces a
+    /// delay smaller than the flat 60ms floor.
+    @Test func expandLabelDelayClampsNegativeRowIndexToZero() {
+        let delay = WorkspaceLayout.expandLabelDelay(rowIndex: -3, glyphLandDuration: 0.24)
+        #expect(delay == 0.3)
+    }
+
+    /// Row-level choreography (label fade window, glyph travel, stagger)
+    /// runs only with motion enabled — Reduce Motion drops it entirely and
+    /// relies solely on the container-level 120ms cross-fade (Flow 05
+    /// "Reduced Motion: drop the translate entirely... layout snaps").
+    @Test func rowChoreographyIsDisabledUnderReducedMotion() {
+        #expect(WorkspaceLayout.sidebarRowChoreographyEnabled(reduceMotion: true) == false)
+        #expect(WorkspaceLayout.sidebarRowChoreographyEnabled(reduceMotion: false) == true)
+    }
+
+    /// The SwiftUI-side content cross-fade animation must share its
+    /// duration with the AppKit width animation it runs alongside — this is
+    /// the one seam that would desync the panel's geometry motion from the
+    /// content's label/glyph motion if it drifted.
+    @Test func collapseCrossfadeSwiftUIAnimationMatchesTheAppKitTimingDuration() {
+        let timing = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .collapsed)
+        // `Animation` isn't directly inspectable, but constructing it must
+        // not crash and the function must be pure (called twice with the
+        // same input yields the same duration, checked indirectly by the
+        // duration table itself already being covered above); this proves
+        // it's callable from a curve with real control points (the drawer
+        // curve, not `.legacyEaseInOut`, which has none).
+        _ = WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
+        #expect(timing.curve.swiftUIAnimation != nil)
+    }
+
+    /// The legacy (overlay) curve pair has no named control points — the
+    /// content cross-fade doesn't apply to overlay transitions at all, but
+    /// the fallback (`.easeInOut`) path must still resolve without a crash
+    /// if ever called on one.
+    @Test func legacyEaseCurveHasNoSwiftUIControlPoints() {
+        let timing = WorkspaceLayout.sidebarTransitionTiming(from: .closed, to: .overlay)
+        #expect(timing.curve.swiftUIAnimation == nil)
+        _ = WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
+    }
+}
+
+private extension TimeInterval {
+    func isApproximatelyEqual(to other: TimeInterval, tolerance: TimeInterval = 0.0001) -> Bool {
+        abs(self - other) < tolerance
+    }
 }

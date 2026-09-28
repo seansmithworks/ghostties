@@ -37,7 +37,14 @@ struct RecentsRowView: View, Equatable {
     var onCommitRename: () -> Void = {}
     var onCancelRename: () -> Void = {}
 
+    /// This row's position within its rendered section (Pinned/Active/
+    /// Inactive) — decorative only, feeds the Flow 05 expand stagger
+    /// (`WorkspaceLayout.expandLabelDelay`). Defaults to 0 so every other
+    /// call site (unaffected by the stagger) is unchanged.
+    var staggerIndex: Int = 0
+
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var widthModel: SidebarWidthModel
     @State private var isHovered = false
 
     /// Every field that affects rendered output. Deliberately excludes
@@ -51,6 +58,7 @@ struct RecentsRowView: View, Equatable {
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
+            && lhs.staggerIndex == rhs.staggerIndex
     }
 
     var body: some View {
@@ -86,6 +94,8 @@ struct RecentsRowView: View, Equatable {
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
             }
+            .opacity(labelOpacity)
+            .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
 
             Spacer(minLength: 4)
 
@@ -97,6 +107,8 @@ struct RecentsRowView: View, Equatable {
                     .font(.system(size: 10))
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .monospacedDigit()
+                    .opacity(labelOpacity)
+                    .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
             }
 
             // Per-session status glyph — pattern D, "type is the icon"
@@ -106,8 +118,16 @@ struct RecentsRowView: View, Equatable {
             // the row in a fixed icon column shared with the header icons
             // above it; that alignment purpose no longer applies here, so
             // it's sized to the glyph itself instead of that column width.
+            //
+            // Flow 05 (sidebar-presence): the small in-row inward nudge on
+            // collapse/expand — see `glyphOffsetX` — is a decorative shift,
+            // NOT the panel's own pinned→rail travel (that's carried
+            // entirely by `WorkspaceLayout.sidebarTransitionTiming`'s width
+            // animation on the container).
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind)
                 .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
+                .offset(x: glyphOffsetX)
+                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
         }
         .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
         .padding(.trailing, 10)
@@ -124,11 +144,80 @@ struct RecentsRowView: View, Equatable {
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
+    // MARK: - Flow 05 Content Choreography (sidebar-presence)
+    //
+    // `widthModel.isCollapsedPresentation` is injected into every sidebar
+    // content tree (not just the transitional pinned⇄collapsed cross-fade
+    // `WorkspaceViewContainer` mounts mid-transition), so these resolve
+    // correctly at rest too: while steady-state pinned it's always `false`,
+    // which is exactly this row's normal (label visible, glyph resting,
+    // corner radius 8) appearance — nothing below changes existing behavior
+    // outside an active transition.
+
+    private var choreographyEnabled: Bool {
+        WorkspaceLayout.sidebarRowChoreographyEnabled(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+    }
+
+    /// Label (name/subtitle/timestamp) opacity — 1 while expanded, 0 while
+    /// collapsed. Reduce Motion skips the windowed fade below and lets only
+    /// the container-level cross-fade (120ms, Flow 05 "Reduced Motion") show
+    /// the change; the label still ends at the right value, just without
+    /// this row's own animation layered on top.
+    private var labelOpacity: Double {
+        widthModel.isCollapsedPresentation ? 0 : 1
+    }
+
+    /// COLLAPSE: labels fade fast (0-100ms of the 260ms window) with no
+    /// delay — "labels leave first." EXPAND: labels fade in only after
+    /// their glyph has landed, staggered per row — see `expandLabelDelay`.
+    private var labelAnimation: Animation? {
+        guard choreographyEnabled else { return nil }
+        if widthModel.isCollapsedPresentation {
+            return .easeOut(duration: WorkspaceLayout.sidebarRowLabelCollapseFadeDuration)
+        }
+        let delay = WorkspaceLayout.expandLabelDelay(
+            rowIndex: staggerIndex,
+            glyphLandDuration: WorkspaceLayout.sidebarRowGlyphExpandTravelDuration()
+        )
+        return .easeOut(duration: WorkspaceLayout.sidebarRowLabelExpandFadeDuration).delay(delay)
+    }
+
+    /// Small in-row glyph shift toward the panel's centerline — the
+    /// canvas's own "+8 → +28px" glyph translateX row, not the panel's
+    /// pinned→rail travel.
+    private var glyphOffsetX: CGFloat {
+        widthModel.isCollapsedPresentation
+            ? WorkspaceLayout.sidebarRowGlyphTraveledOffset
+            : WorkspaceLayout.sidebarRowGlyphRestingOffset
+    }
+
+    /// COLLAPSE: glyph waits for the label to mostly clear (60ms delay),
+    /// then travels for the rest of the 260ms window. EXPAND: glyph travels
+    /// back out immediately, over the whole expand window — every row's
+    /// glyph starts together; only labels are staggered.
+    private var glyphAnimation: Animation? {
+        guard choreographyEnabled else { return nil }
+        if widthModel.isCollapsedPresentation {
+            return .timingCurve(0.32, 0.72, 0, 1, duration: WorkspaceLayout.sidebarRowGlyphCollapseTravelDuration)
+                .delay(WorkspaceLayout.sidebarRowGlyphCollapseTravelDelay)
+        }
+        return .timingCurve(0.32, 0.72, 0, 1, duration: WorkspaceLayout.sidebarRowGlyphExpandTravelDuration())
+    }
+
     // MARK: - Row Background
 
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 6)
+        RoundedRectangle(cornerRadius: rowCornerRadius)
             .fill(rowFill)
+            .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
+    }
+
+    /// Row corner radius — the canvas's "8 → 16px" row, same window as the
+    /// glyph travel above.
+    private var rowCornerRadius: CGFloat {
+        widthModel.isCollapsedPresentation
+            ? WorkspaceLayout.sidebarRowCornerRadiusTraveled
+            : WorkspaceLayout.sidebarRowCornerRadiusResting
     }
 
     private var rowFill: Color {
