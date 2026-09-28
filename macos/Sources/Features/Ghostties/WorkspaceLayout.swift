@@ -24,25 +24,26 @@ enum WorkspaceLayout {
     /// Width of the sidebar panel (Flow 01: 220 → 244).
     static let sidebarWidth: CGFloat = 244
 
-    /// Width of the collapsed icon-only rail (Flow 01, sidebar-presence §02).
-    /// Not drag-resizable, unlike `sidebarWidth` — this is now a FLOOR, not
-    /// the applied width. The applied width is `collapsedRailWidth(in:)`
-    /// below, which grows this floor to clear the window's traffic-light
-    /// cluster (see that function's doc comment).
-    static let sidebarRailWidth: CGFloat = 72
+    /// Width of the collapsed icon-only rail (Sean, sidebar-presence review
+    /// round 2: 128pt on the 16pt grid — up from the original 72pt design
+    /// floor). This is what users see in the overwhelmingly common case.
+    /// Not drag-resizable, unlike `sidebarWidth`. The traffic-light cluster
+    /// check in `collapsedRailWidth(in:)` below is now a FLOOR ONLY — it
+    /// grows the rail past 128 only if the cluster itself is wider (a
+    /// future/unusual macOS layout), it never shrinks it. Content (glyph
+    /// rows, tray pill) stays centered in whatever width is applied.
+    static let sidebarRailWidth: CGFloat = 128
 
-    /// Pure width calculation for the collapsed rail: the rail must clear the
-    /// macOS traffic-light cluster, which on macOS 26 reaches ~78pt from the
-    /// window's left edge — wider than the original fixed 72pt, so the
-    /// buttons overran into the terminal card. Takes the cluster's rightmost
-    /// edge (zoom button `maxX`) and its leading inset (close button `minX`,
-    /// the gap from the window edge to the first button), both in the same
-    /// coordinate space, and returns a width that clears the cluster with a
-    /// trailing gap equal to that same leading inset — keeping the cluster
-    /// visually centered in the rail rather than jammed against its trailing
-    /// edge. Never returns less than `sidebarRailWidth`, the original design
-    /// floor, so a shrunk or unusual cluster never regresses the rail
-    /// narrower than the spec width.
+    /// Pure width calculation for the collapsed rail: floors at
+    /// `sidebarRailWidth` (128, the 16pt-grid design width) and grows only
+    /// if the macOS traffic-light cluster itself needs more room than that
+    /// — on macOS 26 the cluster reaches ~78pt from the window's left edge,
+    /// comfortably under the 128 floor, so in practice this returns 128.
+    /// Takes the cluster's rightmost edge (zoom button `maxX`) and its
+    /// leading inset (close button `minX`, the gap from the window edge to
+    /// the first button), both in the same coordinate space. Never returns
+    /// less than `sidebarRailWidth` — a shrunk or unusual cluster never
+    /// regresses the rail narrower than the design width.
     static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat) -> CGFloat {
         max(sidebarRailWidth, zoomButtonMaxX + leadingInset)
     }

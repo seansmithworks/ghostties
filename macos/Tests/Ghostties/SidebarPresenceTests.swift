@@ -87,30 +87,39 @@ struct SidebarPresenceTests {
         #expect(items.last?.label == "Expand Sidebar")
     }
 
-    // MARK: - Collapsed Rail Width Clears Traffic Lights
+    // MARK: - Collapsed Rail Width — 128pt Default, Traffic Lights Are a Floor Only
 
-    /// macOS 26's traffic-light cluster reaches ~78pt from the window's left
-    /// edge — wider than the original fixed 72pt rail, so the buttons
-    /// overran into the terminal card. The rail width must grow to clear
-    /// whatever the live cluster measures, with a trailing gap matching its
-    /// leading inset.
-    @Test func railWidthClearsAWideTrafficLightCluster() {
+    /// The design width users actually see: macOS 26's traffic-light
+    /// cluster reaches only ~78pt from the window's left edge, comfortably
+    /// under the 128pt floor, so the rail renders at exactly 128 — the
+    /// cluster check no longer determines the visible width in the common
+    /// case (Sean, sidebar-presence review round 2).
+    @Test func railWidthIsOneTwentyEightForATypicalCluster() {
         // Cluster spans x=20...78 (macOS 26-shaped): leading inset 20, maxX 78.
         let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 78, leadingInset: 20)
-        #expect(width == 98)
+        #expect(width == 128)
     }
 
     /// A cluster narrower than the floor (e.g. an older macOS layout) must
-    /// not shrink the rail below the original 72pt design width.
-    @Test func railWidthFloorsAtSeventyTwo() {
+    /// not shrink the rail below the 128pt design width.
+    @Test func railWidthFloorsAtOneTwentyEight() {
         let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 40, leadingInset: 8)
-        #expect(width == 72)
+        #expect(width == 128)
     }
 
-    /// A cluster that lands exactly on the floor's boundary still floors at 72.
+    /// A cluster that lands exactly on the floor's boundary still floors at 128.
     @Test func railWidthAtExactFloorBoundary() {
-        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 62, leadingInset: 10)
-        #expect(width == 72)
+        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 118, leadingInset: 10)
+        #expect(width == 128)
+    }
+
+    /// The traffic-light check is a FLOOR ONLY, per Sean's review: it must
+    /// still grow the rail past 128 for a cluster wide enough to need it —
+    /// this is the one case where the visible width isn't the flat 128
+    /// default.
+    @Test func railWidthGrowsPastFloorForAWideCluster() {
+        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 150, leadingInset: 20)
+        #expect(width == 170)
     }
 
     /// `collapsedRailWidth(in:)` must special-case fullscreen the same way

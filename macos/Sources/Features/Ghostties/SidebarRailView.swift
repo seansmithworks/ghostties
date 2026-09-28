@@ -1,7 +1,8 @@
 import SwiftUI
 import GhosttiesCore
 
-/// The collapsed 72pt icon-only rail (Flow 01, sidebar-presence §02).
+/// The collapsed 128pt icon-only rail (Flow 01, sidebar-presence §02;
+/// widened from 72pt, sidebar-presence review round 2).
 ///
 /// Content-agnostic across project-first/task-first sidebar view modes —
 /// it lists every live session in visual order regardless of which full

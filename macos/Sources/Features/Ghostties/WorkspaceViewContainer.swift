@@ -69,7 +69,7 @@ private struct SidebarWidthFrame<Content: View>: View {
 ///
 /// The sidebar operates in four modes (see `SidebarMode`):
 /// - **pinned**: Sidebar pushes terminal right (floating card with shadow/insets).
-/// - **collapsed**: Icon-only 72pt rail, same card treatment as pinned (Flow 01).
+/// - **collapsed**: Icon-only 128pt rail, same card treatment as pinned (Flow 01).
 /// - **closed**: Sidebar hidden, terminal fills window flush, traffic lights hidden.
 /// - **overlay**: Sidebar floats on top of full-width terminal (hover-to-reveal).
 class WorkspaceViewContainer: NSView {
