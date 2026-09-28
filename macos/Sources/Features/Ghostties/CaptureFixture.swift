@@ -174,7 +174,23 @@ enum CaptureFixture {
                 store.updateSessionStatus(id: session.id, status: .running)
             }
         }
+        if let mode = initialSidebarMode {
+            store.updateSidebarMode(mode)
+        }
         return store
+    }
+
+    /// Optional starting sidebar mode for a capture, from
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_MODE` (`pinned`, `collapsed`, `closed`).
+    /// The fixture store never persists, so without this every capture
+    /// starts pinned and the rail/closed states need synthetic keystrokes.
+    private static var initialSidebarMode: SidebarMode? {
+        switch ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_SIDEBAR_MODE"] {
+        case "pinned": return .pinned
+        case "collapsed": return .collapsed
+        case "closed": return .closed
+        default: return nil
+        }
     }
 
     #endif

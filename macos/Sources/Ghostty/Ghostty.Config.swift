@@ -64,6 +64,11 @@ extension Ghostty {
                 return nil
             }
 
+            // Ghostties defaults go first so everything loaded below overrides them.
+            if let defaults = GhosttiesConfigDefaults.fileURL() {
+                ghostty_config_load_file(cfg, defaults.path)
+            }
+
             // Load our configuration from files, CLI args, and then any referenced files.
             if let path {
                 ghostty_config_load_file(cfg, path)

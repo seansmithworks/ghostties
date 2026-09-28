@@ -1,8 +1,8 @@
 import SwiftUI
 import GhosttiesCore
 
-/// The collapsed 128pt icon-only rail (Flow 01, sidebar-presence §02;
-/// widened from 72pt, sidebar-presence review round 2).
+/// The collapsed icon-only rail (Flow 01, sidebar-presence §02), sized to
+/// hug the window's traffic lights (`WorkspaceLayout.collapsedRailWidth`).
 ///
 /// Content-agnostic across project-first/task-first sidebar view modes —
 /// it lists every live session in visual order regardless of which full

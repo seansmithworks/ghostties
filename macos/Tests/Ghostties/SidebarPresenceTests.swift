@@ -87,39 +87,37 @@ struct SidebarPresenceTests {
         #expect(items.last?.label == "Expand Sidebar")
     }
 
-    // MARK: - Collapsed Rail Width — 128pt Default, Traffic Lights Are a Floor Only
+    // MARK: - Collapsed Rail Width — Hugs the Traffic Lights
 
-    /// The design width users actually see: macOS 26's traffic-light
-    /// cluster reaches only ~78pt from the window's left edge, comfortably
-    /// under the 128pt floor, so the rail renders at exactly 128 — the
-    /// cluster check no longer determines the visible width in the common
-    /// case (Sean, sidebar-presence review round 2).
-    @Test func railWidthIsOneTwentyEightForATypicalCluster() {
-        // Cluster spans x=20...78 (macOS 26-shaped): leading inset 20, maxX 78.
+    /// The rail hugs the traffic-light cluster: zoom `maxX` plus a trailing
+    /// gap equal to the leading inset, so the cluster sits centered. A
+    /// macOS 26-shaped cluster (x=20...78) gives 98 — not a fixed width
+    /// (Sean, sidebar-presence review round 3).
+    @Test func railWidthHugsATypicalCluster() {
         let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 78, leadingInset: 20)
-        #expect(width == 128)
+        #expect(width == 98)
     }
 
-    /// A cluster narrower than the floor (e.g. an older macOS layout) must
-    /// not shrink the rail below the 128pt design width.
-    @Test func railWidthFloorsAtOneTwentyEight() {
-        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 40, leadingInset: 8)
-        #expect(width == 128)
-    }
-
-    /// A cluster that lands exactly on the floor's boundary still floors at 128.
-    @Test func railWidthAtExactFloorBoundary() {
-        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 118, leadingInset: 10)
-        #expect(width == 128)
-    }
-
-    /// The traffic-light check is a FLOOR ONLY, per Sean's review: it must
-    /// still grow the rail past 128 for a cluster wide enough to need it —
-    /// this is the one case where the visible width isn't the flat 128
-    /// default.
-    @Test func railWidthGrowsPastFloorForAWideCluster() {
+    /// The hug tracks the cluster: a wider cluster widens the rail by the
+    /// same amount.
+    @Test func railWidthTracksAWideCluster() {
         let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 150, leadingInset: 20)
         #expect(width == 170)
+    }
+
+    /// A cluster narrower than the floor must not squeeze the rail below
+    /// what the 40pt tray pill needs.
+    @Test func railWidthFloorsForANarrowCluster() {
+        let width = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: 40, leadingInset: 8)
+        #expect(width == WorkspaceLayout.sidebarRailWidth)
+    }
+
+    /// The floor only has to fit the tray pill — it must stay well under
+    /// the typical hugged width, or it silently becomes a fixed width again.
+    @Test func railFloorFitsTrayPillButStaysUnderTheHug() {
+        let trayPillWidth: CGFloat = 32 + 4 * 2
+        #expect(WorkspaceLayout.sidebarRailWidth >= trayPillWidth)
+        #expect(WorkspaceLayout.sidebarRailWidth < 98)
     }
 
     /// `collapsedRailWidth(in:)` must special-case fullscreen the same way
@@ -319,6 +317,18 @@ struct SidebarPresenceTests {
         let timing = WorkspaceLayout.sidebarTransitionTiming(from: .closed, to: .overlay)
         #expect(timing.curve.swiftUIAnimation == nil)
         _ = WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
+    }
+
+    // MARK: - Terminal Text Padding — Ghostties Default Under User Config
+
+    /// The 16/8 padding defaults are loaded before the user's config on
+    /// every load. A misspelled key or bad value would surface here as a
+    /// config diagnostic (and a pop-up on every launch).
+    @Test func paddingDefaultsLoadWithoutDiagnostics() throws {
+        #expect(GhosttiesConfigDefaults.contents.contains("window-padding-x = 16"))
+        #expect(GhosttiesConfigDefaults.contents.contains("window-padding-y = 8"))
+        let config = try TemporaryConfig("")
+        #expect(config.errors.isEmpty)
     }
 }
 

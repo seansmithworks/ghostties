@@ -107,7 +107,7 @@ private struct SidebarCollapseCrossfade: View {
 ///
 /// The sidebar operates in four modes (see `SidebarMode`):
 /// - **pinned**: Sidebar pushes terminal right (floating card with shadow/insets).
-/// - **collapsed**: Icon-only 128pt rail, same card treatment as pinned (Flow 01).
+/// - **collapsed**: Icon-only rail hugging the traffic lights, same card treatment as pinned (Flow 01).
 /// - **closed**: Sidebar hidden, terminal fills window flush, traffic lights hidden.
 /// - **overlay**: Sidebar floats on top of full-width terminal (hover-to-reveal).
 class WorkspaceViewContainer: NSView {
@@ -1092,7 +1092,7 @@ class WorkspaceViewContainer: NSView {
 
     // MARK: - Sidebar State Machine
 
-    /// Toggle sidebar via keyboard shortcut (Cmd+Shift+E).
+    /// Toggle sidebar via keyboard shortcut (Cmd+S).
     /// Flips `pinned ↔ collapsed` (Sean, sidebar-presence review) — the
     /// toggle no longer walks all the way to fully closed; it goes from full
     /// width straight to the narrow rail. `closed` is left in the model
