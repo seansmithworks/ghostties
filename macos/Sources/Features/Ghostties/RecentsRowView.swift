@@ -55,13 +55,6 @@ struct RecentsRowView: View, Equatable {
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Per-session status glyph — pattern D, "type is the icon"
-            // (BACKLOG J). Replaces the ghost as the status signal in this
-            // slot; see SessionStatusGlyph.
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind)
-                .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
-                .frame(width: WorkspaceLayout.sidebarIconColumnWidth, alignment: .center)
-
             // Session name + project name stacked
             VStack(alignment: .leading, spacing: 1) {
                 if isEditing {
@@ -105,6 +98,16 @@ struct RecentsRowView: View, Equatable {
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .monospacedDigit()
             }
+
+            // Per-session status glyph — pattern D, "type is the icon"
+            // (BACKLOG J). Trailing edge, after the timestamp (Sean,
+            // sidebar-presence review round 2 — Flow 07 frame 01): name and
+            // subtitle read flush left, the glyph reads last. Previously led
+            // the row in a fixed icon column shared with the header icons
+            // above it; that alignment purpose no longer applies here, so
+            // it's sized to the glyph itself instead of that column width.
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind)
+                .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
         }
         .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
         .padding(.trailing, 10)
