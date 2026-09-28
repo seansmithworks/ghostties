@@ -284,8 +284,28 @@ class WorkspaceViewContainer: NSView {
     /// the animation, and reclamping against those mid-flight values would
     /// fight (or outright kill) the open/close animation. Set true right
     /// before `NSAnimationContext.runAnimationGroup` starts, cleared in its
-    /// `completionHandler`.
+    /// `completionHandler`, GATED by `sidebarTransitionGeneration` below —
+    /// see that property's doc comment for why the raw completion closure
+    /// alone isn't safe.
     private var isSidebarTransitionAnimating = false
+
+    /// Bumped at the start of every `transitionTo`/`sidebarViewModeChanged`
+    /// call; each call's completion handler captures the value it bumped to
+    /// and only clears `isSidebarTransitionAnimating` if the counter still
+    /// matches when it fires. Flow 05 gave each transition pair its own
+    /// duration (180–260ms) instead of one uniform 200ms, which means a
+    /// SHORTER transition started shortly after a LONGER one (e.g. full
+    /// close at 180ms fired while a 260ms collapse from the previous toggle
+    /// is still animating) reliably finishes first. Without this guard, the
+    /// stale (superseded) transition's completion handler still fires later
+    /// and clears the flag while the newer transition's own animation is
+    /// genuinely still live — `layout()`'s resize reclamp then sees
+    /// `isSidebarTransitionAnimating == false`, treats the still-animating
+    /// constraint as settled, and snaps it directly (no `.animator()`),
+    /// fighting the in-flight interpolation and leaving a half-applied mix
+    /// of old/new geometry at rest. This is the mechanism behind the
+    /// traffic-lights-over-terminal / narrow-card glitch caught in review.
+    private var sidebarTransitionGeneration = 0
 
     /// Stored constraints for animating sidebar show/hide and terminal insets.
     private var sidebarWidthConstraint: NSLayoutConstraint!
@@ -893,6 +913,14 @@ class WorkspaceViewContainer: NSView {
         // the overlay width which is also driven by currentSidebarWidth.
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         isSidebarTransitionAnimating = true
+        // Shares `sidebarTransitionGeneration` with `transitionTo` — both
+        // entry points drive the same `sidebarWidthConstraint`/
+        // `isSidebarTransitionAnimating`, so a view-mode toggle that lands
+        // mid-`transitionTo` (or vice versa) needs the same guard against a
+        // superseded completion handler firing late. See that property's
+        // doc comment.
+        sidebarTransitionGeneration += 1
+        let generation = sidebarTransitionGeneration
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = reduceMotion ? 0 : 0.2
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -908,12 +936,13 @@ class WorkspaceViewContainer: NSView {
                 break
             }
         }, completionHandler: { [weak self] in
-            self?.isSidebarTransitionAnimating = false
+            guard let self, self.sidebarTransitionGeneration == generation else { return }
+            self.isSidebarTransitionAnimating = false
             // The resize reclamp in `layout()` was deferred for the duration of
             // this animation. Force one more layout pass now that the flag is
             // clear, or a window shrink that happened mid-animation may never
             // get re-clamped.
-            self?.needsLayout = true
+            self.needsLayout = true
         })
         updateTrackingAreas()
         invalidateIntrinsicContentSize()
@@ -1292,6 +1321,7 @@ class WorkspaceViewContainer: NSView {
         let now = CACurrentMediaTime()
         guard now - lastTransitionTime > 0.25 else { return }
         lastTransitionTime = now
+        let previousMode = sidebarMode
         sidebarMode = newMode
 
         // Re-derive the overlay's text/icon legibility override — only
@@ -1338,108 +1368,67 @@ class WorkspaceViewContainer: NSView {
         // hover state — not a resize target).
         sidebarDragHandle.isHidden = newMode != .pinned
 
-        // 4. Animate constraints, widths, alphas.
+        // 4. Animate constraints, widths, alphas — duration/curve come from
+        // the Flow 05 named-transition table (`WorkspaceLayout.
+        // sidebarTransitionTiming`), not one generic duration for every mode
+        // change. Interruption: `.animator()` proxies on constraints/alpha
+        // retarget from whatever AppKit's Auto Layout animation currently
+        // has the affected views at (the presentation state), not the
+        // original start value — calling `transitionTo` again mid-flight
+        // (a second toggle) redirects smoothly instead of snapping to the
+        // old end value and replaying. The completion handler below still
+        // needs the generation guard (see `sidebarTransitionGeneration`'s
+        // doc comment) — retargeting the constraint itself is safe, but a
+        // SUPERSEDED transition's own completion firing late is not.
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let timing = WorkspaceLayout.sidebarTransitionTiming(from: previousMode, to: newMode)
         isSidebarTransitionAnimating = true
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = reduceMotion ? 0 : 0.2
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        sidebarTransitionGeneration += 1
+        let generation = sidebarTransitionGeneration
 
-            switch newMode {
-            case .pinned:
-                sidebarWidthConstraint.animator().constant = currentSidebarWidth
-                widthModel.width = currentSidebarWidth
-                sidebarHostingView.animator().alphaValue = 1
-                shadowHostTopConstraint.animator().constant = inset
-                shadowHostLeadingToSidebar.animator().constant = inset
-                if !isBrowserVisible {
-                    shadowHostTrailingConstraint.animator().constant = -inset
-                }
-                shadowHostBottomConstraint.animator().constant = -inset
-                // Reference states 01/02: no terminal-card top bar — no
-                // header band, no floating toggle/globe buttons. The sidebar
-                // toggle lives in the tray; the globe is reachable via Cmd+B.
-                terminalTopConstraint.animator().constant = 0
-                sidebarOverlayBackground.animator().alphaValue = 0
-                // Browser insets match terminal.
-                browserShadowHostTopConstraint.animator().constant = inset
-                browserShadowHostBottomConstraint.animator().constant = -inset
-                browserShadowHostTrailingConstraint.animator().constant = -inset
-
-            case .collapsed:
-                let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
-                sidebarWidthConstraint.animator().constant = railWidth
-                widthModel.width = railWidth
-                sidebarHostingView.animator().alphaValue = 1
-                shadowHostTopConstraint.animator().constant = inset
-                shadowHostLeadingToSidebar.animator().constant = inset
-                if !isBrowserVisible {
-                    shadowHostTrailingConstraint.animator().constant = -inset
-                }
-                shadowHostBottomConstraint.animator().constant = -inset
-                // Reference states 01/02: no terminal-card top bar (see .pinned above).
-                terminalTopConstraint.animator().constant = 0
-                sidebarOverlayBackground.animator().alphaValue = 0
-                // Browser insets match terminal.
-                browserShadowHostTopConstraint.animator().constant = inset
-                browserShadowHostBottomConstraint.animator().constant = -inset
-                browserShadowHostTrailingConstraint.animator().constant = -inset
-
-            case .closed:
-                // Spec §03: no chrome at all — no header, no band, no
-                // floating buttons, no traffic lights. Terminal is full
-                // bleed (zero inset) at radius 18 (non-animatable block,
-                // below). The 24pt hot zone is the only affordance.
-                sidebarWidthConstraint.animator().constant = 0
-                sidebarHostingView.animator().alphaValue = 0
-                shadowHostTopConstraint.animator().constant = 0
-                shadowHostLeadingToSuperview.animator().constant = 0
-                if !isBrowserVisible {
-                    shadowHostTrailingConstraint.animator().constant = 0
-                }
-                shadowHostBottomConstraint.animator().constant = 0
-                terminalTopConstraint.animator().constant = 0
-                sidebarOverlayBackground.animator().alphaValue = 0
-                // Browser insets match terminal (full bleed).
-                browserShadowHostTopConstraint.animator().constant = 0
-                browserShadowHostBottomConstraint.animator().constant = 0
-                browserShadowHostTrailingConstraint.animator().constant = 0
-
-            case .overlay:
-                // If browser was visible, swap trailing constraint back to window edge.
-                if isBrowserVisible {
-                    shadowHostTrailingToBrowser.isActive = false
-                    shadowHostTrailingConstraint.isActive = true
-                    isBrowserVisible = false
-                    browserDragHandle.isHidden = true
-                }
-                sidebarWidthConstraint.animator().constant = currentSidebarWidth
-                widthModel.width = currentSidebarWidth
-                sidebarHostingView.animator().alphaValue = 1
-                // Terminal floats as a carded, inset canvas — same outer inset
-                // as pinned/closed. The sidebar (z-order above the card) floats
-                // over its left edge rather than sharing space with it.
-                shadowHostTopConstraint.animator().constant = inset
-                shadowHostLeadingToSuperview.animator().constant = inset
-                shadowHostTrailingConstraint.animator().constant = -inset
-                shadowHostBottomConstraint.animator().constant = -inset
-                terminalTopConstraint.animator().constant = 0
-                sidebarOverlayBackground.animator().alphaValue = 1
-                // Collapse browser in overlay mode.
-                browserWidthConstraint.animator().constant = 0
-                browserShadowHost.animator().alphaValue = 0
-                browserShadowHostTopConstraint.animator().constant = 0
-                browserShadowHostBottomConstraint.animator().constant = 0
-                browserShadowHostTrailingConstraint.animator().constant = 0
-            }
-        }, completionHandler: { [weak self] in
-            self?.isSidebarTransitionAnimating = false
+        let animationCompletion: () -> Void = { [weak self] in
+            guard let self, self.sidebarTransitionGeneration == generation else { return }
+            self.isSidebarTransitionAnimating = false
             // The resize reclamp in `layout()` was deferred for the duration of
             // this animation. Force one more layout pass now that the flag is
             // clear, or a window shrink that happened mid-animation may never
             // get re-clamped.
-            self?.needsLayout = true
-        })
+            self.needsLayout = true
+        }
+
+        if reduceMotion {
+            // Flow 05 "Reduced motion": drop the translate entirely — layout
+            // snaps — and carry the change with a single gentler 120ms
+            // opacity cross-fade instead of the full spatial motion.
+            //
+            // The geometry snap deliberately does NOT go through
+            // `NSAnimationContext` at all (not even `duration = 0`):
+            // `.animator()` on an `NSLayoutConstraint` inside a zero-duration
+            // animation context is a known-fragile combination — AppKit can
+            // commit the underlying transaction before every constraint in
+            // the batch has been folded into one `layoutIfNeeded()` pass,
+            // leaving the view showing a half-applied mix of old/new
+            // constants (traffic lights + old sidebar content peeking
+            // through a too-narrow card — the exact shape of the bug Sean
+            // caught). `animated: false` sets `.constant` directly and the
+            // explicit `layoutSubtreeIfNeeded()` right after is the ONE
+            // atomic layout pass that guarantees a clean settle. The alpha
+            // half still animates on its own 120ms cross-fade.
+            applyTransitionConstraints(for: newMode, inset: inset, animated: false)
+            layoutSubtreeIfNeeded()
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: true, timing: timing)
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                applyTransitionAlphas(for: newMode)
+            }, completionHandler: animationCompletion)
+        } else {
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = timing.duration
+                context.timingFunction = timing.curve.mediaTimingFunction
+                applyTransitionConstraints(for: newMode, inset: inset)
+                applyTransitionAlphas(for: newMode)
+            }, completionHandler: animationCompletion)
+        }
         // 5. Non-animatable properties.
         switch newMode {
         case .pinned, .collapsed:
@@ -1454,15 +1443,17 @@ class WorkspaceViewContainer: NSView {
             layer?.backgroundColor = canvasBackgroundCGColor
             backgroundEffectView.layer?.shadowOpacity = 0
         case .closed:
-            // Spec §03: full bleed at radius 18 (states 03/04 meet the
-            // window edge; 01/02's inset card stays at 12 — see the
-            // `terminalCornerRadius` doc comment).
-            terminalContainer.layer?.cornerRadius = 18
+            // Sean's closed-state layout call (overrides Flow 05 spec §03's
+            // full-bleed/radius-18 card): closed keeps the same 8pt-inset,
+            // 12pt-radius floating card as pinned — only the sidebar is
+            // gone, no chrome, no traffic lights, no header. Same radius
+            // token the pinned state uses, not a distinct "closed" radius.
+            terminalContainer.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalContainer.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
             terminalShadowHost.layer?.shadowOpacity = WorkspaceLayout.canvasShadowOpacity
-            terminalShadowHost.layer?.cornerRadius = 18
+            terminalShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
-            browserShadowHost.layer?.cornerRadius = 18
+            browserShadowHost.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
             browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
             browserShadowHost.layer?.shadowOpacity = isBrowserVisible ? WorkspaceLayout.canvasShadowOpacity : 0
             layer?.backgroundColor = canvasBackgroundCGColor
@@ -1493,13 +1484,148 @@ class WorkspaceViewContainer: NSView {
         // 6. Traffic lights.
         setTrafficLightsHidden(newMode == .closed)
 
-        // 7. Refresh tracking areas.
-        updateTrackingAreas()
+        // 7. Refresh tracking areas. Every mode but a fresh close installs
+        // its tracking area immediately; closing delays the 24pt hot zone's
+        // activation until the close motion has actually finished (Flow 05:
+        // "hidden → 24px at 180ms, step") so a fast mouse can't trigger the
+        // reveal overlay while the card is still mid-close.
+        if newMode == .closed {
+            if let area = activeTrackingArea {
+                removeTrackingArea(area)
+                activeTrackingArea = nil
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + WorkspaceLayout.closedHotZoneActivationDelay) { [weak self] in
+                guard let self, self.sidebarMode == .closed else { return }
+                self.updateTrackingAreas()
+            }
+        } else {
+            updateTrackingAreas()
+        }
 
         // 8. Persist (overlay is transient — store persists it as .closed).
         WorkspaceStore.shared.updateSidebarMode(newMode)
 
         invalidateIntrinsicContentSize()
+    }
+
+    /// Geometry side of a sidebar transition — widths, insets, constraint
+    /// constants. Extracted from `transitionTo` so the normal path (one
+    /// animated group covering geometry + alpha together) and the reduced-
+    /// motion path (geometry snaps at duration 0, alpha cross-fades
+    /// separately over 120ms) share one implementation instead of drifting.
+    private func applyTransitionConstraints(for newMode: SidebarMode, inset: CGFloat, animated: Bool = true) {
+        // `.animator()` on an `NSLayoutConstraint` only produces a reliable
+        // Auto Layout animation inside a real (non-zero-duration) animation
+        // context — an `NSAnimationContext` with `duration = 0` wrapping a
+        // batch of `.animator().constant` assignments is a known-fragile
+        // combination: AppKit can commit the underlying CATransaction before
+        // every constraint in the batch has actually been folded into a
+        // single `layoutIfNeeded()` pass, so the view can settle on a
+        // half-applied mix of old/new constants instead of cleanly snapping.
+        // Reduced motion calls this with `animated: false`, which bypasses
+        // `.animator()` entirely (plain `.constant =`) — `transitionTo`
+        // follows with one explicit `layoutSubtreeIfNeeded()` outside any
+        // animation context, so the snap is a single atomic layout pass.
+        func set(_ constraint: NSLayoutConstraint, _ value: CGFloat) {
+            if animated {
+                constraint.animator().constant = value
+            } else {
+                constraint.constant = value
+            }
+        }
+
+        switch newMode {
+        case .pinned:
+            set(sidebarWidthConstraint, currentSidebarWidth)
+            widthModel.width = currentSidebarWidth
+            set(shadowHostTopConstraint, inset)
+            set(shadowHostLeadingToSidebar, inset)
+            if !isBrowserVisible {
+                set(shadowHostTrailingConstraint, -inset)
+            }
+            set(shadowHostBottomConstraint, -inset)
+            // Reference states 01/02: no terminal-card top bar — no
+            // header band, no floating toggle/globe buttons. The sidebar
+            // toggle lives in the tray; the globe is reachable via Cmd+B.
+            set(terminalTopConstraint, 0)
+            // Browser insets match terminal.
+            set(browserShadowHostTopConstraint, inset)
+            set(browserShadowHostBottomConstraint, -inset)
+            set(browserShadowHostTrailingConstraint, -inset)
+
+        case .collapsed:
+            let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
+            set(sidebarWidthConstraint, railWidth)
+            widthModel.width = railWidth
+            set(shadowHostTopConstraint, inset)
+            set(shadowHostLeadingToSidebar, inset)
+            if !isBrowserVisible {
+                set(shadowHostTrailingConstraint, -inset)
+            }
+            set(shadowHostBottomConstraint, -inset)
+            // Reference states 01/02: no terminal-card top bar (see .pinned above).
+            set(terminalTopConstraint, 0)
+            // Browser insets match terminal.
+            set(browserShadowHostTopConstraint, inset)
+            set(browserShadowHostBottomConstraint, -inset)
+            set(browserShadowHostTrailingConstraint, -inset)
+
+        case .closed:
+            // Sean's closed-state layout call: the card keeps its 8pt
+            // margin on ALL sides — only the LEFT inset actually moves,
+            // from the rail edge (`shadowHostLeadingToSidebar`) to 8pt off
+            // the window edge (`shadowHostLeadingToSuperview`, active in
+            // this mode per the leading-constraint swap above). Never full
+            // bleed — overrides Flow 05's own "card padding-left 8 → 0."
+            set(sidebarWidthConstraint, 0)
+            set(shadowHostTopConstraint, inset)
+            set(shadowHostLeadingToSuperview, inset)
+            if !isBrowserVisible {
+                set(shadowHostTrailingConstraint, -inset)
+            }
+            set(shadowHostBottomConstraint, -inset)
+            set(terminalTopConstraint, 0)
+            // Browser insets match terminal.
+            set(browserShadowHostTopConstraint, inset)
+            set(browserShadowHostBottomConstraint, -inset)
+            set(browserShadowHostTrailingConstraint, -inset)
+
+        case .overlay:
+            // If browser was visible, swap trailing constraint back to window edge.
+            if isBrowserVisible {
+                shadowHostTrailingToBrowser.isActive = false
+                shadowHostTrailingConstraint.isActive = true
+                isBrowserVisible = false
+                browserDragHandle.isHidden = true
+            }
+            set(sidebarWidthConstraint, currentSidebarWidth)
+            widthModel.width = currentSidebarWidth
+            // Terminal floats as a carded, inset canvas — same outer inset
+            // as pinned/closed. The sidebar (z-order above the card) floats
+            // over its left edge rather than sharing space with it.
+            set(shadowHostTopConstraint, inset)
+            set(shadowHostLeadingToSuperview, inset)
+            set(shadowHostTrailingConstraint, -inset)
+            set(shadowHostBottomConstraint, -inset)
+            set(terminalTopConstraint, 0)
+            // Collapse browser in overlay mode.
+            set(browserWidthConstraint, 0)
+            set(browserShadowHostTopConstraint, 0)
+            set(browserShadowHostBottomConstraint, 0)
+            set(browserShadowHostTrailingConstraint, 0)
+        }
+    }
+
+    /// Opacity side of a sidebar transition — sidebar content and overlay-
+    /// background alpha, kept separate from `applyTransitionConstraints` so
+    /// reduced motion can animate this half (120ms cross-fade) while the
+    /// geometry half snaps instantly.
+    private func applyTransitionAlphas(for newMode: SidebarMode) {
+        sidebarHostingView.animator().alphaValue = newMode == .closed ? 0 : 1
+        sidebarOverlayBackground.animator().alphaValue = newMode == .overlay ? 1 : 0
+        if newMode == .overlay {
+            browserShadowHost.animator().alphaValue = 0
+        }
     }
 
     // MARK: - Hover Tracking
@@ -2012,9 +2138,11 @@ class WorkspaceViewContainer: NSView {
 
         sidebarWidthConstraint = sidebarHostingView.widthAnchor.constraint(equalToConstant: initialWidth)
 
-        // Spec §03: closed launches full bleed (zero inset), same as the
-        // toggle transition into `.closed` — see `transitionTo`.
-        let inset: CGFloat = (hasCardInset && initialMode != .closed) ? WorkspaceLayout.terminalInset : 0
+        // Closed launches with the same 8pt card margin as every other
+        // mode (Sean's closed-state layout call — see `transitionTo`'s
+        // `applyTransitionConstraints(for:.closed:)` doc comment); it is
+        // never full bleed.
+        let inset: CGFloat = WorkspaceLayout.terminalInset
         // Inset constraints target the shadow host, not the terminal directly.
         shadowHostTopConstraint = terminalShadowHost.topAnchor.constraint(
             equalTo: topAnchor, constant: inset)
@@ -2118,9 +2246,9 @@ class WorkspaceViewContainer: NSView {
             buildInfoBadgeHostingView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
         ])
 
-        // Spec §03: closed launches at radius 18 (full bleed), same as the
-        // toggle transition into `.closed` — see `transitionTo`.
-        let initialTerminalRadius: CGFloat = initialMode == .closed ? 18 : WorkspaceLayout.terminalCornerRadius
+        // Closed launches at the same card radius as every other mode —
+        // Sean's closed-state layout call, see `transitionTo`.
+        let initialTerminalRadius: CGFloat = WorkspaceLayout.terminalCornerRadius
 
         // Terminal floating card: top corners rounded when in card mode (pinned/closed).
         terminalContainer.wantsLayer = true

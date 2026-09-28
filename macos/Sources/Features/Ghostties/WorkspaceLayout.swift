@@ -355,6 +355,90 @@ enum WorkspaceLayout {
 
     /// Muted red for CI failure state — distinct from terracotta.
     static let ciFailColor = Color(nsColor: .systemRed).opacity(0.7)
+
+    // MARK: - Sidebar Transition Motion (Flow 05, sidebar-presence)
+
+    /// Named easing curve for a sidebar transition. Kept as an enum (not a
+    /// raw `CAMediaTimingFunction`) so `SidebarTransitionTiming` stays
+    /// `Equatable` and the timing table below is directly unit-testable.
+    enum SidebarTransitionCurveKind: Equatable {
+        /// iOS drawer curve — cubic-bezier(0.32, 0.72, 0, 1) (Ionic).
+        /// Almost all the distance is covered in the first third, then it
+        /// coasts to a stop — panels feel pushed, not dragged. Used for
+        /// collapse, expand, and reopen.
+        case drawer
+
+        /// Full-close curve — cubic-bezier(0.23, 1, 0.32, 1). Closing runs
+        /// against opening because there's nothing left to read on the way
+        /// out — the exit should never make the user wait.
+        case close
+
+        /// The pre-Flow-05 generic curve (`.easeInEaseOut`), kept only for
+        /// transition pairs the Flow 05 motion spec doesn't name (overlay
+        /// reveal/dismiss) — "keeps its current animation," per brief.
+        case legacyEaseInOut
+
+        var mediaTimingFunction: CAMediaTimingFunction {
+            switch self {
+            case .drawer:
+                return CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
+            case .close:
+                return CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+            case .legacyEaseInOut:
+                return CAMediaTimingFunction(name: .easeInEaseOut)
+            }
+        }
+    }
+
+    /// One row of the Flow 05 timing table: how long a `from → to` sidebar
+    /// mode transition takes and which curve it plays on.
+    struct SidebarTransitionTiming: Equatable {
+        let duration: TimeInterval
+        let curve: SidebarTransitionCurveKind
+    }
+
+    /// The Flow 05 motion spec's named transition table, as a pure
+    /// `from → to` lookup (Sean's canvas, "Flow 05 · Collapse and close"):
+    /// collapse 244→rail 260ms, expand rail→244 240ms, full close 180ms,
+    /// reopen 240ms — all on `drawer` except the full close, which runs the
+    /// steeper `close` curve. Pairs the spec doesn't name (anything routing
+    /// through `.overlay`) keep the pre-Flow-05 generic 200ms
+    /// `legacyEaseInOut` — the brief says the reveal overlay "keeps its
+    /// current animation unless it conflicts."
+    static func sidebarTransitionTiming(from: SidebarMode, to: SidebarMode) -> SidebarTransitionTiming {
+        switch (from, to) {
+        case (.pinned, .collapsed):
+            return SidebarTransitionTiming(duration: 0.26, curve: .drawer)
+        case (.collapsed, .pinned):
+            return SidebarTransitionTiming(duration: 0.24, curve: .drawer)
+        case (_, .closed):
+            return SidebarTransitionTiming(duration: 0.18, curve: .close)
+        case (.closed, .pinned), (.closed, .collapsed):
+            return SidebarTransitionTiming(duration: 0.24, curve: .drawer)
+        default:
+            return SidebarTransitionTiming(duration: 0.2, curve: .legacyEaseInOut)
+        }
+    }
+
+    /// Reduced-motion crossfade duration replacing every translation-based
+    /// sidebar transition (Flow 05 "Reduced motion": drop the translate,
+    /// cross-fade the two widths over 120ms — gentler, never zero).
+    static let sidebarReducedMotionCrossfadeDuration: TimeInterval = 0.12
+
+    /// Pure reduced-motion path selection: which alpha duration a sidebar
+    /// transition should actually play. Extracted so the reduce-motion
+    /// branch `transitionTo` takes is covered directly, not only implied by
+    /// the two duration constants it picks between.
+    static func sidebarTransitionAlphaDuration(reduceMotion: Bool, timing: SidebarTransitionTiming) -> TimeInterval {
+        reduceMotion ? sidebarReducedMotionCrossfadeDuration : timing.duration
+    }
+
+    /// Delay before the closed-state 24pt hot zone starts accepting hover
+    /// (Flow 05: "hot zone hidden → 24px at 180ms, step") — installed only
+    /// once the full-close animation has actually finished, not the instant
+    /// the toggle fires, so a fast mouse can't trigger the reveal overlay
+    /// before the card has reached the edge.
+    static let closedHotZoneActivationDelay: TimeInterval = 0.18
 }
 
 // MARK: - Animation Tokens (D18)

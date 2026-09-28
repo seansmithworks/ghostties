@@ -122,4 +122,100 @@ struct SidebarPresenceTests {
         #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.fullScreen]) == true)
         #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.titled, .closable, .resizable]) == false)
     }
+
+    // MARK: - Flow 05 Transition Timing Table
+
+    /// Collapse (244pt → rail) runs 260ms on the drawer curve — Sean's
+    /// canvas, "Flow 05 · Collapse and close."
+    @Test func collapseTimingIs260msOnDrawerCurve() {
+        let timing = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .collapsed)
+        #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.26, curve: .drawer))
+    }
+
+    /// Expand (rail → 244pt) runs 240ms on the drawer curve — faster than
+    /// collapse's 260ms, since expand has no separate label-fade phase.
+    @Test func expandTimingIs240msOnDrawerCurve() {
+        let timing = WorkspaceLayout.sidebarTransitionTiming(from: .collapsed, to: .pinned)
+        #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.24, curve: .drawer))
+    }
+
+    /// Full close runs 180ms on the close curve regardless of which visible
+    /// mode it closes from — closing has nothing left to read, so it never
+    /// waits on the slower drawer curve.
+    @Test func fullCloseTimingIs180msOnCloseCurveFromAnyVisibleMode() {
+        for start: SidebarMode in [.pinned, .collapsed, .overlay] {
+            let timing = WorkspaceLayout.sidebarTransitionTiming(from: start, to: .closed)
+            #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.18, curve: .close))
+        }
+    }
+
+    /// Reopen (closed → pinned or collapsed) runs 240ms on the drawer curve —
+    /// coming back, the user is reading again, so it mirrors expand's timing
+    /// rather than the faster close.
+    @Test func reopenTimingIs240msOnDrawerCurve() {
+        for target: SidebarMode in [.pinned, .collapsed] {
+            let timing = WorkspaceLayout.sidebarTransitionTiming(from: .closed, to: target)
+            #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.24, curve: .drawer))
+        }
+    }
+
+    /// Pairs the Flow 05 canvas never named — anything routing through
+    /// `.overlay` — keep the pre-Flow-05 generic 200ms curve untouched, per
+    /// the brief ("reveal overlay keeps its current animation").
+    @Test func overlayTransitionsKeepTheLegacyTiming() {
+        let toOverlay = WorkspaceLayout.sidebarTransitionTiming(from: .closed, to: .overlay)
+        let fromOverlay = WorkspaceLayout.sidebarTransitionTiming(from: .overlay, to: .pinned)
+        #expect(toOverlay == WorkspaceLayout.SidebarTransitionTiming(duration: 0.2, curve: .legacyEaseInOut))
+        #expect(fromOverlay == WorkspaceLayout.SidebarTransitionTiming(duration: 0.2, curve: .legacyEaseInOut))
+    }
+
+    /// Reduced motion drops translation for a single gentler cross-fade —
+    /// never a literal zero, per the reduced-motion convention ("fewer and
+    /// gentler animations, not zero").
+    @Test func reducedMotionCrossfadeIsNonZeroAndUnder300ms() {
+        #expect(WorkspaceLayout.sidebarReducedMotionCrossfadeDuration > 0)
+        #expect(WorkspaceLayout.sidebarReducedMotionCrossfadeDuration < 0.3)
+    }
+
+    /// Reduced-motion path selection: with the accessibility setting on, the
+    /// alpha cross-fade always uses the fixed 120ms token, never the
+    /// transition's own (longer, spatial) duration — regardless of which
+    /// transition it is.
+    @Test func reducedMotionPathAlwaysSelectsTheCrossfadeDuration() {
+        let collapseTiming = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .collapsed)
+        let closeTiming = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .closed)
+        #expect(WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: true, timing: collapseTiming)
+            == WorkspaceLayout.sidebarReducedMotionCrossfadeDuration)
+        #expect(WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: true, timing: closeTiming)
+            == WorkspaceLayout.sidebarReducedMotionCrossfadeDuration)
+    }
+
+    /// With motion enabled, the alpha cross-fade always uses the
+    /// transition's own duration, not the reduced-motion token.
+    @Test func motionEnabledPathAlwaysSelectsTheTransitionDuration() {
+        let collapseTiming = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .collapsed)
+        #expect(WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: false, timing: collapseTiming)
+            == collapseTiming.duration)
+    }
+
+    /// The closed-state hot zone activates only after the full-close motion
+    /// (180ms) has actually finished — the delay must be at least as long as
+    /// the close animation itself, or the reveal overlay could fire before
+    /// the card has reached the edge.
+    @Test func closedHotZoneActivatesNoSoonerThanCloseFinishes() {
+        let closeTiming = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .closed)
+        #expect(WorkspaceLayout.closedHotZoneActivationDelay >= closeTiming.duration)
+    }
+
+    // MARK: - Closed-State Card Inset
+
+    /// Sean's closed-state layout call (overrides Flow 05's own "card
+    /// padding-left 8 → 0"): the terminal card keeps an 8pt margin on ALL
+    /// four sides in closed mode — it is never full bleed. `terminalInset`
+    /// is the single token every mode's card inset derives from, so this
+    /// pins the value the closed-state constraints in `WorkspaceViewContainer`
+    /// use on every side.
+    @Test func closedStateInsetIsEightPointsOnAllSides() {
+        #expect(WorkspaceLayout.terminalInset == 8)
+    }
 }
