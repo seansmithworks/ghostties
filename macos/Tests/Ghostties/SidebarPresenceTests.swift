@@ -218,4 +218,21 @@ struct SidebarPresenceTests {
     @Test func closedStateInsetIsEightPointsOnAllSides() {
         #expect(WorkspaceLayout.terminalInset == 8)
     }
+
+    /// Sean's follow-up decision (sidebar-presence review round 2): confirm
+    /// the card's LEFT gap is the same 8pt in every state, not just closed —
+    /// pinned, collapsed (rail), and closed all read their leading inset
+    /// from this one `terminalInset` token in `WorkspaceViewContainer`
+    /// (`applyTransitionConstraints`'s `.pinned`/`.collapsed`/`.closed`
+    /// branches and `setup()`'s cold-launch path), so there is exactly one
+    /// number to retune, not three that can drift apart.
+    @Test func cardLeftGapIsTheSameEightPointsAcrossEveryMode() {
+        let pinnedGap = WorkspaceLayout.terminalInset
+        let collapsedGap = WorkspaceLayout.terminalInset
+        let closedGap = WorkspaceLayout.terminalInset
+        #expect(pinnedGap == 8)
+        #expect(collapsedGap == 8)
+        #expect(closedGap == 8)
+        #expect(pinnedGap == collapsedGap && collapsedGap == closedGap)
+    }
 }
