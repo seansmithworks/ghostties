@@ -7,11 +7,14 @@ iCloud `Pencil.Dev/Ghostties-Sidebar-26Sep2026.pen` + `~/Archive/rescue/pen/ghos
 spec `docs/design/sidebar-presence/flow-01-sidebar-presence.md`). Session transcripts survived.
 
 - [x] S1 Reconstruct — NO code was ever built (no sidebar edits in any transcript); old-Mac transcripts (Sep 20–23) were not rescued, only Sep 25+. Build is fresh from the spec.
-- [ ] S2 Replay/rebuild on branch `feat/sidebar-presence` off main (isolated worktree), Debug build green, commit locally
-- [ ] S3 Tests: full suite via xcresulttool totals, vs main baseline; new tests for SidebarMode.collapsed persistence
-- [ ] S4 Independent review (not the builder) against the spec + transcript decisions
-- [ ] S5 Fixture screenshots of the 4 states (capture fixture, throwaway state dir) for Sean's morning review
-- ⛔ Not overnight: push, PR, merge, #189 merge (held by Sean), anything in /Applications
+- [x] S2 Built on `feat/sidebar-presence` (pushed to origin 2026-09-28 @ 840301a9a), plus Sean's revisions: toggle pinned↔rail (Cmd+S), Cmd+Shift+S full close, rail 128pt, tray = one pill, no terminal top bar, glyph trailing, overlay follows terminal theme, 8pt card margin every state, Flow 05 motion
+- [x] S3 Full suite @ c66692ede: 1430/6/1 (Light); all 6 = known load-timeout flakes, pass in isolation. (carried) Re-run full suite on 840301a9a
+- [x] S4 Reviews: first @ 9884fef8e (pass), second @ c66692ede (reject → fixed 1b4c999d9..d32041cfd). (carried) Review 1b4c999d9..840301a9a (motion + rail 128 + glyph trailing) — not yet reviewed
+- [ ] S5 (carried) Screenshots of pinned/rail/closed @ 840301a9a — blocked last round: displays asleep. Motion needs Sean's hands-on pass
+- [ ] (carried) PR `feat/sidebar-presence` → main on the fork, with before/after screenshots, after S3–S5 re-run + Sean's motion feel-check
+- [ ] (carried) Known compromise: Flow 05 glyphs don't travel 1:1 into the rail (sections vs flat list); crossfade + small inward shift instead. Tray pill + Projects tab only crossfade
+- [ ] (carried) Restore 4 missing rig memory notes (dev-builds-share-a-bundle-id, dev-process-name-is-ghostty, demo-capture-rig-gotchas, visual-pass-rig-facts) — indexed in MEMORY.md, absent on disk
+- [ ] (parked) Resolve the one remaining open artifact comment thread (toggle/closed) on https://claude.ai/artifact/7L6zZaXrEw1WjyYEq1rS28 — answered by Cmd+Shift+S
 
 ## 2026-09-25 — review files rescued from the old (compromised, since wiped) Mac
 
