@@ -27,34 +27,67 @@ struct SidebarTrayItem: Identifiable {
     }
 }
 
-/// Round 4 tray pill tuning — Sean's strawman, named so every dimension
-/// tunes from one place instead of being hand-picked at each call site.
-/// Button/icon sizing feeds both the Liquid Glass path (macOS 26+) and the
-/// opaque fallback below, so the two never drift into different proportions.
+/// Round 5 tray pill tuning — Sean's strawman ("stylized more" than round
+/// 4's stock glass, which read as a faint outline on flat chrome), named so
+/// every dimension tunes from one place instead of being hand-picked at each
+/// call site. Button/icon sizing feeds both the Liquid Glass path (macOS
+/// 26+) and the opaque fallback below, so the two never drift into
+/// different proportions.
 enum TrayGlassStyle {
-    /// Hit target / visual size of one `TrayIconButton`.
-    static let buttonSize: CGFloat = 28
-    /// SF Symbol point size inside a tray button.
-    static let iconSize: CGFloat = 13
+    /// Hit target / visual size of one `TrayIconButton`. Round 5: 28 → 30.
+    static let buttonSize: CGFloat = 30
+    /// SF Symbol point size inside a tray button. Round 5: 13 → 14.
+    static let iconSize: CGFloat = 14
     /// SF Symbol weight inside a tray button.
     static let iconWeight: Font.Weight = .medium
     /// Padding between the pill's capsule edge and its buttons.
     static let innerPadding: CGFloat = 4
     /// Gap between adjacent tray buttons.
     static let itemGap: CGFloat = 2
+
+    /// Round 5 glass tint — a warm tone drawn from DESIGN.md's own
+    /// `chromeBackground`/`darkChromeBackground` tokens (`WorkspaceLayout
+    /// .chromeBackgroundLight/Dark`), NOT the terracotta accent
+    /// (`waitingTerracotta`), which DESIGN.md reserves exclusively for the
+    /// `waiting` session-status dot. Opacity is tuned so the pill reads as a
+    /// raised, tinted surface rather than the round-4 near-invisible
+    /// outline.
+    static func glassTint(for colorScheme: ColorScheme) -> Color {
+        let base = colorScheme == .dark
+            ? WorkspaceLayout.chromeBackgroundDark
+            : WorkspaceLayout.chromeBackgroundLight
+        return Color(base).opacity(0.55)
+    }
+
+    /// 0.5pt inner highlight stroke — the top/light edge a physically
+    /// raised glass pill would catch. Brighter in light mode (white against
+    /// the warm cream chrome); dimmer in dark mode so it doesn't read as a
+    /// glow.
+    static func innerHighlightStroke(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.6)
+    }
+
+    /// Soft drop shadow lifting the pill off the chrome/terminal behind it —
+    /// DESIGN.md's shadow-only-elevation pattern (`composerModalShadow*`),
+    /// scaled down for a small floating control rather than a full card.
+    static let shadowColor = Color.black.opacity(0.08)
+    static let shadowRadius: CGFloat = 4
+    static let shadowYOffset: CGFloat = 1
 }
 
 /// The floating rounded pill that houses tray icon buttons. On macOS 26+,
 /// with transparency effects allowed, this is real Liquid Glass
-/// (`.glassEffect(.regular.interactive())`) — Sean wanted to try it,
-/// styled beyond the stock look via `TrayGlassStyle`. Everywhere else
-/// (pre-26, or Reduce Transparency on) it falls back to the original opaque
-/// recess: 5% black in light appearance, 4% white in dark (Flow 01
-/// reference, pen-t4 frames 01/02) — a bright terminal behind the pill must
-/// never bleed through when the user has asked to avoid transparency, and
-/// there's no glass API to fall back on below 26. Shared by the expanded
-/// sidebar's horizontal bottom tray and the collapsed rail's vertical tray
-/// pill, so both are one component that only changes axis.
+/// (`.glassEffect(.regular.tint(...).interactive())`) — Sean wanted to try
+/// it; round 5 stylizes it further via `TrayGlassStyle` (warm tint, inner
+/// highlight stroke, soft shadow) after round 4's stock look read as a
+/// faint outline on flat chrome. Everywhere else (pre-26, or Reduce
+/// Transparency on) it falls back to the original opaque recess: 5% black
+/// in light appearance, 4% white in dark (Flow 01 reference, pen-t4 frames
+/// 01/02) — a bright terminal behind the pill must never bleed through when
+/// the user has asked to avoid transparency, and there's no glass API to
+/// fall back on below 26. Shared by the expanded sidebar's horizontal
+/// bottom tray and the collapsed rail's vertical tray pill, so both are one
+/// component that only changes axis.
 struct SidebarTrayPill<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -68,7 +101,19 @@ struct SidebarTrayPill<Content: View>: View {
                 pillStack
                     .padding(TrayGlassStyle.innerPadding)
             }
-            .glassEffect(.regular.interactive(), in: Capsule())
+            .glassEffect(
+                .regular.tint(TrayGlassStyle.glassTint(for: colorScheme)).interactive(),
+                in: Capsule()
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(TrayGlassStyle.innerHighlightStroke(for: colorScheme), lineWidth: 0.5)
+            )
+            .shadow(
+                color: TrayGlassStyle.shadowColor,
+                radius: TrayGlassStyle.shadowRadius,
+                y: TrayGlassStyle.shadowYOffset
+            )
         } else {
             pillStack
                 .padding(TrayGlassStyle.innerPadding)
