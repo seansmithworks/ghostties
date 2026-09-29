@@ -495,6 +495,20 @@ final class WorkspaceStore: ObservableObject {
         }.filter { coordinator.hasLiveSurface(id: $0.id) }
     }
 
+    /// Pinned + Active sessions, in the same order `RecentsListView` renders
+    /// them (Pinned above Active) — the source for the collapsed rail's
+    /// per-session status glyphs (`SidebarRailView`). Deliberately NOT
+    /// filtered by `hasLiveSurface` like `sessionsInVisualOrder(coordinator:)`
+    /// above — that filter exists for Cmd+Shift+[/] cycling, not for "what
+    /// should render": a pinned session with a closed terminal (or, in
+    /// capture-fixture mode, any canned session that was never actually
+    /// opened) still has a row in the full sidebar and must still have one
+    /// in the rail.
+    func railSessions() -> [AgentSession] {
+        RecentsListView.pinnedSessions(from: sessions)
+            + RecentsListView.activeSessions(from: sessions, statuses: globalStatuses)
+    }
+
     #if DEBUG
     /// Test hook — seed the grace-period tracker directly. Production code must
     /// use `updateProjectActivityFromIndicatorStates()` instead.

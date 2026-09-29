@@ -5,8 +5,9 @@ import GhosttiesCore
 /// hug the window's traffic lights (`WorkspaceLayout.collapsedRailWidth`).
 ///
 /// Content-agnostic across project-first/task-first sidebar view modes —
-/// it lists every live session in visual order regardless of which full
-/// sidebar view is otherwise mounted, since the rail has no room for the
+/// it lists Pinned + Active sessions (`WorkspaceStore.railSessions()`, same
+/// membership/order as `RecentsListView`) regardless of which full sidebar
+/// view is otherwise mounted, since the rail has no room for the
 /// project/task distinction. Hosted by `WorkspaceViewContainer.applySidebarView()`
 /// in place of `WorkspaceSidebarView`/`TaskSidebarView` whenever
 /// `sidebarMode == .collapsed`.
@@ -24,7 +25,7 @@ struct SidebarRailView: View {
             Color.clear.frame(height: WorkspaceLayout.titlebarSpacerHeight)
 
             VStack(spacing: 4) {
-                ForEach(store.sessionsInVisualOrder(coordinator: coordinator)) { session in
+                ForEach(store.railSessions()) { session in
                     RailSessionRow(
                         indicatorState: coordinator.indicatorState(for: session.id),
                         isActive: coordinator.activeSessionId == session.id,

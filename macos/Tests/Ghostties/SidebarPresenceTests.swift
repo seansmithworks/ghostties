@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import GhosttiesCore
 import Testing
 @testable import Ghostty
 
@@ -194,6 +195,34 @@ struct SidebarPresenceTests {
         // same as the real AppKit reset/correct cycle needs a runloop tick.
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         #expect(close.frame.minX == WorkspaceLayout.trafficLightLeadingInset)
+    }
+
+    // MARK: - Collapsed Rail Session List
+
+    /// Round 5: the rail rendered NO session rows at all in review captures.
+    /// Cause — `SidebarRailView` was sourcing its list from
+    /// `sessionsInVisualOrder(coordinator:)`, which is filtered to sessions
+    /// with a live surface (`hasLiveSurface`) for Cmd+Shift+[/] cycling. A
+    /// pinned or active session that has never opened a real terminal
+    /// surface (every capture-fixture session, or any real pinned session
+    /// with a closed terminal) has no live surface and was silently
+    /// dropped. `railSessions()` must include it anyway, matching what
+    /// `RecentsListView` actually renders for Pinned/Active.
+    @MainActor
+    @Test func railSessionsIncludesSessionsWithNoLiveSurface() {
+        let project = Project(name: "p", rootPath: "~/p")
+        let store = WorkspaceStore(testingProjects: [project])
+        let pinned = store.addSession(name: "pinned", templateId: UUID(), projectId: project.id)
+        store.setSessionPinned(id: pinned.id, true)
+        let active = store.addSession(name: "active", templateId: UUID(), projectId: project.id)
+        store.updateSessionStatus(id: active.id, status: .running)
+        // Neither session is ever given a live surface (no
+        // `SessionCoordinator`/`seedEmptySessionTreeForTesting` involved) —
+        // this is exactly the capture-fixture / closed-pinned-terminal case.
+
+        let rail = store.railSessions()
+
+        #expect(rail.map(\.name) == ["pinned", "active"])
     }
 
     // MARK: - Flow 05 Transition Timing Table
