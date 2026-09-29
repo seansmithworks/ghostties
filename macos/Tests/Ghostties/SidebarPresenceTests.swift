@@ -393,12 +393,13 @@ struct SidebarPresenceTests {
 
     // MARK: - Terminal Text Padding — Ghostties Default Under User Config
 
-    /// The 16/8 padding defaults are loaded before the user's config on
-    /// every load. A misspelled key or bad value would surface here as a
-    /// config diagnostic (and a pop-up on every launch).
+    /// The 20/20 padding defaults (round 6, Flow 07's Terminal Card
+    /// `padding: 20px`) are loaded before the user's config on every load.
+    /// A misspelled key or bad value would surface here as a config
+    /// diagnostic (and a pop-up on every launch).
     @Test func paddingDefaultsLoadWithoutDiagnostics() throws {
-        #expect(GhosttiesConfigDefaults.contents.contains("window-padding-x = 16"))
-        #expect(GhosttiesConfigDefaults.contents.contains("window-padding-y = 8"))
+        #expect(GhosttiesConfigDefaults.contents.contains("window-padding-x = 20"))
+        #expect(GhosttiesConfigDefaults.contents.contains("window-padding-y = 20"))
         let config = try TemporaryConfig("")
         #expect(config.errors.isEmpty)
     }

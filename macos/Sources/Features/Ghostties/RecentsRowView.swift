@@ -99,39 +99,34 @@ struct RecentsRowView: View, Equatable {
 
             Spacer(minLength: 4)
 
-            // Relative timestamp — reads `displayTimestamp` (last real output,
-            // falling back to `lastActiveAt`), not `lastActiveAt` directly, so
-            // browsing/focus never advances what this row shows.
-            if let ts = session.displayTimestamp {
-                Text(Self.relativeLabel(ts))
-                    .font(.system(size: 10))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
-                    .monospacedDigit()
-                    .opacity(labelOpacity)
-                    .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
-            }
+            // No timestamp — Flow 07 round 6 drops the relative-time label
+            // from the row entirely (design frame `t4XvdY`: name + subtitle
+            // + trailing ghost, nothing else). `relativeLabel` itself is
+            // kept (still backs the accessibility label below) — only the
+            // visible `Text` is gone.
 
-            // Per-session status glyph — pattern D, "type is the icon"
-            // (BACKLOG J). Trailing edge, after the timestamp (Sean,
-            // sidebar-presence review round 2 — Flow 07 frame 01): name and
-            // subtitle read flush left, the glyph reads last. Previously led
-            // the row in a fixed icon column shared with the header icons
-            // above it; that alignment purpose no longer applies here, so
-            // it's sized to the glyph itself instead of that column width.
+            // Per-session status glyph — now a ghost, red when selected
+            // (Flow 07 round 6, supersedes pattern D's type glyph). Trailing
+            // edge, after the name/subtitle (Sean, sidebar-presence review
+            // round 2 — Flow 07 frame 01): name and subtitle read flush
+            // left, the glyph reads last. Previously led the row in a fixed
+            // icon column shared with the header icons above it; that
+            // alignment purpose no longer applies here, so it's sized to the
+            // glyph itself instead of that column width.
             //
             // Flow 05 (sidebar-presence): the small in-row inward nudge on
             // collapse/expand — see `glyphOffsetX` — is a decorative shift,
             // NOT the panel's own pinned→rail travel (that's carried
             // entirely by `WorkspaceLayout.sidebarTransitionTiming`'s width
             // animation on the container).
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, isSelected: isActive)
                 .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
                 .offset(x: glyphOffsetX)
                 .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
         }
         .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
         .padding(.trailing, 10)
-        .frame(height: 36)
+        .frame(height: 40)
         .background(rowBackground)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
@@ -206,14 +201,30 @@ struct RecentsRowView: View, Equatable {
 
     // MARK: - Row Background
 
+    /// The selected row is a raised card (Flow 07 round 6, layer
+    /// `XHBC1`/"Bottom Group"): opaque canvas-surface fill at a fixed 12pt
+    /// radius plus a soft drop shadow, not a flat tint at the width-driven
+    /// resting/traveled radius every other row uses. Unselected rows are
+    /// unchanged — same `rowCornerRadius`/hover fill as before.
+    @ViewBuilder
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: rowCornerRadius)
-            .fill(rowFill)
-            .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
+        if isActive {
+            RoundedRectangle(cornerRadius: WorkspaceLayout.selectedRowCornerRadius)
+                .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color(WorkspaceLayout.canvasBackgroundLight))
+                .shadow(
+                    color: Color.black.opacity(WorkspaceLayout.selectedRowShadowOpacity),
+                    radius: WorkspaceLayout.selectedRowShadowRadius,
+                    y: WorkspaceLayout.selectedRowShadowYOffset
+                )
+        } else {
+            RoundedRectangle(cornerRadius: rowCornerRadius)
+                .fill(rowFill)
+                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
+        }
     }
 
     /// Row corner radius — the canvas's "8 → 16px" row, same window as the
-    /// glyph travel above.
+    /// glyph travel above. Unselected rows only — see `rowBackground`.
     private var rowCornerRadius: CGFloat {
         widthModel.isCollapsedPresentation
             ? WorkspaceLayout.sidebarRowCornerRadiusTraveled
@@ -221,11 +232,6 @@ struct RecentsRowView: View, Equatable {
     }
 
     private var rowFill: Color {
-        if isActive {
-            return colorScheme == .dark
-                ? WorkspaceLayout.activeRowDark
-                : WorkspaceLayout.activeRowLight
-        }
         if isHovered {
             return Color.primary.opacity(0.05)
         }

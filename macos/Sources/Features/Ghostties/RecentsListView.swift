@@ -1109,6 +1109,20 @@ private struct SessionSectionHeader: View {
             }
         } label: {
             HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+                // Sentence case, title + muted count in parens, chevron
+                // TRAILING (Flow 07 round 6, layer `YFjju`/"Active Header":
+                // `Title` "Active" + `Count` "(5)" on the left, `Chevron Col`
+                // on the right) — supersedes the old leading-chevron,
+                // all-caps "ACTIVE 5" layout.
+                (Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color.primary)
+                 + Text(" (\(count))")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(WorkspaceLayout.sectionHeaderForeground(for: colorScheme)))
+
+                Spacer(minLength: 0)
+
                 // Sized to `sidebarIconColumnWidth` (not a hardcoded literal)
                 // so this chevron's x-center lines up with session-row ghosts
                 // directly below it — `PixelChevronView` already pins its own
@@ -1116,13 +1130,6 @@ private struct SessionSectionHeader: View {
                 // must match that, not shrink it.
                 PixelChevronView(isExpanded: isEffectivelyExpanded)
                     .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
-
-                Text("\(title.uppercased()) \(count)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
-
-                Spacer(minLength: 0)
             }
             .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
             .padding(.trailing, 12)

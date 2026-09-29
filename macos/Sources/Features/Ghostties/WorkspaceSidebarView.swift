@@ -515,20 +515,20 @@ private struct SidebarBottomTray: View {
     @EnvironmentObject private var coordinator: SessionCoordinator
 
     var body: some View {
-        HStack {
-            Spacer(minLength: 0)
-            SidebarTrayPill(axis: .horizontal) {
-                ForEach(WorkspaceViewContainer.sidebarTrayItems(
-                    container: coordinator.containerView as? WorkspaceViewContainer,
-                    toggleLabel: toggleLabel
-                )) { item in
-                    TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, action: item.action)
-                }
+        // Full-width bar (Flow 07 round 6, layer `OEpEM`) — no longer a
+        // centered capsule between two `Spacer`s. Horizontal padding matches
+        // `RecentsRowView`/`SessionSectionHeader`'s leading inset so the
+        // tray's edges line up with row content above it.
+        SidebarTrayPill(axis: .horizontal) {
+            ForEach(WorkspaceViewContainer.sidebarTrayItems(
+                container: coordinator.containerView as? WorkspaceViewContainer,
+                toggleLabel: toggleLabel
+            )) { item in
+                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, stretch: true, action: item.action)
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
     }
 
     /// "Collapse Sidebar" while pinned (toggle now flips full width ↔ rail,

@@ -198,6 +198,25 @@ enum WorkspaceLayout {
     /// Background for active session row (light mode): 4% black.
     static let activeRowLight = Color.black.opacity(0.04)
 
+    // MARK: - Round 6 (Flow 07 pen.dev match, sidebar-presence)
+
+    /// Selected session row: a raised card, not a tint — Flow 07 frame
+    /// `t4XvdY`, layer `XHBC1`/`OEpEM` ("Bottom Group"): `background-color`
+    /// reads as the app's own canvas surface, `box-shadow: 0px 2px 10px
+    /// #00000014`. Reuses `canvasBackgroundLight/Dark` (the terminal-card
+    /// token) rather than inventing a third background — same "raised
+    /// surface" role.
+    static let selectedRowCornerRadius: CGFloat = 12
+    static let selectedRowShadowOpacity: Double = 0.078 // #00000014 -> alpha 0x14/255
+    static let selectedRowShadowRadius: CGFloat = 10
+    static let selectedRowShadowYOffset: CGFloat = 2
+
+    /// Selected-row ghost glyph color — sampled from Flow 07 export `mIi8b.png`
+    /// at the "portfolio" row's ghost icon (~253, 100, 99). The design bakes
+    /// this ghost into a raster layer with no extractable CSS hex, so this is
+    /// a pixel sample, not a token from `flow07.html`.
+    static let selectedGhostRed = Color(red: 253.0 / 255.0, green: 100.0 / 255.0, blue: 99.0 / 255.0)
+
     /// Chrome background (light mode). Covers the left sidebar column and the
     /// gutter padding around the terminal card. The outer of the two Ghostties
     /// design-system layers — warm pink-cream, independent of terminal theme.

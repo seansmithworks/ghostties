@@ -7,13 +7,14 @@ import Foundation
 /// loaded after it (the user's config, CLI args, `config-file` includes)
 /// still overrides any key set here.
 enum GhosttiesConfigDefaults {
-    /// Terminal text padding inside the floating card (Sean,
-    /// sidebar-presence review round 3): 16pt horizontal, 8pt vertical.
-    /// This is the text inset within the terminal surface — separate from
-    /// `terminalInset`, the 8pt outer card margin.
+    /// Terminal text padding inside the floating card (round 6, Flow 07:
+    /// `flow07.html` layer `r2Ds7p`/"Terminal Card", `padding: 20px` on all
+    /// sides). This is the text inset within the terminal surface —
+    /// separate from `terminalInset`, the 8pt outer card margin (unchanged
+    /// by this round; see `WorkspaceLayout.terminalInset`).
     static let contents = """
-    window-padding-x = 16
-    window-padding-y = 8
+    window-padding-x = 20
+    window-padding-y = 20
     """
 
     /// Writes the defaults file and returns its path, or nil if the write

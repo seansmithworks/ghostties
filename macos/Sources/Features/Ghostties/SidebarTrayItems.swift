@@ -95,6 +95,16 @@ struct SidebarTrayPill<Content: View>: View {
     let axis: Axis
     @ViewBuilder let content: () -> Content
 
+    /// Round 6 (Flow 07, layer `OEpEM`/"Bottom Group"): the tray is a
+    /// full-width rounded bar, not a centered capsule — `RoundedRectangle`
+    /// at the same 12pt radius the selected-row card and terminal card use,
+    /// with a light stroke ("rim") instead of the round-5 inner-highlight-only
+    /// treatment. Shape only; the glass/opaque fallback split below is
+    /// unchanged.
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: WorkspaceLayout.selectedRowCornerRadius, style: .continuous)
+    }
+
     var body: some View {
         if #available(macOS 26.0, *), !reduceTransparency {
             GlassEffectContainer {
@@ -103,11 +113,10 @@ struct SidebarTrayPill<Content: View>: View {
             }
             .glassEffect(
                 .regular.tint(TrayGlassStyle.glassTint(for: colorScheme)).interactive(),
-                in: Capsule()
+                in: shape
             )
             .overlay(
-                Capsule()
-                    .strokeBorder(TrayGlassStyle.innerHighlightStroke(for: colorScheme), lineWidth: 0.5)
+                shape.strokeBorder(rimColor, lineWidth: 0.5)
             )
             .shadow(
                 color: TrayGlassStyle.shadowColor,
@@ -117,7 +126,8 @@ struct SidebarTrayPill<Content: View>: View {
         } else {
             pillStack
                 .padding(TrayGlassStyle.innerPadding)
-                .background(Capsule().fill(fill))
+                .background(shape.fill(fill))
+                .overlay(shape.strokeBorder(rimColor, lineWidth: 0.5))
         }
     }
 
@@ -125,7 +135,11 @@ struct SidebarTrayPill<Content: View>: View {
     private var pillStack: some View {
         switch axis {
         case .horizontal:
+            // `maxWidth: .infinity` lets the bar's flexible children
+            // (`TrayIconButton(stretch: true)`) actually claim the full
+            // sidebar width instead of hugging their intrinsic size.
             HStack(spacing: TrayGlassStyle.itemGap, content: content)
+                .frame(maxWidth: .infinity)
         case .vertical:
             VStack(spacing: TrayGlassStyle.itemGap, content: content)
         }
@@ -133,6 +147,14 @@ struct SidebarTrayPill<Content: View>: View {
 
     private var fill: Color {
         colorScheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.05)
+    }
+
+    /// Light rim stroke around the tray bar — Flow 07's caption on the
+    /// collapsed export (`yhzPU.png`) calls out this recess explicitly:
+    /// "The tray becomes a 5% black recess instead of a 4% white one."
+    /// Reuses the same highlight-stroke tokens the glass path already had.
+    private var rimColor: Color {
+        TrayGlassStyle.innerHighlightStroke(for: colorScheme)
     }
 }
 
@@ -143,6 +165,12 @@ struct TrayIconButton: View {
     let systemName: String
     let label: String
     var helpText: String? = nil
+    /// True in the expanded/overlay horizontal tray, where each icon takes
+    /// an equal flexible share of the full-width bar (Flow 07 layer `wy7vi`
+    /// et al.: each icon's "New Session"/"Settings"/"Collapse" wrapper is
+    /// `flex: 1 1 0`). False (default) in the collapsed rail's fixed-size
+    /// vertical pill, which is unchanged.
+    var stretch: Bool = false
     let action: () -> Void
 
     @State private var isHovered = false
@@ -152,9 +180,14 @@ struct TrayIconButton: View {
             Image(systemName: systemName)
                 .font(.system(size: TrayGlassStyle.iconSize, weight: TrayGlassStyle.iconWeight))
                 .foregroundStyle(.secondary)
-                .frame(width: TrayGlassStyle.buttonSize, height: TrayGlassStyle.buttonSize)
+                .frame(
+                    maxWidth: stretch ? .infinity : TrayGlassStyle.buttonSize,
+                    minHeight: TrayGlassStyle.buttonSize,
+                    maxHeight: TrayGlassStyle.buttonSize
+                )
                 .background(
-                    Circle().fill(isHovered ? Color.primary.opacity(0.10) : .clear)
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isHovered ? Color.primary.opacity(0.10) : .clear)
                 )
         }
         .buttonStyle(.plain)

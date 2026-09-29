@@ -24,6 +24,15 @@ struct SidebarRailView: View {
             // pattern used by the task-first sidebar.
             Color.clear.frame(height: WorkspaceLayout.titlebarSpacerHeight)
 
+            // Flow 07 round 6, layer `G10V5`/"Chevron Col": the expanded
+            // sidebar's section-header chevron collapses down to this single
+            // static glyph at the top of the rail — expanding the rail
+            // (Cmd+S) is what "opens" it back to full sections, so this
+            // glyph is decorative, not an independent tap target.
+            PixelChevronView(isExpanded: false)
+                .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
+                .padding(.top, 6)
+
             VStack(spacing: 4) {
                 ForEach(store.railSessions()) { session in
                     RailSessionRow(
@@ -60,7 +69,7 @@ private struct RailSessionRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: 16)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: 16, isSelected: isActive)
                 .frame(width: 52, height: 32)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
