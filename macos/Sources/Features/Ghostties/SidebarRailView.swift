@@ -183,5 +183,9 @@ private struct RailTray: View {
                 TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, tapEffect: item.tapEffect, action: item.action)
             }
         }
+        // Same margin rule as the expanded sidebar's `SidebarBottomTray`:
+        // tray width = container (here, the rail) width − 2×margin, rather
+        // than hugging the buttons' intrinsic width.
+        .padding(.horizontal, WorkspaceLayout.trayHorizontalMargin)
     }
 }

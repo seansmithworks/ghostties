@@ -170,7 +170,14 @@ struct SidebarTrayPill<Content: View>: View {
             HStack(spacing: TrayGlassStyle.itemGap, content: content)
                 .frame(maxWidth: .infinity)
         case .vertical:
+            // `maxWidth: .infinity` lets the rail's tray pill fill its
+            // container (minus `WorkspaceLayout.trayHorizontalMargin`,
+            // applied by the call site) instead of hugging its buttons'
+            // intrinsic width — the same rule the horizontal bar already
+            // applies. Buttons themselves stay fixed-size and center in the
+            // wider pill via the VStack's default `.center` alignment.
             VStack(spacing: TrayGlassStyle.itemGap, content: content)
+                .frame(maxWidth: .infinity)
         }
     }
 

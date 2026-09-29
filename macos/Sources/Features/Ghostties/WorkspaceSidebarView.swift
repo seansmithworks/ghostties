@@ -533,7 +533,7 @@ private struct SidebarBottomTray: View {
                 TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, stretch: true, tapEffect: item.tapEffect, action: item.action)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, WorkspaceLayout.trayHorizontalMargin)
         .padding(.bottom, 8)
     }
 

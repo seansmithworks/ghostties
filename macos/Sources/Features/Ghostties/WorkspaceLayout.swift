@@ -34,6 +34,16 @@ enum WorkspaceLayout {
     /// whatever width is applied.
     static let sidebarRailWidth: CGFloat = 60
 
+    /// Horizontal margin between the sidebar tray pill and the edges of its
+    /// container — shared by the expanded bottom tray (`SidebarBottomTray`,
+    /// full sidebar width) and the collapsed rail's vertical tray (`RailTray`,
+    /// rail width), so both states apply one rule: tray width = container
+    /// width − 2×margin. Previously hand-picked only at the expanded call
+    /// site; named here once the rail tray needed to match it (Sean,
+    /// sidebar-presence review: the rail pill read too narrow at its old
+    /// intrinsic 44pt width).
+    static let trayHorizontalMargin: CGFloat = 8
+
     /// Pure width calculation for the collapsed rail: hugs the macOS
     /// traffic-light cluster — the cluster's rightmost edge (zoom button
     /// `maxX`) plus a trailing gap equal to its leading inset (close button
