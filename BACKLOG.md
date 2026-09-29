@@ -1,5 +1,11 @@
 # Ghostties — Backlog
 
+## 2026-09-28 — filed from sidebar-presence review (not started)
+
+- [ ] **Explore: localhost gets a "more special" surface** instead of a generic new tab + terminal. Sean's
+  ideas: a right-side panel, or a hover view off the left sidebar with its own button next to `+` and
+  the sidebar toggle in the tray. Explore only; not scheduled.
+
 ## 2026-09-26 — overnight: recover the lost sidebar build (Flow 01) from transcripts
 
 Old Mac wipe lost the uncommitted sidebar build; the design survived (pen.dev canvas, now at

@@ -319,6 +319,38 @@ struct SidebarPresenceTests {
         _ = WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
     }
 
+    // MARK: - Drag Snaps Between Rail and Expanded
+
+    /// Rail 98, min 180 → snap point 139. Below it the drag lands on the
+    /// rail; at or above it, pinned — dragging no longer stops at the min
+    /// width (Sean, sidebar-presence review round 3).
+    @Test func dragBelowSnapPointLandsOnRail() {
+        let target = WorkspaceViewContainer.sidebarDragTarget(pointerWidth: 138, railWidth: 98, upperBound: 480)
+        #expect(target.mode == .collapsed)
+        #expect(target.width == 98)
+    }
+
+    /// Past the snap point but under the min width, the sidebar expands to
+    /// the min width — not the rail, and not a squeezed full sidebar.
+    @Test func dragAtSnapPointExpandsToMinWidth() {
+        let target = WorkspaceViewContainer.sidebarDragTarget(pointerWidth: 139, railWidth: 98, upperBound: 480)
+        #expect(target.mode == .pinned)
+        #expect(target.width == WorkspaceLayout.sidebarMinWidth)
+    }
+
+    /// Above the min width the edge follows the pointer, clamped at the top.
+    @Test func dragAboveMinWidthFollowsPointerUpToTheBound() {
+        #expect(WorkspaceViewContainer.sidebarDragTarget(pointerWidth: 300, railWidth: 98, upperBound: 480).width == 300)
+        #expect(WorkspaceViewContainer.sidebarDragTarget(pointerWidth: 900, railWidth: 98, upperBound: 480).width == 480)
+    }
+
+    /// Dragging past the left edge of the rail stays on the rail — drag
+    /// moves between rail and expanded only; full close stays Cmd+Shift+S.
+    @Test func dragFarLeftStaysOnRailNeverCloses() {
+        let target = WorkspaceViewContainer.sidebarDragTarget(pointerWidth: -50, railWidth: 98, upperBound: 480)
+        #expect(target.mode == .collapsed)
+    }
+
     // MARK: - Terminal Text Padding — Ghostties Default Under User Config
 
     /// The 16/8 padding defaults are loaded before the user's config on

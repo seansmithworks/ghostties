@@ -393,17 +393,20 @@ class WorkspaceViewContainer: NSView {
 
     /// Drag handle on the sidebar's trailing edge for resizing. Sits in the
     /// same 8pt inset gap the browser drag handle sits in (proven pattern),
-    /// just on the other side of the terminal card. Visible only when the
-    /// sidebar is pinned; hidden when closed or overlaid.
+    /// just on the other side of the terminal card. Visible when the
+    /// sidebar is pinned or collapsed; hidden when closed or overlaid.
     private lazy var sidebarDragHandle: PanelDragHandleView = {
         let handle = PanelDragHandleView()
         handle.translatesAutoresizingMaskIntoConstraints = false
         handle.isHidden = true  // corrected to match initialMode in setup()
+        handle.onDragStart = { [weak self] in
+            self?.beginSidebarDrag()
+        }
         handle.onDrag = { [weak self] delta in
             self?.handleSidebarDrag(delta: delta)
         }
         handle.onDragEnd = { [weak self] in
-            self?.persistSidebarWidth()
+            self?.endSidebarDrag()
         }
         return handle
     }()
@@ -1235,10 +1238,43 @@ class WorkspaceViewContainer: NSView {
         }
     }
 
+    /// Where the pointer would put the sidebar edge, unclamped — the width
+    /// the user is asking for, which can sit below the rail or between the
+    /// rail and `sidebarMinWidth`. Non-nil only while a drag is in flight.
+    private var sidebarDragPointerWidth: CGFloat?
+
+    /// The pinned width when the drag began, restored if the drag ends up
+    /// collapsing to the rail — passing through `sidebarMinWidth` on the
+    /// way down must not overwrite the width the toggle expands back to.
+    private var sidebarWidthBeforeDrag: CGFloat = 0
+
+    /// Where a sidebar drag lands for a given pointer width: the rail below
+    /// the midpoint between the rail and `sidebarMinWidth`, pinned (clamped
+    /// to min…upperBound) at or above it — the same collapse point
+    /// `NSSplitView` uses, so dragging snaps between rail and expanded in
+    /// both directions instead of stopping at the min width.
+    static func sidebarDragTarget(
+        pointerWidth: CGFloat,
+        railWidth: CGFloat,
+        upperBound: CGFloat
+    ) -> (mode: SidebarMode, width: CGFloat) {
+        let snapPoint = (railWidth + WorkspaceLayout.sidebarMinWidth) / 2
+        if pointerWidth < snapPoint {
+            return (.collapsed, railWidth)
+        }
+        return (.pinned, min(max(pointerWidth, WorkspaceLayout.sidebarMinWidth), upperBound))
+    }
+
+    private func beginSidebarDrag() {
+        sidebarDragPointerWidth = sidebarWidthConstraint.constant
+        sidebarWidthBeforeDrag = currentSidebarWidth
+    }
+
     /// Handle a horizontal drag delta from the sidebar drag handle.
     /// Positive delta = dragging right (sidebar grows), negative = dragging left (sidebar shrinks).
     private func handleSidebarDrag(delta: CGFloat) {
-        let proposed = sidebarWidthConstraint.constant + delta
+        guard let pointer = sidebarDragPointerWidth.map({ $0 + delta }) else { return }
+        sidebarDragPointerWidth = pointer
 
         // Upper bound: the design-token max, but never wider than leaves room
         // for the terminal's minimum usable width (mirrors the browser drag
@@ -1246,7 +1282,27 @@ class WorkspaceViewContainer: NSView {
         let inset = WorkspaceLayout.terminalInset
         let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
         let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
-        let clamped = min(max(proposed, WorkspaceLayout.sidebarMinWidth), upperBound)
+        let target = Self.sidebarDragTarget(
+            pointerWidth: pointer,
+            railWidth: WorkspaceLayout.collapsedRailWidth(in: self),
+            upperBound: upperBound
+        )
+
+        // Crossing the snap point switches mode through the normal animated
+        // transition. Expanding lands at the pointer's width so the edge
+        // stays under the cursor; collapsing restores the pre-drag width for
+        // the next expand. `transitionTo`'s 0.25s debounce can drop a
+        // re-cross; the next drag tick re-evaluates and catches up.
+        if target.mode != sidebarMode {
+            currentSidebarWidth = target.mode == .pinned ? target.width : sidebarWidthBeforeDrag
+            transitionTo(target.mode)
+            return
+        }
+
+        // Live resize only in pinned mode, and never while the snap
+        // animation is driving the width constraint — writing it mid-flight
+        // would fight the animator. The next tick after it settles catches up.
+        guard target.mode == .pinned, !isSidebarTransitionAnimating else { return }
 
         // Single source of truth: writing through `currentSidebarWidth` updates
         // the same stored value `applySidebarView()` reads when it next runs,
@@ -1259,9 +1315,14 @@ class WorkspaceViewContainer: NSView {
         // TaskSidebarView + environment objects) and was previously invoked on
         // every mouseDragged tick at 60-120Hz — the sidebar subtree has a
         // documented render-cost history (two shipped 100%-CPU beachballs).
-        sidebarWidthConstraint.constant = clamped
-        currentSidebarWidth = clamped
-        widthModel.width = clamped
+        sidebarWidthConstraint.constant = target.width
+        currentSidebarWidth = target.width
+        widthModel.width = target.width
+    }
+
+    private func endSidebarDrag() {
+        sidebarDragPointerWidth = nil
+        persistSidebarWidth()
     }
 
     /// Persist the drag-resized width to this view mode's UserDefaults key.
@@ -1516,10 +1577,10 @@ class WorkspaceViewContainer: NSView {
             sidebarOverlayBackground.isHidden = false
         }
 
-        // Sidebar drag handle: only active while the sidebar is pinned. Hidden
-        // in closed mode (sidebar isn't there) and in overlay mode (transient
-        // hover state — not a resize target).
-        sidebarDragHandle.isHidden = newMode != .pinned
+        // Sidebar drag handle: active while pinned or collapsed — dragging
+        // snaps between the two. Hidden in closed mode (sidebar isn't there)
+        // and in overlay mode (transient hover state — not a resize target).
+        sidebarDragHandle.isHidden = !(newMode == .pinned || newMode == .collapsed)
 
         // 4. Animate constraints, widths, alphas — duration/curve come from
         // the Flow 05 named-transition table (`WorkspaceLayout.
@@ -2295,7 +2356,7 @@ class WorkspaceViewContainer: NSView {
         // the sidebar over the same carded terminal rather than a full-bleed one.
         let hasCardInset = true
         let initialWidth: CGFloat = isPinned ? currentSidebarWidth : (initialMode == .collapsed ? WorkspaceLayout.collapsedRailWidth(in: self) : 0)
-        sidebarDragHandle.isHidden = !isPinned
+        sidebarDragHandle.isHidden = !occupiesSpace
 
         sidebarWidthConstraint = sidebarHostingView.widthAnchor.constraint(equalToConstant: initialWidth)
 
@@ -2703,6 +2764,9 @@ class TransparentHostingView<Content: View>: NSHostingView<Content> {
 /// sidebar/terminal divider. Changes the cursor to a left-right resize arrow
 /// on hover and reports horizontal drag deltas via the `onDrag` closure.
 private class PanelDragHandleView: NSView {
+    /// Called on mouseDown, before any drag delta. Unused (nil) by the browser handle.
+    var onDragStart: (() -> Void)?
+
     /// Called during mouseDragged with the horizontal delta (positive = rightward).
     var onDrag: ((CGFloat) -> Void)?
 
@@ -2753,6 +2817,7 @@ private class PanelDragHandleView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         lastDragX = event.locationInWindow.x
+        onDragStart?()
     }
 
     override func mouseDragged(with event: NSEvent) {
