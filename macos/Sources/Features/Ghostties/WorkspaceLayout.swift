@@ -32,17 +32,55 @@ enum WorkspaceLayout {
     /// 3: the fixed 128pt rail read too wide). Not drag-resizable, unlike
     /// `sidebarWidth`. Content (glyph rows, tray pill) stays centered in
     /// whatever width is applied.
-    static let sidebarRailWidth: CGFloat = 72
+    static let sidebarRailWidth: CGFloat = 60
 
     /// Pure width calculation for the collapsed rail: hugs the macOS
     /// traffic-light cluster — the cluster's rightmost edge (zoom button
     /// `maxX`) plus a trailing gap equal to its leading inset (close button
     /// `minX`), both in the same coordinate space, so the cluster sits
-    /// visually centered in the rail. On macOS 26 that's ~98pt. Never
-    /// returns less than `sidebarRailWidth`, so a narrow or unusual cluster
-    /// never squeezes the tray pill.
+    /// visually centered in the rail. With the cluster pulled in to
+    /// `trafficLightLeadingInset` (round 4, "if we can go smaller let's do
+    /// it") that lands around ~64-68pt on macOS 26, down from ~98pt at
+    /// AppKit's default inset. Never returns less than `sidebarRailWidth`,
+    /// so a narrow or unusual cluster never squeezes the tray pill.
     static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat) -> CGFloat {
         max(sidebarRailWidth, zoomButtonMaxX + leadingInset)
+    }
+
+    /// Target leading/top inset for the traffic-light cluster — pen.dev
+    /// "Flow 07 · Light · Collapsed" reference (~8pt from the window edge),
+    /// down from AppKit's default ~20pt inset. Driving `collapsedRailWidth`
+    /// down requires physically moving the buttons, not just reading
+    /// wherever AppKit happens to place them.
+    static let trafficLightLeadingInset: CGFloat = 8
+
+    /// Repositions `window`'s three standard titlebar buttons so the
+    /// cluster's leading edge sits at `trafficLightLeadingInset`, preserving
+    /// their existing relative spacing and vertical position — shifts the
+    /// whole cluster by one delta rather than re-deriving each button's
+    /// frame. No-op in fullscreen (buttons are hidden/inapplicable there,
+    /// mirroring `collapsedRailWidth(in:)`'s early return) or before the
+    /// window is on-screen. AppKit re-lays out these buttons on its own
+    /// titlebar passes (resize, fullscreen enter/exit, tab changes), so this
+    /// must be re-applied every layout pass, not once — call from the same
+    /// `layout()` hook that already re-derives `collapsedRailWidth(in:)`/
+    /// `titlebarRowTopAnchorConstant(in:)` from these same three buttons.
+    /// Applied unconditionally, independent of sidebar mode — the
+    /// traffic-light position is window chrome, not sidebar state, and
+    /// moving it only in some modes would make the cluster visibly jump
+    /// when the sidebar toggles.
+    static func repositionTrafficLights(in window: NSWindow) {
+        if isFullScreenLayout(styleMask: window.styleMask) { return }
+        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        let resolved = buttons.compactMap { window.standardWindowButton($0) }
+        guard let leftmost = resolved.min(by: { $0.frame.minX < $1.frame.minX }) else { return }
+        let delta = trafficLightLeadingInset - leftmost.frame.minX
+        guard abs(delta) > 0.5 else { return }
+        for button in resolved {
+            var origin = button.frame.origin
+            origin.x += delta
+            button.setFrameOrigin(origin)
+        }
     }
 
     /// Pure fullscreen check shared by `titlebarRowTopAnchorConstant(in:)`

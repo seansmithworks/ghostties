@@ -120,6 +120,23 @@ struct SidebarPresenceTests {
         #expect(WorkspaceLayout.sidebarRailWidth < 98)
     }
 
+    /// Round 4 ("if we can go smaller let's do it"): with the cluster
+    /// pulled in to `trafficLightLeadingInset` (8pt) the hug lands well
+    /// under the old ~98pt default-inset width — the narrowing has to come
+    /// from actually moving the buttons, not a floor tweak alone.
+    @Test func railWidthNarrowsWhenClusterSitsAtTheRound4Inset() {
+        #expect(WorkspaceLayout.trafficLightLeadingInset == 8)
+        // Same cluster width as the round-3 fixture (78 - 20 = 58pt), just
+        // shifted so its leading edge sits at the round-4 inset.
+        let zoomMaxXAtRound4Inset: CGFloat = 58 + WorkspaceLayout.trafficLightLeadingInset
+        let width = WorkspaceLayout.collapsedRailWidth(
+            zoomButtonMaxX: zoomMaxXAtRound4Inset,
+            leadingInset: WorkspaceLayout.trafficLightLeadingInset
+        )
+        #expect(width < 98)
+        #expect(width == zoomMaxXAtRound4Inset + WorkspaceLayout.trafficLightLeadingInset)
+    }
+
     /// `collapsedRailWidth(in:)` must special-case fullscreen the same way
     /// `titlebarRowTopAnchorConstant(in:)` already does — traffic lights are
     /// hidden there, so measuring their (stale/zero) frames would be wrong.

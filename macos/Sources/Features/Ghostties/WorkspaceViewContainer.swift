@@ -856,6 +856,14 @@ class WorkspaceViewContainer: NSView {
             )
         }
 
+        // Pull the traffic lights in to the round-4 target inset before
+        // reading their frames below — every other calculation in this pass
+        // (toolbar row anchor, rail width) derives from wherever these
+        // buttons currently sit.
+        if let win = window {
+            WorkspaceLayout.repositionTrafficLights(in: win)
+        }
+
         // Re-derive toolbar row position from live close-button frame.
         // This survives macOS version bumps and upstream titlebar refactors.
         if let constant = WorkspaceLayout.titlebarRowTopAnchorConstant(in: self) {
@@ -1917,6 +1925,10 @@ class WorkspaceViewContainer: NSView {
     // MARK: - Window Focus
 
     @objc private func windowDidResignKey() {
+        // Round 4: mirrors the `needsLayout = true` in `windowDidBecomeKey()`
+        // — the dimmed/inactive traffic-light redraw on losing key is another
+        // AppKit-owned titlebar pass worth re-asserting the inset against.
+        needsLayout = true
         if sidebarMode == .overlay {
             transitionTo(.closed)
         }
@@ -1977,6 +1989,10 @@ class WorkspaceViewContainer: NSView {
         // freeze the section layout while this window is the user's focus.
         // No-op if already frozen — `freezeSnapshot()` guards against clobber.
         WorkspaceStore.shared.freezeSnapshot()
+        // Round 4: focus changes are one of the events that can re-lay-out
+        // AppKit's own titlebar buttons; force a layout pass so
+        // `repositionTrafficLights(in:)` re-applies the round-4 inset.
+        needsLayout = true
     }
 
     @objc private func windowDidEnterOrExitFullScreen() {
