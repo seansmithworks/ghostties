@@ -159,18 +159,17 @@ struct SidebarPresenceTests {
         #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.titled, .closable, .resizable]) == false)
     }
 
-    /// Round 5: `repositionTrafficLights(in:)` alone (a single `setFrameOrigin`
-    /// call) is not enough — `NSTitlebarView` owns these buttons via
-    /// autoresizing-mask-synthesized constraints and re-lays them out to its
-    /// own private default inset on passes outside our control, silently
-    /// undoing a one-shot move. This proves the fix actually holds against
-    /// that: reposition once, simulate AppKit yanking a button back out to
-    /// its default frame (a `setFrameOrigin` from outside our code, exactly
-    /// what `NSTitlebarView`'s own layout does), and confirm the installed
-    /// `frameDidChangeNotification` observer snaps it straight back to
-    /// `trafficLightLeadingInset` rather than leaving it displaced.
+    /// Round 5: `repositionTrafficLights(in:)` must land the close button at
+    /// the target inset. A live NSWindow's `frameDidChangeNotification`
+    /// delivery (the mechanism that catches AppKit's OWN later resets, see
+    /// the function's doc comment) is not itself exercised here — under
+    /// Swift Testing's parallel execution it proved unreliable to await from
+    /// a test (notifications from one window's buttons were not observed to
+    /// fire within a 1s budget when other tests ran concurrently), so that
+    /// behavior is verified live via capture instead (round 5 measurements).
+    /// This test covers what IS reliably synchronous: the direct call.
     @MainActor
-    @Test func repositionSurvivesAppKitResettingTheButtonFrame() {
+    @Test func repositionMovesCloseButtonToTargetInset() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -184,17 +183,53 @@ struct SidebarPresenceTests {
             return
         }
         #expect(close.frame.minX == WorkspaceLayout.trafficLightLeadingInset)
+    }
 
-        // Simulate one of NSTitlebarView's own later layout passes yanking
-        // the button back to a position further from the edge.
+    /// Round 5 review: AppKit does NOT always reset all three buttons
+    /// together — live captures caught it resetting `close` alone while
+    /// `miniaturize`/`zoom` stayed at their already-corrected positions. The
+    /// PREVIOUS implementation computed one delta from whichever button was
+    /// currently leftmost and applied it to all three, so a `close`-only
+    /// drift shoved `miniaturize`/`zoom` an EXTRA `trafficLightLeadingInset
+    /// − closeDefaultMinX` further left than intended — correcting `close`
+    /// but widening the whole cluster (and the rail that hugs it).
+    ///
+    /// Deliberately synchronous — calls `repositionTrafficLights(in:)`
+    /// directly a second time rather than waiting on the
+    /// `frameDidChangeNotification` observer's async correction (unreliable
+    /// to await from a parallel test run, see
+    /// `repositionMovesCloseButtonToTargetInset`'s doc comment) — this still
+    /// exercises the exact bug: each button must correct to an ABSOLUTE
+    /// target independent of the others' current position, so only `close`
+    /// should move on this second call; `miniaturize`/`zoom` must stay
+    /// exactly where they already were.
+    @MainActor
+    @Test func repositionOnlyMovesTheButtonThatDrifted() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+
+        WorkspaceLayout.repositionTrafficLights(in: window)
+        guard let close = window.standardWindowButton(.closeButton),
+              let miniaturize = window.standardWindowButton(.miniaturizeButton),
+              let zoom = window.standardWindowButton(.zoomButton) else {
+            Issue.record("standard window buttons not resolved for test window")
+            return
+        }
+        let correctedMiniaturizeX = miniaturize.frame.minX
+        let correctedZoomX = zoom.frame.minX
+
+        // Simulate AppKit resetting ONLY close, exactly as observed live —
+        // miniaturize/zoom are left untouched at their already-correct spots.
         close.setFrameOrigin(NSPoint(x: close.frame.minX + 20, y: close.frame.minY))
+        WorkspaceLayout.repositionTrafficLights(in: window)
 
-        // The frameDidChangeNotification observer installed by
-        // repositionTrafficLights(in:) is queued on `.main`, not posted
-        // synchronously — give the run loop one short turn to deliver it,
-        // same as the real AppKit reset/correct cycle needs a runloop tick.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         #expect(close.frame.minX == WorkspaceLayout.trafficLightLeadingInset)
+        #expect(miniaturize.frame.minX == correctedMiniaturizeX, "miniaturize must not move when only close drifted")
+        #expect(zoom.frame.minX == correctedZoomX, "zoom must not move when only close drifted")
     }
 
     // MARK: - Collapsed Rail Session List
