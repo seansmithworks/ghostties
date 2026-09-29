@@ -1,5 +1,23 @@
 # Ghostties — Backlog
 
+## 2026-09-29 — sidebar-presence round 6: match the pen.dev design (carried)
+
+State: `feat/sidebar-presence` @ `6e783ae9f`, pushed, no PR. Rounds 4–5 landed: glass tray pill, Settings
+(gear → Open Config), rail renders session glyphs (`railSessions()`), drag snap, 16/8 padding. Traffic-light
+repositioning tried and REVERTED (Sean chose native positions; rail ~95pt).
+
+- [ ] **Rebuild sidebar visuals from the pen.dev file** (carried) — build drifted because builders never used
+  the canvas. Source: Flow 07 frame `t4XvdY` in pen.dev doc `edff08ac` (exports: expanded `mIi8b`,
+  collapsed `yhzPU`, closed `sz7jE`). Diffs: sentence-case headers "Active (5)" w/ trailing chevron; raised
+  white glow card on selected row; ~15pt titles, roomier rows, no timestamps; ghost glyphs (red on selected);
+  full-width tray bar with 3 spaced icons + light rim; rail chevron + highlighted selected ghost + › rows for
+  Inactive/Archived; terminal padding ~20 left / 24 top. Layout/motion/behavior unchanged.
+- [ ] **Glyph strawman: ghosts as designed** (carried) — supersedes pattern D (✓/?/⋮) since the design is
+  newer. Apply; Sean redlines if wrong.
+- [ ] **Rail width tuning** (parked) — Sean: "tune later". Design is ~60pt; native traffic lights force ~95.
+- [ ] **Then:** Sean hands-on (Cmd+S / Cmd+Shift+S / mash, gear, glass) → PR to SeanSmithWorks/ghostties
+  with before/after (carried).
+
 ## 2026-09-28 — filed from sidebar-presence review (not started)
 
 - [ ] **Explore: localhost gets a "more special" surface** instead of a generic new tab + terminal. Sean's
