@@ -60,16 +60,53 @@ enum WorkspaceLayout {
     /// whole cluster by one delta rather than re-deriving each button's
     /// frame. No-op in fullscreen (buttons are hidden/inapplicable there,
     /// mirroring `collapsedRailWidth(in:)`'s early return) or before the
-    /// window is on-screen. AppKit re-lays out these buttons on its own
-    /// titlebar passes (resize, fullscreen enter/exit, tab changes), so this
-    /// must be re-applied every layout pass, not once — call from the same
-    /// `layout()` hook that already re-derives `collapsedRailWidth(in:)`/
-    /// `titlebarRowTopAnchorConstant(in:)` from these same three buttons.
-    /// Applied unconditionally, independent of sidebar mode — the
-    /// traffic-light position is window chrome, not sidebar state, and
-    /// moving it only in some modes would make the cluster visibly jump
-    /// when the sidebar toggles.
+    /// window is on-screen. Applied unconditionally, independent of sidebar
+    /// mode — the traffic-light position is window chrome, not sidebar
+    /// state, and moving it only in some modes would make the cluster
+    /// visibly jump when the sidebar toggles.
+    ///
+    /// `NSTitlebarView` owns these buttons via `NSAutoresizingMaskLayoutConstraint`s
+    /// synthesized from `translatesAutoresizingMaskIntoConstraints = true`
+    /// (confirmed by inspecting the live constraint: `_NSThemeCloseWidget.minX
+    /// == 19`), and re-lays them out to that same private default inset on
+    /// its OWN titlebar passes — which are NOT limited to this view's
+    /// `layout()` calls (window becoming key, tab-bar layout, and the
+    /// fixture's own content population all trigger more of them later, well
+    /// after any one-shot correction). A single `setFrameOrigin` — even
+    /// deferred a runloop tick — reliably gets silently overwritten again by
+    /// one of those later passes. So instead of fighting from our own
+    /// layout() alone, this installs a `frameDidChangeNotification` observer
+    /// directly on the buttons (once per window) that re-applies the inset
+    /// every time AppKit moves them away from it — including whenever
+    /// `applyTrafficLightInset` itself calls `setFrameOrigin`, which is safe:
+    /// once frame == target, `delta` is ~0 and the guard below stops the
+    /// re-entrant chain.
     static func repositionTrafficLights(in window: NSWindow) {
+        applyTrafficLightInset(in: window)
+        installTrafficLightObserverIfNeeded(for: window)
+    }
+
+    private static var trafficLightObserverWindows = NSHashTable<NSWindow>.weakObjects()
+
+    private static func installTrafficLightObserverIfNeeded(for window: NSWindow) {
+        guard !trafficLightObserverWindows.contains(window) else { return }
+        trafficLightObserverWindows.add(window)
+        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        for type in buttons {
+            guard let button = window.standardWindowButton(type) else { continue }
+            button.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                forName: NSView.frameDidChangeNotification,
+                object: button,
+                queue: .main
+            ) { [weak window] _ in
+                guard let window else { return }
+                applyTrafficLightInset(in: window)
+            }
+        }
+    }
+
+    private static func applyTrafficLightInset(in window: NSWindow) {
         if isFullScreenLayout(styleMask: window.styleMask) { return }
         let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
         let resolved = buttons.compactMap { window.standardWindowButton($0) }

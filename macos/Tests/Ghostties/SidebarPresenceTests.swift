@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Ghostty
@@ -155,6 +156,44 @@ struct SidebarPresenceTests {
     @Test func fullScreenLayoutIsDetectedFromStyleMask() {
         #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.fullScreen]) == true)
         #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.titled, .closable, .resizable]) == false)
+    }
+
+    /// Round 5: `repositionTrafficLights(in:)` alone (a single `setFrameOrigin`
+    /// call) is not enough — `NSTitlebarView` owns these buttons via
+    /// autoresizing-mask-synthesized constraints and re-lays them out to its
+    /// own private default inset on passes outside our control, silently
+    /// undoing a one-shot move. This proves the fix actually holds against
+    /// that: reposition once, simulate AppKit yanking a button back out to
+    /// its default frame (a `setFrameOrigin` from outside our code, exactly
+    /// what `NSTitlebarView`'s own layout does), and confirm the installed
+    /// `frameDidChangeNotification` observer snaps it straight back to
+    /// `trafficLightLeadingInset` rather than leaving it displaced.
+    @MainActor
+    @Test func repositionSurvivesAppKitResettingTheButtonFrame() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+
+        WorkspaceLayout.repositionTrafficLights(in: window)
+        guard let close = window.standardWindowButton(.closeButton) else {
+            Issue.record("no close button resolved for test window")
+            return
+        }
+        #expect(close.frame.minX == WorkspaceLayout.trafficLightLeadingInset)
+
+        // Simulate one of NSTitlebarView's own later layout passes yanking
+        // the button back to a position further from the edge.
+        close.setFrameOrigin(NSPoint(x: close.frame.minX + 20, y: close.frame.minY))
+
+        // The frameDidChangeNotification observer installed by
+        // repositionTrafficLights(in:) is queued on `.main`, not posted
+        // synchronously — give the run loop one short turn to deliver it,
+        // same as the real AppKit reset/correct cycle needs a runloop tick.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        #expect(close.frame.minX == WorkspaceLayout.trafficLightLeadingInset)
     }
 
     // MARK: - Flow 05 Transition Timing Table
