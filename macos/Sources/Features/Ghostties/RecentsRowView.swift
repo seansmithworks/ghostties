@@ -126,7 +126,15 @@ struct RecentsRowView: View, Equatable {
         }
         .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
         .padding(.trailing, 10)
-        .frame(height: 40)
+        // 46pt + the enclosing `VStack(spacing: 2)`'s 2pt inter-row gap
+        // (`RecentsListView.sectionsContent`) = 48pt row-to-row pitch —
+        // measured directly off Flow 07's export (`mIi8b.png`): traffic-light
+        // diameter is 12px there and native traffic lights are a fixed 12pt,
+        // so design px IS pt (1:1, no export scaling to correct for).
+        // Consecutive row-icon centers measure 48px apart; the round-6 first
+        // pass used 40 (before that, 36), both too tight — Sean's round-6
+        // follow-up review called this out as ~30% tighter than the design.
+        .frame(height: 46)
         .background(rowBackground)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }

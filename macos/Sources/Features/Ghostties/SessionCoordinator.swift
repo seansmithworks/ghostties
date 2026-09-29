@@ -1756,6 +1756,33 @@ final class SessionCoordinator: ObservableObject {
         sessionIdsStartedThisLaunch.insert(id)
     }
 
+    /// Capture-rig-only seam (round 6 follow-up): marks a session focused
+    /// for `GHOSTTIES_CAPTURE_FIXTURE` screenshots so the sidebar's
+    /// selected-row styling actually renders (`RecentsRowView`/
+    /// `SidebarRailView` key off `activeSessionId`). Sets `activeSessionId`
+    /// directly instead of routing through `focusSession(id:)` — the real
+    /// path snapshots/swaps the terminal's `SplitTree`, which the fixture's
+    /// canned sessions don't have (their terminal content comes from the
+    /// default-window transcript, not a per-session surface — see
+    /// `CaptureFixture`'s doc comment on `TerminalController.init`).
+    ///
+    /// Called from BOTH `WorkspaceSidebarView.onAppear` and
+    /// `SidebarRailView.onAppear` — a capture can cold-launch straight into
+    /// `.collapsed` mode (`GHOSTTIES_CAPTURE_SIDEBAR_MODE=collapsed`), in
+    /// which case `WorkspaceSidebarView` never mounts at all, so only the
+    /// rail's own `onAppear` ever runs. The `CaptureFixture.isActive` guard
+    /// (outside `#if DEBUG` — unlike `focusedSessionId`) means this method
+    /// is always safe to call unconditionally from either site; it no-ops
+    /// entirely outside fixture mode, so it can never affect a real launch.
+    func applyCaptureFixtureFocusIfNeeded() {
+        guard CaptureFixture.isActive else { return }
+        #if DEBUG
+        if let id = CaptureFixture.focusedSessionId {
+            activeSessionId = id
+        }
+        #endif
+    }
+
     /// Test-only: current count of live name-sync subscriptions, so tests
     /// can assert the dictionary shrinks after teardown without reaching
     /// into a `private` property directly.

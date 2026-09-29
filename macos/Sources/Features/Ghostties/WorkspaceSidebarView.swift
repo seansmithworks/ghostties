@@ -111,6 +111,12 @@ struct WorkspaceSidebarView: View {
             }
             // Auto-expand the project containing the active session.
             autoExpandActiveProject()
+
+            // Round 6 follow-up: capture-rig-only — exercises the
+            // selected-row styling in `GHOSTTIES_CAPTURE_FIXTURE`
+            // screenshots. No-ops outside fixture mode (see the method's
+            // own doc comment for why `SidebarRailView` needs the same call).
+            coordinator.applyCaptureFixtureFocusIfNeeded()
         }
         .onChange(of: selectedProjectId) { newId in
             store.lastSelectedProjectId = newId

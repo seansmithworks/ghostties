@@ -35,9 +35,19 @@ struct SidebarTrayItem: Identifiable {
 /// different proportions.
 enum TrayGlassStyle {
     /// Hit target / visual size of one `TrayIconButton`. Round 5: 28 → 30.
-    static let buttonSize: CGFloat = 30
+    /// Round 6 follow-up: 30 → 36 — derived from Flow 07's Icon container
+    /// (20×20) plus its "New Session" wrapper's 8pt padding on every side
+    /// (`flow07.html` layer `wy7vi`: `padding: 8px` around a 20×20 `Icon`),
+    /// measured in design px which the traffic-light ruler confirms are 1:1
+    /// with app pt. `innerPadding` (4pt, unchanged) added on top of this
+    /// gives a 44pt tray bar, matching the design's measured tray height.
+    static let buttonSize: CGFloat = 36
     /// SF Symbol point size inside a tray button. Round 5: 13 → 14.
-    static let iconSize: CGFloat = 14
+    /// Round 6 follow-up: 14 → 16, scaled with `buttonSize` (30→36 is
+    /// ×1.2; 14×1.2 ≈ 16) — SF Symbols carry more ink per point than
+    /// Flow 07's raw 17.5px custom glyphs, so this tracks the button-size
+    /// ratio rather than the glyph's own px value directly.
+    static let iconSize: CGFloat = 16
     /// SF Symbol weight inside a tray button.
     static let iconWeight: Font.Weight = .medium
     /// Padding between the pill's capsule edge and its buttons.
