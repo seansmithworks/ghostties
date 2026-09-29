@@ -38,86 +38,11 @@ enum WorkspaceLayout {
     /// traffic-light cluster — the cluster's rightmost edge (zoom button
     /// `maxX`) plus a trailing gap equal to its leading inset (close button
     /// `minX`), both in the same coordinate space, so the cluster sits
-    /// visually centered in the rail. With the cluster pulled in to
-    /// `trafficLightLeadingInset` (round 4, "if we can go smaller let's do
-    /// it") that lands around ~64-68pt on macOS 26, down from ~98pt at
-    /// AppKit's default inset. Never returns less than `sidebarRailWidth`,
+    /// visually centered in the rail. Native (AppKit-default) inset lands
+    /// around ~94pt on macOS 26. Never returns less than `sidebarRailWidth`,
     /// so a narrow or unusual cluster never squeezes the tray pill.
     static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat) -> CGFloat {
         max(sidebarRailWidth, zoomButtonMaxX + leadingInset)
-    }
-
-    /// Target leading/top inset for the traffic-light cluster — pen.dev
-    /// "Flow 07 · Light · Collapsed" reference (~8pt from the window edge),
-    /// down from AppKit's default ~20pt inset. Driving `collapsedRailWidth`
-    /// down requires physically moving the buttons, not just reading
-    /// wherever AppKit happens to place them.
-    static let trafficLightLeadingInset: CGFloat = 8
-
-    /// Repositions `window`'s three standard titlebar buttons so the
-    /// cluster's leading edge sits at `trafficLightLeadingInset`, preserving
-    /// their existing relative spacing and vertical position — shifts the
-    /// whole cluster by one delta rather than re-deriving each button's
-    /// frame. No-op in fullscreen (buttons are hidden/inapplicable there,
-    /// mirroring `collapsedRailWidth(in:)`'s early return) or before the
-    /// window is on-screen. Applied unconditionally, independent of sidebar
-    /// mode — the traffic-light position is window chrome, not sidebar
-    /// state, and moving it only in some modes would make the cluster
-    /// visibly jump when the sidebar toggles.
-    ///
-    /// `NSTitlebarView` owns these buttons via `NSAutoresizingMaskLayoutConstraint`s
-    /// synthesized from `translatesAutoresizingMaskIntoConstraints = true`
-    /// (confirmed by inspecting the live constraint: `_NSThemeCloseWidget.minX
-    /// == 19`), and re-lays them out to that same private default inset on
-    /// its OWN titlebar passes — which are NOT limited to this view's
-    /// `layout()` calls (window becoming key, tab-bar layout, and the
-    /// fixture's own content population all trigger more of them later, well
-    /// after any one-shot correction). A single `setFrameOrigin` — even
-    /// deferred a runloop tick — reliably gets silently overwritten again by
-    /// one of those later passes. So instead of fighting from our own
-    /// layout() alone, this installs a `frameDidChangeNotification` observer
-    /// directly on the buttons (once per window) that re-applies the inset
-    /// every time AppKit moves them away from it — including whenever
-    /// `applyTrafficLightInset` itself calls `setFrameOrigin`, which is safe:
-    /// once frame == target, `delta` is ~0 and the guard below stops the
-    /// re-entrant chain.
-    static func repositionTrafficLights(in window: NSWindow) {
-        applyTrafficLightInset(in: window)
-        installTrafficLightObserverIfNeeded(for: window)
-    }
-
-    private static var trafficLightObserverWindows = NSHashTable<NSWindow>.weakObjects()
-
-    private static func installTrafficLightObserverIfNeeded(for window: NSWindow) {
-        guard !trafficLightObserverWindows.contains(window) else { return }
-        trafficLightObserverWindows.add(window)
-        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-        for type in buttons {
-            guard let button = window.standardWindowButton(type) else { continue }
-            button.postsFrameChangedNotifications = true
-            NotificationCenter.default.addObserver(
-                forName: NSView.frameDidChangeNotification,
-                object: button,
-                queue: .main
-            ) { [weak window] _ in
-                guard let window else { return }
-                applyTrafficLightInset(in: window)
-            }
-        }
-    }
-
-    private static func applyTrafficLightInset(in window: NSWindow) {
-        if isFullScreenLayout(styleMask: window.styleMask) { return }
-        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-        let resolved = buttons.compactMap { window.standardWindowButton($0) }
-        guard let leftmost = resolved.min(by: { $0.frame.minX < $1.frame.minX }) else { return }
-        let delta = trafficLightLeadingInset - leftmost.frame.minX
-        guard abs(delta) > 0.5 else { return }
-        for button in resolved {
-            var origin = button.frame.origin
-            origin.x += delta
-            button.setFrameOrigin(origin)
-        }
     }
 
     /// Pure fullscreen check shared by `titlebarRowTopAnchorConstant(in:)`

@@ -132,23 +132,6 @@ struct SidebarPresenceTests {
         #expect(WorkspaceLayout.sidebarRailWidth < 98)
     }
 
-    /// Round 4 ("if we can go smaller let's do it"): with the cluster
-    /// pulled in to `trafficLightLeadingInset` (8pt) the hug lands well
-    /// under the old ~98pt default-inset width — the narrowing has to come
-    /// from actually moving the buttons, not a floor tweak alone.
-    @Test func railWidthNarrowsWhenClusterSitsAtTheRound4Inset() {
-        #expect(WorkspaceLayout.trafficLightLeadingInset == 8)
-        // Same cluster width as the round-3 fixture (78 - 20 = 58pt), just
-        // shifted so its leading edge sits at the round-4 inset.
-        let zoomMaxXAtRound4Inset: CGFloat = 58 + WorkspaceLayout.trafficLightLeadingInset
-        let width = WorkspaceLayout.collapsedRailWidth(
-            zoomButtonMaxX: zoomMaxXAtRound4Inset,
-            leadingInset: WorkspaceLayout.trafficLightLeadingInset
-        )
-        #expect(width < 98)
-        #expect(width == zoomMaxXAtRound4Inset + WorkspaceLayout.trafficLightLeadingInset)
-    }
-
     /// `collapsedRailWidth(in:)` must special-case fullscreen the same way
     /// `titlebarRowTopAnchorConstant(in:)` already does — traffic lights are
     /// hidden there, so measuring their (stale/zero) frames would be wrong.
@@ -157,44 +140,6 @@ struct SidebarPresenceTests {
     @Test func fullScreenLayoutIsDetectedFromStyleMask() {
         #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.fullScreen]) == true)
         #expect(WorkspaceLayout.isFullScreenLayout(styleMask: [.titled, .closable, .resizable]) == false)
-    }
-
-    /// Round 5: `repositionTrafficLights(in:)` alone (a single `setFrameOrigin`
-    /// call) is not enough — `NSTitlebarView` owns these buttons via
-    /// autoresizing-mask-synthesized constraints and re-lays them out to its
-    /// own private default inset on passes outside our control, silently
-    /// undoing a one-shot move. This proves the fix actually holds against
-    /// that: reposition once, simulate AppKit yanking a button back out to
-    /// its default frame (a `setFrameOrigin` from outside our code, exactly
-    /// what `NSTitlebarView`'s own layout does), and confirm the installed
-    /// `frameDidChangeNotification` observer snaps it straight back to
-    /// `trafficLightLeadingInset` rather than leaving it displaced.
-    @MainActor
-    @Test func repositionSurvivesAppKitResettingTheButtonFrame() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-
-        WorkspaceLayout.repositionTrafficLights(in: window)
-        guard let close = window.standardWindowButton(.closeButton) else {
-            Issue.record("no close button resolved for test window")
-            return
-        }
-        #expect(close.frame.minX == WorkspaceLayout.trafficLightLeadingInset)
-
-        // Simulate one of NSTitlebarView's own later layout passes yanking
-        // the button back to a position further from the edge.
-        close.setFrameOrigin(NSPoint(x: close.frame.minX + 20, y: close.frame.minY))
-
-        // The frameDidChangeNotification observer installed by
-        // repositionTrafficLights(in:) is queued on `.main`, not posted
-        // synchronously — give the run loop one short turn to deliver it,
-        // same as the real AppKit reset/correct cycle needs a runloop tick.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        #expect(close.frame.minX == WorkspaceLayout.trafficLightLeadingInset)
     }
 
     // MARK: - Collapsed Rail Session List
