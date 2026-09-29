@@ -14,30 +14,62 @@ struct SidebarTrayItem: Identifiable {
     let action: () -> Void
 }
 
-/// The floating rounded pill that houses tray icon buttons — opaque, no
-/// blur: a 5% black recess in light appearance, 4% white in dark (Flow 01
-/// reference, pen-t4 frames 01/02). Shared by the expanded sidebar's
-/// horizontal bottom tray and the collapsed rail's vertical tray pill, so
-/// both are one component that only changes axis.
+/// Round 4 tray pill tuning — Sean's strawman, named so every dimension
+/// tunes from one place instead of being hand-picked at each call site.
+/// Button/icon sizing feeds both the Liquid Glass path (macOS 26+) and the
+/// opaque fallback below, so the two never drift into different proportions.
+enum TrayGlassStyle {
+    /// Hit target / visual size of one `TrayIconButton`.
+    static let buttonSize: CGFloat = 28
+    /// SF Symbol point size inside a tray button.
+    static let iconSize: CGFloat = 13
+    /// SF Symbol weight inside a tray button.
+    static let iconWeight: Font.Weight = .medium
+    /// Padding between the pill's capsule edge and its buttons.
+    static let innerPadding: CGFloat = 4
+    /// Gap between adjacent tray buttons.
+    static let itemGap: CGFloat = 2
+}
+
+/// The floating rounded pill that houses tray icon buttons. On macOS 26+,
+/// with transparency effects allowed, this is real Liquid Glass
+/// (`.glassEffect(.regular.interactive())`) — Sean wanted to try it,
+/// styled beyond the stock look via `TrayGlassStyle`. Everywhere else
+/// (pre-26, or Reduce Transparency on) it falls back to the original opaque
+/// recess: 5% black in light appearance, 4% white in dark (Flow 01
+/// reference, pen-t4 frames 01/02) — a bright terminal behind the pill must
+/// never bleed through when the user has asked to avoid transparency, and
+/// there's no glass API to fall back on below 26. Shared by the expanded
+/// sidebar's horizontal bottom tray and the collapsed rail's vertical tray
+/// pill, so both are one component that only changes axis.
 struct SidebarTrayPill<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     let axis: Axis
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        pillStack
-            .padding(4)
-            .background(Capsule().fill(fill))
+        if #available(macOS 26.0, *), !reduceTransparency {
+            GlassEffectContainer {
+                pillStack
+                    .padding(TrayGlassStyle.innerPadding)
+            }
+            .glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            pillStack
+                .padding(TrayGlassStyle.innerPadding)
+                .background(Capsule().fill(fill))
+        }
     }
 
     @ViewBuilder
     private var pillStack: some View {
         switch axis {
         case .horizontal:
-            HStack(spacing: 2, content: content)
+            HStack(spacing: TrayGlassStyle.itemGap, content: content)
         case .vertical:
-            VStack(spacing: 2, content: content)
+            VStack(spacing: TrayGlassStyle.itemGap, content: content)
         }
     }
 
@@ -46,9 +78,9 @@ struct SidebarTrayPill<Content: View>: View {
     }
 }
 
-/// A 32×32 icon-only button hosted inside `SidebarTrayPill`. The pill has
-/// no visible text, so the item's title carries over as a tooltip and an
-/// accessibility label instead.
+/// An icon-only button hosted inside `SidebarTrayPill`, sized from
+/// `TrayGlassStyle`. The pill has no visible text, so the item's title
+/// carries over as a tooltip and an accessibility label instead.
 struct TrayIconButton: View {
     let systemName: String
     let label: String
@@ -59,9 +91,9 @@ struct TrayIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: TrayGlassStyle.iconSize, weight: TrayGlassStyle.iconWeight))
                 .foregroundStyle(.secondary)
-                .frame(width: 32, height: 32)
+                .frame(width: TrayGlassStyle.buttonSize, height: TrayGlassStyle.buttonSize)
                 .background(
                     Circle().fill(isHovered ? Color.primary.opacity(0.10) : .clear)
                 )
