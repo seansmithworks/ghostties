@@ -258,6 +258,15 @@ class AppDelegate: NSObject,
             // keep whatever value they have persisted.
             "ghostties.sidebarViewMode": "projectFirst",
         ])
+
+        #if DEBUG
+        // Matches `buildInfoBadgeDefaultEnabled` in BuildInfoBadgeView.swift
+        // (DEBUG default ON) so the View menu checkmark reads correctly
+        // before the user ever touches the toggle.
+        UserDefaults.standard.register(defaults: [
+            buildInfoBadgeStorageKey: true,
+        ])
+        #endif
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -847,7 +856,35 @@ class AppDelegate: NSObject,
         viewMenu.insertItem(makeComposerFieldToggleMenuItem(), at: 10)
         viewMenu.insertItem(NSMenuItem.separator(), at: 11)
 
+        #if DEBUG
+        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 12)
+        #endif
     }
+
+    #if DEBUG
+    // MARK: - Dev build-info badge toggle (View menu, DEBUG only)
+
+    /// Builds the "Show Build Info" checkbox item that toggles the same
+    /// `buildInfoBadgeStorageKey` `@AppStorage` key `BuildInfoBadgeView`
+    /// reads, so the menu checkmark and the on-screen badge always agree.
+    private func makeBuildInfoBadgeToggleMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(
+            title: "Show Build Info",
+            action: #selector(toggleBuildInfoBadge(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        return item
+    }
+
+    /// Flips `buildInfoBadgeStorageKey` in `UserDefaults.standard` — the same
+    /// store `@AppStorage` in `BuildInfoBadgeView` observes, so the badge
+    /// updates immediately with no relaunch required.
+    @objc private func toggleBuildInfoBadge(_ sender: NSMenuItem) {
+        let current = UserDefaults.standard.bool(forKey: buildInfoBadgeStorageKey)
+        UserDefaults.standard.set(!current, forKey: buildInfoBadgeStorageKey)
+    }
+    #endif
 
     // MARK: - Composer field A/B toggle (View menu, all configurations)
 
@@ -2002,6 +2039,12 @@ extension AppDelegate: NSMenuItemValidation {
                 forKey: ComposerGhostTextField.modelBFieldStorageKey
             ) ? .on : .off
             return true
+
+        #if DEBUG
+        case #selector(toggleBuildInfoBadge(_:)):
+            item.state = UserDefaults.standard.bool(forKey: buildInfoBadgeStorageKey) ? .on : .off
+            return true
+        #endif
 
         default:
             return true
