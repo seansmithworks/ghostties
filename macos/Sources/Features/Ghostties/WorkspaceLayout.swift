@@ -56,91 +56,37 @@ enum WorkspaceLayout {
 
     /// Repositions `window`'s three standard titlebar buttons so the
     /// cluster's leading edge sits at `trafficLightLeadingInset`, preserving
-    /// their existing native spacing. No-op in fullscreen (buttons are
-    /// hidden/inapplicable there, mirroring `collapsedRailWidth(in:)`'s
-    /// early return) or before the window is on-screen. Applied
-    /// unconditionally, independent of sidebar mode — the traffic-light
-    /// position is window chrome, not sidebar state, and moving it only in
-    /// some modes would make the cluster visibly jump when the sidebar
-    /// toggles.
+    /// their existing relative spacing and vertical position — shifts the
+    /// whole cluster by one delta rather than re-deriving each button's
+    /// frame. No-op in fullscreen (buttons are hidden/inapplicable there,
+    /// mirroring `collapsedRailWidth(in:)`'s early return) or before the
+    /// window is on-screen. Applied unconditionally, independent of sidebar
+    /// mode — the traffic-light position is window chrome, not sidebar
+    /// state, and moving it only in some modes would make the cluster
+    /// visibly jump when the sidebar toggles.
     ///
     /// `NSTitlebarView` owns these buttons via `NSAutoresizingMaskLayoutConstraint`s
     /// synthesized from `translatesAutoresizingMaskIntoConstraints = true`
     /// (confirmed by inspecting the live constraint: `_NSThemeCloseWidget.minX
-    /// == 19`), and re-lays them out on its OWN titlebar passes — which are
-    /// NOT limited to this view's `layout()` calls (window becoming key,
-    /// tab-bar layout, and the fixture's own content population all trigger
-    /// more of them later) and, critically, do NOT always reset all three
-    /// buttons together: round 5 review caught AppKit resetting `close`
-    /// alone while `miniaturize`/`zoom` stayed put. `applyTrafficLightInset`
-    /// installs a `frameDidChangeNotification` observer (once per window) so
-    /// every drift gets corrected, rather than only from our own `layout()`
-    /// pass.
-    ///
-    /// Round 5 fix (1st pass): derive each button's target from "shift the
-    /// whole cluster by (target − current leftmost)" — a DELTA relative to
-    /// whichever button happened to be leftmost RIGHT NOW — breaks the
-    /// moment only one button drifts (exactly what round 5 review caught):
-    /// with `close` reset to its default and `miniaturize`/`zoom` still
-    /// correct, the leftmost-relative delta gets computed from `close`'s
-    /// drift and applied to ALL THREE, shoving the other two further left
-    /// than intended and widening the rail. Fixed by storing each button's
-    /// native offset from the leftmost button once and setting each to an
-    /// ABSOLUTE target (`trafficLightLeadingInset + nativeOffset`)
-    /// independent of the others' current position.
-    ///
-    /// Round 5 fix (2nd pass): calling that absolute-target correction
-    /// directly from the `frameDidChangeNotification` handler thrashed —
-    /// our own `setFrameOrigin` posts another frame-change notification,
-    /// re-entering the handler before the previous pass even settles,
-    /// observed live as buttons bouncing between corrected and native
-    /// positions dozens of times within a single millisecond (and the
-    /// capture that flagged this bug caught one such transient, mid-thrash
-    /// frame, not a stable resting state). `scheduleCorrection` coalesces
-    /// that into at most one corrective pass per runloop turn.
+    /// == 19`), and re-lays them out to that same private default inset on
+    /// its OWN titlebar passes — which are NOT limited to this view's
+    /// `layout()` calls (window becoming key, tab-bar layout, and the
+    /// fixture's own content population all trigger more of them later, well
+    /// after any one-shot correction). A single `setFrameOrigin` — even
+    /// deferred a runloop tick — reliably gets silently overwritten again by
+    /// one of those later passes. So instead of fighting from our own
+    /// layout() alone, this installs a `frameDidChangeNotification` observer
+    /// directly on the buttons (once per window) that re-applies the inset
+    /// every time AppKit moves them away from it — including whenever
+    /// `applyTrafficLightInset` itself calls `setFrameOrigin`, which is safe:
+    /// once frame == target, `delta` is ~0 and the guard below stops the
+    /// re-entrant chain.
     static func repositionTrafficLights(in window: NSWindow) {
         applyTrafficLightInset(in: window)
         installTrafficLightObserverIfNeeded(for: window)
     }
 
-    private static func applyTrafficLightInset(in window: NSWindow) {
-        if isFullScreenLayout(styleMask: window.styleMask) { return }
-        let types: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-        let buttons = types.compactMap { window.standardWindowButton($0) }
-        guard buttons.count == types.count, let offsets = nativeOffsets(for: window, buttons: buttons) else { return }
-        for (button, offset) in zip(buttons, offsets) {
-            let targetX = trafficLightLeadingInset + offset
-            guard abs(button.frame.minX - targetX) > 0.5 else { continue }
-            button.setFrameOrigin(NSPoint(x: targetX, y: button.frame.minY))
-        }
-    }
-
-    /// Per-window cache of each of the three buttons' native x-offset from
-    /// the leftmost button, captured the first time this window is seen
-    /// with EVENLY spaced buttons (adjacent gaps match within 0.5pt) — i.e.
-    /// either AppKit's untouched default layout, or a state we've already
-    /// fully corrected ourselves. A mid-drift read (only one button moved,
-    /// so the gaps are uneven — exactly what round 5 review caught) is
-    /// rejected rather than cached, or the cache would permanently bake in
-    /// the wrong spacing for this window's lifetime.
-    private static var nativeOffsetsByWindow = NSMapTable<NSWindow, NSArray>.weakToStrongObjects()
-
-    private static func nativeOffsets(for window: NSWindow, buttons: [NSButton]) -> [CGFloat]? {
-        if let cached = nativeOffsetsByWindow.object(forKey: window) as? [NSNumber] {
-            return cached.map { CGFloat(truncating: $0) }
-        }
-        let xs = buttons.map(\.frame.minX)
-        guard xs.count >= 2 else { return nil }
-        let gaps = zip(xs, xs.dropFirst()).map { $1 - $0 }
-        guard let firstGap = gaps.first, gaps.allSatisfy({ abs($0 - firstGap) < 0.5 }) else { return nil }
-        let minX = xs.min() ?? 0
-        let offsets = xs.map { $0 - minX }
-        nativeOffsetsByWindow.setObject(offsets.map { NSNumber(value: $0) } as NSArray, forKey: window)
-        return offsets
-    }
-
     private static var trafficLightObserverWindows = NSHashTable<NSWindow>.weakObjects()
-    private static var pendingCorrectionWindows = NSHashTable<NSWindow>.weakObjects()
 
     private static func installTrafficLightObserverIfNeeded(for window: NSWindow) {
         guard !trafficLightObserverWindows.contains(window) else { return }
@@ -155,22 +101,22 @@ enum WorkspaceLayout {
                 queue: .main
             ) { [weak window] _ in
                 guard let window else { return }
-                scheduleCorrection(for: window)
+                applyTrafficLightInset(in: window)
             }
         }
     }
 
-    /// Coalesces frame-change notifications into at most one corrective
-    /// pass per runloop turn — see the thrashing note on
-    /// `repositionTrafficLights(in:)` above for why calling
-    /// `applyTrafficLightInset` synchronously from the notification handler
-    /// doesn't work.
-    private static func scheduleCorrection(for window: NSWindow) {
-        guard !pendingCorrectionWindows.contains(window) else { return }
-        pendingCorrectionWindows.add(window)
-        DispatchQueue.main.async {
-            pendingCorrectionWindows.remove(window)
-            applyTrafficLightInset(in: window)
+    private static func applyTrafficLightInset(in window: NSWindow) {
+        if isFullScreenLayout(styleMask: window.styleMask) { return }
+        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        let resolved = buttons.compactMap { window.standardWindowButton($0) }
+        guard let leftmost = resolved.min(by: { $0.frame.minX < $1.frame.minX }) else { return }
+        let delta = trafficLightLeadingInset - leftmost.frame.minX
+        guard abs(delta) > 0.5 else { return }
+        for button in resolved {
+            var origin = button.frame.origin
+            origin.x += delta
+            button.setFrameOrigin(origin)
         }
     }
 
