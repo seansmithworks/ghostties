@@ -530,7 +530,7 @@ private struct SidebarBottomTray: View {
                 container: coordinator.containerView as? WorkspaceViewContainer,
                 toggleLabel: toggleLabel
             )) { item in
-                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, stretch: true, action: item.action)
+                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, stretch: true, tapEffect: item.tapEffect, action: item.action)
             }
         }
         .padding(.horizontal, 8)

@@ -16,15 +16,34 @@ struct SidebarTrayItem: Identifiable {
     /// tooltip names the concrete action, "Open Config".
     var helpText: String { helpTextOverride ?? label }
     let helpTextOverride: String?
+    /// Which symbol animation `TrayIconButton` plays on click. `nil` = none.
+    let tapEffect: TrayIconTapEffect?
     let action: () -> Void
 
-    init(id: String, systemName: String, label: String, helpText: String? = nil, action: @escaping () -> Void) {
+    init(
+        id: String,
+        systemName: String,
+        label: String,
+        helpText: String? = nil,
+        tapEffect: TrayIconTapEffect? = nil,
+        action: @escaping () -> Void
+    ) {
         self.id = id
         self.systemName = systemName
         self.label = label
         self.helpTextOverride = helpText
+        self.tapEffect = tapEffect
         self.action = action
     }
+}
+
+/// The click-triggered SF Symbol animation a `TrayIconButton` plays, gated
+/// by `#available` (symbolEffect needs macOS 14+, `.rotate` needs 15+) and
+/// always suppressed under Reduce Motion. Strawman for Sean to react to —
+/// restrained on purpose.
+enum TrayIconTapEffect {
+    case bounce
+    case rotate
 }
 
 /// Round 5 tray pill tuning — Sean's strawman ("stylized more" than round
@@ -181,15 +200,20 @@ struct TrayIconButton: View {
     /// `flex: 1 1 0`). False (default) in the collapsed rail's fixed-size
     /// vertical pill, which is unchanged.
     var stretch: Bool = false
+    /// Symbol animation to play on click — see `TrayIconTapEffect`.
+    var tapEffect: TrayIconTapEffect? = nil
     let action: () -> Void
 
     @State private var isHovered = false
+    @State private var tapEffectTrigger = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: TrayGlassStyle.iconSize, weight: TrayGlassStyle.iconWeight))
-                .foregroundStyle(.secondary)
+        Button {
+            tapEffectTrigger += 1
+            action()
+        } label: {
+            icon
                 .frame(
                     maxWidth: stretch ? .infinity : TrayGlassStyle.buttonSize,
                     minHeight: TrayGlassStyle.buttonSize,
@@ -202,8 +226,43 @@ struct TrayIconButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        // Hover lift — the glass path's own `.interactive()` reacts to
+        // press, not hover, so this is additive rather than doubled-up with
+        // it. Reduce Motion suppresses it like every other animation here.
+        .scaleEffect(!reduceMotion && isHovered ? 1.06 : 1.0)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isHovered)
         .help(helpText ?? label)
         .accessibilityLabel(label)
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        let glyph = Image(systemName: systemName)
+            .font(.system(size: TrayGlassStyle.iconSize, weight: TrayGlassStyle.iconWeight))
+            .foregroundStyle(.secondary)
+
+        if reduceMotion {
+            glyph
+        } else {
+            switch tapEffect {
+            case .none:
+                glyph
+            case .bounce:
+                if #available(macOS 14.0, *) {
+                    glyph.symbolEffect(.bounce, value: tapEffectTrigger)
+                } else {
+                    glyph
+                }
+            case .rotate:
+                if #available(macOS 15.0, *) {
+                    glyph.symbolEffect(.rotate, value: tapEffectTrigger)
+                } else if #available(macOS 14.0, *) {
+                    glyph.symbolEffect(.bounce, value: tapEffectTrigger)
+                } else {
+                    glyph
+                }
+            }
+        }
     }
 }
 
@@ -225,7 +284,7 @@ extension WorkspaceViewContainer {
         toggleLabel: String
     ) -> [SidebarTrayItem] {
         [
-            SidebarTrayItem(id: "newSession", systemName: "plus", label: "New Session") {
+            SidebarTrayItem(id: "newSession", systemName: "plus", label: "New Session", tapEffect: .bounce) {
                 guard let container else {
                     assertionFailure("sidebarTrayItems: coordinator.containerView is not a WorkspaceViewContainer")
                     return
@@ -236,14 +295,19 @@ extension WorkspaceViewContainer {
             // (`AppDelegate.openConfig` -> `Ghostty.App.openConfig()`) rather
             // than a new file-opening path — this container already holds
             // the same `Ghostty.App` instance.
-            SidebarTrayItem(id: "settings", systemName: "gearshape", label: "Settings", helpText: "Open Config") {
+            SidebarTrayItem(id: "settings", systemName: "gearshape", label: "Settings", helpText: "Open Config", tapEffect: .rotate) {
                 guard let container else {
                     assertionFailure("sidebarTrayItems: coordinator.containerView is not a WorkspaceViewContainer")
                     return
                 }
                 container.openConfig()
             },
-            SidebarTrayItem(id: "toggleSidebar", systemName: "sidebar.left", label: toggleLabel) {
+            // No `.contentTransition(.symbolEffect(.replace))` here: the icon
+            // is the static "sidebar.left" glyph in every mode (pinned,
+            // rail, overlay) — only `toggleLabel` changes — so there's no
+            // natural pinned↔rail symbol pair to cross-fade between. Falls
+            // back to `.bounce` per the brief.
+            SidebarTrayItem(id: "toggleSidebar", systemName: "sidebar.left", label: toggleLabel, tapEffect: .bounce) {
                 container?.toggleSidebar()
             }
         ]
