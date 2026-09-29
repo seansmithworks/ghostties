@@ -92,7 +92,7 @@ private struct RailTray: View {
                 container: coordinator.containerView as? WorkspaceViewContainer,
                 toggleLabel: "Expand Sidebar"
             )) { item in
-                TrayIconButton(systemName: item.systemName, label: item.label, action: item.action)
+                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, action: item.action)
             }
         }
     }

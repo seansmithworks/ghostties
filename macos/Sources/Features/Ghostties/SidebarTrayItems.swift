@@ -11,7 +11,20 @@ struct SidebarTrayItem: Identifiable {
     let id: String
     let systemName: String
     let label: String
+    /// Hover tooltip text. Defaults to `label`; only the Settings item
+    /// (round 4) diverges — its accessibility label is "Settings" but its
+    /// tooltip names the concrete action, "Open Config".
+    var helpText: String { helpTextOverride ?? label }
+    let helpTextOverride: String?
     let action: () -> Void
+
+    init(id: String, systemName: String, label: String, helpText: String? = nil, action: @escaping () -> Void) {
+        self.id = id
+        self.systemName = systemName
+        self.label = label
+        self.helpTextOverride = helpText
+        self.action = action
+    }
 }
 
 /// Round 4 tray pill tuning — Sean's strawman, named so every dimension
@@ -84,6 +97,7 @@ struct SidebarTrayPill<Content: View>: View {
 struct TrayIconButton: View {
     let systemName: String
     let label: String
+    var helpText: String? = nil
     let action: () -> Void
 
     @State private var isHovered = false
@@ -100,7 +114,7 @@ struct TrayIconButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .help(label)
+        .help(helpText ?? label)
         .accessibilityLabel(label)
     }
 }
@@ -129,6 +143,17 @@ extension WorkspaceViewContainer {
                     return
                 }
                 container.presentComposerOverlay(projectBinding: .open)
+            },
+            // Round 4: reuses the app's existing "Open Config" action
+            // (`AppDelegate.openConfig` -> `Ghostty.App.openConfig()`) rather
+            // than a new file-opening path — this container already holds
+            // the same `Ghostty.App` instance.
+            SidebarTrayItem(id: "settings", systemName: "gearshape", label: "Settings", helpText: "Open Config") {
+                guard let container else {
+                    assertionFailure("sidebarTrayItems: coordinator.containerView is not a WorkspaceViewContainer")
+                    return
+                }
+                container.openConfig()
             },
             SidebarTrayItem(id: "toggleSidebar", systemName: "sidebar.left", label: toggleLabel) {
                 container?.toggleSidebar()

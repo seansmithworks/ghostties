@@ -522,7 +522,7 @@ private struct SidebarBottomTray: View {
                     container: coordinator.containerView as? WorkspaceViewContainer,
                     toggleLabel: toggleLabel
                 )) { item in
-                    TrayIconButton(systemName: item.systemName, label: item.label, action: item.action)
+                    TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, action: item.action)
                 }
             }
             Spacer(minLength: 0)

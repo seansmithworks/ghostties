@@ -74,8 +74,18 @@ struct SidebarPresenceTests {
     /// require inserting into this list, not touching two views.
     @Test func trayItemsAreOrderedNewSessionThenToggle() {
         let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "Collapse Sidebar")
-        #expect(items.map(\.id) == ["newSession", "toggleSidebar"])
-        #expect(items.map(\.systemName) == ["plus", "sidebar.left"])
+        #expect(items.map(\.id) == ["newSession", "settings", "toggleSidebar"])
+        #expect(items.map(\.systemName) == ["plus", "gearshape", "sidebar.left"])
+    }
+
+    /// Round 4: Settings sits between `+` and the sidebar toggle (matching
+    /// the design), and its accessibility label ("Settings") is distinct
+    /// from its tooltip, which names the concrete action ("Open Config").
+    @Test func trayItemsIncludeSettingsWithDistinctAccessibilityLabelAndTooltip() {
+        let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "Collapse Sidebar")
+        let settings = items.first(where: { $0.id == "settings" })
+        #expect(settings?.label == "Settings")
+        #expect(settings?.helpText == "Open Config")
     }
 
     /// The toggle item's label is the one piece of state callers still

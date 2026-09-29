@@ -1131,6 +1131,13 @@ class WorkspaceViewContainer: NSView {
         transitionTo(Self.nextSidebarMode(after: sidebarMode))
     }
 
+    /// Tray/rail Settings item (round 4) — thin wrapper so `SidebarTrayItems`
+    /// (a separate file) can reach the same action `AppDelegate.openConfig`
+    /// invokes, without exposing the `private let ghostty` property itself.
+    func openConfig() {
+        ghostty.openConfig()
+    }
+
     /// Full close ↔ reopen, bound to Cmd+Shift+S. Any visible mode (pinned,
     /// collapsed, overlay) goes to `.closed`; `.closed` reopens to `.pinned`.
     /// This is the toggle's only remaining path back into (and out of)
