@@ -1,22 +1,29 @@
 # Ghostties — Backlog
 
-## 2026-09-29 — sidebar-presence round 6: match the pen.dev design (carried)
+## 2026-09-30 — sidebar-presence round 7: popover build + Sean's review (carried)
 
-State: `feat/sidebar-presence` @ `6e783ae9f`, pushed, no PR. Rounds 4–5 landed: glass tray pill, Settings
-(gear → Open Config), rail renders session glyphs (`railSessions()`), drag snap, 16/8 padding. Traffic-light
-repositioning tried and REVERTED (Sean chose native positions; rail ~95pt).
+State: `feat/sidebar-presence` @ `8f90cd5be`, pushed, no PR. Round 6 landed and was reviewed (PASS WITH NOTES):
+Flow 07 visuals, ghost glyphs, rail › rows, badge menu toggle, tray icon animations, rail tray fills rail,
+sidebar DialKit panel, Release-compile fix. Design canvas saved to `~/Code/ghostties/3-edff08ac-5MB.pen`
+(Flow 07 = `t4XvdY`, Flow 09 popover options = `b8Wi6z`).
 
-- [ ] **Rebuild sidebar visuals from the pen.dev file** (carried) — build drifted because builders never used
-  the canvas. Source: Flow 07 frame `t4XvdY` in pen.dev doc `edff08ac` (exports: expanded `mIi8b`,
-  collapsed `yhzPU`, closed `sz7jE`). Diffs: sentence-case headers "Active (5)" w/ trailing chevron; raised
-  white glow card on selected row; ~15pt titles, roomier rows, no timestamps; ghost glyphs (red on selected);
-  full-width tray bar with 3 spaced icons + light rim; rail chevron + highlighted selected ghost + › rows for
-  Inactive/Archived; terminal padding ~20 left / 24 top. Layout/motion/behavior unchanged.
-- [ ] **Glyph strawman: ghosts as designed** (carried) — supersedes pattern D (✓/?/⋮) since the design is
-  newer. Apply; Sean redlines if wrong.
-- [ ] **Rail width tuning** (parked) — Sean: "tune later". Design is ~60pt; native traffic lights force ~95.
-- [ ] **Then:** Sean hands-on (Cmd+S / Cmd+Shift+S / mash, gear, glass) → PR to SeanSmithWorks/ghostties
-  with before/after (carried).
+- [ ] **Key-press spike** (carried) — can Ghostties answer Claude Code's permission menu from outside the
+  terminal? `Surface.sendText` is PASTE semantics (Ghostty.Surface.swift:47-59); the menu may ignore a pasted
+  "1". Find a key-event path, prove it on a throwaway session. Gates Approve/Deny and 06's reply.
+- [ ] **Build popover 01 + 03's command block** (carried; Sean: "go") — Flow 09 `RdXUA` + `ON6h9`. Preview
+  + command from the PermissionRequest hook payload (ClaudeStateStore). Open button now; Approve/Deny after
+  the spike. Only live while state is fresh `.needsPermission` (race: keys landing in Claude's input).
+- [ ] **Build popover 06 terminal peek + reply** (carried; Sean: "go") — Flow 09 `V443rn`. Depends on the spike.
+- [ ] **DECIDE OR KILL: red has two meanings** — selected ghost vs "needs you". Strawman: keep red = needs you,
+  selected = white card only (ghost stays grey).
+- [ ] **DECIDE OR KILL: status marks on ghosts** — reviewer: ghosts dropped working/needs/done/error at a glance.
+  Strawman: small spinner/?/✓/✕ on the ghost.
+- [ ] **DECIDE OR KILL: glass tray morph** pinned↔rail (changes Flow 05 transition).
+- [ ] **Sean hands-on + DialKit tune** (carried) — then PR to SeanSmithWorks/ghostties with before/after.
+  Capture screenshots with the fixture only (public repo).
+- [ ] **Rail width tuning** (parked) — now dial-able via DialKit "Rail extra width".
+- [ ] **Release universal build fails on CEF arm64-only** (parked, pre-existing) — `ld` wants x86_64.
+- [ ] **Dead code: `SpinnerDotFrame` + its tests** (parked) — unused since ghosts replaced type glyphs.
 
 ## 2026-09-28 — filed from sidebar-presence review (not started)
 
