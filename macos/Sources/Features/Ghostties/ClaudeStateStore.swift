@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// Raw on-disk shape written by `ghostties-status.sh` to
@@ -25,8 +26,8 @@ struct ClaudeHookWrapper: Decodable {
 /// about, across every event Sean's `~/.claude/settings.json` registers
 /// (`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `Notification`,
 /// `PermissionRequest`, `SessionEnd`). Unlisted keys in the real payload
-/// (e.g. `tool_input`, `background_tasks`) are ignored by `Decodable`, not
-/// an error. Measured shapes: `docs/plans/session-row-status/gate-evidence.md`.
+/// (e.g. `background_tasks`) are ignored by `Decodable`, not an error.
+/// `tool_input` is decoded only as the narrow `ToolInputSummary` below. Measured shapes: `docs/plans/session-row-status/gate-evidence.md`.
 struct ClaudeHookPayload: Decodable {
     let hookEventName: String
     let toolName: String?
@@ -38,14 +39,64 @@ struct ClaudeHookPayload: Decodable {
     /// (`gate-evidence.md`/spike 2026-09-13). Used by `AgentResume` to
     /// gate a Claude resume on the transcript still existing.
     let transcriptPath: String?
+    /// The few `tool_input` fields the session popover shows for a
+    /// `PermissionRequest`. Nil when the payload has no `tool_input`.
+    let toolInput: ToolInputSummary?
 
     enum CodingKeys: String, CodingKey {
         case hookEventName = "hook_event_name"
         case toolName = "tool_name"
+        case toolInput = "tool_input"
         case notificationType = "notification_type"
         case sessionId = "session_id"
         case cwd
         case transcriptPath = "transcript_path"
+    }
+}
+
+/// The subset of a hook's `tool_input` object the session popover renders:
+/// `command` + `description` (Bash), `file_path` (Edit/Write/Read-style
+/// tools). Every field is optional and decoding never throws — a missing,
+/// non-object, or wrongly-typed `tool_input` yields an all-nil summary rather
+/// than failing the whole hook payload (and with it the session's state).
+struct ToolInputSummary: Decodable, Equatable {
+    let command: String?
+    let description: String?
+    let filePath: String?
+    /// First of the other single-target keys tools use in place of
+    /// `file_path` (Glob/Grep `pattern`, Notebook `notebook_path`, `path`,
+    /// WebFetch `url`), for the "first arg" of a non-Bash tool line.
+    let firstArgument: String?
+
+    private enum Keys: String, CodingKey {
+        case command, description
+        case filePath = "file_path"
+        case path, pattern, url
+        case notebookPath = "notebook_path"
+    }
+
+    init(command: String? = nil, description: String? = nil, filePath: String? = nil, firstArgument: String? = nil) {
+        self.command = command
+        self.description = description
+        self.filePath = filePath
+        self.firstArgument = firstArgument
+    }
+
+    init(from decoder: Decoder) throws {
+        guard let c = try? decoder.container(keyedBy: Keys.self) else {
+            self.init()
+            return
+        }
+        func string(_ key: Keys) -> String? {
+            guard let value = try? c.decodeIfPresent(String.self, forKey: key), !value.isEmpty else { return nil }
+            return value
+        }
+        self.init(
+            command: string(.command),
+            description: string(.description),
+            filePath: string(.filePath),
+            firstArgument: string(.notebookPath) ?? string(.path) ?? string(.pattern) ?? string(.url)
+        )
     }
 }
 
@@ -60,6 +111,9 @@ struct ClaudeHookPayload: Decodable {
 struct StructuredPrompt: Equatable {
     let toolName: String
     let toolUseId: String?
+    /// What the tool is about to do — carried here and nowhere else, so it
+    /// exists only while the state is `.needsPermission`.
+    var toolInput: ToolInputSummary? = nil
 }
 
 /// Decoded, derived state for one Ghostties session, keyed by
@@ -106,11 +160,15 @@ final class ClaudeStateStore {
     /// stop trusting it and fall back to today's output-based heuristics.
     /// A crashed or force-quit Claude process leaves its last hook event on
     /// disk forever otherwise.
-    private static let staleInterval: TimeInterval = 30 * 60
+    static let staleInterval: TimeInterval = 30 * 60
 
     private let directoryURL: URL
     private var states: [UUID: ClaudeState] = [:]
     private var watcher: TaskFileWatcher?
+
+    /// Fires after every `refresh()` rebuilds `states`, so a live consumer
+    /// (the session popover) can re-derive instead of trusting a snapshot.
+    let didRefresh = PassthroughSubject<Void, Never>()
 
     nonisolated static var defaultDirectoryURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -230,6 +288,7 @@ final class ClaudeStateStore {
             // it only ever runs once, at construction.
             ensureDirectory()
             states = [:]
+            didRefresh.send()
             return
         }
 
@@ -253,6 +312,7 @@ final class ClaudeStateStore {
             newStates[state.ghosttiesSessionId] = state
         }
         states = newStates
+        didRefresh.send()
     }
 
     /// Create `directoryURL` at `0o700` if absent; enforce `0o700` on an
@@ -333,7 +393,7 @@ final class ClaudeStateStore {
         case "PermissionRequest":
             kind = .needsPermission
             // toolUseId is nil — see StructuredPrompt's doc comment above.
-            structuredPrompt = StructuredPrompt(toolName: hook.toolName ?? "", toolUseId: nil)
+            structuredPrompt = StructuredPrompt(toolName: hook.toolName ?? "", toolUseId: nil, toolInput: hook.toolInput)
         case "Notification":
             switch hook.notificationType {
             case "permission_prompt":
