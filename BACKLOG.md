@@ -7,12 +7,23 @@ Flow 07 visuals, ghost glyphs, rail › rows, badge menu toggle, tray icon anima
 sidebar DialKit panel, Release-compile fix. Design canvas saved to `~/Code/ghostties/3-edff08ac-5MB.pen`
 (Flow 07 = `t4XvdY`, Flow 09 popover options = `b8Wi6z`).
 
-- [ ] **Key-press spike** (carried) — can Ghostties answer Claude Code's permission menu from outside the
-  terminal? `Surface.sendText` is PASTE semantics (Ghostty.Surface.swift:47-59); the menu may ignore a pasted
-  "1". Find a key-event path, prove it on a throwaway session. Gates Approve/Deny and 06's reply.
-- [ ] **Build popover 01 + 03's command block** (carried; Sean: "go") — Flow 09 `RdXUA` + `ON6h9`. Preview
-  + command from the PermissionRequest hook payload (ClaudeStateStore). Open button now; Approve/Deny after
-  the spike. Only live while state is fresh `.needsPermission` (race: keys landing in Claude's input).
+- [ ] **Key-press spike — BLOCKED on Sean (2026-09-30).** The auto-mode classifier denied running a throwaway
+  `claude` in a PTY and answering its permission prompt. Sean runs it or allows it. `Surface.sendKeyEvent`
+  already exists (Ghostty.Surface.swift:~78), so the spike only has to prove which key (1 / Enter / Esc) the
+  menu accepts as a raw key versus a paste. Gates Approve/Deny and 06's reply.
+- [x] **Popover 01 + 03's command block** — branch `feat/sidebar-popover` (stacked on `feat/sidebar-presence`),
+  5 commits ending `7249d3bb2`. Hover card on rows and rail ghosts; Bash → command hero, other tools → mini
+  terminal; Open/Close only. Review PASS WITH NOTES, all notes fixed. 172/172 targeted tests (dark), not the full suite.
+  Captures are fixture-only in the session scratchpad.
+- [x] **Green card = "what's happening" summary** (Sean, 2026-09-30) — last prompt + current step + edit count,
+  in memory only. Can undercount edits on fast bursts (150ms debounce, one state file per session).
+- [ ] **Sean hands-on: popover** — hover delay, Esc (consumed only while the pointer is over the card), Open.
+  None of it has been exercised; GUI driving is off-limits for agents.
+- [ ] **Stale "Needs approval" after an Esc interrupt** (pre-existing, state source) — an interrupt likely fires
+  no hook, so `.needsPermission` stays fresh for up to 30 minutes; the row indicator likely shares this.
+- [ ] **PR base decision** — `feat/sidebar-presence` contains the Zig 0.16 upstream merge (`7c4b258cd`, PR #188).
+  A PR to `main` drags in #188: land #188 first, or target `sync/upstream-zig-0.16`.
+- [ ] **Popover deviations to decide:** ⌘4 chip (no per-session shortcut exists), blast-radius row, 288 vs 340 width.
 - [ ] **Build popover 06 terminal peek + reply** (carried; Sean: "go") — Flow 09 `V443rn`. Depends on the spike.
 - [ ] **DECIDE OR KILL: red has two meanings** — selected ghost vs "needs you". Strawman: keep red = needs you,
   selected = white card only (ghost stays grey).
