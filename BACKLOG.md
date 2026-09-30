@@ -1,5 +1,10 @@
 # Ghostties — Backlog
 
+## 2026-09-30 — vNext brainstorm round 2 (off-objective captures)
+
+- [ ] **Image previewer in the terminal.** Sean (2026-09-30): "if I click on one of these, why does finder need to open?" — Claude Code prints `[image] name.png` as an OSC 8 `file://` link; Ghostties owns the link-click path. Candidate: intercept image links → Quick Look popover (`QLPreviewPanel`) or inline pane; upstream already speaks Kitty graphics. Inferred, link handler not yet checked. Candidate avenue #40 on `docs/plans/vnext-avenues-2026-09-29.html`.
+- [ ] vNext page + 4 mockups + research docs in `docs/plans/vnext-*` are UNCOMMITTED on main — commit after Sean's review round (`sess_5e6d1d44a1be`).
+
 ## 2026-09-26 — overnight: recover the lost sidebar build (Flow 01) from transcripts
 
 Old Mac wipe lost the uncommitted sidebar build; the design survived (pen.dev canvas, now at
