@@ -159,6 +159,27 @@ struct SessionPopoverCard: View {
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(block))
             .padding(EdgeInsets(top: 0, leading: 10, bottom: 10, trailing: 10))
+        case let .summary(task, detail):
+            VStack(alignment: .leading, spacing: 3) {
+                Text(task)
+                    .font(.system(size: 11))
+                    .foregroundStyle(primaryText)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 10))
+                        .foregroundStyle(secondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(block))
+            .padding(EdgeInsets(top: 0, leading: 10, bottom: 10, trailing: 10))
         case let .miniTerminal(lines):
             VStack(alignment: .leading, spacing: 1) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in

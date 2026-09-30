@@ -256,11 +256,15 @@ final class SessionPopoverController {
         var cwd = ClaudeStateStore.shared.state(for: id)?.cwd
             ?? store.projects.first { $0.id == session.projectId }?.rootPath
         var approval = ClaudeStateStore.shared.state(for: id)
+        var summary = ClaudeStateStore.shared.summary(for: id)
+        var indicator = store.globalIndicatorStates[id] ?? .inactive
         #if DEBUG
         if let override = CaptureFixture.popoverOverride(for: id) {
             title = override.title
             cwd = override.cwd
             approval = override.approval
+            summary = override.summary
+            if let forced = override.indicator { indicator = forced }
         }
         #endif
         return SessionPopoverContent.make(
@@ -268,8 +272,9 @@ final class SessionPopoverController {
             title: title,
             cwd: cwd,
             agent: session.resume?.agent.rawValue ?? "claude",
-            indicator: store.globalIndicatorStates[id] ?? .inactive,
+            indicator: indicator,
             approval: approval,
+            summary: summary,
             fallbackDate: session.displayTimestamp
         )
     }

@@ -195,7 +195,7 @@ enum CaptureFixture {
 
     // MARK: - Session popover fixture
 
-    /// `GHOSTTIES_CAPTURE_POPOVER` (`needs-bash`, `needs-edit`, `running`):
+    /// `GHOSTTIES_CAPTURE_POPOVER` (`needs-bash`, `needs-edit`, `running`, `done`):
     /// force the sidebar session popover open for one fixture session,
     /// without hovering. Nil unless fixture mode is active and the value is
     /// recognised.
@@ -203,6 +203,7 @@ enum CaptureFixture {
         case needsBash = "needs-bash"
         case needsEdit = "needs-edit"
         case running
+        case done
     }
 
     static var popoverScenario: PopoverScenario? {
@@ -218,6 +219,7 @@ enum CaptureFixture {
         switch popoverScenario {
         case .needsBash, .needsEdit: return sessions.first { $0.name == "Claude Code 6" }?.id
         case .running: return sessions.first?.id
+        case .done: return sessions.first { $0.name == "Claude Code 2" }?.id
         case nil: return nil
         }
     }
@@ -228,6 +230,8 @@ enum CaptureFixture {
         let title: String
         let cwd: String
         let approval: ClaudeState?
+        var summary: SessionSummary? = nil
+        var indicator: SessionIndicatorState? = nil
     }
 
     static func popoverOverride(for id: UUID) -> PopoverOverride? {
@@ -254,7 +258,18 @@ enum CaptureFixture {
                 input: ToolInputSummary(description: "Raise the request timeout to 30s", filePath: "src/server/config.ts")
             ))
         case .running:
-            return PopoverOverride(title: "DAB", cwd: "~/work/dab", approval: nil)
+            return PopoverOverride(title: "DAB", cwd: "~/work/dab", approval: nil, summary: SessionSummary(
+                prompt: "fix the flaky router tests",
+                currentStep: "running npm test",
+                currentCommand: "npm test",
+                editCount: 3
+            ), indicator: .processing)
+        case .done:
+            return PopoverOverride(title: "DAB", cwd: "~/work/dab", approval: nil, summary: SessionSummary(
+                prompt: "fix the flaky router tests",
+                editCount: 3,
+                isDone: true
+            ), indicator: .idle)
         }
     }
 

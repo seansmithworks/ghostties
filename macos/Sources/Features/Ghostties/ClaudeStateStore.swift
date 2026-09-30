@@ -42,15 +42,39 @@ struct ClaudeHookPayload: Decodable {
     /// The few `tool_input` fields the session popover shows for a
     /// `PermissionRequest`. Nil when the payload has no `tool_input`.
     let toolInput: ToolInputSummary?
+    /// `UserPromptSubmit`'s `prompt` — real user text. Held in memory only
+    /// by `SessionSummary`; never persisted, logged, or written to a fixture.
+    let prompt: String?
+    /// `PreToolUse`/`PostToolUse`'s `tool_use_id`, used only to count each
+    /// edit once when `refresh()` re-reads an unchanged file.
+    let toolUseId: String?
 
     enum CodingKeys: String, CodingKey {
         case hookEventName = "hook_event_name"
         case toolName = "tool_name"
         case toolInput = "tool_input"
+        case prompt
+        case toolUseId = "tool_use_id"
         case notificationType = "notification_type"
         case sessionId = "session_id"
         case cwd
         case transcriptPath = "transcript_path"
+    }
+
+    /// `hook_event_name` is required; every other field is optional AND
+    /// tolerant — a wrongly-typed `prompt` or `tool_use_id` becomes nil
+    /// instead of failing the payload (and the session's state with it).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        hookEventName = try c.decode(String.self, forKey: .hookEventName)
+        toolName = try? c.decodeIfPresent(String.self, forKey: .toolName)
+        notificationType = try? c.decodeIfPresent(String.self, forKey: .notificationType)
+        sessionId = try? c.decodeIfPresent(String.self, forKey: .sessionId)
+        cwd = try? c.decodeIfPresent(String.self, forKey: .cwd)
+        transcriptPath = try? c.decodeIfPresent(String.self, forKey: .transcriptPath)
+        toolInput = try? c.decodeIfPresent(ToolInputSummary.self, forKey: .toolInput)
+        prompt = try? c.decodeIfPresent(String.self, forKey: .prompt)
+        toolUseId = try? c.decodeIfPresent(String.self, forKey: .toolUseId)
     }
 }
 
@@ -97,6 +121,116 @@ struct ToolInputSummary: Decodable, Equatable {
             filePath: string(.filePath),
             firstArgument: string(.notebookPath) ?? string(.path) ?? string(.pattern) ?? string(.url)
         )
+    }
+}
+
+/// What a session is doing right now, for the popover's "what's happening"
+/// block. Lives ONLY in memory in `ClaudeStateStore.summaries`, separate from
+/// `states` (whose contents feed the indicator caches): it is built from the
+/// hook stream as events are ingested, because the state file is
+/// last-event-wins and the prompt is overwritten by the next tool event.
+/// Never persisted -- `prompt` is real user text.
+struct SessionSummary: Equatable {
+    /// The last `UserPromptSubmit` prompt, whitespace collapsed. nil until one
+    /// has been seen (e.g. after an app relaunch, mid-turn).
+    private(set) var prompt: String?
+    /// Latest `PreToolUse`, as "running npm test" / "editing config.ts".
+    private(set) var currentStep: String?
+    /// The current Bash command, first line, truncated. Bash only.
+    private(set) var currentCommand: String?
+    /// Edit/Write/MultiEdit `PostToolUse` events since the last prompt.
+    private(set) var editCount = 0
+    /// True after `Stop`, until the next prompt.
+    private(set) var isDone = false
+    private(set) var updatedAt = Date.distantPast
+
+    /// A repeated read of the same file (`refresh()` re-decodes every file on
+    /// every directory change) must not double-count.
+    private var lastEventKey: String?
+    private var countedEditIds: Set<String> = []
+
+    static let maxPromptLength = 400
+    static let maxCommandLength = 80
+    private static let editTools: Set<String> = ["Edit", "Write", "MultiEdit"]
+
+    init() {}
+
+    /// Test/fixture seam: an already-built summary.
+    init(prompt: String?, currentStep: String? = nil, currentCommand: String? = nil,
+         editCount: Int = 0, isDone: Bool = false, updatedAt: Date = Date()) {
+        self.prompt = prompt
+        self.currentStep = currentStep
+        self.currentCommand = currentCommand
+        self.editCount = editCount
+        self.isDone = isDone
+        self.updatedAt = updatedAt
+    }
+
+    /// Fold one hook event in. Idempotent for a repeated read of the same
+    /// file. `updatedAt` is unix SECONDS, so two events in one second are
+    /// told apart by `tool_use_id`, not the timestamp.
+    mutating func ingest(_ hook: ClaudeHookPayload, updatedAt: Date) {
+        let key = "\(updatedAt.timeIntervalSince1970)|\(hook.hookEventName)|\(hook.toolUseId ?? "")"
+        guard key != lastEventKey else { return }
+
+        switch hook.hookEventName {
+        case "UserPromptSubmit":
+            self = SessionSummary()
+            let text = hook.prompt.map(Self.collapse) ?? ""
+            prompt = text.isEmpty ? nil : String(text.prefix(Self.maxPromptLength))
+        case "PreToolUse":
+            isDone = false
+            currentStep = Self.step(tool: hook.toolName, input: hook.toolInput)
+            currentCommand = hook.toolName == "Bash" ? hook.toolInput?.command.map(Self.firstLine) : nil
+        case "PostToolUse":
+            if let tool = hook.toolName, Self.editTools.contains(tool) {
+                if let id = hook.toolUseId {
+                    if countedEditIds.insert(id).inserted { editCount += 1 }
+                } else {
+                    editCount += 1
+                }
+            }
+        case "Stop":
+            isDone = true
+            currentStep = nil
+            currentCommand = nil
+        default:
+            return
+        }
+        lastEventKey = key
+        self.updatedAt = updatedAt
+    }
+
+    static func collapse(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    private static func firstLine(_ command: String) -> String {
+        let line = command.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let trimmed = collapse(line)
+        return trimmed.count > maxCommandLength ? String(trimmed.prefix(maxCommandLength)) + "…" : trimmed
+    }
+
+    private static func basename(_ path: String?) -> String? {
+        path.map { ($0 as NSString).lastPathComponent }.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    private static func step(tool: String?, input: ToolInputSummary?) -> String? {
+        guard let tool, !tool.isEmpty else { return nil }
+        switch tool {
+        case "Bash":
+            return input?.command.map { "running " + firstLine($0) } ?? "running a command"
+        case "Edit", "Write", "MultiEdit":
+            return basename(input?.filePath).map { "editing " + $0 } ?? "editing"
+        case "Read":
+            return basename(input?.filePath).map { "reading " + $0 } ?? "reading"
+        case "Grep", "Glob":
+            return "searching"
+        case "Task", "Agent":
+            return "running a subagent"
+        default:
+            return tool.lowercased()
+        }
     }
 }
 
@@ -164,6 +298,10 @@ final class ClaudeStateStore {
 
     private let directoryURL: URL
     private var states: [UUID: ClaudeState] = [:]
+    /// In-memory "what's happening" per session; see `SessionSummary`. Kept
+    /// apart from `states` on purpose -- nothing that feeds the indicator
+    /// caches reads it, so ingesting summaries cannot change what they publish.
+    private var summaries: [UUID: SessionSummary] = [:]
     private var watcher: TaskFileWatcher?
 
     /// Fires after every `refresh()` rebuilds `states`, so a live consumer
@@ -216,6 +354,14 @@ final class ClaudeStateStore {
         }
     }
 
+    /// The session's summary, or nil if no prompt has been seen this run or
+    /// it has gone stale. The popover shows no summary block on nil.
+    func summary(for id: UUID) -> SessionSummary? {
+        guard let summary = summaries[id], summary.prompt != nil,
+              Date().timeIntervalSince(summary.updatedAt) <= Self.staleInterval else { return nil }
+        return summary
+    }
+
     // MARK: - Writes
 
     /// Delete both state files for a session. Called from `SessionCoordinator
@@ -224,6 +370,7 @@ final class ClaudeStateStore {
     /// cannot outlive the session that owned it.
     func removeState(for id: UUID) {
         states.removeValue(forKey: id)
+        summaries.removeValue(forKey: id)
         let fm = FileManager.default
         try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).json"))
         try? fm.removeItem(at: directoryURL.appendingPathComponent("\(id.uuidString).todos.json"))
@@ -288,11 +435,13 @@ final class ClaudeStateStore {
             // it only ever runs once, at construction.
             ensureDirectory()
             states = [:]
+            summaries = [:]
             didRefresh.send()
             return
         }
 
         var newStates: [UUID: ClaudeState] = [:]
+        var seen: Set<UUID> = []
         for url in entries {
             let name = url.lastPathComponent
             guard name.hasSuffix(".json"), !name.hasSuffix(".todos.json") else { continue }
@@ -308,10 +457,22 @@ final class ClaudeStateStore {
             // via `removeState(for:)` afterward). See `AgentResume`.
             persistResumeIfPresent(ghosttiesSessionId: ghosttiesSessionId, wrapper: wrapper)
 
+            // Summary ingest: reads the same wrapper, writes only `summaries`.
+            seen.insert(ghosttiesSessionId)
+            if wrapper.hook.hookEventName == "SessionEnd" {
+                summaries.removeValue(forKey: ghosttiesSessionId)
+            } else {
+                var summary = summaries[ghosttiesSessionId] ?? SessionSummary()
+                summary.ingest(wrapper.hook, updatedAt: Date(timeIntervalSince1970: wrapper.updatedAt))
+                summaries[ghosttiesSessionId] = summary
+            }
+
             guard let state = Self.derive(from: wrapper) else { continue }
             newStates[state.ghosttiesSessionId] = state
         }
         states = newStates
+        // A session whose file is gone has gone away.
+        summaries = summaries.filter { seen.contains($0.key) }
         didRefresh.send()
     }
 

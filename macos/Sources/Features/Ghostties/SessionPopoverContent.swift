@@ -30,7 +30,11 @@ struct SessionPopoverContent: Equatable {
         case commandHero(command: String, description: String?)
         /// Option 01's Mini Terminal.
         case miniTerminal(lines: [TerminalLine])
-        /// Passive card, or a permission prompt with no tool detail.
+        /// The passive card's "what's happening" block: the session's last
+        /// prompt (primary) and, while running, its current step (secondary).
+        case summary(task: String, detail: String?)
+        /// Passive card with no summary data, or a permission prompt with no
+        /// tool detail.
         case none
     }
 
@@ -60,6 +64,7 @@ struct SessionPopoverContent: Equatable {
         agent: String,
         indicator: SessionIndicatorState,
         approval: ClaudeState?,
+        summary: SessionSummary? = nil,
         fallbackDate: Date?,
         now: Date = Date(),
         homeDirectory: String = NSHomeDirectory()
@@ -99,9 +104,33 @@ struct SessionPopoverContent: Equatable {
             relativeTime: fallbackDate.map { relativeLabel($0, now: now) },
             statusKind: kind,
             statusLabel: label,
-            statusDetail: nil,
-            body: .none
+            statusDetail: kind == .running ? summary.flatMap { usable($0, running: true, now: now) }?.currentCommand : nil,
+            body: summaryBody(summary, kind: kind, now: now)
         )
+    }
+
+    /// The summary, only if it still describes this card's state: a running
+    /// card needs a not-done summary, an idle card needs a done one, and a
+    /// summary older than the state store's staleness window is dropped.
+    private static func usable(_ summary: SessionSummary, running: Bool, now: Date) -> SessionSummary? {
+        guard summary.prompt != nil,
+              summary.isDone != running,
+              now.timeIntervalSince(summary.updatedAt) <= ClaudeStateStore.staleInterval else { return nil }
+        return summary
+    }
+
+    private static func summaryBody(_ summary: SessionSummary?, kind: StatusKind, now: Date) -> Body {
+        guard let summary, kind == .running || kind == .idle,
+              let usable = usable(summary, running: kind == .running, now: now),
+              let prompt = usable.prompt else { return .none }
+        let edits: String? = usable.editCount >= 1
+            ? (usable.editCount == 1 ? "1 edit" : "\(usable.editCount) edits")
+            : nil
+        if kind == .running {
+            let parts = [usable.currentStep.map { "Now: " + $0 }, edits.map { $0 + " so far" }].compactMap { $0 }
+            return .summary(task: prompt, detail: parts.isEmpty ? nil : parts.joined(separator: " \u{00B7} "))
+        }
+        return .summary(task: "Done: " + prompt, detail: edits)
     }
 
     /// True only for a `.needsPermission` state whose hook event is still
