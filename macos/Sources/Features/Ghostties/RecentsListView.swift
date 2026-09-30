@@ -169,8 +169,10 @@ struct RecentsListView: View {
                         inactiveExpanded: true,
                         archiveExpanded: true
                     )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.leading, WorkspaceLayout.sidebarContentPaddingLeading)
+                    .padding(.trailing, WorkspaceLayout.sidebarContentPaddingTrailing)
+                    .padding(.top, WorkspaceLayout.sidebarContentPaddingTop)
+                    .padding(.bottom, 4)
                 } else {
                     sessionsScrollView(
                         pinned: pinned,
@@ -251,7 +253,7 @@ struct RecentsListView: View {
         // still re-invokes its content closure on element change
         // (e.g. `LazyVStack` keyed with `.id` forced to include a
         // content hash), not a plain revert.
-        VStack(spacing: 2) {
+        VStack(spacing: WorkspaceLayout.recentsRowGap) {
             // Pinned is the one section that's hidden entirely
             // when empty — it's an opt-in section, not one of
             // the three lifecycle buckets every session always
@@ -367,8 +369,10 @@ struct RecentsListView: View {
                     inactiveExpanded: inactiveExpanded,
                     archiveExpanded: archiveExpanded
                 )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.leading, WorkspaceLayout.sidebarContentPaddingLeading)
+                .padding(.trailing, WorkspaceLayout.sidebarContentPaddingTrailing)
+                .padding(.top, WorkspaceLayout.sidebarContentPaddingTop)
+                .padding(.bottom, 4)
                 .animation(reflowAnimation, value: dragState)
             }
             .accessibilityLabel("Sessions")
@@ -1115,26 +1119,26 @@ private struct SessionSectionHeader: View {
                 // on the right) — supersedes the old leading-chevron,
                 // all-caps "ACTIVE 5" layout.
                 (Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: WorkspaceLayout.sessionSectionHeaderTextSize, weight: .medium))
                     .foregroundColor(Color.primary)
                  + Text(" (\(count))")
-                    .font(.system(size: 11, weight: .regular))
+                    .font(.system(size: WorkspaceLayout.sessionSectionHeaderTextSize, weight: .regular))
                     .foregroundColor(WorkspaceLayout.sectionHeaderForeground(for: colorScheme)))
 
                 Spacer(minLength: 0)
 
-                // Sized to `sidebarIconColumnWidth` (not a hardcoded literal)
-                // so this chevron's x-center lines up with session-row ghosts
+                // Sized from `sessionSectionHeaderChevronSize` so this
+                // chevron's x-center lines up with session-row ghosts
                 // directly below it — `PixelChevronView` already pins its own
                 // internal content to a 16pt frame, so the outer frame here
                 // must match that, not shrink it.
                 PixelChevronView(isExpanded: isEffectivelyExpanded)
-                    .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
+                    .frame(width: WorkspaceLayout.sessionSectionHeaderChevronSize, height: WorkspaceLayout.sessionSectionHeaderChevronSize)
             }
             .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
             .padding(.trailing, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.top, WorkspaceLayout.sessionSectionHeaderTopPadding)
+            .padding(.bottom, WorkspaceLayout.sessionSectionHeaderBottomPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }

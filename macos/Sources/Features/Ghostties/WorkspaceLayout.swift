@@ -52,7 +52,7 @@ enum WorkspaceLayout {
     /// around ~94pt on macOS 26. Never returns less than `sidebarRailWidth`,
     /// so a narrow or unusual cluster never squeezes the tray pill.
     static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat) -> CGFloat {
-        max(sidebarRailWidth, zoomButtonMaxX + leadingInset)
+        max(sidebarRailWidth, zoomButtonMaxX + leadingInset + railExtraWidth)
     }
 
     /// Pure fullscreen check shared by `titlebarRowTopAnchorConstant(in:)`
@@ -361,6 +361,93 @@ enum WorkspaceLayout {
     /// tab). Smaller than `sidebarIconColumnWidth` — the ghost sits centered
     /// inside that column, not filling it.
     static let sessionGhostSize: CGFloat = 14
+
+    // MARK: - Sidebar DialKit Tunables (sidebar-presence, session-8 brief)
+    //
+    // Named constants lifted from prior inline literals so `SidebarDialTuning`
+    // (see `SidebarDialKit.swift`) has a single default to read for each —
+    // never re-derive a literal at a second call site. Grouped by the same
+    // sections the DialKit panel presents them in.
+
+    /// `RecentsRowView` row height — 46pt + the 2pt inter-row gap
+    /// (`recentsRowGap`) below gives the 48pt row-to-row pitch measured off
+    /// Flow 07's export. See `RecentsRowView.body`'s `.frame(height:)` comment.
+    static let recentsRowHeight: CGFloat = 46
+
+    /// Inter-row gap in the Sessions tab's section `VStack`
+    /// (`RecentsListView.sectionsContent`).
+    static let recentsRowGap: CGFloat = 2
+
+    /// Session name / inline-rename field text size in `RecentsRowView`.
+    static let recentsRowTitleSize: CGFloat = 12
+
+    /// Project-name subtitle text size in `RecentsRowView`.
+    static let recentsRowSubtitleSize: CGFloat = 10
+
+    /// `RecentsRowView`'s trailing edge padding (leading uses
+    /// `sidebarRowLeadingPadding`, shared with every other sidebar row/header).
+    static let recentsRowTrailingPadding: CGFloat = 10
+
+    /// Section header ("Pinned"/"Active"/"Inactive"/"Archive") title/count
+    /// text size in `RecentsListView`'s `SessionSectionHeader`.
+    static let sessionSectionHeaderTextSize: CGFloat = 11
+
+    /// Section header top padding (`SessionSectionHeader`).
+    static let sessionSectionHeaderTopPadding: CGFloat = 8
+
+    /// Section header bottom padding (`SessionSectionHeader`).
+    static let sessionSectionHeaderBottomPadding: CGFloat = 4
+
+    /// Section header chevron size (`SessionSectionHeader`'s `PixelChevronView`
+    /// frame). A dial independent of `sidebarIconColumnWidth`, even though it
+    /// defaults to the same 16pt value — the two are visually related, not
+    /// structurally tied.
+    static let sessionSectionHeaderChevronSize: CGFloat = 16
+
+    /// Top padding of the scrollable list content in both sidebar tabs
+    /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s
+    /// Sessions `sectionsContent` — both currently `.padding(.vertical, 4)`,
+    /// split here into a dialable top value; bottom stays the fixed 4pt this
+    /// replaces).
+    static let sidebarContentPaddingTop: CGFloat = 4
+
+    /// Leading padding of the scrollable list content in both sidebar tabs.
+    static let sidebarContentPaddingLeading: CGFloat = 8
+
+    /// Trailing padding of the scrollable list content in both sidebar tabs.
+    static let sidebarContentPaddingTrailing: CGFloat = 8
+
+    /// Extra top padding on the bottom tray, opening a gap between the list
+    /// above and the tray below. 0 = today's flush layout (the list's
+    /// `Spacer` already pushes the tray to the bottom).
+    static let sidebarListToTrayGap: CGFloat = 0
+
+    /// Ghost glyph size in a collapsed-rail session row (`SidebarRailView`'s
+    /// `RailSessionRow`) — distinct from `sessionGhostSize`, the expanded
+    /// row's glyph size.
+    static let railGhostSize: CGFloat = 16
+
+    /// Width of one collapsed-rail session row (`RailSessionRow`,
+    /// `RailSectionSummaryRow`).
+    static let railRowWidth: CGFloat = 52
+
+    /// Height of one collapsed-rail session row (`RailSessionRow`).
+    static let railRowHeight: CGFloat = 32
+
+    /// Vertical gap between rail session rows (`SidebarRailView`'s
+    /// `VStack(spacing:)`).
+    static let railRowGap: CGFloat = 4
+
+    /// Height of a rail section-summary row (`RailSectionSummaryRow`, the bare
+    /// "›" Inactive/Archived rows) — width shared with `railRowWidth`.
+    static let railSummaryRowHeight: CGFloat = 24
+
+    /// Added on top of `collapsedRailWidth`'s computed hug width — parked
+    /// tuning knob (Sean, sidebar-presence review round 3: "the fixed 128pt
+    /// rail read too wide," resolved by hugging the traffic lights instead).
+    /// 0 = today's hug formula, unmodified. Does not change the hug formula
+    /// itself; only adds headroom on top of it.
+    static let railExtraWidth: CGFloat = 0
 
     // MARK: - Source-dot colors
 

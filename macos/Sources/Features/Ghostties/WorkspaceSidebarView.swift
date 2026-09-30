@@ -80,8 +80,10 @@ struct WorkspaceSidebarView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.leading, WorkspaceLayout.sidebarContentPaddingLeading)
+                        .padding(.trailing, WorkspaceLayout.sidebarContentPaddingTrailing)
+                        .padding(.top, WorkspaceLayout.sidebarContentPaddingTop)
+                        .padding(.bottom, 4)
                         .animation(
                             NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
                                 ? nil
@@ -534,6 +536,7 @@ private struct SidebarBottomTray: View {
             }
         }
         .padding(.horizontal, WorkspaceLayout.trayHorizontalMargin)
+        .padding(.top, WorkspaceLayout.sidebarListToTrayGap)
         .padding(.bottom, 8)
     }
 

@@ -33,7 +33,7 @@ struct SidebarRailView: View {
                 .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
                 .padding(.top, 6)
 
-            VStack(spacing: 4) {
+            VStack(spacing: WorkspaceLayout.railRowGap) {
                 ForEach(store.railSessions()) { session in
                     RailSessionRow(
                         indicatorState: coordinator.indicatorState(for: session.id),
@@ -102,8 +102,8 @@ private struct RailSessionRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: 16, isSelected: isActive)
-                .frame(width: 52, height: 32)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: WorkspaceLayout.railGhostSize, isSelected: isActive)
+                .frame(width: WorkspaceLayout.railRowWidth, height: WorkspaceLayout.railRowHeight)
                 .background(rowBackground)
         }
         .buttonStyle(.plain)
@@ -151,7 +151,7 @@ private struct RailSectionSummaryRow: View {
             (coordinator.containerView as? WorkspaceViewContainer)?.toggleSidebar()
         } label: {
             PixelChevronView(isExpanded: false)
-                .frame(width: 52, height: 24)
+                .frame(width: WorkspaceLayout.railRowWidth, height: WorkspaceLayout.railSummaryRowHeight)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
                         .fill(isHovered ? Color.primary.opacity(0.06) : .clear)

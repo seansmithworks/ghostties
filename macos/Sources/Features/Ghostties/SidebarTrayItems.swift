@@ -85,7 +85,7 @@ enum TrayGlassStyle {
         let base = colorScheme == .dark
             ? WorkspaceLayout.chromeBackgroundDark
             : WorkspaceLayout.chromeBackgroundLight
-        return Color(base).opacity(0.55)
+        return Color(base).opacity(tintOpacity)
     }
 
     /// 0.5pt inner highlight stroke — the top/light edge a physically
@@ -93,7 +93,7 @@ enum TrayGlassStyle {
     /// the warm cream chrome); dimmer in dark mode so it doesn't read as a
     /// glow.
     static func innerHighlightStroke(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.6)
+        colorScheme == .dark ? Color.white.opacity(rimOpacityDark) : Color.white.opacity(rimOpacityLight)
     }
 
     /// Soft drop shadow lifting the pill off the chrome/terminal behind it —
@@ -102,6 +102,15 @@ enum TrayGlassStyle {
     static let shadowColor = Color.black.opacity(0.08)
     static let shadowRadius: CGFloat = 4
     static let shadowYOffset: CGFloat = 1
+
+    /// Opacity applied to the chrome-background tint in `glassTint(for:)`.
+    static let tintOpacity: Double = 0.55
+
+    /// `innerHighlightStroke(for:)` opacity in light mode.
+    static let rimOpacityLight: Double = 0.6
+
+    /// `innerHighlightStroke(for:)` opacity in dark mode.
+    static let rimOpacityDark: Double = 0.14
 }
 
 /// The floating rounded pill that houses tray icon buttons. On macOS 26+,
