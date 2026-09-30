@@ -162,13 +162,6 @@ final class SessionPopoverController {
 
     // MARK: - Actions
 
-    /// Same code path a row click takes.
-    private func open() {
-        guard let id = currentSessionId else { return }
-        coordinator?.focusSession(id: id)
-        dismiss()
-    }
-
     func dismiss() {
         showWork?.cancel()
         dismissWork?.cancel()
@@ -201,7 +194,12 @@ final class SessionPopoverController {
 
     private func present(sessionId: UUID, anchor: NSView) {
         guard let container = coordinator?.containerView, anchor.window != nil else { return }
-        guard let content = makeContent(for: sessionId) else { return }
+        guard let content = makeContent(for: sessionId, showsName: Self.showsName(anchor)) else {
+            // Nothing essential to show for this row: don't leave the previous
+            // row's card up over it.
+            if isVisible { dismiss() }
+            return
+        }
 
         let wasVisible = isVisible
         currentSessionId = sessionId
@@ -223,8 +221,6 @@ final class SessionPopoverController {
         if let hosting { return hosting }
         let root = SessionPopoverCard(
             model: model,
-            onOpen: { [weak self] in self?.open() },
-            onClose: { [weak self] in self?.dismiss() },
             onHover: { [weak self] in self?.cardHoverChanged($0) }
         )
         let host = SessionPopoverHostingView(rootView: AnyView(root))
@@ -295,19 +291,23 @@ final class SessionPopoverController {
 
     // MARK: - Content
 
-    private func makeContent(for id: UUID) -> SessionPopoverContent? {
+    private static func showsName(_ anchor: NSView?) -> Bool {
+        (anchor as? SessionPopoverAnchor.AnchorView)?.showsName ?? false
+    }
+
+    /// nil when there is nothing essential to show for this session.
+    private func makeContent(for id: UUID, showsName: Bool) -> SessionPopoverContent? {
         let store = workspace
         guard let session = store.sessions.first(where: { $0.id == id }) else { return nil }
         var title = session.name
-        var cwd = claudeState.state(for: id)?.cwd
-            ?? store.projects.first { $0.id == session.projectId }?.rootPath
+        var project = store.projects.first { $0.id == session.projectId }?.name
         var approval = claudeState.state(for: id)
         var summary = claudeState.summary(for: id)
         var indicator = store.globalIndicatorStates[id] ?? .inactive
         #if DEBUG
         if let override = CaptureFixture.popoverOverride(for: id) {
             title = override.title
-            cwd = override.cwd
+            project = override.project
             approval = override.approval
             summary = override.summary
             if let forced = override.indicator { indicator = forced }
@@ -315,21 +315,21 @@ final class SessionPopoverController {
         #endif
         return SessionPopoverContent.make(
             sessionId: id,
-            title: title,
-            cwd: cwd,
-            agent: session.resume?.agent.rawValue ?? "claude",
+            name: title,
+            project: project,
+            showsName: showsName,
             indicator: indicator,
             approval: approval,
-            summary: summary,
-            fallbackDate: session.displayTimestamp
+            summary: summary
         )
     }
 
     /// Re-derive the content from current state. A session that no longer
-    /// exists dismisses the card.
+    /// exists, or that no longer has anything essential to show (the approval
+    /// was answered, the run finished), dismisses the card.
     private func refresh() {
         guard let id = currentSessionId else { return }
-        guard let content = makeContent(for: id) else { dismiss(); return }
+        guard let content = makeContent(for: id, showsName: Self.showsName(currentAnchor)) else { dismiss(); return }
         guard content != model.content else { return }
         model.content = content
         // SwiftUI applies the new content on its next layout pass.
@@ -345,8 +345,8 @@ final class SessionPopoverController {
 
     #if DEBUG
     /// Test seams: drive the content path with no window or GUI.
-    func openForTesting(sessionId: UUID) {
-        guard let content = makeContent(for: sessionId) else { return }
+    func openForTesting(sessionId: UUID, showsName: Bool = false) {
+        guard let content = makeContent(for: sessionId, showsName: showsName) else { return }
         currentSessionId = sessionId
         model.content = content
     }
@@ -463,10 +463,12 @@ private final class LiveUpdates {
 struct SessionPopoverAnchor: NSViewRepresentable {
     let sessionId: UUID
     let controller: SessionPopoverController
+    let showsName: Bool
 
     func makeNSView(context: Context) -> AnchorView {
         let view = AnchorView()
         view.sessionId = sessionId
+        view.showsName = showsName
         view.controller = controller
         controller.register(anchor: view, for: sessionId)
         return view
@@ -487,6 +489,7 @@ struct SessionPopoverAnchor: NSViewRepresentable {
 
     final class AnchorView: NSView {
         var sessionId = UUID()
+        var showsName = false
         weak var controller: SessionPopoverController?
         private var area: NSTrackingArea?
 
@@ -517,7 +520,8 @@ struct SessionPopoverAnchor: NSViewRepresentable {
 
 extension View {
     /// Shows the session popover while the pointer rests over this view.
-    func sessionPopoverAnchor(sessionId: UUID, controller: SessionPopoverController) -> some View {
-        background(SessionPopoverAnchor(sessionId: sessionId, controller: controller))
+    /// `showsName`: the rail shows ghosts only, so its card names the session.
+    func sessionPopoverAnchor(sessionId: UUID, controller: SessionPopoverController, showsName: Bool = false) -> some View {
+        background(SessionPopoverAnchor(sessionId: sessionId, controller: controller, showsName: showsName))
     }
 }

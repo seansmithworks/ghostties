@@ -27,19 +27,35 @@ final class SessionPopoverTests: XCTestCase {
 
     private func content(
         indicator: SessionIndicatorState,
-        approval: ClaudeState?
-    ) -> SessionPopoverContent {
+        approval: ClaudeState?,
+        summary: SessionSummary? = nil,
+        rail: Bool = false,
+        at date: Date? = nil
+    ) -> SessionPopoverContent? {
         SessionPopoverContent.make(
             sessionId: sessionId,
-            title: "DAB",
-            cwd: "/Users/example/work/dab",
-            agent: "claude",
+            name: "DAB",
+            project: "dab",
+            showsName: rail,
             indicator: indicator,
             approval: approval,
-            fallbackDate: nil,
-            now: now,
-            homeDirectory: "/Users/example"
+            summary: summary,
+            now: date ?? now
         )
+    }
+
+    private func editState(description: String?) -> ClaudeState? {
+        derive(editPermission).map {
+            ClaudeState(
+                ghosttiesSessionId: $0.ghosttiesSessionId, claudeSessionId: $0.claudeSessionId, cwd: $0.cwd,
+                state: $0.state,
+                structuredPrompt: StructuredPrompt(
+                    toolName: "Edit", toolUseId: nil,
+                    toolInput: ToolInputSummary(description: description, filePath: "src/server/config.ts")
+                ),
+                updatedAt: $0.updatedAt
+            )
+        }
     }
 
     private let bashPermission = #"""
@@ -95,50 +111,67 @@ final class SessionPopoverTests: XCTestCase {
 
     // MARK: - (b) State -> content
 
-    func testNeedsBashMapsToCommandHero() {
+    func testNeedsBashMapsToCommandAndDescription() {
         let card = content(indicator: .needsAttention, approval: derive(bashPermission))
-        XCTAssertTrue(card.isApproval)
-        XCTAssertEqual(card.statusLabel, "Needs approval")
-        XCTAssertEqual(card.statusDetail, "Bash")
-        XCTAssertEqual(card.subtitle, "~/work/dab · claude")
-        XCTAssertEqual(card.body, .commandHero(command: "rm -rf build/", description: "Clean stale artifacts before rebuild"))
+        XCTAssertEqual(card?.isApproval, true)
+        XCTAssertNil(card?.nameLine)
+        XCTAssertEqual(card?.block, .command(command: "rm -rf build/", description: "Clean stale artifacts before rebuild"))
     }
 
-    func testNeedsEditMapsToMiniTerminalLines() {
-        var input = derive(editPermission)
-        input = input.map {
-            ClaudeState(
-                ghosttiesSessionId: $0.ghosttiesSessionId, claudeSessionId: $0.claudeSessionId, cwd: $0.cwd,
-                state: $0.state,
-                structuredPrompt: StructuredPrompt(
-                    toolName: "Edit", toolUseId: nil,
-                    toolInput: ToolInputSummary(description: "Raise the timeout", filePath: "src/server/config.ts")
-                ),
-                updatedAt: $0.updatedAt
-            )
-        }
-        let card = content(indicator: .needsAttention, approval: input)
-        XCTAssertEqual(card.body, .miniTerminal(lines: [
-            .init(text: "● Edit(src/server/config.ts)", tone: .primary),
-            .init(text: "  Raise the timeout", tone: .secondary),
-            .init(text: "  Do you want to proceed?", tone: .alert),
-        ]))
+    func testNeedsEditMapsToToolHeadlineAndPath() {
+        let card = content(indicator: .needsAttention, approval: editState(description: "Raise the timeout"))
+        XCTAssertEqual(card?.block, .tool(
+            headline: "Edit config.ts", path: "src/server/config.ts", description: "Raise the timeout"
+        ))
     }
 
-    func testEditWithoutDescriptionOmitsThatLine() {
+    func testEditWithoutDescriptionOmitsIt() {
         let card = content(indicator: .needsAttention, approval: derive(editPermission))
-        XCTAssertEqual(card.body, .miniTerminal(lines: [
-            .init(text: "● Edit(src/server/config.ts)", tone: .primary),
-            .init(text: "  Do you want to proceed?", tone: .alert),
-        ]))
+        XCTAssertEqual(card?.block, .tool(headline: "Edit config.ts", path: "src/server/config.ts", description: nil))
     }
 
-    func testRunningIsPassiveWithNoApprovalText() {
-        let card = content(indicator: .processing, approval: nil)
-        XCTAssertFalse(card.isApproval)
-        XCTAssertEqual(card.statusLabel, "Running")
-        XCTAssertNil(card.statusDetail)
-        XCTAssertEqual(card.body, .none)
+    func testNonFileToolUsesItsFirstArgumentAndNoPath() {
+        let state = derive(#"{"cwd":"/tmp","hook_event_name":"PermissionRequest","session_id":"c-1","tool_name":"WebFetch","tool_input":{"url":"https://example.com"}}"#)
+        XCTAssertEqual(
+            content(indicator: .needsAttention, approval: state)?.block,
+            .tool(headline: "WebFetch https://example.com", path: nil, description: nil)
+        )
+    }
+
+    func testRunningShowsPromptAndStepWithNoCount() {
+        let summary = ingest([promptEvent, bashEvent, editDone("e1"), editDone("e2")])
+        let card = content(indicator: .processing, approval: nil, summary: summary)
+        XCTAssertEqual(card?.block, .running(prompt: "fix the flaky router tests", step: "running npm test"))
+        XCTAssertEqual(card?.isApproval, false)
+    }
+
+    func testDoneAndOtherNonRunningStatesHaveNoCard() {
+        let done = ingest([promptEvent, bashEvent, stopEvent])
+        XCTAssertNil(content(indicator: .idle, approval: nil, summary: done))
+        XCTAssertNil(content(indicator: .needsAttention, approval: nil, summary: done))
+        XCTAssertNil(content(indicator: .error, approval: nil, summary: done))
+        XCTAssertNil(content(indicator: .inactive, approval: nil, summary: done))
+        // A finished summary must not produce a Running card either.
+        XCTAssertNil(content(indicator: .processing, approval: nil, summary: done))
+        // Even a live-looking summary does not make an idle row worth a card.
+        XCTAssertNil(content(indicator: .idle, approval: nil, summary: ingest([promptEvent, bashEvent])))
+    }
+
+    func testRunningWithNoSummaryDataHasNoCard() {
+        XCTAssertNil(content(indicator: .processing, approval: nil, summary: nil))
+        // Mid-turn events with no prompt seen (app relaunched): still no card.
+        XCTAssertNil(content(indicator: .processing, approval: nil, summary: ingest([bashEvent, editDone("e1")])))
+    }
+
+    func testRailAddsTheNameLineAndExpandedDoesNot() {
+        let approval = derive(bashPermission)
+        let rail = content(indicator: .needsAttention, approval: approval, rail: true)
+        XCTAssertEqual(rail?.nameLine, .init(name: "DAB", project: "dab"))
+        XCTAssertNil(content(indicator: .needsAttention, approval: approval, rail: false)?.nameLine)
+        let running = content(indicator: .processing, approval: nil, summary: ingest([promptEvent]), rail: true)
+        XCTAssertEqual(running?.nameLine, .init(name: "DAB", project: "dab"))
+        // No block, no card, even in the rail.
+        XCTAssertNil(content(indicator: .idle, approval: nil, rail: true))
     }
 
     // MARK: - (c) Staleness
@@ -148,33 +181,45 @@ final class SessionPopoverTests: XCTestCase {
         // lands once the user answers in the terminal.
         let needs = derive(bashPermission)
         let shownWhileWaiting = content(indicator: .needsAttention, approval: needs)
-        XCTAssertEqual(shownWhileWaiting.statusDetail, "Bash")
+        XCTAssertEqual(shownWhileWaiting?.isApproval, true)
 
         let after = derive(#"{"cwd":"/tmp","hook_event_name":"PostToolUse","session_id":"c-1","tool_name":"Bash","tool_input":{"command":"rm -rf build/"}}"#)
         XCTAssertEqual(after?.state, .busy)
         let card = content(indicator: .processing, approval: after)
-        XCTAssertFalse(card.isApproval)
-        XCTAssertEqual(card.body, .none)
-        XCTAssertNil(card.statusDetail)
+        XCTAssertNil(card)
         XCTAssertFalse(String(describing: card).contains("rm -rf"))
     }
 
     func testOldPermissionStateIsNotShownAsApproval() {
         guard let needs = derive(bashPermission) else { return }
         let later = needs.updatedAt.addingTimeInterval(ClaudeStateStore.staleInterval + 1)
-        let card = SessionPopoverContent.make(
-            sessionId: sessionId, title: "DAB", cwd: nil, agent: "claude",
-            indicator: .idle, approval: needs, fallbackDate: nil, now: later
-        )
-        XCTAssertFalse(card.isApproval)
-        XCTAssertEqual(card.body, .none)
+        XCTAssertNil(content(indicator: .idle, approval: needs, at: later))
     }
 
-    func testPermissionWithoutToolDetailHasNoBodyBlock() {
+    func testStaleRunningSummaryHasNoCard() {
+        let summary = ingest([promptEvent, bashEvent])
+        let later = now.addingTimeInterval(ClaudeStateStore.staleInterval + 60)
+        XCTAssertNil(content(indicator: .processing, approval: nil, summary: summary, at: later))
+    }
+
+    func testPermissionWithoutToolDetailHasNoCard() {
         let state = derive(#"{"cwd":"/tmp","hook_event_name":"Notification","notification_type":"permission_prompt","session_id":"c-1"}"#)
-        let card = content(indicator: .needsAttention, approval: state)
-        XCTAssertTrue(card.isApproval)
-        XCTAssertEqual(card.body, .none)
+        XCTAssertNil(content(indicator: .needsAttention, approval: state))
+    }
+
+    func testNewPromptResetsPromptAndStep() {
+        var summary = ingest([promptEvent, bashEvent])
+        XCTAssertEqual(summary.currentStep, "running npm test")
+        summary.ingest(
+            hookPayload(#"{"hook_event_name":"UserPromptSubmit","session_id":"c-1","prompt":"tidy the config"}"#),
+            updatedAt: now.addingTimeInterval(-5)
+        )
+        XCTAssertEqual(summary.prompt, "tidy the config")
+        XCTAssertNil(summary.currentStep)
+        XCTAssertEqual(
+            content(indicator: .processing, approval: nil, summary: summary)?.block,
+            .running(prompt: "tidy the config", step: nil)
+        )
     }
 
     // MARK: - "What's happening" summary (invented text only)
@@ -199,62 +244,6 @@ final class SessionPopoverTests: XCTestCase {
         return summary
     }
 
-    private func card(_ summary: SessionSummary?, indicator: SessionIndicatorState) -> SessionPopoverContent {
-        SessionPopoverContent.make(
-            sessionId: sessionId, title: "DAB", cwd: nil, agent: "claude",
-            indicator: indicator, approval: nil, summary: summary, fallbackDate: nil, now: now
-        )
-    }
-
-    func testRunningSummaryShowsPromptStepAndEditCount() {
-        let summary = ingest([promptEvent, bashEvent, editDone("e1"), editDone("e2")])
-        let running = card(summary, indicator: .processing)
-        XCTAssertEqual(running.statusLabel, "Running")
-        XCTAssertEqual(running.statusDetail, "npm test")
-        XCTAssertEqual(running.body, .summary(
-            task: "fix the flaky router tests",
-            detail: "Now: running npm test \u{00B7} 2 edits so far"
-        ))
-    }
-
-    func testRepeatedReadOfTheSameEventDoesNotDoubleCount() {
-        var summary = ingest([promptEvent, editDone("e1")])
-        // refresh() re-decodes an unchanged file: same event, same timestamp.
-        summary.ingest(hookPayload(editDone("e1")), updatedAt: now.addingTimeInterval(-19))
-        summary.ingest(hookPayload(editDone("e1")), updatedAt: now.addingTimeInterval(-19))
-        XCTAssertEqual(summary.editCount, 1)
-    }
-
-    func testNewPromptResetsCountAndPrompt() {
-        var summary = ingest([promptEvent, bashEvent, editDone("e1")])
-        XCTAssertEqual(summary.editCount, 1)
-        summary.ingest(
-            hookPayload(#"{"hook_event_name":"UserPromptSubmit","session_id":"c-1","prompt":"tidy the config"}"#),
-            updatedAt: now.addingTimeInterval(-5)
-        )
-        XCTAssertEqual(summary.prompt, "tidy the config")
-        XCTAssertEqual(summary.editCount, 0)
-        XCTAssertNil(summary.currentStep)
-        XCTAssertEqual(card(summary, indicator: .processing).body, .summary(task: "tidy the config", detail: nil))
-    }
-
-    func testStopShowsDoneWithEditCountAndNoNowLine() {
-        let summary = ingest([promptEvent, bashEvent, editDone("e1"), editDone("e2"), stopEvent])
-        let done = card(summary, indicator: .idle)
-        XCTAssertEqual(done.body, .summary(task: "Done: fix the flaky router tests", detail: "2 edits"))
-        XCTAssertNil(done.statusDetail)
-        // A finished summary must not decorate a card that says Running.
-        XCTAssertEqual(card(summary, indicator: .processing).body, .none)
-    }
-
-    func testNoSummaryDataMeansNoBlock() {
-        XCTAssertEqual(card(nil, indicator: .processing).body, .none)
-        // Mid-turn events with no prompt seen (app relaunched): still omitted.
-        let midTurn = ingest([bashEvent, editDone("e1")])
-        XCTAssertEqual(card(midTurn, indicator: .processing).body, .none)
-        XCTAssertNil(card(midTurn, indicator: .processing).statusDetail)
-    }
-
     func testNowLineWording() {
         func step(_ tool: String, _ input: String) -> String? {
             let event = #"{"hook_event_name":"PreToolUse","tool_name":"\#(tool)","tool_input":\#(input)}"#
@@ -277,14 +266,9 @@ final class SessionPopoverTests: XCTestCase {
     func testApprovalCardIgnoresSummary() {
         guard let needs = derive(bashPermission) else { return }
         let summary = ingest([promptEvent, bashEvent])
-        let withSummary = SessionPopoverContent.make(
-            sessionId: sessionId, title: "DAB", cwd: nil, agent: "claude",
-            indicator: .needsAttention, approval: needs, summary: summary, fallbackDate: nil, now: now
-        )
-        let without = SessionPopoverContent.make(
-            sessionId: sessionId, title: "DAB", cwd: nil, agent: "claude",
-            indicator: .needsAttention, approval: needs, summary: nil, fallbackDate: nil, now: now
-        )
+        let withSummary = content(indicator: .needsAttention, approval: needs, summary: summary)
+        let without = content(indicator: .needsAttention, approval: needs, summary: nil)
+        XCTAssertNotNil(withSummary)
         XCTAssertEqual(withSummary, without)
     }
 
@@ -306,7 +290,7 @@ final class SessionPopoverTests: XCTestCase {
         write(editDone("e1"), at: 2)
         store.refreshForTesting() // unchanged file re-read
         XCTAssertEqual(store.summary(for: sessionId)?.prompt, "fix the flaky router tests")
-        XCTAssertEqual(store.summary(for: sessionId)?.editCount, 1)
+        XCTAssertEqual(store.summary(for: sessionId)?.currentStep, "running npm test")
         XCTAssertEqual(store.state(for: sessionId)?.state, .busy)
 
         write(stopEvent, at: 3)
@@ -393,17 +377,22 @@ final class SessionPopoverTests: XCTestCase {
         write(bashPermission)
         controller.openForTesting(sessionId: sessionId)
         XCTAssertEqual(controller.contentForTesting?.isApproval, true)
-        XCTAssertEqual(controller.contentForTesting?.statusDetail, "Bash")
+        XCTAssertEqual(controller.contentForTesting?.block, .command(command: "rm -rf build/", description: "Clean stale artifacts before rebuild"))
 
         write(#"{"cwd":"/tmp","hook_event_name":"PostToolUse","session_id":"c-1","tool_name":"Bash","tool_input":{"command":"rm -rf build/"}}"#)
         controller.refreshForTesting()
 
-        let card = controller.contentForTesting
-        XCTAssertNotNil(card)
-        XCTAssertEqual(card?.isApproval, false)
-        XCTAssertEqual(card?.body, SessionPopoverContent.Body.none)
-        XCTAssertNil(card?.statusDetail)
-        XCTAssertFalse(String(describing: card).contains("rm -rf"))
+        // Nothing essential left to show: the card goes away, with no stale command.
+        XCTAssertNil(controller.contentForTesting)
+        XCTAssertNil(controller.currentSessionIdForTesting)
+    }
+
+    func testControllerCarriesTheRailNameLine() {
+        let (controller, _, _, dir, write) = makeController()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        write(bashPermission)
+        controller.openForTesting(sessionId: sessionId, showsName: true)
+        XCTAssertEqual(controller.contentForTesting?.nameLine, .init(name: "DAB", project: "dab"))
     }
 
     func testRefreshDismissesWhenTheSessionIsRemoved() {

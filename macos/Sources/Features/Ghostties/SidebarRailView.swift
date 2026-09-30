@@ -113,7 +113,7 @@ private struct RailSessionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .sessionPopoverAnchor(sessionId: sessionId, controller: coordinator.sessionPopover)
+        .sessionPopoverAnchor(sessionId: sessionId, controller: coordinator.sessionPopover, showsName: true)
     }
 
     /// Selected rail row is the same raised card as the expanded sidebar's

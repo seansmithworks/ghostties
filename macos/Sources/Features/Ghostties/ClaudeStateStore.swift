@@ -138,10 +138,6 @@ struct SessionSummary: Equatable {
     private(set) var prompt: String?
     /// Latest `PreToolUse`, as "running npm test" / "editing config.ts".
     private(set) var currentStep: String?
-    /// The current Bash command, first line, truncated. Bash only.
-    private(set) var currentCommand: String?
-    /// Edit/Write/MultiEdit `PostToolUse` events since the last prompt.
-    private(set) var editCount = 0
     /// True after `Stop`, until the next prompt.
     private(set) var isDone = false
     private(set) var updatedAt = Date.distantPast
@@ -149,21 +145,16 @@ struct SessionSummary: Equatable {
     /// A repeated read of the same file (`refresh()` re-decodes every file on
     /// every directory change) must not double-count.
     private var lastEventKey: String?
-    private var countedEditIds: Set<String> = []
 
     static let maxPromptLength = 400
     static let maxCommandLength = 80
-    private static let editTools: Set<String> = ["Edit", "Write", "MultiEdit"]
 
     init() {}
 
     /// Test/fixture seam: an already-built summary.
-    init(prompt: String?, currentStep: String? = nil, currentCommand: String? = nil,
-         editCount: Int = 0, isDone: Bool = false, updatedAt: Date = Date()) {
+    init(prompt: String?, currentStep: String? = nil, isDone: Bool = false, updatedAt: Date = Date()) {
         self.prompt = prompt
         self.currentStep = currentStep
-        self.currentCommand = currentCommand
-        self.editCount = editCount
         self.isDone = isDone
         self.updatedAt = updatedAt
     }
@@ -183,19 +174,12 @@ struct SessionSummary: Equatable {
         case "PreToolUse":
             isDone = false
             currentStep = Self.step(tool: hook.toolName, input: hook.toolInput)
-            currentCommand = hook.toolName == "Bash" ? hook.toolInput?.command.map(Self.firstLine) : nil
         case "PostToolUse":
-            if let tool = hook.toolName, Self.editTools.contains(tool) {
-                if let id = hook.toolUseId {
-                    if countedEditIds.insert(id).inserted { editCount += 1 }
-                } else {
-                    editCount += 1
-                }
-            }
+            // Nothing to record, but the session is still alive: refresh `updatedAt`.
+            break
         case "Stop":
             isDone = true
             currentStep = nil
-            currentCommand = nil
         default:
             return
         }
