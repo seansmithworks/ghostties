@@ -85,7 +85,7 @@ enum TrayGlassStyle {
         let base = colorScheme == .dark
             ? WorkspaceLayout.chromeBackgroundDark
             : WorkspaceLayout.chromeBackgroundLight
-        return Color(base).opacity(tintOpacity)
+        return Color(base).opacity(SidebarDialTuning.trayTintOpacity())
     }
 
     /// 0.5pt inner highlight stroke — the top/light edge a physically
@@ -93,7 +93,7 @@ enum TrayGlassStyle {
     /// the warm cream chrome); dimmer in dark mode so it doesn't read as a
     /// glow.
     static func innerHighlightStroke(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? Color.white.opacity(rimOpacityDark) : Color.white.opacity(rimOpacityLight)
+        colorScheme == .dark ? Color.white.opacity(SidebarDialTuning.trayRimOpacityDark()) : Color.white.opacity(SidebarDialTuning.trayRimOpacityLight())
     }
 
     /// Soft drop shadow lifting the pill off the chrome/terminal behind it —
@@ -140,14 +140,14 @@ struct SidebarTrayPill<Content: View>: View {
     /// treatment. Shape only; the glass/opaque fallback split below is
     /// unchanged.
     private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: WorkspaceLayout.selectedRowCornerRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: SidebarDialTuning.selectedCardCornerRadius(), style: .continuous)
     }
 
     var body: some View {
         if #available(macOS 26.0, *), !reduceTransparency {
             GlassEffectContainer {
                 pillStack
-                    .padding(TrayGlassStyle.innerPadding)
+                    .padding(SidebarDialTuning.trayInnerPadding())
             }
             .glassEffect(
                 .regular.tint(TrayGlassStyle.glassTint(for: colorScheme)).interactive(),
@@ -163,7 +163,7 @@ struct SidebarTrayPill<Content: View>: View {
             )
         } else {
             pillStack
-                .padding(TrayGlassStyle.innerPadding)
+                .padding(SidebarDialTuning.trayInnerPadding())
                 .background(shape.fill(fill))
                 .overlay(shape.strokeBorder(rimColor, lineWidth: 0.5))
         }
@@ -231,9 +231,9 @@ struct TrayIconButton: View {
         } label: {
             icon
                 .frame(
-                    maxWidth: stretch ? .infinity : TrayGlassStyle.buttonSize,
-                    minHeight: TrayGlassStyle.buttonSize,
-                    maxHeight: TrayGlassStyle.buttonSize
+                    maxWidth: stretch ? .infinity : SidebarDialTuning.trayButtonSize(),
+                    minHeight: SidebarDialTuning.trayButtonSize(),
+                    maxHeight: SidebarDialTuning.trayButtonSize()
                 )
                 .background(
                     RoundedRectangle(cornerRadius: 6)
@@ -254,7 +254,7 @@ struct TrayIconButton: View {
     @ViewBuilder
     private var icon: some View {
         let glyph = Image(systemName: systemName)
-            .font(.system(size: TrayGlassStyle.iconSize, weight: TrayGlassStyle.iconWeight))
+            .font(.system(size: SidebarDialTuning.trayIconSize(), weight: TrayGlassStyle.iconWeight))
             .foregroundStyle(.secondary)
 
         if reduceMotion {

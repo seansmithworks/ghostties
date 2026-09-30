@@ -43,6 +43,17 @@ struct RecentsRowView: View, Equatable {
     /// call site (unaffected by the stagger) is unchanged.
     var staggerIndex: Int = 0
 
+    /// `SidebarDialTuning.epoch()` at construction — DEBUG-tuning-only.
+    /// `.equatable()` is a body-re-execution perf gate (see the type doc
+    /// comment above): none of this row's OTHER stored properties change
+    /// when the sidebar DialKit panel writes a new row height/title size/
+    /// ghost size/etc., so without this field a live tuning edit would be
+    /// silently swallowed by the same `==` this row relies on for its perf
+    /// win, until some unrelated row mutation happened to force a redraw.
+    /// Defaults to 0 so every call site that never reads the panel (i.e.
+    /// every Release build, where the key is never written) is unaffected.
+    var dialEpoch: Int = 0
+
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @State private var isHovered = false
@@ -59,6 +70,7 @@ struct RecentsRowView: View, Equatable {
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
+            && lhs.dialEpoch == rhs.dialEpoch
     }
 
     var body: some View {
@@ -67,7 +79,7 @@ struct RecentsRowView: View, Equatable {
             VStack(alignment: .leading, spacing: 1) {
                 if isEditing {
                     TextField("Session name", text: $editingName)
-                        .font(.system(size: WorkspaceLayout.recentsRowTitleSize))
+                        .font(.system(size: SidebarDialTuning.rowTitleSize()))
                         .textFieldStyle(.plain)
                         .focused(isRenameFocused)
                         .onSubmit { onCommitRename() }
@@ -84,13 +96,13 @@ struct RecentsRowView: View, Equatable {
                         }
                 } else {
                     Text(session.name)
-                        .font(.system(size: WorkspaceLayout.recentsRowTitleSize))
+                        .font(.system(size: SidebarDialTuning.rowTitleSize()))
                         .foregroundStyle(Color.primary)
                         .lineLimit(1)
                 }
 
                 Text(hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName)
-                    .font(.system(size: WorkspaceLayout.recentsRowSubtitleSize))
+                    .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
             }
@@ -119,13 +131,13 @@ struct RecentsRowView: View, Equatable {
             // NOT the panel's own pinned→rail travel (that's carried
             // entirely by `WorkspaceLayout.sidebarTransitionTiming`'s width
             // animation on the container).
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, isSelected: isActive)
-                .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize(), isSelected: isActive)
+                .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
                 .offset(x: glyphOffsetX)
                 .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
         }
-        .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
-        .padding(.trailing, WorkspaceLayout.recentsRowTrailingPadding)
+        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
         // 46pt + the enclosing `VStack(spacing: 2)`'s 2pt inter-row gap
         // (`RecentsListView.sectionsContent`) = 48pt row-to-row pitch —
         // measured directly off Flow 07's export (`mIi8b.png`): traffic-light
@@ -134,7 +146,7 @@ struct RecentsRowView: View, Equatable {
         // Consecutive row-icon centers measure 48px apart; the round-6 first
         // pass used 40 (before that, 36), both too tight — Sean's round-6
         // follow-up review called this out as ~30% tighter than the design.
-        .frame(height: WorkspaceLayout.recentsRowHeight)
+        .frame(height: SidebarDialTuning.rowHeight())
         .background(rowBackground)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
@@ -217,12 +229,12 @@ struct RecentsRowView: View, Equatable {
     @ViewBuilder
     private var rowBackground: some View {
         if isActive {
-            RoundedRectangle(cornerRadius: WorkspaceLayout.selectedRowCornerRadius)
+            RoundedRectangle(cornerRadius: SidebarDialTuning.selectedCardCornerRadius())
                 .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color(WorkspaceLayout.canvasBackgroundLight))
                 .shadow(
-                    color: Color.black.opacity(WorkspaceLayout.selectedRowShadowOpacity),
-                    radius: WorkspaceLayout.selectedRowShadowRadius,
-                    y: WorkspaceLayout.selectedRowShadowYOffset
+                    color: Color.black.opacity(SidebarDialTuning.selectedCardShadowOpacity()),
+                    radius: SidebarDialTuning.selectedCardShadowRadius(),
+                    y: SidebarDialTuning.selectedCardShadowYOffset()
                 )
         } else {
             RoundedRectangle(cornerRadius: rowCornerRadius)

@@ -80,9 +80,9 @@ struct WorkspaceSidebarView: View {
                                 }
                             }
                         }
-                        .padding(.leading, WorkspaceLayout.sidebarContentPaddingLeading)
-                        .padding(.trailing, WorkspaceLayout.sidebarContentPaddingTrailing)
-                        .padding(.top, WorkspaceLayout.sidebarContentPaddingTop)
+                        .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+                        .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                        .padding(.top, SidebarDialTuning.contentPaddingTop())
                         .padding(.bottom, 4)
                         .animation(
                             NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -101,6 +101,19 @@ struct WorkspaceSidebarView: View {
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)
+        #if DEBUG
+        // DEBUG-only live tuning control (session-8 brief) — same mount
+        // pattern as `SessionComposerOverlay`'s `ComposerDebugTuningControl`.
+        // Compiled out of Release entirely; every symbol it touches lives in
+        // `SidebarDialKit.swift`'s `#if DEBUG` block.
+        .overlay(alignment: .topTrailing) {
+            SidebarDebugTuningControl(
+                defaults: .standard,
+                onChange: { store.objectWillChange.send() }
+            )
+            .padding(12)
+        }
+        #endif
         .onAppear {
             // Restore persisted project selection, or default to the first project.
             if selectedProjectId == nil {
@@ -535,8 +548,8 @@ private struct SidebarBottomTray: View {
                 TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, stretch: true, tapEffect: item.tapEffect, action: item.action)
             }
         }
-        .padding(.horizontal, WorkspaceLayout.trayHorizontalMargin)
-        .padding(.top, WorkspaceLayout.sidebarListToTrayGap)
+        .padding(.horizontal, SidebarDialTuning.trayMargin())
+        .padding(.top, SidebarDialTuning.listToTrayGap())
         .padding(.bottom, 8)
     }
 

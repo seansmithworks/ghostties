@@ -33,7 +33,7 @@ struct SidebarRailView: View {
                 .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
                 .padding(.top, 6)
 
-            VStack(spacing: WorkspaceLayout.railRowGap) {
+            VStack(spacing: SidebarDialTuning.railRowGap()) {
                 ForEach(store.railSessions()) { session in
                     RailSessionRow(
                         indicatorState: coordinator.indicatorState(for: session.id),
@@ -102,8 +102,8 @@ private struct RailSessionRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: WorkspaceLayout.railGhostSize, isSelected: isActive)
-                .frame(width: WorkspaceLayout.railRowWidth, height: WorkspaceLayout.railRowHeight)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.railGhostSize(), isSelected: isActive)
+                .frame(width: SidebarDialTuning.railRowWidth(), height: SidebarDialTuning.railRowHeight())
                 .background(rowBackground)
         }
         .buttonStyle(.plain)
@@ -117,12 +117,12 @@ private struct RailSessionRow: View {
     @ViewBuilder
     private var rowBackground: some View {
         if isActive {
-            RoundedRectangle(cornerRadius: WorkspaceLayout.selectedRowCornerRadius)
+            RoundedRectangle(cornerRadius: SidebarDialTuning.selectedCardCornerRadius())
                 .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color(WorkspaceLayout.canvasBackgroundLight))
                 .shadow(
-                    color: Color.black.opacity(WorkspaceLayout.selectedRowShadowOpacity),
-                    radius: WorkspaceLayout.selectedRowShadowRadius,
-                    y: WorkspaceLayout.selectedRowShadowYOffset
+                    color: Color.black.opacity(SidebarDialTuning.selectedCardShadowOpacity()),
+                    radius: SidebarDialTuning.selectedCardShadowRadius(),
+                    y: SidebarDialTuning.selectedCardShadowYOffset()
                 )
         } else {
             RoundedRectangle(cornerRadius: 6)
@@ -151,7 +151,7 @@ private struct RailSectionSummaryRow: View {
             (coordinator.containerView as? WorkspaceViewContainer)?.toggleSidebar()
         } label: {
             PixelChevronView(isExpanded: false)
-                .frame(width: WorkspaceLayout.railRowWidth, height: WorkspaceLayout.railSummaryRowHeight)
+                .frame(width: SidebarDialTuning.railRowWidth(), height: SidebarDialTuning.railSummaryRowHeight())
                 .background(
                     RoundedRectangle(cornerRadius: 6)
                         .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
@@ -186,6 +186,6 @@ private struct RailTray: View {
         // Same margin rule as the expanded sidebar's `SidebarBottomTray`:
         // tray width = container (here, the rail) width − 2×margin, rather
         // than hugging the buttons' intrinsic width.
-        .padding(.horizontal, WorkspaceLayout.trayHorizontalMargin)
+        .padding(.horizontal, SidebarDialTuning.trayMargin())
     }
 }

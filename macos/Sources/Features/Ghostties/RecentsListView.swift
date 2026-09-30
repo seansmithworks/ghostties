@@ -169,9 +169,9 @@ struct RecentsListView: View {
                         inactiveExpanded: true,
                         archiveExpanded: true
                     )
-                    .padding(.leading, WorkspaceLayout.sidebarContentPaddingLeading)
-                    .padding(.trailing, WorkspaceLayout.sidebarContentPaddingTrailing)
-                    .padding(.top, WorkspaceLayout.sidebarContentPaddingTop)
+                    .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+                    .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                    .padding(.top, SidebarDialTuning.contentPaddingTop())
                     .padding(.bottom, 4)
                 } else {
                     sessionsScrollView(
@@ -253,7 +253,7 @@ struct RecentsListView: View {
         // still re-invokes its content closure on element change
         // (e.g. `LazyVStack` keyed with `.id` forced to include a
         // content hash), not a plain revert.
-        VStack(spacing: WorkspaceLayout.recentsRowGap) {
+        VStack(spacing: SidebarDialTuning.rowGap()) {
             // Pinned is the one section that's hidden entirely
             // when empty — it's an opt-in section, not one of
             // the three lifecycle buckets every session always
@@ -369,9 +369,9 @@ struct RecentsListView: View {
                     inactiveExpanded: inactiveExpanded,
                     archiveExpanded: archiveExpanded
                 )
-                .padding(.leading, WorkspaceLayout.sidebarContentPaddingLeading)
-                .padding(.trailing, WorkspaceLayout.sidebarContentPaddingTrailing)
-                .padding(.top, WorkspaceLayout.sidebarContentPaddingTop)
+                .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+                .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                .padding(.top, SidebarDialTuning.contentPaddingTop())
                 .padding(.bottom, 4)
                 .animation(reflowAnimation, value: dragState)
             }
@@ -697,7 +697,8 @@ struct RecentsListView: View {
             onTap: { coordinator.focusSession(id: session.id) },
             onCommitRename: { commitRename(session: session) },
             onCancelRename: { cancelRename() },
-            staggerIndex: indexInSection ?? 0
+            staggerIndex: indexInSection ?? 0,
+            dialEpoch: SidebarDialTuning.epoch()
         )
         .equatable()
         .contextMenu {
@@ -1119,10 +1120,10 @@ private struct SessionSectionHeader: View {
                 // on the right) — supersedes the old leading-chevron,
                 // all-caps "ACTIVE 5" layout.
                 (Text(title)
-                    .font(.system(size: WorkspaceLayout.sessionSectionHeaderTextSize, weight: .medium))
+                    .font(.system(size: SidebarDialTuning.headerTextSize(), weight: .medium))
                     .foregroundColor(Color.primary)
                  + Text(" (\(count))")
-                    .font(.system(size: WorkspaceLayout.sessionSectionHeaderTextSize, weight: .regular))
+                    .font(.system(size: SidebarDialTuning.headerTextSize(), weight: .regular))
                     .foregroundColor(WorkspaceLayout.sectionHeaderForeground(for: colorScheme)))
 
                 Spacer(minLength: 0)
@@ -1133,12 +1134,12 @@ private struct SessionSectionHeader: View {
                 // internal content to a 16pt frame, so the outer frame here
                 // must match that, not shrink it.
                 PixelChevronView(isExpanded: isEffectivelyExpanded)
-                    .frame(width: WorkspaceLayout.sessionSectionHeaderChevronSize, height: WorkspaceLayout.sessionSectionHeaderChevronSize)
+                    .frame(width: SidebarDialTuning.headerChevronSize(), height: SidebarDialTuning.headerChevronSize())
             }
             .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
             .padding(.trailing, 12)
-            .padding(.top, WorkspaceLayout.sessionSectionHeaderTopPadding)
-            .padding(.bottom, WorkspaceLayout.sessionSectionHeaderBottomPadding)
+            .padding(.top, SidebarDialTuning.headerTopPadding())
+            .padding(.bottom, SidebarDialTuning.headerBottomPadding())
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
