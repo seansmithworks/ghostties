@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8"><title>33</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:640px;height:420px;overflow:hidden}
+body{background:#F0E9E6;color:#1a1a1a;font:11px/1.25 -apple-system,"SF Pro Text",system-ui,sans-serif;position:relative;-webkit-font-smoothing:antialiased}
+.side{position:absolute;left:0;top:0;width:260px;height:420px;padding:0 8px}
+.tl{height:38px;display:flex;align-items:center;gap:8px;padding-left:8px}
+.tl i{width:12px;height:12px;border-radius:50%;display:block}
+.tl .new{margin-left:auto;color:#636363;font-size:11px;padding-right:4px}
+.sec{display:flex;align-items:center;gap:8px;height:24px;padding:0 8px;font-size:10px;font-weight:600;letter-spacing:.06em;color:#636363}
+.sec b{font-weight:600}
+.row{display:flex;align-items:flex-start;gap:8px;padding:4px 8px;border-radius:6px;min-height:36px;position:relative}
+.row .g{flex:none;width:16px;margin-top:2px}
+.row .m{flex:1;min-width:0}
+.row .n{font-weight:500;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .p{color:#636363;font-size:10px;white-space:nowrap}
+.row .t{color:#636363;font-size:10px;white-space:nowrap;margin-top:1px}
+.chip{display:inline-flex;align-items:center;gap:4px;height:16px;padding:0 6px;border-radius:8px;font-size:10px;font-weight:500;white-space:nowrap;border:1px solid #e5e5e3;background:#FAF7F3;color:#636363;margin-top:1px}
+.chip.ok{color:#2d7d46;border-color:rgba(45,125,70,.3);background:rgba(45,125,70,.07)}
+.chip.bad{color:#dc3545;border-color:rgba(220,53,69,.3);background:rgba(220,53,69,.07)}
+.sel{background:rgba(0,0,0,.05)}
+.card{position:absolute;left:268px;top:8px;right:8px;bottom:8px;background:#FAF7F3;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.15);padding:14px 14px;font:10px/1.5 ui-monospace,"SF Mono",Menlo,monospace;color:#1a1a1a;overflow:hidden}
+.card .d{color:#9a9a9a}.card .l{margin-bottom:6px}
+.card .dot{color:#8a5a8f}
+.card .rd{color:#dc3545}
+.card .ok{color:#2d7d46}
+
+.mono{font:10px/1.5 ui-monospace,"SF Mono",Menlo,monospace}
+.ev{white-space:pre;color:#1a1a1a;margin-bottom:2px}.ev .d{color:#9a9a9a}
+.key{margin-left:auto;align-self:center;font:10px ui-monospace,Menlo,monospace;color:#636363;border:1px solid #d5d3d0;border-bottom-width:2px;border-radius:4px;padding:0 5px;background:#FAF7F3;height:16px;line-height:14px}
+.ask{color:#636363;font-size:10px;white-space:nowrap}
+.row.q{min-height:32px}
+.gl{flex:none;width:16px;margin-top:2px;text-align:center;color:#636363;font-size:13px;line-height:14px}
+.tr{position:relative;margin:0 0 4px 32px;padding-left:16px;font-size:10px;color:#636363}
+.tr div{position:relative;height:18px;line-height:18px}
+.tr div:before{content:"";position:absolute;left:-13px;top:7px;width:5px;height:5px;border-radius:50%;background:#b8b4b0}
+.tr div:after{content:"";position:absolute;left:-11px;top:12px;width:1px;height:18px;background:#d5d3d0}
+.tr div:last-child:after{display:none}
+.tr .ok{color:#2d7d46}.tr .ok:before{background:#2d7d46}
+</style></head><body><div class="side"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="new">+ New Session</span></div><div class="sec"><span>&#8964;</span><span>ACTIVE <b>3</b></span></div><div class="row sel"><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#4caf62"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">fix-auth-redirect</div><div class="p">web &middot; 3h</div></div></div><div class="tr"><div>PR #412 merged 09:41</div><div class="ok">&#9650; preview ready 09:44</div><div class="ok">&#9650; prod ready 10:02 &middot; web/</div></div><div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#4caf62"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">add-rate-limit</div><div class="p">api &middot; 3m</div></div></div><div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#5b7fe0"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">update-quickstart</div><div class="p">docs &middot; 4m</div></div></div></div><div class="card"><div class="l"><span class="dot">&#9679;</span> Bash(gh pr merge 412 --squash)</div><div class="l"><span class="d">&#9146; Merged #412 into main</span></div><div class="l"><span class="dot">&#9679;</span> Merged. Preview and prod deploys are running.</div><div class="l"><span class="d">&#9146; &#9650; prod ready 10:02 &middot; web/</span></div><div class="l">&gt; </div></div></body></html>
