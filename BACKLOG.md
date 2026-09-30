@@ -1,9 +1,16 @@
 # Ghostties — Backlog
 
-## 2026-09-30 — vNext brainstorm round 2 (off-objective captures)
+## 2026-09-30 — vNext round 2 (page in Draft 2, waiting on Sean's review)
 
-- [ ] **Image previewer in the terminal.** Sean (2026-09-30): "if I click on one of these, why does finder need to open?" — Claude Code prints `[image] name.png` as an OSC 8 `file://` link; Ghostties owns the link-click path. Candidate: intercept image links → Quick Look popover (`QLPreviewPanel`) or inline pane; upstream already speaks Kitty graphics. Inferred, link handler not yet checked. Candidate avenue #40 on `docs/plans/vnext-avenues-2026-09-29.html`.
-- [ ] vNext page + 4 mockups + research docs in `docs/plans/vnext-*` are UNCOMMITTED on main — commit after Sean's review round (`sess_5e6d1d44a1be`).
+Page: `docs/plans/vnext-avenues-2026-09-29.html` (`834ce6564`), 20 avenues #24–#43, 10 mockups, adversarial review folded in. Research: `docs/plans/vnext-research-2026-09-29/`. Concept-lab restored at `ghostties-concept-lab/` with the round-2 concepts (`ef7eaf5`, local only).
+
+- [ ] **Review round** — comment on the page (`html-review` session `sess_5e6d1d44a1be`) and decide bet 1: page recommends the #24 prod-trail spike (deploy → merge → PR → session via the `Claude-Session:` trailer). **Decide or kill.**
+- [ ] **Held for a nod:** push docs commits to `origin/main` · run the #24 read-only spike (script, no app code) · enable Vercel Web Analytics on ghostties.org (free tier; Growth-role gap — site has no analytics).
+- [ ] **#29 consent card on the application track** — page recommends building it BEFORE applying to Vercel Marketplace; Ship SF Oct 15 / Next.js Conf Oct 22 as timing. Decide role: Marketplace (page) vs Design Engineer/AI Gateway (roles doc ranks it 2nd). Verify who leads Vercel design first — both named leaders appear gone as of 2026-09-30.
+- [ ] **Unverified still:** does Vercel's GitHub status count as a CI check (if yes, Claude Desktop auto-fix already covers #25's preview half)? Vercel Sandbox endpoints for #42.
+- [ ] **Image/media previewer (#40)** — Sean 2026-09-30: "if I click on one of these, why does finder need to open?" Hook is `Ghostty.App.swift` `openURL` → OSC 8 → `openUntrustedURL`; default shape = `QLPreviewPanel` (large, resizable), setting `media-preview = panel | popover | pane` only if asked. Concept-lab ranks it 17/20, 2nd overall.
+- [ ] **Concept-lab** `ef7eaf5` not pushed/deployed; #26/#39 site sketches use placeholder copy.
+- [ ] Memory pointer `project_avenues-review-site-2026-09-05.md` never existed on disk — 09-05 site + sketches live only on branch `visual-pass-2026-09-05` (never merged).
 
 ## 2026-09-26 — overnight: recover the lost sidebar build (Flow 01) from transcripts
 
