@@ -36,6 +36,7 @@ struct SidebarRailView: View {
             VStack(spacing: SidebarDialTuning.railRowGap()) {
                 ForEach(store.railSessions()) { session in
                     RailSessionRow(
+                        sessionId: session.id,
                         indicatorState: coordinator.indicatorState(for: session.id),
                         isActive: coordinator.activeSessionId == session.id,
                         onTap: { coordinator.focusSession(id: session.id) }
@@ -95,11 +96,13 @@ struct SidebarRailView: View {
 /// drops in the collapsed rail, but the glyph (and the per-row tap target)
 /// stays, per spec §02.
 private struct RailSessionRow: View {
+    let sessionId: UUID
     let indicatorState: SessionIndicatorState
     let isActive: Bool
     let onTap: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var coordinator: SessionCoordinator
     @State private var isHovered = false
 
     var body: some View {
@@ -110,6 +113,7 @@ private struct RailSessionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .sessionPopoverAnchor(sessionId: sessionId, controller: coordinator.sessionPopover)
     }
 
     /// Selected rail row is the same raised card as the expanded sidebar's

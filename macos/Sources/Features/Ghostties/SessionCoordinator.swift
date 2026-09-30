@@ -25,6 +25,10 @@ final class SessionCoordinator: ObservableObject {
     /// Weak reference to the container NSView — used to find the window controller.
     weak var containerView: NSView?
 
+    /// The hover popover shown over a session row / rail ghost. Lazy because
+    /// it needs `self`; owned here so it is one-per-window like the sidebar.
+    private(set) lazy var sessionPopover = SessionPopoverController(coordinator: self)
+
     /// Session-hybrid: set by `WorkspaceViewContainer` after init. When present,
     /// terminal session lifecycle events (spawn, close) create/GC `SessionDraft`
     /// rows in the sidebar's ACTIVE zone. Nil during tests or legacy-only code
@@ -1780,6 +1784,7 @@ final class SessionCoordinator: ObservableObject {
         if let id = CaptureFixture.focusedSessionId {
             activeSessionId = id
         }
+        sessionPopover.openForCaptureFixtureIfNeeded()
         #endif
     }
 

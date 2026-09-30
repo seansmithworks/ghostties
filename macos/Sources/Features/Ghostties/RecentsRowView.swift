@@ -56,6 +56,7 @@ struct RecentsRowView: View, Equatable {
 
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
+    @EnvironmentObject private var coordinator: SessionCoordinator
     @State private var isHovered = false
 
     /// Every field that affects rendered output. Deliberately excludes
@@ -150,6 +151,7 @@ struct RecentsRowView: View, Equatable {
         .background(rowBackground)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+        .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
         .onTapGesture {
             guard !isEditing else { return }
             onTap()
