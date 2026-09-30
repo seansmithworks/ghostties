@@ -82,7 +82,9 @@ struct SidebarRailView: View {
             // `.collapsed` mode, in which case `WorkspaceSidebarView` (and
             // its own identical call) never mounts — see this method's doc
             // comment. No-ops outside `GHOSTTIES_CAPTURE_FIXTURE`.
+            #if DEBUG
             coordinator.applyCaptureFixtureFocusIfNeeded()
+            #endif
         }
     }
 }

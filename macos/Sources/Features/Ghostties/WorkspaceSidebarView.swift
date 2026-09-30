@@ -131,7 +131,9 @@ struct WorkspaceSidebarView: View {
             // selected-row styling in `GHOSTTIES_CAPTURE_FIXTURE`
             // screenshots. No-ops outside fixture mode (see the method's
             // own doc comment for why `SidebarRailView` needs the same call).
+            #if DEBUG
             coordinator.applyCaptureFixtureFocusIfNeeded()
+            #endif
         }
         .onChange(of: selectedProjectId) { newId in
             store.lastSelectedProjectId = newId
