@@ -36,6 +36,8 @@ final class SessionPopoverHostingView: TransparentHostingView<AnyView> {
 @MainActor
 final class SessionPopoverController {
     private weak var coordinator: SessionCoordinator?
+    private let workspace: WorkspaceStore
+    private let claudeState: ClaudeStateStore
     private let model = SessionPopoverModel()
 
     private var anchors: [UUID: WeakAnchor] = [:]
@@ -44,22 +46,34 @@ final class SessionPopoverController {
     private weak var currentAnchor: NSView?
 
     private var hoveredSessionId: UUID?
-    private var rowHovered: Bool { hoveredSessionId != nil }
+    /// The anchor view the pointer is over. nil while a hovered row's anchor
+    /// has been torn down and not yet replaced — see `unregister`/`register`.
+    private weak var hoveredAnchor: NSView?
+    private var rowHovered: Bool { hoveredSessionId != nil && hoveredAnchor != nil }
     private var cardHovered = false
     /// A capture forced the card open: hover exit must not dismiss it.
     private var isPinnedOpen = false
 
     private var showWork: DispatchWorkItem?
     private var dismissWork: DispatchWorkItem?
-    private var refreshTimer: Timer?
-    private var keyMonitor: Any?
-    private var storeSubscription: AnyCancellable?
+    /// The single owner of everything that outlives one `present` call: the
+    /// 1s timer, the Esc monitor, the store subscription and the window-close
+    /// observer. Released by `stopLiveUpdates()`, and by this controller's
+    /// own deallocation (its deinit tears the handles down), so no path can
+    /// leave a timer or event monitor behind.
+    private var liveUpdates: LiveUpdates?
     private var generation = 0
 
     private struct WeakAnchor { weak var view: NSView? }
 
-    init(coordinator: SessionCoordinator) {
+    init(
+        coordinator: SessionCoordinator?,
+        workspace: WorkspaceStore = .shared,
+        claudeState: ClaudeStateStore = .shared
+    ) {
         self.coordinator = coordinator
+        self.workspace = workspace
+        self.claudeState = claudeState
     }
 
     var isVisible: Bool { hosting?.superview != nil && currentSessionId != nil }
@@ -68,16 +82,34 @@ final class SessionPopoverController {
 
     func register(anchor: NSView, for sessionId: UUID) {
         anchors[sessionId] = WeakAnchor(view: anchor)
+        // A row rebuilt under the pointer (e.g. it changed section) tears its
+        // anchor down and registers a new one for the same session: the new
+        // anchor adopts the open card and the hover.
+        if hoveredSessionId == sessionId, hoveredAnchor == nil { hoveredAnchor = anchor }
+        if currentSessionId == sessionId {
+            currentAnchor = anchor
+            DispatchQueue.main.async { [weak self] in self?.replaceCurrentCard() }
+        }
     }
 
     func unregister(anchor: NSView, for sessionId: UUID) {
         if anchors[sessionId]?.view === anchor { anchors[sessionId] = nil }
-        if hoveredSessionId == sessionId { hoveredSessionId = nil; scheduleDismiss() }
+        // Only the anchor the pointer is actually over can end the hover; a
+        // stale or unrelated anchor going away must not dismiss the card.
+        guard hoveredAnchor === anchor else { return }
+        hoveredAnchor = nil
+        scheduleDismiss()
+    }
+
+    private func replaceCurrentCard() {
+        guard isVisible, let container = coordinator?.containerView else { return }
+        placeCard(in: container, animated: false, slideIn: false)
     }
 
     func rowHoverChanged(sessionId: UUID, anchor: NSView, hovering: Bool) {
         if hovering {
             hoveredSessionId = sessionId
+            hoveredAnchor = anchor
             dismissWork?.cancel()
             if isVisible {
                 // Moving between rows retargets immediately; the delay is
@@ -92,8 +124,9 @@ final class SessionPopoverController {
                 showWork = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + SessionPopoverLayout.hoverDelay, execute: work)
             }
-        } else if hoveredSessionId == sessionId {
+        } else if hoveredSessionId == sessionId, hoveredAnchor === anchor {
             hoveredSessionId = nil
+            hoveredAnchor = nil
             showWork?.cancel()
             scheduleDismiss()
         }
@@ -108,11 +141,23 @@ final class SessionPopoverController {
         guard isVisible, !isPinnedOpen else { return }
         dismissWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.rowHovered, !self.cardHovered else { return }
+            guard let self, !self.cardHovered else { return }
+            // An adopted anchor never got a mouseEntered: confirm the pointer
+            // is still over it before letting it hold the card open.
+            if self.rowHovered, let anchor = self.hoveredAnchor, !Self.pointerIsInside(anchor) {
+                self.hoveredSessionId = nil
+                self.hoveredAnchor = nil
+            }
+            guard !self.rowHovered else { return }
             self.dismiss()
         }
         dismissWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + SessionPopoverLayout.dismissGrace, execute: work)
+    }
+
+    private static func pointerIsInside(_ view: NSView) -> Bool {
+        guard let window = view.window else { return false }
+        return view.bounds.contains(view.convert(window.mouseLocationOutsideOfEventStream, from: nil))
     }
 
     // MARK: - Actions
@@ -129,6 +174,7 @@ final class SessionPopoverController {
         dismissWork?.cancel()
         isPinnedOpen = false
         hoveredSessionId = nil
+        hoveredAnchor = nil
         cardHovered = false
         stopLiveUpdates()
         currentSessionId = nil
@@ -170,7 +216,7 @@ final class SessionPopoverController {
             container.addSubview(host, positioned: .above, relativeTo: nil)
         }
         placeCard(in: container, animated: false, slideIn: !wasVisible)
-        startLiveUpdates()
+        startLiveUpdates(window: anchor.window)
     }
 
     private func ensureHosting() -> SessionPopoverHostingView {
@@ -250,13 +296,13 @@ final class SessionPopoverController {
     // MARK: - Content
 
     private func makeContent(for id: UUID) -> SessionPopoverContent? {
-        let store = WorkspaceStore.shared
+        let store = workspace
         guard let session = store.sessions.first(where: { $0.id == id }) else { return nil }
         var title = session.name
-        var cwd = ClaudeStateStore.shared.state(for: id)?.cwd
+        var cwd = claudeState.state(for: id)?.cwd
             ?? store.projects.first { $0.id == session.projectId }?.rootPath
-        var approval = ClaudeStateStore.shared.state(for: id)
-        var summary = ClaudeStateStore.shared.summary(for: id)
+        var approval = claudeState.state(for: id)
+        var summary = claudeState.summary(for: id)
         var indicator = store.globalIndicatorStates[id] ?? .inactive
         #if DEBUG
         if let override = CaptureFixture.popoverOverride(for: id) {
@@ -282,46 +328,70 @@ final class SessionPopoverController {
     /// Re-derive the content from current state. A session that no longer
     /// exists dismisses the card.
     private func refresh() {
-        guard let id = currentSessionId, let container = coordinator?.containerView else { return }
+        guard let id = currentSessionId else { return }
         guard let content = makeContent(for: id) else { dismiss(); return }
         guard content != model.content else { return }
         model.content = content
         // SwiftUI applies the new content on its next layout pass.
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.isVisible else { return }
-            self.placeCard(in: container, animated: false, slideIn: false)
-        }
+        DispatchQueue.main.async { [weak self] in self?.replaceCurrentCard() }
     }
 
-    private func startLiveUpdates() {
-        guard refreshTimer == nil else { return }
+    /// Whether Esc should be swallowed by the card: only while it is visible
+    /// AND the pointer is over it. Anything else goes to the terminal
+    /// untouched (Claude Code uses Esc heavily).
+    nonisolated static func shouldConsumeEscape(keyCode: UInt16, isVisible: Bool, cardHovered: Bool) -> Bool {
+        keyCode == 53 && isVisible && cardHovered
+    }
+
+    #if DEBUG
+    /// Test seams: drive the content path with no window or GUI.
+    func openForTesting(sessionId: UUID) {
+        guard let content = makeContent(for: sessionId) else { return }
+        currentSessionId = sessionId
+        model.content = content
+    }
+    func refreshForTesting() { refresh() }
+    var contentForTesting: SessionPopoverContent? { model.content }
+    var currentSessionIdForTesting: UUID? { currentSessionId }
+    var isRowHoveredForTesting: Bool { rowHovered }
+    var liveUpdatesActiveForTesting: Bool { liveUpdates != nil }
+    func startLiveUpdatesForTesting(window: NSWindow?) { startLiveUpdates(window: window) }
+    #endif
+
+    private func startLiveUpdates(window: NSWindow?) {
+        guard liveUpdates == nil else { return }
         // Poll once a second: indicator state and approval freshness are not
         // change-notified, and the card is only ever open briefly.
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
-        }
-        storeSubscription = ClaudeStateStore.shared.didRefresh
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.refresh() }
-        // Esc dismisses only while the pointer is over the card; otherwise it
-        // goes to the terminal untouched (Claude Code uses Esc heavily).
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53 else { return event }
-            let consumed: Bool = MainActor.assumeIsolated {
-                guard let self, self.isVisible, self.cardHovered else { return false }
-                self.dismiss()
-                return true
+        liveUpdates = LiveUpdates(
+            window: window,
+            didRefresh: claudeState.didRefresh,
+            refresh: { [weak self] in MainActor.assumeIsolated { self?.refresh() } },
+            // The window is closing under an open card: remove it at once
+            // rather than fading it in a window that is going away.
+            windowWillClose: { [weak self] in MainActor.assumeIsolated { self?.teardown() } },
+            // Esc dismisses only while the pointer is over the card.
+            escape: { [weak self] keyCode in
+                MainActor.assumeIsolated {
+                    guard let self else { return false }
+                    let consume = Self.shouldConsumeEscape(
+                        keyCode: keyCode, isVisible: self.isVisible, cardHovered: self.cardHovered
+                    )
+                    if consume { self.dismiss() }
+                    return consume
+                }
             }
-            return consumed ? nil : event
-        }
+        )
     }
 
     private func stopLiveUpdates() {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
-        storeSubscription = nil
-        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-        keyMonitor = nil
+        liveUpdates = nil
+    }
+
+    /// Immediate, unanimated removal — the window is going away.
+    private func teardown() {
+        dismiss()
+        generation += 1
+        hosting?.removeFromSuperview()
     }
 
     // MARK: - Capture fixture
@@ -343,6 +413,45 @@ final class SessionPopoverController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { attempt(15) }
     }
     #endif
+}
+
+// MARK: - Live updates
+
+/// Owns every resource an open card holds beyond its views: the refresh timer,
+/// the local Esc monitor, the store subscription and the window-close
+/// observer. Creating one starts them; releasing it (explicitly, or when the
+/// owning controller deallocates) stops them, so lifetime is a single
+/// reference, not a set of paired start/stop calls.
+private final class LiveUpdates {
+    private var timer: Timer?
+    private var keyMonitor: Any?
+    private var subscription: AnyCancellable?
+    private var closeObserver: NSObjectProtocol?
+
+    init(
+        window: NSWindow?,
+        didRefresh: PassthroughSubject<Void, Never>,
+        refresh: @escaping () -> Void,
+        windowWillClose: @escaping () -> Void,
+        escape: @escaping (UInt16) -> Bool
+    ) {
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in refresh() }
+        subscription = didRefresh.receive(on: DispatchQueue.main).sink { refresh() }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            escape(event.keyCode) ? nil : event
+        }
+        if let window {
+            closeObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: window, queue: .main
+            ) { _ in windowWillClose() }
+        }
+    }
+
+    deinit {
+        timer?.invalidate()
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+    }
 }
 
 // MARK: - Hover anchor

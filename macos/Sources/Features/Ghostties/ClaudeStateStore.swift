@@ -61,17 +61,19 @@ struct ClaudeHookPayload: Decodable {
         case transcriptPath = "transcript_path"
     }
 
-    /// `hook_event_name` is required; every other field is optional AND
-    /// tolerant — a wrongly-typed `prompt` or `tool_use_id` becomes nil
-    /// instead of failing the payload (and the session's state with it).
+    /// The pre-existing fields decode exactly as the synthesized conformance
+    /// did: a wrongly-typed value throws and the state file is skipped. Only
+    /// the fields added for the popover (`tool_input`, `prompt`,
+    /// `tool_use_id`) are tolerant — a wrongly-typed one becomes nil instead
+    /// of failing the payload (and the session's state with it).
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         hookEventName = try c.decode(String.self, forKey: .hookEventName)
-        toolName = try? c.decodeIfPresent(String.self, forKey: .toolName)
-        notificationType = try? c.decodeIfPresent(String.self, forKey: .notificationType)
-        sessionId = try? c.decodeIfPresent(String.self, forKey: .sessionId)
-        cwd = try? c.decodeIfPresent(String.self, forKey: .cwd)
-        transcriptPath = try? c.decodeIfPresent(String.self, forKey: .transcriptPath)
+        toolName = try c.decodeIfPresent(String.self, forKey: .toolName)
+        notificationType = try c.decodeIfPresent(String.self, forKey: .notificationType)
+        sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId)
+        cwd = try c.decodeIfPresent(String.self, forKey: .cwd)
+        transcriptPath = try c.decodeIfPresent(String.self, forKey: .transcriptPath)
         toolInput = try? c.decodeIfPresent(ToolInputSummary.self, forKey: .toolInput)
         prompt = try? c.decodeIfPresent(String.self, forKey: .prompt)
         toolUseId = try? c.decodeIfPresent(String.self, forKey: .toolUseId)

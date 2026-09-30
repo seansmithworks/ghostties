@@ -86,7 +86,7 @@ struct SessionPopoverCard: View {
     private func header(_ content: SessionPopoverContent) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 8) {
-                GhostCharacterView(character: .blinky, color: secondaryText, style: .filled)
+                GhostCharacterView(character: .blinky, color: content.isApproval ? SessionPopoverLayout.alertRed : secondaryText, style: .filled)
                     .frame(width: 16, height: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(content.title)

@@ -1,5 +1,6 @@
 // IDE-ONLY: not currently exercised in CI macos job (build-only).
 import XCTest
+import GhosttiesCore
 @testable import Ghostty
 
 /// Coverage for the sidebar session popover's data path: `tool_input`
@@ -314,5 +315,174 @@ final class SessionPopoverTests: XCTestCase {
 
         store.removeState(for: sessionId)
         XCTAssertNil(store.summary(for: sessionId))
+    }
+
+    // MARK: - Summary lifetime (the `seen` filter in refresh())
+
+    private func makeStore() -> (store: ClaudeStateStore, dir: URL, write: (String) -> Void) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SessionPopoverTests-\(UUID().uuidString)", isDirectory: true)
+        let store = ClaudeStateStore(directoryURL: dir)
+        store.resumeWriterForTesting = { _, _ in }
+        let id = sessionId
+        let write: (String) -> Void = { hook in
+            // Fresh timestamps: approval and summary staleness use the real clock.
+            let json = #"{"ghosttiesSessionId":"\#(id.uuidString)","updatedAt":\#(Int(Date().timeIntervalSince1970)),"hook":\#(hook)}"#
+            try? json.write(to: dir.appendingPathComponent("\(id.uuidString).json"), atomically: true, encoding: .utf8)
+            store.refreshForTesting()
+        }
+        return (store, dir, write)
+    }
+
+    func testSummaryIsDroppedOnSessionEnd() {
+        let (store, dir, write) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        write(promptEvent)
+        XCTAssertNotNil(store.summary(for: sessionId), "precondition: summary exists")
+        write(#"{"hook_event_name":"SessionEnd","session_id":"c-1"}"#)
+        XCTAssertNil(store.summary(for: sessionId))
+    }
+
+    func testSummaryIsDroppedWhenItsStateFileDisappears() {
+        let (store, dir, write) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        write(promptEvent)
+        XCTAssertNotNil(store.summary(for: sessionId), "precondition: summary exists")
+        // The file goes away out-of-band (not via removeState).
+        try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(sessionId.uuidString).json"))
+        store.refreshForTesting()
+        XCTAssertNil(store.summary(for: sessionId))
+    }
+
+    // MARK: - Decode strictness of pre-existing fields
+
+    func testWronglyTypedPreExistingFieldStillFailsTheDecode() {
+        // Same outcome as before the popover fields existed: the payload
+        // fails to decode (and the state file is skipped).
+        for field in [#""notification_type":5"#, #""tool_name":{"a":1}"#, #""session_id":7"#, #""cwd":false"#, #""transcript_path":[1]"#] {
+            let json = #"{"hook_event_name":"Notification",\#(field)}"#
+            XCTAssertThrowsError(try JSONDecoder().decode(ClaudeHookPayload.self, from: Data(json.utf8)), field)
+        }
+    }
+
+    func testWronglyTypedNotificationTypeSkipsTheStateFile() {
+        let (store, dir, write) = makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // PreToolUse derives .busy on its own, so a state here would mean the
+        // bad field was tolerated rather than the file skipped.
+        write(#"{"cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","notification_type":5,"session_id":"c-1"}"#)
+        XCTAssertNil(store.state(for: sessionId))
+        XCTAssertNil(store.summary(for: sessionId))
+    }
+
+    // MARK: - Controller refresh path (no GUI)
+
+    private func makeController() -> (SessionPopoverController, WorkspaceStore, ClaudeStateStore, URL, (String) -> Void) {
+        let project = Project(name: "dab", rootPath: "/Users/example/work/dab")
+        let session = AgentSession(id: sessionId, name: "DAB", templateId: UUID(), projectId: project.id)
+        let workspace = WorkspaceStore(testingProjects: [project], testingSessions: [session])
+        let (claude, dir, write) = makeStore()
+        let controller = SessionPopoverController(coordinator: nil, workspace: workspace, claudeState: claude)
+        return (controller, workspace, claude, dir, write)
+    }
+
+    func testRefreshDropsApprovalTextWhenStateLeavesPermission() {
+        let (controller, _, _, dir, write) = makeController()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        write(bashPermission)
+        controller.openForTesting(sessionId: sessionId)
+        XCTAssertEqual(controller.contentForTesting?.isApproval, true)
+        XCTAssertEqual(controller.contentForTesting?.statusDetail, "Bash")
+
+        write(#"{"cwd":"/tmp","hook_event_name":"PostToolUse","session_id":"c-1","tool_name":"Bash","tool_input":{"command":"rm -rf build/"}}"#)
+        controller.refreshForTesting()
+
+        let card = controller.contentForTesting
+        XCTAssertNotNil(card)
+        XCTAssertEqual(card?.isApproval, false)
+        XCTAssertEqual(card?.body, SessionPopoverContent.Body.none)
+        XCTAssertNil(card?.statusDetail)
+        XCTAssertFalse(String(describing: card).contains("rm -rf"))
+    }
+
+    func testRefreshDismissesWhenTheSessionIsRemoved() {
+        let (controller, workspace, _, dir, write) = makeController()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        write(bashPermission)
+        controller.openForTesting(sessionId: sessionId)
+        XCTAssertNotNil(controller.contentForTesting)
+
+        workspace.removeSession(id: sessionId)
+        controller.refreshForTesting()
+
+        XCTAssertNil(controller.contentForTesting)
+        XCTAssertNil(controller.currentSessionIdForTesting)
+    }
+
+    // MARK: - Esc scoping
+
+    func testEscapeIsConsumedOnlyWhileVisibleAndHovered() {
+        let esc: UInt16 = 53
+        typealias C = SessionPopoverController
+        XCTAssertTrue(C.shouldConsumeEscape(keyCode: esc, isVisible: true, cardHovered: true))
+        XCTAssertFalse(C.shouldConsumeEscape(keyCode: esc, isVisible: true, cardHovered: false))
+        XCTAssertFalse(C.shouldConsumeEscape(keyCode: esc, isVisible: false, cardHovered: true))
+        XCTAssertFalse(C.shouldConsumeEscape(keyCode: esc, isVisible: false, cardHovered: false))
+        XCTAssertFalse(C.shouldConsumeEscape(keyCode: 36, isVisible: true, cardHovered: true), "only Esc")
+    }
+
+    // MARK: - Hover survives a rebuilt anchor
+
+    func testRebuiltAnchorForTheSameSessionAdoptsTheHover() {
+        let (controller, _, _, dir, _) = makeController()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let old = NSView(), new = NSView(), stray = NSView()
+        controller.register(anchor: old, for: sessionId)
+        controller.rowHoverChanged(sessionId: sessionId, anchor: old, hovering: true)
+        XCTAssertTrue(controller.isRowHoveredForTesting)
+
+        // An unrelated anchor going away does not end the hover.
+        controller.unregister(anchor: stray, for: sessionId)
+        XCTAssertTrue(controller.isRowHoveredForTesting)
+
+        // The hovered row is rebuilt: teardown, then a new anchor, same id.
+        controller.unregister(anchor: old, for: sessionId)
+        controller.register(anchor: new, for: sessionId)
+        XCTAssertTrue(controller.isRowHoveredForTesting)
+    }
+
+    // MARK: - Teardown
+
+    func testWindowCloseTearsDownLiveUpdates() {
+        let (controller, _, _, dir, write) = makeController()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        write(bashPermission)
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 100, height: 100), styleMask: [.titled], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        controller.openForTesting(sessionId: sessionId)
+        controller.startLiveUpdatesForTesting(window: window)
+        XCTAssertTrue(controller.liveUpdatesActiveForTesting)
+
+        NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: window)
+        let released = expectation(description: "live updates released")
+        DispatchQueue.main.async { released.fulfill() }
+        wait(for: [released], timeout: 2)
+
+        XCTAssertFalse(controller.liveUpdatesActiveForTesting)
+        XCTAssertNil(controller.currentSessionIdForTesting)
+    }
+
+    func testControllerDeallocationReleasesLiveUpdates() {
+        weak var weakController: SessionPopoverController?
+        autoreleasepool {
+            let (controller, _, _, dir, _) = makeController()
+            defer { try? FileManager.default.removeItem(at: dir) }
+            controller.startLiveUpdatesForTesting(window: nil)
+            XCTAssertTrue(controller.liveUpdatesActiveForTesting)
+            weakController = controller
+        }
+        // A retain cycle through the timer/monitor closures would keep it alive.
+        XCTAssertNil(weakController)
     }
 }
