@@ -1,5 +1,59 @@
 # Ghostties — Backlog
 
+## 2026-09-30 — sidebar-presence round 7: popover build + Sean's review (carried)
+
+State: `feat/sidebar-presence` @ `8f90cd5be`, pushed, no PR. Round 6 landed and was reviewed (PASS WITH NOTES):
+Flow 07 visuals, ghost glyphs, rail › rows, badge menu toggle, tray icon animations, rail tray fills rail,
+sidebar DialKit panel, Release-compile fix. Design canvas saved to `~/Code/ghostties/3-edff08ac-5MB.pen`
+(Flow 07 = `t4XvdY`, Flow 09 popover options = `b8Wi6z`).
+
+### Next round — blocked on Sean (2026-10-01)
+
+- [ ] **DECIDE OR KILL: card-in-card** — after the simplify (`7ec1b7725`) the white shell only frames the grey
+  block. Strawman: drop the inner block; content sits straight on the white card.
+- [ ] **Swap the open Dev to the simplified build** — PID 20717 (scratchpad snapshot) is the OLD full card.
+  Quitting it needs Sean's nod; then snapshot the fresh `7ec1b7725` build and launch it by path.
+- [ ] **Sean hands-on: simplified popover** — hover delay, rail name line, Esc (only while the pointer is on the card).
+- [ ] **Key-press spike** — see below; gates Approve/Deny and popover 06.
+
+### Round 7 detail
+
+- [x] **Simplified popover** (Sean, 2026-09-30) — `7ec1b7725`, pushed. One block per state: approval = command
+  or "Edit config.ts" + reason; running = last prompt + current step; rail adds a name line; done/no data = no
+  card. Header, status line, time, Open/Close and edit count removed. 174/174 targeted tests (light) per builder.
+- [x] **PR base** — resolved: #188 is already in `origin/main` (checked 2026-10-01), so a PR to `main` carries
+  only the sidebar work.
+- [ ] **Key-press spike — BLOCKED on Sean (2026-09-30).** The auto-mode classifier denied running a throwaway
+  `claude` in a PTY and answering its permission prompt. Sean runs it or allows it. `Surface.sendKeyEvent`
+  already exists (Ghostty.Surface.swift:~78), so the spike only has to prove which key (1 / Enter / Esc) the
+  menu accepts as a raw key versus a paste. Gates Approve/Deny and 06's reply.
+- [x] **Popover 01 + 03's command block** — branch `feat/sidebar-popover` (stacked on `feat/sidebar-presence`),
+  5 commits ending `7249d3bb2`. Hover card on rows and rail ghosts; Bash → command hero, other tools → mini
+  terminal; Open/Close only. Review PASS WITH NOTES, all notes fixed. 172/172 targeted tests (dark), not the full suite.
+  Captures are fixture-only in the session scratchpad.
+- [x] **Green card = "what's happening" summary** (Sean, 2026-09-30) — last prompt + current step + edit count,
+  in memory only. Can undercount edits on fast bursts (150ms debounce, one state file per session).
+- [ ] **Stale "Needs approval" after an Esc interrupt** (pre-existing, state source) — an interrupt likely fires
+  no hook, so `.needsPermission` stays fresh for up to 30 minutes; the row indicator likely shares this.
+- [ ] **Before the PR (on Claude):** full suite with xcresulttool totals; side-by-side captures vs the Flow 09 exports.
+- [ ] **Build popover 06 terminal peek + reply** (carried; Sean: "go") — Flow 09 `V443rn`. Depends on the spike.
+- [ ] **DECIDE OR KILL: red has two meanings** — selected ghost vs "needs you". Strawman: keep red = needs you,
+  selected = white card only (ghost stays grey).
+- [ ] **DECIDE OR KILL: status marks on ghosts** — reviewer: ghosts dropped working/needs/done/error at a glance.
+  Strawman: small spinner/?/✓/✕ on the ghost.
+- [ ] **DECIDE OR KILL: glass tray morph** pinned↔rail (changes Flow 05 transition).
+- [ ] **Sean hands-on + DialKit tune** (carried) — then PR to SeanSmithWorks/ghostties with before/after.
+  Capture screenshots with the fixture only (public repo).
+- [ ] **Rail width tuning** (parked) — now dial-able via DialKit "Rail extra width".
+- [ ] **Release universal build fails on CEF arm64-only** (parked, pre-existing) — `ld` wants x86_64.
+- [ ] **Dead code: `SpinnerDotFrame` + its tests** (parked) — unused since ghosts replaced type glyphs.
+
+## 2026-09-28 — filed from sidebar-presence review (not started)
+
+- [ ] **Explore: localhost gets a "more special" surface** instead of a generic new tab + terminal. Sean's
+  ideas: a right-side panel, or a hover view off the left sidebar with its own button next to `+` and
+  the sidebar toggle in the tray. Explore only; not scheduled.
+
 ## Session-5 checkpoint — status skills, AGENTS.md, tooling census (2026-09-22)
 
 - [ ] **Carried** — Merge PR #187 (`worktree-session-5` → `main`, https://github.com/seansmithworks/ghostties/pull/187). Docs only; Sean's merge.

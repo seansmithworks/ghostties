@@ -125,6 +125,19 @@ enum CaptureFixture {
         FixtureSession(name: "icon pass", project: "wren", ghost: .pinky, state: .inactive, hoursAgo: 168),
     ]
 
+    /// Round 6 follow-up: the one session the fixture marks focused, so a
+    /// capture actually exercises the sidebar's selected-row styling
+    /// (raised card, red ghost — see `WorkspaceLayout.selectedRowCornerRadius`/
+    /// `selectedGhostRed`) instead of leaving every row in its resting
+    /// state. The first entry ("Claude Code 4", switchboard, top of
+    /// Active) — same row position Flow 07's own "portfolio" occupies.
+    /// Wired in by `SessionCoordinator.applyCaptureFixtureFocusIfNeeded()`,
+    /// called from both `WorkspaceSidebarView.onAppear` and
+    /// `SidebarRailView.onAppear`.
+    static var focusedSessionId: UUID? {
+        sessions.first?.id
+    }
+
     static let sessions: [AgentSession] = fixtureSessions.enumerated().map { index, fs in
         let now = Date()
         return AgentSession(
@@ -174,7 +187,100 @@ enum CaptureFixture {
                 store.updateSessionStatus(id: session.id, status: .running)
             }
         }
+        if let mode = initialSidebarMode {
+            store.updateSidebarMode(mode)
+        }
         return store
+    }
+
+    // MARK: - Session popover fixture
+
+    /// `GHOSTTIES_CAPTURE_POPOVER` (`needs-bash`, `needs-edit`, `running`, `done`):
+    /// force the sidebar session popover open for one fixture session,
+    /// without hovering. Nil unless fixture mode is active and the value is
+    /// recognised.
+    enum PopoverScenario: String {
+        case needsBash = "needs-bash"
+        case needsEdit = "needs-edit"
+        case running
+        case done
+    }
+
+    static var popoverScenario: PopoverScenario? {
+        guard isActive,
+              let raw = ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_POPOVER"] else { return nil }
+        return PopoverScenario(rawValue: raw)
+    }
+
+    /// The fixture session the popover opens over: the row already in the
+    /// "needs attention" state for the approval scenarios, the focused
+    /// (processing) row for `running`.
+    static var popoverTargetSessionId: UUID? {
+        switch popoverScenario {
+        case .needsBash, .needsEdit: return sessions.first { $0.name == "Claude Code 6" }?.id
+        case .running: return sessions.first?.id
+        case .done: return sessions.first { $0.name == "Claude Code 2" }?.id
+        case nil: return nil
+        }
+    }
+
+    /// Invented card content for the target session — never the fixture
+    /// project's real temp-directory path or any real session data.
+    struct PopoverOverride {
+        let title: String
+        let project: String
+        let approval: ClaudeState?
+        var summary: SessionSummary? = nil
+        var indicator: SessionIndicatorState? = nil
+    }
+
+    static func popoverOverride(for id: UUID) -> PopoverOverride? {
+        guard let scenario = popoverScenario, id == popoverTargetSessionId else { return nil }
+        func permission(tool: String, input: ToolInputSummary) -> ClaudeState {
+            ClaudeState(
+                ghosttiesSessionId: id,
+                claudeSessionId: "fixture-claude-session",
+                cwd: "~/work/dab",
+                state: .needsPermission,
+                structuredPrompt: StructuredPrompt(toolName: tool, toolUseId: nil, toolInput: input),
+                updatedAt: Date()
+            )
+        }
+        switch scenario {
+        case .needsBash:
+            return PopoverOverride(title: "DAB", project: "dab", approval: permission(
+                tool: "Bash",
+                input: ToolInputSummary(command: "rm -rf build/", description: "Clean stale artifacts before rebuild")
+            ))
+        case .needsEdit:
+            return PopoverOverride(title: "DAB", project: "dab", approval: permission(
+                tool: "Edit",
+                input: ToolInputSummary(description: "Raise the request timeout to 30s", filePath: "src/server/config.ts")
+            ))
+        case .running:
+            return PopoverOverride(title: "DAB", project: "dab", approval: nil, summary: SessionSummary(
+                prompt: "fix the flaky router tests",
+                currentStep: "running npm test"
+            ), indicator: .processing)
+        case .done:
+            return PopoverOverride(title: "DAB", project: "dab", approval: nil, summary: SessionSummary(
+                prompt: "fix the flaky router tests",
+                isDone: true
+            ), indicator: .idle)
+        }
+    }
+
+    /// Optional starting sidebar mode for a capture, from
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_MODE` (`pinned`, `collapsed`, `closed`).
+    /// The fixture store never persists, so without this every capture
+    /// starts pinned and the rail/closed states need synthetic keystrokes.
+    private static var initialSidebarMode: SidebarMode? {
+        switch ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_SIDEBAR_MODE"] {
+        case "pinned": return .pinned
+        case "collapsed": return .collapsed
+        case "closed": return .closed
+        default: return nil
+        }
     }
 
     #endif

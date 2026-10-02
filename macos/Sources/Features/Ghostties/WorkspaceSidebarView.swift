@@ -80,8 +80,10 @@ struct WorkspaceSidebarView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+                        .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                        .padding(.top, SidebarDialTuning.contentPaddingTop())
+                        .padding(.bottom, 4)
                         .animation(
                             NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
                                 ? nil
@@ -94,9 +96,24 @@ struct WorkspaceSidebarView: View {
             }
 
             Spacer(minLength: 0)
+
+            SidebarBottomTray()
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)
+        #if DEBUG
+        // DEBUG-only live tuning control (session-8 brief) — same mount
+        // pattern as `SessionComposerOverlay`'s `ComposerDebugTuningControl`.
+        // Compiled out of Release entirely; every symbol it touches lives in
+        // `SidebarDialKit.swift`'s `#if DEBUG` block.
+        .overlay(alignment: .topTrailing) {
+            SidebarDebugTuningControl(
+                defaults: .standard,
+                onChange: { store.objectWillChange.send() }
+            )
+            .padding(12)
+        }
+        #endif
         .onAppear {
             // Restore persisted project selection, or default to the first project.
             if selectedProjectId == nil {
@@ -109,6 +126,14 @@ struct WorkspaceSidebarView: View {
             }
             // Auto-expand the project containing the active session.
             autoExpandActiveProject()
+
+            // Round 6 follow-up: capture-rig-only — exercises the
+            // selected-row styling in `GHOSTTIES_CAPTURE_FIXTURE`
+            // screenshots. No-ops outside fixture mode (see the method's
+            // own doc comment for why `SidebarRailView` needs the same call).
+            #if DEBUG
+            coordinator.applyCaptureFixtureFocusIfNeeded()
+            #endif
         }
         .onChange(of: selectedProjectId) { newId in
             store.lastSelectedProjectId = newId
@@ -168,14 +193,13 @@ struct WorkspaceSidebarView: View {
     private var titlebarToolbar: some View {
         HStack(spacing: 8) {
             Spacer()
-            // One labelled "new item" control per tab, right-aligned. Projects
-            // gets a plain action button; Sessions gets a button that opens
-            // the centered session composer overlay (Phase 3 of
-            // session-creation-unified) — see `NewSessionToolbarButton`.
+            // Projects keeps its header action (no tray equivalent exists
+            // for "New Project"). Sessions no longer does — Flow 01's
+            // bottom tray (`SidebarBottomTray`) owns "New Session" now, and
+            // this header button duplicated it (spec §01: top group is
+            // traffic lights → section header → rows, no header strip).
             if sidebarTab == .projects {
                 ToolbarLabelButton(systemName: "plus", label: "New Project", action: presentFolderPicker)
-            } else {
-                NewSessionToolbarButton()
             }
         }
         .padding(.horizontal, 12)
@@ -497,6 +521,48 @@ private struct EmptyStateAddButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(isHovered ? .primary : .secondary)
         .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Bottom Tray
+
+/// The sidebar's bottom tray (Flow 01, sidebar-presence §01): a horizontal
+/// `SidebarTrayPill` of icon buttons — "New Session" and the sidebar
+/// toggle — centered in the sidebar's bottom area, same shared item list
+/// and pill component the collapsed rail's vertical tray uses. Decision 4
+/// (spec): no account row — no account model exists in the sidebar sources
+/// today, so the pill omits the "Sean Smith" affordance from the design
+/// canvas.
+private struct SidebarBottomTray: View {
+    @EnvironmentObject private var store: WorkspaceStore
+    @EnvironmentObject private var coordinator: SessionCoordinator
+
+    var body: some View {
+        // Full-width bar (Flow 07 round 6, layer `OEpEM`) — no longer a
+        // centered capsule between two `Spacer`s. Horizontal padding matches
+        // `RecentsRowView`/`SessionSectionHeader`'s leading inset so the
+        // tray's edges line up with row content above it.
+        SidebarTrayPill(axis: .horizontal) {
+            ForEach(WorkspaceViewContainer.sidebarTrayItems(
+                container: coordinator.containerView as? WorkspaceViewContainer,
+                toggleLabel: toggleLabel
+            )) { item in
+                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, stretch: true, tapEffect: item.tapEffect, action: item.action)
+            }
+        }
+        .padding(.horizontal, SidebarDialTuning.trayMargin())
+        .padding(.top, SidebarDialTuning.listToTrayGap())
+        .padding(.bottom, 8)
+    }
+
+    /// "Collapse Sidebar" while pinned (toggle now flips full width ↔ rail,
+    /// not closed), "Open Sidebar" while overlaid — the overlay's toggle
+    /// promotes it to pinned (existing behavior, unchanged by Flow 01).
+    /// `store.sidebarMode` covers `.collapsed` too, but the collapsed rail
+    /// hosts `RailTray`, not this view, so that case never actually renders
+    /// here.
+    private var toggleLabel: String {
+        store.sidebarMode == .overlay ? "Open Sidebar" : "Collapse Sidebar"
     }
 }
 

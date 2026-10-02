@@ -1373,6 +1373,12 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         container.toggleSidebar()
     }
 
+    /// Full close ↔ reopen — Cmd+Shift+S.
+    @IBAction func toggleWorkspaceSidebarFullyClosed(_ sender: Any?) {
+        guard let container = window?.contentView as? WorkspaceViewContainer else { return }
+        container.toggleSidebarFullyClosed()
+    }
+
     @IBAction func toggleWorkspaceBrowser(_ sender: Any?) {
         guard let container = window?.contentView as? WorkspaceViewContainer else { return }
         container.toggleBrowser()

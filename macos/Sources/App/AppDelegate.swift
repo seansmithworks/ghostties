@@ -258,6 +258,15 @@ class AppDelegate: NSObject,
             // keep whatever value they have persisted.
             "ghostties.sidebarViewMode": "projectFirst",
         ])
+
+        #if DEBUG
+        // Matches `buildInfoBadgeDefaultEnabled` in BuildInfoBadgeView.swift
+        // (DEBUG default ON) so the View menu checkmark reads correctly
+        // before the user ever touches the toggle.
+        UserDefaults.standard.register(defaults: [
+            buildInfoBadgeStorageKey: true,
+        ])
+        #endif
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -707,25 +716,30 @@ class AppDelegate: NSObject,
         // Find the View menu by locating an item we know is there.
         guard let viewMenu = menuToggleFullScreen?.menu else { return }
 
-        // "Toggle Sidebar" — Cmd+Shift+E
-        let sidebarItem = NSMenuItem(
-            title: "Toggle Sidebar",
-            action: #selector(TerminalController.toggleWorkspaceSidebar(_:)),
-            keyEquivalent: "e"
-        )
-        sidebarItem.keyEquivalentModifierMask = [.command, .shift]
-        sidebarItem.setImageIfDesired(systemSymbolName: "sidebar.left")
-
-        // Hidden duplicate: Cmd+S also toggles the sidebar (Dia Browser convention).
+        // "Toggle Sidebar" — Cmd+S (full width ↔ rail; Dia Browser convention).
         // Terminals have no Save action, so this shortcut is safe to claim.
-        let sidebarItemCmdS = NSMenuItem(
+        // Formerly Cmd+Shift+E with a hidden Cmd+S duplicate for the same
+        // action — collapsed to the one visible shortcut (Flow 01 review);
+        // Cmd+Shift+E itself is unclaimed, not reassigned.
+        let sidebarItem = NSMenuItem(
             title: "Toggle Sidebar",
             action: #selector(TerminalController.toggleWorkspaceSidebar(_:)),
             keyEquivalent: "s"
         )
-        sidebarItemCmdS.keyEquivalentModifierMask = [.command]
-        sidebarItemCmdS.isHidden = true
-        sidebarItemCmdS.allowsKeyEquivalentWhenHidden = true
+        sidebarItem.keyEquivalentModifierMask = [.command]
+        sidebarItem.setImageIfDesired(systemSymbolName: "sidebar.left")
+
+        // "Close Sidebar" — Cmd+Shift+S: full close ↔ reopen. Any visible
+        // mode (pinned/collapsed/overlay) goes to `.closed`; `.closed`
+        // reopens to `.pinned`. The hot-zone reveal from `.closed` is
+        // unaffected.
+        let sidebarCloseItem = NSMenuItem(
+            title: "Close Sidebar",
+            action: #selector(TerminalController.toggleWorkspaceSidebarFullyClosed(_:)),
+            keyEquivalent: "s"
+        )
+        sidebarCloseItem.keyEquivalentModifierMask = [.command, .shift]
+        sidebarCloseItem.setImageIfDesired(systemSymbolName: "sidebar.left")
 
         // "Toggle Browser" — Cmd+B
         let browserItem = NSMenuItem(
@@ -830,7 +844,7 @@ class AppDelegate: NSObject,
 
         // Insert workspace group at the top of the View menu.
         viewMenu.insertItem(sidebarItem, at: 0)
-        viewMenu.insertItem(sidebarItemCmdS, at: 1)
+        viewMenu.insertItem(sidebarCloseItem, at: 1)
         viewMenu.insertItem(browserItem, at: 2)
         viewMenu.insertItem(nextItem, at: 3)
         viewMenu.insertItem(prevItem, at: 4)
@@ -842,7 +856,35 @@ class AppDelegate: NSObject,
         viewMenu.insertItem(makeComposerFieldToggleMenuItem(), at: 10)
         viewMenu.insertItem(NSMenuItem.separator(), at: 11)
 
+        #if DEBUG
+        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 12)
+        #endif
     }
+
+    #if DEBUG
+    // MARK: - Dev build-info badge toggle (View menu, DEBUG only)
+
+    /// Builds the "Show Build Info" checkbox item that toggles the same
+    /// `buildInfoBadgeStorageKey` `@AppStorage` key `BuildInfoBadgeView`
+    /// reads, so the menu checkmark and the on-screen badge always agree.
+    private func makeBuildInfoBadgeToggleMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(
+            title: "Show Build Info",
+            action: #selector(toggleBuildInfoBadge(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        return item
+    }
+
+    /// Flips `buildInfoBadgeStorageKey` in `UserDefaults.standard` — the same
+    /// store `@AppStorage` in `BuildInfoBadgeView` observes, so the badge
+    /// updates immediately with no relaunch required.
+    @objc private func toggleBuildInfoBadge(_ sender: NSMenuItem) {
+        let current = UserDefaults.standard.bool(forKey: buildInfoBadgeStorageKey)
+        UserDefaults.standard.set(!current, forKey: buildInfoBadgeStorageKey)
+    }
+    #endif
 
     // MARK: - Composer field A/B toggle (View menu, all configurations)
 
@@ -1997,6 +2039,12 @@ extension AppDelegate: NSMenuItemValidation {
                 forKey: ComposerGhostTextField.modelBFieldStorageKey
             ) ? .on : .off
             return true
+
+        #if DEBUG
+        case #selector(toggleBuildInfoBadge(_:)):
+            item.state = UserDefaults.standard.bool(forKey: buildInfoBadgeStorageKey) ? .on : .off
+            return true
+        #endif
 
         default:
             return true

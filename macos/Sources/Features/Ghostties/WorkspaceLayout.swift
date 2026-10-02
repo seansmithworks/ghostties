@@ -2,21 +2,94 @@ import AppKit
 import Foundation
 import SwiftUI
 
-/// Three-state sidebar visibility model.
+/// Four-state sidebar visibility model.
 ///
 /// - `pinned`: Sidebar open, terminal pushed right (floating card).
 /// - `closed`: Sidebar hidden, terminal fills window flush.
 /// - `overlay`: Sidebar floats on top of full-width terminal (hover-to-reveal).
+/// - `collapsed`: Sidebar shown as a narrow icon-only rail (Flow 01, sidebar-presence).
+///
+/// `Codable` by `Int` raw value and persisted in `WorkspaceStore` — new cases
+/// must always be APPENDED, never renumbered, or an old `workspace.json`
+/// decodes into the wrong mode.
 enum SidebarMode: Int, Codable {
     case pinned
     case closed
     case overlay
+    case collapsed
 }
 
 /// Shared layout constants for the workspace sidebar.
 enum WorkspaceLayout {
-    /// Width of the sidebar panel.
-    static let sidebarWidth: CGFloat = 220
+    /// Width of the sidebar panel (Flow 01: 220 → 244).
+    static let sidebarWidth: CGFloat = 244
+
+    /// Minimum width of the collapsed icon-only rail — a floor, not the
+    /// applied width. Sized only so the 40pt vertical tray pill (32pt
+    /// buttons + 4pt pill padding each side) fits with breathing room. The
+    /// applied width is `collapsedRailWidth(in:)` below, which hugs the
+    /// window's traffic-light cluster (Sean, sidebar-presence review round
+    /// 3: the fixed 128pt rail read too wide). Not drag-resizable, unlike
+    /// `sidebarWidth`. Content (glyph rows, tray pill) stays centered in
+    /// whatever width is applied.
+    static let sidebarRailWidth: CGFloat = 60
+
+    /// Horizontal margin between the sidebar tray pill and the edges of its
+    /// container — shared by the expanded bottom tray (`SidebarBottomTray`,
+    /// full sidebar width) and the collapsed rail's vertical tray (`RailTray`,
+    /// rail width), so both states apply one rule: tray width = container
+    /// width − 2×margin. Previously hand-picked only at the expanded call
+    /// site; named here once the rail tray needed to match it (Sean,
+    /// sidebar-presence review: the rail pill read too narrow at its old
+    /// intrinsic 44pt width).
+    static let trayHorizontalMargin: CGFloat = 8
+
+    /// Pure width calculation for the collapsed rail: hugs the macOS
+    /// traffic-light cluster — the cluster's rightmost edge (zoom button
+    /// `maxX`) plus a trailing gap equal to its leading inset (close button
+    /// `minX`), both in the same coordinate space, so the cluster sits
+    /// visually centered in the rail. Native (AppKit-default) inset lands
+    /// around ~94pt on macOS 26. Never returns less than `sidebarRailWidth`,
+    /// so a narrow or unusual cluster never squeezes the tray pill.
+    static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat, defaults: UserDefaults = .standard) -> CGFloat {
+        max(sidebarRailWidth, zoomButtonMaxX + leadingInset + SidebarDialTuning.railExtraWidth(defaults: defaults))
+    }
+
+    /// Pure fullscreen check shared by `titlebarRowTopAnchorConstant(in:)`
+    /// and `collapsedRailWidth(in:)` — both need to special-case fullscreen
+    /// (no titlebar row, traffic lights hidden), and this factors the check
+    /// out of the live `NSView`/`NSWindow` lookup so it's independently
+    /// testable without a real window.
+    static func isFullScreenLayout(styleMask: NSWindow.StyleMask) -> Bool {
+        styleMask.contains(.fullScreen)
+    }
+
+    /// Live collapsed-rail width for the window containing `view`, derived
+    /// from the real traffic-light button frames. Callers should recompute
+    /// wherever `titlebarRowTopAnchorConstant(in:)` above is already
+    /// recomputed — window attach, fullscreen enter/exit, and titlebar
+    /// layout passes — since both derive from the same button geometry.
+    /// In fullscreen (traffic lights hidden, mirroring
+    /// `titlebarRowTopAnchorConstant`'s early return) returns the
+    /// `sidebarRailWidth` floor directly rather than measuring hidden
+    /// buttons. Also returns the floor before the window is on-screen or if
+    /// the buttons aren't available (mirrors `titlebarRowTopAnchorConstant`'s
+    /// guard, but returns a floor instead of nil since a rail width is
+    /// always needed, even in the fallback).
+    static func collapsedRailWidth(in view: NSView) -> CGFloat {
+        if let styleMask = view.window?.styleMask, isFullScreenLayout(styleMask: styleMask) {
+            return sidebarRailWidth
+        }
+        guard let win = view.window,
+              let close = win.standardWindowButton(.closeButton),
+              let zoom = win.standardWindowButton(.zoomButton),
+              close.window === win, zoom.window === win else {
+            return sidebarRailWidth
+        }
+        let closeInView = close.convert(close.bounds, to: view)
+        let zoomInView = zoom.convert(zoom.bounds, to: view)
+        return collapsedRailWidth(zoomButtonMaxX: zoomInView.maxX, leadingInset: closeInView.minX)
+    }
 
     /// Width of the task-first sidebar panel (Concept F).
     /// Wider than `sidebarWidth` to accommodate the hero row's two-line typography.
@@ -76,7 +149,7 @@ enum WorkspaceLayout {
         // In fullscreen, there is no titlebar row — content extends edge-to-edge.
         // Return 0 so toolbar buttons park at the top edge (they will be hidden
         // by the fullscreen chrome).
-        if view.window?.styleMask.contains(.fullScreen) == true {
+        if let styleMask = view.window?.styleMask, isFullScreenLayout(styleMask: styleMask) {
             return 0
         }
         guard let win = view.window,
@@ -113,7 +186,9 @@ enum WorkspaceLayout {
     static let terminalInset: CGFloat = 8
 
     /// Width of the invisible hover trigger strip at the left edge (closed mode).
-    static let overlayTriggerWidth: CGFloat = 10
+    /// Flow 01 (sidebar-presence): 10 → 24 — the hot zone is invisible in the
+    /// app; the `#ffffff08` fill on the design canvas is a diagram device only.
+    static let overlayTriggerWidth: CGFloat = 24
 
     /// Minimum width for the browser panel when visible.
     static let browserMinWidth: CGFloat = 320
@@ -132,6 +207,25 @@ enum WorkspaceLayout {
 
     /// Background for active session row (light mode): 4% black.
     static let activeRowLight = Color.black.opacity(0.04)
+
+    // MARK: - Round 6 (Flow 07 pen.dev match, sidebar-presence)
+
+    /// Selected session row: a raised card, not a tint — Flow 07 frame
+    /// `t4XvdY`, layer `XHBC1`/`OEpEM` ("Bottom Group"): `background-color`
+    /// reads as the app's own canvas surface, `box-shadow: 0px 2px 10px
+    /// #00000014`. Reuses `canvasBackgroundLight/Dark` (the terminal-card
+    /// token) rather than inventing a third background — same "raised
+    /// surface" role.
+    static let selectedRowCornerRadius: CGFloat = 12
+    static let selectedRowShadowOpacity: Double = 0.078 // #00000014 -> alpha 0x14/255
+    static let selectedRowShadowRadius: CGFloat = 10
+    static let selectedRowShadowYOffset: CGFloat = 2
+
+    /// Selected-row ghost glyph color — sampled from Flow 07 export `mIi8b.png`
+    /// at the "portfolio" row's ghost icon (~253, 100, 99). The design bakes
+    /// this ghost into a raster layer with no extractable CSS hex, so this is
+    /// a pixel sample, not a token from `flow07.html`.
+    static let selectedGhostRed = Color(red: 253.0 / 255.0, green: 100.0 / 255.0, blue: 99.0 / 255.0)
 
     /// Chrome background (light mode). Covers the left sidebar column and the
     /// gutter padding around the terminal card. The outer of the two Ghostties
@@ -268,6 +362,93 @@ enum WorkspaceLayout {
     /// inside that column, not filling it.
     static let sessionGhostSize: CGFloat = 14
 
+    // MARK: - Sidebar DialKit Tunables (sidebar-presence, session-8 brief)
+    //
+    // Named constants lifted from prior inline literals so `SidebarDialTuning`
+    // (see `SidebarDialKit.swift`) has a single default to read for each —
+    // never re-derive a literal at a second call site. Grouped by the same
+    // sections the DialKit panel presents them in.
+
+    /// `RecentsRowView` row height — 46pt + the 2pt inter-row gap
+    /// (`recentsRowGap`) below gives the 48pt row-to-row pitch measured off
+    /// Flow 07's export. See `RecentsRowView.body`'s `.frame(height:)` comment.
+    static let recentsRowHeight: CGFloat = 46
+
+    /// Inter-row gap in the Sessions tab's section `VStack`
+    /// (`RecentsListView.sectionsContent`).
+    static let recentsRowGap: CGFloat = 2
+
+    /// Session name / inline-rename field text size in `RecentsRowView`.
+    static let recentsRowTitleSize: CGFloat = 12
+
+    /// Project-name subtitle text size in `RecentsRowView`.
+    static let recentsRowSubtitleSize: CGFloat = 10
+
+    /// `RecentsRowView`'s trailing edge padding (leading uses
+    /// `sidebarRowLeadingPadding`, shared with every other sidebar row/header).
+    static let recentsRowTrailingPadding: CGFloat = 10
+
+    /// Section header ("Pinned"/"Active"/"Inactive"/"Archive") title/count
+    /// text size in `RecentsListView`'s `SessionSectionHeader`.
+    static let sessionSectionHeaderTextSize: CGFloat = 11
+
+    /// Section header top padding (`SessionSectionHeader`).
+    static let sessionSectionHeaderTopPadding: CGFloat = 8
+
+    /// Section header bottom padding (`SessionSectionHeader`).
+    static let sessionSectionHeaderBottomPadding: CGFloat = 4
+
+    /// Section header chevron size (`SessionSectionHeader`'s `PixelChevronView`
+    /// frame). A dial independent of `sidebarIconColumnWidth`, even though it
+    /// defaults to the same 16pt value — the two are visually related, not
+    /// structurally tied.
+    static let sessionSectionHeaderChevronSize: CGFloat = 16
+
+    /// Top padding of the scrollable list content in both sidebar tabs
+    /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s
+    /// Sessions `sectionsContent` — both currently `.padding(.vertical, 4)`,
+    /// split here into a dialable top value; bottom stays the fixed 4pt this
+    /// replaces).
+    static let sidebarContentPaddingTop: CGFloat = 4
+
+    /// Leading padding of the scrollable list content in both sidebar tabs.
+    static let sidebarContentPaddingLeading: CGFloat = 8
+
+    /// Trailing padding of the scrollable list content in both sidebar tabs.
+    static let sidebarContentPaddingTrailing: CGFloat = 8
+
+    /// Extra top padding on the bottom tray, opening a gap between the list
+    /// above and the tray below. 0 = today's flush layout (the list's
+    /// `Spacer` already pushes the tray to the bottom).
+    static let sidebarListToTrayGap: CGFloat = 0
+
+    /// Ghost glyph size in a collapsed-rail session row (`SidebarRailView`'s
+    /// `RailSessionRow`) — distinct from `sessionGhostSize`, the expanded
+    /// row's glyph size.
+    static let railGhostSize: CGFloat = 16
+
+    /// Width of one collapsed-rail session row (`RailSessionRow`,
+    /// `RailSectionSummaryRow`).
+    static let railRowWidth: CGFloat = 52
+
+    /// Height of one collapsed-rail session row (`RailSessionRow`).
+    static let railRowHeight: CGFloat = 32
+
+    /// Vertical gap between rail session rows (`SidebarRailView`'s
+    /// `VStack(spacing:)`).
+    static let railRowGap: CGFloat = 4
+
+    /// Height of a rail section-summary row (`RailSectionSummaryRow`, the bare
+    /// "›" Inactive/Archived rows) — width shared with `railRowWidth`.
+    static let railSummaryRowHeight: CGFloat = 24
+
+    /// Added on top of `collapsedRailWidth`'s computed hug width — parked
+    /// tuning knob (Sean, sidebar-presence review round 3: "the fixed 128pt
+    /// rail read too wide," resolved by hugging the traffic lights instead).
+    /// 0 = today's hug formula, unmodified. Does not change the hug formula
+    /// itself; only adds headroom on top of it.
+    static let railExtraWidth: CGFloat = 0
+
     // MARK: - Source-dot colors
 
     /// Source-dot color for shell-spawned tasks. Muted sage — existing token,
@@ -288,6 +469,198 @@ enum WorkspaceLayout {
 
     /// Muted red for CI failure state — distinct from terracotta.
     static let ciFailColor = Color(nsColor: .systemRed).opacity(0.7)
+
+    // MARK: - Sidebar Transition Motion (Flow 05, sidebar-presence)
+
+    /// Named easing curve for a sidebar transition. Kept as an enum (not a
+    /// raw `CAMediaTimingFunction`) so `SidebarTransitionTiming` stays
+    /// `Equatable` and the timing table below is directly unit-testable.
+    enum SidebarTransitionCurveKind: Equatable {
+        /// iOS drawer curve — cubic-bezier(0.32, 0.72, 0, 1) (Ionic).
+        /// Almost all the distance is covered in the first third, then it
+        /// coasts to a stop — panels feel pushed, not dragged. Used for
+        /// collapse, expand, and reopen.
+        case drawer
+
+        /// Full-close curve — cubic-bezier(0.23, 1, 0.32, 1). Closing runs
+        /// against opening because there's nothing left to read on the way
+        /// out — the exit should never make the user wait.
+        case close
+
+        /// The pre-Flow-05 generic curve (`.easeInEaseOut`), kept only for
+        /// transition pairs the Flow 05 motion spec doesn't name (overlay
+        /// reveal/dismiss) — "keeps its current animation," per brief.
+        case legacyEaseInOut
+
+        var mediaTimingFunction: CAMediaTimingFunction {
+            switch self {
+            case .drawer:
+                return CAMediaTimingFunction(controlPoints: 0.32, 0.72, 0, 1)
+            case .close:
+                return CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+            case .legacyEaseInOut:
+                return CAMediaTimingFunction(name: .easeInEaseOut)
+            }
+        }
+
+        /// SwiftUI-side equivalent of `mediaTimingFunction` above, for the
+        /// content cross-fade (`SidebarWidthModel.isCollapsedPresentation`)
+        /// that runs alongside — but independently of — the AppKit
+        /// `NSAnimationContext`/`CAMediaTimingFunction` pair that drives the
+        /// width constraint. Same control points; SwiftUI has no notion of
+        /// `CAMediaTimingFunction` to share directly.
+        var swiftUIAnimation: (Double, Double, Double, Double)? {
+            switch self {
+            case .drawer:
+                return (0.32, 0.72, 0, 1)
+            case .close:
+                return (0.23, 1, 0.32, 1)
+            case .legacyEaseInOut:
+                return nil
+            }
+        }
+    }
+
+    /// One row of the Flow 05 timing table: how long a `from → to` sidebar
+    /// mode transition takes and which curve it plays on.
+    struct SidebarTransitionTiming: Equatable {
+        let duration: TimeInterval
+        let curve: SidebarTransitionCurveKind
+    }
+
+    /// The Flow 05 motion spec's named transition table, as a pure
+    /// `from → to` lookup (Sean's canvas, "Flow 05 · Collapse and close"):
+    /// collapse 244→rail 260ms, expand rail→244 240ms, full close 180ms,
+    /// reopen 240ms — all on `drawer` except the full close, which runs the
+    /// steeper `close` curve. Pairs the spec doesn't name (anything routing
+    /// through `.overlay`) keep the pre-Flow-05 generic 200ms
+    /// `legacyEaseInOut` — the brief says the reveal overlay "keeps its
+    /// current animation unless it conflicts."
+    static func sidebarTransitionTiming(from: SidebarMode, to: SidebarMode) -> SidebarTransitionTiming {
+        switch (from, to) {
+        case (.pinned, .collapsed):
+            return SidebarTransitionTiming(duration: 0.26, curve: .drawer)
+        case (.collapsed, .pinned):
+            return SidebarTransitionTiming(duration: 0.24, curve: .drawer)
+        case (_, .closed):
+            return SidebarTransitionTiming(duration: 0.18, curve: .close)
+        case (.closed, .pinned), (.closed, .collapsed):
+            return SidebarTransitionTiming(duration: 0.24, curve: .drawer)
+        default:
+            return SidebarTransitionTiming(duration: 0.2, curve: .legacyEaseInOut)
+        }
+    }
+
+    /// SwiftUI `Animation` matching a `SidebarTransitionTiming` row, for the
+    /// content cross-fade described above `SidebarTransitionCurveKind.
+    /// swiftUIAnimation`. Centralized here (not hand-built at each call
+    /// site) so the content cross-fade can never silently drift from the
+    /// AppKit width animation's own duration/curve.
+    static func sidebarTransitionSwiftUIAnimation(_ timing: SidebarTransitionTiming) -> Animation {
+        guard let points = timing.curve.swiftUIAnimation else {
+            return .easeInOut(duration: timing.duration)
+        }
+        return .timingCurve(points.0, points.1, points.2, points.3, duration: timing.duration)
+    }
+
+    /// Reduced-motion crossfade duration replacing every translation-based
+    /// sidebar transition (Flow 05 "Reduced motion": drop the translate,
+    /// cross-fade the two widths over 120ms — gentler, never zero).
+    static let sidebarReducedMotionCrossfadeDuration: TimeInterval = 0.12
+
+    /// Pure reduced-motion path selection: which alpha duration a sidebar
+    /// transition should actually play. Extracted so the reduce-motion
+    /// branch `transitionTo` takes is covered directly, not only implied by
+    /// the two duration constants it picks between.
+    static func sidebarTransitionAlphaDuration(reduceMotion: Bool, timing: SidebarTransitionTiming) -> TimeInterval {
+        reduceMotion ? sidebarReducedMotionCrossfadeDuration : timing.duration
+    }
+
+    /// Delay before the closed-state 24pt hot zone starts accepting hover
+    /// (Flow 05: "hot zone hidden → 24px at 180ms, step") — installed only
+    /// once the full-close animation has actually finished, not the instant
+    /// the toggle fires, so a fast mouse can't trigger the reveal overlay
+    /// before the card has reached the edge.
+    static let closedHotZoneActivationDelay: TimeInterval = 0.18
+
+    // MARK: - Flow 05 Content Choreography (row-level, sidebar-presence)
+
+    /// Duration of a session row's label (name/subtitle/timestamp) fade on
+    /// COLLAPSE — the canvas's "label opacity 1 → 0, window 0-100ms" row.
+    /// Runs from the very start of the collapse transition (no delay) —
+    /// labels leave first, before the panel/glyph motion below even starts.
+    static let sidebarRowLabelCollapseFadeDuration: TimeInterval = 0.1
+
+    /// Delay before a session row's glyph starts its inward travel on
+    /// COLLAPSE — the canvas's "glyph translateX +8 → +28px, window
+    /// 60-260ms" row. The panel itself is already moving at t=0 (driven by
+    /// `sidebarTransitionTiming`); the glyph's own small in-row shift waits
+    /// until the label has mostly cleared before it starts.
+    static let sidebarRowGlyphCollapseTravelDelay: TimeInterval = 0.06
+
+    /// Duration of the glyph's inward travel once it starts (260ms total
+    /// collapse window minus the 60ms delay above).
+    static let sidebarRowGlyphCollapseTravelDuration: TimeInterval = 0.2
+
+    /// Small in-row glyph shift toward the panel's centerline as a session
+    /// row collapses — NOT the full pinned→rail travel distance (that's
+    /// carried by the panel/card translateX in `sidebarTransitionTiming`).
+    /// Resting (expanded) is 0 — the row's EXISTING, unmodified trailing
+    /// position (`RecentsRowView`'s natural HStack flow) — so steady-state
+    /// layout is byte-for-byte unchanged by this choreography; traveled
+    /// carries the canvas's own +8→+28px DELTA (20pt) as a leftward nudge
+    /// once collapsed.
+    static let sidebarRowGlyphRestingOffset: CGFloat = 0
+    static let sidebarRowGlyphTraveledOffset: CGFloat = -20
+
+    /// Row corner radius on COLLAPSE — same 60-260ms window as the glyph
+    /// travel above. The canvas's own table names "8 → 16px", but this
+    /// row's EXISTING resting radius (`RecentsRowView.rowBackground`,
+    /// unrelated to Flow 05) is 6, not 8 — resting stays 6 so this
+    /// choreography never silently changes the settled row's appearance;
+    /// the traveled value keeps the canvas's ~2x ratio (6 → 12) rather than
+    /// importing its literal 16.
+    static let sidebarRowCornerRadiusResting: CGFloat = 6
+    static let sidebarRowCornerRadiusTraveled: CGFloat = 12
+
+    /// Duration a session row's glyph takes to travel back out on EXPAND —
+    /// the canvas's reopen note: "reverse at 240ms on the drawer curve...
+    /// session glyphs fade in 40ms apart, labels land 60ms after their
+    /// glyph." The glyph travels the FULL expand window; only the label is
+    /// delayed/staggered (see `expandLabelDelay(rowIndex:glyphLandDuration:)`).
+    static func sidebarRowGlyphExpandTravelDuration() -> TimeInterval {
+        sidebarTransitionTiming(from: .collapsed, to: .pinned).duration
+    }
+
+    /// Duration of a session row's label fade-in on EXPAND, once its delay
+    /// (`expandLabelDelay`) elapses. Deliberately shorter than a glyph's
+    /// travel — the label is arriving, not moving spatially — but still a
+    /// standard UI fade (Emil: tooltips/small popovers 125-200ms).
+    static let sidebarRowLabelExpandFadeDuration: TimeInterval = 0.12
+
+    /// Flow 05 expand stagger, exactly as spec'd on the canvas: "session
+    /// glyphs fade in 40ms apart, labels land 60ms after their glyph." Every
+    /// row's glyph travels the SAME full `glyphLandDuration` window (they
+    /// all start together, at t=0) — only each row's LABEL is delayed:
+    /// `glyphLandDuration` (wait for the glyph to land) + a flat 60ms, plus
+    /// 40ms more per row index (0-based, in the row's own rendered section).
+    /// Pure so the stagger schedule is directly unit-testable without
+    /// driving any real animation. Stagger is decorative — never gates
+    /// hit-testing, so rows stay clickable from frame 1 regardless of this
+    /// delay (per the canvas's own "controls are clickable from frame 1").
+    static func expandLabelDelay(rowIndex: Int, glyphLandDuration: TimeInterval) -> TimeInterval {
+        glyphLandDuration + 0.06 + 0.04 * TimeInterval(max(rowIndex, 0))
+    }
+
+    /// Whether a session row should run the Flow 05 windowed label-fade/
+    /// glyph-travel choreography above, or snap straight to its resting
+    /// state and let only the container-level cross-fade animate (Flow 05
+    /// "Reduced Motion: drop the translate entirely... layout snaps").
+    /// Pure selector, mirroring `sidebarTransitionAlphaDuration`'s pattern,
+    /// so the reduced-motion branch a row takes is covered directly.
+    static func sidebarRowChoreographyEnabled(reduceMotion: Bool) -> Bool {
+        !reduceMotion
+    }
 }
 
 // MARK: - Animation Tokens (D18)

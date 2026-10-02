@@ -169,8 +169,10 @@ struct RecentsListView: View {
                         inactiveExpanded: true,
                         archiveExpanded: true
                     )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+                    .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                    .padding(.top, SidebarDialTuning.contentPaddingTop())
+                    .padding(.bottom, 4)
                 } else {
                     sessionsScrollView(
                         pinned: pinned,
@@ -251,7 +253,7 @@ struct RecentsListView: View {
         // still re-invokes its content closure on element change
         // (e.g. `LazyVStack` keyed with `.id` forced to include a
         // content hash), not a plain revert.
-        VStack(spacing: 2) {
+        VStack(spacing: SidebarDialTuning.rowGap()) {
             // Pinned is the one section that's hidden entirely
             // when empty — it's an opt-in section, not one of
             // the three lifecycle buckets every session always
@@ -367,8 +369,10 @@ struct RecentsListView: View {
                     inactiveExpanded: inactiveExpanded,
                     archiveExpanded: archiveExpanded
                 )
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+                .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                .padding(.top, SidebarDialTuning.contentPaddingTop())
+                .padding(.bottom, 4)
                 .animation(reflowAnimation, value: dragState)
             }
             .accessibilityLabel("Sessions")
@@ -692,7 +696,9 @@ struct RecentsListView: View {
             isRenameFocused: $renameFieldFocused,
             onTap: { coordinator.focusSession(id: session.id) },
             onCommitRename: { commitRename(session: session) },
-            onCancelRename: { cancelRename() }
+            onCancelRename: { cancelRename() },
+            staggerIndex: indexInSection ?? 0,
+            dialEpoch: SidebarDialTuning.epoch()
         )
         .equatable()
         .contextMenu {
@@ -1081,53 +1087,6 @@ struct RecentsListView: View {
     }
 }
 
-// MARK: - New Session Toolbar Button
-
-/// Labelled toolbar button for the Sessions tab, presented in
-/// `WorkspaceSidebarView.titlebarToolbar` right-aligned on the traffic-light
-/// row. Opens the centered session composer overlay (Phase 3 of
-/// session-creation-unified) instead of the old two-level project → template
-/// cascade menu (D7) — see `WorkspaceViewContainer.presentComposerOverlay(projectBinding:)`,
-/// reached via `coordinator.containerView` since this view has no direct
-/// reference to the AppKit container.
-struct NewSessionToolbarButton: View {
-    @EnvironmentObject private var coordinator: SessionCoordinator
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button {
-            // F9 (Phase 3 review): `coordinator.containerView` is always a
-            // `WorkspaceViewContainer` in practice — it's set exactly once,
-            // from `WorkspaceViewContainer.viewDidMoveToWindow()` — so this
-            // cast is a class invariant, not a real runtime branch. The old
-            // `Menu` silently did nothing if the invariant ever broke; assert
-            // instead so a regression is caught in development rather than
-            // shipping as a silently-dead button.
-            guard let container = coordinator.containerView as? WorkspaceViewContainer else {
-                assertionFailure("NewSessionToolbarButton: coordinator.containerView is not a WorkspaceViewContainer")
-                return
-            }
-            container.presentComposerOverlay(projectBinding: .open)
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .medium))
-                Text("New Session")
-                    .font(.system(size: 12, weight: .medium))
-            }
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(isHovered ? .primary : .secondary)
-        .onHover { isHovered = $0 }
-        // F9 (Phase 3 review): with zero projects, the composer's own
-        // "+ Add project…" row (in the open project dropdown) is the only
-        // way to add one from this tab — disabling the button that reaches
-        // it made that path unreachable.
-        .accessibilityLabel("New Session")
-    }
-}
-
 // MARK: - Section Header
 
 private struct SessionSectionHeader: View {
@@ -1155,25 +1114,32 @@ private struct SessionSectionHeader: View {
             }
         } label: {
             HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-                // Sized to `sidebarIconColumnWidth` (not a hardcoded literal)
-                // so this chevron's x-center lines up with session-row ghosts
+                // Sentence case, title + muted count in parens, chevron
+                // TRAILING (Flow 07 round 6, layer `YFjju`/"Active Header":
+                // `Title` "Active" + `Count` "(5)" on the left, `Chevron Col`
+                // on the right) — supersedes the old leading-chevron,
+                // all-caps "ACTIVE 5" layout.
+                (Text(title)
+                    .font(.system(size: SidebarDialTuning.headerTextSize(), weight: .medium))
+                    .foregroundColor(Color.primary)
+                 + Text(" (\(count))")
+                    .font(.system(size: SidebarDialTuning.headerTextSize(), weight: .regular))
+                    .foregroundColor(WorkspaceLayout.sectionHeaderForeground(for: colorScheme)))
+
+                Spacer(minLength: 0)
+
+                // Sized from `sessionSectionHeaderChevronSize` so this
+                // chevron's x-center lines up with session-row ghosts
                 // directly below it — `PixelChevronView` already pins its own
                 // internal content to a 16pt frame, so the outer frame here
                 // must match that, not shrink it.
                 PixelChevronView(isExpanded: isEffectivelyExpanded)
-                    .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
-
-                Text("\(title.uppercased()) \(count)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
-
-                Spacer(minLength: 0)
+                    .frame(width: SidebarDialTuning.headerChevronSize(), height: SidebarDialTuning.headerChevronSize())
             }
             .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
             .padding(.trailing, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.top, SidebarDialTuning.headerTopPadding())
+            .padding(.bottom, SidebarDialTuning.headerBottomPadding())
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
@@ -1194,6 +1160,7 @@ private struct SessionSectionHeader: View {
     return RecentsListView()
         .environmentObject(store)
         .environmentObject(coordinator)
+        .environmentObject(SidebarWidthModel(width: 220))
         .frame(width: 220, height: 500)
         .preferredColorScheme(.dark)
 }
@@ -1204,6 +1171,7 @@ private struct SessionSectionHeader: View {
     return RecentsListView()
         .environmentObject(store)
         .environmentObject(coordinator)
+        .environmentObject(SidebarWidthModel(width: 220))
         .frame(width: 220, height: 500)
         .preferredColorScheme(.dark)
 }

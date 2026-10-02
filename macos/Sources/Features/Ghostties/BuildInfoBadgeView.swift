@@ -9,7 +9,10 @@ import SwiftUI
 ///   defaults write com.seansmithdesign.ghostties.dev ghostties.devBuildInfoBadge.enabled -bool false
 ///   defaults write com.seansmithdesign.ghostties ghostties.devBuildInfoBadge.enabled -bool true
 ///   defaults write com.seansmithdesign.ghostties ghostties.devBuildInfoBadge.enabled -bool false
-private let buildInfoBadgeStorageKey = "ghostties.devBuildInfoBadge.enabled"
+/// Not `private` — `AppDelegate`'s DEBUG-only "Show Build Info" menu item
+/// reads/writes this same key so the menu checkmark and the badge never
+/// drift apart.
+let buildInfoBadgeStorageKey = "ghostties.devBuildInfoBadge.enabled"
 
 #if DEBUG
     private let buildInfoBadgeDefaultEnabled = true

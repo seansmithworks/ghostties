@@ -37,7 +37,26 @@ struct RecentsRowView: View, Equatable {
     var onCommitRename: () -> Void = {}
     var onCancelRename: () -> Void = {}
 
+    /// This row's position within its rendered section (Pinned/Active/
+    /// Inactive) — decorative only, feeds the Flow 05 expand stagger
+    /// (`WorkspaceLayout.expandLabelDelay`). Defaults to 0 so every other
+    /// call site (unaffected by the stagger) is unchanged.
+    var staggerIndex: Int = 0
+
+    /// `SidebarDialTuning.epoch()` at construction — DEBUG-tuning-only.
+    /// `.equatable()` is a body-re-execution perf gate (see the type doc
+    /// comment above): none of this row's OTHER stored properties change
+    /// when the sidebar DialKit panel writes a new row height/title size/
+    /// ghost size/etc., so without this field a live tuning edit would be
+    /// silently swallowed by the same `==` this row relies on for its perf
+    /// win, until some unrelated row mutation happened to force a redraw.
+    /// Defaults to 0 so every call site that never reads the panel (i.e.
+    /// every Release build, where the key is never written) is unaffected.
+    var dialEpoch: Int = 0
+
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var widthModel: SidebarWidthModel
+    @EnvironmentObject private var coordinator: SessionCoordinator
     @State private var isHovered = false
 
     /// Every field that affects rendered output. Deliberately excludes
@@ -51,22 +70,17 @@ struct RecentsRowView: View, Equatable {
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
+            && lhs.staggerIndex == rhs.staggerIndex
+            && lhs.dialEpoch == rhs.dialEpoch
     }
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Per-session status glyph — pattern D, "type is the icon"
-            // (BACKLOG J). Replaces the ghost as the status signal in this
-            // slot; see SessionStatusGlyph.
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind)
-                .frame(width: WorkspaceLayout.sessionGhostSize, height: WorkspaceLayout.sessionGhostSize)
-                .frame(width: WorkspaceLayout.sidebarIconColumnWidth, alignment: .center)
-
             // Session name + project name stacked
             VStack(alignment: .leading, spacing: 1) {
                 if isEditing {
                     TextField("Session name", text: $editingName)
-                        .font(.system(size: 12))
+                        .font(.system(size: SidebarDialTuning.rowTitleSize()))
                         .textFieldStyle(.plain)
                         .focused(isRenameFocused)
                         .onSubmit { onCommitRename() }
@@ -83,35 +97,61 @@ struct RecentsRowView: View, Equatable {
                         }
                 } else {
                     Text(session.name)
-                        .font(.system(size: 12))
+                        .font(.system(size: SidebarDialTuning.rowTitleSize()))
                         .foregroundStyle(Color.primary)
                         .lineLimit(1)
                 }
 
                 Text(hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName)
-                    .font(.system(size: 10))
+                    .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
             }
+            .opacity(labelOpacity)
+            .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
 
             Spacer(minLength: 4)
 
-            // Relative timestamp — reads `displayTimestamp` (last real output,
-            // falling back to `lastActiveAt`), not `lastActiveAt` directly, so
-            // browsing/focus never advances what this row shows.
-            if let ts = session.displayTimestamp {
-                Text(Self.relativeLabel(ts))
-                    .font(.system(size: 10))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
-                    .monospacedDigit()
-            }
+            // No timestamp — Flow 07 round 6 drops the relative-time label
+            // from the row entirely (design frame `t4XvdY`: name + subtitle
+            // + trailing ghost, nothing else). `relativeLabel` itself is
+            // kept (still backs the accessibility label below) — only the
+            // visible `Text` is gone.
+
+            // Per-session status glyph — now a ghost, red when selected
+            // (Flow 07 round 6, supersedes pattern D's type glyph). Trailing
+            // edge, after the name/subtitle (Sean, sidebar-presence review
+            // round 2 — Flow 07 frame 01): name and subtitle read flush
+            // left, the glyph reads last. Previously led the row in a fixed
+            // icon column shared with the header icons above it; that
+            // alignment purpose no longer applies here, so it's sized to the
+            // glyph itself instead of that column width.
+            //
+            // Flow 05 (sidebar-presence): the small in-row inward nudge on
+            // collapse/expand — see `glyphOffsetX` — is a decorative shift,
+            // NOT the panel's own pinned→rail travel (that's carried
+            // entirely by `WorkspaceLayout.sidebarTransitionTiming`'s width
+            // animation on the container).
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize(), isSelected: isActive)
+                .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
+                .offset(x: glyphOffsetX)
+                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
         }
-        .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
-        .padding(.trailing, 10)
-        .frame(height: 36)
+        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+        // 46pt + the enclosing `VStack(spacing: 2)`'s 2pt inter-row gap
+        // (`RecentsListView.sectionsContent`) = 48pt row-to-row pitch —
+        // measured directly off Flow 07's export (`mIi8b.png`): traffic-light
+        // diameter is 12px there and native traffic lights are a fixed 12pt,
+        // so design px IS pt (1:1, no export scaling to correct for).
+        // Consecutive row-icon centers measure 48px apart; the round-6 first
+        // pass used 40 (before that, 36), both too tight — Sean's round-6
+        // follow-up review called this out as ~30% tighter than the design.
+        .frame(height: SidebarDialTuning.rowHeight())
         .background(rowBackground)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+        .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
         .onTapGesture {
             guard !isEditing else { return }
             onTap()
@@ -121,19 +161,99 @@ struct RecentsRowView: View, Equatable {
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
+    // MARK: - Flow 05 Content Choreography (sidebar-presence)
+    //
+    // `widthModel.isCollapsedPresentation` is injected into every sidebar
+    // content tree (not just the transitional pinned⇄collapsed cross-fade
+    // `WorkspaceViewContainer` mounts mid-transition), so these resolve
+    // correctly at rest too: while steady-state pinned it's always `false`,
+    // which is exactly this row's normal (label visible, glyph resting,
+    // corner radius 8) appearance — nothing below changes existing behavior
+    // outside an active transition.
+
+    private var choreographyEnabled: Bool {
+        WorkspaceLayout.sidebarRowChoreographyEnabled(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+    }
+
+    /// Label (name/subtitle/timestamp) opacity — 1 while expanded, 0 while
+    /// collapsed. Reduce Motion skips the windowed fade below and lets only
+    /// the container-level cross-fade (120ms, Flow 05 "Reduced Motion") show
+    /// the change; the label still ends at the right value, just without
+    /// this row's own animation layered on top.
+    private var labelOpacity: Double {
+        widthModel.isCollapsedPresentation ? 0 : 1
+    }
+
+    /// COLLAPSE: labels fade fast (0-100ms of the 260ms window) with no
+    /// delay — "labels leave first." EXPAND: labels fade in only after
+    /// their glyph has landed, staggered per row — see `expandLabelDelay`.
+    private var labelAnimation: Animation? {
+        guard choreographyEnabled else { return nil }
+        if widthModel.isCollapsedPresentation {
+            return .easeOut(duration: WorkspaceLayout.sidebarRowLabelCollapseFadeDuration)
+        }
+        let delay = WorkspaceLayout.expandLabelDelay(
+            rowIndex: staggerIndex,
+            glyphLandDuration: WorkspaceLayout.sidebarRowGlyphExpandTravelDuration()
+        )
+        return .easeOut(duration: WorkspaceLayout.sidebarRowLabelExpandFadeDuration).delay(delay)
+    }
+
+    /// Small in-row glyph shift toward the panel's centerline — the
+    /// canvas's own "+8 → +28px" glyph translateX row, not the panel's
+    /// pinned→rail travel.
+    private var glyphOffsetX: CGFloat {
+        widthModel.isCollapsedPresentation
+            ? WorkspaceLayout.sidebarRowGlyphTraveledOffset
+            : WorkspaceLayout.sidebarRowGlyphRestingOffset
+    }
+
+    /// COLLAPSE: glyph waits for the label to mostly clear (60ms delay),
+    /// then travels for the rest of the 260ms window. EXPAND: glyph travels
+    /// back out immediately, over the whole expand window — every row's
+    /// glyph starts together; only labels are staggered.
+    private var glyphAnimation: Animation? {
+        guard choreographyEnabled else { return nil }
+        if widthModel.isCollapsedPresentation {
+            return .timingCurve(0.32, 0.72, 0, 1, duration: WorkspaceLayout.sidebarRowGlyphCollapseTravelDuration)
+                .delay(WorkspaceLayout.sidebarRowGlyphCollapseTravelDelay)
+        }
+        return .timingCurve(0.32, 0.72, 0, 1, duration: WorkspaceLayout.sidebarRowGlyphExpandTravelDuration())
+    }
+
     // MARK: - Row Background
 
+    /// The selected row is a raised card (Flow 07 round 6, layer
+    /// `XHBC1`/"Bottom Group"): opaque canvas-surface fill at a fixed 12pt
+    /// radius plus a soft drop shadow, not a flat tint at the width-driven
+    /// resting/traveled radius every other row uses. Unselected rows are
+    /// unchanged — same `rowCornerRadius`/hover fill as before.
+    @ViewBuilder
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 6)
-            .fill(rowFill)
+        if isActive {
+            RoundedRectangle(cornerRadius: SidebarDialTuning.selectedCardCornerRadius())
+                .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color(WorkspaceLayout.canvasBackgroundLight))
+                .shadow(
+                    color: Color.black.opacity(SidebarDialTuning.selectedCardShadowOpacity()),
+                    radius: SidebarDialTuning.selectedCardShadowRadius(),
+                    y: SidebarDialTuning.selectedCardShadowYOffset()
+                )
+        } else {
+            RoundedRectangle(cornerRadius: rowCornerRadius)
+                .fill(rowFill)
+                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
+        }
+    }
+
+    /// Row corner radius — the canvas's "8 → 16px" row, same window as the
+    /// glyph travel above. Unselected rows only — see `rowBackground`.
+    private var rowCornerRadius: CGFloat {
+        widthModel.isCollapsedPresentation
+            ? WorkspaceLayout.sidebarRowCornerRadiusTraveled
+            : WorkspaceLayout.sidebarRowCornerRadiusResting
     }
 
     private var rowFill: Color {
-        if isActive {
-            return colorScheme == .dark
-                ? WorkspaceLayout.activeRowDark
-                : WorkspaceLayout.activeRowLight
-        }
         if isHovered {
             return Color.primary.opacity(0.05)
         }
