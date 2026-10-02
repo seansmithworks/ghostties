@@ -54,6 +54,25 @@ sidebar DialKit panel, Release-compile fix. Design canvas saved to `~/Code/ghost
   ideas: a right-side panel, or a hover view off the left sidebar with its own button next to `+` and
   the sidebar toggle in the tray. Explore only; not scheduled.
 
+## Session-5 checkpoint — status skills, AGENTS.md, tooling census (2026-09-22)
+
+- [ ] **Carried** — Merge PR #187 (`worktree-session-5` → `main`, https://github.com/seansmithworks/ghostties/pull/187). Docs only; Sean's merge.
+- [ ] **Carried, DECIDE OR KILL** — Structural scope-check fix. `~/.claude/hooks/scope-check.py` diffs only the session's `Repo` root (`git -C root`), so cross-repo work (edits to `~/.claude`, `~/Code/agent-skills`) reads as DROPOUT. The prompt-rule patch (`b9a69a8`, in `~/.claude`) FAILED — a fifth false DROPOUT fired after it landed. Strawman: a PostToolUse hook on Edit/Write appends each touched absolute path to `~/.claude/scope/.touched/<session_id>`; scope-check.py resolves each path's repo root with `git rev-parse --show-toplevel` and adds that repo's diff under a `# repo: <root>` header. Lives in `~/.claude`, so commits there need a real terminal — a worktree-isolated session cannot run git outside its own tree.
+- [ ] **Parked** — 12 `.easeIn` uses in Swift sources vs emil-design-eng's "Never use ease-in for UI animations". Not checked one by one; some may be exits or non-UI.
+- [ ] **Parked** — Reduce Motion coverage: 18 `accessibilityReduceMotion` vs 44 `withAnimation`. A count, not an audit.
+- [ ] **Parked** — `framer-motion` (old name) still in 9 projects vs `motion` in 11; the PR-visuals rule names `agent-browser` (64 calls/90d) while claude-in-chrome (1,551) and playwright (681) do the real work.
+- [ ] **Parked** — The catching-up Review cap's `+<N> older` overflow has never run (max seen: 8 entries).
+- Census scripts (session scratchpad, will not survive): `skill_census.py`, `third_party_census.py`, `design_census.py`. Rebuild from this list if needed: they scan `~/.claude/projects/**/*.jsonl` (last 90 days, skipping subagents) for Skill tool_use, `<command-name>` tags, `mcp__<server>__` tool names and Bash CLI names, plus `package.json` deps under `~/Code`.
+
+## AGENTS.md / CLAUDE.md consolidation (2026-09-20, decision open)
+
+Claude Code v2.1.277+ can read `AGENTS.md`; `~/.claude/settings.json` is now set to `claude-md-and-agents-md`, so this repo loads **both** root files every session, plus nested `AGENTS.md` on demand when Claude reads files in `macos/`, `example/`, `src/benchmark/`, `src/inspector/`, `src/terminal/c/`, `test/fuzz-libghostty/`.
+
+- [x] Consolidated 2026-09-20. `AGENTS.md` is canonical (2,877 chars) and absorbed the CEF download line and the `GhosttyTests`/`GhosttyUITests` target names; `CLAUDE.md` is now 425 chars — `@AGENTS.md` plus the Design Quality block. Duplication gone.
+- [x] `macos/AGENTS.md` fork block now defers to the root instead of restating scheme/module/test-target facts, and no longer names the broken `zig build` commands. Everything below the `---` is upstream's own content and was left byte-for-byte — editing there would conflict on every upstream pull.
+- [ ] Not chased: `example/`, `src/benchmark/`, `src/inspector/`, `src/terminal/c/`, `test/fuzz-libghostty/` each still carry an upstream `AGENTS.md`. They load on demand when Claude reads files in those dirs. Unreviewed — they are upstream's, and none of them mention the fork.
+- [x] Build order corrected in `AGENTS.md`. Xcode leads; the `zig build` commands are kept below a note saying they do not currently work. Evidence: zig is still `0.15.2` (the version `build-xcode-workaround.md` records as broken) and macOS is now `27.0`, so the memory's "re-check when Zig 0.16 ships" condition is unmet. **Not verified by an actual build this session** — if `zig build run` turns out to work again, the note at the top of AGENTS.md § Commands is what to delete.
+
 ## 2026-09-30 — vNext round 2 (page in Draft 2, waiting on Sean's review)
 
 Page: `docs/plans/vnext-avenues-2026-09-29.html` (`834ce6564`), 20 avenues #24–#43, 10 mockups, adversarial review folded in. Research: `docs/plans/vnext-research-2026-09-29/`. Concept-lab restored at `ghostties-concept-lab/` with the round-2 concepts (`ef7eaf5`, local only).
