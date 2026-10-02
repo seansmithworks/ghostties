@@ -1,13 +1,15 @@
 ## Ghostties Fork
 
-This fork uses different build tooling than upstream.
+This fork uses different build tooling than upstream. **The root
+[AGENTS.md](../AGENTS.md) is canonical** for build commands, module naming and
+test targets — read it, and put changes there rather than restating them here.
 
-- **Scheme**: `Ghostties` (not `Ghostty`)
-- **Build output**: `macos/build/ReleaseLocal/Ghostties.app`
-- **Build command**: `zig build run -Doptimize=ReleaseFast` (not `build.nu`)
-- **Swift module**: `import Ghostty` (PRODUCT_MODULE_NAME is still `Ghostty`)
-- **Unit tests**: `zig build test` or Xcode Cmd+U
-- **Test targets**: `GhosttyTests`, `GhosttyUITests` (unchanged from upstream)
+What it overrides in the upstream section below:
+
+- Build with Xcode, **not** `macos/build.nu` and **not** `zig build` — see the
+  note in the root AGENTS.md § Commands for why the Zig path is broken.
+- The scheme and the built bundle are `Ghostties`, not `Ghostty`, so every
+  `Ghostty.app` path below is `Ghostties.app` here.
 
 ---
 
