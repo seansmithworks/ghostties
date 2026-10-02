@@ -54,6 +54,18 @@ sidebar DialKit panel, Release-compile fix. Design canvas saved to `~/Code/ghost
   ideas: a right-side panel, or a hover view off the left sidebar with its own button next to `+` and
   the sidebar toggle in the tray. Explore only; not scheduled.
 
+## 2026-09-30 — vNext round 2 (page in Draft 2, waiting on Sean's review)
+
+Page: `docs/plans/vnext-avenues-2026-09-29.html` (`834ce6564`), 20 avenues #24–#43, 10 mockups, adversarial review folded in. Research: `docs/plans/vnext-research-2026-09-29/`. Concept-lab restored at `ghostties-concept-lab/` with the round-2 concepts (`ef7eaf5`, local only).
+
+- [ ] **Review round** — comment on the page (`html-review` session `sess_5e6d1d44a1be`) and decide bet 1: page recommends the #24 prod-trail spike (deploy → merge → PR → session via the `Claude-Session:` trailer). **Decide or kill.**
+- [ ] **Held for a nod:** push docs commits to `origin/main` · run the #24 read-only spike (script, no app code) · enable Vercel Web Analytics on ghostties.org (free tier; Growth-role gap — site has no analytics).
+- [ ] **#29 consent card on the application track** — page recommends building it BEFORE applying to Vercel Marketplace; Ship SF Oct 15 / Next.js Conf Oct 22 as timing. Decide role: Marketplace (page) vs Design Engineer/AI Gateway (roles doc ranks it 2nd). Verify who leads Vercel design first — both named leaders appear gone as of 2026-09-30.
+- [ ] **Unverified still:** does Vercel's GitHub status count as a CI check (if yes, Claude Desktop auto-fix already covers #25's preview half)? Vercel Sandbox endpoints for #42.
+- [ ] **Image/media previewer (#40)** — Sean 2026-09-30: "if I click on one of these, why does finder need to open?" Hook is `Ghostty.App.swift` `openURL` → OSC 8 → `openUntrustedURL`; default shape = `QLPreviewPanel` (large, resizable), setting `media-preview = panel | popover | pane` only if asked. Concept-lab ranks it 17/20, 2nd overall.
+- [ ] **Concept-lab** `ef7eaf5` not pushed/deployed; #26/#39 site sketches use placeholder copy.
+- [ ] Memory pointer `project_avenues-review-site-2026-09-05.md` never existed on disk — 09-05 site + sketches live only on branch `visual-pass-2026-09-05` (never merged).
+
 ## 2026-09-26 — overnight: recover the lost sidebar build (Flow 01) from transcripts
 
 Old Mac wipe lost the uncommitted sidebar build; the design survived (pen.dev canvas, now at
@@ -61,11 +73,14 @@ iCloud `Pencil.Dev/Ghostties-Sidebar-26Sep2026.pen` + `~/Archive/rescue/pen/ghos
 spec `docs/design/sidebar-presence/flow-01-sidebar-presence.md`). Session transcripts survived.
 
 - [x] S1 Reconstruct — NO code was ever built (no sidebar edits in any transcript); old-Mac transcripts (Sep 20–23) were not rescued, only Sep 25+. Build is fresh from the spec.
-- [ ] S2 Replay/rebuild on branch `feat/sidebar-presence` off main (isolated worktree), Debug build green, commit locally
-- [ ] S3 Tests: full suite via xcresulttool totals, vs main baseline; new tests for SidebarMode.collapsed persistence
-- [ ] S4 Independent review (not the builder) against the spec + transcript decisions
-- [ ] S5 Fixture screenshots of the 4 states (capture fixture, throwaway state dir) for Sean's morning review
-- ⛔ Not overnight: push, PR, merge, #189 merge (held by Sean), anything in /Applications
+- [x] S2 Built on `feat/sidebar-presence` (pushed to origin 2026-09-28 @ 840301a9a), plus Sean's revisions: toggle pinned↔rail (Cmd+S), Cmd+Shift+S full close, rail 128pt, tray = one pill, no terminal top bar, glyph trailing, overlay follows terminal theme, 8pt card margin every state, Flow 05 motion
+- [x] S3 Full suite @ c66692ede: 1430/6/1 (Light); all 6 = known load-timeout flakes, pass in isolation. (carried) Re-run full suite on 840301a9a
+- [x] S4 Reviews: first @ 9884fef8e (pass), second @ c66692ede (reject → fixed 1b4c999d9..d32041cfd). (carried) Review 1b4c999d9..840301a9a (motion + rail 128 + glyph trailing) — not yet reviewed
+- [ ] S5 (carried) Screenshots of pinned/rail/closed @ 840301a9a — blocked last round: displays asleep. Motion needs Sean's hands-on pass
+- [ ] (carried) PR `feat/sidebar-presence` → main on the fork, with before/after screenshots, after S3–S5 re-run + Sean's motion feel-check
+- [ ] (carried) Known compromise: Flow 05 glyphs don't travel 1:1 into the rail (sections vs flat list); crossfade + small inward shift instead. Tray pill + Projects tab only crossfade
+- [ ] (carried) Restore 4 missing rig memory notes (dev-builds-share-a-bundle-id, dev-process-name-is-ghostty, demo-capture-rig-gotchas, visual-pass-rig-facts) — indexed in MEMORY.md, absent on disk
+- [ ] (parked) Resolve the one remaining open artifact comment thread (toggle/closed) on https://claude.ai/artifact/7L6zZaXrEw1WjyYEq1rS28 — answered by Cmd+Shift+S
 
 ## 2026-09-25 — review files rescued from the old (compromised, since wiped) Mac
 

@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset="utf-8"><title>31</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:640px;height:420px;overflow:hidden}
+body{background:#F0E9E6;color:#1a1a1a;font:11px/1.25 -apple-system,"SF Pro Text",system-ui,sans-serif;position:relative;-webkit-font-smoothing:antialiased}
+.side{position:absolute;left:0;top:0;width:260px;height:420px;padding:0 8px}
+.tl{height:38px;display:flex;align-items:center;gap:8px;padding-left:8px}
+.tl i{width:12px;height:12px;border-radius:50%;display:block}
+.tl .new{margin-left:auto;color:#636363;font-size:11px;padding-right:4px}
+.sec{display:flex;align-items:center;gap:8px;height:24px;padding:0 8px;font-size:10px;font-weight:600;letter-spacing:.06em;color:#636363}
+.sec b{font-weight:600}
+.row{display:flex;align-items:flex-start;gap:8px;padding:4px 8px;border-radius:6px;min-height:36px;position:relative}
+.row .g{flex:none;width:16px;margin-top:2px}
+.row .m{flex:1;min-width:0}
+.row .n{font-weight:500;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .p{color:#636363;font-size:10px;white-space:nowrap}
+.row .t{color:#636363;font-size:10px;white-space:nowrap;margin-top:1px}
+.chip{display:inline-flex;align-items:center;gap:4px;height:16px;padding:0 6px;border-radius:8px;font-size:10px;font-weight:500;white-space:nowrap;border:1px solid #e5e5e3;background:#FAF7F3;color:#636363;margin-top:1px}
+.chip.ok{color:#2d7d46;border-color:rgba(45,125,70,.3);background:rgba(45,125,70,.07)}
+.chip.bad{color:#dc3545;border-color:rgba(220,53,69,.3);background:rgba(220,53,69,.07)}
+.sel{background:rgba(0,0,0,.05)}
+.card{position:absolute;left:268px;top:8px;right:8px;bottom:8px;background:#FAF7F3;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.15);padding:14px 14px;font:10px/1.5 ui-monospace,"SF Mono",Menlo,monospace;color:#1a1a1a;overflow:hidden}
+.card .d{color:#9a9a9a}.card .l{margin-bottom:6px}
+.card .dot{color:#8a5a8f}
+.card .rd{color:#dc3545}
+.card .ok{color:#2d7d46}
+
+.mono{font:10px/1.5 ui-monospace,"SF Mono",Menlo,monospace}
+.ev{white-space:pre;color:#1a1a1a;margin-bottom:2px}.ev .d{color:#9a9a9a}
+.key{margin-left:auto;align-self:center;font:10px ui-monospace,Menlo,monospace;color:#636363;border:1px solid #d5d3d0;border-bottom-width:2px;border-radius:4px;padding:0 5px;background:#FAF7F3;height:16px;line-height:14px}
+.ask{color:#636363;font-size:10px;white-space:nowrap}
+.row.q{min-height:32px}
+.gl{flex:none;width:16px;margin-top:2px;text-align:center;color:#636363;font-size:13px;line-height:14px}
+.tr{position:relative;margin:0 0 4px 32px;padding-left:16px;font-size:10px;color:#636363}
+.tr div{position:relative;height:18px;line-height:18px}
+.tr div:before{content:"";position:absolute;left:-13px;top:7px;width:5px;height:5px;border-radius:50%;background:#b8b4b0}
+.tr div:after{content:"";position:absolute;left:-11px;top:12px;width:1px;height:18px;background:#d5d3d0}
+.tr div:last-child:after{display:none}
+.tr .ok{color:#2d7d46}.tr .ok:before{background:#2d7d46}
+.lk{color:#3b6fb6;text-decoration:underline dotted;text-underline-offset:2px}
+.ind{padding-left:14px}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.08)}
+.pop{position:absolute;left:60px;top:40px;width:520px;height:340px;background:#FFFFFF;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.22),0 2px 6px rgba(0,0,0,.12);overflow:hidden;font:11px/1.25 -apple-system,"SF Pro Text",system-ui,sans-serif}
+.pop .bar{height:28px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid #e5e5e3;background:#F7F4F1;font-size:11px;font-weight:500;position:relative}
+.pop .bar .ct{margin-left:auto;color:#636363;font-weight:400;font-size:10px}
+.pop .bar .op{margin-left:12px;color:#3b6fb6;font-weight:400;font-size:10px}
+.pop .th{position:absolute;left:0;right:0;top:28px;bottom:0;background:#ECE8E4;overflow:hidden}
+.pop .th .s{position:absolute;left:14px;top:14px;bottom:14px;width:110px;background:#DDD8D3;border-radius:6px}
+.pop .th .s i{display:block;height:8px;margin:10px 9px 0;background:#C8C2BC;border-radius:3px}
+.pop .th .c{position:absolute;left:132px;top:14px;right:14px;bottom:14px;background:#F7F4F1;border-radius:6px}
+.pop .th .c i{display:block;height:6px;margin:14px 14px 0;background:#D6D0CA;border-radius:3px}
+.cur{position:absolute;left:400px;top:68px;display:none}
+</style></head><body><div class="side"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="new">+ New Session</span></div><div class="sec"><span>&#8964;</span><span>ACTIVE <b>5</b></span></div><div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#4caf62"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">Claude Code 4</div><div class="p">webapp &middot; 1m</div></div></div><div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#4caf62"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">Claude Code 3</div><div class="p">webapp &middot; 4m</div></div></div><div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#5b7fe0"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">Claude Code 2</div><div class="p">webapp &middot; 9m</div></div></div></div><div class="card"></div><div class="dim"></div><div class="pop" style="left:90px;top:24px;width:460px;height:372px"><div class="bar" style="height:32px;display:flex;align-items:center;padding:0 14px;border-bottom:1px solid #e5e5e3;background:#F7F4F1;font-weight:500;font-size:12px">Overnight &middot; Tue 30 Sep<span style="margin-left:auto;color:#636363;font-weight:400;font-size:10px">esc to close</span></div><div style="padding:0 14px"><div style="font-size:10px;font-weight:600;letter-spacing:.06em;color:#636363;margin:10px 0 3px">FINISHED</div><div style="display:flex;gap:8px;align-items:center;height:22px"><span style="width:16px;text-align:center;color:#636363;font-size:13px"><svg style="margin:0 0 0 0" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#4caf62"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg></span><span style="font-weight:500;width:130px;white-space:nowrap">fix-auth-redirect</span><span style="color:#636363;white-space:nowrap" class="">PR #412 merged, tests green</span></div><div style="display:flex;gap:8px;align-items:center;height:22px"><span style="width:16px;text-align:center;color:#636363;font-size:13px">&#9671;</span><span style="font-weight:500;width:130px;white-space:nowrap">migrate-billing-tables</span><span style="color:#636363;white-space:nowrap" class="">4 migrations applied to staging</span></div><div style="display:flex;gap:8px;align-items:center;height:22px"><span style="width:16px;text-align:center;color:#636363;font-size:13px">&#9651;</span><span style="font-weight:500;width:130px;white-space:nowrap">summarize-changelog</span><span style="color:#636363;white-space:nowrap" class="">Draft written to docs/</span></div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;color:#636363;margin:10px 0 3px">WAITING ON YOU</div><div style="display:flex;gap:8px;align-items:center;height:22px"><span style="width:16px;text-align:center;color:#636363;font-size:13px"><svg style="margin:0 0 0 0" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#5b7fe0"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg></span><span style="font-weight:500;width:130px;white-space:nowrap">add-rate-limit</span><span style="color:#636363;white-space:nowrap" class="">ask &middot; spend $4 gateway</span></div><div style="display:flex;gap:8px;align-items:center;height:22px"><span style="width:16px;text-align:center;color:#636363;font-size:13px">&#9671;</span><span style="font-weight:500;width:130px;white-space:nowrap">seed-fixtures</span><span style="color:#636363;white-space:nowrap" class="">ask &middot; push to main</span></div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;color:#636363;margin:10px 0 3px">LIVE</div><div style="display:flex;gap:8px;align-items:center;height:22px"><span style="width:16px;text-align:center;color:#636363;font-size:13px"></span><span style="font-weight:500;width:130px;white-space:nowrap">web</span><span style="color:#636363;white-space:nowrap" class=""><span style="color:#2d7d46">&#9650; ready 06:12 &middot; prod</span></span></div><div style="display:flex;gap:8px;align-items:center;height:22px"><span style="width:16px;text-align:center;color:#636363;font-size:13px"></span><span style="font-weight:500;width:130px;white-space:nowrap">api</span><span style="color:#636363;white-space:nowrap" class=""><span style="color:#dc3545">&#9650; failed 05:48 &middot; staging</span></span></div></div></div></body></html>
