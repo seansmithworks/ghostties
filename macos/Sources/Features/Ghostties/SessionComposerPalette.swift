@@ -1456,7 +1456,7 @@ struct SessionComposerPalette: View {
     // MARK: - Body
 
     var body: some View {
-        let scheme: ColorScheme = OSColor(Color(nsColor: .windowBackgroundColor)).isLightColor ? .light : .dark
+        let scheme: ColorScheme = NSColor(Color(nsColor: .windowBackgroundColor)).isLightColor ? .light : .dark
 
         // Shake-clearance wrapper (finding: `.anchored` is an NSPopover
         // sized exactly to its content — a shake applied to the composer's

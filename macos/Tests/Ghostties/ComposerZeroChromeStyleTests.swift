@@ -217,7 +217,7 @@ struct ComposerZeroChromeStyleTests {
             Issue.record("Failed to render PNG for \(filename)")
             return
         }
-        let dir = URL(fileURLWithPath: "/private/tmp/claude-501/-Users-seansmith-Code-ghostties--claude-worktrees-session-7/f3940a7d-dda2-4101-98ae-06507a0f43e3/scratchpad/zero-chrome", isDirectory: true)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("scratchpad/zero-chrome", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? data.write(to: dir.appendingPathComponent(filename))
     }

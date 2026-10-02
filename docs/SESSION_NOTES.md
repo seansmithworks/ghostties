@@ -1,5 +1,23 @@
 # Session Notes — Ghostties
 
+## Sep 29–30, 2026 — vNext round 2: research, avenues page, mockups, concept-lab restored
+
+**What landed.** `ba6a5dbc7` (page draft 1, 4 research docs, 5 mockups, BACKLOG) and
+`834ce6564` (draft 2: adversarial review folded in, 5 more mockups, 3 assumptions verified),
+both on `main`. Concept-lab checkout restored at `ghostties-concept-lab/` with concepts #24–#43
+(`ef7eaf5`, local only). Memory: `project_vnext-open-ground-2026-09-29.md`.
+
+**Verdict.** The native agent sidebar is taken (cmux, 27.5k stars, same stack); open ground is
+prod attribution — deploy → merge → PR → the session that wrote it. Live deploy metadata on
+ghostties.org already carries the `Claude-Session:` trailer, so that join is a read.
+
+**Vercel angle.** Marketplace + Connect designer is the fit; #29 consent card is the portfolio
+piece; Growth needs analytics the site doesn't have; Design Engineer is AI Gateway (weak fit);
+both named design leaders appear to have left as of 2026-09-30.
+
+**Open.** Sean's review round (`sess_5e6d1d44a1be`, 0 comments); push/spike/analytics nods;
+#40 media previewer captured from Sean's ask. All in `BACKLOG.md` 2026-09-30.
+
 ## Sep 13, 2026 — Composer PR #169 refinement closed; handed to merge coordinator
 
 **What shipped.** All on `feat/composer-zero-chrome`, pushed, PR #169 still draft, nothing

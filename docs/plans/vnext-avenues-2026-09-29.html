@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ghostties vNext — the open ground is what your agents shipped</title>
+    <link rel="stylesheet" href="http://localhost:4849/assets/plan.css" />
+    <style>
+      .avenue { border: 1px solid #dddbd6; border-radius: 8px; padding: 0.75rem 1rem; margin: 0.75rem 0; }
+      .avenue h3 { margin: 0 0 0.35rem 0; }
+      .avenue ul { margin: 0.25rem 0 0 0; }
+      .avenue--cut { padding: 0.4rem 1rem; border-style: dashed; color: #5a5852; }
+      .avenue--cut p { margin: 0; }
+      .band { font-size: 0.75rem; font-weight: 600; padding: 1px 7px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
+      .band--mild { background: #e6f0e6; color: #2f6b2f; }
+      .band--mid { background: #e8eef8; color: #2d5fa8; }
+      .band--wild { background: #f6e6dc; color: #9a4a1f; }
+      .cost { font-size: 0.75rem; color: #5a5852; margin-left: 6px; }
+      .cell-gap { background: #e6f0e6; }
+      .cell-bridge { background: #e8eef8; }
+      .cell-crowded { background: #f3e3e3; }
+      table.map td, table.map th { font-size: 0.85rem; text-align: center; }
+      table.map td:first-child { text-align: left; }
+    </style>
+  </head>
+  <body>
+    <h1>Ghostties vNext — the open ground is what your agents shipped</h1>
+
+    <div class="doc-meta">
+      <span>Project: Ghostties</span>
+      <span>2026-09-30</span>
+      <span class="badge badge--draft">Draft 2 · reviewed</span>
+    </div>
+
+    <blockquote class="callout">
+      <strong>Thesis</strong>
+      Per-session status is table stakes (cmux: 27.5k stars, same Ghostty + Swift stack). The open ground is prod, past the merge: this production deploy came from this merge commit, from this PR, from this agent session. Commit messages already carry a <code>Claude-Session:</code> trailer and Vercel records the commit on every deploy, so attribution is a metadata read, not a heuristic. Honest scope: deploy state is a weekly glance plus a rare alarm. The daily surface is the morning glance (#31), with deploys as one line in it. Build the prod trail first, on a data format that is open and multi-provider, with Vercel as the first provider.
+    </blockquote>
+
+    <table>
+      <thead>
+        <tr><th>Bet</th><th>What it is</th><th>Why it's open</th><th>Closer</th><th>Vercel tie</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><a href="#avenue-24">Prod trail</a> (#24 + #25)</td>
+          <td>Prod deploy → merge commit → PR → the session that wrote it. A red prod opens that session with logs.</td>
+          <td>Conductor owns per-PR previews and stops at merge; menu bar apps poll with no agent attribution</td>
+          <td>Conductor (high)</td>
+          <td>Software Factory narrative (PM posting)</td>
+        </tr>
+        <tr>
+          <td><a href="#avenue-28">Open deploy events</a> (#28)</td>
+          <td>A small public format for "a deploy changed state," with <code>gt</code> adapters. Vercel is the reference adapter.</td>
+          <td>Five providers, five delivery mechanisms; the only multi-provider tool has 9 stars</td>
+          <td>Vercel MCP push (medium)</td>
+          <td>Marketplace (partner side)</td>
+        </tr>
+        <tr>
+          <td><a href="#avenue-29">Agent asks, human grants</a> (#29) — application track</td>
+          <td>Consent card in the session row for a database or key: scope, cost, expiry, one-key approve, one-click revoke.</td>
+          <td>Vercel approvals live in Slack and the dashboard, not where the agent runs</td>
+          <td>Anthropic (permission prompt)</td>
+          <td>Marketplace + Connect</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><strong>Order and clock:</strong> product order is #24 → #28 → #29. #29 sits on a separate application track: a portfolio piece to exist before applying. Ship SF (Oct 15) and Next.js Conf (Oct 22) are timing, not deadlines.</p>
+
+    <blockquote class="callout">
+      <strong>This week</strong>
+      A script, no app code (a <code>gt</code>-shaped command is fine). Take ghostties.org's current production deploy, read its <code>githubCommitSha</code> and commit message, resolve the merge commit to its PR, and print the <code>Claude-Session:</code> trailer. If it names the session, the join works. Capture one before/after screenshot of the row chip afterwards; it becomes the demo and the first application artifact.
+    </blockquote>
+
+    <figure style="display:flex;flex-wrap:wrap;gap:8px;margin:16px 0"><img src="vnext-avenues-2026-09-29-assets/24-deploy-chip.png" alt="Session list with deploy chips: building, ready preview, failed, and one row without" style="max-width:48%;height:auto"><img src="vnext-avenues-2026-09-29-assets/25-red-build.png" alt="Failed row expanded with a build-failed strip and a reopen-with-log action, session resumed with the log pasted" style="max-width:48%;height:auto"><img src="vnext-avenues-2026-09-29-assets/29-consent-card.png" alt="Session row raised into a consent card for Neon Postgres, with a granted chip on the row below" style="max-width:48%;height:auto"><img src="vnext-avenues-2026-09-29-assets/36-bot-console.png" alt="Sidebar as a bot console: four named agents with scopes and a revoke action on hover" style="max-width:48%;height:auto"></figure>
+
+    <h2 id="decisions">Decisions for Sean</h2>
+    <ol>
+      <li><strong>Which bet first?</strong> Recommend the prod trail (#24) spike: the deploy-to-session trace on ghostties.org. It is small, and it is the input to #28.</li>
+      <li><strong>#29 before or after applying?</strong> Recommend before, on its own track, aimed at Ship SF (Oct 15) as timing. It is the only bet the Marketplace posting names verbatim ("human approval and autonomous action"). Don't let it delay the #24 spike.</li>
+      <li><strong>Does the application drive the roadmap, or ride on it?</strong> Recommend it rides. Every bet is worth building without it; #29 is the one deliberate exception, and it stays on the application track.</li>
+      <li><strong>Verify design leadership before tailoring?</strong> Recommend yes: check who you'd report to before writing the cover note. Tailor to the posting text, which doesn't depend on who leads design. Don't block building on it.</li>
+      <li><strong>Open spec or Ghostties-internal first?</strong> Recommend internal first, shaped to be opened. Version the schema in the repo; publish once a second adapter (Railway) works. A spec with one implementation is a guess.</li>
+      <li><strong>Which role?</strong> Recommend Marketplace. The role research ranks Design Engineer second and Growth third, while the brief says Growth second. Growth only makes sense if #26 produces real numbers first.</li>
+    </ol>
+
+    <h2 id="map">Intersection map</h2>
+    <p>Rows are Ghostties strengths. Columns are Vercel surfaces. <span class="cell-gap">&nbsp;gap&nbsp;</span> means nobody found doing it. <span class="cell-bridge">&nbsp;bridge&nbsp;</span> means Vercel has the piece but surfaces it somewhere else. <span class="cell-crowded">&nbsp;crowded&nbsp;</span> means it's already owned. A dash means no real tie.</p>
+    <table class="map">
+      <thead>
+        <tr><th></th><th>Deployments</th><th>Connect / Marketplace</th><th>Agent / approvals</th><th>AI Gateway</th><th>v0 API</th><th>BotID</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Native Mac surface</td><td class="cell-gap">gap #24</td><td class="cell-bridge">bridge #29</td><td class="cell-bridge">bridge #30</td><td class="cell-crowded">crowded (Logs page)</td><td>—</td><td>—</td></tr>
+        <tr><td>Hooks-grade status</td><td class="cell-bridge">bridge #24 #25</td><td class="cell-bridge">bridge #29</td><td class="cell-bridge">bridge #30</td><td class="cell-bridge">bridge #32</td><td>—</td><td>—</td></tr>
+        <tr><td>Multi-provider</td><td class="cell-gap">gap #28 #41</td><td class="cell-crowded">crowded (Vercel's catalog)</td><td class="cell-gap">gap #30</td><td class="cell-crowded">crowded (is multi-model)</td><td class="cell-bridge">bridge #38</td><td>—</td></tr>
+        <tr><td>Ghost identity</td><td>—</td><td class="cell-bridge">bridge #35</td><td>—</td><td>—</td><td>—</td><td class="cell-gap">gap #36</td></tr>
+        <tr><td>Morning glance</td><td class="cell-gap">gap #31</td><td>—</td><td class="cell-bridge">bridge #31</td><td class="cell-bridge">bridge #32</td><td class="cell-crowded">crowded (v0's own UI)</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <p>The Deployments column is the most open, and the Approvals column has the strongest bridges to Vercel. The multi-provider row is where the "open, Vercel as the star" framing actually lives.</p>
+
+    <h2 id="findings">Honest findings</h2>
+    <ul>
+      <li><strong>cmux is the incumbent, not a peer.</strong> It's a Ghostty-based native Swift sidebar with PR status, ports and attention rings, has 27.5k stars, and has an iOS app in TestFlight (<a href="https://github.com/manaflow-ai/cmux">repo</a>).</li>
+      <li><strong>Every platform owner shipped a cockpit in 2026.</strong> Claude's <code>claude agents</code>, the Codex app, Cursor 3, the Copilot app, Devin Desktop, and iTerm2 3.7's built-in Claude status (<a href="https://code.claude.com/docs/en/agent-view">agent view</a>, <a href="https://iterm2.com/claude-code-integration.html">iTerm2</a>).</li>
+      <li><strong>Per-session status and PR checks are table stakes.</strong> Claude's agent view colors PR labels by check state, and Superset rows show checks (<a href="https://code.claude.com/docs/en/agent-view">docs</a>, <a href="https://docs.superset.sh/workspaces">Superset</a>).</li>
+      <li><strong>Deploy state is pull-only for local surfaces.</strong> Vercel's MCP and CLI only answer when asked, and every menu bar app polls. Push exists as webhooks, but they need a public receiver (<a href="https://vercel.com/docs/agent-resources/vercel-mcp">MCP</a>). Agents trigger more than 50% of Vercel deploys, per Vercel's own numbers (<a href="https://www.digitalapplied.com/blog/vercel-ship-2026-agents-half-of-deployments-enterprise-stack">source</a>).</li>
+      <li><strong>No cross-provider event model found.</strong> Vercel sends webhooks, Netlify signs its webhooks, Cloudflare sends to a queue, Render limits webhooks to Pro, and Fly has none (<a href="https://developers.cloudflare.com/workers/ci-cd/builds/event-subscriptions">Cloudflare</a>, <a href="https://community.fly.io/t/deploy-notifications-webhooks/9058">Fly</a>).</li>
+      <li><strong>Nobody found carries the session past the pull request.</strong> Inferred from absence, not proven; Conductor is the closest and stops at merge.</li>
+      <li><strong>ghostties.org has no analytics.</strong> That is the #1 must-have gap for the Growth role, which asks for "measurable outcomes … chose what to measure" (<a href="https://vercel.com/careers/senior-product-designer-growth-6131210004">posting</a>).</li>
+      <li><strong>Vercel design leadership: both named leaders appear to have left as of 2026-09-30.</strong> VP Design Manuel Muñoz Solera's last day is today (his own post per search snippets; new role SpaceXAI). Head of Product Design Hannah Hearth appears to be at Anthropic (medium confidence, one non-LinkedIn source). No successor is public. Verify who you'd report to before tailoring.</li>
+      <li><strong>Vercel is hiring for the Ghostties thesis.</strong> A "PM, Software Factory" posting (today) says "human time and human attention has become the bottleneck" (<a href="https://job-boards.greenhouse.io/vercel/jobs/6210353004">posting</a>). A matching design role is likely to follow (inferred).</li>
+      <li><strong>Assumption checks, 2026-09-30.</strong> VERIFIED: Claude Code routes through Vercel AI Gateway. VERIFIED: every ghostties.org deploy carries the git commit, and commits carry <code>Claude-Session:</code>. VERIFIED: Ghostties has hook support for Claude (manual paste) and Codex (auto-registered). REFUTED: Gemini hook support does not exist in the code.</li>
+    </ul>
+
+    <h2 id="avenues">Avenues, mild → wild</h2>
+    <p>Numbering continues from the 2026-09-05 set. <strong>Killed as crowded:</strong> a per-PR preview button (Conductor and Superset have it), hook status as a differentiator (cmux, iTerm2), cloud VMs (cmux, Codex, Warp Oz), and diff/kanban review surfaces (every ADE has them, and they break the non-IDE anti-goal). Four more cut after review, at the end of this section.</p>
+
+    <h3 id="mild">Mild — ships in about a week on existing code</h3>
+
+    <div class="avenue" id="avenue-24" data-anchor-id="avenue-24">
+      <h3>24. Prod trail: deploy → merge commit → PR → the session that wrote it<span class="band band--mild">MILD</span><span class="cost">Cost M</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/24-deploy-chip.png" width="640" alt="Session list with deploy chips: building, ready preview, failed, and one row without">
+      <img src="vnext-avenues-2026-09-29-assets/33-what-each-agent-shipped.png" width="640" alt="Session row expanded into a connected trail: PR merged, preview ready, prod ready">
+      <ul>
+        <li><strong>Why now:</strong> VERIFIED on live data: every ghostties.org deploy carries <code>githubCommitSha/Ref/Message</code>, and every commit message ends with a <code>Claude-Session:</code> trailer. The trailer makes attribution a read, not a heuristic. Ghostties only maps that id to a sidebar row.</li>
+        <li><strong>The open half is prod.</strong> A branch preview per session is Conductor's Deployments tab. A deploy on main comes from a merge commit that isn't the session's commit, so the join runs deploy → merge commit → PR → session. Branch chip is step 0.</li>
+        <li><strong>Absorbs #27 and #33:</strong> a one-line-per-project prod state in the existing <code>MenuBar/</code>, and the expanded row trail (second image). No per-agent scoreboard.</li>
+        <li><strong>Evidence:</strong> the menu bar apps show deploy status but not which agent shipped it, and Conductor's view is scoped to a PR (<a href="https://www.conductor.build/changelog/0.29.2-vercel-deployments-simplified-thinking-levels">Conductor 0.29.2</a>).</li>
+        <li><strong>Threat:</strong> Conductor (high). It already has a Deployments tab and ships near-daily; extending past merge is small.</li>
+        <li><strong>Vercel tie:</strong> the Software Factory narrative (a PM posting). It answers "what did my agent ship." The Marketplace tie belongs to #29 only.</li>
+        <li><strong>Token:</strong> reuses the <code>vercel</code> CLI's existing login (long-lived token); Connect-scoped later (#35).</li>
+        <li><strong>Open-not-exclusive:</strong> the chip reads from the #28 event format. Vercel is simply the first provider.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-25" data-anchor-id="avenue-25">
+      <h3>25. Red prod or runtime failure → back to the session that caused it<span class="band band--mild">MILD</span><span class="cost">Cost S (after #24)</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/25-red-build.png" width="640" alt="Failed row expanded with a build-failed strip and a reopen-with-log action, session resumed with the log pasted">
+      <ul>
+        <li><strong>Why now:</strong> Resume already exists on the sidebar branch. A failed chip resumes that session with the log pasted and the Vercel MCP already attached.</li>
+        <li><strong>Verify first:</strong> Vercel posts deploy status on GitHub commits (inferred, not checked as a <code>gh</code>-readable check). If it counts, Claude Desktop auto-fix and Conductor already cover red previews. Scope this to prod and runtime failures only.</li>
+        <li><strong>Evidence:</strong> Vercel Agent fixes things in its own UI (<a href="https://claude.com/blog/preview-review-and-merge-with-claude-code">Claude</a>, <a href="https://vercel.com/docs/agent">Vercel Agent</a>).</li>
+        <li><strong>Threat:</strong> Anthropic (high). Adding Vercel to Claude Desktop's CI auto-fix is a small step for them.</li>
+        <li><strong>Vercel tie:</strong> the "recovery" and "handoff" language in the Software Factory posting.</li>
+        <li><strong>Open-not-exclusive:</strong> any provider's adapter that can produce a log URL qualifies.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-26" data-anchor-id="avenue-26">
+      <h3>26. Time-to-first-agent funnel<span class="band band--mild">MILD</span><span class="cost">Cost S</span></h3>
+      <ul>
+        <li><strong>Why now:</strong> extends #3. Track site visit → installer run → first launch → first agent session → first "done." Use Vercel Web Analytics on the site plus opt-in pings from the app, then run one experiment on the onboarding sheet.</li>
+        <li><strong>Evidence:</strong> Growth's #1 must-have is "understood a funnel, chose what to measure" (<a href="https://vercel.com/careers/senior-product-designer-growth-6131210004">posting</a>).</li>
+        <li><strong>Threat:</strong> none. The only risk is waiting. Numbers need weeks to accumulate, so start now.</li>
+        <li><strong>Vercel tie:</strong> Growth, directly.</li>
+        <li><strong>Open-not-exclusive:</strong> n/a (internal).</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-40" data-anchor-id="avenue-40">
+      <h3>40. Media previewer: click an image, see it here<span class="band band--mild">MILD</span><span class="cost">Cost S</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/40-media-preview.png" width="640" alt="Quick Look panel over the Ghostties window, opened from a Claude Code image link">
+      <ul>
+        <li><strong>Why now:</strong> Claude Code prints <code>[image] name.png</code> as an OSC 8 link and Ghostties hands it to Launch Services, so every screenshot an agent produces opens Finder or Preview. Sean, 2026-09-30: "why does finder need to open?"</li>
+        <li><strong>Evidence:</strong> the click already lands in our code: <code>macos/Sources/Ghostty/Ghostty.App.swift</code> <code>openURL</code> → <code>openUntrustedURL</code> for OSC 8. The terminal already renders pixels via the Kitty graphics protocol (<code>src/terminal/kitty/graphics*.zig</code>). One branch for local image/video/PDF → <code>QLPreviewPanel</code> is the whole feature.</li>
+        <li><strong>Threat:</strong> cmux or Warp could add the same in a release. iTerm2 has inline images but no Quick Look on links. Low moat, high daily-use value.</li>
+        <li><strong>Vercel tie:</strong> none directly. It is the "calm cockpit" thesis applied to the terminal pane: don't leave the window.</li>
+        <li><strong>Open-not-exclusive:</strong> n/a (local files).</li>
+      </ul>
+      <p><strong>Shape:</strong> default is the native Quick Look panel (<code>QLPreviewPanel</code>) — large, user-resizable, size remembered by macOS, ← → steps through every image in the transcript, Space closes. A setting <code>media-preview = panel | popover | pane</code> follows only if asked: popover for glance-and-dismiss, pane to dock media in the right panel (native <code>NSImageView</code>/<code>AVPlayerView</code>, not CEF — see #162). Sean 2026-09-30: "good preview but larger. Or maybe there is a setting to let someone choose."</p>
+    </div>
+
+    <div class="avenue" id="avenue-43" data-anchor-id="avenue-43">
+      <h3>43. Agent-installable ghostties.org<span class="band band--mild">MILD</span><span class="cost">Cost S</span></h3>
+      <ul>
+        <li><strong>Why now:</strong> agents increasingly choose and install tools themselves. Add <code>llms.txt</code>, a machine-readable install path, and a BotID agent/human split so the site can tell the two apart. It feeds #26 an "agents install tools" funnel.</li>
+        <li><strong>Evidence:</strong> Vercel verifies bots via signed Web Bot Auth identities (<a href="https://vercel.com/changelog/vercels-bot-verification-now-supports-web-bot-auth">changelog</a>). Agents trigger more than 50% of Vercel deploys, which is the same shift on the deploy side.</li>
+        <li><strong>Threat:</strong> none; low-moat but cheap.</li>
+        <li><strong>Vercel tie:</strong> BotID, and the Growth funnel through #26.</li>
+        <li><strong>Open-not-exclusive:</strong> n/a (own site).</li>
+      </ul>
+    </div>
+
+    <h3 id="mid">Mid — a real feature</h3>
+
+    <div class="avenue" id="avenue-28" data-anchor-id="avenue-28">
+      <h3>28. Open deploy-event spec + <code>gt</code> adapters<span class="band band--mid">MID</span><span class="cost">Cost M</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/28-open-events.png" width="640" alt="Terminal following gt deploys as a normalized event stream across vercel, railway and netlify, with matching deploy chips on the session rows and a spec footer">
+      <ul>
+        <li><strong>Why now:</strong> extends #11. One JSON shape: provider, project, commit, state, URL, log URL, time, and <code>session</code> as a first-class field sourced from the commit trailer. Adapters (<code>gt deploys --provider vercel|railway|netlify|fly</code>) write it locally, and the app, the menu bar and other terminals read it.</li>
+        <li><strong>Evidence:</strong> five providers use five different event mechanisms (see Peers below).</li>
+        <li><strong>Threat:</strong> Vercel adds push to its MCP (medium). Even then, cross-provider stays open.</li>
+        <li><strong>Vercel tie:</strong> Marketplace's partner side ("partners creating and operating integrations").</li>
+        <li><strong>Open-not-exclusive:</strong> that's the point. Vercel is the reference adapter, and Railway is second because it sends webhooks on every state change.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-29" data-anchor-id="avenue-29">
+      <h3>29. Agent asks, human grants<span class="band band--mid">MID</span><span class="cost">Cost M</span><span class="cost">Application track (inferred, verify Connect + install compose)</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/29-consent-card.png" width="640" alt="Session row raised into a consent card for Neon Postgres, with a granted chip on the row below">
+      <ul>
+        <li><strong>Why now:</strong> the CLI can install Marketplace integrations as JSON, and Connect went GA with short-lived, task-scoped tokens (<a href="https://vercel.com/blog/the-end-of-credential-sprawl-for-agents">Connect</a>). The card shows provider, scope, environment, cost tier and expiry. Approving runs <code>vercel integration add</code>. The grant then sits on the row as a chip that shows its expiry.</li>
+        <li><strong>Open question:</strong> Connect covers runtime credentials, while <code>vercel integration add</code> is provisioning. No source shows the two compose (inferred, verify).</li>
+        <li><strong>Evidence:</strong> the posting's bonus line is "workflows that move between human approval and autonomous action" (<a href="https://vercel.com/careers/product-designer-marketplace-6160974004">posting</a>).</li>
+        <li><strong>Threat:</strong> Anthropic's permission prompt grows service grants (medium). People also provision services only a few times a year.</li>
+        <li><strong>Vercel tie:</strong> Marketplace + Connect. The strongest single portfolio piece, and the only one the posting names verbatim. Timing: before applying; Ship SF (Oct 15) and Next.js Conf (Oct 22) are context, not deadlines.</li>
+        <li><strong>Open-not-exclusive:</strong> the card is generic. Vercel drives it first, and Supabase or Neon direct installs can plug in.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-30" data-anchor-id="avenue-30">
+      <h3>30. One approval queue across parallel sessions<span class="band band--mid">MID</span><span class="cost">Cost M</span><span class="cost">Lower priority</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/30-approval-queue.png" width="640" alt="Sidebar with a NEEDS YOU 3 queue of one-line asks with command-number keys above ACTIVE 4, selected session waiting in the terminal">
+      <ul>
+        <li><strong>Priority:</strong> lower. Warp, cmux and iTerm2 already sort attention, so build it after #24, #28 and #29.</li>
+        <li><strong>Why now:</strong> merges #16. <code>NeedsYouZoneView</code> exists. Turn it into a single queue of every pending permission, grant and prod action across Claude and Codex, answerable without switching terminals. Agent-started promote or rollback always goes through this queue.</li>
+        <li><strong>Evidence:</strong> eve and Vercel Agent both require human approval, but only in Slack or the dashboard (<a href="https://vercel.com/blog/introducing-eve">eve</a>).</li>
+        <li><strong>Threat:</strong> Warp's unified notification center (medium) (<a href="https://docs.warp.dev/agents/capabilities/agent-notifications/">Warp</a>).</li>
+        <li><strong>Vercel tie:</strong> Marketplace (the approval seam).</li>
+        <li><strong>Open-not-exclusive:</strong> hook-based. Claude and Codex have hooks in Ghostties today; Gemini has none.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-31" data-anchor-id="avenue-31">
+      <h3>31. The morning glance, with deploys<span class="band band--mid">MID</span><span class="cost">Cost M</span><span class="cost">The daily surface</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/31-morning-glance.png" width="640" alt="Overnight overlay panel grouping finished sessions, asks waiting on you, and live deploys across Claude, Codex and Gemini">
+      <ul>
+        <li><strong>Why now:</strong> this is the mission's north star and the daily product. One view answers "what finished overnight, what's waiting, what's live." #24 and #25 are its alarm layer: a weekly glance plus a rare interrupt, shown as one deploy line here.</li>
+        <li><strong>Hook coverage (checked):</strong> Claude yes (manual paste of the settings snippet), Codex yes (auto-registered), Gemini none. The mockup shows Gemini; that part is REFUTED for today's code.</li>
+        <li><strong>Evidence:</strong> each vendor's hub covers only itself, and Superset is organized around worktrees, not your day (<a href="https://docs.superset.sh/workspaces">Superset</a>).</li>
+        <li><strong>Threat:</strong> Superset (medium-high, iPhone app shipped Sep 28).</li>
+        <li><strong>Vercel tie:</strong> Growth ("retention" is a daily reason to open the app).</li>
+        <li><strong>Open-not-exclusive:</strong> multi-agent and multi-provider by design.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-32" data-anchor-id="avenue-32">
+      <h3>32. Session ledger via AI Gateway<span class="band band--mid">MID</span><span class="cost">Cost L</span><span class="cost">Portfolio piece, not product</span></h3>
+      <ul>
+        <li><strong>Why now:</strong> merges #10's cost idea. Each session is a row showing model, provider, fallback used, tokens, cost and latency. A failed request expands into a plain-language diagnosis. Built in Next.js + AI SDK, with a sidebar chip.</li>
+        <li><strong>Feasibility: VERIFIED.</strong> Vercel documents Claude Code as a first-class agent: <code>ANTHROPIC_BASE_URL=https://ai-gateway.vercel.sh/claude-code</code> (or <code>npx vercel ai-gateway setup --agent claude-code</code>). Only Claude models route this way; Anthropic doesn't support non-Claude models through a gateway.</li>
+        <li><strong>Cost flag:</strong> once a gateway key is set, the claude.ai subscription no longer covers that usage and billing becomes per token. Setting only the base URL keeps subscription billing.</li>
+        <li><strong>Evidence:</strong> the Gateway's Logs page already lists cost and tokens per request (<a href="https://vercel.com/changelog/ai-gateway-logs">changelog</a>).</li>
+        <li><strong>Threat:</strong> the Copilot app already shows session costs (<a href="https://github.blog/changelog/2026-05-14-github-copilot-app-is-now-available-in-technical-preview/">Copilot</a>), and Gateway Logs is the surface. Build it as a role artifact only.</li>
+        <li><strong>Vercel tie:</strong> Design Engineer (AI Gateway). It closes the React/TS gap and earns the "built with AI Gateway" bonus.</li>
+        <li><strong>Open-not-exclusive:</strong> Gateway-only for routing, but the ledger format can take other providers' usage data.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-41" data-anchor-id="avenue-41">
+      <h3>41. <code>gt deploys</code> as the distribution vehicle<span class="band band--mid">MID</span><span class="cost">Cost S (after #28)</span></h3>
+      <ul>
+        <li><strong>Why now:</strong> ship the #28 adapters as a standalone <code>gt deploys</code> command that runs in cmux, iTerm2 and Warp, not only Ghostties. That gives the open format users beyond this app.</li>
+        <li><strong>Evidence:</strong> the multi-provider tools found are menu bar apps with single-digit to low-thirty stars (see Tool inventory).</li>
+        <li><strong>Threat:</strong> a host terminal or Vercel's CLI adds the same view (low-medium).</li>
+        <li><strong>Vercel tie:</strong> Marketplace partner side, through the shared format.</li>
+        <li><strong>Open-not-exclusive:</strong> the whole point.</li>
+      </ul>
+    </div>
+
+    <h3 id="wild">Wild — a repositioning</h3>
+
+    <div class="avenue" id="avenue-35" data-anchor-id="avenue-35">
+      <h3>35. Ghostties as the agent-side client of Vercel Connect<span class="band band--wild">WILD</span><span class="cost">Cost L</span><span class="cost">(inferred, verify)</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/35-connect-client.png" width="640" alt="Full-width Connect panel listing three scoped, expiring grants with revoke buttons and an add-via-Marketplace link">
+      <ul>
+        <li><strong>Why now:</strong> Connect's consent flow is v1 and designed from the dashboard. Ghostties becomes the place where each agent session holds its own credentials: scoped to that session, and expiring automatically when the session closes. Whether Connect tokens compose with Marketplace install is unverified.</li>
+        <li><strong>Evidence:</strong> "Credentials that used to sit in environments long after the work finished now expire on their own" (<a href="https://vercel.com/blog/the-end-of-credential-sprawl-for-agents">Connect</a>). The April breach came through a leaked OAuth token (<a href="https://vercel.com/kb/bulletin/vercel-april-2026-security-incident">bulletin</a>).</li>
+        <li><strong>Threat:</strong> Vercel builds its own local agent (low).</li>
+        <li><strong>Vercel tie:</strong> Marketplace + Connect, the "how agent access should work next" line.</li>
+        <li><strong>Open-not-exclusive:</strong> Vercel-first. Any short-lived credential broker could plug in later.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-36" data-anchor-id="avenue-36">
+      <h3>36. A bot console for one person<span class="band band--wild">WILD</span><span class="cost">Cost L</span></h3>
+      <img src="vnext-avenues-2026-09-29-assets/36-bot-console.png" width="640" alt="Sidebar as a bot console: four named agents with scopes and a revoke action on hover">
+      <ul>
+        <li><strong>Why now:</strong> the sidebar lists every agent acting on your behalf: coding sessions, scheduled agents, browser agents. Each shows its scopes, live grants, last action and a revoke button. BotID lets sites verify bots; this is the other side, where the person manages them.</li>
+        <li><strong>Evidence:</strong> Vercel verifies bots through signed Web Bot Auth identities (<a href="https://vercel.com/changelog/vercels-bot-verification-now-supports-web-bot-auth">changelog</a>). Nobody found offering a console for the individual (inferred).</li>
+        <li><strong>Threat:</strong> an OS vendor or a password manager (low within 12 months).</li>
+        <li><strong>Vercel tie:</strong> BotID team (none of the three open roles).</li>
+        <li><strong>Open-not-exclusive:</strong> Web Bot Auth is an IETF draft, so this is open by construction.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-38" data-anchor-id="avenue-38">
+      <h3>38. v0 as a session provider<span class="band band--wild">WILD</span><span class="cost">Cost M</span></h3>
+      <ul>
+        <li><strong>Why now:</strong> the v0 API is headless and GA. The composer can start a v0 build as a sidebar row alongside Claude and Codex, with the same status, deploy chip and pull-down.</li>
+        <li><strong>Evidence:</strong> v0 is repositioned as "infrastructure for agents" (<a href="https://www.infoq.com/news/2026/08/vercel-v0-api/">InfoQ</a>).</li>
+        <li><strong>Threat:</strong> Cursor and Conductor add v0 (medium).</li>
+        <li><strong>Vercel tie:</strong> Marketplace ("v0 and partner tools" is named in the posting).</li>
+        <li><strong>Open-not-exclusive:</strong> v0 becomes one more provider in the same sidebar row as Claude and Codex.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-39" data-anchor-id="avenue-39">
+      <h3>39. The human's seat in the software factory<span class="band band--wild">WILD</span><span class="cost">Cost M (copy + site)</span></h3>
+      <ul>
+        <li><strong>Why now:</strong> extends #23. Reposition from "multi-agent terminal" to "where you watch, grant and recover everything your agents ship." This requires #24, #29 and #30 to exist first. Copy goes through <code>writing:draft</code>.</li>
+        <li><strong>Evidence:</strong> Vercel's newest posting says "Human time and human attention has become the bottleneck" (<a href="https://job-boards.greenhouse.io/vercel/jobs/6210353004">Software Factory</a>).</li>
+        <li><strong>Threat:</strong> Vercel's own Software Factory product (unknown shape).</li>
+        <li><strong>Vercel tie:</strong> Software Factory. Name it in any cover note.</li>
+        <li><strong>Open-not-exclusive:</strong> the positioning stays provider-neutral.</li>
+      </ul>
+    </div>
+
+    <div class="avenue" id="avenue-42" data-anchor-id="avenue-42">
+      <h3>42. Vercel Sandbox sessions as sidebar rows<span class="band band--wild">WILD</span><span class="cost">Cost M</span></h3>
+      <ul>
+        <li><strong>Why now:</strong> Vercel Sandbox is a public GA API, so this is the verifiable version of the dropped #21. A cloud agent run shows up as a sidebar row with the same status and deploy trail as a local one.</li>
+        <li><strong>Evidence:</strong> Sandbox is a public GA API (per the critique; haven't re-checked its endpoints).</li>
+        <li><strong>Threat:</strong> cmux, Codex and Warp Oz already ship cloud runs (medium). This keeps the local-first sidebar as the single view.</li>
+        <li><strong>Vercel tie:</strong> Software Factory, and Design Engineer if built in Next.js (inferred).</li>
+        <li><strong>Open-not-exclusive:</strong> Sandbox is one more provider behind the row, like #38.</li>
+      </ul>
+    </div>
+
+    <h3 id="cut">Cut after review</h3>
+    <p>Cards collapsed to one line so numbering and anchors survive.</p>
+
+    <div class="avenue avenue--cut" id="avenue-27" data-anchor-id="avenue-27">
+      <p><strong>27. Prod in the menu bar.</strong> Merged into #24: one prod line per project in <code>MenuBar/</code>.</p>
+    </div>
+
+    <div class="avenue avenue--cut" id="avenue-33" data-anchor-id="avenue-33">
+      <p><strong>33. What each agent shipped.</strong> Killed: subsumed by the re-aimed #24 (its image now lives there), and "Frank shipped 4 deploys" is a scoreboard while mission.md says no gamification.</p>
+    </div>
+
+    <div class="avenue avenue--cut" id="avenue-34" data-anchor-id="avenue-34">
+      <p><strong>34. Push, not poll: a relay on Vercel.</strong> Killed: its own citation (Hookdeck) is a webhook-to-localhost relay, and a hosted relay breaks "no accounts."</p>
+    </div>
+
+    <div class="avenue avenue--cut" id="avenue-37" data-anchor-id="avenue-37">
+      <p><strong>37. Phone glance with prod state.</strong> Killed: Superset, cmux and iTerm2 all ship iOS apps. Prod state is one line in #31.</p>
+    </div>
+
+    <h2 id="prior">What the prior 23 look like now</h2>
+    <table>
+      <thead><tr><th>Prior #</th><th>Now</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Keep, as a prerequisite</td><td>Still needed, but hook status is table stakes now (iTerm2 3.7, cmux), not the headline.</td></tr>
+        <tr><td>2</td><td>Keep, unchanged</td><td>Close the loop on beta.25 (release pipeline housekeeping). Outside the vNext bets, and nothing here replaces it.</td></tr>
+        <tr><td>3</td><td>Merge into #26</td><td>Analytics only matter if they feed a funnel with a hypothesis.</td></tr>
+        <tr><td>5</td><td>Keep, pairs with #26</td><td>Ship v0.1.0 stable plus one launch post. It gives "shipped outcomes, impact after launch" for the application, and gives #26 something to measure.</td></tr>
+        <tr><td>7</td><td>Merge into #24 (via #27)</td><td>A menu bar with only session status matches cmux. Prod state is what differentiates it.</td></tr>
+        <tr><td>8</td><td>Keep, folds into #24 and #31</td><td>Ghost glyph owns status. Still blocked on the session join (<code>GHOSTTIES_SESSION_ID</code> → pid), which the prod trail needs anyway.</td></tr>
+        <tr><td>10</td><td>Merge into #32</td><td>Claude agent view has one-line summaries, and Copilot shows cost.</td></tr>
+        <tr><td>11</td><td>Keep, the bet</td><td>It now carries the #28 event format as its spec.</td></tr>
+        <tr><td>12</td><td>Merge into #31</td><td>Superset, cmux and iTerm2 all ship iOS status apps; #37 was cut.</td></tr>
+        <tr><td>13</td><td>Keep sitting; revisit after Ghostty 1.4</td><td>Ghostty 1.4 scripting plus the libghostty-app prediction makes a companion app more viable (<a href="https://mitchellh.com/writing/libghostty-is-coming">Hashimoto</a>).</td></tr>
+        <tr><td>16</td><td>Merge into #30</td><td>One line per row is now standard. The queue is the new part.</td></tr>
+        <tr><td>21</td><td>Drop; #42 is the verifiable variant</td><td>Every vendor unifies only its own cloud. Vercel Sandbox is a public API.</td></tr>
+        <tr><td>22</td><td>Drop</td><td>Team-shaped (anti-goal), and Conductor loadouts already share configs.</td></tr>
+        <tr><td>23</td><td>Merge into #39</td><td>Now has a direction to say.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="backing">Backing detail</h2>
+
+    <details>
+      <summary>Adversarial review (2026-09-30)</summary>
+      <p><strong>Verdict:</strong> the thesis holds only past the merge. The "this week" spike builds the crowded pre-merge half. Re-aim the spike, split portfolio from product, cut four avenues.</p>
+      <ol>
+        <li><strong>HIGH, spike tests the wrong half.</strong> Bet 1 and "This week" now target the prod deploy → merge commit → PR → session join; the branch chip is step 0 in #24.</li>
+        <li><strong>HIGH, #25 may already exist.</strong> #25 now carries a "Verify first" bullet and is scoped to prod and runtime failures. The check itself is not run yet.</li>
+        <li><strong>HIGH, feature, not product.</strong> Thesis names #31 as the daily surface and #24/#25 as its weekly-glance alarm layer; #31 card says so.</li>
+        <li><strong>HIGH, Marketplace tie on #24 overstated.</strong> #24 and the bet table now tie to the Software Factory PM narrative; Marketplace stays on #29.</li>
+        <li><strong>MED, #29 first still loses.</strong> Order stays #24 → #28 → #29, with #29 on a labelled application track and Oct 15 / Oct 22 as timing.</li>
+        <li><strong>MED, Connect and Marketplace install conflated.</strong> #29 and #35 are marked "inferred, verify"; #29 has an open-question bullet.</li>
+        <li><strong>MED, crowded avenues survived.</strong> #27 merged into #24; #33, #34, #37 collapsed under "Cut after review"; #30 marked lower priority; #32 marked "portfolio piece, not product."</li>
+        <li><strong>MED, "stores no token" misleads.</strong> Replaced with "reuses the vercel CLI's existing login (long-lived token)" in #24 and the tool inventory note.</li>
+        <li><strong>MED, missing avenues.</strong> Added #41 (<code>gt deploys</code> distribution), #42 (Sandbox rows), #43 (agent-installable site).</li>
+        <li><strong>LOW, flat claims marked inferred.</strong> "Nobody carries the session past the PR" is now "nobody found," flagged inferred; "pull-only everywhere" is now "pull-only for local surfaces."</li>
+        <li><strong>LOW, fold misses order and clock.</strong> Added an "Order and clock" line under the bet table, moved Decisions above the fold, and restored #2, #5 and #8 to the prior table.</li>
+      </ol>
+    </details>
+
+    <details>
+      <summary>Verification notes (2026-09-30)</summary>
+      <ul>
+        <li><strong>AI Gateway: VERIFIED.</strong> Claude Code is a documented first-class agent (<code>ANTHROPIC_BASE_URL=https://ai-gateway.vercel.sh/claude-code</code>, <code>ANTHROPIC_AUTH_TOKEN</code> = gateway key). A credential variable replaces subscription billing with per-token billing. Non-Claude models through a gateway are unsupported by Anthropic (<a href="https://vercel.com/docs/ai-gateway/coding-agents">Vercel</a>, <a href="https://code.claude.com/docs/en/llm-gateway">Claude Code</a>).</li>
+        <li><strong>Hooks in Ghostties (main @ ba6a5dbc7).</strong> Claude: YES, manual registration (<code>HookInstaller</code> seeds the script; Sean pastes the settings snippet; state goes to <code>~/.ghostties/state/</code>). Codex: YES, auto-registered by <code>CodexHookRegistrar</code> on first launch, approved once in Codex's trust UI (this refutes the earlier "template-only" note). Gemini: NO, zero matches in code. Nothing in the Swift code reads <code>~/.claude/sessions/&lt;pid&gt;.json</code>.</li>
+        <li><strong>Design leadership.</strong> VP Design Manuel Muñoz Solera: last day 2026-09-30, moving to SpaceXAI (medium-high; his post via search snippets, x.com not fetchable). Head of Product Design Hannah Hearth: appears to be at Anthropic (medium; one non-LinkedIn roster, her own site still says Vercel). Current lead: unverified; no successor public, Evil Rabbit the likeliest senior design voice (inferred, low).</li>
+        <li><strong>Vercel records the commit per deploy: VERIFIED on live data.</strong> The 3 most recent <code>ghostties-web</code> deploys each carry <code>githubCommitSha</code>, <code>githubCommitRef</code>, <code>githubCommitMessage</code>, and every commit message ends with a <code>Claude-Session:</code> trailer. Deploy → session needs no local bookkeeping.</li>
+      </ul>
+    </details>
+
+    <details>
+      <summary>Landscape — agent cockpits (tightened)</summary>
+      <table>
+        <thead><tr><th>Name</th><th>Native?</th><th>Status model</th><th>Deploy visibility</th><th>Traction</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://github.com/manaflow-ai/cmux">cmux</a></td><td>Swift/AppKit, Ghostty-based</td><td>Attention ring via OSC / <code>cmux notify</code></td><td>PR status and ports, no deploys</td><td>27.5k stars, iOS TestFlight, cloud VMs</td></tr>
+          <tr><td><a href="https://www.conductor.build/changelog">Conductor</a></td><td>Mac app (framework unverified)</td><td>Per workspace, checks</td><td><strong>Per-PR Vercel/GitHub Deployments tab</strong></td><td>$22M A, ships near-daily</td></tr>
+          <tr><td><a href="https://github.com/superset-sh/superset">Superset</a></td><td>Electron</td><td>Working indicator, checks on rows</td><td>"Open Preview" per branch</td><td>14.7k stars, iPhone app Sep 28</td></tr>
+          <tr><td><a href="https://github.com/generalaction/emdash">Emdash</a></td><td>Electron</td><td>Provider hooks, 20+ CLIs</td><td>CI checks, no deploys</td><td>5.9k stars</td></tr>
+          <tr><td><a href="https://code.claude.com/docs/en/agent-view">Claude agent view</a></td><td>Terminal</td><td>8 states + Haiku summary</td><td>PR label colored by checks</td><td>Research preview</td></tr>
+          <tr><td><a href="https://claude.com/blog/preview-review-and-merge-with-claude-code">Claude Desktop</a></td><td>Desktop (Electron, inferred)</td><td>Notifications, Sessions Hub</td><td>CI auto-fix and auto-merge via <code>gh</code></td><td>Bundled Pro/Max</td></tr>
+          <tr><td><a href="https://openai.com/index/introducing-the-codex-app/">Codex app</a></td><td>macOS app</td><td>Task status filter</td><td>None found</td><td>Bundled ChatGPT</td></tr>
+          <tr><td><a href="https://cursor.com/changelog/3-0">Cursor 3</a></td><td>Electron</td><td>Undocumented</td><td>Cloud agents publish to Vercel</td><td>Cursor-only agents</td></tr>
+          <tr><td><a href="https://github.blog/changelog/2026-05-14-github-copilot-app-is-now-available-in-technical-preview/">Copilot app</a></td><td>Desktop</td><td>Session modes, costs</td><td>PR-centric</td><td>Tech preview</td></tr>
+          <tr><td><a href="https://docs.warp.dev/agents/capabilities/agent-notifications/">Warp + Oz</a></td><td>Rust</td><td>Unified notification center</td><td>None found</td><td>1M active users</td></tr>
+          <tr><td><a href="https://zed.dev/blog/parallel-agents">Zed</a></td><td>Rust/GPUI</td><td>Threads sidebar</td><td>None found</td><td>Shipped Apr 22</td></tr>
+          <tr><td><a href="https://iterm2.com/claude-code-integration.html">iTerm2 3.7</a></td><td>Native</td><td>working / waiting / idle (Claude only)</td><td>None</td><td>Sep 2026, iOS companion</td></tr>
+          <tr><td><a href="https://devin.ai/blog/windsurf-is-now-devin-desktop">Devin Desktop</a></td><td>Electron</td><td>Kanban</td><td>None found</td><td>$20–200/mo</td></tr>
+          <tr><td><a href="https://www.netlify.com/knowledge-base/how-to-run-ai-agent-tasks-remotely-with-netlify-agent-runner/">Netlify Agent Runners</a></td><td>Web</td><td>Poll</td><td>Every run gets a Deploy Preview (agent runs on the host)</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <p>Shut down or deprecated: Terragon (Jan), Vibe Kanban's company (Apr), Crystal (Feb → Nimbalyst).</p>
+    </details>
+
+    <details>
+      <summary>Tool inventory — deploy state outside the dashboard</summary>
+      <table>
+        <thead><tr><th>Tool</th><th>Surface</th><th>Providers</th><th>Source of state</th><th>Signal</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://vercel.com/docs/agent-resources/vercel-mcp">Vercel MCP</a></td><td>Agent (remote OAuth, 14 approved clients)</td><td>Vercel</td><td>Pull</td><td>Beta; can deploy, roll back, read logs</td></tr>
+          <tr><td><a href="https://vercel.com/docs/agent-resources/vercel-plugin">Vercel Plugin</a></td><td>Agent skills, <code>/status</code></td><td>Vercel</td><td>Pull; hooks inject context at session start only</td><td>28 skills</td></tr>
+          <tr><td><a href="https://vercel.com/docs/cli">vercel CLI</a></td><td>Terminal</td><td>Vercel</td><td>Pull; JSON uneven (<a href="https://github.com/vercel/vercel/discussions/6704">#6704</a>)</td><td>Logs rebuilt for agents (Feb)</td></tr>
+          <tr><td><a href="https://github.com/andrewk17/vercel-deployment-menu-bar">vercel-deployment-menu-bar</a></td><td>Menu bar, Swift</td><td>Vercel</td><td>Polls with token</td><td>31 stars</td></tr>
+          <tr><td><a href="https://github.com/snapre/DeployBar">DeployBar</a></td><td>Menu bar, Swift 6</td><td>11 providers</td><td>Polls</td><td>9 stars</td></tr>
+          <tr><td><a href="https://apps.apple.com/us/app/deploy-status-for-vercel/id6755970752?mt=12">Deploy Status for Vercel</a></td><td>App Store menu bar</td><td>Vercel</td><td>Traffic light</td><td>Paid</td></tr>
+          <tr><td><a href="https://www.raycast.com/vercel/vercast">Raycast: Vercel</a></td><td>Launcher</td><td>Vercel</td><td>On demand</td><td>Official-listed</td></tr>
+          <tr><td>TUI</td><td>—</td><td>—</td><td>—</td><td>None found</td></tr>
+        </tbody>
+      </table>
+      <p>Every third-party tool asks for a long-lived personal token, which is a trust cost after the <a href="https://vercel.com/kb/bulletin/vercel-april-2026-security-incident">April breach</a>. #24 reuses the <code>vercel</code> CLI's existing login instead, which is also a long-lived token; Connect-scoped access comes later (#35).</p>
+    </details>
+
+    <details>
+      <summary>Peers — how each host delivers deploy events</summary>
+      <table>
+        <thead><tr><th>Platform</th><th>Official MCP</th><th>Deploy events</th></tr></thead>
+        <tbody>
+          <tr><td>Vercel</td><td><a href="https://vercel.com/docs/agent-resources/vercel-mcp">Remote OAuth, beta</a></td><td>Webhooks <code>deployment.*</code>, HMAC</td></tr>
+          <tr><td>Netlify</td><td><a href="https://github.com/netlify/netlify-mcp">Remote</a></td><td><a href="https://docs.netlify.com/deploy/deploy-notifications/">Webhooks with JWS signature</a>. Agent Runners: poll only</td></tr>
+          <tr><td>Cloudflare</td><td><a href="https://mcpservers.org/servers/cloudflare/mcp-server-cloudflare">Multiple remote</a></td><td><a href="https://developers.cloudflare.com/workers/ci-cd/builds/event-subscriptions">To a Queue</a>, not a webhook</td></tr>
+          <tr><td>Railway</td><td><a href="https://github.com/railwayapp/railway-mcp-server">mcp.railway.com</a></td><td><a href="https://docs.railway.com/observability/webhooks">Webhook on every transition</a></td></tr>
+          <tr><td>Render</td><td><a href="https://render.com/changelog/render-mcp-server-is-now-generally-available">GA</a></td><td><a href="https://render.com/docs/webhooks">Webhooks, Pro+ only</a></td></tr>
+          <tr><td>Fly.io</td><td><a href="https://fly.io/docs/flyctl/mcp/">Experimental</a></td><td><a href="https://community.fly.io/t/deploy-notifications-webhooks/9058">None, poll</a></td></tr>
+        </tbody>
+      </table>
+    </details>
+
+    <details>
+      <summary>Threat table — who closes each opening</summary>
+      <table>
+        <thead><tr><th>Opening</th><th>Closer</th><th>Likelihood (12 mo)</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Session-attributed prod state</td><td>Conductor</td><td><strong>High</strong></td><td>Deployments tab plus PR timeline. Extending past merge is small.</td></tr>
+          <tr><td></td><td>Superset / Vercel plugin</td><td>Medium</td><td>Preview button plus sidebar-badge issue / plugin already has hooks</td></tr>
+          <tr><td>Failure → agent handoff</td><td>Anthropic</td><td><strong>High</strong></td><td>CI auto-fix exists; adding the Vercel connector is small</td></tr>
+          <tr><td>Cross-provider morning glance</td><td>Superset</td><td>Medium-high</td><td>Multi-provider plus iPhone</td></tr>
+          <tr><td>Native multi-provider hook status</td><td>cmux</td><td><strong>High</strong></td><td>Same stack, hooks CLI exists</td></tr>
+          <tr><td>Personal agent roster</td><td>Anthropic</td><td>Medium</td><td>Owns <code>~/.claude/agents</code></td></tr>
+          <tr><td>Calm, non-IDE cockpit</td><td>cmux</td><td>Medium</td><td>Occupies it now, but drifting toward cloud</td></tr>
+          <tr><td>Cross-vendor local + cloud</td><td>GitHub Agent HQ</td><td>Medium</td><td>Multi-vendor charter, PR-centric</td></tr>
+        </tbody>
+      </table>
+    </details>
+
+    <details>
+      <summary>Vercel roles — fit at a glance</summary>
+      <ul>
+        <li><strong>Marketplace</strong> ($172–258K, <a href="https://vercel.com/careers/product-designer-marketplace-6160974004">posting</a>): "production engineering experience is not required"; bonus for approval ↔ autonomy work. Gap: no multi-sided or billing work shown.</li>
+        <li><strong>Growth</strong> ($172–258K, <a href="https://vercel.com/careers/senior-product-designer-growth-6131210004">posting</a>): the #1 must-have is a measured funnel. Gap: no analytics.</li>
+        <li><strong>Design Engineer, AI Gateway</strong> ($208–312K, <a href="https://vercel.com/careers/design-engineer-us-6129441004">posting</a>): requires React/TS in a large codebase. Gap: shipped work is Swift.</li>
+      </ul>
+    </details>
+
+    <details>
+      <summary>Sources</summary>
+      <ul>
+        <li>Landscape: <a href="https://github.com/manaflow-ai/cmux">cmux</a>, <a href="https://www.conductor.build/changelog/0.29.2-vercel-deployments-simplified-thinking-levels">Conductor 0.29.2</a>, <a href="https://docs.superset.sh/workspaces">Superset docs</a>, <a href="https://code.claude.com/docs/en/agent-view">Claude agent view</a>, <a href="https://iterm2.com/claude-code-integration.html">iTerm2</a>, <a href="https://docs.warp.dev/agents/capabilities/agent-notifications/">Warp</a>.</li>
+        <li>Vercel platform: <a href="https://vercel.com/blog/vercel-ship-2026-recap">Ship 2026 recap</a>, <a href="https://vercel.com/docs/agent-resources/vercel-mcp">MCP</a>, <a href="https://vercel.com/docs/agent">Vercel Agent</a>, <a href="https://vercel.com/blog/introducing-eve">eve</a>, <a href="https://vercel.com/blog/the-end-of-credential-sprawl-for-agents">Connect</a>, <a href="https://www.infoq.com/news/2026/08/vercel-v0-api/">v0 API</a>, <a href="https://vercel.com/changelog/ai-gateway-logs">Gateway Logs</a>, <a href="https://vercel.com/docs/ai-gateway/coding-agents">AI Gateway coding agents</a>, <a href="https://vercel.com/changelog/vercels-bot-verification-now-supports-web-bot-auth">Web Bot Auth</a>, <a href="https://www.digitalapplied.com/blog/vercel-ship-2026-agents-half-of-deployments-enterprise-stack">&gt;50% agent deploys</a>.</li>
+        <li>Roles: <a href="https://boards-api.greenhouse.io/v1/boards/vercel/jobs?content=true">Greenhouse API</a>, <a href="https://job-boards.greenhouse.io/vercel/jobs/6210353004">Software Factory PM</a>.</li>
+        <li>Still unverified: Conductor's and Claude Desktop's frameworks, whether Vercel's GitHub commit status counts as a <code>gh</code>-readable check (#25), whether Connect tokens compose with Marketplace install (#29, #35), and Vercel's current design lead.</li>
+      </ul>
+    </details>
+  </body>
+</html>

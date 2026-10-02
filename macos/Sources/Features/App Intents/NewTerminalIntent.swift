@@ -74,7 +74,7 @@ struct NewTerminalIntent: AppIntent {
         // If we were given a working directory then open that directory
         if let url = workingDirectory?.fileURL {
             let dir = url.hasDirectoryPath ? url : url.deletingLastPathComponent()
-            config.workingDirectory = dir.path(percentEncoded: false)
+            config.workingDirectory = dir.pathWithoutTrailingSlash
         }
 
         // Parse environment variables from KEY=VALUE format
@@ -112,7 +112,7 @@ struct NewTerminalIntent: AppIntent {
                 withBaseConfig: config,
                 withParent: parent?.window)
             if let view = newController.surfaceTree.root?.leftmostLeaf() {
-                return .result(value: TerminalEntity(view))
+                return .result(value: await TerminalEntity(view: view))
             }
 
         case .tab:
@@ -121,7 +121,7 @@ struct NewTerminalIntent: AppIntent {
                 from: parent?.window,
                 withBaseConfig: config)
             if let view = newController?.surfaceTree.root?.leftmostLeaf() {
-                return .result(value: TerminalEntity(view))
+                return .result(value: await TerminalEntity(view: view))
             }
 
         case .splitLeft, .splitRight, .splitUp, .splitDown:
@@ -135,7 +135,7 @@ struct NewTerminalIntent: AppIntent {
                 direction: location.splitDirection!,
                 baseConfig: config
             ) {
-                return .result(value: TerminalEntity(view))
+                return .result(value: await TerminalEntity(view: view))
             }
         }
 

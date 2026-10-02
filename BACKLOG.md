@@ -19,6 +19,124 @@ Claude Code v2.1.277+ can read `AGENTS.md`; `~/.claude/settings.json` is now set
 - [ ] Not chased: `example/`, `src/benchmark/`, `src/inspector/`, `src/terminal/c/`, `test/fuzz-libghostty/` each still carry an upstream `AGENTS.md`. They load on demand when Claude reads files in those dirs. Unreviewed — they are upstream's, and none of them mention the fork.
 - [x] Build order corrected in `AGENTS.md`. Xcode leads; the `zig build` commands are kept below a note saying they do not currently work. Evidence: zig is still `0.15.2` (the version `build-xcode-workaround.md` records as broken) and macOS is now `27.0`, so the memory's "re-check when Zig 0.16 ships" condition is unmet. **Not verified by an actual build this session** — if `zig build run` turns out to work again, the note at the top of AGENTS.md § Commands is what to delete.
 
+## 2026-09-30 — vNext round 2 (page in Draft 2, waiting on Sean's review)
+
+Page: `docs/plans/vnext-avenues-2026-09-29.html` (`834ce6564`), 20 avenues #24–#43, 10 mockups, adversarial review folded in. Research: `docs/plans/vnext-research-2026-09-29/`. Concept-lab restored at `ghostties-concept-lab/` with the round-2 concepts (`ef7eaf5`, local only).
+
+- [ ] **Review round** — comment on the page (`html-review` session `sess_5e6d1d44a1be`) and decide bet 1: page recommends the #24 prod-trail spike (deploy → merge → PR → session via the `Claude-Session:` trailer). **Decide or kill.**
+- [ ] **Held for a nod:** push docs commits to `origin/main` · run the #24 read-only spike (script, no app code) · enable Vercel Web Analytics on ghostties.org (free tier; Growth-role gap — site has no analytics).
+- [ ] **#29 consent card on the application track** — page recommends building it BEFORE applying to Vercel Marketplace; Ship SF Oct 15 / Next.js Conf Oct 22 as timing. Decide role: Marketplace (page) vs Design Engineer/AI Gateway (roles doc ranks it 2nd). Verify who leads Vercel design first — both named leaders appear gone as of 2026-09-30.
+- [ ] **Unverified still:** does Vercel's GitHub status count as a CI check (if yes, Claude Desktop auto-fix already covers #25's preview half)? Vercel Sandbox endpoints for #42.
+- [ ] **Image/media previewer (#40)** — Sean 2026-09-30: "if I click on one of these, why does finder need to open?" Hook is `Ghostty.App.swift` `openURL` → OSC 8 → `openUntrustedURL`; default shape = `QLPreviewPanel` (large, resizable), setting `media-preview = panel | popover | pane` only if asked. Concept-lab ranks it 17/20, 2nd overall.
+- [ ] **Concept-lab** `ef7eaf5` not pushed/deployed; #26/#39 site sketches use placeholder copy.
+- [ ] Memory pointer `project_avenues-review-site-2026-09-05.md` never existed on disk — 09-05 site + sketches live only on branch `visual-pass-2026-09-05` (never merged).
+
+## 2026-09-26 — overnight: recover the lost sidebar build (Flow 01) from transcripts
+
+Old Mac wipe lost the uncommitted sidebar build; the design survived (pen.dev canvas, now at
+iCloud `Pencil.Dev/Ghostties-Sidebar-26Sep2026.pen` + `~/Archive/rescue/pen/ghostties-sidebar-canvas-2026-09-26/`;
+spec `docs/design/sidebar-presence/flow-01-sidebar-presence.md`). Session transcripts survived.
+
+- [x] S1 Reconstruct — NO code was ever built (no sidebar edits in any transcript); old-Mac transcripts (Sep 20–23) were not rescued, only Sep 25+. Build is fresh from the spec.
+- [x] S2 Built on `feat/sidebar-presence` (pushed to origin 2026-09-28 @ 840301a9a), plus Sean's revisions: toggle pinned↔rail (Cmd+S), Cmd+Shift+S full close, rail 128pt, tray = one pill, no terminal top bar, glyph trailing, overlay follows terminal theme, 8pt card margin every state, Flow 05 motion
+- [x] S3 Full suite @ c66692ede: 1430/6/1 (Light); all 6 = known load-timeout flakes, pass in isolation. (carried) Re-run full suite on 840301a9a
+- [x] S4 Reviews: first @ 9884fef8e (pass), second @ c66692ede (reject → fixed 1b4c999d9..d32041cfd). (carried) Review 1b4c999d9..840301a9a (motion + rail 128 + glyph trailing) — not yet reviewed
+- [ ] S5 (carried) Screenshots of pinned/rail/closed @ 840301a9a — blocked last round: displays asleep. Motion needs Sean's hands-on pass
+- [ ] (carried) PR `feat/sidebar-presence` → main on the fork, with before/after screenshots, after S3–S5 re-run + Sean's motion feel-check
+- [ ] (carried) Known compromise: Flow 05 glyphs don't travel 1:1 into the rail (sections vs flat list); crossfade + small inward shift instead. Tray pill + Projects tab only crossfade
+- [ ] (carried) Restore 4 missing rig memory notes (dev-builds-share-a-bundle-id, dev-process-name-is-ghostty, demo-capture-rig-gotchas, visual-pass-rig-facts) — indexed in MEMORY.md, absent on disk
+- [ ] (parked) Resolve the one remaining open artifact comment thread (toggle/closed) on https://claude.ai/artifact/7L6zZaXrEw1WjyYEq1rS28 — answered by Cmd+Shift+S
+
+## 2026-09-25 — review files rescued from the old (compromised, since wiped) Mac
+
+Scanned clean before copying. Old versions sit in `.rescued-2026-09-24/`, mirroring their real paths; nothing live was overwritten. Keep what you want, then delete the folder (do not commit it).
+
+- [ ] **Dev app icon set (10 PNGs, `macos/Assets.xcassets/AppIcon-Dev.appiconset/`).** Old versions differ from the committed ones, same sizes. Compare visually; if the old art is the one you want, copy it over the live set.
+
+## 2026-09-24 — upstream sync to Zig 0.16 (next week, before sub renewal)
+
+- [ ] **Upstream sync: merge `upstream/main` (Zig 0.16).** Fork diverged 2026-05-03; upstream +1,828
+  commits, fork +1,044. Trial `git merge-tree`: 34 conflicted files (10 `macos/` incl. AppDelegate,
+  pbxproj, BaseTerminalController; 2 `src/`; rest CI/config). Wins: macOS 27 fixes, crash/leak fixes,
+  Zig 0.16 drops the Xcode 26.3 SDK pin (local + CI). Caveat: upstream has no release since the fork —
+  this pulls unreleased tip. Sean: "next week … you can just run at it and fan out." Full suite gate
+  before any tag. | build | filed
+  Overnight run dispatched 2026-09-24 on `sync/upstream-zig-0.16` (worktree `.claude/worktrees/upstream-sync`):
+  - [x] P0 premise: pristine `upstream/main` builds GhosttyKit with brew Zig 0.16 on Xcode 27 SDK, no shim
+  - [x] P1 conflict map + resolution strategy (planner)
+  - [x] P2 merge + resolve 34 conflicts, commit
+  - [x] P3 Zig 0.16 GhosttyKit build + Xcode Debug build green
+  - [x] P4 full suite (skip UI tests) — identifier-set diff vs main baseline (1341 IDs)
+  - [x] P5 independent review of the merge (reviewer ≠ builder); push branch to origin, NO PR/merge/tag
+  Status 2026-09-25: branch `sync/upstream-zig-0.16` @ `dd8633ec5` LOCAL ONLY (push rejected: commits carry
+  sean@seansmithdesign.com; GitHub email privacy). Suite 1421 IDs, 6 load flakes (Light + Dark identical).
+  Landing plan (each step needs Sean's nod where marked):
+  - [x] L1 Rewrite author/committer email → `1028901+seansmithworks@users.noreply.github.com` on the 11 commits
+    (`^origin/main ^upstream/main`; trees must be byte-identical before/after). ⛔ Sean said "rewrite and push"? — not yet
+  - [x] L2 Push branch to origin (fork only; upstream push URL is disabled). ⛔ Sean's nod
+  - [x] L3 PR on SeanSmithWorks/ghostties (`--repo` explicit), CI green on the Zig 0.16 workflows — PR #188, CI green 2026-09-25
+  - [ ] L4 Sean hands-on pass on `Ghostties Dev.app` from the sync worktree (never /Applications) — tabs/windows,
+    quit prompt, sidebar, composer, browser, Sparkle "Check for Updates" wiring
+  - [ ] L5 Investigate `SessionComposerSnapshotTests/typedUnknownBranchTokenRendersCreateBranchRowFirst` — fails
+    only in branch full runs (2/2), passes isolated
+  - [ ] L6 Merge to main ⛔ Sean; then drop Xcode 26.3 pin in ghostties-release.yml (follow-up PR)
+  - [ ] L7 Next beta: verify Sparkle beta.25 → new build update end to end (Sparkle 2.9.4 → 2.9.6)
+
+## 2026-09-20 — canvas-header pivot + distribution (carried)
+
+- [ ] **CARRIED — header pivot: pick a variant, then build.** D/E/F all built and verified on the
+  pen.dev canvas (`id0Jm` / `Q30Ctk` / `T7PDwM`; F brief `1af199839`). Legibility pass (`861b79df4`,
+  frame `OJ88s`): D/F glass fails over htop, light themes and diffs — favours E. Cost note
+  (`3a3ba3b97`): E is the smallest diff (toggles already anchor to the window top). Next: Sean picks,
+  and decides what overlay mode shows (it already hides both toggles). | craft | carried 2× since 2026-09-20
+- [ ] **CARRIED — pen.dev canvas rescue.** Save silently failing; on-disk `.pen` == the 00:20
+  backup. 20 named frames exported to `~/pen-rescue-2026-09-21/` (PNG + HTML). Remaining frames
+  need Sean's Cmd+A so `get_app_state` reports their ids, then export. Don't quit pen.dev first. | ops | carried
+- [ ] **CARRIED — root cause is settled, do not re-litigate.** The header color "bug" is the token
+  rendering correctly; DESIGN.md §2 decouples chrome/canvas from the user's terminal theme so it can
+  never match. See `reference_header-color-is-decoupled-by-design.md`. Supersedes the color-equality
+  test proposed in the 2026-09-19 item below — that test would encode a promise the system doesn't make. | craft | carried
+- [ ] **CARRIED — Homebrew tap does not exist.** `HOMEBREW_TAP_REPO` unset, so the cask job skips on
+  every release while the build stays green; beta.25 never reached brew users. `verify-release` went
+  red on beta.25 flagging exactly this and publication continued anyway. Decide: create
+  `SeanSmithWorks/homebrew-tap` + set secret then variable, or drop brew from the distribution story
+  and correct the docs that claim it's live. | build | carried
+- [ ] **PARKED — composer search/open shotfun.** Second design wave, deliberately deferred until the
+  header pivot is picked so the two don't compete. Requirement already filed below. | experience | parked
+- [ ] **PARKED — `session-7` worktree holds 17G** behind a live shell; no unique commits. Close that
+  terminal and `git worktree remove` reclaims it. | ops | parked
+- [ ] **PARKED — `visual-pass-2026-09-05` pushed to origin** after a clean leak verification (25 PNGs
+  inspected, all fixture data). Merge or delete when convenient. | ops | parked
+
+## 2026-09-19 — filed items (not yet started)
+
+- [ ] **BUG — renaming a Claude Code thread does not update all sidebars.** Renaming updates
+  some sidebar surfaces but not all of them. Project memory records terminal→sidebar naming as
+  deliberately ONE-WAY (`decision_session-naming-stays-one-way.md`, 2026-08-10, do not re-open)
+  and that an unpinned session's sidebar name IS the live terminal title — so the likely defect
+  is a stale/missed propagation to some surfaces, not the one-way policy itself. First
+  investigation step: inventory which sidebars miss the update; not yet known. | app | new
+- [ ] **FEATURE — composer needs better search/open.** Sean's stated starting shape, quoted:
+  start from the simple form that exists today; pressing arrow-key Up or Down expands the view
+  to show suggestions plus buttons to open; the buttons are liquid-glass icon buttons. Next
+  step: run design variations via the `shotfun` skill under `/design`. Not designed here — just
+  the requirement and the named next step. | experience | new
+- [ ] **BUG (RECURRING) — terminal drop shadow disappears.** The terminal drop shadow
+  intermittently drops or gets removed; Sean reports this has regressed and been "fixed"
+  several times. See also the shadow entry below (`project_canvas-shadow-disappears-during-use.md`
+  — no repro, bounds guard shipped in beta.23 for Sean to test). Repeated regression with no
+  failing test means **no test guards this** — a regression test is part of the fix, not
+  optional. | app | new
+- [ ] **BUG (RECURRING) + DESIGN PIVOT — terminal canvas header color does not match the
+  canvas.** Fixed multiple times before. Sean sampled the exact colors as evidence: dark mode
+  header `#2e2e2e` / canvas `#0a0300`; light mode header `#faf6f2` / canvas `#f7f7f7`. Same
+  recurring-with-no-test-guard note as the shadow item above — a pixel/color-equality test
+  belongs in the fix. Proposed pivot (design direction, NOT a decision): remove the header
+  entirely; put the sidebar icon and the browser icon into liquid-glass buttons floating over
+  the canvas. Known risk, in Sean's words: the position of the sidebar icon was a big problem
+  before, so the pivot must account for that impact. Next step: design variations via the
+  `shotfun` skill under `/design`. | craft | new
+
 ## PR #169 merge + post-merge verification (handoff, 2026-09-13)
 
 - Handoff: owned by Sean's separate merge-coordinator thread. Test plan: `docs/plans/pr169-composer-post-merge-test-plan.html`. Adversarial review evidence: `docs/plans/pr169-test-plan-gate/`.
@@ -31,7 +149,7 @@ Claude Code v2.1.277+ can read `AGENTS.md`; `~/.claude/settings.json` is now set
 - [ ] Until (b) is green, tag no beta from main.
 - [ ] Sidebar "+ New Session" popover never looked at live since Classic removal (`275c37d69`). Covered by the manual checklist item 10 in the plan.
 - [ ] 21 popover snapshot sites retargeted in `275c37d69` have pixel thresholds calibrated at the old 360pt centered card, unverified at the 204pt popover. Expect possible threshold-recalibration failures, not regressions.
-- [ ] (noticed, not pursued) `ComposerResultsTable.resultsWellMaxHeight` in `SessionComposerPalette.swift` still has a `.centered` branch that is unreachable since `275c37d69` (dead-code removal candidate). Decide or kill — strawman: delete in a follow-up.
+- [x] RESOLVED, NOT DEAD (hygiene audit, 2026-09-17): `ComposerResultsTable.resultsWellMaxHeight`'s `.centered` branch in `SessionComposerPalette.swift:451-456` is reachable — `WorkspaceViewContainer.swift:1637` still constructs `SessionComposerRequest(presentation: .centered, ...)` for the overlay composer. No deletion needed.
 - [ ] (noticed, not pursued) Ghost frame test coverage: 26 of 27 `ComposerWitnessFramesTests` have no red proof. The plan labels them a known gap.
 
 ## 2026-09-13 (later) — Composer live-look round (PR #169)
@@ -1703,7 +1821,10 @@ git's own dirty check and stronger evidence than the sampled audit that preceded
   PAT — set `HOMEBREW_TAP_TOKEN` *before* `HOMEBREW_TAP_REPO` or the next release goes red at its
   final job). Manual: `bash scripts/update-cask-version.sh v0.1.0-beta.23`, then copy into the tap's
   `Casks/ghostties.rb`. | build | carried
-- [ ] **Canvas shadow fix shipped UNVERIFIED — needs a repro.** #125 guards the `shadowPath` rebuild
+- [ ] **Canvas shadow fix shipped UNVERIFIED — needs a repro.** (2026-09-19: still recurring —
+  see the filed BUG entry in "2026-09-19 — filed items" above. Regressed and been "fixed" several
+  times with no failing test guarding it; a regression test is part of the fix, not optional.)
+  #125 guards the `shadowPath` rebuild
   against zero-size bounds in both `terminalShadowHost` and `browserShadowHost`. The trigger was
   never reproduced, so the fix may be a no-op. Sean is testing against beta.23; the release notes ask
   for the trigger. If it still vanishes, the next move is a repro, **not** a second blind fix. Full
@@ -2935,3 +3056,15 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 - [ ] PR #165 `fix/composer-return-to-shell` @ `d32fb32b6` — OPEN, MERGEABLE, CI green, but CI is
   `build-for-testing` only and **its tests have never been executed anywhere**. Needs a build in the
   main tree and Sean running the ⌘T flow. | build | carried 1×
+
+
+## Recovered from old Mac — uncommitted as of 2026-09-24 (merged 2026-09-25, review and fold in)
+
+### 2026-09-20 — canvas-header pivot + distribution (carried) (items missing from this section)
+- [ ] **DISPATCHED 2026-09-23 — flow 01, sidebar presence.** Variant E placement resolved into a
+  four-state build spec: `docs/design/sidebar-presence/flow-01-sidebar-presence.md` (+ reference PNGs).
+  244 expanded → 72 rail → 0 closed with a 24pt hot zone → opaque 244 reveal. New: a fourth
+  `SidebarMode` case, the bottom tray, and an opaque (un-blurred) overlay. Four decisions are Sean's,
+  listed at the end of the spec. Canvas `mkJau`. | craft | new
+
+- [ ] Tab title sometimes misses the Claude thread name set via /rename (seen 2026-09-25, "Jev adoption" thread). Statusline now reads `session_name` reliably; tab-title path should use the same source.

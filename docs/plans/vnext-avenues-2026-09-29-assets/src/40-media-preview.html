@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset="utf-8"><title>40</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:640px;height:420px;overflow:hidden}
+body{background:#F0E9E6;color:#1a1a1a;font:11px/1.25 -apple-system,"SF Pro Text",system-ui,sans-serif;position:relative;-webkit-font-smoothing:antialiased}
+.side{position:absolute;left:0;top:0;width:260px;height:420px;padding:0 8px}
+.tl{height:38px;display:flex;align-items:center;gap:8px;padding-left:8px}
+.tl i{width:12px;height:12px;border-radius:50%;display:block}
+.tl .new{margin-left:auto;color:#636363;font-size:11px;padding-right:4px}
+.sec{display:flex;align-items:center;gap:8px;height:24px;padding:0 8px;font-size:10px;font-weight:600;letter-spacing:.06em;color:#636363}
+.sec b{font-weight:600}
+.row{display:flex;align-items:flex-start;gap:8px;padding:4px 8px;border-radius:6px;min-height:36px;position:relative}
+.row .g{flex:none;width:16px;margin-top:2px}
+.row .m{flex:1;min-width:0}
+.row .n{font-weight:500;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .p{color:#636363;font-size:10px;white-space:nowrap}
+.row .t{color:#636363;font-size:10px;white-space:nowrap;margin-top:1px}
+.chip{display:inline-flex;align-items:center;gap:4px;height:16px;padding:0 6px;border-radius:8px;font-size:10px;font-weight:500;white-space:nowrap;border:1px solid #e5e5e3;background:#FAF7F3;color:#636363;margin-top:1px}
+.chip.ok{color:#2d7d46;border-color:rgba(45,125,70,.3);background:rgba(45,125,70,.07)}
+.chip.bad{color:#dc3545;border-color:rgba(220,53,69,.3);background:rgba(220,53,69,.07)}
+.sel{background:rgba(0,0,0,.05)}
+.card{position:absolute;left:268px;top:8px;right:8px;bottom:8px;background:#FAF7F3;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.15);padding:14px 14px;font:10px/1.5 ui-monospace,"SF Mono",Menlo,monospace;color:#1a1a1a;overflow:hidden}
+.card .d{color:#9a9a9a}.card .l{margin-bottom:6px}
+.card .dot{color:#8a5a8f}
+.card .rd{color:#dc3545}
+.card .ok{color:#2d7d46}
+
+.lk{color:#3b6fb6;text-decoration:underline dotted;text-underline-offset:2px}
+.ind{padding-left:14px}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.08)}
+.pop{position:absolute;left:60px;top:40px;width:520px;height:340px;background:#FFFFFF;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.22),0 2px 6px rgba(0,0,0,.12);overflow:hidden;font:11px/1.25 -apple-system,"SF Pro Text",system-ui,sans-serif}
+.pop .bar{height:28px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid #e5e5e3;background:#F7F4F1;font-size:11px;font-weight:500;position:relative}
+.pop .bar .ct{margin-left:auto;color:#636363;font-weight:400;font-size:10px}
+.pop .bar .op{margin-left:12px;color:#3b6fb6;font-weight:400;font-size:10px}
+.pop .th{position:absolute;left:0;right:0;top:28px;bottom:0;background:#ECE8E4;overflow:hidden}
+.pop .th .s{position:absolute;left:14px;top:14px;bottom:14px;width:110px;background:#DDD8D3;border-radius:6px}
+.pop .th .s i{display:block;height:8px;margin:10px 9px 0;background:#C8C2BC;border-radius:3px}
+.pop .th .c{position:absolute;left:132px;top:14px;right:14px;bottom:14px;background:#F7F4F1;border-radius:6px}
+.pop .th .c i{display:block;height:6px;margin:14px 14px 0;background:#D6D0CA;border-radius:3px}
+.cur{position:absolute;left:400px;top:68px;display:none}
+</style></head><body>
+<div class="side"><div class="tl"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="new">+ New Session</span></div>
+<div class="sec"><span>&#8964;</span><span>ACTIVE <b>5</b></span></div>
+<div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#4caf62"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">Claude Code 4</div><div class="p">webapp &middot; 1m</div></div></div><div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#4caf62"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">Claude Code 3</div><div class="p">webapp &middot; 4m</div></div></div><div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#5b7fe0"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">Claude Code 2</div><div class="p">webapp &middot; 9m</div></div></div><div class="row "><svg class="g" width="16" height="16" viewBox="0 0 16 16"><path d="M2 14V7a6 6 0 0112 0v7l-2-1.5L10 14l-2-1.5L6 14l-2-1.5z" fill="#5b7fe0"/><rect x="5" y="6" width="2" height="2.5" fill="#fff"/><rect x="9" y="6" width="2" height="2.5" fill="#fff"/></svg><div class="m"><div class="n">Claude Code 1</div><div class="p">docs &middot; 14m</div></div></div></div><div class="card"><div class="l"><span class="dot">&#9679;</span> Strawmen for #24 deploy chip &middot; #25 red build</div>
+<div class="l ind"><span class="d">&rsaquo;</span> <span class="lk">[image] 24-deploy-chip.png (74.4KB)</span></div>
+<div class="l ind"><span class="d">&rsaquo;</span> <span class="lk">[image] 25-red-build.png (81.2KB)</span></div>
+<div class="l ind"><span class="d">&rsaquo;</span> <span class="lk">[image] 29-consent-card.png (68.9KB)</span></div>
+<div class="l ind"><span class="d">&rsaquo;</span> <span class="lk">[image] 36-bot-console.png (77.0KB)</span></div></div>
+<div class="dim"></div>
+<div class="pop"><div class="bar"><span>25-red-build.png &mdash; 1280 &times; 840</span><span class="ct">2 of 4</span><span class="op">Open with Preview</span></div>
+<div class="th"><div class="s"><i></i><i></i><i></i><i></i><i></i></div><div class="c"><i style="width:70%"></i><i style="width:50%"></i><i style="width:62%"></i><i style="width:40%"></i><i style="width:56%"></i></div></div></div>
+<svg class="cur" width="14" height="18" viewBox="0 0 14 18"><path d="M1 1v13l3-3 2.5 5.5 2-1L6 10h5z" fill="#1a1a1a" stroke="#fff" stroke-width="1"/></svg></body></html>

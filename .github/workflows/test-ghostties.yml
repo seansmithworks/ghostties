@@ -84,12 +84,12 @@ jobs:
       - name: Xcode version
         run: xcodebuild -version
 
-      # Install Zig 0.15.2 (matches build.zig.zon minimum_zig_version).
+      # Install Zig 0.16.0 (matches build.zig.zon minimum_zig_version).
       # Required to build GhosttyKit.xcframework from source — the
       # xcframework is gitignored, not vendored.
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.15.2
+          version: 0.16.0
 
       # Cache Zig package downloads + build artifacts. Keyed on the lock
       # file so deps changes invalidate the cache; falls back to any prior
