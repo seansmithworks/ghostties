@@ -280,6 +280,49 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         XCTAssertEqual((CGFloat(minX) / scale + CGFloat(maxX + 1) / scale) / 2, width / 2, accuracy: 0.5)
     }
 
+    // MARK: - Rail tray pill hugs its icons and is centered
+
+    func testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail() throws {
+        let railWidth: CGFloat = 98
+        let size = CGSize(width: railWidth, height: 260)
+
+        // Pill width: the tray's own ideal width is the pill (icons + 2 x padding).
+        let alone = NSHostingView(rootView: RailTray().environmentObject(SessionCoordinator()))
+        let expected = SidebarDialTuning.trayButtonSize() + 2 * SidebarDialTuning.trayInnerPadding()
+        XCTAssertEqual(alone.fittingSize.width, expected, accuracy: 0.5, "pill width = icon + 2 x padding")
+
+        // Centering: render in a rail-width column with the plain (non-glass) pill,
+        // since cacheDisplay can't capture glass.
+        let hosting = NSHostingView(rootView: RailTray(forceOpaque: true)
+            .environmentObject(SessionCoordinator())
+            .frame(width: size.width, height: size.height, alignment: .bottom)
+            .background(Color.white))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        hosting.layoutSubtreeIfNeeded()
+        let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        let scale = CGFloat(rep.pixelsWide) / railWidth
+        let y = Int((size.height - 12 - 40) * scale)
+        var minX = Int.max, maxX = -1
+        for x in 0..<rep.pixelsWide {
+            guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+            let darkness: CGFloat = 3 - c.redComponent - c.greenComponent - c.blueComponent
+            if darkness > 0.06 { minX = min(minX, x); maxX = max(maxX, x) }
+        }
+        XCTAssertGreaterThanOrEqual(maxX, 0, "tray pill not found")
+        let pillMinX: CGFloat = CGFloat(minX) / scale
+        let pillMaxX: CGFloat = CGFloat(maxX + 1) / scale
+        let pillWidth: CGFloat = pillMaxX - pillMinX
+        let pillCenter: CGFloat = (pillMinX + pillMaxX) / 2
+        XCTAssertEqual(pillWidth, expected, accuracy: 1.0, "rendered pill width")
+        XCTAssertEqual(pillCenter, railWidth / 2, accuracy: 0.5, "pill center x = rail center x")
+    }
+
     // MARK: - Rail VoiceOver label
 
     func testRailRowLabelNamesTheSessionAndItsStatus() {

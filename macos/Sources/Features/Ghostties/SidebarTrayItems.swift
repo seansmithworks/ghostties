@@ -131,6 +131,10 @@ struct SidebarTrayPill<Content: View>: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     let axis: Axis
+    /// Skips the glass effect so the pill renders as plain fill — the same
+    /// path Reduce Transparency takes. Test seam: `cacheDisplay` can't capture
+    /// glass, and the system setting can't be set from a test.
+    var forceOpaque = false
     @ViewBuilder let content: () -> Content
 
     /// Round 6 (Flow 07, layer `OEpEM`/"Bottom Group"): the tray is a
@@ -144,7 +148,7 @@ struct SidebarTrayPill<Content: View>: View {
     }
 
     var body: some View {
-        if #available(macOS 26.0, *), !reduceTransparency {
+        if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
             GlassEffectContainer {
                 pillStack
                     .padding(SidebarDialTuning.trayInnerPadding())
@@ -179,14 +183,9 @@ struct SidebarTrayPill<Content: View>: View {
             HStack(spacing: TrayGlassStyle.itemGap, content: content)
                 .frame(maxWidth: .infinity)
         case .vertical:
-            // `maxWidth: .infinity` lets the rail's tray pill fill its
-            // container (minus `WorkspaceLayout.trayHorizontalMargin`,
-            // applied by the call site) instead of hugging its buttons'
-            // intrinsic width — the same rule the horizontal bar already
-            // applies. Buttons themselves stay fixed-size and center in the
-            // wider pill via the VStack's default `.center` alignment.
+            // The rail's pill hugs its buttons (button width + 2 x
+            // `trayInnerPadding`); the call site centers it in the rail.
             VStack(spacing: TrayGlassStyle.itemGap, content: content)
-                .frame(maxWidth: .infinity)
         }
     }
 
@@ -231,6 +230,7 @@ struct TrayIconButton: View {
         } label: {
             icon
                 .frame(
+                    minWidth: stretch ? nil : SidebarDialTuning.trayButtonSize(),
                     maxWidth: stretch ? .infinity : SidebarDialTuning.trayButtonSize(),
                     minHeight: SidebarDialTuning.trayButtonSize(),
                     maxHeight: SidebarDialTuning.trayButtonSize()

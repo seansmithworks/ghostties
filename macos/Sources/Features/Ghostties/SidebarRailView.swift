@@ -217,9 +217,11 @@ private struct RailSectionSummaryRow: View {
 /// one for.
 struct RailTray: View {
     @EnvironmentObject private var coordinator: SessionCoordinator
+    /// See `SidebarTrayPill.forceOpaque`.
+    var forceOpaque = false
 
     var body: some View {
-        SidebarTrayPill(axis: .vertical) {
+        SidebarTrayPill(axis: .vertical, forceOpaque: forceOpaque) {
             ForEach(WorkspaceViewContainer.sidebarTrayItems(
                 container: coordinator.containerView as? WorkspaceViewContainer,
                 toggleLabel: "Expand Sidebar"
@@ -227,9 +229,9 @@ struct RailTray: View {
                 TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, tapEffect: item.tapEffect, action: item.action)
             }
         }
-        // Same margin rule as the expanded sidebar's `SidebarBottomTray`:
-        // tray width = container (here, the rail) width − 2×margin, rather
-        // than hugging the buttons' intrinsic width.
-        .padding(.horizontal, SidebarDialTuning.trayMargin())
+        // Hugs the icons (button + 2 x `trayInnerPadding`) and sits centered
+        // in the rail column (Sean, 2026-10-05); the expanded tray keeps its
+        // full-width bar.
+        .frame(maxWidth: .infinity)
     }
 }
