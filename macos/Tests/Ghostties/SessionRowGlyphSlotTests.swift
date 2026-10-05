@@ -147,8 +147,12 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         for state in [SessionIndicatorState.needsAttention, .idle, .error] {
             let e = try XCTUnwrap(inkBounds(try XCTUnwrap(renderExpanded(state, appearance: .aqua))))
             let r = try XCTUnwrap(inkBounds(try XCTUnwrap(renderRail(state, appearance: .aqua)), fromX: 0))
-            // Expanded: the glyph stays in the trailing quarter of the row.
-            XCTAssertGreaterThan(e.minX, width * 0.75, "expanded glyph stays trailing, \(state)")
+            // Expanded: the ink stays inside the glyph's box, which ends at the list
+            // margin + row trailing padding (measured: ink sits up to ~5pt inside it).
+            let boxMaxX = width - SidebarDialTuning.contentPaddingTrailing() - SidebarDialTuning.rowTrailingPadding()
+            let boxMinX = boxMaxX - SidebarDialTuning.rowGhostSize()
+            XCTAssertLessThanOrEqual(e.maxX, boxMaxX + 0.6, "expanded glyph ink right edge, \(state)")
+            XCTAssertGreaterThanOrEqual(e.minX, boxMinX - 0.6, "expanded glyph ink left edge, \(state)")
             // Rail: ink center x == rail center x.
             XCTAssertEqual((r.minX + r.maxX) / 2, width / 2, accuracy: 0.5, "rail glyph center x, \(state)")
             XCTAssertEqual(e.minY, r.minY, accuracy: 0.6, "glyph top, \(state)")
@@ -295,7 +299,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         // since cacheDisplay can't capture glass.
         let hosting = NSHostingView(rootView: RailTray(forceOpaque: true)
             .environmentObject(SessionCoordinator())
-            .frame(width: size.width, height: size.height, alignment: .bottom)
+            .frame(width: size.width, height: size.height, alignment: .bottomLeading)
             .background(Color.white))
         hosting.frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
