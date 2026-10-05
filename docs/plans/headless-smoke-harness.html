@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Plan: background smoke harness for Ghostties</title>
+<style>
+body{font:15px/1.5 -apple-system,system-ui,sans-serif;max-width:860px;margin:32px auto;padding:0 20px;color:#1d1d1f}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 8px;border-top:1px solid #ddd;padding-top:16px}
+.sub{color:#666;margin:0 0 16px}code{font:13px ui-monospace,Menlo,monospace;background:#f2f2f4;padding:1px 4px;border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f6f6f8}
+.call{background:#fff6e0;border-left:4px solid #e0a800;padding:8px 12px;margin:12px 0}
+.ok{background:#eef8ee;border-left:4px solid #2a9d3a;padding:8px 12px;margin:12px 0}
+details{margin:8px 0}summary{cursor:pointer;font-weight:600}
+@media (prefers-color-scheme:dark){body{background:#1c1c1e;color:#eee}code{background:#2c2c2e}th{background:#2c2c2e}td,th{border-color:#444}.call{background:#3a3020}.ok{background:#1f3322}}
+</style></head><body>
+
+<h1>Background smoke harness</h1>
+<p class="sub">Plan only. Seams cited against <code>feat/composer-one</code> @ f5560a264 (landing on main for beta.26).</p>
+
+<div class="ok"><b>Recommendation:</b> one script, <code>scripts/smoke.sh</code>, runs two layers against a separately named <b>Smoke</b> build. No keystrokes, no clicks, no XCUITest, no Accessibility permission. The app opens itself in the requested state, reports its own layout to a JSON file, and the script takes one window capture per state.</div>
+
+<ul>
+<li><b>Layer 1, offscreen view tests:</b> pixel and geometry checks inside the existing GhosttyTests, styled like <code>SessionRowGlyphSlotTests</code>. These run with no app window and no prompt, so they are safe during a call. Exact centring, glyph slots and tray counts belong here.</li>
+<li><b>Layer 2, launched fixture app:</b> one launch per state from env vars. It checks things only a real window shows: real blur, overlay centring inside an actual window, and whether the popover is still on screen.</li>
+<li><b>Isolation is enforced, not hoped for.</b> The Smoke build uses its own bundle id, <code>com.seansmithdesign.ghostties.smoke</code>, a temp state dir, a temp home folder and the in-memory fixture store. The app quits on launch if smoke mode runs under any other bundle id.</li>
+<li><b>Assertions:</b> the app reports its layout as JSON, and the script asserts on geometry and state from that file. PNGs are evidence for review, not golden baselines. Only JSON baselines get committed, because they contain invented fixture names only.</li>
+<li><b>Appearance is pinned by a committed Ghostty config per run</b> (the sidebar follows the terminal theme, not the system setting). Every run does both light and dark.</li>
+<li><b>Focus:</b> the app runs as a background accessory, with no Dock icon and no activation. <b>It still shows a window</b>, because a hidden window never draws (details below).</li>
+<li><b>First slice:</b> about 9 files and about 900 lines of code. It covers 3 of tonight's 4 smoke items fully and 1 partly. Click feel stays with you.</li>
+</ul>
+
+<div class="call"><b>The one fork, "Layer 2 windows during a call":</b> each state flashes a non-focused window on screen for about 8 s, and a screen share would show it. <b>Default:</b> the window goes on the secondary display if one is attached, otherwise the bottom-right corner. <code>--quiet</code> runs Layer 1 only. The alternative is that Layer 2 refuses to run until you pass <code>--allow-windows</code>. Choose that if you screen-share a lot.</div>
+
+<h2>1 · Which check lives where</h2>
+<table>
+<tr><th>Tonight's item</th><th>Layer 1 (offscreen)</th><th>Layer 2 (fixture app)</th><th>Still needs you</th></tr>
+<tr><td>Rail icons centred; thin tray with 4 icons</td><td>New <code>SidebarRailCenteringTests</code>: each glyph's ink centre sits within 0.5pt of the rail's centre line, in light and dark. Tray: item count is 4 and tray height stays under the cap, extending <code>SidebarPresenceTests</code> (trayItems tests at :77–:97).</td><td>States <code>rail</code> and <code>closed</code>: the probe gives icon frames against the rail frame and the tray frame plus 4 children.</td><td>Hover affordance on rail icons</td></tr>
+<tr><td>Projects-tab glyphs</td><td>Pixel probe of the project row's glyph slot, the same pattern as SessionRowGlyphSlotTests.</td><td>State <code>projects</code>: glyph frames line up on one trailing edge.</td><td>None</td></tr>
+<tr><td>Every + opens the centred composer; row + pre-fills</td><td>None</td><td>States <code>composer-new</code> and <code>composer-row:switchboard</code>: card midX within 1pt of the window content's midX, and <code>selectedProjectId</code> equals switchboard. The script also prints every <code>presentComposerOverlay</code> call site into the report so a reviewer can confirm each + routes there.</td><td><b>Clicking each +</b> (the wiring from click to seam)</td></tr>
+<tr><td>Templates edit/delete keep the popover open</td><td>Existing <code>ProjectTemplatesSectionTests</code></td><td>States <code>templates</code>, <code>templates-edit</code> and <code>templates-delete</code> force the edit sheet or delete alert from inside the popover. The probe checks the popover window is still there 2 s later. This catches dismissal caused by state. It does not catch dismissal caused by a click.</td><td><b>Click-driven dismissal</b></td></tr>
+</table>
+
+<h2>2 · Launch-state hooks (DEBUG only, all under <code>GHOSTTIES_CAPTURE_FIXTURE=1</code>)</h2>
+<p>The plan extends <code>CaptureFixture</code> rather than adding a second system. It already gates on an env var because Ghostty's argv parser rejects unknown <code>-key</code> launch arguments (CaptureFixture.swift:28–39).</p>
+<table>
+<tr><th>Env var</th><th>Values</th><th>Seam</th></tr>
+<tr><td><code>GHOSTTIES_CAPTURE_SIDEBAR_MODE</code></td><td>pinned · collapsed (rail) · closed</td><td><b>Exists</b>: CaptureFixture.swift:277, applied at :190</td></tr>
+<tr><td><code>GHOSTTIES_CAPTURE_SIDEBAR_TAB</code></td><td>projects · sessions</td><td>Write <code>ghostties.sidebarTab</code> into UserDefaults inside <code>makeStore()</code> (CaptureFixture.swift:190), before the first read by <code>@AppStorage</code> at WorkspaceSidebarView.swift:40. This is safe because the defaults domain belongs to the Smoke build.</td></tr>
+<tr><td><code>GHOSTTIES_CAPTURE_COMPOSER</code> + <code>…_COMPOSER_TEXT</code></td><td>new · project:&lt;name&gt; · prefill text</td><td>Call <code>presentComposerOverlay</code> (WorkspaceViewContainer.swift:2023) from the container's <code>viewDidMoveToWindow</code> (:574). It can't go in the sidebar's onAppear, because the sidebar doesn't exist in closed mode. Set the text through <code>SessionComposerStore.searchText</code> (SessionComposerStore.swift:142) after <code>open</code> (:555).</td></tr>
+<tr><td><code>GHOSTTIES_CAPTURE_SETTINGS</code></td><td>&lt;project&gt;:templates · :templates-edit · :templates-delete</td><td>Set <code>settingsProject</code> (ProjectDisclosureRow.swift:52, popover at :396–:407) on appear. Scroll to <code>ProjectTemplatesSection</code> (ProjectSettingsView.swift:90). Set <code>templateToEdit</code> or <code>templateToDelete</code> (ProjectTemplatesSection.swift:94/:96, which drive the sheet at :135 and the alert at :138).</td></tr>
+<tr><td><code>GHOSTTIES_CAPTURE_POPOVER</code></td><td>running · needs-bash · needs-edit · done</td><td><b>Exists</b>: the hover card via <code>openForCaptureFixtureIfNeeded</code> (SessionPopoverController.swift:403)</td></tr>
+<tr><td><code>GHOSTTIES_SMOKE_REPORT_DIR</code></td><td>path</td><td>Turns on smoke mode. New <code>SmokeProbe.swift</code> writes <code>probe.json</code> plus a <code>ready</code> file once every window frame has held still for 1 s. That replaces fixed sleeps; the closed state needed about 10 s to settle.</td></tr>
+</table>
+
+<h2>3 · Isolation and quiet launch</h2>
+<ul>
+<li><b>Bundle id:</b> build Debug with <code>GHOSTTIES_DEV_BUNDLE_SUFFIX=.smoke</code>, an existing build setting (project.pbxproj:1113/:1145), into <code>macos/build-smoke</code>. UserDefaults, the state folder name and LaunchServices identity are then all separate from Dev (<code>.dev</code>), Release and upstream <code>com.mitchellh.ghostty</code>. <code>open</code> can no longer focus Sean's Dev instance by mistake.</li>
+<li><b>Fail closed:</b> in <code>applicationWillFinishLaunching</code> (AppDelegate.swift:221), smoke mode with a bundle id that isn't <code>.smoke</code>, or without fixture mode, calls <code>exit(78)</code>. This closes the "unknown bundle id falls through" class rather than checking for one case of it.</li>
+<li><b>Data:</b> the fixture store is in-memory and never persists, so <code>workspace.json</code> is never touched. The script also sets <code>GHOSTTIES_STATE_DIR</code> (WorkspacePersistence.swift:51) to a temp dir. It sets <code>CFFIXED_USER_HOME</code> to a temp home, because <code>~/.ghostties/hooks</code>, <code>~/.codex/hooks.json</code> (written at SessionCoordinator.swift:230) and <code>~/.claude/sessions</code> are not scoped by bundle id.</li>
+<li><b>Env hygiene:</b> launch with <code>env -u GHOSTTIES_SESSION_ID -u GHOSTTIES_LAUNCHER</code>, or the app takes the session-join path and comes up as a bare terminal.</li>
+<li><b>No focus steal:</b> launch with <code>open -g -n --env …</code>. In smoke mode, call <code>setActivationPolicy(.accessory)</code> and skip the forced activate at AppDelegate.swift:474–478. A direct binary launch counts as a CLI launch and runs that forced activate, so that branch has to be gated.</li>
+<li><b>Why a window must show:</b> a covered instance never drew, and window captures came back blank (memory: the Dev capture occlusion trap). Off-screen and other-Space windows are probably occluded the same way (inferred). The Phase 0 spike checks this. If an off-screen window does draw, the fork above goes away.</li>
+</ul>
+
+<h2>4 · Assertions and baselines</h2>
+<ul>
+<li><b>The probe is in-process, not external AX.</b> The app walks its own accessibility tree (<code>accessibilityChildren</code>, frames, identifiers). That needs no Accessibility grant for your terminal, so there is no grant that would also allow synthetic input. It records sidebar mode, tab, composer card frame, popover presence and identified element frames.</li>
+<li><b>The script asserts per state</b> with <code>jq</code> rules in <code>scripts/smoke/states.tsv</code>, for example <code>abs(card.midX - content.midX) &lt;= 1</code>.</li>
+<li><b>No golden PNGs.</b> Your design changes weekly and font rendering moves between macOS versions, so image diffs would turn into noise to re-approve. Pixel truth lives in Layer 1 probes that measure one property each.</li>
+<li><b>Committed baselines</b> are <code>macos/Smoke/baselines/&lt;state&gt;.json</code>: structure only, with invented fixture names, so they are safe in a public repo. Screenshots go to <code>macos/build/smoke-reports/&lt;timestamp&gt;/</code>, which is gitignored.</li>
+<li><b>Appearance:</b> <code>GHOSTTY_CONFIG_PATH</code> (AppDelegate.swift:121) points at <code>macos/Smoke/smoke-light.ghostty</code> or <code>smoke-dark.ghostty</code>, which fix theme and font. <code>GHOSTTIES_SMOKE_APPEARANCE</code> sets <code>NSApp.appearance</code> for the AppKit chrome. Layer 1 already pins appearance per window.</li>
+</ul>
+
+<h2>5 · The runner</h2>
+<p><code>scripts/smoke.sh [--quiet] [--no-build] &lt;state…|all&gt;</code></p>
+<ul>
+<li><b>Build:</b> if the build is stale, run xcodebuild Debug with <code>.smoke</code>, arm64 only, into <code>macos/build-smoke</code>. In a worktree, first symlink the three gitignored inputs (<code>GhosttyKit.xcframework</code>, <code>zig-out</code>, <code>vendor/cef</code>) from the main checkout.</li>
+<li><b>Preflight:</b> the built Info.plist id must be <code>.smoke</code>, the display must be awake, and no other <code>.smoke</code> process can be running. Any failure aborts the run.</li>
+<li><b>Layer 1:</b> <code>xcodebuild test -only-testing:GhosttyTests/&lt;smoke suites&gt;</code> with the same suffix. The script stores the <code>xcresulttool</code> summary counts, not log lines.</li>
+<li><b>Layer 2, per state and per appearance:</b> launch; wait for <code>ready</code> (20 s timeout); find the window id by PID with <code>scripts/smoke/winid.swift</code>; run <code>screencapture -x -o -l</code>; run the assertions; send <code>kill -TERM</code> to that PID only. The PID is resolved from the <code>.smoke</code> bundle id, so it can only be the script's own instance.</li>
+<li><b>Output:</b> a <code>summary.json</code> and an <code>index.html</code> contact sheet per run. The script exits non-zero on any failure.</li>
+<li><b>Brief line for orchestrators:</b> "Run <code>scripts/smoke.sh all</code>. PASS only if summary.json is all-pass. Send the contact sheet via SendUserFile. Never send input to any Ghostties process. Write anything that needs a click into the human checklist."</li>
+</ul>
+
+<h2>6 · Phasing</h2>
+<ol>
+<li><b>Phase 0, 30-minute spike, no commit:</b> verify <code>open --env</code> reaches the app; <code>CFFIXED_USER_HOME</code> redirects <code>~</code> and defaults; the in-process accessibility walk returns SwiftUI frames; whether an off-screen or covered window still draws. Each check has a fallback: a launcher script; fixture-only with no home redirect; <code>.anchorPreference</code> frame reporting; a visible corner window.</li>
+<li><b>Phase 1, covers tonight's list:</b> the Smoke build plus fail-closed guard; the TAB, COMPOSER and SETTINGS hooks; SmokeProbe; smoke.sh; 8 states (<code>rail closed projects composer-new composer-row templates templates-edit templates-delete</code>), each in light and dark; and the 2 new Layer 1 suites.</li>
+<li><b>Phase 2, later:</b> wire the existing marketing and visual-pass captures onto the same hooks and retire their XCUITest launch path, which is what brings the UI-automation prompt.</li>
+</ol>
+
+<details><summary>What this can't catch</summary>
+<ul>
+<li><b>Interaction feel:</b> hover delay, motion curves (Flow 05), drag, scroll inertia, click hit areas.</li>
+<li><b>Click-to-seam wiring:</b> a + that is drawn correctly but wired to the wrong action still passes Layer 2.</li>
+<li><b>Key-window styling:</b> runs are never focused, so the caret, focus rings and active-window materials go unseen.</li>
+<li><b>Live data:</b> real Claude session states, real git repos, worktree enumeration and multi-window ownership.</li>
+<li><b>Reduce Motion and Increase Contrast</b> are untouched unless they get added as states later.</li>
+</ul></details>
+
+<details><summary>Cost: about 9 files, about 900 lines of code</summary>
+<table>
+<tr><th>File</th><th>Rough size</th></tr>
+<tr><td>CaptureFixture.swift (3 new env vars)</td><td>+90</td></tr>
+<tr><td>SmokeProbe.swift (new)</td><td>~130</td></tr>
+<tr><td>AppDelegate / WorkspaceViewContainer / ProjectDisclosureRow / ProjectTemplatesSection hooks</td><td>+60 total</td></tr>
+<tr><td>scripts/smoke.sh + smoke/winid.swift + smoke/states.tsv</td><td>~300</td></tr>
+<tr><td>macos/Smoke/ (2 configs, report template, baselines)</td><td>~80</td></tr>
+<tr><td>SidebarRailCenteringTests + ProjectRowGlyphTests</td><td>~250</td></tr>
+</table>
+<p>Run time is about 10 s per state per appearance, so about 3 minutes for the Phase 1 set, plus one Debug build.</p></details>
+
+<details><summary>Risks seen in the code, not fixed here</summary>
+<ul>
+<li><b>Existing "offscreen" Layer 1 tests flash a window.</b> They call <code>orderFrontRegardless()</code> on a borderless window (SessionRowGlyphSlotTests.swift:73), so they briefly put pixels on screen.</li>
+<li><b>Unit tests share Sean's Dev defaults.</b> They run in the <code>.dev</code> test host today, so <code>UserDefaults.standard</code> writes land in Sean's Dev defaults domain. Running them under <code>.smoke</code> isolates them as a side effect.</li>
+</ul></details>
+
+</body></html>
