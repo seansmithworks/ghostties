@@ -8,7 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [0.1.0-beta.26] — 2026-10-05
 
-The sidebar gets a third state, a narrow rail, and session status is back at a glance: spinner, `?`, check and cross glyphs return on the right of every row, in the full list and the rail. There is now one composer, a centered single line. Ghostties also moves onto the latest upstream Ghostty.
+The sidebar gets a third state, a narrow rail, and session status is back at a glance: spinner, `?`, check and cross glyphs return on the right of every row in the full list, and are centered in the rail. There is now one composer, a centered single line. Ghostties also moves onto the latest upstream Ghostty.
 
 ### Added
 
