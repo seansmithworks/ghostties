@@ -91,14 +91,6 @@ final class SessionComposerStore: ObservableObject {
     /// first); its `$isOpen` sink and `dismissComposerOverlayIfPresented`
     /// check it before acting.
     ///
-    /// Deliberately NOT written by the ANCHORED popover's `open()` call
-    /// (`SessionComposerPalette.swift`'s `.onAppear`) — a row popover in
-    /// window B while window A's centered overlay is up still leaves two
-    /// composers live against the shared store. That's pre-existing
-    /// behavior (the round-2 `NSApp.isActive` gate produced the same
-    /// outcome) and explicitly out of scope here — not chased by this
-    /// property, which only arbitrates between CENTERED overlays.
-    ///
     /// `weak` so this never keeps a window alive and simply reads `nil`
     /// once one is gone.
     weak var owningWindow: NSWindow?

@@ -1358,7 +1358,7 @@ struct SessionComposerPalette: View {
     }
 
     /// Pure function extracted from the overlay modifier below so it's
-    /// directly testable without rendering (`ComposerZeroChromeStyleTests
+    /// directly testable without rendering (`ComposerSingleLineStyleTests
     /// .witnessOverlayYOffsetIsSizePlusGap`) — `ghostGap` is the tunable
     /// space between the Witness sprite's bottom edge and the card's top
     /// edge, so the overlay must rise an additional `ghostGap` points
@@ -1549,32 +1549,6 @@ struct SessionComposerPalette: View {
             break
         }
 
-        // Fix round 2 (Timing board, commit exit): only meaningful for
-        // `.zeroChrome` — `revealPhase` defaults `.constant(.revealed)`
-        // everywhere else, so this write is a no-op there. Set BEFORE any
-        // of the state below in case a guard further down returns early;
-        // a commit that fails (write error) should not look like a
-        // successful launch's exit animation, but there's no cheap way to
-        // "undo" this from here, and the palette re-shows on failure
-        // anyway (S6, see `body`'s `onChange(of: isPresented)` chain) —
-        // acceptable for a spike, flagged rather than engineered around.
-        // S1: reset the stale index up front. `recordRecent` (inside the
-        // store's precommit) reorders RECENT, which would otherwise leave
-        // `selectedIndex` pointing at the wrong row if the composer stays
-        // open on a failed commit (S6). Synchronous and load-bearing (N1):
-        // it is what makes a double Return a no-op if both `.onSubmit` and
-        // `.onKeyPress` ever fire on macOS 14+. Scoped to what's actually
-        // reachable via Return: every `ComposerOption.action` in
-        // `flattenedOptions` — this one and the search-result project row
-        // (`makeOption(for project:)`) — nils `selectedIndex` FIRST for the
-        // same reason. The trailing project dropdown and "+ Add project…"
-        // are mouse-only Buttons outside `flattenedOptions`, so
-        // `handle(.submit)` can never resolve `selectedOption` into them —
-        // they don't need this guard, and `addProjectViaPanel` (on
-        // `SessionComposerStore`) couldn't apply it anyway, having no
-        // access to this view's `@State` (PR #132 review round 3 — a prior
-        // draft of this comment claimed all four sites nil'd first; only
-        // these two do).
         selectedIndex = nil
 
         // BLOCKER fix (command grammar slice 1): a resolved command project
@@ -1617,12 +1591,6 @@ struct SessionComposerPalette: View {
         case .failure(let error):
             composerStore.rejectUnresolvedBranch(message: error.message)
             selectedIndex = bestSelectionIndex(in: flattenedOptions)
-            // Round 7 (open finding from the zero-chrome in-flight memo):
-            // `revealPhase` was already set to `.committing` above before
-            // this switch ran, same as the B2 fix below for a failed
-            // precommit. This early return skipped that restoration
-            // entirely, so a rejected typed-branch commit left the
-            // composer open but faded to invisible. Mirror B2's fix here.
             return
         }
 
@@ -1663,15 +1631,6 @@ struct SessionComposerPalette: View {
             // so Return is dead until the user types or arrows; re-seed the
             // best match (D1) so Return works again immediately.
             selectedIndex = bestSelectionIndex(in: flattenedOptions)
-            // B2 fix: `revealPhase` was set to `.committing` above before
-            // `precommit` ran. On failure the composer stays open (this is
-            // the whole point of `writeError`), but `.committing` fades the
-            // field/rows to invisible — leaving an open, unreadable
-            // composer with no visible error. Restore `.revealed` so the
-            // field, rows, and `writeError` are visible again. No-op
-            // outside `.zeroChrome` (`revealPhase` defaults
-            // `.constant(.revealed)` there, so this write matches the
-            // existing value).
         }
     }
 
@@ -1685,13 +1644,6 @@ struct SessionComposerPalette: View {
     private func handle(_ event: ComposerQueryField.KeyboardEvent) {
         switch event {
         case .exit:
-            // Fix round 2 (Timing board, esc exit) — no-op outside
-            // `.zeroChrome` (`revealPhase` defaults `.constant(.revealed)`).
-            // Only meaningful when this Esc actually dismisses (not when
-            // it's just closing an inline picker) — `.zeroChrome` never
-            // opens either picker, so this is always the dismiss branch in
-            // practice, but the guard matches `closeChipPickerOrDismiss`'s
-            // own condition rather than assuming that.
             dismissComposer()
 
         case .submit:
@@ -1706,12 +1658,6 @@ struct SessionComposerPalette: View {
             selectedIndex = (current == 0) ? UInt(flattenedOptions.count - 1) : current - 1
 
         case .move(.down):
-            // Fix round (finding 3, brief §4): `↓` on an EMPTY zero-chrome
-            // field must reveal the candidate rows even though there's no
-            // query to filter by yet — `showNewStyleRows` OR's this flag in
-            // alongside the existing `!query.isEmpty` gate. Set
-            // unconditionally (cheap, harmless for `.singleLine`,
-            // which never read it).
             if flattenedOptions.isEmpty { break }
             let current = selectedIndex ?? UInt.max
             selectedIndex = (current >= UInt(flattenedOptions.count - 1)) ? 0 : current + 1

@@ -4,9 +4,9 @@ import Testing
 @testable import Ghostty
 
 /// Tests for round 12's composer tuning additions
-/// (`ComposerZeroChromeStyle.swift`: `ComposerSingleLineTuning`,
+/// (`ComposerSingleLineStyle.swift`: `ComposerSingleLineTuning`,
 /// `ComposerSingleLineShadowPreset`/`Dials`, `ComposerSingleLineTreatment`,
-/// `ComposerSingleLineBackgroundChoice`, `ComposerZeroChromeAlignment`).
+/// `ComposerSingleLineBackgroundChoice`).
 /// Every test references a production symbol directly and was proven red
 /// against the pre-fix code before the corresponding change landed (see
 /// each test's doc comment) — `feedback_vacuous-tests-pass-green`.
@@ -137,15 +137,5 @@ struct ComposerRound12TuningTests {
         #expect(ComposerSingleLineBackgroundChoice.resolve(treatment: .glass, glassAvailable: true) == .glass)
         #expect(ComposerSingleLineBackgroundChoice.resolve(treatment: .material, glassAvailable: true) == .material)
         #expect(ComposerSingleLineBackgroundChoice.resolve(treatment: .material, glassAvailable: false) == .material)
-    }
-
-    // MARK: - Zero-chrome alignment (item 5)
-
-    private func firstTextView(in view: NSView) -> NSTextView? {
-        if let textView = view as? NSTextView { return textView }
-        for subview in view.subviews {
-            if let found = firstTextView(in: subview) { return found }
-        }
-        return nil
     }
 }

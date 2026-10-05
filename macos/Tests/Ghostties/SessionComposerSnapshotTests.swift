@@ -86,7 +86,7 @@ struct SessionComposerSnapshotTests {
 
     /// `windowAppearance`/`ambientAppearance` test arguments name an
     /// `NSAppearance.Name` as a plain string (`"aqua"`/`"darkAqua"`) — same
-    /// shape as `ComposerZeroChromeStyleTests.appearanceName`, kept local to
+    /// shape as `ComposerSingleLineStyleTests.appearanceName`, kept local to
     /// this file rather than shared (private, `@testable` structs don't
     /// share test-file internals).
     private func appearanceName(_ key: String) -> NSAppearance.Name {
