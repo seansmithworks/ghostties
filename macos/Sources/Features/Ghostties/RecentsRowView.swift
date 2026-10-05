@@ -121,12 +121,9 @@ struct RecentsRowView: View, Equatable {
             // row's card background, not a glyph tint. The collapsed rail
             // (`RailSessionRow`) draws the same glyph at the same trailing
             // inset, so it stays on the sidebar's right edge as the width
-            // animates — no independent glyph motion (the old inward nudge
-            // is gone: `sidebarRowGlyphTraveledOffset` is 0).
+            // animates — the glyph makes no independent move.
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
-                .offset(x: glyphOffsetX)
-                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
         }
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
@@ -190,19 +187,10 @@ struct RecentsRowView: View, Equatable {
         return .easeOut(duration: WorkspaceLayout.sidebarRowLabelExpandFadeDuration).delay(delay)
     }
 
-    /// Small in-row glyph shift toward the panel's centerline — the
-    /// canvas's own "+8 → +28px" glyph translateX row, not the panel's
-    /// pinned→rail travel.
-    private var glyphOffsetX: CGFloat {
-        widthModel.isCollapsedPresentation
-            ? WorkspaceLayout.sidebarRowGlyphTraveledOffset
-            : WorkspaceLayout.sidebarRowGlyphRestingOffset
-    }
-
-    /// COLLAPSE: glyph waits for the label to mostly clear (60ms delay),
-    /// then travels for the rest of the 260ms window. EXPAND: glyph travels
-    /// back out immediately, over the whole expand window — every row's
-    /// glyph starts together; only labels are staggered.
+    /// Row-background (corner radius) timing. COLLAPSE: waits for the label
+    /// to mostly clear (60ms delay), then runs for the rest of the 260ms
+    /// window. EXPAND: runs immediately over the whole expand window — every
+    /// row starts together; only labels are staggered.
     private var glyphAnimation: Animation? {
         guard choreographyEnabled else { return nil }
         if widthModel.isCollapsedPresentation {

@@ -413,6 +413,10 @@ enum WorkspaceLayout {
     /// structurally tied.
     static let sessionSectionHeaderChevronSize: CGFloat = 16
 
+    /// Trailing padding of a Sessions-list section header (and the rail's
+    /// chevron rows, which mirror it).
+    static let sessionSectionHeaderTrailingPadding: CGFloat = 12
+
     /// Top padding of the scrollable list content in both sidebar tabs
     /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s
     /// Sessions `sectionsContent` — both currently `.padding(.vertical, 4)`,
@@ -430,26 +434,6 @@ enum WorkspaceLayout {
     /// above and the tray below. 0 = today's flush layout (the list's
     /// `Spacer` already pushes the tray to the bottom).
     static let sidebarListToTrayGap: CGFloat = 0
-
-    /// Ghost glyph size in a collapsed-rail session row (`SidebarRailView`'s
-    /// `RailSessionRow`) — distinct from `sessionGhostSize`, the expanded
-    /// row's glyph size.
-    static let railGhostSize: CGFloat = 16
-
-    /// Width of one collapsed-rail session row (`RailSessionRow`,
-    /// `RailSectionSummaryRow`).
-    static let railRowWidth: CGFloat = 52
-
-    /// Height of one collapsed-rail session row (`RailSessionRow`).
-    static let railRowHeight: CGFloat = 32
-
-    /// Vertical gap between rail session rows (`SidebarRailView`'s
-    /// `VStack(spacing:)`).
-    static let railRowGap: CGFloat = 4
-
-    /// Height of a rail section-summary row (`RailSectionSummaryRow`, the bare
-    /// "›" Inactive/Archived rows) — width shared with `railRowWidth`.
-    static let railSummaryRowHeight: CGFloat = 24
 
     /// Added on top of `collapsedRailWidth`'s computed hug width — parked
     /// tuning knob (Sean, sidebar-presence review round 3: "the fixed 128pt
@@ -610,21 +594,6 @@ enum WorkspaceLayout {
     /// Duration of the glyph's inward travel once it starts (260ms total
     /// collapse window minus the 60ms delay above).
     static let sidebarRowGlyphCollapseTravelDuration: TimeInterval = 0.2
-
-    /// 0 since 2026-10-04: the glyph rides the sidebar's trailing edge in both
-    /// expanded and rail, so it makes no independent in-row move. (Sean:
-    /// glyphs on the right of the sidebar, "a cleaner animation.")
-    ///
-    /// Small in-row glyph shift toward the panel's centerline as a session
-    /// row collapses — NOT the full pinned→rail travel distance (that's
-    /// carried by the panel/card translateX in `sidebarTransitionTiming`).
-    /// Resting (expanded) is 0 — the row's EXISTING, unmodified trailing
-    /// position (`RecentsRowView`'s natural HStack flow) — so steady-state
-    /// layout is byte-for-byte unchanged by this choreography; traveled
-    /// carries the canvas's own +8→+28px DELTA (20pt) as a leftward nudge
-    /// once collapsed.
-    static let sidebarRowGlyphRestingOffset: CGFloat = 0
-    static let sidebarRowGlyphTraveledOffset: CGFloat = 0
 
     /// Row corner radius on COLLAPSE — same 60-260ms window as the glyph
     /// travel above. The canvas's own table names "8 → 16px", but this
