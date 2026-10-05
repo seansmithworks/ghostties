@@ -3,11 +3,12 @@ import GhosttiesCore
 
 /// The single source of truth for "which templates are available to a
 /// project, in what order" for the session-creation surfaces (the New
-/// Session menu and the template picker) — replaces two divergent
+/// Session menu and Project settings) — replaces two divergent
 /// implementations that used to live in
 /// `RecentsListView.availableTemplates(for:store:)` and the three computed
-/// properties on `TemplatePickerView` (`presetTemplates`, `builtinTemplates`,
-/// `customTemplates`). Both those callers now route through this type.
+/// properties on the retired template picker (`presetTemplates`,
+/// `builtinTemplates`, `customTemplates`). The remaining callers route
+/// through this type.
 ///
 /// `WorkspaceStore.templates(for projectId:)` is a third, knowingly-separate
 /// copy of the scoping predicate consumed by `NewTaskComposerView` — it does
@@ -55,9 +56,9 @@ enum SessionTemplateResolver {
     /// Default-first, ahead of group order, is a deliberate ordering
     /// decision: because a stable partition preserves each group's relative
     /// order, putting the default first in this flat list also puts it
-    /// first within whichever section it belongs to once `TemplatePickerView`
-    /// filters this same list by `group(for:)` — so the sectioned picker's
-    /// "default appears first in its own section" behavior falls out of one
+    /// first within whichever section it belongs to once a caller filters
+    /// this same list by `group(for:)` — so "default appears first in its own
+    /// section" behavior falls out of one
     /// resolved list for free, instead of needing a second, separate sort.
     static func templates(for project: Project, store: WorkspaceStore) -> [AgentTemplate] {
         let candidates = store.templates.filter { $0.isGlobal || $0.projectId == project.id }

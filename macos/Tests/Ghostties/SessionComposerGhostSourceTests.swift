@@ -2,9 +2,9 @@ import Testing
 import GhosttiesCore
 @testable import Ghostty
 
-/// Model B's ghost source (Spotlight-inline-completion + Raycast-Tab-drill
+/// The composer field's ghost source (Spotlight-inline-completion + Raycast-Tab-drill
 /// rewrite): `SessionComposerPalette.destination(for:store:recentSelections:)`
-/// is the half of `ghostFullPathForModelB` that resolves a HIGHLIGHTED
+/// is the half of `ghostFullPathForField` that resolves a HIGHLIGHTED
 /// PROJECT row's own destination — the fix for defect 1 ("ghost welded to
 /// the current project"). It's a `static` pure function over explicit
 /// `Project`/`WorkspaceStore`/`[RecentComposerSelection]` inputs
@@ -12,7 +12,7 @@ import GhosttiesCore
 /// `SessionComposerPalette` (the repo's usual private-computed-property-
 /// on-a-View gap, `SessionComposerGhostPlaceholderTests`' own doc comment).
 ///
-/// `ghostFullPathForModelB` itself (the `selectedOption`-kind dispatch —
+/// `ghostFullPathForField` itself (the `selectedOption`-kind dispatch —
 /// "is the highlighted row a project, a template, or nothing?") stays a
 /// `private` computed property on the View, same gap as `ghostPlaceholder`
 /// always had; `SessionComposerSnapshotTests.workedExampleGhostsADifferentProjectsFullPath`
@@ -23,7 +23,7 @@ import GhosttiesCore
 /// defers to `SessionTemplateResolver`'s real ordering and lands on
 /// `Browser` for a vanilla fixture project — see this file's own tests.
 @MainActor
-struct SessionComposerModelBGhostSourceTests {
+struct SessionComposerGhostSourceTests {
     /// `WorkspaceStore(testingProjects:testingSessions:)` always seeds
     /// `templates` with `AgentTemplate.defaults` (`templates` is
     /// `private(set)`, so tests can't substitute a different set without

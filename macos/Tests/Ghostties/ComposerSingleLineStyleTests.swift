@@ -6,13 +6,12 @@ import GhosttiesCore
 import DialKit
 @testable import Ghostty
 
-/// Tests for the zero-chrome / single-line composer style spike
-/// (`ghostties.composerStyle`, `ComposerZeroChromeStyle.swift`). Every test
-/// references a production symbol (`ComposerStyle`, `ComposerZeroChrome
-/// Material`, `ComposerDescriptorCycle`, or `SessionComposerPalette` itself
-/// via the snapshot harness) — see `feedback_vacuous-tests-pass-green`.
+/// Tests for the single-line composer (`ComposerSingleLineStyle.swift`).
+/// Every test references a production symbol (`ComposerDescriptorCycle`,
+/// the tuning dials, or `SessionComposerPalette` itself via the snapshot
+/// harness) — see `feedback_vacuous-tests-pass-green`.
 @MainActor
-struct ComposerZeroChromeStyleTests {
+struct ComposerSingleLineStyleTests {
 
     // MARK: - Descriptor cycle order (pure function)
 
@@ -43,96 +42,37 @@ struct ComposerZeroChromeStyleTests {
         #expect(descriptors[1] == "ghostties cco -n \"Composer\"")
     }
 
-    // MARK: - Style flag
+    // MARK: - Stored `ghostties.composerStyle` is ignored
 
-    /// Sean's decision (2026-09-13): single-line is the default composer
-    /// style for everyone. Unset reads `.singleLine`.
-    @Test func composerStyleDefaultsToSingleLineWhenUnset() {
-        let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
-        #expect(ComposerStyle.current(defaults: suite) == .singleLine)
+    /// There is one composer. A stale `ghostties.composerStyle = zeroChrome`
+    /// (or any other value) left in a user's defaults must render exactly
+    /// what an unset key renders: the single-line card, with its border
+    /// stroke. Two isolated suites differing ONLY in that key, rendered with
+    /// the Witness off (its idle animation is clock-driven, so it would
+    /// differ between any two renders) and compared byte-for-byte.
+    @Test(arguments: ["zeroChrome", "classic", "bogus"])
+    func storedLegacyComposerStyleRendersTheSameAsUnset(stored: String) {
+        let project = makeProject()
+        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
+
+        func render(storedStyle: String?) -> Data? {
+            let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
+            suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
+            suite.set(false, forKey: ComposerWitnessSetting.storageKey)
+            if let storedStyle { suite.set(storedStyle, forKey: "ghostties.composerStyle") }
+            let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
+            let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, tuningDefaults: suite)
+            return renderPNG(view, size: NSSize(width: Self.derivedRenderCanvasWidth, height: 100))
+        }
+
+        let unset = render(storedStyle: nil)
+        let withStored = render(storedStyle: stored)
+        #expect(unset != nil)
+        #expect(unset == withStored, "a stored composerStyle of \(stored) must not change what renders")
+        if let withStored {
+            #expect((strokeEdgeCoverage(in: withStored) ?? 0) > 0.5, "expected the single-line card's border stroke")
+        }
     }
-
-    @Test func composerStyleReadsZeroChrome() {
-        let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
-        suite.set("zeroChrome", forKey: ComposerStyle.storageKey)
-        #expect(ComposerStyle.current(defaults: suite) == .zeroChrome)
-    }
-
-    /// Sean's decision (2026-09-13): Classic no longer exists as a
-    /// `ComposerStyle` case — a stale stored `"classic"` (from a build
-    /// before this commit) is just another unrecognized raw value, and must
-    /// fall back to the same default as unset/typo: `.singleLine`.
-    @Test func composerStyleReadsStaleClassicRawValueAsSingleLine() {
-        let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
-        suite.set("classic", forKey: ComposerStyle.storageKey)
-        #expect(ComposerStyle.current(defaults: suite) == .singleLine)
-    }
-
-    /// An unrecognized value (typo, stale build) falls back to the same
-    /// default as unset — `.singleLine` — rather than crashing.
-    @Test func composerStyleFallsBackToSingleLineOnUnrecognizedValue() {
-        let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
-        suite.set("bogus", forKey: ComposerStyle.storageKey)
-        #expect(ComposerStyle.current(defaults: suite) == .singleLine)
-    }
-
-    /// Round 8 (Sean, live look): default moved from `.regular` to
-    /// `.medium` — the "in between thin and regular" option.
-    @Test func composerZeroChromeMaterialDefaultsToMedium() {
-        let suite = UserDefaults(suiteName: "ghostties.composerZeroChromeMaterial.test.\(UUID().uuidString)")!
-        #expect(ComposerZeroChromeMaterial.current(defaults: suite) == .medium)
-    }
-
-    @Test func composerZeroChromeMaterialReadsThin() {
-        let suite = UserDefaults(suiteName: "ghostties.composerZeroChromeMaterial.test.\(UUID().uuidString)")!
-        suite.set("thin", forKey: ComposerZeroChromeMaterial.storageKey)
-        #expect(ComposerZeroChromeMaterial.current(defaults: suite) == .thin)
-    }
-
-    // MARK: - `.anchored` popover keeps its own card under the single-line default
-    //
-    // `SessionComposerPalette.cardKind(style:presentation:)` is the pure
-    // decision extracted from `activeCardKind` — covers the sidebar popover
-    // (`ProjectDisclosureRow.swift`) never picking up `.singleLine`/
-    // `.zeroChrome`'s card, which would silently drop `ComposerResultsTable`
-    // (only `popoverComposerCard` renders it). Classic's removal
-    // (2026-09-13) means the popover card is no longer a `ComposerStyle`
-    // case at all — it's a `ComposerCardKind` selected by presentation.
-
-    @Test(arguments: [ComposerStyle.zeroChrome, .singleLine])
-    func cardKindIsPopoverWhenAnchoredRegardlessOfStored(stored: ComposerStyle) {
-        #expect(SessionComposerPalette.cardKind(style: stored, presentation: .anchored) == .popover)
-    }
-
-    @Test(arguments: [ComposerStyle.zeroChrome, .singleLine])
-    func cardKindMatchesStoredStyleWhenCentered(stored: ComposerStyle) {
-        let expected: ComposerCardKind = stored == .zeroChrome ? .zeroChrome : .singleLine
-        #expect(SessionComposerPalette.cardKind(style: stored, presentation: .centered) == expected)
-    }
-
-    /// No stored value → `ComposerStyle.current()` → `.singleLine`; centered
-    /// presentation resolves it to the `.singleLine` card.
-    @Test func cardKindKeepsSingleLineDefaultWhenCentered() {
-        let suite = UserDefaults(suiteName: "ghostties.composerStyle.test.\(UUID().uuidString)")!
-        let stored = ComposerStyle.current(defaults: suite)
-        #expect(stored == .singleLine)
-        #expect(SessionComposerPalette.cardKind(style: stored, presentation: .centered) == .singleLine)
-    }
-
-    // MARK: - Snapshot evidence (real UserDefaults.standard, save/restore)
-    //
-    // `SessionComposerPalette.activeStyle` reads `ComposerStyle.current()`
-    // with NO defaults injection at that call site (deliberate — it's the
-    // same `.standard`-reading pattern `ComposerGhostTextField
-    // .modelBFieldStorageKey` already uses at its own call site), so these
-    // tests use `SessionComposerPalette`'s `styleOverrideForTesting:` init
-    // param (added alongside this file) rather than writing the real
-    // `UserDefaults.standard` key directly — `xcodebuild test`'s parallel
-    // test processes share that on-disk domain across processes, so a
-    // direct set/restore raced other parallel snapshot tests in this same
-    // file's early draft and intermittently poisoned unrelated
-    // renders (caught by `SessionComposerSnapshotTests` regressing on the
-    // same run).
 
     /// R15b: shared canvas width for the single-line render tests below,
     /// derived instead of hardcoded. Must contain the card at its widest
@@ -151,7 +91,7 @@ struct ComposerZeroChromeStyleTests {
         CGFloat(ComposerSingleLineTuning.widthRange.upperBound) + 16 + 24
 
     private func makeProject() -> Project {
-        Project(name: "Demo Project", rootPath: "/tmp/composer-zero-chrome-snapshot-\(UUID().uuidString)")
+        Project(name: "Demo Project", rootPath: "/tmp/composer-snapshot-\(UUID().uuidString)")
     }
 
     private func makeComposerStore(project: Project, workspaceStore: WorkspaceStore) -> SessionComposerStore {
@@ -165,14 +105,12 @@ struct ComposerZeroChromeStyleTests {
         project: Project,
         workspaceStore: WorkspaceStore,
         composerStore: SessionComposerStore,
-        style: ComposerStyle? = nil,
         tuningDefaults: UserDefaults? = nil
     ) -> some View {
         SessionComposerPalette(
             isPresented: .constant(true),
-            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+            request: SessionComposerRequest(projectBinding: .locked(project)),
             composerStore: composerStore,
-            styleOverrideForTesting: style,
             tuningDefaultsForTesting: tuningDefaults
         )
         .environmentObject(workspaceStore)
@@ -217,7 +155,7 @@ struct ComposerZeroChromeStyleTests {
             Issue.record("Failed to render PNG for \(filename)")
             return
         }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("scratchpad/zero-chrome", isDirectory: true)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("scratchpad/composer", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? data.write(to: dir.appendingPathComponent(filename))
     }
@@ -314,172 +252,6 @@ struct ComposerZeroChromeStyleTests {
         return Double(count) / Double(total)
     }
 
-    /// Fix round 2, item 5: since the wash moved OUT of the palette (it's
-    /// full-bleed now, painted by `SessionComposerOverlay`, which this
-    /// palette-only harness never constructs), this fixture's canvas is
-    /// mostly transparent with just the rest-state descriptor text on it —
-    /// `borderStrokePixelCount`'s color-proximity match (designed to catch
-    /// a `.tertiaryLabelColor` STROKE) started false-positiving on the
-    /// descriptor text's OWN dark glyph pixels once there was no wash
-    /// providing a visually distinct background for the two colors to
-    /// diverge against (measured: 8124 "border" pixels on a fixture with
-    /// zero stroke-drawing code anywhere in its render path). Verified by
-    /// code inspection instead, which is the actual guarantee this test
-    /// wants: `zeroChromeComposerCard`
-    /// (`SessionComposerPalette.swift`) has no `.stroke(`, `.overlay(...
-    /// shape.stroke...)`, `.clipShape`, or `.background` call anywhere in
-    /// its body — grep confirms zero matches, vs. `popoverComposerCard`'s
-    /// and `singleLineComposerCard`'s each having exactly one `.stroke(`.
-    @Test func zeroChromeRestStateHasNoCardBorderDrawingCode() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let size = NSSize(width: 560, height: 200)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .zeroChrome)
-        let png = renderPNG(view, size: size)
-        writeScratchPNG(png, filename: "zero-chrome-rest.png")
-        #expect(png != nil)
-    }
-
-    /// Fix round (finding 2): the earlier version of this test asserted
-    /// only `png != nil` — true for any non-blank render, including a
-    /// wash with no rows at all. Replaced with a real production-symbol
-    /// check: row 0 is seeded selected on `onAppear`
-    /// (`bestSelectionIndex(in: flattenedOptions)`), and
-    /// `newStyleCandidateRows` paints a selected row's text in
-    /// `WorkspaceLayout.composerSelectionAccent` — this scans for that
-    /// exact accent tint, which can ONLY appear if `showNewStyleRows` is
-    /// true AND the `ForEach` actually rendered a selected row. Rows are
-    /// plain SwiftUI `Text` (not `ComposerGhostTextField`'s `NSTextView`),
-    /// so — unlike the typed query text in the field above them — they DO
-    /// paint correctly through `cacheDisplay` in this offscreen harness.
-    /// Renamed from `zeroChromeTypingShowsCandidateRows` since it now
-    /// proves row content + selection, not just "something rendered".
-    /// Fix round: the first version of this test set `composerStore
-    /// .searchText` BEFORE constructing the view — `SessionComposerStore
-    /// .open(projectBinding:workspaceStore:)` unconditionally resets
-    /// `searchText = ""`, and `SessionComposerPalette`'s own `.onAppear`
-    /// calls `open()` again on first mount, silently wiping the pre-seeded
-    /// query the instant the view actually appeared. Same defect (and same
-    /// documented fix) `SessionComposerSnapshotTests
-    /// .renderMountedPaletteAfterTyping` already covers for the popover
-    /// path: mount first (let `.onAppear` settle), THEN set `searchText`,
-    /// spin the run loop briefly, THEN render.
-    @Test func zeroChromeTypingRevealsSelectedCandidateRow() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let size = NSSize(width: 560, height: 260)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .zeroChrome)
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .aqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        // Settles `.onAppear` (`open()` + the empty-query default selection)
-        // BEFORE the query is set — matches
-        // `renderMountedPaletteAfterTyping`'s documented ordering.
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        composerStore.noteSearchTextEditedByTyping()
-        composerStore.searchText = "d"
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-
-        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the typing fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        let png = rep.representation(using: .png, properties: [:])
-        writeScratchPNG(png, filename: "zero-chrome-typing-3-rows.png")
-        #expect(png != nil)
-        if let png {
-            #expect(selectionAccentPixelCount(in: png) > 0)
-        }
-    }
-
-    /// Fix round (finding 3): `↓` on an EMPTY zero-chrome field must reveal
-    /// the candidate rows — `zeroChromeRowsRevealedByArrow`
-    /// (`SessionComposerPalette`), set from the production `handle(_:)`
-    /// `.move(.down)` case. Exercised through the REAL keyboard-routing
-    /// path `ComposerGhostTextFieldTests` already uses elsewhere in this
-    /// repo: calling the mounted `NSTextView`'s delegate `textView(_:
-    /// doCommandBy:)` directly with `moveDown(_:)`'s selector — not a
-    /// synthetic `CGEvent`/AX keystroke, the same technique
-    /// `moveDownDispatchesWhenPickerClosed` uses.
-    @Test func zeroChromeArrowDownRevealsRowsOnEmptyQuery() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let size = NSSize(width: 560, height: 260)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .zeroChrome)
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .aqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        guard let before = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the pre-arrow fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: before)
-        let beforeData = before.representation(using: .png, properties: [:])
-        #expect(beforeData != nil)
-        if let beforeData {
-            #expect(
-                selectionAccentPixelCount(in: beforeData) == 0,
-                "expected no rows (and so no accent-tinted row text) before ↓ on an empty field"
-            )
-        }
-
-        guard let textView = firstTextView(in: hosting), let delegate = textView.delegate else {
-            Issue.record("could not locate the mounted ComposerGhostTextField's NSTextView/delegate")
-            return
-        }
-        _ = delegate.textView?(textView, doCommandBy: #selector(NSResponder.moveDown(_:)))
-        hosting.layoutSubtreeIfNeeded()
-
-        guard let after = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the post-arrow fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: after)
-        let afterData = after.representation(using: .png, properties: [:])
-        writeScratchPNG(afterData, filename: "zero-chrome-arrow-down-reveals-rows.png")
-        #expect(afterData != nil)
-        if let afterData {
-            #expect(
-                selectionAccentPixelCount(in: afterData) > 0,
-                "expected ↓ on an empty zero-chrome field to reveal rows (zeroChromeRowsRevealedByArrow)"
-            )
-        }
-    }
-
     /// Walks the mounted view hierarchy for the `NSTextView` a
     /// `ComposerGhostTextField` installs (same shape as
     /// `ComposerGhostTextFieldTests`' own harness, which reaches its
@@ -555,9 +327,9 @@ struct ComposerZeroChromeStyleTests {
             // real `UserDefaults.standard` here (the R13 gap) let this test pass
             // for the wrong reason whenever `.glass` fell back to material by
             // availability rather than by explicit treatment.
-            let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
+            let suite = UserDefaults(suiteName: "ghostties.composer.test.\(UUID().uuidString)")!
             suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
-            let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+            let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, tuningDefaults: suite)
             let png = renderPNG(view, size: size, appearance: appearanceName(windowAppearance))
             writeScratchPNG(png, filename: "single-line-rest.png")
             #expect(png != nil)
@@ -583,7 +355,7 @@ struct ComposerZeroChromeStyleTests {
         let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
         let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
         let size = NSSize(width: 560, height: 120)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore)
 
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
@@ -671,7 +443,7 @@ struct ComposerZeroChromeStyleTests {
         let suite = UserDefaults(suiteName: "ghostties.composerWitness.pixels.test.\(UUID().uuidString)")!
         suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
         suite.set(witnessEnabled, forKey: ComposerWitnessSetting.storageKey)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, tuningDefaults: suite)
         // R15: same root cause as `singleLineRestStateHasCardChrome` — the
         // isolated suite resolves the 688pt round-13b width default. `body`
         // centers `composerCard` inside `renderPNG`'s outer `.frame`, so at
@@ -749,12 +521,11 @@ struct ComposerZeroChromeStyleTests {
     // headless test process doesn't have. Falling back to a DIRECT test of
     // the actual gate `ComposerDescriptorGhostText.body` uses
     // (`if query.isEmpty`), which is the real root cause anyway):
-    // `SessionComposerPalette.zeroChromeComposerCard`'s ONLY call site for
+    // `SessionComposerPalette`'s ONLY call site for
     // `ComposerDescriptorGhostText` passes `query: query` — a live,
     // always-current read of `composerStore.searchText` (trimmed). The
     // reviewer's screenshot matches EXACTLY fix round 1's already-diagnosed
-    // defect (see `zeroChromeTypingRevealsSelectedCandidateRow`'s doc
-    // comment): `SessionComposerStore.open()` resets `searchText = ""` on
+    // defect: `SessionComposerStore.open()` resets `searchText = ""` on
     // every call, including the one `SessionComposerPalette`'s `body`
     // `.onAppear` makes on mount — a caller (test or otherwise) that sets
     // `searchText` BEFORE the view finishes its first appearance has it
@@ -797,76 +568,7 @@ struct ComposerZeroChromeStyleTests {
         }
     }
 
-    /// End-to-end companion to the above, using the SAME corrected
-    /// mount-then-type ordering fix round 1 established (pre-seeding
-    /// `searchText` before mount is the test bug that produced the
-    /// reviewer's artifact in the first place) — proves the full palette,
-    /// not just the leaf view, has no stray descriptor once real typing
-    /// has happened.
-    @Test func zeroChromePaletteHasNoDescriptorTextAfterTyping() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let size = NSSize(width: 560, height: 260)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .zeroChrome)
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .aqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        composerStore.noteSearchTextEditedByTyping()
-        composerStore.searchText = "d"
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-
-        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the post-typing fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        let png = rep.representation(using: .png, properties: [:])
-        writeScratchPNG(png, filename: "zero-chrome-no-stray-descriptor-after-typing.png")
-        #expect(png != nil)
-        // Not a pixel assertion here (rows/field text legitimately paint
-        // dark pixels once typing starts) — this fixture exists for visual
-        // review alongside `zero-chrome-typing-3-rows.png`; the actual
-        // regression guard is `descriptorGhostTextRendersNothingForANonEmptyQuery`
-        // above, which isolates the exact gate with no confounding content.
-    }
-
     // MARK: - Fix round 2, item 1: Timing board constants
-
-    @Test func timingConstantsMatchTheBoard() {
-        #expect(ComposerZeroChromeTiming.summonWashDuration == 0.14)
-        // Round 8: text now waits for the fog's smoke-build to mostly
-        // settle before revealing (was 0.12s duration / 0.04s delay).
-        #expect(ComposerZeroChromeTiming.summonTextDuration == 0.18)
-        #expect(ComposerZeroChromeTiming.summonTextDelay == 0.22)
-        #expect(ComposerZeroChromeTiming.summonFogRampDuration == 0.32)
-        #expect(ComposerZeroChromeTiming.commitTextDuration == 0.10)
-        #expect(ComposerZeroChromeTiming.commitWashDuration == 0.16)
-        #expect(ComposerZeroChromeTiming.commitWashDelay == 0.04)
-        #expect(ComposerZeroChromeTiming.dismissTextDuration == 0.12)
-        #expect(ComposerZeroChromeTiming.dismissWashDuration == 0.14)
-        #expect(ComposerZeroChromeTiming.dismissWashDelay == 0.02)
-        #expect(ComposerZeroChromeTiming.commitTextOffsetY == -6)
-        // Fix round 4, item 1: summon text slide (opacity 0→1 AND y 4→0),
-        // not opacity-only.
-        #expect(ComposerZeroChromeTiming.summonTextOffsetY == 4)
-    }
 
     // MARK: - Fix round 3, item 2: descriptor crossfade constant
 
@@ -973,41 +675,6 @@ struct ComposerZeroChromeStyleTests {
         )
     }
 
-    /// The snapshot harness renders a single settled frame — proves the
-    /// `revealPhase` test seam (`.constant(.revealed)`, the default every
-    /// call site in this file already uses) produces a non-blank capture,
-    /// same evidence shape as `zeroChromeRestStateHasNoCardBorder`.
-    @Test func revealPhaseConstantRevealedRendersSettled() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let view = SessionComposerPalette(
-            isPresented: .constant(true),
-            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-            composerStore: composerStore,
-            styleOverrideForTesting: .zeroChrome,
-            revealPhase: .constant(.revealed)
-        )
-        .environmentObject(workspaceStore)
-        .environmentObject(SessionCoordinator())
-        let size = NSSize(width: 560, height: 200)
-        let png = renderPNG(view, size: size)
-        #expect(png != nil)
-        if let png, let rep = NSBitmapImageRep(data: png) {
-            var darkPixels = 0
-            for x in stride(from: 0, to: rep.pixelsWide, by: 3) {
-                for y in stride(from: 0, to: rep.pixelsHigh, by: 3) {
-                    guard let color = rep.colorAt(x: x, y: y), color.alphaComponent > 0.3 else { continue }
-                    let r = Int((color.redComponent * 255).rounded())
-                    let g = Int((color.greenComponent * 255).rounded())
-                    let b = Int((color.blueComponent * 255).rounded())
-                    if (r + g + b) / 3 < 200 { darkPixels += 1 }
-                }
-            }
-            #expect(darkPixels > 0, "expected the descriptor text to be visible on first paint with revealPhase = .revealed")
-        }
-    }
-
     // MARK: - Fix round 2, item 2: new-style status strip copy
 
     @Test func newStyleStatusStripUsesTheArrowCopy() {
@@ -1026,73 +693,11 @@ struct ComposerZeroChromeStyleTests {
         )
     }
 
-    // MARK: - Fix round 2, item 8: zero-chrome type scale
+    // MARK: - Single-line type scale
 
-    @Test func zeroChromeTypographyConstantsMatchTheStrawman() {
-        #expect(ComposerZeroChromeTypography.fieldSize == 32)
-        #expect(ComposerZeroChromeTypography.fieldWeight == .semibold)
-        #expect(ComposerZeroChromeTypography.fieldLineHeight == 44)
-        #expect(ComposerZeroChromeTypography.rowSize == 20)
-        #expect(ComposerZeroChromeTypography.rowWeight == .medium)
-        #expect(ComposerZeroChromeTypography.rowLineHeight == 30)
-        #expect(ComposerZeroChromeTypography.measureMin == 480)
-        #expect(ComposerZeroChromeTypography.measureMax == 960)
-        // Round 10: replaced the round-8 off-center "center stage" column
-        // (leading-edge fraction) with a centered column.
-        #expect(ComposerZeroChromeTypography.columnMaxWidth == 640)
-        #expect(ComposerZeroChromeTypography.columnGutter == 48)
-        #expect(ComposerZeroChromeTypography.fieldAnchorFraction == 0.46)
-        #expect(ComposerZeroChromeTypography.fieldAnchorBottomOffset == 22)
-        #expect(ComposerZeroChromeTypography.maxFieldLines == 3)
-    }
-
-    /// Round 10: `columnFrame(overlayWidth:)` centers a 640pt column with
-    /// 48pt gutters both sides at a wide overlay (1600pt: x 480, w 640 —
-    /// the brief's own worked example), and shrinks to fit — still
-    /// centered, gutters intact — on a narrower one (600pt: w 504, x 48,
-    /// which is exactly centered since `(600 - 504) / 2 == 48`).
-    @Test func columnFrameAtTwoWidths() {
-        let wide = ComposerZeroChromeTypography.columnFrame(overlayWidth: 1600)
-        #expect(wide.width == 640)
-        #expect(wide.leadingX == 480)
-
-        let narrow = ComposerZeroChromeTypography.columnFrame(overlayWidth: 600)
-        #expect(narrow.width == 504) // 600 - 2*48
-        #expect(narrow.leadingX == 48) // (600 - 504) / 2
-    }
-
-    /// A degenerate overlay narrower than twice the gutter must never go
-    /// negative — width floors at 0, and the column stays centered (x ==
-    /// half the overlay).
-    @Test func columnFrameNeverGoesNegativeOnADegenerateOverlay() {
-        let column = ComposerZeroChromeTypography.columnFrame(overlayWidth: 40)
-        #expect(column.width == 0)
-        #expect(column.leadingX == 20)
-    }
-
-    /// Round 10: pure anchor math — the field's BOTTOM edge
-    /// (`top + height`) must equal `0.46*H + 22` at 1, 2, and 3 lines, and
-    /// the height must cap at `maxFieldLines` (3) even when asked for 5.
-    @Test func fieldFrameHoldsTheBottomEdgeFixedAsLinesGrow() {
-        let overlaySize = CGSize(width: 1200, height: 800)
-        let expectedBottom = 800 * ComposerZeroChromeTypography.fieldAnchorFraction
-            + ComposerZeroChromeTypography.fieldAnchorBottomOffset
-
-        for lineCount in 1...3 {
-            let frame = ComposerZeroChromeTypography.fieldFrame(overlaySize: overlaySize, lineCount: lineCount)
-            #expect(frame.height == CGFloat(lineCount) * ComposerZeroChromeTypography.fieldLineHeight)
-            #expect(abs((frame.top + frame.height) - expectedBottom) < 0.001)
-        }
-
-        let overflowing = ComposerZeroChromeTypography.fieldFrame(overlaySize: overlaySize, lineCount: 5)
-        #expect(overflowing.height == CGFloat(ComposerZeroChromeTypography.maxFieldLines) * ComposerZeroChromeTypography.fieldLineHeight)
-        #expect(abs((overflowing.top + overflowing.height) - expectedBottom) < 0.001)
-    }
-
-    /// `.singleLine` must keep the ORIGINAL 15pt field size, not
-    /// `ComposerZeroChromeTypography`'s 32pt — checked by rendering a
-    /// single-line fixture and confirming it fits comfortably inside the
-    /// unchanged 512pt card (a 32pt field would overflow it).
+    /// The single-line field must keep its 15pt field size — checked by
+    /// rendering a single-line fixture and confirming it fits comfortably
+    /// inside the 512pt card (a 32pt field would overflow it).
     /// Parameterized over window appearance × ambient appearance — see
     /// `singleLineRestStateHasCardChrome`'s comment.
     @Test(arguments: ["aqua", "darkAqua"], ["aqua", "darkAqua"])
@@ -1103,9 +708,9 @@ struct ComposerZeroChromeStyleTests {
             let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
             // Step 0 (R14): same isolated-suite/material pin as
             // `singleLineRestStateHasCardChrome` — see that test's comment.
-            let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
+            let suite = UserDefaults(suiteName: "ghostties.composer.test.\(UUID().uuidString)")!
             suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
-            let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+            let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, tuningDefaults: suite)
             // R15: see `singleLineRestStateHasCardChrome`'s comment — the
             // isolated suite resolves the 688pt round-13b width default, not
             // the pre-R13b 512pt this canvas was originally sized for. R15b:
@@ -1124,159 +729,7 @@ struct ComposerZeroChromeStyleTests {
         }
     }
 
-    /// Zero-chrome typing at the new scale — the item 8 snapshot.
-    @Test func zeroChromeTypingAtNewScale() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let size = NSSize(width: 700, height: 400)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .zeroChrome)
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .aqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        composerStore.noteSearchTextEditedByTyping()
-        composerStore.searchText = "d"
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-
-        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the new-scale typing fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        let png = rep.representation(using: .png, properties: [:])
-        writeScratchPNG(png, filename: "zero-chrome-typing-new-scale.png")
-        #expect(png != nil)
-    }
-
-    /// A 1000×700 window — proves nothing clips at the measure clamp
-    /// (960pt max, well under `columnFrame`'s centered-column result).
-    @Test func zeroChromeNothingClipsAtALargeWindow() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let size = NSSize(width: 1000, height: 700)
-        let measure = ComposerZeroChromeTypography.columnFrame(overlayWidth: size.width).width
-        let view = SessionComposerPalette(
-            isPresented: .constant(true),
-            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-            composerStore: composerStore,
-            styleOverrideForTesting: .zeroChrome,
-            zeroChromeMeasureOverride: measure
-        )
-        .environmentObject(workspaceStore)
-        .environmentObject(SessionCoordinator())
-        let png = renderPNG(view, size: size)
-        writeScratchPNG(png, filename: "zero-chrome-1000x700-no-clip.png")
-        #expect(png != nil)
-        #expect(measure == 640) // min(640, 1000 - 2*48) — the centered column's own max width
-    }
-
     // MARK: - Fix round 5: wash reaches the titlebar band
-
-    /// Sean's live look: "the ghostties app should be blurred" — the whole
-    /// window, titlebar band included. Mounts a REAL `SessionComposerOverlay`
-    /// (not just the palette, which never rendered the titlebar-band
-    /// spacer this bug lived in) with a non-zero `titlebarBandHeight`, and
-    /// asserts the wash's material visibly lightens a solid-black pixel
-    /// INSIDE that band — a pre-fix render leaves that strip untouched
-    /// (`Color.clear`), so this pixel would stay pure black.
-    /// `revealPhaseOverrideForTesting: .revealed` bypasses the `.task`'s
-    /// one-run-loop-turn summon race for a deterministic settled frame.
-    /// Mutation-checked: temporarily restoring the old
-    /// `VStack { Color.clear.frame(height:); ComposerZeroChromeWash(...) }`
-    /// structure in `SessionComposerOverlay.zeroChromeFullBleedWash` made
-    /// this fail red (confirmed by hand during implementation — see the
-    /// implementer's report — then reverted back to the fix, green).
-    @Test func zeroChromeWashCoversTheTitlebarBand() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let centeringModel = ComposerCenteringModel()
-        centeringModel.titlebarBandHeight = 28
-
-        // Round 7: was reading real `.standard` (this xctest bundle IS
-        // `com.seansmithdesign.ghostties.dev` — the same domain Sean's own
-        // DEBUG tuning pill writes into on this machine, currently pinned to
-        // `ultraThin` per the in-flight memo). This test asserts the DEFAULT
-        // wash's coverage, not whatever material Sean last tuned by eye —
-        // an isolated empty suite resolves both knobs to their `.regular`/
-        // `.thick` defaults, same seam `overlayResolvedStyleFollowsInjectedDefaultsWrite`
-        // already uses. Round 7's ultraThin/thin transparency (0.35/0.55)
-        // made this pre-existing hermeticity gap visible: `ultraThin` alone
-        // still cleared the >0.05 threshold, `ultraThin` × 0.35 opacity
-        // didn't.
-        let isolatedDefaults = UserDefaults(suiteName: "ghostties.zeroChromeTitlebarBand.test.\(UUID().uuidString)")!
-        let size = NSSize(width: 700, height: 400)
-        let composite = ZStack {
-            DenseTerminalBackdropForOverlayTest()
-            SessionComposerOverlay(
-                request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-                styleOverrideForTesting: .zeroChrome,
-                revealPhaseOverrideForTesting: .revealed,
-                defaultsForTesting: isolatedDefaults,
-                centeringModel: centeringModel
-            )
-            .environmentObject(workspaceStore)
-            .environmentObject(SessionCoordinator())
-        }
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .darkAqua)
-        window.isOpaque = true
-        window.backgroundColor = .black
-
-        let hosting = NSHostingView(rootView: composite.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        guard let compositeRep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the composite fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: compositeRep)
-
-        // Sample a pixel well inside the 28pt titlebar band (y = 10, 4pt in
-        // from the left) on a backdrop that painted a distinctive band
-        // color there — a wash that stops at the band boundary would leave
-        // this pixel unchanged.
-        guard let bandColor = compositeRep.colorAt(x: 4, y: 10) else {
-            Issue.record("failed to sample the titlebar-band pixel")
-            return
-        }
-        let bandLuma = (bandColor.redComponent + bandColor.greenComponent + bandColor.blueComponent) / 3
-        let centerColor = compositeRep.colorAt(x: 350, y: 200)
-        let centerLuma = centerColor.map { ($0.redComponent + $0.greenComponent + $0.blueComponent) / 3 } ?? -1
-        #expect(
-            bandLuma > 0.05,
-            "expected the wash's material to visibly lighten the titlebar-band pixel (raw backdrop paints solid black there), got luma \(bandLuma), centerLuma \(centerLuma)"
-        )
-    }
 
     /// Solid black everywhere, including the titlebar band, so any
     /// non-black pixel sampled there after compositing the overlay proves
@@ -1285,274 +738,6 @@ struct ComposerZeroChromeStyleTests {
         var body: some View {
             Color.black
         }
-    }
-
-    // MARK: - B1: rows must fade with the field, not outlive it
-
-    /// `showNewStyleRows` tracks query/arrow state only, not `revealPhase` —
-    /// pre-fix, rows stayed fully painted on `.committing`/`.dismissing`
-    /// even though the field+status stack above them faded via its own
-    /// `revealPhase`-gated `.opacity`. Mounts with a non-empty query (so
-    /// `showNewStyleRows` is true) and `revealPhase: .constant(.committing)`
-    /// directly (same injection seam `revealPhaseConstantRevealedRendersSettled`
-    /// uses) — against the unfixed code this renders a visible selected-row
-    /// accent tint despite the phase never being `.revealed`; the fix gates
-    /// the rows block on the same phase check the text block already had.
-    @Test func zeroChromeRowsFadeOutDuringCommitPhase() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let size = NSSize(width: 560, height: 260)
-        let view = SessionComposerPalette(
-            isPresented: .constant(true),
-            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-            composerStore: composerStore,
-            styleOverrideForTesting: .zeroChrome,
-            revealPhase: .constant(.committing)
-        )
-        .environmentObject(workspaceStore)
-        .environmentObject(SessionCoordinator())
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .aqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        composerStore.noteSearchTextEditedByTyping()
-        composerStore.searchText = "d"
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-
-        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-            Issue.record("failed to render the committing-phase fixture")
-            return
-        }
-        hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        let png = rep.representation(using: .png, properties: [:])
-        writeScratchPNG(png, filename: "zero-chrome-rows-committing-phase.png")
-        #expect(png != nil)
-        if let png {
-            #expect(
-                selectionAccentPixelCount(in: png) == 0,
-                "expected rows to be faded out (opacity 0) while revealPhase == .committing, even though showNewStyleRows is true"
-            )
-        }
-    }
-
-    // MARK: - B2: a failed commit must restore revealPhase to .revealed
-
-    /// Drives a REAL commit through the keyboard path (`insertNewline:` on
-    /// the mounted `NSTextView`, same technique
-    /// `zeroChromeArrowDownRevealsRowsOnEmptyQuery` uses for `moveDown:`) —
-    /// not a call to the private `commit(template:)`. Calls `composerStore
-    /// .createWorktree(named:in:)` (same fixture-free call
-    /// `SessionComposerWorktreeLaunchTests` uses — the underlying `git
-    /// worktree add` fails harmlessly in the background against the
-    /// synthetic non-repo path this test's `makeProject()` always uses;
-    /// nothing here waits on or asserts its outcome) immediately before
-    /// firing Return, with no intervening `RunLoop` spin — `isCreatingWorktree`
-    /// is set `true` SYNCHRONOUSLY before that call returns (`SessionComposerStore
-    /// .swift:1104`), so `precommit`'s guard at `SessionComposerStore
-    /// .swift:723-726` fails and returns `false` with `writeError` set,
-    /// without ever touching the (still fully valid, still fully rendered)
-    /// project or row list — unlike removing the project, this doesn't
-    /// collapse `selectedOption` out from under the same synchronous Return
-    /// that's supposed to observe the failure. Pre-fix, `revealPhase` is set
-    /// to `.committing` before `precommit` runs and never restored on this
-    /// failure path, leaving the composer open but invisible. Reads
-    /// `revealPhase.wrappedValue` back through an `ObservableObject` box
-    /// bound in, and `composerStore.writeError` directly.
-    @MainActor
-    private final class RevealPhaseBox: ObservableObject {
-        @Published var phase: ComposerRevealPhase = .revealed
-    }
-
-    @Test func failedCommitRestoresRevealPhaseToRevealed() {
-        let project = makeProject()
-        let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
-        let box = RevealPhaseBox()
-        let phaseBinding = Binding<ComposerRevealPhase>(
-            get: { box.phase },
-            set: { box.phase = $0 }
-        )
-        let size = NSSize(width: 560, height: 260)
-        let view = SessionComposerPalette(
-            isPresented: .constant(true),
-            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-            composerStore: composerStore,
-            styleOverrideForTesting: .zeroChrome,
-            revealPhase: phaseBinding
-        )
-        .environmentObject(workspaceStore)
-        .environmentObject(SessionCoordinator())
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .aqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        // A second pass, matching `zeroChromeTypingRevealsSelectedCandidateRow`'s
-        // documented ordering: `onAppear` seeds `selectedIndex` synchronously,
-        // but `ComposerGhostTextField`'s `hasSelection` is an `NSViewRepresentable`
-        // param — it only reaches the Coordinator on `updateNSView`, which needs
-        // this second layout pass to have actually run before Return is simulated.
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        guard let textView = firstTextView(in: hosting), let delegate = textView.delegate else {
-            Issue.record("could not locate the mounted ComposerGhostTextField's NSTextView/delegate")
-            return
-        }
-
-        // Arms `isCreatingWorktree` synchronously (set before this call
-        // returns) — the git op itself runs in the background against a
-        // non-repo synthetic path and is never awaited or asserted here.
-        composerStore.createWorktree(named: "test-branch", in: project)
-        #expect(composerStore.isCreatingWorktree, "sanity check: expected isCreatingWorktree armed before Return")
-
-        _ = delegate.textView?(textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
-
-        #expect(composerStore.writeError != nil, "expected precommit to fail and set writeError")
-        #expect(
-            box.phase == .revealed,
-            "expected revealPhase restored to .revealed after a failed commit, got \(box.phase)"
-        )
-    }
-
-    // MARK: - Round 7: the OTHER commit-time failure arm must also restore revealPhase
-
-    /// Open finding from the zero-chrome in-flight memo:
-    /// `resolveCommitWorktreePathForCommit`'s `.failure` arm in
-    /// `commit(template:)` (`SessionComposerPalette.swift`) returned early
-    /// without restoring `revealPhase` to `.revealed` — the same bug class
-    /// as B2 above, but on the sibling switch a few lines later. Reachable
-    /// even though both switches read the SAME `typedBranchResolution`
-    /// computed property with no intervening keystroke: `SessionComposerStore
-    /// .selectedProjectId`'s `didSet` synchronously clears `worktreesProjectId`
-    /// (`cascadeProjectChange`) the instant `commit(template:)`'s own
-    /// mid-function write resolves a NEWLY-typed project into
-    /// `selectedProjectId` — so a typed `"<project B> > <branch> > <idiom>"`
-    /// that resolved cleanly against B's PRE-populated cache on the FIRST
-    /// read (passing the earlier `.unresolved`/`.pending` guard) reads
-    /// `.pending` on the SECOND read, once that write has fired and wiped
-    /// the cache out from under it. Project B's worktree cache is populated
-    /// directly via `refreshWorktrees` here (the same call production makes,
-    /// just not routed through the view's 300ms-debounced `.onChange` —
-    /// bypassing that debounce is what keeps this test deterministic rather
-    /// than racing a `Task.sleep`).
-    @Test func failedTypedProjectCommitRestoresRevealPhaseToRevealed() async {
-        let repoA = Self.makeThrowawayRepo()
-        let repoB = Self.makeThrowawayRepo()
-        defer {
-            Self.cleanup(repoA)
-            Self.cleanup(repoB)
-        }
-        let projectA = Project(name: "projecta", rootPath: repoA)
-        let projectB = Project(name: "projectb", rootPath: repoB)
-        let workspaceStore = WorkspaceStore(testingProjects: [projectA, projectB], testingSessions: [])
-        let suiteName = "ghostties.sessionComposerStore.test.\(UUID().uuidString)"
-        let composerStore = SessionComposerStore(isolatedForTesting: suiteName)
-        composerStore.open(projectBinding: .prefilled(projectA), workspaceStore: workspaceStore)
-        #expect(composerStore.selectedProjectId == projectA.id, "setup failed: .prefilled must pre-select A")
-
-        let box = RevealPhaseBox()
-        let phaseBinding = Binding<ComposerRevealPhase>(
-            get: { box.phase },
-            set: { box.phase = $0 }
-        )
-        let size = NSSize(width: 560, height: 260)
-        let view = SessionComposerPalette(
-            isPresented: .constant(true),
-            request: SessionComposerRequest(presentation: .centered, projectBinding: .prefilled(projectA)),
-            composerStore: composerStore,
-            styleOverrideForTesting: .zeroChrome,
-            revealPhase: phaseBinding
-        )
-        .environmentObject(workspaceStore)
-        .environmentObject(SessionCoordinator())
-
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.appearance = NSAppearance(named: .aqua)
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        // Settles `.onAppear` (`open()` + the empty-query default selection)
-        // BEFORE the query is set — matches
-        // `zeroChromeTypingRevealsSelectedCandidateRow`'s documented
-        // ordering; setting a full command string before mount left
-        // `commandProject`/`selectedIndex` unseeded and Return committed
-        // into project A's own ad-hoc path instead of resolving B at all.
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        // Mounting fires its own `.onAppear` `open()`/refresh cycle for A,
-        // asynchronously, racing anything called right after `layoutSubtreeIfNeeded()`
-        // returns. Settle to A first (absorbing that race), THEN settle to
-        // B (the project the text below types) — retrying each
-        // `refreshWorktrees` call until it actually sticks, since a single
-        // call can still lose to an in-flight competing refresh for the
-        // other project. Production populates B's cache the same way, via
-        // the view's own 300ms-debounced `commandProjectRefreshTask`; this
-        // just does it deterministically instead of racing that timer.
-        func settleWorktrees(to projectId: UUID, path: String) async {
-            for _ in 0..<40 where composerStore.worktreesProjectId != projectId {
-                await composerStore.refreshWorktrees(for: path, projectId: projectId)
-                if composerStore.worktreesProjectId == projectId { return }
-                try? await _Concurrency.Task.sleep(nanoseconds: 50_000_000)
-            }
-        }
-        await settleWorktrees(to: projectA.id, path: repoA)
-        await settleWorktrees(to: projectB.id, path: repoB)
-        #expect(composerStore.worktreesProjectId == projectB.id, "sanity check: expected B's cache populated before typing")
-
-        composerStore.noteSearchTextEditedByTyping()
-        composerStore.searchText = "projectb > main > cco"
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-
-        guard let textView = firstTextView(in: hosting), let delegate = textView.delegate else {
-            Issue.record("could not locate the mounted ComposerGhostTextField's NSTextView/delegate")
-            return
-        }
-
-        _ = delegate.textView?(textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
-
-        #expect(composerStore.selectedProjectId == projectB.id, "sanity check: expected the typed project to have won by commit time")
-        #expect(
-            box.phase == .revealed,
-            "expected revealPhase restored to .revealed after the .failure arm fired, got \(box.phase)"
-        )
     }
 
     // MARK: - DEBUG-only tuning control (session-7 brief, 2026-09-11)
@@ -1564,7 +749,7 @@ struct ComposerZeroChromeStyleTests {
     /// duplicated rather than shared across test targets/files, matching
     /// this codebase's existing per-file convention for this exact helper.
     private static func makeThrowawayRepo() -> String {
-        let unresolvedPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-zero-chrome-branch-test-\(UUID().uuidString)")
+        let unresolvedPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-composer-branch-test-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(atPath: unresolvedPath, withIntermediateDirectories: true)
         let path = realPath(unresolvedPath)
 
@@ -1601,152 +786,22 @@ struct ComposerZeroChromeStyleTests {
     /// "The control writes the right key" — drives the (non-`private`,
     /// `@testable`-reachable) bindings directly rather than simulating a
     /// menu click, same no-AX-driving shape this file already uses for
-    /// keyboard events. Covers all three knobs' storage keys in one test.
+    /// keyboard events.
     @Test func debugTuningControlWritesTheRightKeys() {
         let defaults = makeTuningDefaults()
         var changeCount = 0
         let control = ComposerDebugTuningControl(defaults: defaults, onChange: { changeCount += 1 })
 
-        control.style.wrappedValue = .zeroChrome
-        #expect(defaults.string(forKey: ComposerStyle.storageKey) == "zeroChrome")
+        control.singleLineWidthBinding.wrappedValue = 600
+        #expect(defaults.double(forKey: ComposerSingleLineTuning.widthStorageKey) == 600)
 
-        control.material.wrappedValue = .thin
-        #expect(defaults.string(forKey: ComposerZeroChromeMaterial.storageKey) == "thin")
+        control.singleLineFieldSizeBinding.wrappedValue = 20
+        #expect(defaults.double(forKey: ComposerSingleLineTuning.fieldSizeStorageKey) == 20)
 
-        control.focalBlur.wrappedValue = .off
-        #expect(defaults.string(forKey: ComposerZeroChromeFocalBlurStyle.storageKey) == "off")
+        control.witness.wrappedValue = false
+        #expect(defaults.bool(forKey: ComposerWitnessSetting.storageKey) == false)
 
-        control.fog.wrappedValue = false
-        #expect(defaults.bool(forKey: ComposerZeroChromeFogSetting.storageKey) == false)
-
-        #expect(changeCount == 4, "expected onChange to fire once per knob write, got \(changeCount)")
-    }
-
-    /// Round 8: `ComposerZeroChromeFocalBlurStyle.current()`'s own default
-    /// (unset key) moved from `.thick` to `.regular`, alongside the base
-    /// material's move to `.medium` (Sean's live look).
-    @Test func focalBlurStyleDefaultsToRegular() {
-        let defaults = makeTuningDefaults()
-        #expect(ComposerZeroChromeFocalBlurStyle.current(defaults: defaults) == .regular)
-    }
-
-    @Test func focalBlurStyleOffProducesNoMaterial() {
-        #expect(ComposerZeroChromeFocalBlur.focalMaterial(for: .off) == nil)
-        #expect(ComposerZeroChromeFocalBlur.focalMaterial(for: .thick) != nil)
-    }
-
-    /// "The overlay's resolved style/material follows it" — writes directly
-    /// to the SAME injected suite `SessionComposerOverlay(defaultsForTesting:)`
-    /// reads via `@AppStorage`, then re-renders and confirms the view
-    /// switched from the default `.singleLine`'s bordered card to the
-    /// zero-chrome branch (no border-stroke drawing code,
-    /// `zeroChromeRestStateHasNoCardBorderDrawingCode`'s same reasoning) —
-    /// proving observation, not just a one-time read.
-    /// Parameterized over window appearance × ambient appearance — see
-    /// `singleLineRestStateHasCardChrome`'s comment.
-    @Test(arguments: ["aqua", "darkAqua"], ["aqua", "darkAqua"])
-    func overlayResolvedStyleFollowsInjectedDefaultsWrite(windowAppearance: String, ambientAppearance: String) {
-        NSAppearance(named: appearanceName(ambientAppearance))!.performAsCurrentDrawingAppearance {
-            // `SessionComposerOverlay.body`'s `#if DEBUG` `ComposerDebugTuningControl`
-            // overlay (rendered whenever `isMarketingCaptureFixtureActive` is
-            // false — true for every Debug test run) is a whole dark panel of
-            // pill/row dividers close enough to `.tertiaryLabelColor` to swamp
-            // the old RGB-match border check (measured 1691, an order of
-            // magnitude over the composer card's own border) — a real
-            // regression in the card underneath would be invisible next to
-            // it. Matches the marketing capture rig's own env var to hide
-            // it, the same gate `debugTuningControlGateReflectsCaptureFixtureEnvVar`
-            // above tests directly.
-            setenv("GHOSTTIES_CAPTURE_FIXTURE", "1", 1)
-            defer { unsetenv("GHOSTTIES_CAPTURE_FIXTURE") }
-
-            let defaults = makeTuningDefaults()
-            // Fog off: `ComposerZeroChromeWash`'s own doc comment (round 8)
-            // flags that its fog shader defeats `Material`'s live blur
-            // sampling specifically in this offscreen `cacheDisplay` snapshot
-            // path on this machine, producing a flat fill. `ComposerBlurCompositingTests`
-            // pins the same flag off for the same documented reason.
-            defaults.set(false, forKey: ComposerZeroChromeFogSetting.storageKey)
-            // Step 0 (R14): same isolated-suite/material pin as
-            // `singleLineRestStateHasCardChrome` — unpinned, this suite
-            // resolves the default `.glass` treatment, which has no
-            // `.stroke(` at all, so the "before" render would never have a
-            // border to measure regardless of style.
-            defaults.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
-            let project = makeProject()
-            let workspaceStore = WorkspaceStore(testingProjects: [project], testingSessions: [])
-            let centeringModel = ComposerCenteringModel()
-            let size = NSSize(width: 700, height: 400)
-
-            let view = SessionComposerOverlay(
-                request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
-                revealPhaseOverrideForTesting: .revealed,
-                defaultsForTesting: defaults,
-                centeringModel: centeringModel
-            )
-            .environmentObject(workspaceStore)
-            .environmentObject(SessionCoordinator())
-
-            let window = NSWindow(
-                contentRect: NSRect(origin: .zero, size: size),
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
-            )
-            window.appearance = NSAppearance(named: appearanceName(windowAppearance))
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
-            hosting.frame = NSRect(origin: .zero, size: size)
-            window.contentView = hosting
-            window.orderFrontRegardless()
-            hosting.layoutSubtreeIfNeeded()
-            defer { window.orderOut(nil) }
-
-            guard let before = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-                Issue.record("failed to render the pre-write fixture")
-                return
-            }
-            hosting.cacheDisplay(in: hosting.bounds, to: before)
-            if let beforeData = before.representation(using: .png, properties: [:]) {
-                let coverage = strokeEdgeCoverage(in: beforeData) ?? 0
-                #expect(coverage >= 0.9, "expected the .singleLine card (treatment pinned .material) to render its stroke; measured strokeEdgeCoverage=\(coverage)")
-            }
-
-            defaults.set(ComposerStyle.zeroChrome.rawValue, forKey: ComposerStyle.storageKey)
-            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-            hosting.layoutSubtreeIfNeeded()
-            hosting.layoutSubtreeIfNeeded()
-
-            guard let after = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
-                Issue.record("failed to render the post-write fixture")
-                return
-            }
-            hosting.cacheDisplay(in: hosting.bounds, to: after)
-            let afterData = after.representation(using: .png, properties: [:])
-            writeScratchPNG(afterData, filename: "overlay-follows-injected-defaults-write.png")
-            #expect(afterData != nil)
-            if let afterData {
-                // Not a strict `coverage == 0`: `zeroChromeFullBleedWash`'s
-                // own concentric ripple gradient (`ComposerZeroChromeWash`)
-                // can still produce a stray high-contrast edge pair by
-                // coincidence, so this checks BOTH that stroke coverage
-                // dropped well below the bordered-card threshold above AND
-                // that the render is a real (mostly-opaque) wash rather than
-                // an accidental blank canvas, which would also score a low
-                // stroke coverage.
-                let coverage = strokeEdgeCoverage(in: afterData) ?? 0
-                let opaqueFraction = opaqueishPixelFraction(in: afterData)
-                #expect(
-                    coverage < 0.5,
-                    "expected writing ComposerStyle.zeroChrome into the injected suite to switch the LIVE overlay to the zero-chrome (borderless) branch; measured strokeEdgeCoverage=\(coverage)"
-                )
-                #expect(
-                    opaqueFraction >= 0.5,
-                    "expected the zero-chrome wash to actually render, not a blank canvas; measured opaqueishPixelFraction=\(opaqueFraction)"
-                )
-            }
-        }
+        #expect(changeCount == 3, "expected onChange to fire once per knob write, got \(changeCount)")
     }
 
     /// The fixture-hiding gate itself: `GHOSTTIES_CAPTURE_FIXTURE=1` in the
@@ -1791,62 +846,6 @@ struct ComposerZeroChromeStyleTests {
         return nil
     }
 
-    /// Mounts the PRODUCTION `ComposerGhostTextField` (`wrapsAndGrows: true`)
-    /// at the 640pt column width with the exact long prompt from the round-10
-    /// brief and proves it actually wraps (line count >= 2, via
-    /// `ComposerGhostNSTextView.wrappedLineCount`, TextKit's own line-fragment
-    /// count) with no horizontal scroll offset — the start of the text is
-    /// never clipped. Proven to fail on the OLD single-line configuration
-    /// during implementation: temporarily removing the `wrapsAndGrows`
-    /// branch in `ComposerGhostTextField.makeNSView` and re-running this
-    /// test alone reported `wrappedLineCount == 1` (red); restoring the
-    /// branch returns it to green.
-    @Test func wrappingFieldAtColumnWidthNeverClipsTheStartOfALongPrompt() {
-        let longPrompt = "brukas cco -n \"testing the naming set up for this stuff and\""
-        let queryBox = ValueBox(longPrompt)
-        let focusBox = ValueBox(false)
-        let heightBox = ValueBox<CGFloat>(ComposerZeroChromeTypography.fieldLineHeight)
-
-        let field = ComposerGhostTextField(
-            query: Binding(get: { queryBox.value }, set: { queryBox.value = $0 }),
-            fontSize: ComposerZeroChromeTypography.fieldSize,
-            fontWeight: .semibold,
-            rowHeight: ComposerZeroChromeTypography.fieldLineHeight,
-            focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
-            hasSelection: false,
-            isPickerOpen: false,
-            ghostFullPath: "",
-            wrapsAndGrows: true,
-            measuredHeight: Binding(get: { heightBox.value }, set: { heightBox.value = $0 })
-        ) { _ in }
-
-        let size = NSSize(width: 640, height: 200)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        let hosting = NSHostingView(rootView: field.frame(width: size.width, height: size.height))
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        guard let scrollView = firstScrollView(in: hosting),
-              let textView = scrollView.documentView as? ComposerGhostNSTextView else {
-            Issue.record("expected a mounted ComposerGhostNSTextView")
-            return
-        }
-        #expect(textView.wrappedLineCount >= 2)
-        #expect(scrollView.contentView.bounds.origin.x == 0)
-        #expect(textView.string.hasPrefix("brukas"))
-    }
-
     /// The popover card / `.singleLine` never set `wrapsAndGrows` — asserts the
     /// PRODUCTION default (`wrapsAndGrows: false`) keeps the field's
     /// original horizontally-scrolling single-line `NSTextContainer`/
@@ -1860,7 +859,6 @@ struct ComposerZeroChromeStyleTests {
             rowHeight: 38,
             focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
             hasSelection: false,
-            isPickerOpen: false,
             ghostFullPath: ""
         ) { _ in }
 
@@ -1929,9 +927,8 @@ struct ComposerZeroChromeStyleTests {
         let size = NSSize(width: 900, height: 300)
         let view = SessionComposerPalette(
             isPresented: .constant(true),
-            request: SessionComposerRequest(presentation: .centered, projectBinding: .locked(project)),
+            request: SessionComposerRequest(projectBinding: .locked(project)),
             composerStore: composerStore,
-            styleOverrideForTesting: .singleLine,
             tuningDefaultsForTesting: suite
         )
         .environmentObject(workspaceStore)
@@ -2121,9 +1118,9 @@ struct ComposerZeroChromeStyleTests {
         suite.set(externalWidth, forKey: ComposerSingleLineTuning.widthStorageKey)
 
         // This coordinator now changes an UNRELATED field.
-        coordinator.state.values.focalBlurRaw = ComposerZeroChromeFocalBlurStyle.thick.rawValue
+        coordinator.state.values.singleLineFieldSize = 20
 
-        #expect(suite.string(forKey: ComposerZeroChromeFocalBlurStyle.storageKey) == ComposerZeroChromeFocalBlurStyle.thick.rawValue)
+        #expect(suite.object(forKey: ComposerSingleLineTuning.fieldSizeStorageKey) as? Double == 20)
         #expect(
             suite.object(forKey: ComposerSingleLineTuning.widthStorageKey) as? Double == externalWidth,
             "a write for one field must not clobber a key this panel didn't touch"
@@ -2250,7 +1247,7 @@ struct ComposerZeroChromeStyleTests {
         let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
         let suite = UserDefaults(suiteName: "ghostties.composerSingleLineInset.test.\(UUID().uuidString)")!
         suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, tuningDefaults: suite)
         let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 100)
 
         let window = NSWindow(
@@ -2351,7 +1348,7 @@ struct ComposerZeroChromeStyleTests {
         let suite = UserDefaults(suiteName: "ghostties.composerWitnessAlignment.test.\(UUID().uuidString)")!
         suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
         suite.set(true, forKey: ComposerWitnessSetting.storageKey)
-        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, style: .singleLine, tuningDefaults: suite)
+        let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, tuningDefaults: suite)
         let size = NSSize(width: Self.derivedRenderCanvasWidth, height: 140)
 
         let window = NSWindow(
@@ -2624,23 +1621,11 @@ struct ComposerZeroChromeStyleTests {
         }
     }
 
-    /// Companion to the above: reset must not touch Style itself or any
-    /// zero-chrome-only key — those aren't single-line keys.
-    @Test func composerSingleLineResetLeavesStyleAndZeroChromeKeysAlone() {
-        let suite = UserDefaults(suiteName: "ghostties.singleLineReset.scope.test.\(UUID().uuidString)")!
-        suite.set(ComposerStyle.singleLine.rawValue, forKey: ComposerStyle.storageKey)
-        suite.set(ComposerZeroChromeMaterial.thick.rawValue, forKey: ComposerZeroChromeMaterial.storageKey)
-        ComposerSingleLineReset.reset(defaults: suite)
-        #expect(suite.string(forKey: ComposerStyle.storageKey) == ComposerStyle.singleLine.rawValue)
-        #expect(suite.string(forKey: ComposerZeroChromeMaterial.storageKey) == ComposerZeroChromeMaterial.thick.rawValue)
-    }
-
     // MARK: - DialKit panel: conditional visibility + reset action
 
     /// Acceptance item 1 (Classic removed, 2026-09-13 — the "Style only"
-    /// count this used to assert no longer exists): Style + the 4
-    /// zero-chrome dials for Zero chrome, Style + the 19 single-line dials
-    /// for Single line (round 15 added the Float horizontal dial to round
+    /// count this used to assert no longer exists): Style + the 19
+    /// single-line dials (round 15 added the Float horizontal dial to round
     /// 14's 18, which added 5 Witness dials to round 13's 13).
     /// `DialControl` doesn't expose its label/path outside the DialKit
     /// package, so this names the discriminator this test target CAN see —
@@ -2648,20 +1633,10 @@ struct ComposerZeroChromeStyleTests {
     /// mutation: showing every control for every style (the "just don't
     /// hide anything" shortcut) fails both.
     @available(macOS 14, *)
-    @Test func dialKitVisibleControlCountsMatchEachStyle() {
-        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.zeroChrome.rawValue).count == 5)
-        #expect(ComposerDialKitCoordinator.controls(for: ComposerStyle.singleLine.rawValue).count == 20)
-    }
-
     /// A stale stored `"classic"` (or any other unrecognized raw value)
     /// falls back to `.singleLine`'s control list, same as
     /// `ComposerStyle.current` itself — not the removed "Style only" list.
     @available(macOS 14, *)
-    @Test func dialKitVisibleControlCountFallsBackToSingleLineForUnrecognizedRawValue() {
-        #expect(ComposerDialKitCoordinator.controls(for: "classic").count == 20)
-        #expect(ComposerDialKitCoordinator.controls(for: "bogus").count == 20)
-    }
-
     /// Proves the LIVE panel (not just the pure function above) rebuilds
     /// its control list when Style changes — the actual "conditional
     /// visibility" mechanism (`ComposerDialKitCoordinator.handle` calling
@@ -2669,26 +1644,12 @@ struct ComposerZeroChromeStyleTests {
     /// `styleRaw != previous.styleRaw` branch in `handle` fails this since
     /// `state.controls` would stay frozen at whatever it started at.
     @available(macOS 14, *)
-    @Test func dialKitPanelRebuildsControlsWhenStyleChanges() {
-        let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.visibility.test.\(UUID().uuidString)")!
-        suite.set(ComposerStyle.zeroChrome.rawValue, forKey: ComposerStyle.storageKey)
-        let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
-        #expect(coordinator.state.controls.count == 5)
-
-        coordinator.state.values.styleRaw = ComposerStyle.singleLine.rawValue
-        #expect(coordinator.state.controls.count == 20)
-
-        coordinator.state.values.styleRaw = ComposerStyle.zeroChrome.rawValue
-        #expect(coordinator.state.controls.count == 5)
-    }
-
     /// Acceptance item 4 (panel side): triggering the panel's reset action
     /// clears every single-line key AND the panel's own in-memory model
     /// reflects the reset immediately (no stale sliders).
     @available(macOS 14, *)
     @Test func dialKitResetActionClearsKeysAndUpdatesPanelImmediately() {
         let suite = UserDefaults(suiteName: "ghostties.dialKitCoordinator.reset.test.\(UUID().uuidString)")!
-        suite.set(ComposerStyle.singleLine.rawValue, forKey: ComposerStyle.storageKey)
         let coordinator = ComposerDialKitCoordinator(defaults: suite, onChange: {})
 
         coordinator.state.values.singleLineWidth = 512

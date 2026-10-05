@@ -3,30 +3,21 @@ import Foundation
 import SwiftUI
 import GhosttiesCore
 
-/// Describes how a `SessionComposerPalette` was invoked (Phase 2 of
-/// session-creation-unified). Nothing else parameterizes the composer.
+/// Describes how the centered `SessionComposerPalette` was invoked. Nothing
+/// else parameterizes the composer.
 struct SessionComposerRequest {
-    /// How the composer is presented. Only `.anchored` (the sidebar
-    /// popover) is built in Phase 2 — `.centered` is declared now so the
-    /// type is stable, but Phase 3 is the first caller to actually use it.
-    enum Presentation: Equatable {
-        case anchored
-        case centered
-    }
-
     /// How the project is bound at open time.
     enum ProjectBinding {
         /// The project is fixed and cannot be changed from inside the
-        /// composer (the sidebar's per-project "+ New Session").
+        /// composer (the add-project flow).
         case locked(Project)
-        /// The project starts pre-selected but the user can change it via
-        /// the trailing dropdown.
+        /// The project starts pre-selected but the user can change it by
+        /// typing another project name (the sidebar's per-project "+").
         case prefilled(Project)
         /// No project pre-selected — the smart-default cascade decides.
         case open
     }
 
-    let presentation: Presentation
     let projectBinding: ProjectBinding
 }
 
@@ -99,14 +90,6 @@ final class SessionComposerStore: ObservableObject {
     /// every CENTERED-overlay open (dismissing any other window's overlay
     /// first); its `$isOpen` sink and `dismissComposerOverlayIfPresented`
     /// check it before acting.
-    ///
-    /// Deliberately NOT written by the ANCHORED popover's `open()` call
-    /// (`SessionComposerPalette.swift`'s `.onAppear`) — a row popover in
-    /// window B while window A's centered overlay is up still leaves two
-    /// composers live against the shared store. That's pre-existing
-    /// behavior (the round-2 `NSApp.isActive` gate produced the same
-    /// outcome) and explicitly out of scope here — not chased by this
-    /// property, which only arbitrates between CENTERED overlays.
     ///
     /// `weak` so this never keeps a window alive and simply reads `nil`
     /// once one is gone.
@@ -702,7 +685,7 @@ final class SessionComposerStore: ObservableObject {
         // R3 (Phase 3 review round 2): the keyboard path's double-Return
         // guard (`SessionComposerPalette.commit(template:)` nil-ing
         // `selectedIndex` synchronously) doesn't cover the mouse path —
-        // `ComposerRow`'s `Button(action:)` calls `option.action()` directly
+        // a results row's `Button(action:)` calls `option.action()` directly
         // and never reads `selectedIndex`. A fast double-click on a
         // template row (well inside the system's ~500ms double-click
         // interval, especially during the centered overlay's 0.2s
@@ -1025,13 +1008,6 @@ final class SessionComposerStore: ObservableObject {
         guard worktreePath != currentlyShown else { return .noOp }
         selectedWorktreePath = worktreePath
         return .changed
-    }
-
-    /// The picker's "Default (<branch>)" row — clears the override back to
-    /// "wherever the project points right now" (`project.rootPath`). Arms
-    /// no undo, same reasoning as `changeBranchChip`.
-    func clearBranchChip() {
-        selectedWorktreePath = nil
     }
 
     /// Blocker 2 (Slice B review round 1): sets `writeError` for an

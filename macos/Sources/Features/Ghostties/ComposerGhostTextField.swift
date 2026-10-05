@@ -12,10 +12,8 @@ import GhosttiesCore
 /// field editor, a different protocol on a different class; nothing here
 /// copies it). It is built to the AppKit semantics documented in
 /// `docs/plans/composer-ui-11/refutation-appkit.md` (findings A-F1 through
-/// A-F28) and gated OFF by default
-/// (`ComposerGhostTextField.modelBFieldStorageKey`, `@AppStorage`, default
-/// `false`) — `SessionComposerPalette.queryRow` still builds
-/// `ComposerQueryField` unless Sean flips the flag himself.
+/// A-F28). It is the composer's one query field, built by
+/// `SessionComposerPalette`'s single-line field.
 ///
 /// **What is NOT verified, and cannot be verified by an agent** (A-F13 —
 /// every gate below is a manual keyboard matrix, and this repo forbids
@@ -36,13 +34,10 @@ import GhosttiesCore
 /// - Undo scope across a composer close/reopen cycle (A-F7/G-F16).
 /// - `⌘V` of multi-line text, drag-and-drop, or Services insertions
 ///   (`isFieldEditor = true` is set, per A-F15, but not driven).
-/// - On-screen material/vibrancy fidelity, or the `.anchored` popover path
-///   (this field only renders when `.centered`, matching the ghost-gate
-///   rule G-F28; `.anchored` keeps `ComposerQueryField` even with the flag
-///   on).
+/// - On-screen material/vibrancy fidelity.
 /// - Whether the four hidden `.keyboardShortcut` Buttons (retained from
-///   `ComposerQueryField`, A-F11 — mounted at the call site,
-///   `SessionComposerPalette.queryRow`'s model-B branch, NOT in this file;
+///   the deleted SwiftUI query field, A-F11 — mounted at the call site,
+///   `SessionComposerPalette`'s single-line field, NOT in this file;
 ///   this type owns no SwiftUI `body` to hang them on) still win first
 ///   against a live `NSTextView` first responder the way they did against
 ///   SwiftUI's own field editor — Assumption 1 in the refutation, "probably
@@ -50,8 +45,7 @@ import GhosttiesCore
 ///   these four Buttons were DROPPED from the initial construction despite
 ///   the plan requiring them retained, and the omission went undocumented
 ///   here — this file's own header claimed them present while they were
-///   not. Restored at the call site with the same `!isPickerOpen`
-///   conditional mounting `ComposerQueryField.body` uses. Their WIN-FIRST
+///   not. Restored at the call site. Their WIN-FIRST
 ///   behavior against this file's `NSTextView` remains exactly as
 ///   unverified as stated above — restoring them closes the "dropped
 ///   entirely" gap, not the "unverified interaction" one.
@@ -77,7 +71,7 @@ import GhosttiesCore
 ///   comparing like with like. With Blocker 1 fixed — typed text now
 ///   carries `textView.typingAttributes` (15pt) on write, matching the
 ///   font `typedWidth` was always measuring against — the residual
-///   RE-measured at ~3.5pt logical (7px @2x) in `step7-modelb-light.png`
+///   RE-measured at ~3.5pt logical (7px @2x) in `step7-ghost-field-light.png`
 ///   (was ~2pt/4px under the old, mismatched-font measurement; the two
 ///   numbers are not comparable, since the earlier one was measuring the
 ///   wrong thing). Not fully closed to zero; most likely ordinary
@@ -98,37 +92,22 @@ import GhosttiesCore
 /// applies NO temporary attributes — there is nothing to tint yet, Q2 is
 /// still open.
 struct ComposerGhostTextField: NSViewRepresentable {
-    /// `@AppStorage` key gating model B. Default OFF — read at the call
-    /// site (`SessionComposerPalette.queryRow`), not here; this type has no
-    /// opinion about the flag beyond owning its name.
-    static let modelBFieldStorageKey = "ghostties.composerModelBField"
-
     @Binding var query: String
     var fontSize: CGFloat
-    /// Fix round 2, item 8 (zero-chrome type scale): default `.regular`
-    /// keeps every existing call site (the popover's Model B field, `.singleLine`)
-    /// byte-identical — only `.zeroChrome`'s field passes `.semibold`.
     var fontWeight: NSFont.Weight = .regular
-    /// The row height the field renders inside (`.centered` only tonight,
-    /// 38pt — `SessionComposerPalette.fieldHeight`). Used only to compute a
+    /// The row height the field renders inside (38pt — `SessionComposerPalette.fieldHeight`). Used only to compute a
     /// vertical `textContainerInset` that centers a single line, since
     /// `NSTextView`'s own inset defaults to `(0, 0)` and renders top-aligned
     /// (A-F6).
     var rowHeight: CGFloat
     @Binding var focusTrigger: Bool
-    /// D6 parity with `ComposerQueryField.hasSelection` — whether Return
+    /// D6: whether Return
     /// commits (`.submit`) or shakes (`.submitNoMatch`).
     var hasSelection: Bool
-    /// D6 parity with `ComposerQueryField.isPickerOpen` — while true, this
-    /// field's own arrow/Return handling goes quiet (the inline
-    /// project/branch picker is the only live handler); mirrors the guard
-    /// ladder in `ComposerQueryField.body`'s `.onSubmit`/`.onMoveCommand`
-    /// exactly, selector-for-selector.
-    var isPickerOpen: Bool
     /// The full destination Return would commit right now — NOT
-    /// `SessionComposerPalette.ghostPlaceholder` (model A's rest-state-only
+    /// `SessionComposerPalette.ghostPlaceholder` (the rest-state-only
     /// placeholder, welded to `currentProject`). Sourced instead from
-    /// `SessionComposerPalette.ghostFullPathForModelB`, which reads the
+    /// `SessionComposerPalette.ghostFullPathForField`, which reads the
     /// CURRENTLY HIGHLIGHTED option's own resolved destination — a
     /// highlighted project row ghosts THAT project's path even though
     /// `currentProject` never changed, which is what lets typing `bruk`
@@ -141,34 +120,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// (`nextSegment(remainder:)`).
     var ghostFullPath: String
 
-    /// Round 10 (typewriter centered column): when true, the field WRAPS
-    /// at word boundaries within its own width instead of scrolling
-    /// horizontally, growing vertically up to
-    /// `ComposerZeroChromeTypography.maxFieldLines` lines before scrolling
-    /// internally. `.singleLine` never sets this — it keeps the
-    /// original single-line, horizontally-scrolling configuration
-    /// byte-for-byte (see `makeNSView`'s branch below).
-    var wrapsAndGrows: Bool = false
-
-    /// Round 12 (zero-chrome "one last ditch effort" centering): `.left`
-    /// (unchanged) or `.center` — sets `NSTextView.alignment` directly.
-    /// `applyStyles()`'s ghost-label placement needs NO separate branch for
-    /// this: in `wrapsAndGrows` mode it already reads the caret's real
-    /// on-screen position via `firstRect(forCharacterRange:)`, which
-    /// reflects whatever alignment TextKit actually laid the line out
-    /// with — see that method's doc comment. `.singleLine`
-    /// always passes `.left`, this field's only alignment before this round.
-    var textAlignment: NSTextAlignment = .left
-
-    /// Round 10: the field's own laid-out content height — one
-    /// `ComposerZeroChromeTypography.fieldLineHeight` per wrapped line,
-    /// capped at `maxFieldLines` — written back to SwiftUI so the caller's
-    /// frame can grow (`Coordinator.reportMeasuredHeightIfNeeded()`).
-    /// Ignored entirely (never read or written) when `wrapsAndGrows` is
-    /// false.
-    @Binding var measuredHeight: CGFloat
-
-    var onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)?
+    var onEvent: ((KeyboardEvent) -> Void)?
 
     init(
         query: Binding<String>,
@@ -177,12 +129,8 @@ struct ComposerGhostTextField: NSViewRepresentable {
         rowHeight: CGFloat,
         focusTrigger: Binding<Bool>,
         hasSelection: Bool,
-        isPickerOpen: Bool,
         ghostFullPath: String,
-        wrapsAndGrows: Bool = false,
-        textAlignment: NSTextAlignment = .left,
-        measuredHeight: Binding<CGFloat> = .constant(ComposerZeroChromeTypography.fieldLineHeight),
-        onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)? = nil
+        onEvent: ((KeyboardEvent) -> Void)? = nil
     ) {
         self._query = query
         self.fontSize = fontSize
@@ -190,11 +138,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         self.rowHeight = rowHeight
         self._focusTrigger = focusTrigger
         self.hasSelection = hasSelection
-        self.isPickerOpen = isPickerOpen
         self.ghostFullPath = ghostFullPath
-        self.wrapsAndGrows = wrapsAndGrows
-        self.textAlignment = textAlignment
-        self._measuredHeight = measuredHeight
         self.onEvent = onEvent
     }
 
@@ -206,15 +150,34 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// his call as design authority, not an accessibility miss. **0.50 does
     /// NOT meet WCAG AA** (measured ≈3.0:1 light mode; see
     /// `ComposerDesignCallRenderTests`' evidence for the exact rendered
-    /// ratio). Same production symbol `ComposerQueryField.ghostPlaceholderOpacity`
-    /// pins, re-declared here (not shared) because this type has its own
-    /// AppKit color path (`NSColor`, not SwiftUI `Color`) and no common base
-    /// to hang a shared constant on without touching `ComposerQueryField`,
-    /// which is out of scope. Deliberately kept in lockstep with that
-    /// constant — this is model B (behind View → Experimental Composer
-    /// Field, default OFF); `ComposerQueryField` is model A, the shipping
-    /// default. If you change one, change the other.
+    /// ratio). `ghostPlaceholderOpacity` below is the same value as a
+    /// `Double` for tests that pin it; this one is the `CGFloat` the AppKit
+    /// color path (`NSColor`) consumes. Keep the two in lockstep.
     static let ghostOpacity: CGFloat = 0.50
+
+    /// `ghostOpacity` as a `Double`, a named production symbol so a test can
+    /// pin the rendered value (0.50, deliberately below WCAG AA; see above)
+    /// without re-declaring a literal.
+    static let ghostPlaceholderOpacity: Double = 0.50
+
+    /// The field's `.accessibilityLabel`, a named production symbol so
+    /// `AccessibilityTests` asserts against the string actually rendered.
+    static let accessibilityFieldLabel: String = "New session command"
+
+    enum KeyboardEvent {
+        case exit
+        case submit
+        /// Return pressed with no row highlighted (empty results list) —
+        /// distinct from `.submit` so the parent can play the no-match
+        /// shake/border feedback instead of silently swallowing the key.
+        case submitNoMatch
+        case move(MoveCommandDirection)
+        /// R14: Tab accepted a ghost-text segment (`acceptGhost`, past both
+        /// its guards — a Tab with nothing to accept sends nothing). Drives
+        /// the Witness ghost's hop beat only; no other effect (the field
+        /// already wrote the accepted text itself).
+        case acceptedGhost
+    }
 
     /// DEFECT 3 fix (review round 2): a small fixed trailing pad added to
     /// `ghostInkSize`'s measured (advance-width) size — see
@@ -266,8 +229,8 @@ struct ComposerGhostTextField: NSViewRepresentable {
 
     /// The `" > "` segment separator every full destination path
     /// (`ghostFullPath`) is built from (`SessionComposerCommandParser`'s
-    /// `resolutionLineSegments`/`ghostPlaceholder`, and the model-B-only
-    /// `ghostFullPathForModelB` at the `SessionComposerPalette` call site).
+    /// `resolutionLineSegments`/`ghostPlaceholder`, and
+    /// `ghostFullPathForField` at the `SessionComposerPalette` call site).
     static let segmentSeparator = " > "
 
     /// Derives the ghost from the same full-path source model A's
@@ -379,7 +342,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// swapping to `ghostInkSize` alone reproduced an IDENTICAL hard cutoff
     /// at the same column (if it were genuinely ink-based this fix would
     /// have moved the clip). Second, its returned HEIGHT is used verbatim
-    /// as the label height below, and in `step7-modelb-light.png` the
+    /// as the label height below, and in `step7-ghost-field-light.png` the
     /// ghost's ink spans the same rows (27-50) as the typed run — that is
     /// LINE HEIGHT, not a tight ink bounding box. The thing that actually
     /// fixed the clipping is `glyphAntialiasMargin` (a fixed 3pt trailing
@@ -415,10 +378,6 @@ struct ComposerGhostTextField: NSViewRepresentable {
         // these the document view never grows past the clip view's width,
         // `NSScrollView` has nothing to scroll, and typed text past the
         // field's edge simply clips instead of scrolling into view.
-        // Round 10: `wrapsAndGrows` (zero-chrome only) overrides this whole
-        // block below — `.singleLine` never sets it, so this
-        // stays byte-for-byte their existing single-line, horizontally-
-        // scrolling configuration.
         textView.isHorizontallyResizable = true
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.autoresizingMask = [.height]
@@ -431,21 +390,6 @@ struct ComposerGhostTextField: NSViewRepresentable {
         textView.isRichText = false
         textView.isVerticallyResizable = false
 
-        if wrapsAndGrows {
-            // Round 10 (typewriter centered column): word-wrap within the
-            // text view's own width instead of scrolling horizontally.
-            // `widthTracksTextView = true` syncs the container's width to
-            // the text view's frame on every layout — SwiftUI drives that
-            // frame width via `newStyleFieldWidth` at the call site, so no
-            // explicit `containerSize` write is needed here. Height is
-            // content-driven (`reportMeasuredHeightIfNeeded()` below), not
-            // the fixed `rowHeight` single-line centering uses.
-            textContainer.widthTracksTextView = true
-            textView.isHorizontallyResizable = false
-            textView.isVerticallyResizable = true
-            textView.autoresizingMask = [.width]
-        }
-
         // Fix 4 (review, A-F6): font MUST be set before computing
         // `verticalInset` — `NSTextView.font` is already non-nil at
         // construction (its own AppKit default, not this field's 15pt), so
@@ -456,27 +400,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
         // always computed against it.
         textView.font = NSFont.systemFont(ofSize: fontSize, weight: fontWeight)
         textView.textColor = .labelColor
-        // Round 12: set BEFORE any text is inserted (`setText` below) so the
-        // typing attributes' paragraph style already carries this alignment
-        // for the very first character, not just ones typed after a later
-        // `updateNSView` pass.
-        textView.alignment = textAlignment
 
-        if wrapsAndGrows {
-            // No single-line centering inset — each wrapped line uses the
-            // font's own natural line height. The SwiftUI frame this field
-            // renders inside grows in `ComposerZeroChromeTypography
-            // .fieldLineHeight`-per-line increments (`measuredHeight`
-            // below), which is a nominal 44pt/line contract for the
-            // ANCHOR math, not a pixel-exact measurement of this font's
-            // own line spacing — a documented approximation, not tuned
-            // further here.
-            textView.textContainerInset = .zero
-        } else {
-            let lineHeight = layoutManager.defaultLineHeight(for: textView.font ?? NSFont.systemFont(ofSize: fontSize))
-            let verticalInset = max(0, (rowHeight - lineHeight) / 2)
-            textView.textContainerInset = NSSize(width: 0, height: verticalInset)
-        }
+        let lineHeight = layoutManager.defaultLineHeight(for: textView.font ?? NSFont.systemFont(ofSize: fontSize))
+        let verticalInset = max(0, (rowHeight - lineHeight) / 2)
+        textView.textContainerInset = NSSize(width: 0, height: verticalInset)
 
         // `isFieldEditor = true` (A-F15/G-F10): rejects newline-bearing
         // paste, drag, and Services insertions wholesale — the only
@@ -521,7 +448,6 @@ struct ComposerGhostTextField: NSViewRepresentable {
         context.coordinator.textView = textView
         context.coordinator.installGhostLabel(in: textView)
         context.coordinator.applyStyles()
-        context.coordinator.reportMeasuredHeightIfNeeded()
 
         return scrollView
     }
@@ -530,19 +456,12 @@ struct ComposerGhostTextField: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = context.coordinator.textView else { return }
 
-        // Round 12: the live pill can flip alignment while the field is
-        // mounted (Sean tuning by eye) — keep it in sync every update.
-        if textView.alignment != textAlignment {
-            textView.alignment = textAlignment
-        }
-
         // A-F14: never write the binding — or run the styling pass — into a
         // live IME composition session.
         if !textView.hasMarkedText(), textView.string != query {
             context.coordinator.setText(query, in: textView)
         }
         context.coordinator.applyStyles()
-        context.coordinator.reportMeasuredHeightIfNeeded()
 
         if focusTrigger {
             // A-F8: never assign SwiftUI `@Published` state synchronously
@@ -591,7 +510,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// fully transparent — `drawsBackground = false` top to bottom)
         /// hierarchy rendered visibly DARKER than the same alpha applied
         /// any other way — measured `rgb(66,66,66)` light /
-        /// `rgb(196,196,196)` dark in `step7-modelb-light.png` /
+        /// `rgb(196,196,196)` dark in `step7-ghost-field-light.png` /
         /// `-dark.png`, both matching `1 − (1 − 0.49)²` (a doubled 0.49
         /// composite) to three decimal places even though only ONE draw
         /// was happening. `wantsLayer = true` (an EXPLICIT own layer,
@@ -650,7 +569,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// NO preceding character to inherit attributes from, so it rendered
         /// at TextKit's own layout-manager defaults — NOT `textView.font`
         /// (this field's 15pt) or `textView.textColor` (`.labelColor`).
-        /// Measured (pre-fix `0db87aef3` vs the regression, `step7-modelb-
+        /// Measured (pre-fix `0db87aef3` vs the regression, `step7-ghost-field-
         /// light.png`): typed "Gho" glyph height 24px -> 19px (19/24 ≈
         /// 12/15), darkest typed pixel rgb(39,39,39) (labelColor at 0.85)
         /// -> rgb(0,0,0) (unattributed). Fix: after the replace, explicitly
@@ -748,7 +667,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // explanation. With Blocker 1 fixed (typed text now carries
             // `textView.typingAttributes`, 15pt, matching the font measured
             // here), re-measured against the freshly rendered
-            // `step7-modelb-light.png`: gap is ~3.5pt logical (7px @2x) —
+            // `step7-ghost-field-light.png`: gap is ~3.5pt logical (7px @2x) —
             // not directly comparable to round 1's ~2pt/4px figure, since
             // that number was measuring a mismatched-font comparison, not
             // a smaller version of this same gap. Not fully closed to
@@ -767,7 +686,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // bearing" was also wrong, above.)
             //
             // Measured facts instead: a column scan of the typed-vs-ghost
-            // boundary in `step7-modelb-light.png` shows 2 blank columns
+            // boundary in `step7-ghost-field-light.png` shows 2 blank columns
             // between glyphs INSIDE the typed run, 1-2 blank columns
             // INSIDE the ghost run, but 5 blank columns AT the
             // typed-to-ghost boundary — a systematic ~1.5-2pt excess, not
@@ -785,24 +704,9 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // leading offset that `titleRect(forBounds:)` doesn't expose
             // remains UNTESTED; that piece is still a hypothesis, not a
             // measured cause.
-            // Round 10: the `typedWidth`-sum measurement above assumes the
-            // ENTIRE typed string sits on one line — true for the
-            // single-line callers this was tuned for, but wrong once
-            // `wrapsAndGrows` lets the caret land on line 2 or 3. Use
-            // `firstRect`'s own on-screen rect directly there instead —
-            // it's exactly the caret's real position regardless of which
-            // wrapped line it's on, at the cost of reintroducing the small
-            // sub-pixel gap the `typedWidth` measurement above was tuned
-            // to close (acceptable: correct line/position beats a few
-            // points of kerning gap).
-            let origin: NSPoint
-            if parent.wrapsAndGrows {
-                origin = NSPoint(x: viewRect.minX, y: viewRect.minY)
-            } else {
-                let typedWidth = (typed as NSString).size(withAttributes: [.font: textView.font as Any]).width
-                let originX = textView.textContainerInset.width + typedWidth
-                origin = NSPoint(x: originX, y: viewRect.minY)
-            }
+            let typedWidth = (typed as NSString).size(withAttributes: [.font: textView.font as Any]).width
+            let originX = textView.textContainerInset.width + typedWidth
+            let origin = NSPoint(x: originX, y: viewRect.minY)
 
             // This method is a legitimate MULTI-CALL socket by design
             // (A-F3 — fired from both `onWindowChange` AND `updateNSView`,
@@ -861,7 +765,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // ADVANCE widths, not the glyphs' actual painted ink extent —
             // a glyph whose outline overshoots its own advance (this
             // font's terminal `s` does, measured directly: column-ink-count
-            // scan of `step7-modelb-light.png` showed the last `s` cut with
+            // scan of `step7-ghost-field-light.png` showed the last `s` cut with
             // a HARD zero at the frame edge, not tapering the way every
             // other glyph in the string does) gets its trailing pixels
             // clipped by `ghostLabel.frame`'s width, since `NSTextField`
@@ -885,23 +789,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // cutoff (see this fix set's commit body for the full scan).
             let measuredSize = ComposerGhostTextField.ghostInkSize(for: ghostText, font: ghostLabel.font ?? textView.font ?? NSFont.systemFont(ofSize: parent.fontSize))
             let fullWidth = measuredSize.width + ComposerGhostTextField.glyphAntialiasMargin
-            // Round 11 (review): in wrap mode the field's own frame width
-            // IS the centered column width — `widthTracksTextView = true`
-            // means growing `textView.frame` (as A-F2 below does for the
-            // single-line/horizontal-scroll styles) widens the text
-            // container too, so typed text re-wraps past the 640pt column.
-            // Clip the label to the column's right edge instead of growing
-            // the field to fit it; Tab still completes the full string
-            // regardless of what's currently painted. (Flowing the
-            // overflow onto the next wrapped line was considered and
-            // rejected for this round — see round-11 report.)
-            let labelWidth = parent.wrapsAndGrows
-                ? min(fullWidth, max(0, textView.bounds.width - origin.x))
-                : fullWidth
             ghostLabel.frame = NSRect(
                 x: origin.x,
                 y: origin.y,
-                width: labelWidth,
+                width: fullWidth,
                 height: measuredSize.height
             )
             ghostLabel.isHidden = false
@@ -910,16 +801,9 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // or a long-path ghost is clipped to zero — the text view
             // otherwise sizes itself to the used rect of the real glyphs
             // only, and the scroll view has nothing beyond that to reveal.
-            // Round 11 (review): NEVER in wrap mode — `widthTracksTextView`
-            // syncs the text container to this same frame, so growing it
-            // here re-wraps typed text past the column. Wrap mode's field
-            // width is driven by SwiftUI's column layout, not by ghost
-            // content.
-            if !parent.wrapsAndGrows {
-                let requiredWidth = ghostLabel.frame.maxX + textView.textContainerInset.width
-                if textView.frame.width < requiredWidth {
-                    textView.setFrameSize(NSSize(width: requiredWidth, height: textView.frame.height))
-                }
+            let requiredWidth = ghostLabel.frame.maxX + textView.textContainerInset.width
+            if textView.frame.width < requiredWidth {
+                textView.setFrameSize(NSSize(width: requiredWidth, height: textView.frame.height))
             }
         }
 
@@ -936,17 +820,13 @@ struct ComposerGhostTextField: NSViewRepresentable {
             }
             parent.query = textView.string
             applyStyles()
-            reportMeasuredHeightIfNeeded()
         }
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
             switch selector {
             case #selector(NSResponder.insertNewline(_:)):
-                // Mirrors `ComposerQueryField.body`'s `.onSubmit` guard
-                // ladder selector-for-selector (D6/B1): quiet while a picker
-                // is open, `.submitNoMatch` shakes instead of silently
-                // swallowing Return against an empty result list.
-                guard !parent.isPickerOpen else { return true }
+                // `.submitNoMatch` shakes instead of silently swallowing
+                // Return against an empty result list.
                 if parent.hasSelection {
                     parent.onEvent?(.submit)
                 } else {
@@ -963,11 +843,11 @@ struct ComposerGhostTextField: NSViewRepresentable {
                 return true
 
             case #selector(NSResponder.moveUp(_:)):
-                if !parent.isPickerOpen { parent.onEvent?(.move(.up)) }
+                parent.onEvent?(.move(.up))
                 return true
 
             case #selector(NSResponder.moveDown(_:)):
-                if !parent.isPickerOpen { parent.onEvent?(.move(.down)) }
+                parent.onEvent?(.move(.down))
                 return true
 
             case #selector(NSResponder.insertTab(_:)):
@@ -1017,39 +897,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
             setText(newText, in: textView)
             parent.query = newText
             applyStyles()
-            reportMeasuredHeightIfNeeded()
             // R14: past both guards above — there was ghost text and a
             // non-empty segment was actually accepted. Drives the Witness
             // ghost's hop beat only.
             parent.onEvent?(.acceptedGhost)
-        }
-
-        /// Round 10 (typewriter centered column): writes the field's
-        /// current wrapped-line-count-derived height
-        /// (`ComposerZeroChromeTypography.fieldLineHeight` per line,
-        /// capped at `maxFieldLines`) back into `parent.measuredHeight` —
-        /// the "report the laid-out used height back to SwiftUI" mechanism
-        /// this file's caller (`SessionComposerPalette`) uses to grow its
-        /// own frame upward from a fixed bottom anchor. No-op when
-        /// `wrapsAndGrows` is false — `.singleLine` never reads
-        /// `measuredHeight`, so this never touches their bindings. Also
-        /// keeps the caret's own line visible once content exceeds the cap
-        /// (`scrollRangeToVisible`), per the brief's "scrolls internally,
-        /// keeping the caret's line visible."
-        func reportMeasuredHeightIfNeeded() {
-            guard parent.wrapsAndGrows, let textView else { return }
-            textView.scrollRangeToVisible(textView.selectedRange())
-            let lines = min(ComposerZeroChromeTypography.maxFieldLines, textView.wrappedLineCount)
-            let height = CGFloat(lines) * ComposerZeroChromeTypography.fieldLineHeight
-            guard abs(height - parent.measuredHeight) > 0.5 else { return }
-            // A-F8 pattern: defer the binding write to the next runloop
-            // turn, same reasoning `updateNSView`'s `focusTrigger` handling
-            // documents — this method is called FROM `updateNSView` and
-            // `textDidChange`, both mid-view-update contexts.
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.textView != nil else { return }
-                self.parent.measuredHeight = height
-            }
         }
 
         func teardown() {
@@ -1093,27 +944,6 @@ final class ComposerGhostNSTextView: NSTextView {
     override func accessibilityValue() -> String? {
         guard !currentGhostText.isEmpty else { return string }
         return "\(string), suggestion: \(currentGhostText)"
-    }
-
-    /// Round 10 (typewriter centered column): how many wrapped line
-    /// fragments the CURRENT text lays out into, via TextKit's own
-    /// authoritative line-fragment enumeration (not a
-    /// `usedRect.height / lineHeight` division, which drifts against this
-    /// font's real line spacing). Floors at 1 (even empty text occupies one
-    /// line). Not gated on `wrapsAndGrows` — harmless to call on a
-    /// single-line configuration (always returns 1 there, since a
-    /// non-wrapping container never breaks a line), but only
-    /// `Coordinator.reportMeasuredHeightIfNeeded()` actually reads it.
-    var wrappedLineCount: Int {
-        guard let layoutManager, let textContainer else { return 1 }
-        layoutManager.ensureLayout(for: textContainer)
-        let glyphRange = layoutManager.glyphRange(for: textContainer)
-        guard glyphRange.length > 0 else { return 1 }
-        var count = 0
-        layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, _, _, _, _ in
-            count += 1
-        }
-        return max(1, count)
     }
 
     /// Sean doesn't want the macOS cursor-accessory bubble (dictation /

@@ -267,24 +267,6 @@ struct SessionComposerBreadcrumbChipTests {
         #expect(store.selectedWorktreePath == "/tmp/A-worktrees/feature-x")
     }
 
-    /// `clearBranchChip()` is the picker's "Default" row — resets the
-    /// override back to nil (no launch-path override) without touching
-    /// project or search text, and arms no undo, same as `changeBranchChip`.
-    @Test func clearBranchChipResetsToDefaultWithoutArmingUndo() {
-        let store = SessionComposerStore(isolatedForTesting: ())
-        let projectA = makeProject(name: "A")
-        store.selectedProjectId = projectA.id
-        store.searchText = "cco"
-        store.selectedWorktreePath = "/tmp/A-worktrees/feature-x"
-
-        store.clearBranchChip()
-
-        #expect(store.selectedWorktreePath == nil)
-        #expect(store.selectedProjectId == projectA.id)
-        #expect(store.searchText == "cco")
-        #expect(store.pendingChipUndo == nil)
-    }
-
     // MARK: - B3: open()/cancel() reset selectedWorktreePath
 
     /// `open(...)` must reset `selectedWorktreePath` even when called

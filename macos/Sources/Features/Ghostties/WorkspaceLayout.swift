@@ -288,8 +288,8 @@ enum WorkspaceLayout {
     static let needsAttentionPurple = Color(red: 0.659, green: 0.333, blue: 0.969)
 
     /// Composer results-list selection accent — the selected-row fill and
-    /// per-character search-match highlight in `ComposerResultsTable`/
-    /// `ComposerRow`, replacing the system `Color.accentColor`. Deliberately
+    /// per-character search-match highlight in the composer's results list,
+    /// replacing the system `Color.accentColor`. Deliberately
     /// shares its hex (#5B8DEF) with `statusYourTurnBlue`, a known collision
     /// Sean has accepted for now rather than reusing that status-named token
     /// directly (composer selection isn't a session status). Scheduled for
@@ -741,15 +741,6 @@ extension Notification.Name {
     /// created via the cascade pick (Cmd+T, Cmd+Shift+T, or a composer
     /// commit) into a collapsed project spawns with no visible row anywhere.
     static let workspaceDidCreateSessionInProject = Notification.Name("com.seansmithdesign.ghostties.workspace.didCreateSessionInProject")
-
-    /// Posted by `WorkspaceViewContainer.presentComposerOverlay(projectBinding:)`
-    /// right before it opens the centered composer (F5 fix, Phase 3 review).
-    /// The notification object is the originating NSWindow. `ProjectDisclosureRow`
-    /// observes this and closes its own anchored composer popover, if open —
-    /// the single-presentation invariant: the centered overlay always wins
-    /// over a per-row popover, since both share the one `SessionComposerStore`
-    /// singleton's state.
-    static let workspaceComposerOverlayWillPresent = Notification.Name("com.seansmithdesign.ghostties.workspace.composerOverlayWillPresent")
 
     /// Posted by AppDelegate's Cmd+W local-event monitor, project-first
     /// workspace mode only (see `AppDelegate.isProjectFirstWorkspaceWindow(_:)`).
