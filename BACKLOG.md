@@ -15,6 +15,14 @@ sidebar DialKit panel, Release-compile fix. Design canvas saved to `~/Code/ghost
   Quitting it needs Sean's nod; then snapshot the fresh `7ec1b7725` build and launch it by path.
 - [ ] **Sean hands-on: simplified popover** — hover delay, rail name line, Esc (only while the pointer is on the card).
 - [ ] **Key-press spike** — see below; gates Approve/Deny and popover 06.
+- [ ] **Review the Sidebar Build Check board** (2026-10-02) — fixture captures of `5263d69eb` (now on main):
+  pinned / rail / closed + popover approval / running / done beside the Flow 01 canvas, with 4 flags.
+  https://claude.ai/artifact/XKxBxTnC43TrQPMY82x8bC
+- [ ] **Closed state slow to settle?** (inferred, 2026-10-02) — a fixture launch into `closed` still showed ghosts,
+  chevrons and half the tray over the terminal at 3s; clean at 10s. Check by hand whether Cmd+Shift+S does it too.
+- [ ] **DECIDE OR KILL: capture worktree** `session-4/.claude/worktrees/sidebar-capture` (detached `5263d69eb`,
+  clean; holds copied GhosttyKit/zig-out/CEF link + Debug build). Strawman: remove — main now has the same code.
+- [ ] **Hover-reveal (Flow 01 state 04) never captured** — needs a real pointer; fixture can't force it.
 
 ### Round 7 detail
 
@@ -36,6 +44,7 @@ sidebar DialKit panel, Release-compile fix. Design canvas saved to `~/Code/ghost
 - [ ] **Stale "Needs approval" after an Esc interrupt** (pre-existing, state source) — an interrupt likely fires
   no hook, so `.needsPermission` stays fresh for up to 30 minutes; the row indicator likely shares this.
 - [ ] **Before the PR (on Claude):** full suite with xcresulttool totals; side-by-side captures vs the Flow 09 exports.
+  (2026-10-02: side-by-side vs **Flow 01** done — board above; Flow 09 comparison still not done.)
 - [ ] **Build popover 06 terminal peek + reply** (carried; Sean: "go") — Flow 09 `V443rn`. Depends on the spike.
 - [ ] **DECIDE OR KILL: red has two meanings** — selected ghost vs "needs you". Strawman: keep red = needs you,
   selected = white card only (ghost stays grey).
@@ -95,7 +104,7 @@ spec `docs/design/sidebar-presence/flow-01-sidebar-presence.md`). Session transc
 - [x] S2 Built on `feat/sidebar-presence` (pushed to origin 2026-09-28 @ 840301a9a), plus Sean's revisions: toggle pinned↔rail (Cmd+S), Cmd+Shift+S full close, rail 128pt, tray = one pill, no terminal top bar, glyph trailing, overlay follows terminal theme, 8pt card margin every state, Flow 05 motion
 - [x] S3 Full suite @ c66692ede: 1430/6/1 (Light); all 6 = known load-timeout flakes, pass in isolation. (carried) Re-run full suite on 840301a9a
 - [x] S4 Reviews: first @ 9884fef8e (pass), second @ c66692ede (reject → fixed 1b4c999d9..d32041cfd). (carried) Review 1b4c999d9..840301a9a (motion + rail 128 + glyph trailing) — not yet reviewed
-- [ ] S5 (carried) Screenshots of pinned/rail/closed @ 840301a9a — blocked last round: displays asleep. Motion needs Sean's hands-on pass
+- [x] S5 Screenshots of pinned/rail/closed — done 2026-10-02 at the later `5263d69eb` (Sidebar Build Check board, see top). Motion still needs Sean's hands-on pass
 - [ ] (carried) PR `feat/sidebar-presence` → main on the fork, with before/after screenshots, after S3–S5 re-run + Sean's motion feel-check
 - [ ] (carried) Known compromise: Flow 05 glyphs don't travel 1:1 into the rail (sections vs flat list); crossfade + small inward shift instead. Tray pill + Projects tab only crossfade
 - [ ] (carried) Restore 4 missing rig memory notes (dev-builds-share-a-bundle-id, dev-process-name-is-ghostty, demo-capture-rig-gotchas, visual-pass-rig-facts) — indexed in MEMORY.md, absent on disk
