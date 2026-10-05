@@ -8,6 +8,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+The sidebar gets a third state, a narrow rail, and hovering a session now tells you what it needs or is doing. Ghostties also moves onto the latest upstream Ghostty.
+
+### Added
+
+- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a 128pt rail of session icons with a New Session button, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on).
+- **Hover a session to see what it needs or is doing.** A session that needs approval shows the command and the reason. A running session shows your last prompt, the current step, and how many edits it has made. The rail also shows the session name. Esc dismisses it.
+
+### Changed
+
+- **The default theme now follows macOS.** With no theme set, Ghostties uses Apple System Colors and switches between light and dark with your system appearance. A theme in your config still wins.
+- **Ghostties now builds on the latest upstream Ghostty** (Zig 0.16), bringing in its fixes, including word selection that stops at hard line breaks and a crash fix for tmux `list-windows`.
+- **New Session moved to a button at the bottom of the sidebar**, shared by the full list and the rail.
+- **Row status shows as a single ghost per row** (gray, red when selected). <!-- pending Sean: ghost vs the beta.25 type glyphs (spinner / ? / check); PR #190 shipped the ghost "pending Sean's confirmation". Revise or drop this line once decided. -->
+- **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win. <!-- pending Sean: confirm the window-padding 20 default (PR #190). -->
+
+### Fixed
+
+- **Release builds no longer ship with code-coverage instrumentation.** The app is smaller and faster, and it no longer drops stray `default.profraw` files into the folder it ran from.
+
 ---
 
 ## [0.1.0-beta.25] — 2026-09-15
