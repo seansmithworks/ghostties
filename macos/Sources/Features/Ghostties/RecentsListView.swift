@@ -1137,7 +1137,7 @@ private struct SessionSectionHeader: View {
                     .frame(width: SidebarDialTuning.headerChevronSize(), height: SidebarDialTuning.headerChevronSize())
             }
             .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
-            .padding(.trailing, 12)
+            .padding(.trailing, WorkspaceLayout.sessionSectionHeaderTrailingPadding)
             .padding(.top, SidebarDialTuning.headerTopPadding())
             .padding(.bottom, SidebarDialTuning.headerBottomPadding())
             .frame(maxWidth: .infinity, alignment: .leading)

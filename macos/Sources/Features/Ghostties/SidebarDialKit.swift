@@ -53,11 +53,6 @@ enum SidebarDialTuning {
     static let listToTrayGapKey = "ghostties.sidebarDial.listToTrayGap"
 
     // MARK: Rail
-    static let railGhostSizeKey = "ghostties.sidebarDial.railGhostSize"
-    static let railRowWidthKey = "ghostties.sidebarDial.railRowWidth"
-    static let railRowHeightKey = "ghostties.sidebarDial.railRowHeight"
-    static let railRowGapKey = "ghostties.sidebarDial.railRowGap"
-    static let railSummaryRowHeightKey = "ghostties.sidebarDial.railSummaryRowHeight"
     static let railExtraWidthKey = "ghostties.sidebarDial.railExtraWidth"
 
     /// Bumped every time the panel writes any key (`SidebarDialKitCoordinator
@@ -169,21 +164,6 @@ enum SidebarDialTuning {
         cgFloat(listToTrayGapKey, default: WorkspaceLayout.sidebarListToTrayGap, defaults: defaults)
     }
 
-    static func railGhostSize(defaults: UserDefaults = .standard) -> CGFloat {
-        cgFloat(railGhostSizeKey, default: WorkspaceLayout.railGhostSize, defaults: defaults)
-    }
-    static func railRowWidth(defaults: UserDefaults = .standard) -> CGFloat {
-        cgFloat(railRowWidthKey, default: WorkspaceLayout.railRowWidth, defaults: defaults)
-    }
-    static func railRowHeight(defaults: UserDefaults = .standard) -> CGFloat {
-        cgFloat(railRowHeightKey, default: WorkspaceLayout.railRowHeight, defaults: defaults)
-    }
-    static func railRowGap(defaults: UserDefaults = .standard) -> CGFloat {
-        cgFloat(railRowGapKey, default: WorkspaceLayout.railRowGap, defaults: defaults)
-    }
-    static func railSummaryRowHeight(defaults: UserDefaults = .standard) -> CGFloat {
-        cgFloat(railSummaryRowHeightKey, default: WorkspaceLayout.railSummaryRowHeight, defaults: defaults)
-    }
     /// Added on top of `WorkspaceLayout.collapsedRailWidth`'s computed hug
     /// width — see that function's own doc comment. Not folded into
     /// `WorkspaceLayout.railExtraWidth` (the compiled default both this and
@@ -204,8 +184,7 @@ enum SidebarDialTuning {
         selectedCardShadowOpacityKey, selectedCardShadowRadiusKey, selectedCardShadowYOffsetKey,
         headerTextSizeKey, headerTopPaddingKey, headerBottomPaddingKey, headerChevronSizeKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
-        railGhostSizeKey, railRowWidthKey, railRowHeightKey, railRowGapKey,
-        railSummaryRowHeightKey, railExtraWidthKey
+        railExtraWidthKey
     ]
 
     static func reset(defaults: UserDefaults = .standard) {
@@ -267,11 +246,6 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var contentPaddingTrailing: Double
     var listToTrayGap: Double
 
-    var railGhostSize: Double
-    var railRowWidth: Double
-    var railRowHeight: Double
-    var railRowGap: Double
-    var railSummaryRowHeight: Double
     var railExtraWidth: Double
 }
 
@@ -356,11 +330,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             contentPaddingLeading: Double(SidebarDialTuning.contentPaddingLeading(defaults: defaults)),
             contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
             listToTrayGap: Double(SidebarDialTuning.listToTrayGap(defaults: defaults)),
-            railGhostSize: Double(SidebarDialTuning.railGhostSize(defaults: defaults)),
-            railRowWidth: Double(SidebarDialTuning.railRowWidth(defaults: defaults)),
-            railRowHeight: Double(SidebarDialTuning.railRowHeight(defaults: defaults)),
-            railRowGap: Double(SidebarDialTuning.railRowGap(defaults: defaults)),
-            railSummaryRowHeight: Double(SidebarDialTuning.railSummaryRowHeight(defaults: defaults)),
             railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults))
         )
     }
@@ -400,11 +369,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.contentPaddingLeadingKey, previous.contentPaddingLeading, model.contentPaddingLeading)
         setIfChanged(SidebarDialTuning.contentPaddingTrailingKey, previous.contentPaddingTrailing, model.contentPaddingTrailing)
         setIfChanged(SidebarDialTuning.listToTrayGapKey, previous.listToTrayGap, model.listToTrayGap)
-        setIfChanged(SidebarDialTuning.railGhostSizeKey, previous.railGhostSize, model.railGhostSize)
-        setIfChanged(SidebarDialTuning.railRowWidthKey, previous.railRowWidth, model.railRowWidth)
-        setIfChanged(SidebarDialTuning.railRowHeightKey, previous.railRowHeight, model.railRowHeight)
-        setIfChanged(SidebarDialTuning.railRowGapKey, previous.railRowGap, model.railRowGap)
-        setIfChanged(SidebarDialTuning.railSummaryRowHeightKey, previous.railSummaryRowHeight, model.railSummaryRowHeight)
         setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
         // Any write at all is a tuning change a row's `.equatable()` gate
         // can't see on its own — see `SidebarDialTuning.epochKey`'s doc
@@ -447,11 +411,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Content padding trailing", range: 0...24, unit: "pt"),
         .slider("listToTrayGap", keyPath: \.listToTrayGap, label: "List-to-tray gap", range: 0...24, unit: "pt"),
         // Rail
-        .slider("railGhostSize", keyPath: \.railGhostSize, label: "Rail ghost size", range: 8...24, unit: "pt"),
-        .slider("railRowWidth", keyPath: \.railRowWidth, label: "Rail row width", range: 32...80, unit: "pt"),
-        .slider("railRowHeight", keyPath: \.railRowHeight, label: "Rail row height", range: 20...48, unit: "pt"),
-        .slider("railRowGap", keyPath: \.railRowGap, label: "Rail row gap", range: 0...16, unit: "pt"),
-        .slider("railSummaryRowHeight", keyPath: \.railSummaryRowHeight, label: "Rail summary row height", range: 12...36, unit: "pt"),
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
         .action(resetActionPath, label: "Reset sidebar")
     ]

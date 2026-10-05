@@ -30,7 +30,8 @@ enum SessionPopoverLayout {
 }
 
 /// The popover card: the card shell around one content block (a Bash command,
-/// a tool approval, or what a running session is doing). Read-only: clicking
+/// a tool approval, or what a running session is doing), set directly on the
+/// white card — no inner block (Sean, 2026-10-04: one card). Read-only: clicking
 /// the row opens the session, moving off it dismisses the card.
 struct SessionPopoverCard: View {
     @ObservedObject var model: SessionPopoverModel
@@ -44,9 +45,6 @@ struct SessionPopoverCard: View {
         dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
     }
     private var surface: Color { dark ? WorkspaceLayout.expandedContainerDark : .white }
-    private var block: Color {
-        dark ? Color.white.opacity(0.07) : Color(red: 0xF6 / 255.0, green: 0xF3 / 255.0, blue: 0xEF / 255.0)
-    }
     private var hairline: Color { dark ? Color.white.opacity(0.10) : Color.black.opacity(0.07) }
 
     var body: some View {
@@ -63,7 +61,7 @@ struct SessionPopoverCard: View {
             if let nameLine = content.nameLine {
                 self.nameLine(nameLine)
             }
-            blockView(content.block)
+            blockView(content.block, hasNameLine: content.nameLine != nil)
         }
         .frame(width: SessionPopoverLayout.width)
         .background(surface)
@@ -92,12 +90,17 @@ struct SessionPopoverCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(EdgeInsets(top: 12, leading: 14, bottom: 0, trailing: 14))
+        .padding(EdgeInsets(
+            top: WorkspaceLayout.sessionPopoverContentPadding / 2,
+            leading: WorkspaceLayout.sessionPopoverContentPadding,
+            bottom: 0,
+            trailing: WorkspaceLayout.sessionPopoverContentPadding
+        ))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private func blockView(_ content: SessionPopoverContent.Block) -> some View {
+    private func blockView(_ content: SessionPopoverContent.Block, hasNameLine: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             switch content {
             case let .command(command, description):
@@ -130,9 +133,9 @@ struct SessionPopoverCard: View {
         .truncationMode(.tail)
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(block))
-        .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+        .padding(.horizontal, WorkspaceLayout.sessionPopoverContentPadding)
+        .padding(.bottom, WorkspaceLayout.sessionPopoverContentPadding)
+        .padding(.top, hasNameLine ? WorkspaceLayout.sessionPopoverNameGap : WorkspaceLayout.sessionPopoverContentPadding)
     }
 
     @ViewBuilder
