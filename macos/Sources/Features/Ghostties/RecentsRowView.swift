@@ -119,9 +119,9 @@ struct RecentsRowView: View, Equatable {
             // Per-session status glyph (spinner / ? / check / x) in the
             // trailing slot (Sean, 2026-10-04). Selection is carried by the
             // row's card background, not a glyph tint. The collapsed rail
-            // (`RailSessionRow`) draws the same glyph at the same trailing
-            // inset, so it stays on the sidebar's right edge as the width
-            // animates — the glyph makes no independent move.
+            // (`RailSessionRow`) draws the same glyph centered in the rail,
+            // so across the pinned⇄rail transition the glyph moves from this
+            // trailing slot to the center (it snaps under Reduce Motion).
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }

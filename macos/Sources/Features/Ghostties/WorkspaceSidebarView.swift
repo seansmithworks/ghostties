@@ -245,19 +245,13 @@ struct WorkspaceSidebarView: View {
     // MARK: - Actions
 
     private func presentFolderPicker() {
-        guard let id = store.addProjectViaFolderPicker() else { return }
-        selectedProjectId = id
-        expandedProjectIds.insert(id)
-
-        // Phase 4: chain header add straight into the composer so adding a
-        // project from the header ends in a running session instead of
-        // dead-ending (see docs/plans/session-creation-unified.html).
-        guard let newProject = store.projects.first(where: { $0.id == id }) else { return }
         guard let container = coordinator.containerView as? WorkspaceViewContainer else {
             assertionFailure("presentFolderPicker: coordinator.containerView is not a WorkspaceViewContainer")
             return
         }
-        container.presentComposerOverlay(projectBinding: .locked(newProject))
+        guard let id = container.addProjectViaFolderPickerAndOpenComposer() else { return }
+        selectedProjectId = id
+        expandedProjectIds.insert(id)
     }
 
     /// Move selection to the next or previous project in the flattened section

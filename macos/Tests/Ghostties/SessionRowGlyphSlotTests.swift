@@ -83,9 +83,10 @@ final class SessionRowGlyphSlotTests: XCTestCase {
 
     /// Pixels in the trailing 60pt of the row whose colour differs from the
     /// background, as (minX, maxX, minY, maxY) in points; nil if blank.
-    private func inkBounds(_ rep: NSBitmapImageRep) -> (minX: CGFloat, maxX: CGFloat, minY: CGFloat, maxY: CGFloat)? {
+    /// `fromX` defaults to the trailing slot; the centered rail scans the full width.
+    private func inkBounds(_ rep: NSBitmapImageRep, fromX: CGFloat? = nil) -> (minX: CGFloat, maxX: CGFloat, minY: CGFloat, maxY: CGFloat)? {
         let scale = CGFloat(rep.pixelsWide) / width
-        let start = Int((width - 60) * scale)
+        let start = Int((fromX ?? (width - 60)) * scale)
         guard let bg = rep.colorAt(x: rep.pixelsWide - 1, y: 0)?.usingColorSpace(.sRGB) else { return nil }
         var minX = Int.max, maxX = -1, minY = Int.max, maxY = -1
         for y in 0..<rep.pixelsHigh {
@@ -99,9 +100,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         return (CGFloat(minX) / scale, CGFloat(maxX + 1) / scale, CGFloat(minY) / scale, CGFloat(maxY + 1) / scale)
     }
 
-    private func trailingPixels(_ rep: NSBitmapImageRep) -> [UInt8] {
+    private func trailingPixels(_ rep: NSBitmapImageRep, fromX: CGFloat? = nil) -> [UInt8] {
         let scale = CGFloat(rep.pixelsWide) / width
-        let start = Int((width - 60) * scale)
+        let start = Int((fromX ?? (width - 60)) * scale)
         var out: [UInt8] = []
         for y in 0..<rep.pixelsHigh {
             for x in start..<rep.pixelsWide {
@@ -133,20 +134,27 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             let idle = try XCTUnwrap(renderRail(.idle, appearance: appearance))
             let error = try XCTUnwrap(renderRail(.error, appearance: appearance))
             let stopped = try XCTUnwrap(renderRail(.inactive, appearance: appearance))
-            XCTAssertNotEqual(trailingPixels(needs), trailingPixels(idle), "rail: ? and check must differ (\(appearance))")
-            XCTAssertNotEqual(trailingPixels(idle), trailingPixels(error), "rail: check and x must differ (\(appearance))")
-            XCTAssertNil(inkBounds(stopped), "rail: a stopped row draws nothing (\(appearance))")
-            XCTAssertNotNil(inkBounds(needs))
+            XCTAssertNotEqual(trailingPixels(needs, fromX: 0), trailingPixels(idle, fromX: 0), "rail: ? and check must differ (\(appearance))")
+            XCTAssertNotEqual(trailingPixels(idle, fromX: 0), trailingPixels(error, fromX: 0), "rail: check and x must differ (\(appearance))")
+            XCTAssertNil(inkBounds(stopped, fromX: 0), "rail: a stopped row draws nothing (\(appearance))")
+            XCTAssertNotNil(inkBounds(needs, fromX: 0))
         }
     }
 
-    // MARK: - Same trailing inset and vertical position, expanded vs rail
+    // MARK: - Expanded glyph stays trailing; rail glyph is centered; same vertical position
 
-    func testGlyphTrailingInsetAndVerticalPositionMatchBetweenExpandedAndRail() throws {
+    func testExpandedGlyphSitsAtTheTrailingInsetAndRailGlyphIsCentered() throws {
         for state in [SessionIndicatorState.needsAttention, .idle, .error] {
             let e = try XCTUnwrap(inkBounds(try XCTUnwrap(renderExpanded(state, appearance: .aqua))))
-            let r = try XCTUnwrap(inkBounds(try XCTUnwrap(renderRail(state, appearance: .aqua))))
-            XCTAssertEqual(width - e.maxX, width - r.maxX, accuracy: 0.6, "trailing inset, \(state)")
+            let r = try XCTUnwrap(inkBounds(try XCTUnwrap(renderRail(state, appearance: .aqua)), fromX: 0))
+            // Expanded: the ink stays inside the glyph's box, which ends at the list
+            // margin + row trailing padding (measured: ink sits up to ~5pt inside it).
+            let boxMaxX = width - SidebarDialTuning.contentPaddingTrailing() - SidebarDialTuning.rowTrailingPadding()
+            let boxMinX = boxMaxX - SidebarDialTuning.rowGhostSize()
+            XCTAssertLessThanOrEqual(e.maxX, boxMaxX + 0.6, "expanded glyph ink right edge, \(state)")
+            XCTAssertGreaterThanOrEqual(e.minX, boxMinX - 0.6, "expanded glyph ink left edge, \(state)")
+            // Rail: ink center x == rail center x.
+            XCTAssertEqual((r.minX + r.maxX) / 2, width / 2, accuracy: 0.5, "rail glyph center x, \(state)")
             XCTAssertEqual(e.minY, r.minY, accuracy: 0.6, "glyph top, \(state)")
             XCTAssertEqual(e.maxY, r.maxY, accuracy: 0.6, "glyph bottom, \(state)")
         }
@@ -213,11 +221,11 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// trailing 60pt and the top 150pt — the glyph slot, found by diffing a
     /// `?` row against a check row so the section chevron (identical in both)
     /// cancels out.
-    private func diffBounds(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> (minY: CGFloat, maxY: CGFloat)? {
+    private func diffBounds(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep, fromX: CGFloat? = nil) -> (minY: CGFloat, maxY: CGFloat)? {
         let scale = CGFloat(a.pixelsWide) / width
         var minY = Int.max, maxY = -1
         for y in 0..<Int(150 * scale) {
-            for x in Int((width - 60) * scale)..<a.pixelsWide {
+            for x in Int((fromX ?? (width - 60)) * scale)..<a.pixelsWide {
                 guard let p = a.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
                       let q = b.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
                 if abs(p.redComponent - q.redComponent) + abs(p.greenComponent - q.greenComponent) > 0.3 {
@@ -228,11 +236,11 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         return maxY >= 0 ? (CGFloat(minY) / scale, CGFloat(maxY + 1) / scale) : nil
     }
 
-    private func topInkY(_ rep: NSBitmapImageRep) -> CGFloat? {
+    private func topInkY(_ rep: NSBitmapImageRep, fromX: CGFloat? = nil) -> CGFloat? {
         let scale = CGFloat(rep.pixelsWide) / width
         guard let bg = rep.colorAt(x: rep.pixelsWide - 1, y: 0)?.usingColorSpace(.sRGB) else { return nil }
         for y in 0..<Int(150 * scale) {
-            for x in Int((width - 60) * scale)..<rep.pixelsWide {
+            for x in Int((fromX ?? (width - 60)) * scale)..<rep.pixelsWide {
                 guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
                 if abs(c.redComponent - bg.redComponent) + abs(c.greenComponent - bg.greenComponent) > 0.2 { return CGFloat(y) / scale }
             }
@@ -247,36 +255,76 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             let rNeeds = try XCTUnwrap(renderWholeSidebar(expanded: false, state: .needsAttention, appearance: appearance))
             let rIdle = try XCTUnwrap(renderWholeSidebar(expanded: false, state: .idle, appearance: appearance))
             let e = try XCTUnwrap(diffBounds(eNeeds, eIdle), "expanded glyph not found")
-            let r = try XCTUnwrap(diffBounds(rNeeds, rIdle), "rail glyph not found")
+            let r = try XCTUnwrap(diffBounds(rNeeds, rIdle, fromX: 0), "rail glyph not found")
             XCTAssertEqual(e.minY, r.minY, accuracy: 0.6, "first session glyph top (\(appearance))")
             XCTAssertEqual(e.maxY, r.maxY, accuracy: 0.6, "first session glyph bottom (\(appearance))")
             // Topmost ink in the trailing column is the section chevron.
-            let ec = try XCTUnwrap(topInkY(eNeeds)), rc = try XCTUnwrap(topInkY(rNeeds))
+            let ec = try XCTUnwrap(topInkY(eNeeds)), rc = try XCTUnwrap(topInkY(rNeeds, fromX: 0))
             XCTAssertEqual(ec, rc, accuracy: 0.6, "section chevron top (\(appearance))")
         }
     }
 
-    func testRailChevronColumnMatchesTheGlyphColumnOfTheExpandedHeader() throws {
-        // Chevron right edge = the expanded header's, not centred in a 52pt column.
-        let eNeeds = try XCTUnwrap(renderWholeSidebar(expanded: true, state: .needsAttention, appearance: .aqua))
+    func testRailChevronIsCenteredOnTheRail() throws {
         let rNeeds = try XCTUnwrap(renderWholeSidebar(expanded: false, state: .needsAttention, appearance: .aqua))
-        func chevronRightX(_ rep: NSBitmapImageRep) -> CGFloat? {
-            let scale = CGFloat(rep.pixelsWide) / width
-            guard let bg = rep.colorAt(x: rep.pixelsWide - 1, y: 0)?.usingColorSpace(.sRGB) else { return nil }
-            var maxX = -1
-            // Only the header band: chevron top to bottom, above the first row.
-            let headerTop = (WorkspaceStore(testingProjects: []).toolbarRowTopAnchorConstant * 2 + SidebarDialTuning.contentPaddingTop() + SidebarDialTuning.headerTopPadding()) * scale
-            let headerBottom = headerTop + SidebarDialTuning.headerChevronSize() * scale
-            for y in Int(headerTop)..<Int(headerBottom) {
-                for x in 0..<rep.pixelsWide {
-                    guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
-                    if abs(c.redComponent - bg.redComponent) + abs(c.greenComponent - bg.greenComponent) > 0.2, x > maxX { maxX = x }
+        let scale = CGFloat(rNeeds.pixelsWide) / width
+        let bg = try XCTUnwrap(rNeeds.colorAt(x: rNeeds.pixelsWide - 1, y: 0)?.usingColorSpace(.sRGB))
+        var minX = Int.max, maxX = -1
+        // Only the header band: chevron top to bottom, above the first row.
+        let headerTop = (WorkspaceStore(testingProjects: []).toolbarRowTopAnchorConstant * 2 + SidebarDialTuning.contentPaddingTop() + SidebarDialTuning.headerTopPadding()) * scale
+        let headerBottom = headerTop + SidebarDialTuning.headerChevronSize() * scale
+        for y in Int(headerTop)..<Int(headerBottom) {
+            for x in 0..<rNeeds.pixelsWide {
+                guard let c = rNeeds.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if abs(c.redComponent - bg.redComponent) + abs(c.greenComponent - bg.greenComponent) > 0.2 {
+                    minX = min(minX, x); maxX = max(maxX, x)
                 }
             }
-            return maxX >= 0 ? CGFloat(maxX + 1) / scale : nil
         }
-        // Expanded header also has "Active (1)" text on the left; only the right edge is compared.
-        XCTAssertEqual(try XCTUnwrap(chevronRightX(eNeeds)), try XCTUnwrap(chevronRightX(rNeeds)), accuracy: 0.6)
+        XCTAssertGreaterThanOrEqual(maxX, 0, "rail chevron not found")
+        XCTAssertEqual((CGFloat(minX) / scale + CGFloat(maxX + 1) / scale) / 2, width / 2, accuracy: 0.5)
+    }
+
+    // MARK: - Rail tray pill hugs its icons and is centered
+
+    func testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail() throws {
+        let railWidth: CGFloat = 98
+        let size = CGSize(width: railWidth, height: 260)
+
+        // Pill width: the tray's own ideal width is the pill (icons + 2 x padding).
+        let alone = NSHostingView(rootView: RailTray().environmentObject(SessionCoordinator()))
+        let expected = SidebarDialTuning.trayButtonSize() + 2 * SidebarDialTuning.trayInnerPadding()
+        XCTAssertEqual(alone.fittingSize.width, expected, accuracy: 0.5, "pill width = icon + 2 x padding")
+
+        // Centering: render in a rail-width column with the plain (non-glass) pill,
+        // since cacheDisplay can't capture glass.
+        let hosting = NSHostingView(rootView: RailTray(forceOpaque: true)
+            .environmentObject(SessionCoordinator())
+            .frame(width: size.width, height: size.height, alignment: .bottomLeading)
+            .background(Color.white))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        hosting.layoutSubtreeIfNeeded()
+        let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        let scale = CGFloat(rep.pixelsWide) / railWidth
+        let y = Int((size.height - 12 - 40) * scale)
+        var minX = Int.max, maxX = -1
+        for x in 0..<rep.pixelsWide {
+            guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+            let darkness: CGFloat = 3 - c.redComponent - c.greenComponent - c.blueComponent
+            if darkness > 0.06 { minX = min(minX, x); maxX = max(maxX, x) }
+        }
+        XCTAssertGreaterThanOrEqual(maxX, 0, "tray pill not found")
+        let pillMinX: CGFloat = CGFloat(minX) / scale
+        let pillMaxX: CGFloat = CGFloat(maxX + 1) / scale
+        let pillWidth: CGFloat = pillMaxX - pillMinX
+        let pillCenter: CGFloat = (pillMinX + pillMaxX) / 2
+        XCTAssertEqual(pillWidth, expected, accuracy: 1.0, "rendered pill width")
+        XCTAssertEqual(pillCenter, railWidth / 2, accuracy: 0.5, "pill center x = rail center x")
     }
 
     // MARK: - Rail VoiceOver label
