@@ -118,8 +118,10 @@ struct RecentsRowView: View, Equatable {
             // kept (still backs the accessibility label below) — only the
             // visible `Text` is gone.
 
-            // Per-session status glyph — now a ghost, red when selected
-            // (Flow 07 round 6, supersedes pattern D's type glyph). Trailing
+            // Per-session status glyph — pattern D type glyphs (spinner / ? /
+            // ✓ / ✕) are back, in the trailing slot the ghost held (Sean,
+            // 2026-10-04). Selection is carried by the row's card
+            // background, not a glyph tint. Trailing
             // edge, after the name/subtitle (Sean, sidebar-presence review
             // round 2 — Flow 07 frame 01): name and subtitle read flush
             // left, the glyph reads last. Previously led the row in a fixed
@@ -132,7 +134,7 @@ struct RecentsRowView: View, Equatable {
             // NOT the panel's own pinned→rail travel (that's carried
             // entirely by `WorkspaceLayout.sidebarTransitionTiming`'s width
             // animation on the container).
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize(), isSelected: isActive)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
                 .offset(x: glyphOffsetX)
                 .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)

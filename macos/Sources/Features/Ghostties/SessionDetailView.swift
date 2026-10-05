@@ -61,7 +61,7 @@ struct SessionRow: View {
 
             Spacer()
 
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: 16)
+            SessionStatusGhost(kind: indicatorState.statusGlyphKind, size: 16)
         }
         .padding(.horizontal, 8)
         .frame(height: 28)

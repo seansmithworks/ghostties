@@ -1,5 +1,6 @@
 // IDE-ONLY: not currently exercised in CI macos job (build-only).
 import XCTest
+import SwiftUI
 import GhosttiesCore
 @testable import Ghostty
 
@@ -473,5 +474,60 @@ final class SessionPopoverTests: XCTestCase {
         }
         // A retain cycle through the timer/monitor closures would keep it alive.
         XCTAssertNil(weakController)
+    }
+
+    // MARK: - One card, no inner block
+
+    /// Renders the card in `appearance` and returns (pixel at the card's
+    /// content-area bottom-right, pixel in the card's outer margin). With no
+    /// inner block they are the same surface colour; the old grey block made
+    /// the first differ from the second.
+    private func contentVsMarginPixels(
+        _ block: SessionPopoverContent.Block,
+        appearance: NSAppearance.Name
+    ) -> (content: NSColor, margin: NSColor)? {
+        let model = SessionPopoverModel()
+        model.content = SessionPopoverContent(sessionId: sessionId, nameLine: nil, block: block)
+        let view = SessionPopoverCard(model: model, onHover: { _ in })
+        let hosting = NSHostingView(rootView: view)
+        hosting.frame = NSRect(x: 0, y: 0, width: 400, height: 400)
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: appearance)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        hosting.layoutSubtreeIfNeeded()
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return nil }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        // The card is centered in the 400pt frame and 288pt wide. Samples sit
+        // at mid-height on its right edge: 14pt in is inside the old block
+        // (it began 10pt in) yet clear of text (padding is 24pt); 4pt in is
+        // outside it.
+        let cardW = SessionPopoverLayout.width
+        let cardLeft = (hosting.bounds.width - cardW) / 2
+        let midY = hosting.bounds.height / 2
+        // The bitmap is backing-scale pixels; the geometry above is points.
+        let scale = CGFloat(rep.pixelsWide) / hosting.bounds.width
+        func px(_ x: CGFloat) -> NSColor? {
+            rep.colorAt(x: Int(x * scale), y: Int(midY * scale))?.usingColorSpace(.sRGB)
+        }
+        guard let content = px(cardLeft + cardW - 14), let margin = px(cardLeft + cardW - 4) else { return nil }
+        return (content, margin)
+    }
+
+    func testPopoverCardHasNoInnerBlockInEveryStateAndAppearance() throws {
+        let blocks: [SessionPopoverContent.Block] = [
+            .command(command: "rm -rf build/", description: "Clean stale artifacts"),
+            .tool(headline: "Edit config.ts", path: "src/server/config.ts", description: "Raise timeout"),
+            .running(prompt: "Fix the build", step: "Reading files"),
+        ]
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            for block in blocks {
+                let p = try XCTUnwrap(contentVsMarginPixels(block, appearance: appearance))
+                XCTAssertEqual(p.content.redComponent, p.margin.redComponent, accuracy: 0.01, "\(appearance) \(block)")
+                XCTAssertEqual(p.content.greenComponent, p.margin.greenComponent, accuracy: 0.01, "\(appearance) \(block)")
+                XCTAssertEqual(p.content.blueComponent, p.margin.blueComponent, accuracy: 0.01, "\(appearance) \(block)")
+            }
+        }
     }
 }

@@ -107,7 +107,7 @@ private struct RailSessionRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.railGhostSize(), isSelected: isActive)
+            SessionStatusGhost(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.railGhostSize(), isSelected: isActive)
                 .frame(width: SidebarDialTuning.railRowWidth(), height: SidebarDialTuning.railRowHeight())
                 .background(rowBackground)
         }

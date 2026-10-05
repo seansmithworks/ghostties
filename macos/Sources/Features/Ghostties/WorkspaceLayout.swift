@@ -362,6 +362,11 @@ enum WorkspaceLayout {
     /// inside that column, not filling it.
     static let sessionGhostSize: CGFloat = 14
 
+    /// Padding between the session popover card's edge and its content. The
+    /// card used to nest a grey block (14pt inner padding) inside a 10pt
+    /// inset; with the block gone, content keeps the same 24pt it sat at.
+    static let sessionPopoverContentPadding: CGFloat = 24
+
     // MARK: - Sidebar DialKit Tunables (sidebar-presence, session-8 brief)
     //
     // Named constants lifted from prior inline literals so `SidebarDialTuning`
