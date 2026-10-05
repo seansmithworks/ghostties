@@ -20,37 +20,39 @@ struct SidebarRailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Reserve space for the window's traffic lights, same spacer
-            // pattern used by the task-first sidebar.
-            Color.clear.frame(height: WorkspaceLayout.titlebarSpacerHeight)
+            // Same top inset as the expanded list's titlebar toolbar
+            // (`WorkspaceSidebarView.titlebarToolbar`), so every rail row sits
+            // at the y of its expanded row.
+            Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
 
-            // Flow 07 round 6, layer `G10V5`/"Chevron Col": the expanded
-            // sidebar's section-header chevron collapses down to this single
-            // static glyph at the top of the rail — expanding the rail
-            // (Cmd+S) is what "opens" it back to full sections, so this
-            // glyph is decorative, not an independent tap target.
-            PixelChevronView(isExpanded: false)
-                .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
-                .padding(.top, 6)
+            // Same structure and rhythm as the expanded Sessions list
+            // (`RecentsListView`): header, rows, then the Inactive/Archive
+            // headers. The rail has no room for header text, so each header
+            // collapses to its chevron (`RailChevronRow`, header geometry) —
+            // the top one stands in for Active/Pinned. Margins, row gap and
+            // top padding are the list's own tokens.
+            VStack(spacing: SidebarDialTuning.rowGap()) {
+                RailChevronRow()
 
-            VStack(spacing: SidebarDialTuning.railRowGap()) {
                 ForEach(store.railSessions()) { session in
                     RailSessionRow(
                         sessionId: session.id,
-                        indicatorState: coordinator.indicatorState(for: session.id),
+                        name: session.name,
+                        projectName: store.projects.first { $0.id == session.projectId }?.name ?? "Unknown",
+                        // Same source as `RecentsListView.sessionRow`, so a
+                        // session shows the same glyph in the list and the rail.
+                        indicatorState: store.globalIndicatorStates[session.id] ?? .inactive,
                         isActive: coordinator.activeSessionId == session.id,
                         onTap: { coordinator.focusSession(id: session.id) }
                     )
                 }
 
-                // Flow 07 round 6 follow-up, layer group under the ghost
-                // list in `yhzPU.png`: two bare "›" rows summarizing
-                // Inactive/Archived — the rail is too narrow for their
-                // counts to render, so the count only reaches VoiceOver/the
-                // tooltip. Counts come from `RecentsListView`'s own static
-                // bucket functions (`inactiveSessions`/`archiveSessions`) —
-                // the same source its section headers already read, not a
-                // second copy of the Active/Inactive/Archive rule.
+                // Two bare chevron rows summarizing Inactive/Archived — the
+                // rail is too narrow for their counts to render, so the
+                // count only reaches VoiceOver/the tooltip. Counts come from
+                // `RecentsListView`'s own static bucket functions
+                // (`inactiveSessions`/`archiveSessions`) — the same source
+                // its section headers read.
                 RailSectionSummaryRow(
                     label: "Inactive",
                     count: RecentsListView.inactiveSessions(
@@ -68,8 +70,10 @@ struct SidebarRailView: View {
                     ).count
                 )
             }
-            .padding(.top, 14)
-            .padding(.horizontal, 10)
+            .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+            .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+            .padding(.top, SidebarDialTuning.contentPaddingTop())
+            .padding(.bottom, 4)
 
             Spacer(minLength: 0)
 
@@ -92,11 +96,14 @@ struct SidebarRailView: View {
 
 // MARK: - Rail Session Row
 
-/// A single 52×32 rail row: centered status glyph, no label — the label
-/// drops in the collapsed rail, but the glyph (and the per-row tap target)
-/// stays, per spec §02.
-private struct RailSessionRow: View {
+/// A single rail row: the same status glyph as the expanded Sessions list,
+/// pinned to the trailing edge with the same trailing inset and row height
+/// as `RecentsRowView` (Sean, 2026-10-04: glyphs on the right of the
+/// sidebar). The label is dropped; the per-row tap target stays.
+struct RailSessionRow: View {
     let sessionId: UUID
+    let name: String
+    let projectName: String
     let indicatorState: SessionIndicatorState
     let isActive: Bool
     let onTap: () -> Void
@@ -105,15 +112,33 @@ private struct RailSessionRow: View {
     @EnvironmentObject private var coordinator: SessionCoordinator
     @State private var isHovered = false
 
+    /// Same wording as the expanded row's label (name, project, spoken
+    /// status, active) minus the last-output time.
+    static func accessibilityLabel(name: String, projectName: String, kind: SessionStatusGlyphKind, isActive: Bool) -> String {
+        var parts = [name, "in \(projectName)", kind.spokenStatus]
+        if isActive { parts.append("active") }
+        return parts.joined(separator: ", ")
+    }
+
     var body: some View {
         Button(action: onTap) {
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.railGhostSize(), isSelected: isActive)
-                .frame(width: SidebarDialTuning.railRowWidth(), height: SidebarDialTuning.railRowHeight())
-                .background(rowBackground)
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
+                    .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
+            }
+            .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+            .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+            .frame(maxWidth: .infinity)
+            .frame(height: SidebarDialTuning.rowHeight())
+            .background(rowBackground)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .sessionPopoverAnchor(sessionId: sessionId, controller: coordinator.sessionPopover, showsName: true)
+        .accessibilityLabel(Self.accessibilityLabel(name: name, projectName: projectName, kind: indicatorState.statusGlyphKind, isActive: isActive))
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
     /// Selected rail row is the same raised card as the expanded sidebar's
@@ -137,14 +162,39 @@ private struct RailSessionRow: View {
     }
 }
 
-// MARK: - Rail Section Summary Row
+// MARK: - Rail Section Chevron Rows
 
-/// A bare "›" row summarizing a collapsed-away section (Inactive/Archived)
-/// too narrow for the rail to spell out — Flow 07 round 6 follow-up, layer
-/// group beneath the ghost list in `yhzPU.png`. Not a disclosure control:
-/// tapping it expands the full sidebar (Cmd+S) rather than inline-listing
-/// session rows the rail has no room for, so `count` only reaches VoiceOver
-/// and the tooltip.
+/// A section header collapsed to its chevron: the expanded
+/// `SessionSectionHeader`'s geometry (leading/trailing/top/bottom padding,
+/// chevron size and trailing position) with the title dropped, so the
+/// chevron sits in the same column as the row glyphs below it and at the
+/// header's y.
+private struct RailChevronRow: View {
+    var isHovered = false
+
+    var body: some View {
+        HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+            Spacer(minLength: 0)
+            PixelChevronView(isExpanded: false)
+                .frame(width: SidebarDialTuning.headerChevronSize(), height: SidebarDialTuning.headerChevronSize())
+        }
+        .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
+        .padding(.trailing, WorkspaceLayout.sessionSectionHeaderTrailingPadding)
+        .padding(.top, SidebarDialTuning.headerTopPadding())
+        .padding(.bottom, SidebarDialTuning.headerBottomPadding())
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
+        )
+        .contentShape(Rectangle())
+    }
+}
+
+/// A chevron row summarizing a collapsed-away section (Inactive/Archived).
+/// Not a disclosure control: tapping it expands the full sidebar (Cmd+S)
+/// rather than inline-listing session rows the rail has no room for, so
+/// `count` only reaches VoiceOver and the tooltip.
 private struct RailSectionSummaryRow: View {
     let label: String
     let count: Int
@@ -156,12 +206,7 @@ private struct RailSectionSummaryRow: View {
         Button {
             (coordinator.containerView as? WorkspaceViewContainer)?.toggleSidebar()
         } label: {
-            PixelChevronView(isExpanded: false)
-                .frame(width: SidebarDialTuning.railRowWidth(), height: SidebarDialTuning.railSummaryRowHeight())
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
-                )
+            RailChevronRow(isHovered: isHovered)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }

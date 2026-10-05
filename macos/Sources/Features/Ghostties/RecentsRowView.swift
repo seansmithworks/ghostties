@@ -113,29 +113,17 @@ struct RecentsRowView: View, Equatable {
             Spacer(minLength: 4)
 
             // No timestamp — Flow 07 round 6 drops the relative-time label
-            // from the row entirely (design frame `t4XvdY`: name + subtitle
-            // + trailing ghost, nothing else). `relativeLabel` itself is
-            // kept (still backs the accessibility label below) — only the
-            // visible `Text` is gone.
+            // from the row entirely. `relativeLabel` is kept (it still backs
+            // the accessibility label below); only the visible `Text` is gone.
 
-            // Per-session status glyph — now a ghost, red when selected
-            // (Flow 07 round 6, supersedes pattern D's type glyph). Trailing
-            // edge, after the name/subtitle (Sean, sidebar-presence review
-            // round 2 — Flow 07 frame 01): name and subtitle read flush
-            // left, the glyph reads last. Previously led the row in a fixed
-            // icon column shared with the header icons above it; that
-            // alignment purpose no longer applies here, so it's sized to the
-            // glyph itself instead of that column width.
-            //
-            // Flow 05 (sidebar-presence): the small in-row inward nudge on
-            // collapse/expand — see `glyphOffsetX` — is a decorative shift,
-            // NOT the panel's own pinned→rail travel (that's carried
-            // entirely by `WorkspaceLayout.sidebarTransitionTiming`'s width
-            // animation on the container).
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize(), isSelected: isActive)
+            // Per-session status glyph (spinner / ? / check / x) in the
+            // trailing slot (Sean, 2026-10-04). Selection is carried by the
+            // row's card background, not a glyph tint. The collapsed rail
+            // (`RailSessionRow`) draws the same glyph at the same trailing
+            // inset, so it stays on the sidebar's right edge as the width
+            // animates — the glyph makes no independent move.
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
-                .offset(x: glyphOffsetX)
-                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
         }
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
@@ -199,19 +187,10 @@ struct RecentsRowView: View, Equatable {
         return .easeOut(duration: WorkspaceLayout.sidebarRowLabelExpandFadeDuration).delay(delay)
     }
 
-    /// Small in-row glyph shift toward the panel's centerline — the
-    /// canvas's own "+8 → +28px" glyph translateX row, not the panel's
-    /// pinned→rail travel.
-    private var glyphOffsetX: CGFloat {
-        widthModel.isCollapsedPresentation
-            ? WorkspaceLayout.sidebarRowGlyphTraveledOffset
-            : WorkspaceLayout.sidebarRowGlyphRestingOffset
-    }
-
-    /// COLLAPSE: glyph waits for the label to mostly clear (60ms delay),
-    /// then travels for the rest of the 260ms window. EXPAND: glyph travels
-    /// back out immediately, over the whole expand window — every row's
-    /// glyph starts together; only labels are staggered.
+    /// Row-background (corner radius) timing. COLLAPSE: waits for the label
+    /// to mostly clear (60ms delay), then runs for the rest of the 260ms
+    /// window. EXPAND: runs immediately over the whole expand window — every
+    /// row starts together; only labels are staggered.
     private var glyphAnimation: Animation? {
         guard choreographyEnabled else { return nil }
         if widthModel.isCollapsedPresentation {

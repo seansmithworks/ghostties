@@ -73,4 +73,24 @@ struct SessionStatusGlyphMappingTests {
         #expect(SessionIndicatorState.waiting.statusGlyphKind.spokenStatus
                 == SessionIndicatorState.idle.statusGlyphKind.spokenStatus)
     }
+
+    // MARK: - Trailing slot draws type glyphs, not a ghost (2026-10-04)
+
+    @Test func needsInputRowDrawsAQuestionMark() {
+        // The expanded row's trailing slot is `SessionStatusGlyph`, which
+        // draws `kind.symbol`. A ghost-for-every-row regression has no symbol.
+        #expect(SessionIndicatorState.needsAttention.statusGlyphKind.symbol == "?")
+    }
+
+    @Test func idleWaitingAndErrorDrawTheirOwnSymbols() {
+        #expect(SessionIndicatorState.idle.statusGlyphKind.symbol == "✓")
+        #expect(SessionIndicatorState.waiting.statusGlyphKind.symbol == "✓")
+        #expect(SessionIndicatorState.error.statusGlyphKind.symbol == "✕")
+    }
+
+    @Test func workingIsDrawnSpinnerAndStoppedIsEmpty() {
+        #expect(SessionIndicatorState.processing.statusGlyphKind.symbol == nil)
+        #expect(SessionIndicatorState.inactive.statusGlyphKind.symbol == nil)
+        #expect(!SpinnerDotFrame.litDots.isEmpty)
+    }
 }
