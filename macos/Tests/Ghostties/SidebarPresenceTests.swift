@@ -76,8 +76,8 @@ struct SidebarPresenceTests {
     /// require inserting into this list, not touching two views.
     @Test func trayItemsAreOrderedNewSessionThenToggle() {
         let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "Collapse Sidebar")
-        #expect(items.map(\.id) == ["newSession", "settings", "toggleSidebar"])
-        #expect(items.map(\.systemName) == ["plus", "gearshape", "sidebar.left"])
+        #expect(items.map(\.id) == ["newSession", "newProject", "settings", "toggleSidebar"])
+        #expect(items.map(\.systemName) == ["plus", "folder.badge.plus", "gearshape", "sidebar.left"])
     }
 
     /// Round 4: Settings sits between `+` and the sidebar toggle (matching

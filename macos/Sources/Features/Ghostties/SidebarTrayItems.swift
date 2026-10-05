@@ -283,6 +283,21 @@ struct TrayIconButton: View {
 }
 
 extension WorkspaceViewContainer {
+    /// "New Project": the folder picker (`WorkspaceStore.addProjectViaFolderPicker`),
+    /// then the composer locked to the new project, so adding a project ends in
+    /// a running session instead of dead-ending (Phase 4,
+    /// docs/plans/session-creation-unified.html). Shared by the sidebar header
+    /// button and the tray item. Returns the new project's id, nil if cancelled.
+    @discardableResult
+    func addProjectViaFolderPickerAndOpenComposer() -> UUID? {
+        let store = WorkspaceStore.shared
+        guard let id = store.addProjectViaFolderPicker() else { return nil }
+        if let newProject = store.projects.first(where: { $0.id == id }) {
+            presentComposerOverlay(projectBinding: .locked(newProject))
+        }
+        return id
+    }
+
     /// Builds the ordered tray item list shared by the expanded tray and the
     /// collapsed rail's tray pill.
     ///
@@ -306,6 +321,16 @@ extension WorkspaceViewContainer {
                     return
                 }
                 container.presentComposerOverlay(projectBinding: .open)
+            },
+            // Same path as the header's "+ New Project" button
+            // (`WorkspaceSidebarView.presentFolderPicker`): folder picker, then
+            // the composer locked to the new project.
+            SidebarTrayItem(id: "newProject", systemName: "folder.badge.plus", label: "New Project", tapEffect: .bounce) {
+                guard let container else {
+                    assertionFailure("sidebarTrayItems: coordinator.containerView is not a WorkspaceViewContainer")
+                    return
+                }
+                _ = container.addProjectViaFolderPickerAndOpenComposer()
             },
             // Round 4: reuses the app's existing "Open Config" action
             // (`AppDelegate.openConfig` -> `Ghostty.App.openConfig()`) rather
