@@ -76,3 +76,4 @@ concept-lab/
 *.pen
 
 /sprite_face_test*
+.captures/

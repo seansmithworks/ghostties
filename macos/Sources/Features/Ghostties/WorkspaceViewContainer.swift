@@ -2192,7 +2192,7 @@ class WorkspaceViewContainer: NSView {
         // on the invisible dismiss layer's `.onTapGesture { cancel() }` (eating the
         // click and re-entering dismiss, extending the dead window), and a
         // fast double-click on a template row could fire `commit()` twice —
-        // `ComposerRow`'s `Button(action:)` calls `option.action()` directly
+        // a results row's `Button(action:)` calls `option.action()` directly
         // and never reads `selectedIndex`, so the keyboard path's
         // double-Return guard doesn't cover it.
         composerOverlayHostingView.isHitTestDisabled = true

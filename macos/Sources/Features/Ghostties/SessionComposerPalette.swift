@@ -148,7 +148,7 @@ struct SessionComposerPalette: View {
 
     /// D6: guards `closeChipPickerOrDismiss` against a same-turn double-fire
     /// from its two `.onExitCommand` call sites (`queryRow`'s and
-    /// `ComposerQueryField`'s own `.exit` event) — same pattern as
+    /// the field's own `.exit` event) — same pattern as
     /// `isHandlingNoMatchFeedback` above.
     @State private var isHandlingExitCommand = false
 
@@ -560,6 +560,29 @@ struct SessionComposerPalette: View {
         )
     }
 
+    /// The create-branch/create-worktree results row: present exactly when a
+    /// project is current AND the typed branch token is an unresolved offer.
+    /// A pure static so the row's existence is testable without mounting the
+    /// view (`SessionComposerCreateBranchOptionTests`).
+    static func createBranchOption(
+        offerToken: String?,
+        project: Project?,
+        isKnownBranchWithoutWorktree: Bool,
+        action: @escaping () -> Void
+    ) -> ComposerOption? {
+        guard let project, let token = offerToken else { return nil }
+        return ComposerOption(
+            id: SessionComposerCommandParser.createWorktreeRowId,
+            title: SessionComposerCommandParser.createBranchOfferTitle(
+                token: token,
+                isKnownBranchWithoutWorktree: isKnownBranchWithoutWorktree
+            ),
+            subtitle: project.name,
+            leadingIcon: "arrow.triangle.branch",
+            action: action
+        )
+    }
+
     /// Composer variant G (Sean's ruling, 2026-08-31): the typed token in an
     /// armed branch position (`> <token>`), whenever it doesn't already
     /// resolve — `commandOptions` offers a create row for it, EITHER shape:
@@ -717,24 +740,19 @@ struct SessionComposerPalette: View {
         // STORE'S own `guard !isCreatingWorktree` in `createWorktree` is
         // the second, independent guard against the same race (covers the
         // mouse-click path this one doesn't).
-        if let currentProject, let token = typedBranchCreateOffer {
-            options.append(
-                ComposerOption(
-                    id: SessionComposerCommandParser.createWorktreeRowId,
-                    title: SessionComposerCommandParser.createBranchOfferTitle(
-                        token: token,
-                        isKnownBranchWithoutWorktree: isTypedBranchCreateOfferForKnownBranch(token)
-                    ),
-                    subtitle: currentProject.name,
-                    leadingIcon: "arrow.triangle.branch",
-                    action: {
-                        selectedIndex = nil
-                        composerStore.createWorktree(named: token, in: currentProject) { _ in
-                            launchOrFocusAfterWorktreeCreation()
-                        }
-                    }
-                )
-            )
+        if let option = Self.createBranchOption(
+            offerToken: typedBranchCreateOffer,
+            project: currentProject,
+            isKnownBranchWithoutWorktree: typedBranchCreateOffer.map(isTypedBranchCreateOfferForKnownBranch) ?? false,
+            action: { [self] in
+                guard let currentProject, let token = typedBranchCreateOffer else { return }
+                selectedIndex = nil
+                composerStore.createWorktree(named: token, in: currentProject) { _ in
+                    launchOrFocusAfterWorktreeCreation()
+                }
+            }
+        ) {
+            options.append(option)
         }
 
         // Composer variant G: when an armed branch token consumed a word
@@ -1295,7 +1313,7 @@ struct SessionComposerPalette: View {
             ) { event in
                 handle(event)
             }
-            .accessibilityLabel(ComposerQueryField.accessibilityFieldLabel)
+            .accessibilityLabel(ComposerGhostTextField.accessibilityFieldLabel)
         }
         .frame(width: newStyleFieldRenderWidth, height: newStyleFieldLineHeight)
     }
@@ -1637,7 +1655,7 @@ struct SessionComposerPalette: View {
     /// file invented a "commit but keep composer open" meaning for ⌥+Return
     /// that contradicted the plan's own legend (`↵ start · ⌥↵ start +
     /// reveal · esc cancel`) — deleted, not kept as a fallback.
-    private func handle(_ event: ComposerQueryField.KeyboardEvent) {
+    private func handle(_ event: ComposerGhostTextField.KeyboardEvent) {
         switch event {
         case .exit:
             dismissComposer()
@@ -1791,241 +1809,4 @@ struct ComposerOption: Identifiable, Hashable {
 
     static func == (lhs: ComposerOption, rhs: ComposerOption) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
-}
-
-// MARK: - Query field
-
-/// The composer's search field. Forked from `CommandPaletteQuery` with two
-/// changes: the focus-loss auto-dismiss (`onChange(of: isTextFieldFocused)`
-/// calling `.exit`) is REMOVED — the project dropdown and
-/// `+ Add project…`'s `NSOpenPanel` both take first responder, and either
-/// would otherwise kill the composer mid-interaction (ship gate 2) — and
-/// Return is wired through BOTH `.onSubmit` and `Backport.onKeyPress`:
-/// `Backport.onKeyPress` is a documented no-op below macOS 14
-/// (`Helpers/Backport.swift:53-68`) and the app's deployment target is
-/// 13.0, so `.onSubmit` alone is what makes Return work pre-14. If both
-/// fire on 14+, the invariant that makes a double-fire a no-op instead of
-/// a double-commit is scoped to `handle(.submit)`'s own reach: every
-/// `ComposerOption.action` in `flattenedOptions` — `commit(template:)`
-/// (N1) and the search-result project row's action — nils `selectedIndex`
-/// SYNCHRONOUSLY first, so the second fire's `selectedOption` resolves to
-/// `nil` and its handler becomes a no-op rather than acting on a list the
-/// first fire already swapped out from under it. The trailing project
-/// dropdown and "+ Add project…" don't need this: they're mouse-only
-/// Buttons that `handle(.submit)` never reaches, and `addProjectViaPanel`
-/// (on `SessionComposerStore`) has no access to this `@State` regardless
-/// (PR #132 review round 3) — this repo cannot verify from source alone
-/// whether `.onSubmit`/`.onKeyPress` actually both fire, only that a
-/// double-fire is harmless if they do.
-struct ComposerQueryField: View {
-    @Binding var query: String
-    var fontSize: CGFloat
-    @Binding var focusTrigger: Bool
-    /// Whether there's a highlighted row to commit. When false, Return
-    /// fires `.submitNoMatch` (shake/border feedback) instead of `.submit`
-    /// — no longer a silent no-op (nit: `.onKeyPress` used to return
-    /// `.handled` unconditionally, swallowing Return against an empty
-    /// list).
-    var hasSelection: Bool
-    /// While `true`, this field's own ↑/↓/Return handlers go quiet. No
-    /// inline picker exists in the current composer, so nothing sets it.
-    var isPickerOpen: Bool
-    /// Step 3 (Composer UI 11 plan §3): the 11.1 ghost path when it renders
-    /// (`.centered`, rest state), else the generic hint. Rendered as a
-    /// layered `Text` in this view's `ZStack`, shown only while `query` is
-    /// empty, rather than through `TextField`'s `prompt:` initializer:
-    /// SwiftUI on macOS does not honour `.foregroundColor`/`.opacity` on a
-    /// prompt `Text` (measured — the prompt route rendered at ~83% opacity
-    /// against a 49% target, `#1A1A1A7E`, `DESIGN.md` §4). The overlay is
-    /// safe here specifically because the field is empty in this state, so
-    /// there's no horizontal scroll offset to desync against — do not reuse
-    /// this pattern for non-empty text (`reference_composer-field-cannot-tint-subranges.md`).
-    var placeholder: String
-    var onEvent: ((KeyboardEvent) -> Void)?
-    @FocusState private var isTextFieldFocused: Bool
-
-    /// DESIGN.md §4's ghost placeholder grey went through `#1A1A1A7E`
-    /// (0x7E/0xFF ≈ 0.49, measured 2.99:1 light / 3.99:1 dark against WCAG
-    /// AA text contrast's 4.5:1 floor) and 0.65 (measured 4.74:1 light /
-    /// 5.93:1 dark, clearing AA) before Sean, looking at the real build,
-    /// called 0.50 as a deliberate contrast/legibility tradeoff for
-    /// ghost-completion text — his call as design authority, not an
-    /// accessibility miss. **0.50 does NOT meet WCAG AA** (measured ≈3.0:1
-    /// light mode; see `ComposerDesignCallRenderTests`' evidence for the
-    /// exact rendered ratio).
-    /// Deliberately kept in lockstep with
-    /// `ComposerGhostTextField.ghostOpacity` so the two fields render the
-    /// same ghost — if you change one, change the other. A production
-    /// symbol, not a re-declared literal, so a test can pin it without
-    /// drifting from the value actually rendered.
-    static let ghostPlaceholderOpacity: Double = 0.50
-
-    /// DEFECT 4 fix (Composer UI 11 review round 2): a named production
-    /// symbol for the field's `.accessibilityLabel`, so
-    /// `AccessibilityTests` can assert against the string the field
-    /// actually renders instead of a re-declared local literal that would
-    /// still pass against a typo'd production string.
-    static let accessibilityFieldLabel: String = "New session command"
-
-    enum KeyboardEvent {
-        case exit
-        case submit
-        /// Return pressed with no row highlighted (empty results list) —
-        /// distinct from `.submit` so the parent can play the no-match
-        /// shake/border feedback instead of silently swallowing the key.
-        case submitNoMatch
-        case move(MoveCommandDirection)
-        // `.backspaceAtStart` used to live here — the breadcrumb chip's
-        // pop-to-text gesture (A5), fired when backspace hit an empty field
-        // with a chip still showing. Deleted with the chips (model A
-        // rebuild): the field has no non-editable segment left to pop, so
-        // backspace against an empty field is now ordinary, no-op text
-        // editing with no event to dispatch.
-        /// R14: Tab accepted a ghost-text segment (`ComposerGhostTextField
-        /// .acceptGhost`, past both its guards — a Tab with nothing to
-        /// accept sends nothing). Drives the Witness ghost's hop beat only;
-        /// no other effect (the field already wrote the accepted text
-        /// itself).
-        case acceptedGhost
-    }
-
-    var body: some View {
-        ZStack {
-            Group {
-                // FA fix (round-2 review): these four are only mounted while
-                // `!isPickerOpen`, not merely guarded internally. The prior
-                // shape kept all four `Button`s (and their
-                // `.keyboardShortcut` registrations) installed in the view
-                // hierarchy at all times, gating only the ACTION body —
-                // `ProjectDropdownView.keyboardCaptureLayer` then registered
-                // an identical second ↑/↓/Return pair in the same window
-                // while the picker was open. Two live registrations for the
-                // same shortcut is exactly the kind of ambiguity SwiftUI
-                // gives no resolution guarantee for; removing these from the
-                // hierarchy entirely (rather than no-oping their action)
-                // means the picker's handlers are the ONLY ones installed
-                // while it's open, by construction, not by hope.
-                if !isPickerOpen {
-                    Button { onEvent?(.move(.up)) } label: { Color.clear }
-                        .buttonStyle(PlainButtonStyle())
-                        .keyboardShortcut(.upArrow, modifiers: [])
-                    Button { onEvent?(.move(.down)) } label: { Color.clear }
-                        .buttonStyle(PlainButtonStyle())
-                        .keyboardShortcut(.downArrow, modifiers: [])
-
-                    Button { onEvent?(.move(.up)) } label: { Color.clear }
-                        .buttonStyle(PlainButtonStyle())
-                        .keyboardShortcut(.init("p"), modifiers: [.control])
-                    Button { onEvent?(.move(.down)) } label: { Color.clear }
-                        .buttonStyle(PlainButtonStyle())
-                        .keyboardShortcut(.init("n"), modifiers: [.control])
-                }
-            }
-            .frame(width: 0, height: 0)
-            .accessibilityHidden(true)
-
-            // Ghost placeholder overlay — see `placeholder`'s doc comment
-            // for why this replaces `TextField`'s `prompt:` route. Same
-            // font/weight and vertical padding as the `TextField` below so
-            // the metrics line up; only shown while the field is empty.
-            if query.isEmpty {
-                Text(placeholder)
-                    .font(.system(size: fontSize, weight: .regular))
-                    .foregroundColor(Color(nsColor: .labelColor).opacity(Self.ghostPlaceholderOpacity))
-                    // Fix 1 (review): the deleted `resolutionSegment` code
-                    // carried both of these on every segment; without them a
-                    // long resolved path (this repo's own
-                    // `ghostties > feat/composer-ui-11 > Orchestrator` is 45
-                    // chars, over the ~42-char field width at `.centered`)
-                    // wraps to a second line inside the fixed-height 38pt
-                    // field instead of truncating on one.
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-
-            TextField(
-                "",
-                text: $query
-            )
-                .padding(.vertical, 6)
-                // R6 (Phase 3 review round 2): `.light` isn't an allowed
-                // DESIGN.md weight (§3: `.regular`/`.medium`, `.semibold`
-                // sparingly), and DESIGN.md's own new "centered modal" row
-                // documents this field as `.regular` — reconciling to that.
-                .font(.system(size: fontSize, weight: .regular))
-                .textFieldStyle(.plain)
-                // FB (round-2 review): this is a command field, not prose —
-                // autocorrection has no business firing on a project name or
-                // shell flag. NOTE this does NOT verifiably suppress macOS's
-                // separate "smart quotes and dashes" substitution (a
-                // distinct AppKit feature from spelling autocorrection, on
-                // by default, with no exposed SwiftUI/AppKit toggle scoped
-                // to a single `NSTextField` short of reaching into its field
-                // editor mid-edit) — the actual guarantee against a
-                // substituted curly quote breaking the command grammar is
-                // `SessionComposerCommandParser.tokenize`/`splitOnFirstToken`
-                // now treating U+201C/U+201D as quote characters alongside
-                // `"`, which holds regardless of whether substitution fires.
-                .autocorrectionDisabled(true)
-                // Fix 5 (review): the deleted `resolutionLine` announced
-                // "Project: <name>", "Branch: <name>", "Template: <name>" —
-                // with the composer hiding the sidebar/terminal from
-                // VoiceOver while open, this field is essentially the only
-                // accessible content, so losing that with no replacement
-                // meant a screen-reader user learned the destination only
-                // AFTER pressing Return. `accessibilityValue` reuses the
-                // exact same source the ghost `Text` renders (`placeholder`)
-                // while the field is empty — the resolved destination Return
-                // would currently commit — and falls back to the literal
-                // typed text once there's something typed, matching
-                // `TextField`'s own default announcement (which this
-                // override replaces). The ghost `Text` itself stays
-                // `.accessibilityHidden(true)` — decorative once its value
-                // is carried here.
-                .accessibilityLabel(Self.accessibilityFieldLabel)
-                .accessibilityValue(query.isEmpty ? placeholder : query)
-                .focused($isTextFieldFocused)
-                .onExitCommand { onEvent?(.exit) }
-                .onMoveCommand { guard !isPickerOpen else { return }; onEvent?(.move($0)) }
-                // B1: `.onSubmit` is the ONLY Return handler that works
-                // below macOS 14 — the app's deployment target is 13.0.
-                // D6: quiet while the picker is open (see `isPickerOpen`'s
-                // doc comment) — Return there belongs to the picker.
-                .onSubmit {
-                    guard !isPickerOpen else { return }
-                    guard hasSelection else {
-                        onEvent?(.submitNoMatch)
-                        return
-                    }
-                    onEvent?(.submit)
-                }
-                .backport.onKeyPress(.return) { _ in
-                    guard !isPickerOpen else { return .ignored }
-                    guard hasSelection else {
-                        onEvent?(.submitNoMatch)
-                        return .handled
-                    }
-                    onEvent?(.submit)
-                    return .handled
-                }
-                .onAppear {
-                    DispatchQueue.main.async {
-                        isTextFieldFocused = true
-                    }
-                }
-                .onChange(of: focusTrigger) { triggered in
-                    // S7: consumes `SessionComposerStore.focusSearchFieldTrigger`
-                    // — previously set on re-open but read nowhere, so the
-                    // "opening while already open focuses the field" parity
-                    // the doc comment claimed was a complete no-op.
-                    guard triggered else { return }
-                    isTextFieldFocused = true
-                    focusTrigger = false
-                }
-        }
-    }
 }

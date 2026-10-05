@@ -288,8 +288,8 @@ enum WorkspaceLayout {
     static let needsAttentionPurple = Color(red: 0.659, green: 0.333, blue: 0.969)
 
     /// Composer results-list selection accent — the selected-row fill and
-    /// per-character search-match highlight in `ComposerResultsTable`/
-    /// `ComposerRow`, replacing the system `Color.accentColor`. Deliberately
+    /// per-character search-match highlight in the composer's results list,
+    /// replacing the system `Color.accentColor`. Deliberately
     /// shares its hex (#5B8DEF) with `statusYourTurnBlue`, a known collision
     /// Sean has accepted for now rather than reusing that status-named token
     /// directly (composer selection isn't a session status). Scheduled for

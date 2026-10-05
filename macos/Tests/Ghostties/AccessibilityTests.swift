@@ -218,7 +218,7 @@ final class AccessibilityTests: XCTestCase {
         // so it passed against an implementation with NO accessibility
         // modifiers at all (an empty-string typo in production would still
         // pass, since the test never reads production's own value). Now
-        // asserts against `ComposerQueryField.accessibilityFieldLabel`, the
+        // asserts against `ComposerGhostTextField.accessibilityFieldLabel`, the
         // literal symbol `.accessibilityLabel(Self.accessibilityFieldLabel)`
         // actually renders with (`SessionComposerPalette.swift`).
         //
@@ -234,8 +234,8 @@ final class AccessibilityTests: XCTestCase {
         // host to query (see this file's header), which this test does not
         // have. This asserts the LABEL constant only; it makes no claim
         // about the value override actually reaching VoiceOver.
-        XCTAssertEqual(ComposerQueryField.accessibilityFieldLabel, "New session command")
-        XCTAssertFalse(ComposerQueryField.accessibilityFieldLabel.isEmpty,
+        XCTAssertEqual(ComposerGhostTextField.accessibilityFieldLabel, "New session command")
+        XCTAssertFalse(ComposerGhostTextField.accessibilityFieldLabel.isEmpty,
             "Composer query field must have a non-empty VoiceOver label")
     }
 

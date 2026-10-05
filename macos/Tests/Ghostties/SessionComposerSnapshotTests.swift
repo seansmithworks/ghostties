@@ -177,7 +177,7 @@ struct SessionComposerSnapshotTests {
 
     // MARK: - Step 3: ghost placeholder opacity
 
-    /// Pins `ComposerQueryField.ghostPlaceholderOpacity` — the production
+    /// Pins `ComposerGhostTextField.ghostPlaceholderOpacity` — the production
     /// symbol the overlay `Text` actually renders with — to the shipped
     /// design value, 0.50 (`DESIGN.md` §4, Sean's call looking at the real
     /// build; deliberately below the 0.65 that cleared WCAG AA — see the
@@ -188,7 +188,7 @@ struct SessionComposerSnapshotTests {
     /// against a white ground) — NOT an AA-floor guard; this test would
     /// pass at any deliberately-chosen value equal to the constant.
     @Test func ghostPlaceholderOpacityMatchesDesignSpec() {
-        #expect(ComposerQueryField.ghostPlaceholderOpacity == 0.50)
+        #expect(ComposerGhostTextField.ghostPlaceholderOpacity == 0.50)
     }
 
     /// Design-spec pin, NOT an AA guarantee — mirrors
@@ -202,18 +202,18 @@ struct SessionComposerSnapshotTests {
     /// instead of silently passing.
     @Test func ghostPlaceholderOpacityDoesNotSilentlyRegress() {
         #expect(
-            ComposerQueryField.ghostPlaceholderOpacity == 0.50,
+            ComposerGhostTextField.ghostPlaceholderOpacity == 0.50,
             "ghostPlaceholderOpacity drifted from 0.50, the shipped design value (deliberately below WCAG AA — Sean's call)"
         )
     }
 
-    /// The two ghost-opacity constants (`ComposerQueryField.ghostPlaceholderOpacity`
+    /// The two ghost-opacity constants (`ComposerGhostTextField.ghostPlaceholderOpacity`
     /// and `ComposerGhostTextField.ghostOpacity`) are deliberately kept in lockstep so the two
     /// fields render the same ghost — see either constant's doc comment.
     /// This is exactly the drift `def5e9cd4` introduced (raised one, not
     /// the other); this test fails the moment they diverge again.
     @Test func ghostOpacityConstantsStayInLockstep() {
-        #expect(ComposerQueryField.ghostPlaceholderOpacity == Double(ComposerGhostTextField.ghostOpacity))
+        #expect(ComposerGhostTextField.ghostPlaceholderOpacity == Double(ComposerGhostTextField.ghostOpacity))
     }
 
     // MARK: - Step 4: zero-project empty state

@@ -685,7 +685,7 @@ final class SessionComposerStore: ObservableObject {
         // R3 (Phase 3 review round 2): the keyboard path's double-Return
         // guard (`SessionComposerPalette.commit(template:)` nil-ing
         // `selectedIndex` synchronously) doesn't cover the mouse path —
-        // `ComposerRow`'s `Button(action:)` calls `option.action()` directly
+        // a results row's `Button(action:)` calls `option.action()` directly
         // and never reads `selectedIndex`. A fast double-click on a
         // template row (well inside the system's ~500ms double-click
         // interval, especially during the centered overlay's 0.2s

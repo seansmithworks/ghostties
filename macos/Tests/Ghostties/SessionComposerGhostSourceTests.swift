@@ -2,7 +2,7 @@ import Testing
 import GhosttiesCore
 @testable import Ghostty
 
-/// Model B's ghost source (Spotlight-inline-completion + Raycast-Tab-drill
+/// The composer field's ghost source (Spotlight-inline-completion + Raycast-Tab-drill
 /// rewrite): `SessionComposerPalette.destination(for:store:recentSelections:)`
 /// is the half of `ghostFullPathForField` that resolves a HIGHLIGHTED
 /// PROJECT row's own destination — the fix for defect 1 ("ghost welded to

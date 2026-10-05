@@ -36,7 +36,7 @@ import GhosttiesCore
 ///   (`isFieldEditor = true` is set, per A-F15, but not driven).
 /// - On-screen material/vibrancy fidelity.
 /// - Whether the four hidden `.keyboardShortcut` Buttons (retained from
-///   `ComposerQueryField`, A-F11 — mounted at the call site,
+///   the deleted SwiftUI query field, A-F11 — mounted at the call site,
 ///   `SessionComposerPalette`'s single-line field, NOT in this file;
 ///   this type owns no SwiftUI `body` to hang them on) still win first
 ///   against a live `NSTextView` first responder the way they did against
@@ -101,7 +101,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// (A-F6).
     var rowHeight: CGFloat
     @Binding var focusTrigger: Bool
-    /// D6 parity with `ComposerQueryField.hasSelection` — whether Return
+    /// D6: whether Return
     /// commits (`.submit`) or shakes (`.submitNoMatch`).
     var hasSelection: Bool
     /// The full destination Return would commit right now — NOT
@@ -120,7 +120,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// (`nextSegment(remainder:)`).
     var ghostFullPath: String
 
-    var onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)?
+    var onEvent: ((KeyboardEvent) -> Void)?
 
     init(
         query: Binding<String>,
@@ -130,7 +130,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         focusTrigger: Binding<Bool>,
         hasSelection: Bool,
         ghostFullPath: String,
-        onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)? = nil
+        onEvent: ((KeyboardEvent) -> Void)? = nil
     ) {
         self._query = query
         self.fontSize = fontSize
@@ -150,13 +150,34 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// his call as design authority, not an accessibility miss. **0.50 does
     /// NOT meet WCAG AA** (measured ≈3.0:1 light mode; see
     /// `ComposerDesignCallRenderTests`' evidence for the exact rendered
-    /// ratio). Same production symbol `ComposerQueryField.ghostPlaceholderOpacity`
-    /// pins, re-declared here (not shared) because this type has its own
-    /// AppKit color path (`NSColor`, not SwiftUI `Color`) and no common base
-    /// to hang a shared constant on without touching `ComposerQueryField`,
-    /// which is out of scope. Deliberately kept in lockstep with that
-    /// constant. If you change one, change the other.
+    /// ratio). `ghostPlaceholderOpacity` below is the same value as a
+    /// `Double` for tests that pin it; this one is the `CGFloat` the AppKit
+    /// color path (`NSColor`) consumes. Keep the two in lockstep.
     static let ghostOpacity: CGFloat = 0.50
+
+    /// `ghostOpacity` as a `Double`, a named production symbol so a test can
+    /// pin the rendered value (0.50, deliberately below WCAG AA; see above)
+    /// without re-declaring a literal.
+    static let ghostPlaceholderOpacity: Double = 0.50
+
+    /// The field's `.accessibilityLabel`, a named production symbol so
+    /// `AccessibilityTests` asserts against the string actually rendered.
+    static let accessibilityFieldLabel: String = "New session command"
+
+    enum KeyboardEvent {
+        case exit
+        case submit
+        /// Return pressed with no row highlighted (empty results list) —
+        /// distinct from `.submit` so the parent can play the no-match
+        /// shake/border feedback instead of silently swallowing the key.
+        case submitNoMatch
+        case move(MoveCommandDirection)
+        /// R14: Tab accepted a ghost-text segment (`acceptGhost`, past both
+        /// its guards — a Tab with nothing to accept sends nothing). Drives
+        /// the Witness ghost's hop beat only; no other effect (the field
+        /// already wrote the accepted text itself).
+        case acceptedGhost
+    }
 
     /// DEFECT 3 fix (review round 2): a small fixed trailing pad added to
     /// `ghostInkSize`'s measured (advance-width) size — see

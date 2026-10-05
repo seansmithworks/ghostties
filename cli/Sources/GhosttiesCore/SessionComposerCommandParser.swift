@@ -1614,8 +1614,8 @@ public enum SessionComposerCommandParser {
         // ⇥ `accept`: `ComposerGhostTextField.insertTab` → `acceptGhost`
         // — live only when the ghost remainder text is non-empty; Tab
         // no-ops (falls through to ordinary focus traversal) against an
-        // empty remainder, including whenever the experimental model-B
-        // field isn't the one mounted.
+        // empty remainder (the single-line composer field is the only field
+        // that ever offers Tab).
         hasGhostRemainder: Bool,
         // ↑↓ `navigate`: the four hidden `.keyboardShortcut(.upArrow/
         // .downArrow)` buttons — live only when more than one option is
