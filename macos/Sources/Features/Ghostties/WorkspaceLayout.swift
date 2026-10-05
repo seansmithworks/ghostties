@@ -221,12 +221,6 @@ enum WorkspaceLayout {
     static let selectedRowShadowRadius: CGFloat = 10
     static let selectedRowShadowYOffset: CGFloat = 2
 
-    /// Selected-row ghost glyph color — sampled from Flow 07 export `mIi8b.png`
-    /// at the "portfolio" row's ghost icon (~253, 100, 99). The design bakes
-    /// this ghost into a raster layer with no extractable CSS hex, so this is
-    /// a pixel sample, not a token from `flow07.html`.
-    static let selectedGhostRed = Color(red: 253.0 / 255.0, green: 100.0 / 255.0, blue: 99.0 / 255.0)
-
     /// Chrome background (light mode). Covers the left sidebar column and the
     /// gutter padding around the terminal card. The outer of the two Ghostties
     /// design-system layers — warm pink-cream, independent of terminal theme.
