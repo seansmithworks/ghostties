@@ -8,8 +8,8 @@ import DialKit
 // The single-line composer's support code: the rest-state descriptor cycle,
 // the Witness ghost's dials, the live tuning dials (`ComposerSingleLineTuning`
 // and friends), and the DEBUG-only DialKit panel that drives them. There is
-// exactly one composer; a stale stored `ghostties.composerStyle` value
-// (`zeroChrome` or otherwise) is never read.
+// exactly one composer; any stale stored `ghostties.composerStyle` value is
+// never read.
 
 // MARK: - Rest-state descriptor cycle
 
@@ -284,7 +284,7 @@ enum ComposerSingleLineTuning {
     static let defaultRowSize: CGFloat = 18
     static let defaultWidth: CGFloat = 640
     /// Round 14 (session-7): Sean's Dev-tuned corner radius, up from round
-    /// 13b's 10 (the prior `.anchored` card radius).
+    /// 13b's 10.
     static let defaultCornerRadius: CGFloat = 16
 
     static let fieldSizeRange: ClosedRange<Double> = 15...28

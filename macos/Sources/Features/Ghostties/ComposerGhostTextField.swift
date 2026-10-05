@@ -12,10 +12,8 @@ import GhosttiesCore
 /// field editor, a different protocol on a different class; nothing here
 /// copies it). It is built to the AppKit semantics documented in
 /// `docs/plans/composer-ui-11/refutation-appkit.md` (findings A-F1 through
-/// A-F28) and gated OFF by default
-/// (`ComposerGhostTextField.modelBFieldStorageKey`, `@AppStorage`, default
-/// `false`) — `SessionComposerPalette.queryRow` still builds
-/// `ComposerQueryField` unless Sean flips the flag himself.
+/// A-F28). It is the composer's one query field, built by
+/// `SessionComposerPalette`'s single-line field.
 ///
 /// **What is NOT verified, and cannot be verified by an agent** (A-F13 —
 /// every gate below is a manual keyboard matrix, and this repo forbids
@@ -39,7 +37,7 @@ import GhosttiesCore
 /// - On-screen material/vibrancy fidelity.
 /// - Whether the four hidden `.keyboardShortcut` Buttons (retained from
 ///   `ComposerQueryField`, A-F11 — mounted at the call site,
-///   `SessionComposerPalette.queryRow`'s model-B branch, NOT in this file;
+///   `SessionComposerPalette`'s single-line field, NOT in this file;
 ///   this type owns no SwiftUI `body` to hang them on) still win first
 ///   against a live `NSTextView` first responder the way they did against
 ///   SwiftUI's own field editor — Assumption 1 in the refutation, "probably
@@ -47,8 +45,7 @@ import GhosttiesCore
 ///   these four Buttons were DROPPED from the initial construction despite
 ///   the plan requiring them retained, and the omission went undocumented
 ///   here — this file's own header claimed them present while they were
-///   not. Restored at the call site with the same `!isPickerOpen`
-///   conditional mounting `ComposerQueryField.body` uses. Their WIN-FIRST
+///   not. Restored at the call site. Their WIN-FIRST
 ///   behavior against this file's `NSTextView` remains exactly as
 ///   unverified as stated above — restoring them closes the "dropped
 ///   entirely" gap, not the "unverified interaction" one.
@@ -74,7 +71,7 @@ import GhosttiesCore
 ///   comparing like with like. With Blocker 1 fixed — typed text now
 ///   carries `textView.typingAttributes` (15pt) on write, matching the
 ///   font `typedWidth` was always measuring against — the residual
-///   RE-measured at ~3.5pt logical (7px @2x) in `step7-modelb-light.png`
+///   RE-measured at ~3.5pt logical (7px @2x) in `step7-ghost-field-light.png`
 ///   (was ~2pt/4px under the old, mismatched-font measurement; the two
 ///   numbers are not comparable, since the earlier one was measuring the
 ///   wrong thing). Not fully closed to zero; most likely ordinary
@@ -95,16 +92,10 @@ import GhosttiesCore
 /// applies NO temporary attributes — there is nothing to tint yet, Q2 is
 /// still open.
 struct ComposerGhostTextField: NSViewRepresentable {
-    /// `@AppStorage` key gating model B. Default OFF — read at the call
-    /// site (`SessionComposerPalette.queryRow`), not here; this type has no
-    /// opinion about the flag beyond owning its name.
-    static let modelBFieldStorageKey = "ghostties.composerModelBField"
-
     @Binding var query: String
     var fontSize: CGFloat
     var fontWeight: NSFont.Weight = .regular
-    /// The row height the field renders inside (`.centered` only tonight,
-    /// 38pt — `SessionComposerPalette.fieldHeight`). Used only to compute a
+    /// The row height the field renders inside (38pt — `SessionComposerPalette.fieldHeight`). Used only to compute a
     /// vertical `textContainerInset` that centers a single line, since
     /// `NSTextView`'s own inset defaults to `(0, 0)` and renders top-aligned
     /// (A-F6).
@@ -113,16 +104,10 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// D6 parity with `ComposerQueryField.hasSelection` — whether Return
     /// commits (`.submit`) or shakes (`.submitNoMatch`).
     var hasSelection: Bool
-    /// D6 parity with `ComposerQueryField.isPickerOpen` — while true, this
-    /// field's own arrow/Return handling goes quiet (the inline
-    /// project/branch picker is the only live handler); mirrors the guard
-    /// ladder in `ComposerQueryField.body`'s `.onSubmit`/`.onMoveCommand`
-    /// exactly, selector-for-selector.
-    var isPickerOpen: Bool
     /// The full destination Return would commit right now — NOT
-    /// `SessionComposerPalette.ghostPlaceholder` (model A's rest-state-only
+    /// `SessionComposerPalette.ghostPlaceholder` (the rest-state-only
     /// placeholder, welded to `currentProject`). Sourced instead from
-    /// `SessionComposerPalette.ghostFullPathForModelB`, which reads the
+    /// `SessionComposerPalette.ghostFullPathForField`, which reads the
     /// CURRENTLY HIGHLIGHTED option's own resolved destination — a
     /// highlighted project row ghosts THAT project's path even though
     /// `currentProject` never changed, which is what lets typing `bruk`
@@ -144,7 +129,6 @@ struct ComposerGhostTextField: NSViewRepresentable {
         rowHeight: CGFloat,
         focusTrigger: Binding<Bool>,
         hasSelection: Bool,
-        isPickerOpen: Bool,
         ghostFullPath: String,
         onEvent: ((ComposerQueryField.KeyboardEvent) -> Void)? = nil
     ) {
@@ -154,7 +138,6 @@ struct ComposerGhostTextField: NSViewRepresentable {
         self.rowHeight = rowHeight
         self._focusTrigger = focusTrigger
         self.hasSelection = hasSelection
-        self.isPickerOpen = isPickerOpen
         self.ghostFullPath = ghostFullPath
         self.onEvent = onEvent
     }
@@ -172,9 +155,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// AppKit color path (`NSColor`, not SwiftUI `Color`) and no common base
     /// to hang a shared constant on without touching `ComposerQueryField`,
     /// which is out of scope. Deliberately kept in lockstep with that
-    /// constant — this is model B (behind View → Experimental Composer
-    /// Field, default OFF); `ComposerQueryField` is model A, the shipping
-    /// default. If you change one, change the other.
+    /// constant. If you change one, change the other.
     static let ghostOpacity: CGFloat = 0.50
 
     /// DEFECT 3 fix (review round 2): a small fixed trailing pad added to
@@ -227,8 +208,8 @@ struct ComposerGhostTextField: NSViewRepresentable {
 
     /// The `" > "` segment separator every full destination path
     /// (`ghostFullPath`) is built from (`SessionComposerCommandParser`'s
-    /// `resolutionLineSegments`/`ghostPlaceholder`, and the model-B-only
-    /// `ghostFullPathForModelB` at the `SessionComposerPalette` call site).
+    /// `resolutionLineSegments`/`ghostPlaceholder`, and
+    /// `ghostFullPathForField` at the `SessionComposerPalette` call site).
     static let segmentSeparator = " > "
 
     /// Derives the ghost from the same full-path source model A's
@@ -340,7 +321,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
     /// swapping to `ghostInkSize` alone reproduced an IDENTICAL hard cutoff
     /// at the same column (if it were genuinely ink-based this fix would
     /// have moved the clip). Second, its returned HEIGHT is used verbatim
-    /// as the label height below, and in `step7-modelb-light.png` the
+    /// as the label height below, and in `step7-ghost-field-light.png` the
     /// ghost's ink spans the same rows (27-50) as the typed run — that is
     /// LINE HEIGHT, not a tight ink bounding box. The thing that actually
     /// fixed the clipping is `glyphAntialiasMargin` (a fixed 3pt trailing
@@ -508,7 +489,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// fully transparent — `drawsBackground = false` top to bottom)
         /// hierarchy rendered visibly DARKER than the same alpha applied
         /// any other way — measured `rgb(66,66,66)` light /
-        /// `rgb(196,196,196)` dark in `step7-modelb-light.png` /
+        /// `rgb(196,196,196)` dark in `step7-ghost-field-light.png` /
         /// `-dark.png`, both matching `1 − (1 − 0.49)²` (a doubled 0.49
         /// composite) to three decimal places even though only ONE draw
         /// was happening. `wantsLayer = true` (an EXPLICIT own layer,
@@ -567,7 +548,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
         /// NO preceding character to inherit attributes from, so it rendered
         /// at TextKit's own layout-manager defaults — NOT `textView.font`
         /// (this field's 15pt) or `textView.textColor` (`.labelColor`).
-        /// Measured (pre-fix `0db87aef3` vs the regression, `step7-modelb-
+        /// Measured (pre-fix `0db87aef3` vs the regression, `step7-ghost-field-
         /// light.png`): typed "Gho" glyph height 24px -> 19px (19/24 ≈
         /// 12/15), darkest typed pixel rgb(39,39,39) (labelColor at 0.85)
         /// -> rgb(0,0,0) (unattributed). Fix: after the replace, explicitly
@@ -665,7 +646,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // explanation. With Blocker 1 fixed (typed text now carries
             // `textView.typingAttributes`, 15pt, matching the font measured
             // here), re-measured against the freshly rendered
-            // `step7-modelb-light.png`: gap is ~3.5pt logical (7px @2x) —
+            // `step7-ghost-field-light.png`: gap is ~3.5pt logical (7px @2x) —
             // not directly comparable to round 1's ~2pt/4px figure, since
             // that number was measuring a mismatched-font comparison, not
             // a smaller version of this same gap. Not fully closed to
@@ -684,7 +665,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // bearing" was also wrong, above.)
             //
             // Measured facts instead: a column scan of the typed-vs-ghost
-            // boundary in `step7-modelb-light.png` shows 2 blank columns
+            // boundary in `step7-ghost-field-light.png` shows 2 blank columns
             // between glyphs INSIDE the typed run, 1-2 blank columns
             // INSIDE the ghost run, but 5 blank columns AT the
             // typed-to-ghost boundary — a systematic ~1.5-2pt excess, not
@@ -763,7 +744,7 @@ struct ComposerGhostTextField: NSViewRepresentable {
             // ADVANCE widths, not the glyphs' actual painted ink extent —
             // a glyph whose outline overshoots its own advance (this
             // font's terminal `s` does, measured directly: column-ink-count
-            // scan of `step7-modelb-light.png` showed the last `s` cut with
+            // scan of `step7-ghost-field-light.png` showed the last `s` cut with
             // a HARD zero at the frame edge, not tapering the way every
             // other glyph in the string does) gets its trailing pixels
             // clipped by `ghostLabel.frame`'s width, since `NSTextField`
@@ -823,11 +804,8 @@ struct ComposerGhostTextField: NSViewRepresentable {
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
             switch selector {
             case #selector(NSResponder.insertNewline(_:)):
-                // Mirrors `ComposerQueryField.body`'s `.onSubmit` guard
-                // ladder selector-for-selector (D6/B1): quiet while a picker
-                // is open, `.submitNoMatch` shakes instead of silently
-                // swallowing Return against an empty result list.
-                guard !parent.isPickerOpen else { return true }
+                // `.submitNoMatch` shakes instead of silently swallowing
+                // Return against an empty result list.
                 if parent.hasSelection {
                     parent.onEvent?(.submit)
                 } else {
@@ -844,11 +822,11 @@ struct ComposerGhostTextField: NSViewRepresentable {
                 return true
 
             case #selector(NSResponder.moveUp(_:)):
-                if !parent.isPickerOpen { parent.onEvent?(.move(.up)) }
+                parent.onEvent?(.move(.up))
                 return true
 
             case #selector(NSResponder.moveDown(_:)):
-                if !parent.isPickerOpen { parent.onEvent?(.move(.down)) }
+                parent.onEvent?(.move(.down))
                 return true
 
             case #selector(NSResponder.insertTab(_:)):

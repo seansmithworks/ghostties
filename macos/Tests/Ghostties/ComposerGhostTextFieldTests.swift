@@ -4,7 +4,7 @@ import Testing
 import GhosttiesCore
 @testable import Ghostty
 
-/// Step 7 (Composer UI 11 plan §5/§7) — model B spike tests.
+/// Step 7 (Composer UI 11 plan §5/§7) — ghost field spike tests.
 ///
 /// **What these tests do NOT prove**, stated per the acceptance criteria:
 /// the `doCommandBySelector` tests below call
@@ -37,7 +37,6 @@ struct ComposerGhostTextFieldTests {
 
     private func makeCoordinator(
         hasSelection: Bool,
-        isPickerOpen: Bool,
         events: Box<[String]>,
         ghostFullPath: String = ""
     ) -> (ComposerGhostTextField.Coordinator, ComposerGhostNSTextView) {
@@ -49,7 +48,6 @@ struct ComposerGhostTextFieldTests {
             rowHeight: 38,
             focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
             hasSelection: hasSelection,
-            isPickerOpen: isPickerOpen,
             ghostFullPath: ghostFullPath
         ) { event in
             switch event {
@@ -74,7 +72,7 @@ struct ComposerGhostTextFieldTests {
 
     @Test func insertNewlineWithSelectionDispatchesSubmit() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
         #expect(handled == true)
         #expect(events.value == ["submit"])
@@ -82,18 +80,10 @@ struct ComposerGhostTextFieldTests {
 
     @Test func insertNewlineWithoutSelectionDispatchesSubmitNoMatch() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: false, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: false, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
         #expect(handled == true)
         #expect(events.value == ["submitNoMatch"])
-    }
-
-    @Test func insertNewlineWhilePickerOpenIsConsumedSilently() {
-        let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: true, events: events)
-        let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
-        #expect(handled == true)
-        #expect(events.value.isEmpty)
     }
 
     /// A-F10: unhandled `cancelOperation:` falls through to `complete:`
@@ -102,7 +92,7 @@ struct ComposerGhostTextFieldTests {
     /// popup on screen (unverifiable from this test alone; see header).
     @Test func cancelOperationDispatchesExitAndReturnsTrue() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.cancelOperation(_:)))
         #expect(handled == true)
         #expect(events.value == ["exit"])
@@ -110,7 +100,7 @@ struct ComposerGhostTextFieldTests {
 
     @Test func moveUpDispatchesWhenPickerClosed() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.moveUp(_:)))
         #expect(handled == true)
         #expect(events.value == ["moveUp"])
@@ -118,26 +108,10 @@ struct ComposerGhostTextFieldTests {
 
     @Test func moveDownDispatchesWhenPickerClosed() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.moveDown(_:)))
         #expect(handled == true)
         #expect(events.value == ["moveDown"])
-    }
-
-    @Test func moveUpIsConsumedSilentlyWhilePickerOpen() {
-        let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: true, events: events)
-        let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.moveUp(_:)))
-        #expect(handled == true)
-        #expect(events.value.isEmpty)
-    }
-
-    @Test func moveDownIsConsumedSilentlyWhilePickerOpen() {
-        let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: true, events: events)
-        let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.moveDown(_:)))
-        #expect(handled == true)
-        #expect(events.value.isEmpty)
     }
 
     /// No ghost label installed in this harness (`makeCoordinator` skips
@@ -146,7 +120,7 @@ struct ComposerGhostTextFieldTests {
     /// accept path with a ghost label present.
     @Test func insertTabIsConsumedNoOpWithNoGhostLabel() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
         #expect(handled == true)
         #expect(events.value.isEmpty)
@@ -177,7 +151,6 @@ struct ComposerGhostTextFieldTests {
             rowHeight: 38,
             focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
             hasSelection: true,
-            isPickerOpen: false,
             ghostFullPath: "Ghostties > Default > Orchestrator"
         ) { _ in }
         let coordinator = field.makeCoordinator()
@@ -227,7 +200,6 @@ struct ComposerGhostTextFieldTests {
         let events = Box<[String]>([])
         let (coordinator, textView) = makeCoordinator(
             hasSelection: true,
-            isPickerOpen: false,
             events: events,
             ghostFullPath: "Ghostties > Default > Orchestrator"
         )
@@ -247,7 +219,7 @@ struct ComposerGhostTextFieldTests {
     /// non-empty) returns before either the segment slice or the send.
     @Test func tabWithNoGhostTextFiresNoAcceptedGhostEvent() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertTab(_:)))
         #expect(handled == true)
         #expect(events.value.isEmpty)
@@ -276,7 +248,6 @@ struct ComposerGhostTextFieldTests {
             rowHeight: 38,
             focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
             hasSelection: true,
-            isPickerOpen: false,
             ghostFullPath: "ghostties > branch name > cco"
         ) { _ in }
         let coordinator = field.makeCoordinator()
@@ -413,7 +384,7 @@ struct ComposerGhostTextFieldTests {
 
     @Test func insertBacktabIsConsumedNoOp() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.insertBacktab(_:)))
         #expect(handled == true)
         #expect(events.value.isEmpty)
@@ -421,7 +392,7 @@ struct ComposerGhostTextFieldTests {
 
     @Test func unrecognizedSelectorReturnsFalse() {
         let events = Box<[String]>([])
-        let (coordinator, textView) = makeCoordinator(hasSelection: true, isPickerOpen: false, events: events)
+        let (coordinator, textView) = makeCoordinator(hasSelection: true, events: events)
         let handled = coordinator.textView(textView, doCommandBy: #selector(NSResponder.deleteForward(_:)))
         #expect(handled == false)
     }

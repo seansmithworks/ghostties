@@ -11,7 +11,7 @@ import GhosttiesCore
 /// click-outside — all funnel through SwiftUI's `.onDisappear`, not just
 /// the Cancel button) used to leave an empty, `command: nil` custom
 /// template behind forever. Root cause: `docs/plans/session-creation-unified.html`
-/// finding D4 (old `TemplatePickerView.addCustomTemplate()` hardcoded the
+/// finding D4 (the retired template picker's `addCustomTemplate()` hardcoded the
 /// name; the naming-first rebuild fixed that half but never addressed the
 /// "added before configured, never cleaned up if abandoned" half — three
 /// such rows are still live in production `workspace.json`).
@@ -97,9 +97,9 @@ struct TemplateEditFormAbandonTests {
 
     /// Fix 1 (review round 2, PR #155): the counter-case to the test
     /// above. `TemplateEditForm`'s one production call site
-    /// (`SessionComposerPalette.swift:1330`) passes `isNewlyCreated: false`
-    /// from the context menu's Edit action — the case the
-    /// `.onDisappear` guard at `TemplatePickerView.swift:556` exists to
+    /// (`ProjectTemplatesSection`) passes `isNewlyCreated: false`
+    /// from the Edit action — the case the
+    /// `.onDisappear` guard exists to
     /// protect: cancelling an edit of an already-configured template must
     /// never delete it. The three pure-decision tests above only exercise
     /// `shouldDiscardOnDismiss` directly, and the one mounted test above

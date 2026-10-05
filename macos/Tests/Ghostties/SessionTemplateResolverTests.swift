@@ -4,7 +4,7 @@ import GhosttiesCore
 
 /// Tests for `SessionTemplateResolver` — the single template scoping +
 /// ordering implementation that replaced `RecentsListView.availableTemplates`
-/// and the three computed properties on `TemplatePickerView`.
+/// and the three computed properties on the retired template picker.
 @MainActor
 final class SessionTemplateResolverTests: XCTestCase {
 

@@ -207,9 +207,8 @@ struct SessionComposerSnapshotTests {
         )
     }
 
-    /// The two ghost-opacity constants (`ComposerQueryField.ghostPlaceholderOpacity`,
-    /// model A/shipping default, and `ComposerGhostTextField.ghostOpacity`,
-    /// model B/experimental) are deliberately kept in lockstep so the two
+    /// The two ghost-opacity constants (`ComposerQueryField.ghostPlaceholderOpacity`
+    /// and `ComposerGhostTextField.ghostOpacity`) are deliberately kept in lockstep so the two
     /// fields render the same ghost — see either constant's doc comment.
     /// This is exactly the drift `def5e9cd4` introduced (raised one, not
     /// the other); this test fails the moment they diverge again.
@@ -221,7 +220,7 @@ struct SessionComposerSnapshotTests {
 
     // MARK: - Variant G Pass A: section headers, empty-lane guard
 
-    // MARK: - Step 7: model B ghost field (UNVERIFIED-INTERACTION)
+    // MARK: - Step 7: ghost field (UNVERIFIED-INTERACTION)
 
     /// Scans a PNG for its darkest non-black pixel (excludes true black,
     /// which this card never intentionally paints, to avoid a stray
@@ -294,25 +293,24 @@ struct SessionComposerSnapshotTests {
     /// construction time, in an app-hosted, non-key window — nothing about
     /// typing, scrolling, or focus (plan §7's manual key matrix, still
     /// entirely undriven).
-    @Test func step7ModelBGhostFieldRendersLightAndDark() {
+    @Test func step7GhostFieldRendersLightAndDark() {
         let field = ComposerGhostTextField(
             query: .constant("Gho"),
             fontSize: 15,
             rowHeight: 38,
             focusTrigger: .constant(false),
             hasSelection: false,
-            isPickerOpen: false,
             ghostFullPath: "Ghostties > Default > Orchestrator"
         ) { _ in }
         let view = field.background(Color(nsColor: .windowBackgroundColor))
         let size = NSSize(width: WorkspaceLayout.composerOverlayWidth, height: 38)
 
         let lightData = renderPNGWithExtraLayoutPass(view, appearance: .aqua, size: size)
-        writeEvidence(lightData, filename: "step7-modelb-light.png")
+        writeEvidence(lightData, filename: "step7-ghost-field-light.png")
         #expect(lightData != nil)
 
         let darkData = renderPNGWithExtraLayoutPass(view, appearance: .darkAqua, size: size)
-        writeEvidence(darkData, filename: "step7-modelb-dark.png")
+        writeEvidence(darkData, filename: "step7-ghost-field-dark.png")
         #expect(darkData != nil)
 
         // Ghost pixel measurement (acceptance criterion 5). Fix 7 (review):
@@ -327,9 +325,9 @@ struct SessionComposerSnapshotTests {
         // clipped-to-black regression still fails loudly.
         if let lightData {
             let pixel = darkestGhostPixel(in: lightData)
-            #expect(pixel != nil, "step7-modelb-light.png: no ghost pixel found — possible A-F2 regression (ghost clipped/missing)")
+            #expect(pixel != nil, "step7-ghost-field-light.png: no ghost pixel found — possible A-F2 regression (ghost clipped/missing)")
             if let pixel {
-                print("step7-modelb-light.png darkest ghost-region pixel: rgb(\(pixel.r),\(pixel.g),\(pixel.b))")
+                print("step7-ghost-field-light.png darkest ghost-region pixel: rgb(\(pixel.r),\(pixel.g),\(pixel.b))")
                 #expect(
                     abs(pixel.r - pixel.g) < 3 && abs(pixel.g - pixel.b) < 3,
                     "expected a neutral gray ghost pixel, got rgb(\(pixel.r),\(pixel.g),\(pixel.b))"
@@ -346,7 +344,7 @@ struct SessionComposerSnapshotTests {
     /// string `SessionComposerPalette.destination(for:store:
     /// recentSelections:)` produces for a fixture `Brukas` project with no
     /// `defaultTemplateId`/recent selection
-    /// (`SessionComposerModelBGhostSourceTests
+    /// (`SessionComposerGhostSourceTests
     /// .projectWithNoDefaultOrRecentLandsOnTheFirstAvailableTemplate`
     /// proves that function call directly) — this test proves the
     /// RENDERING half, matching this file's existing precedent of
@@ -371,7 +369,6 @@ struct SessionComposerSnapshotTests {
             rowHeight: 38,
             focusTrigger: .constant(false),
             hasSelection: true,
-            isPickerOpen: false,
             ghostFullPath: "Brukas > Default > Shell"
         ) { _ in }
         let view = field.background(Color(nsColor: .windowBackgroundColor))

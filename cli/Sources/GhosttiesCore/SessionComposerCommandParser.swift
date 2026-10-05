@@ -26,24 +26,15 @@ public enum SessionComposerCopy {
         "No worktree found for branch \"\(token)\". Use the create-branch suggestion above, or retype/delete it."
     }
 
-    /// Zero-chrome/single-line composer styles (fix round 2, finding 2):
-    /// narrow, coordinator-approved exception to this file's read-only
-    /// status — ADDS a second constant beside `unresolvedBranchMessage`
-    /// above, does not edit it or any parsing logic. The classic message
-    /// says "Use the create-branch suggestion above" — true in the classic
-    /// results list, where the create-branch row is always visible right
-    /// there, but wrong in the new styles, where NOTHING is visible above
-    /// the status strip until `↓` reveals rows (zero-chrome) or the ghost
-    /// steps to it (single-line). "Press ↓" is accurate for BOTH: zero-chrome
-    /// reveals rows via `SessionComposerPalette`'s `.move(.down)` handler
-    /// (`zeroChromeRowsRevealedByArrow`), and single-line has no results
-    /// list at all but still routes `↓` through the same `flattenedOptions`-
-    /// backed `selectedIndex` step, which includes the create-branch offer
-    /// row (`typedBranchCreateOffer`/`bestSelectionIndex` — same list
-    /// `commandOptions` feeds both the classic table and the new styles'
-    /// row source) — confirmed against `SessionComposerPalette.swift`, not
-    /// re-derived here since this file has no view-layer access to verify
-    /// it directly.
+    /// The single-line composer's variant of `unresolvedBranchMessage`. The
+    /// original message says "Use the create-branch suggestion above", which
+    /// assumes a results list with the create-branch row visible. The
+    /// single-line composer has no results list: nothing shows above the
+    /// status strip, and `↓` steps the ghost to the create-branch offer row
+    /// through `SessionComposerPalette`'s `.move(.down)` handler
+    /// (`typedBranchCreateOffer`/`bestSelectionIndex`). "Press ↓" is what is
+    /// true there. Verified against `SessionComposerPalette.swift`; this file
+    /// has no view-layer access to check it directly.
     public static func unresolvedBranchMessageForNewStyles(token: String) -> String {
         "No worktree found for branch \"\(token)\". Press ↓ for the create-branch option, or retype/delete it."
     }
@@ -1477,9 +1468,8 @@ public enum SessionComposerCommandParser {
     /// the trailing controls, Step 5) renders and `selectedOption` carries
     /// into a Return commit, so the placeholder can never state a
     /// destination Return would not launch — nothing here is computed
-    /// independently. `SessionComposerPalette` gates every call to
-    /// `.centered` only (G-F28: `.anchored` is 11pt/30pt at sidebar width
-    /// and cannot fit the path).
+    /// independently. `SessionComposerPalette` calls this only for
+    /// the single-line composer.
     ///
     /// Four rules, checked in this order (plan §3 Step 3):
     /// 1. A real project resolved (`segments.projectLabel` isn't one of the

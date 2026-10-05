@@ -1010,13 +1010,6 @@ final class SessionComposerStore: ObservableObject {
         return .changed
     }
 
-    /// The picker's "Default (<branch>)" row — clears the override back to
-    /// "wherever the project points right now" (`project.rootPath`). Arms
-    /// no undo, same reasoning as `changeBranchChip`.
-    func clearBranchChip() {
-        selectedWorktreePath = nil
-    }
-
     /// Blocker 2 (Slice B review round 1): sets `writeError` for an
     /// unresolvable typed branch — the ONLY caller is
     /// `SessionComposerPalette.commit(template:)`'s early-return guard, so

@@ -18,7 +18,7 @@ struct TemplateEditForm: View {
     /// via the context menu's "Edit" action. Root cause of the persisted
     /// junk "New Template" rows found in production `workspace.json`
     /// (`docs/plans/session-creation-unified.html` finding D4, old
-    /// `TemplatePickerView.addCustomTemplate()` flow): the record was
+    /// the retired template picker's `addCustomTemplate()` flow): the record was
     /// added to the store BEFORE this form ran, so dismissing without
     /// ever hitting Save left an empty, unconfigured template behind
     /// forever. `didSave` + `onDisappear` below deletes it if abandoned —

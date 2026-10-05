@@ -91,7 +91,7 @@ struct ComposerSingleLineStyleTests {
         CGFloat(ComposerSingleLineTuning.widthRange.upperBound) + 16 + 24
 
     private func makeProject() -> Project {
-        Project(name: "Demo Project", rootPath: "/tmp/composer-zero-chrome-snapshot-\(UUID().uuidString)")
+        Project(name: "Demo Project", rootPath: "/tmp/composer-snapshot-\(UUID().uuidString)")
     }
 
     private func makeComposerStore(project: Project, workspaceStore: WorkspaceStore) -> SessionComposerStore {
@@ -155,7 +155,7 @@ struct ComposerSingleLineStyleTests {
             Issue.record("Failed to render PNG for \(filename)")
             return
         }
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("scratchpad/zero-chrome", isDirectory: true)
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("scratchpad/composer", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? data.write(to: dir.appendingPathComponent(filename))
     }
@@ -327,7 +327,7 @@ struct ComposerSingleLineStyleTests {
             // real `UserDefaults.standard` here (the R13 gap) let this test pass
             // for the wrong reason whenever `.glass` fell back to material by
             // availability rather than by explicit treatment.
-            let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
+            let suite = UserDefaults(suiteName: "ghostties.composer.test.\(UUID().uuidString)")!
             suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
             let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, tuningDefaults: suite)
             let png = renderPNG(view, size: size, appearance: appearanceName(windowAppearance))
@@ -521,12 +521,11 @@ struct ComposerSingleLineStyleTests {
     // headless test process doesn't have. Falling back to a DIRECT test of
     // the actual gate `ComposerDescriptorGhostText.body` uses
     // (`if query.isEmpty`), which is the real root cause anyway):
-    // `SessionComposerPalette.zeroChromeComposerCard`'s ONLY call site for
+    // `SessionComposerPalette`'s ONLY call site for
     // `ComposerDescriptorGhostText` passes `query: query` — a live,
     // always-current read of `composerStore.searchText` (trimmed). The
     // reviewer's screenshot matches EXACTLY fix round 1's already-diagnosed
-    // defect (see `zeroChromeTypingRevealsSelectedCandidateRow`'s doc
-    // comment): `SessionComposerStore.open()` resets `searchText = ""` on
+    // defect: `SessionComposerStore.open()` resets `searchText = ""` on
     // every call, including the one `SessionComposerPalette`'s `body`
     // `.onAppear` makes on mount — a caller (test or otherwise) that sets
     // `searchText` BEFORE the view finishes its first appearance has it
@@ -694,12 +693,11 @@ struct ComposerSingleLineStyleTests {
         )
     }
 
-    // MARK: - Fix round 2, item 8: zero-chrome type scale
+    // MARK: - Single-line type scale
 
-    /// `.singleLine` must keep the ORIGINAL 15pt field size, not
-    /// `ComposerZeroChromeTypography`'s 32pt — checked by rendering a
-    /// single-line fixture and confirming it fits comfortably inside the
-    /// unchanged 512pt card (a 32pt field would overflow it).
+    /// The single-line field must keep its 15pt field size — checked by
+    /// rendering a single-line fixture and confirming it fits comfortably
+    /// inside the 512pt card (a 32pt field would overflow it).
     /// Parameterized over window appearance × ambient appearance — see
     /// `singleLineRestStateHasCardChrome`'s comment.
     @Test(arguments: ["aqua", "darkAqua"], ["aqua", "darkAqua"])
@@ -710,7 +708,7 @@ struct ComposerSingleLineStyleTests {
             let composerStore = makeComposerStore(project: project, workspaceStore: workspaceStore)
             // Step 0 (R14): same isolated-suite/material pin as
             // `singleLineRestStateHasCardChrome` — see that test's comment.
-            let suite = UserDefaults(suiteName: "ghostties.composerZeroChrome.test.\(UUID().uuidString)")!
+            let suite = UserDefaults(suiteName: "ghostties.composer.test.\(UUID().uuidString)")!
             suite.set(ComposerSingleLineTreatment.material.rawValue, forKey: ComposerSingleLineTreatment.storageKey)
             let view = paletteView(project: project, workspaceStore: workspaceStore, composerStore: composerStore, tuningDefaults: suite)
             // R15: see `singleLineRestStateHasCardChrome`'s comment — the
@@ -751,7 +749,7 @@ struct ComposerSingleLineStyleTests {
     /// duplicated rather than shared across test targets/files, matching
     /// this codebase's existing per-file convention for this exact helper.
     private static func makeThrowawayRepo() -> String {
-        let unresolvedPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-zero-chrome-branch-test-\(UUID().uuidString)")
+        let unresolvedPath = (NSTemporaryDirectory() as NSString).appendingPathComponent("ghostties-composer-branch-test-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(atPath: unresolvedPath, withIntermediateDirectories: true)
         let path = realPath(unresolvedPath)
 
@@ -861,7 +859,6 @@ struct ComposerSingleLineStyleTests {
             rowHeight: 38,
             focusTrigger: Binding(get: { focusBox.value }, set: { focusBox.value = $0 }),
             hasSelection: false,
-            isPickerOpen: false,
             ghostFullPath: ""
         ) { _ in }
 
@@ -1627,9 +1624,8 @@ struct ComposerSingleLineStyleTests {
     // MARK: - DialKit panel: conditional visibility + reset action
 
     /// Acceptance item 1 (Classic removed, 2026-09-13 — the "Style only"
-    /// count this used to assert no longer exists): Style + the 4
-    /// zero-chrome dials for Zero chrome, Style + the 19 single-line dials
-    /// for Single line (round 15 added the Float horizontal dial to round
+    /// count this used to assert no longer exists): Style + the 19
+    /// single-line dials (round 15 added the Float horizontal dial to round
     /// 14's 18, which added 5 Witness dials to round 13's 13).
     /// `DialControl` doesn't expose its label/path outside the DialKit
     /// package, so this names the discriminator this test target CAN see —

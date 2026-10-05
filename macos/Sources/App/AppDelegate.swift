@@ -853,11 +853,10 @@ class AppDelegate: NSObject,
         viewMenu.insertItem(newSessionItem, at: 7)
         viewMenu.insertItem(newSessionItemCmdShiftT, at: 8)
         viewMenu.insertItem(sidebarViewParent, at: 9)
-        viewMenu.insertItem(makeComposerFieldToggleMenuItem(), at: 10)
-        viewMenu.insertItem(NSMenuItem.separator(), at: 11)
+        viewMenu.insertItem(NSMenuItem.separator(), at: 10)
 
         #if DEBUG
-        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 12)
+        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 11)
         #endif
     }
 
@@ -885,40 +884,6 @@ class AppDelegate: NSObject,
         UserDefaults.standard.set(!current, forKey: buildInfoBadgeStorageKey)
     }
     #endif
-
-    // MARK: - Composer field A/B toggle (View menu, all configurations)
-
-    /// Builds the "Experimental Composer Field" checkbox item that lives in
-    /// the View menu.
-    ///
-    /// A/B switch (SEA composer-ui-11) so Sean can compare the two composer
-    /// field implementations during real daily use — including in Release/beta
-    /// builds, where this menu item is the only way to reach it — without
-    /// dropping to a terminal for `defaults write` + relaunch. Reads/writes
-    /// the same `UserDefaults` key `@AppStorage` binds in
-    /// `SessionComposerPalette` (`ComposerGhostTextField.modelBFieldStorageKey`),
-    /// so this menu item and `defaults write` always agree, and the running
-    /// SwiftUI view picks up the change immediately — no relaunch needed.
-    /// Checked = new `NSTextView`-based field. Unchecked (default) = the
-    /// original SwiftUI `TextField`.
-    private func makeComposerFieldToggleMenuItem() -> NSMenuItem {
-        let item = NSMenuItem(
-            title: "Experimental Composer Field",
-            action: #selector(toggleComposerModelBField(_:)),
-            keyEquivalent: ""
-        )
-        item.target = self
-        return item
-    }
-
-    /// Flips `ComposerGhostTextField.modelBFieldStorageKey` in `UserDefaults`.
-    /// Takes effect immediately in any open composer — `@AppStorage` observes
-    /// the key directly, so no relaunch is required.
-    @objc private func toggleComposerModelBField(_ sender: NSMenuItem) {
-        let key = ComposerGhostTextField.modelBFieldStorageKey
-        let current = UserDefaults.standard.bool(forKey: key)
-        UserDefaults.standard.set(!current, forKey: key)
-    }
 
     // MARK: - DEBUG-only update simulator menu
 
@@ -2033,12 +1998,6 @@ extension AppDelegate: NSMenuItemValidation {
                 item.title = "Redo"
             }
             return undoManager.canRedo
-
-        case #selector(toggleComposerModelBField(_:)):
-            item.state = UserDefaults.standard.bool(
-                forKey: ComposerGhostTextField.modelBFieldStorageKey
-            ) ? .on : .off
-            return true
 
         #if DEBUG
         case #selector(toggleBuildInfoBadge(_:)):

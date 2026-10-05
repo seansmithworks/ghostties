@@ -16,7 +16,7 @@ import GhosttiesCore
 ///   see the note below). The field holds the literal typed string, always.
 ///   Composer UI 11 (plan §3 Step 3/4/5) replaced the resolution line that
 ///   used to sit beneath it with an in-field GHOST PLACEHOLDER
-///   (`ghostPlaceholder`, `.centered` only) showing the exact path Return
+///   (`ghostPlaceholder`) showing the exact path Return
 ///   would currently commit and a STATUS STRIP for pre/post-Return errors.
 ///   Variant G (Pass A, locked 2026-08-30) removed the sibling branch
 ///   chevron control that used to sit beside the field; Pass C
@@ -462,9 +462,9 @@ struct SessionComposerPalette: View {
         )
     }
 
-    /// Model B's ghost source — deliberately NOT `ghostPlaceholder` above.
+    /// The ghost field's source — deliberately NOT `ghostPlaceholder` above.
     /// `ghostPlaceholder` is welded to `currentProject` (it always renders
-    /// `"<currentProject.name> > ..."`), which is correct for model A
+    /// `"<currentProject.name> > ..."`), which is correct for the rest state
     /// (only ever shown while the field is EMPTY, before any option could
     /// diverge from the current project) but wrong once text is present:
     /// typing `bruk` against a highlighted `Brukas` PROJECT row — a
@@ -488,7 +488,7 @@ struct SessionComposerPalette: View {
     /// Selection is a PROJECT-switch row (a different project than
     /// `currentProject`): resolves THAT project's own destination via
     /// `destination(for:)` — not `currentProject`'s.
-    private var ghostFullPathForModelB: String {
+    private var ghostFullPathForField: String {
         guard let selectedOption else { return ghostPlaceholder }
         if selectedOption.template == nil,
            let targetProject = store.projects.first(where: { $0.id == selectedOption.id }),
@@ -504,7 +504,7 @@ struct SessionComposerPalette: View {
 
     /// The destination a Return commit would resolve to for `project` if
     /// the user switched to it right now — used only by
-    /// `ghostFullPathForModelB` above, for a project OTHER than
+    /// `ghostFullPathForField` above, for a project OTHER than
     /// `currentProject`. A `static` pure function (not a `self`-scoped
     /// computed property) deliberately, so it's directly unit-testable
     /// without constructing a `SessionComposerPalette` view — this repo's
@@ -774,8 +774,7 @@ struct SessionComposerPalette: View {
         let group = SessionTemplateResolver.group(for: template)
         let isPreset = group == .preset
 
-        // Restores the "Default shell" subtitle fallback `TemplatePickerView`
-        // ships: description first, then command (non-presets only), then
+        // Subtitle: description first, then command (non-presets only), then
         // "Default shell" (non-presets only). Presets with no description
         // render no subtitle, matching the original.
         let subtitle: String? = {
@@ -1232,7 +1231,7 @@ struct SessionComposerPalette: View {
     // MARK: - Single-line field
 
     /// The one-line field (brief §1): SF Pro Text at the tuned size, reusing
-    /// the Model-B ghost text field and `handle(_:)` event routing.
+    /// the ghost text field and `handle(_:)` event routing.
     /// `ghostFullPath` is blanked at rest (`query.isEmpty`) so
     /// `ComposerDescriptorGhostText` owns the rest-state hint text instead
     /// of the field's own placeholder ghost (which would otherwise always
@@ -1292,8 +1291,7 @@ struct SessionComposerPalette: View {
                 rowHeight: newStyleFieldLineHeight,
                 focusTrigger: $composerStore.focusSearchFieldTrigger,
                 hasSelection: selectedOption != nil,
-                isPickerOpen: false,
-                ghostFullPath: query.isEmpty ? "" : ghostFullPathForModelB
+                ghostFullPath: query.isEmpty ? "" : ghostFullPathForField
             ) { event in
                 handle(event)
             }
@@ -1345,10 +1343,8 @@ struct SessionComposerPalette: View {
 
     /// Session-7 brief: the single-line card's OWN corner-radius dial —
     /// independent of `cornerRadius`/`composerClipShape` above, which stay
-    /// exactly as they were for classic/`.centered`. Default matches the
-    /// existing `.anchored` radius (10) as a literal, not a read of that
-    /// switch, per `ComposerSingleLineTuning.defaultCornerRadius`'s doc
-    /// comment.
+    /// exactly as they were. See `ComposerSingleLineTuning.defaultCornerRadius`
+    /// for the default.
     private var singleLineCornerRadius: CGFloat {
         ComposerSingleLineTuning.cornerRadius(defaults: tuningDefaults)
     }
@@ -1735,8 +1731,7 @@ private struct ShakeEffect: GeometryEffect {
 /// UUID()` causes on every keystroke recompute.
 ///
 /// `template`/`templateGroup` are non-nil only for options backed by a
-/// template — `ComposerRow` uses them to decide whether (and which)
-/// context menu to attach; project options and other rows carry no menu.
+/// template; project options and other rows carry neither.
 struct ComposerOption: Identifiable, Hashable {
     /// Trailing meta rendered on the right edge of a composer row (Composer
     /// UI 11, Step 2, board `V02Quieted222.dc.html`): a pin glyph for a
@@ -1832,21 +1827,8 @@ struct ComposerQueryField: View {
     /// `.handled` unconditionally, swallowing Return against an empty
     /// list).
     var hasSelection: Bool
-    /// D6: whether the inline project/branch picker is currently open
-    /// (Step 5's `projectControl`/`branchControl` used to be the mouse
-    /// route in — used to be the resolution line's segment click target
-    /// before that, the breadcrumb chip's own click target before that;
-    /// both controls are now deleted, see `isProjectPickerOpen`'s doc
-    /// comment for how this flag still gets driven). While
-    /// `true`, this field's own ↑/↓/Return handlers go quiet — the picker
-    /// (`ProjectDropdownView.keyboardCaptureLayer`) becomes the only live
-    /// ↑/↓/Return handler on screen. Clicking a control to open the picker
-    /// does NOT move first responder away from this field (deliberate — see
-    /// this type's own doc comment on why focus-loss auto-dismiss was
-    /// removed), so without this gate the field's hidden ↑/↓ `Button`s and
-    /// `.onSubmit` kept responding: Return committed whatever TEMPLATE row
-    /// was highlighted and dismissed the whole composer instead of choosing
-    /// a project from the now-open picker.
+    /// While `true`, this field's own ↑/↓/Return handlers go quiet. No
+    /// inline picker exists in the current composer, so nothing sets it.
     var isPickerOpen: Bool
     /// Step 3 (Composer UI 11 plan §3): the 11.1 ghost path when it renders
     /// (`.centered`, rest state), else the generic hint. Rendered as a
@@ -1870,9 +1852,7 @@ struct ComposerQueryField: View {
     /// ghost-completion text — his call as design authority, not an
     /// accessibility miss. **0.50 does NOT meet WCAG AA** (measured ≈3.0:1
     /// light mode; see `ComposerDesignCallRenderTests`' evidence for the
-    /// exact rendered ratio). This is the field users actually get (model
-    /// A, the shipping default — `ComposerGhostTextField` is model B,
-    /// behind View → Experimental Composer Field, default OFF).
+    /// exact rendered ratio).
     /// Deliberately kept in lockstep with
     /// `ComposerGhostTextField.ghostOpacity` so the two fields render the
     /// same ghost — if you change one, change the other. A production
