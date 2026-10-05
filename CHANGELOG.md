@@ -12,25 +12,27 @@ The sidebar gets a third state, a narrow rail, and session status is back at a g
 
 ### Added
 
-- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a 128pt rail of session icons with a + (New Session) button, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on).
+- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a 128pt rail of session icons with a tray of buttons at the bottom, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on).
 - **Hover a session to see what it needs or is doing.** A session that needs approval shows the command and the reason. A running session shows your last prompt, the current step, and how many edits it has made. The rail also shows the session name. Esc dismisses it.
 - **Templates are managed in Project settings.** Create, edit, duplicate, pin and delete templates in a Templates section there. Templates are shared across projects, and changes apply immediately, without Save or Cancel.
 - **Rail buttons are announced by VoiceOver** with the session name, project and status.
 
 ### Changed
 
-- **Status glyphs are back on session rows**, on the right edge: a spinner while a session is working, `?` when it needs you, a check when it's done, a cross on error, and nothing when it has stopped. The collapsed rail shows the same glyphs in the same position, so collapsing hides the titles but leaves the status column where it was.
-- **The rail's top spacing now matches the full list**, so its chevron lines up with the Active header and each glyph lines up with its row.
+- **Status glyphs are back on session rows**, on the right edge: a spinner while a session is working, `?` when it needs you, a check when it's done, a cross on error, and nothing when it has stopped. Sessions listed under a project in the Projects tab show the same glyphs instead of a ghost. In the collapsed rail the glyphs are centered.
+- **The rail's top spacing now matches the full list**, so each glyph lines up with its row. The rail's section chevrons are centered too.
+- **The rail's bottom tray is a narrower pill**, sized to its buttons and centered in the rail.
 - **The session hover card is one card.** The grey block inside it is gone, and in the rail the session name lines up with the content.
 - **There is now one composer.** Every + opens the same centered single-line composer. A project row's + opens it with that project already filled in. Option-clicking a project's + still creates a session straight away when the project has a default template. The zero-chrome style and the old template card are removed.
 - **The default theme now follows macOS.** With no theme set, Ghostties uses Apple System Colors and switches between light and dark with your system appearance. A theme in your config still wins.
 - **Ghostties now builds on the latest upstream Ghostty** (Zig 0.16), bringing in its fixes, including word selection that stops at hard line breaks and a crash fix for tmux `list-windows`.
-- **New Session moved to a + button at the bottom of the sidebar**, shared by the full list and the rail.
+- **New Session moved to a + button in a tray at the bottom of the sidebar**, shared by the full list and the rail. The tray now also has a New Project button (a folder icon) between New Session and Settings. It opens the folder picker, then the composer for the new project.
 - **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win.
 
 ### Removed
 
 - **The zero-chrome composer style and the old template card** are gone. A saved composer style setting is ignored.
+- **The "Experimental Composer Field" item in the View menu is removed.** The single-line composer is the only composer, so there is nothing left to switch.
 
 ### Fixed
 
