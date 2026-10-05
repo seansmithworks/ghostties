@@ -61,7 +61,7 @@ struct SessionPopoverCard: View {
             if let nameLine = content.nameLine {
                 self.nameLine(nameLine)
             }
-            blockView(content.block)
+            blockView(content.block, hasNameLine: content.nameLine != nil)
         }
         .frame(width: SessionPopoverLayout.width)
         .background(surface)
@@ -90,12 +90,17 @@ struct SessionPopoverCard: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(EdgeInsets(top: 12, leading: 14, bottom: 0, trailing: 14))
+        .padding(EdgeInsets(
+            top: WorkspaceLayout.sessionPopoverContentPadding / 2,
+            leading: WorkspaceLayout.sessionPopoverContentPadding,
+            bottom: 0,
+            trailing: WorkspaceLayout.sessionPopoverContentPadding
+        ))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
-    private func blockView(_ content: SessionPopoverContent.Block) -> some View {
+    private func blockView(_ content: SessionPopoverContent.Block, hasNameLine: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             switch content {
             case let .command(command, description):
@@ -128,7 +133,9 @@ struct SessionPopoverCard: View {
         .truncationMode(.tail)
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(WorkspaceLayout.sessionPopoverContentPadding)
+        .padding(.horizontal, WorkspaceLayout.sessionPopoverContentPadding)
+        .padding(.bottom, WorkspaceLayout.sessionPopoverContentPadding)
+        .padding(.top, hasNameLine ? WorkspaceLayout.sessionPopoverNameGap : WorkspaceLayout.sessionPopoverContentPadding)
     }
 
     @ViewBuilder

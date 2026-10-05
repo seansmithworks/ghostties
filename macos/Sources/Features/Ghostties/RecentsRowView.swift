@@ -113,27 +113,16 @@ struct RecentsRowView: View, Equatable {
             Spacer(minLength: 4)
 
             // No timestamp — Flow 07 round 6 drops the relative-time label
-            // from the row entirely (design frame `t4XvdY`: name + subtitle
-            // + trailing ghost, nothing else). `relativeLabel` itself is
-            // kept (still backs the accessibility label below) — only the
-            // visible `Text` is gone.
+            // from the row entirely. `relativeLabel` is kept (it still backs
+            // the accessibility label below); only the visible `Text` is gone.
 
-            // Per-session status glyph — pattern D type glyphs (spinner / ? /
-            // ✓ / ✕) are back, in the trailing slot the ghost held (Sean,
-            // 2026-10-04). Selection is carried by the row's card
-            // background, not a glyph tint. Trailing
-            // edge, after the name/subtitle (Sean, sidebar-presence review
-            // round 2 — Flow 07 frame 01): name and subtitle read flush
-            // left, the glyph reads last. Previously led the row in a fixed
-            // icon column shared with the header icons above it; that
-            // alignment purpose no longer applies here, so it's sized to the
-            // glyph itself instead of that column width.
-            //
-            // Flow 05 (sidebar-presence): the small in-row inward nudge on
-            // collapse/expand — see `glyphOffsetX` — is a decorative shift,
-            // NOT the panel's own pinned→rail travel (that's carried
-            // entirely by `WorkspaceLayout.sidebarTransitionTiming`'s width
-            // animation on the container).
+            // Per-session status glyph (spinner / ? / check / x) in the
+            // trailing slot (Sean, 2026-10-04). Selection is carried by the
+            // row's card background, not a glyph tint. The collapsed rail
+            // (`RailSessionRow`) draws the same glyph at the same trailing
+            // inset, so it stays on the sidebar's right edge as the width
+            // animates — no independent glyph motion (the old inward nudge
+            // is gone: `sidebarRowGlyphTraveledOffset` is 0).
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
                 .offset(x: glyphOffsetX)

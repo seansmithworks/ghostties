@@ -367,6 +367,10 @@ enum WorkspaceLayout {
     /// inset; with the block gone, content keeps the same 24pt it sat at.
     static let sessionPopoverContentPadding: CGFloat = 24
 
+    /// Gap between the popover's rail-mode name line and the content under it
+    /// (the content's top padding when a name line is present).
+    static let sessionPopoverNameGap: CGFloat = 6
+
     // MARK: - Sidebar DialKit Tunables (sidebar-presence, session-8 brief)
     //
     // Named constants lifted from prior inline literals so `SidebarDialTuning`
@@ -607,6 +611,10 @@ enum WorkspaceLayout {
     /// collapse window minus the 60ms delay above).
     static let sidebarRowGlyphCollapseTravelDuration: TimeInterval = 0.2
 
+    /// 0 since 2026-10-04: the glyph rides the sidebar's trailing edge in both
+    /// expanded and rail, so it makes no independent in-row move. (Sean:
+    /// glyphs on the right of the sidebar, "a cleaner animation.")
+    ///
     /// Small in-row glyph shift toward the panel's centerline as a session
     /// row collapses — NOT the full pinned→rail travel distance (that's
     /// carried by the panel/card translateX in `sidebarTransitionTiming`).
@@ -616,7 +624,7 @@ enum WorkspaceLayout {
     /// carries the canvas's own +8→+28px DELTA (20pt) as a leftward nudge
     /// once collapsed.
     static let sidebarRowGlyphRestingOffset: CGFloat = 0
-    static let sidebarRowGlyphTraveledOffset: CGFloat = -20
+    static let sidebarRowGlyphTraveledOffset: CGFloat = 0
 
     /// Row corner radius on COLLAPSE — same 60-260ms window as the glyph
     /// travel above. The canvas's own table names "8 → 16px", but this

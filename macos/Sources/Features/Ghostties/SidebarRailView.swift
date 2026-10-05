@@ -33,11 +33,13 @@ struct SidebarRailView: View {
                 .frame(width: WorkspaceLayout.sidebarIconColumnWidth, height: WorkspaceLayout.sidebarIconColumnWidth)
                 .padding(.top, 6)
 
-            VStack(spacing: SidebarDialTuning.railRowGap()) {
+            VStack(spacing: 2) {
                 ForEach(store.railSessions()) { session in
                     RailSessionRow(
                         sessionId: session.id,
-                        indicatorState: coordinator.indicatorState(for: session.id),
+                        // Same source as `RecentsListView.sessionRow`, so a
+                        // session shows the same glyph in the list and the rail.
+                        indicatorState: store.globalIndicatorStates[session.id] ?? .inactive,
                         isActive: coordinator.activeSessionId == session.id,
                         onTap: { coordinator.focusSession(id: session.id) }
                     )
@@ -69,7 +71,10 @@ struct SidebarRailView: View {
                 )
             }
             .padding(.top, 14)
-            .padding(.horizontal, 10)
+            // Same horizontal margins as the expanded list, so a row's
+            // glyph lands at the same trailing inset in both.
+            .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+            .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
 
             Spacer(minLength: 0)
 
@@ -92,10 +97,11 @@ struct SidebarRailView: View {
 
 // MARK: - Rail Session Row
 
-/// A single 52×32 rail row: centered status glyph, no label — the label
-/// drops in the collapsed rail, but the glyph (and the per-row tap target)
-/// stays, per spec §02.
-private struct RailSessionRow: View {
+/// A single rail row: the same status glyph as the expanded Sessions list,
+/// pinned to the trailing edge with the same trailing inset and row height
+/// as `RecentsRowView` (Sean, 2026-10-04: glyphs on the right of the
+/// sidebar). The label is dropped; the per-row tap target stays.
+struct RailSessionRow: View {
     let sessionId: UUID
     let indicatorState: SessionIndicatorState
     let isActive: Bool
@@ -107,9 +113,17 @@ private struct RailSessionRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            SessionStatusGhost(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.railGhostSize(), isSelected: isActive)
-                .frame(width: SidebarDialTuning.railRowWidth(), height: SidebarDialTuning.railRowHeight())
-                .background(rowBackground)
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
+                    .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
+            }
+            .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+            .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+            .frame(maxWidth: .infinity)
+            .frame(height: SidebarDialTuning.rowHeight())
+            .background(rowBackground)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }

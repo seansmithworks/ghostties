@@ -13,11 +13,6 @@ enum SessionStatusGlyphKind: Equatable {
     case error
     case stopped
 
-    /// The word this glyph speaks to VoiceOver — the single source of truth
-    /// for status wording, so a row's visible glyph and its accessibility
-    /// label can never disagree. `.done` also covers `.waiting`'s silent
-    /// fallback (see `SessionIndicatorState.statusGlyphKind`), so it speaks
-    /// "idle" rather than a done-specific word.
     /// The text symbol drawn for this kind, or nil when it isn't a text
     /// glyph (`.working` is a drawn dot-grid spinner, `.stopped` is empty).
     /// Pure so tests can assert what a row's trailing slot shows.
@@ -30,6 +25,11 @@ enum SessionStatusGlyphKind: Equatable {
         }
     }
 
+    /// The word this glyph speaks to VoiceOver — the single source of truth
+    /// for status wording, so a row's visible glyph and its accessibility
+    /// label can never disagree. `.done` also covers `.waiting`'s silent
+    /// fallback (see `SessionIndicatorState.statusGlyphKind`), so it speaks
+    /// "idle" rather than a done-specific word.
     var spokenStatus: String {
         switch self {
         case .working:    return "working"
@@ -210,9 +210,8 @@ struct SessionStatusGlyph: View {
 /// the visual no longer branches on it. `stopped` still renders nothing, so
 /// an inactive session's row stays glyph-free as before.
 ///
-/// Used by the collapsed rail and `SessionDetailView`. The expanded
-/// sessions list uses `SessionStatusGlyph` (type glyphs) instead — Sean,
-/// 2026-10-04: row status glyphs return, trailing.
+/// Used by `SessionDetailView` only. The Sessions-tab rows and the collapsed
+/// rail draw `SessionStatusGlyph` (type glyphs) instead.
 ///
 /// This does NOT replace `GhostCharacterView` anywhere else — project rollup
 /// rows, empty states, the ghost picker, and app identity already used the
