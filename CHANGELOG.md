@@ -6,24 +6,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
+## [Unreleased]
+
+---
+
 ## [0.1.0-beta.26] — 2026-10-05
 
 The sidebar gets a third state, a narrow rail, and session status is back at a glance: spinner, `?`, check and cross glyphs return on the right of every row in the full list, and are centered in the rail. There is now one composer, a centered single line. Ghostties also moves onto the latest upstream Ghostty.
 
 ### Added
 
-- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a 128pt rail of session icons with a tray of buttons at the bottom, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on).
-- **Hover a session to see what it needs or is doing.** A session that needs approval shows the command and the reason. A running session shows your last prompt, the current step, and how many edits it has made. The rail also shows the session name. Esc dismisses it.
+- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a narrow rail of session icons, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on). In the rail, status glyphs and section chevrons are centered, and the bottom tray is a narrow centered pill (Liquid Glass, solid when Reduce Transparency is on) with New Session, New Project, Settings and the sidebar toggle.
+- **Hover a session to see what it needs or is doing.** A session that needs approval shows what it wants to run and why. A running session shows your last prompt and the current step. The rail also shows the session name. Esc dismisses it while your pointer is on the card.
 - **Templates are managed in Project settings.** Create, edit, duplicate, pin and delete templates in a Templates section there. Templates are shared across projects, and changes apply immediately, without Save or Cancel.
 - **Rail buttons are announced by VoiceOver** with the session name, project and status.
 
 ### Changed
 
-- **Status glyphs are back on session rows**, on the right edge: a spinner while a session is working, `?` when it needs you, a check when it's done, a cross on error, and nothing when it has stopped. Sessions listed under a project in the Projects tab show the same glyphs instead of a ghost. In the collapsed rail the glyphs are centered.
-- **The rail's top spacing now matches the full list**, so each glyph lines up with its row. The rail's section chevrons are centered too.
-- **The rail's bottom tray is a narrower pill**, sized to its buttons and centered in the rail.
-- **The session hover card is one card.** The grey block inside it is gone, and in the rail the session name lines up with the content.
-- **There is now one composer.** Every + opens the same centered single-line composer. A project row's + opens it with that project already filled in. Option-clicking a project's + still creates a session straight away when the project has a default template. The zero-chrome style and the old template card are removed.
+- **Status glyphs are back on session rows**, on the right edge: a spinner while a session is working, `?` when it needs you, a check when it's done, a cross on error, and nothing when it has stopped. Sessions listed under a project in the Projects tab show the same glyphs instead of a ghost.
+- **There is now one composer.** Every + opens the same centered single-line composer. A project row's + opens it with that project already filled in. Option-clicking a project's + still creates a session straight away when the project has a default template.
+- **Cmd+Shift+E no longer toggles the sidebar.** Cmd+S toggles it (it already worked as a hidden shortcut), and Cmd+Shift+S closes it completely.
+- **The sidebar is wider by default**, 244pt instead of 220pt.
 - **The default theme now follows macOS.** With no theme set, Ghostties uses Apple System Colors and switches between light and dark with your system appearance. A theme in your config still wins.
 - **Ghostties now builds on the latest upstream Ghostty** (Zig 0.16), bringing in its fixes, including word selection that stops at hard line breaks and a crash fix for tmux `list-windows`.
 - **New Session moved to a + button in a tray at the bottom of the sidebar**, shared by the full list and the rail. The tray now also has a New Project button (a folder icon) between New Session and Settings. It opens the folder picker, then the composer for the new project.
