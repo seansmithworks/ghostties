@@ -212,6 +212,9 @@ jobs:
       - name: Assert DialKit absent
         run: bash scripts/assert-no-dialkit.sh macos/build/Release/Ghostties.app
 
+      - name: Assert no coverage instrumentation
+        run: bash scripts/assert-no-coverage.sh macos/build/Release/Ghostties.app
+
       # Inject version metadata and Sparkle public key into Info.plist.
       # SUPublicEDKey is NOT secret — it's the public half of the EdDSA keypair.
       - name: Update Info.plist
