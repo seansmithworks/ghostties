@@ -97,9 +97,10 @@ struct SidebarRailView: View {
 // MARK: - Rail Session Row
 
 /// A single rail row: the same status glyph as the expanded Sessions list,
-/// pinned to the trailing edge with the same trailing inset and row height
-/// as `RecentsRowView` (Sean, 2026-10-04: glyphs on the right of the
-/// sidebar). The label is dropped; the per-row tap target stays.
+/// centered horizontally in the rail card, at the same row height as
+/// `RecentsRowView` (Sean, 2026-10-05: rail icons centered; the expanded row
+/// keeps its glyph on the trailing edge). The label is dropped; the per-row
+/// tap target stays.
 struct RailSessionRow: View {
     let sessionId: UUID
     let name: String
@@ -122,14 +123,11 @@ struct RailSessionRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
-                    .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
-            }
-            .padding(.leading, SidebarDialTuning.rowLeadingPadding())
-            .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-            .frame(maxWidth: .infinity)
+            // No side padding: the card spans the rail's content margins
+            // (symmetric), so centering in the card centers on the rail.
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
+                .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
+                .frame(maxWidth: .infinity)
             .frame(height: SidebarDialTuning.rowHeight())
             .background(rowBackground)
             .contentShape(Rectangle())
@@ -165,21 +163,16 @@ struct RailSessionRow: View {
 // MARK: - Rail Section Chevron Rows
 
 /// A section header collapsed to its chevron: the expanded
-/// `SessionSectionHeader`'s geometry (leading/trailing/top/bottom padding,
-/// chevron size and trailing position) with the title dropped, so the
-/// chevron sits in the same column as the row glyphs below it and at the
-/// header's y.
+/// `SessionSectionHeader`'s vertical geometry (top/bottom padding, chevron
+/// size) with the title dropped, centered horizontally so the chevron sits in
+/// the same column as the centered row glyphs below it and at the header's y.
 private struct RailChevronRow: View {
     var isHovered = false
 
     var body: some View {
-        HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            Spacer(minLength: 0)
-            PixelChevronView(isExpanded: false)
-                .frame(width: SidebarDialTuning.headerChevronSize(), height: SidebarDialTuning.headerChevronSize())
-        }
-        .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
-        .padding(.trailing, WorkspaceLayout.sessionSectionHeaderTrailingPadding)
+        PixelChevronView(isExpanded: false)
+            .frame(width: SidebarDialTuning.headerChevronSize(), height: SidebarDialTuning.headerChevronSize())
+            .frame(maxWidth: .infinity)
         .padding(.top, SidebarDialTuning.headerTopPadding())
         .padding(.bottom, SidebarDialTuning.headerBottomPadding())
         .frame(maxWidth: .infinity)
@@ -222,7 +215,7 @@ private struct RailSectionSummaryRow: View {
 /// Session and the sidebar toggle, but the layout doesn't hardcode a count.
 /// Decision 4: no account circle, since there's no account model to show
 /// one for.
-private struct RailTray: View {
+struct RailTray: View {
     @EnvironmentObject private var coordinator: SessionCoordinator
 
     var body: some View {
