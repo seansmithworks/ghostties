@@ -1,5 +1,25 @@
 # Ghostties — Backlog
 
+## 2026-10-05 — beta.26 wave (session 018XCPmh checkpoint)
+
+Merged to main: #187, #190 (sidebar presence + popover), #191 (release builds no longer coverage-instrumented). Release dry run on main green.
+
+Carried (beta.26 path):
+- [ ] Merge #192 `feat/sidebar-finish` @ `75067be9e` (glyphs in rows + rail, rail top spacing, one-card popover). 3 review rounds APPROVE. | carried
+- [ ] `feat/composer-one` @ `88a867e5a` (pushed, no PR): rerun review rounds 1+2 (round 1 was stopped mid-run), then PR. Removes zero-chrome + old template card; Templates move to Project settings. | carried
+- [ ] `docs/changelog-unreleased-b26` @ `b93510cb4`: revise for #192 + composer, verify "New Session button" and "faster" claims, review, PR to main before the tag. | carried
+- [ ] Fresh Dev build from main after both merge (rebuild xcframework, see memory reference_fresh-engine-build-recipe) → Sean smoke → tag v0.1.0-beta.26. | carried
+- [ ] Cleanup remainder (Sean runs): `git worktree remove --force .claude/worktrees/pr187`; `git branch -d fix/theme-follows-system sync/upstream-zig-0.16 worktree-session-3`; `git branch -D worktree-session-2 backup/pre-rewrite-main backup/pre-rewrite-sync pr187-refresh`; rm `~/Library/Preferences/ghostties.phase3review.test.*.plist`. After merges: worktrees sidebar-merge, sidebar-presence, fix-release-coverage, dev-main, changelog-b26, sidebar-finish, composer-one. Close old threads in session-2, session-4/sidebar-capture, sidebar-presence. | carried
+
+Parked:
+- [ ] Single-tree sidebar collapse (one view collapses in place; today two trees crossfade, small vertical settle). Multi-file refactor, plan first. After beta.26. | parked
+- [ ] DECIDE OR KILL: rail section chevron points `>` while the list header points `v`. Strawman: keep `>` (rail = collapsed sections). | parked
+- [ ] Rail with pinned sessions: rows below the pinned group sit one header-height high (rail has no Pinned header). | parked
+- [ ] Dead code (pre-existing): SessionComposerStore chip cascade + pin machinery, ComposerQueryField view body, "Experimental Composer Field" menu + modelBFieldStorageKey. | parked
+- [ ] Approve/Deny + popover 06 still need the key-press spike (Sean-run). | parked
+- [ ] Stale docs: AGENTS.md "zig build broken" (0.16 works), docs/release-checklist.md appcast-description and `gh release edit` steps (CI does both). MEMORY.md links reference_indicator-state-two-cache-coupling.md, which does not exist. | parked
+- [ ] DMG-motion note from origin/worktree-session-3 (c3b77ec5b) not yet folded into BACKLOG. | parked
+
 ## 2026-09-30 — sidebar-presence round 7: popover build + Sean's review (carried)
 
 State: `feat/sidebar-presence` @ `8f90cd5be`, pushed, no PR. Round 6 landed and was reviewed (PASS WITH NOTES):
