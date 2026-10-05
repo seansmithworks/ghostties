@@ -54,6 +54,32 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         )
     }
 
+    /// The Projects-tab session row (`SessionRow`, nested under a project).
+    private struct ProjectRowHarness: View {
+        let state: SessionIndicatorState
+        @FocusState private var focus: Bool
+        @State private var name = ""
+        var body: some View {
+            SessionRow(
+                session: AgentSession(
+                    id: UUID(uuidString: "9B2A6E10-1234-4A11-8B00-0000000000DD")!,
+                    name: "Claude Code 6", templateId: AgentTemplate.claudeCode.id,
+                    projectId: UUID(), sortOrder: 0, lastActiveAt: Date(), lastOutputAt: Date(),
+                    isNamePinned: true, ghostCharacter: .hex
+                ),
+                indicatorState: state,
+                editingName: $name,
+                isRenameFocused: $focus,
+                onCommitRename: {},
+                onCancelRename: {}
+            )
+        }
+    }
+
+    private func renderProjectRow(_ state: SessionIndicatorState, appearance: NSAppearance.Name) -> NSBitmapImageRep? {
+        render(ProjectRowHarness(state: state), appearance: appearance)
+    }
+
     private func renderRail(_ state: SessionIndicatorState, appearance: NSAppearance.Name) -> NSBitmapImageRep? {
         render(
             RailSessionRow(sessionId: UUID(), name: "Claude Code 6", projectName: "atlas-api", indicatorState: state, isActive: false, onTap: {})
@@ -124,6 +150,19 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             XCTAssertNotEqual(trailingPixels(needs), trailingPixels(idle), "? and check must differ (\(appearance))")
             XCTAssertNotEqual(trailingPixels(idle), trailingPixels(error), "check and x must differ (\(appearance))")
             XCTAssertNil(inkBounds(stopped), "a stopped row draws nothing in the slot (\(appearance))")
+            XCTAssertNotNil(inkBounds(needs))
+        }
+    }
+
+    func testProjectTabSessionRowSlotDrawsTheGlyphNotAGhost() throws {
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let needs = try XCTUnwrap(renderProjectRow(.needsAttention, appearance: appearance))
+            let idle = try XCTUnwrap(renderProjectRow(.idle, appearance: appearance))
+            let error = try XCTUnwrap(renderProjectRow(.error, appearance: appearance))
+            let stopped = try XCTUnwrap(renderProjectRow(.inactive, appearance: appearance))
+            XCTAssertNotEqual(trailingPixels(needs), trailingPixels(idle), "project row: ? and check must differ (\(appearance))")
+            XCTAssertNotEqual(trailingPixels(idle), trailingPixels(error), "project row: check and x must differ (\(appearance))")
+            XCTAssertNil(inkBounds(stopped), "project row: a stopped row draws nothing (\(appearance))")
             XCTAssertNotNil(inkBounds(needs))
         }
     }

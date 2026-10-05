@@ -5,8 +5,8 @@ import GhosttiesCore
 ///
 /// Used by ProjectDisclosureRow to render sessions under each project.
 /// The status icon appears on the right, mapped from the session's
-/// indicator state. This view draws the ghost (`SessionStatusGhost`); the
-/// Sessions-tab rows and the collapsed rail draw `SessionStatusGlyph`.
+/// indicator state. Draws `SessionStatusGlyph`, the same type glyph the
+/// Sessions-tab rows and the collapsed rail use.
 struct SessionRow: View {
     let session: AgentSession
     let indicatorState: SessionIndicatorState
@@ -62,7 +62,8 @@ struct SessionRow: View {
 
             Spacer()
 
-            SessionStatusGhost(kind: indicatorState.statusGlyphKind, size: 16)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
+                .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
         .padding(.horizontal, 8)
         .frame(height: 28)
