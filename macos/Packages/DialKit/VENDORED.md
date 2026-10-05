@@ -39,7 +39,7 @@
    No DialKit logic was rewritten — this is purely marking existing
    declarations as macOS-14/iOS-17-only, matching how the app already
    gates every DialKit call site behind `if #available(macOS 14, *)` /
-   `@available(macOS 14, *)` (see `ComposerZeroChromeStyle.swift`).
+   `@available(macOS 14, *)` (see `ComposerSingleLineStyle.swift`).
 
 3. **`Package.swift`: removed the `DialKitCoreTests` and `DialKitTests`
    test targets.** No `Tests/` directory was vendored alongside `Sources/`

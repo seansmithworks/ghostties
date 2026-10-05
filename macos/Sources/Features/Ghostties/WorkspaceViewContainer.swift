@@ -2034,48 +2034,18 @@ class WorkspaceViewContainer: NSView {
         }
         SessionComposerStore.shared.owningWindow = window
 
-        // F5 (Phase 3 review): single-presentation invariant — the centered
-        // overlay always wins over any open per-row anchored popover, since
-        // both share the one `SessionComposerStore` singleton's state and a
-        // second opener silently defeats the popover's `.locked` write-path
-        // enforcement otherwise. `ProjectDisclosureRow` observes this and
-        // closes its own popover.
-        NotificationCenter.default.post(name: .workspaceComposerOverlayWillPresent, object: window)
-
-        // R2 (Phase 3 review round 2): the post above sets `showingTemplatePicker
-        // = false` synchronously in any open row, but the popover's CONTENT
-        // teardown — firing its `onChange(of: isPresented)` / `onDisappear`,
-        // both of which call `composerStore.cancel()` — was NOT proven to
-        // run within this same call stack. Opening/installing the overlay
-        // synchronously right after the post let a `cancel()` from that
-        // teardown (whenever it actually lands) clobber `isOpen` back to
-        // `false` immediately after we set it, killing the just-presented
-        // overlay one frame in (and, while both were briefly alive, leaving
-        // the old `.locked` popover visibly showing a `currentProjectBinding`
-        // this call had already overwritten — the wrong-project write F5 was
-        // supposed to close).
+        // Single-composer invariant: there is exactly one composer surface
+        // (this overlay) and one `SessionComposerStore` behind it, so a
+        // second opener can only re-target and refocus the open composer
+        // (`SessionComposerStore.open` resets its state and bumps
+        // `focusSearchFieldTrigger`); it can never stack another one.
         //
-        // Blocker 1 (Phase 3 review round 3): deferring this half to the
-        // next runloop turn does NOT, by itself, guarantee the popover's
-        // deferred teardown (if it is in fact deferred — see the
-        // `$isOpen` sink's comment in `setup()`) lands BEFORE this block
-        // rather than after; the relative order of two independently
-        // GCD-queued `DispatchQueue.main.async` blocks competing with
-        // SwiftUI's own internal update scheduling is not something either
-        // system's public contract guarantees, and this repo could not
-        // resolve it empirically (see that same sink comment). The actual
-        // fix for the race is on the OTHER end: the `$isOpen` sink re-checks
-        // the LIVE `isOpen` value before dismissing, instead of trusting a
-        // possibly-stale emitted one, which makes the outcome correct
-        // regardless of which block runs first. This deferral is kept as
-        // belt-and-braces — it still avoids doing the open/install work
-        // inside the same call stack as the `.willPresent` post — but is
-        // NOT the mechanism that makes this race-safe; do not treat it as
-        // load-bearing on its own.
+        // Deferred to the next runloop turn so the install below doesn't run
+        // inside the caller's own call stack (e.g. a SwiftUI button action).
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
 
-            let request = SessionComposerRequest(presentation: .centered, projectBinding: projectBinding)
+            let request = SessionComposerRequest(projectBinding: projectBinding)
             self.composerOverlayHostingView.rootView = AnyView(
                 SessionComposerOverlay(request: request, centeringModel: self.composerCenteringModel)
                     .environmentObject(WorkspaceStore.shared)

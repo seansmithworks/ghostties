@@ -54,19 +54,6 @@ import GhosttiesCore
 /// (`SessionComposerCommandParser`) and the store-layer cascade/undo
 /// (`SessionComposerStore`) are UNCHANGED; only the chip rendering and the
 /// field-text transform that fed it are gone.
-/// Which composer card actually renders — decided by presentation, not by
-/// `ComposerStyle` alone. `.popover` is the sidebar popover's dedicated
-/// card (`SessionComposerPalette.popoverComposerCard`, the only one with a
-/// results list); it exists in EVERY `.anchored` presentation regardless of
-/// the stored `ComposerStyle`. `.singleLine`/`.zeroChrome` mirror the two
-/// remaining `ComposerStyle` cases, for `.centered` only. See
-/// `SessionComposerPalette.cardKind(style:presentation:)`.
-enum ComposerCardKind: Equatable {
-    case popover
-    case singleLine
-    case zeroChrome
-}
-
 struct SessionComposerPalette: View {
     @Binding var isPresented: Bool
     let request: SessionComposerRequest
@@ -85,120 +72,29 @@ struct SessionComposerPalette: View {
     /// without this the harness would have no way to avoid mutating the
     /// developer's real, persisted UserDefaults (pins, recents) on every
     /// test run.
-    /// Review round 4, P2 test seam: `initialIsAddingTemplateForTesting`
-    /// seeds `isAddingTemplate` before mount — `@State` is a live view
-    /// identity's own storage, unreachable from outside once mounted, so a
-    /// test that needs to start from "already naming a new template" (to
-    /// then prove an arriving `writeError` evicts it, see
-    /// `SessionComposerSnapshotTests
-    /// .isAddingTemplateClearsWhenAWriteErrorArrives`) has no other route
-    /// in. Defaults `false`, matching every production call site
-    /// unchanged.
-    /// Test seam for `ComposerStyle` (zero-chrome/single-line spike),
-    /// same shape as `initialIsAddingTemplateForTesting` above and for the
-    /// same reason: `activeStyle` reads real `UserDefaults.standard` at
-    /// every production call site (matching `ComposerGhostTextField
-    /// .modelBFieldStorageKey`'s existing flag-reading convention), and
-    /// `xcodebuild test`'s parallel test processes share that SAME on-disk
-    /// domain (same bundle id across processes) — a snapshot test that set
-    /// the real key directly raced other parallel snapshot tests and
-    /// intermittently poisoned unrelated renders. `nil` (every
-    /// production call site) falls through to the real flag unchanged.
-    let styleOverrideForTesting: ComposerStyle?
-
     /// Round 13 review finding: `.singleLine`'s `newStyleFieldFontSize`/
     /// `newStyleFieldWidth` read `ComposerSingleLineTuning`'s `.standard`-
     /// defaulting call sites with no injection point, so no test could
     /// prove this palette actually consumes a non-default tuning without
     /// writing the real `UserDefaults.standard` domain — off-limits to a
     /// parallel `xcodebuild test` run for the same reason documented on
-    /// `styleOverrideForTesting` above. `nil` (every production call site)
+    /// the isolated stores above. `nil` (every production call site)
     /// falls through to `.standard`, unchanged.
     let tuningDefaultsForTesting: UserDefaults?
-
-    /// Fix round 2: `SessionComposerOverlay` owns this — it's the only
-    /// thing that knows "one frame after mount" (summon) — and drives it
-    /// via a real `Binding` so this palette's own `commit(template:)` /
-    /// `.exit` handling can ALSO write `.committing`/`.dismissing` into the
-    /// SAME state without a second source of truth. Defaults to a
-    /// `.constant(.revealed)` binding, matching every OTHER test seam in
-    /// this file — every production call site outside
-    /// `SessionComposerOverlay`'s zero-chrome branch, and every existing
-    /// test, is unaffected and always settled.
-    var revealPhase: Binding<ComposerRevealPhase>
-
-    /// Fix round 2, item 8: `SessionComposerOverlay` computes its own
-    /// `GeometryReader` width via `ComposerZeroChromeTypography.columnFrame`
-    /// (round 10: centered, `min(640, overlayWidth − 96)`), and passes
-    /// it in — every OTHER
-    /// call site (every snapshot test, the popover card, `.singleLine`) has
-    /// no overlay to measure from, so `zeroChromeMeasure` falls back to
-    /// `ComposerZeroChromeTypography.measureMin`. `.singleLine` never
-    /// reads this at all (its own field width is the unrelated, unchanged
-    /// 512pt constant).
-    let zeroChromeMeasureOverride: CGFloat?
-
-    /// Round 10 (typewriter centered column): `SessionComposerOverlay` owns
-    /// the field's live content height (feeds `fieldFrame(overlaySize:
-    /// lineCount:)`'s anchor math) — this palette writes into it whenever
-    /// its own measured field/descriptor height changes (see
-    /// `newStyleField`'s `.onChange`). Defaults to a `.constant` matching
-    /// every OTHER test seam in this file — every snapshot test, the
-    /// popover card, and `.singleLine` never read or write it.
-    let zeroChromeFieldHeight: Binding<CGFloat>
 
     init(
         isPresented: Binding<Bool>,
         request: SessionComposerRequest,
         composerStore: SessionComposerStore = .shared,
-        initialIsAddingTemplateForTesting: Bool = false,
-        styleOverrideForTesting: ComposerStyle? = nil,
-        tuningDefaultsForTesting: UserDefaults? = nil,
-        revealPhase: Binding<ComposerRevealPhase> = .constant(.revealed),
-        zeroChromeMeasureOverride: CGFloat? = nil,
-        zeroChromeFieldHeight: Binding<CGFloat> = .constant(ComposerZeroChromeTypography.fieldLineHeight)
+        tuningDefaultsForTesting: UserDefaults? = nil
     ) {
         self._isPresented = isPresented
         self.request = request
         self.composerStore = composerStore
-        self.styleOverrideForTesting = styleOverrideForTesting
         self.tuningDefaultsForTesting = tuningDefaultsForTesting
-        self.revealPhase = revealPhase
-        self.zeroChromeMeasureOverride = zeroChromeMeasureOverride
-        self.zeroChromeFieldHeight = zeroChromeFieldHeight
-        self._isAddingTemplate = State(initialValue: initialIsAddingTemplateForTesting)
-    }
-
-    private var zeroChromeMeasure: CGFloat {
-        zeroChromeMeasureOverride ?? ComposerZeroChromeTypography.measureMin
     }
 
     @State private var selectedIndex: UInt?
-    @State private var hoveredOptionID: UUID?
-    /// Zero-chrome style only — `↓` on an empty field reveals the
-    /// candidate rows without requiring typed text (brief §4, fix round
-    /// finding 3). Cleared whenever the composer dismisses (`onChange(of:
-    /// isPresented)` below) so a later fresh summon starts collapsed again.
-    @State private var zeroChromeRowsRevealedByArrow = false
-    /// Whether the inline project picker is expanded. Used to open from
-    /// `projectControl` (Step 5; used to be the resolution line's project
-    /// segment, before that the project chip's own click target, Slice
-    /// A/A2) — Variant G Pass C deleted `projectControl`, which was the
-    /// ONLY site that ever set this `true`, so `inlineProjectPicker` is now
-    /// unreachable by mouse; see that view's own doc comment. Drives an
-    /// expansion INSIDE the card, not a `.popover`.
-    @State private var isProjectPickerOpen = false
-    /// Whether the inline branch picker is expanded — Step 5 opened this from
-    /// a since-removed `branchControl` (Variant G Pass A deleted the
-    /// in-field mouse route); now opened only via the keyboard `>` grammar.
-    /// Mutually exclusive with
-    /// `isProjectPickerOpen` BY CONSTRUCTION — every site that flips one to
-    /// `true` flips the other to `false` in the same statement — never
-    /// merely "the two happen not to overlap in practice". A second live
-    /// picker with its own capture layer would re-create exactly the
-    /// ambiguity `ComposerQueryField.isPickerOpen` exists to remove (see
-    /// that type's doc comment).
-    @State private var isBranchPickerOpen = false
     /// Blocker 2 fix (Slice B review round 2): debounced re-refresh when a
     /// typed command resolves a DIFFERENT project than whatever the
     /// composer's worktree cache currently describes — see
@@ -207,37 +103,6 @@ struct SessionComposerPalette: View {
     /// flips through several project names before settling only ever fires
     /// the LAST one, never one refresh per keystroke.
     @State private var commandProjectRefreshTask: _Concurrency.Task<Void, Never>?
-    @State private var isAddingTemplate = false
-    @State private var newTemplateName = ""
-    @State private var newTemplateToEdit: AgentTemplate?
-    /// Whether `newTemplateToEdit`'s sheet is presenting a template just
-    /// created (empty, unconfigured) versus an existing one opened via the
-    /// "Edit" context menu action — see `TemplateEditForm.isNewlyCreated`'s
-    /// doc comment for why this distinction is what fixes the persisted
-    /// junk-template bug (root cause: `commitNewTemplate` below).
-    @State private var newTemplateToEditIsFresh = false
-    @State private var showDeleteConfirmation = false
-    @State private var templateToDelete: AgentTemplate?
-    @FocusState private var newTemplateNameFocused: Bool
-
-    /// Step 7 (Composer UI 11 plan §5/§7): the model B field's ONLY switch
-    /// point. Default ON — `queryRow` builds `ComposerGhostTextField` unless
-    /// this is explicitly turned off (`defaults write … ghostties.composerModelBField -bool NO`).
-    /// `ComposerQueryField` itself is unmodified; this flag lives here, not
-    /// there.
-    @AppStorage(ComposerGhostTextField.modelBFieldStorageKey) private var isModelBFieldEnabled = true
-
-    /// Testing seam: exposes the exact predicate `queryRow` branches on,
-    /// without walking its opaque SwiftUI view tree via reflection (a
-    /// `_ConditionalContent<A, B>`'s TYPE always names both branches
-    /// regardless of which is active, so a type-name test would be
-    /// vacuous). `.centered`-only per G-F28 — `.anchored` never builds
-    /// model B even with the flag on, since the popover is too narrow for
-    /// the predicted path.
-    var usesModelBFieldForTesting: Bool {
-        isModelBFieldEnabled && request.presentation == .centered
-    }
-
     // MARK: - No-match Enter feedback (command grammar slice 1)
 
     /// Drives `ShakeEffect` — 3 cycles / 6pt, animated over 0.25s. Bumped by
@@ -260,13 +125,9 @@ struct SessionComposerPalette: View {
     /// (`commit(template:)`'s success branch).
     @State private var witnessBeat: ComposerWitness.Beat = .idle
 
-    /// Placement gate (plan §1): single-line + centered + toggle on. Never
-    /// shown in `.zeroChrome`, and never in `.anchored` presentation (the
-    /// sidebar popover — content-sized, would clip).
+    /// Placement gate (plan §1): toggle on.
     private var showsWitness: Bool {
-        activeStyle == .singleLine
-            && request.presentation == .centered
-            && ComposerWitnessSetting.isEnabled(defaults: tuningDefaults)
+        ComposerWitnessSetting.isEnabled(defaults: tuningDefaults)
     }
 
     private var witnessIdentity: ComposerWitness.Identity {
@@ -290,174 +151,6 @@ struct SessionComposerPalette: View {
     /// `ComposerQueryField`'s own `.exit` event) — same pattern as
     /// `isHandlingNoMatchFeedback` above.
     @State private var isHandlingExitCommand = false
-
-    // MARK: - DESIGN.md scale (D11) — see `TemplatePickerView` for precedent.
-    // `paletteWidth` pulls from `WorkspaceLayout` tokens (DESIGN.md §2
-    // forbids hardcoded pt values where an equivalent token exists); the
-    // other constants have no `WorkspaceLayout` equivalent. Width varies by
-    // presentation (Phase 3): `.anchored` matches the sidebar it pops out
-    // of; `.centered` is wider since it floats free of the sidebar column.
-    private var paletteWidth: CGFloat {
-        switch request.presentation {
-        case .anchored: return WorkspaceLayout.sidebarWidth - 16 // offsets `body`'s 8pt-per-side shake-clearance padding (16pt total) so net popover width matches the sidebar
-        case .centered: return WorkspaceLayout.composerOverlayWidth
-        }
-    }
-
-    // MARK: - Two surface classes (Phase 3 review — "New centered-modal
-    // surface class")
-    //
-    // `.anchored` (the Phase 2 sidebar popover) and `.centered` (the Phase 3
-    // overlay card) are typographically distinct — the card grew 220pt to
-    // 360pt but originally kept the sidebar's own 11pt density, reading as a
-    // stretched popover rather than a standalone surface. `.anchored`'s
-    // values below are UNCHANGED from Phase 2 (do not restyle the sidebar
-    // popover); `.centered` gets its own scale, documented as a canonical
-    // surface class in `DESIGN.md` §3/§4/§6/§7 rather than living only here.
-    private var fieldHeight: CGFloat {
-        switch request.presentation {
-        case .anchored: return 30
-        case .centered: return 38
-        }
-    }
-
-    private var fieldFontSize: CGFloat {
-        switch request.presentation {
-        case .anchored: return 11
-        case .centered: return 15
-        }
-    }
-
-    private var rowFontSize: CGFloat {
-        switch request.presentation {
-        case .anchored: return 12
-        case .centered: return 13
-        }
-    }
-
-    private var subtitleFontSize: CGFloat {
-        switch request.presentation {
-        case .anchored: return 10
-        case .centered: return 11
-        }
-    }
-
-    // MARK: - Finding 3 fix (review round 2): `.anchored` restored to
-    // byte-identical pre-`786f4d56f` rendering
-    //
-    // `786f4d56f` routed the results-table section header and the footer
-    // operator hint's glyph/label through `subtitleFontSize` — that's
-    // presentation-dependent, so it also restyled `.anchored`, the sidebar
-    // popover DESIGN.md and `SessionComposerPalette.swift:198` both say
-    // must stay unstyled. DESIGN.md's centered-modal type-scale table
-    // (§4) only specifies Query field / Row title / Row subtitle — it has
-    // no entry for a section header or footer hint, so mapping those two
-    // surfaces to the subtitle token at `.centered` was a reasonable
-    // interpretation, not literal DESIGN.md conformance. These three
-    // properties keep `.centered` on that interpretation while giving
-    // `.anchored` back its exact pre-fix literals (10pt `.bold` header;
-    // 10.5pt SF Mono `.semibold`/`.regular` footer glyph/label).
-    private var sectionHeaderFont: Font {
-        switch request.presentation {
-        case .anchored: return .system(size: 10, weight: .bold)
-        case .centered: return .system(size: subtitleFontSize, weight: .medium)
-        }
-    }
-
-    private var footerGlyphFont: Font {
-        switch request.presentation {
-        case .anchored: return .system(size: 10.5, weight: .semibold, design: .monospaced)
-        case .centered: return .system(size: subtitleFontSize, weight: .medium)
-        }
-    }
-
-    private var footerLabelFont: Font {
-        switch request.presentation {
-        case .anchored: return .system(size: 10.5, design: .monospaced)
-        case .centered: return .system(size: subtitleFontSize)
-        }
-    }
-
-    /// Row vertical padding — `ComposerRow`'s existing 5pt (Phase 2,
-    /// `.anchored` only) predates the 4pt spacing scale; left as-is since
-    /// restyling the popover is out of scope. `.centered` adopts the board's
-    /// row chrome (6/10/6, `V02Quieted222.dc.html`) over DESIGN.md's 4pt
-    /// scale — tension flagged to Sean (11.4), not resolved here.
-    private var rowVerticalPadding: CGFloat {
-        switch request.presentation {
-        case .anchored: return 5
-        case .centered: return 6
-        }
-    }
-
-    /// Row horizontal padding — `.anchored` keeps its existing 8pt
-    /// (unstyled). `.centered` adopts the board's 10pt.
-    private var rowHorizontalPadding: CGFloat {
-        switch request.presentation {
-        case .anchored: return 8
-        case .centered: return 10
-        }
-    }
-
-    /// Row corner radius — `.anchored` keeps its existing 5pt (unstyled).
-    /// `.centered` adopts the board's 6pt.
-    private var rowCornerRadius: CGFloat {
-        switch request.presentation {
-        case .anchored: return 5
-        case .centered: return 6
-        }
-    }
-
-    /// Card corner radius — `.anchored` keeps its existing 10pt (unstyled,
-    /// Phase 2, not touched). `.centered` uses the DESIGN.md §7 terminal-card
-    /// radius/style (`WorkspaceLayout.terminalCornerRadius`, `.continuous`) —
-    /// the composer card is a peer surface to the terminal card, not a
-    /// one-off.
-    private var cornerRadius: CGFloat {
-        switch request.presentation {
-        case .anchored: return 10
-        case .centered: return WorkspaceLayout.terminalCornerRadius
-        }
-    }
-
-    /// DESIGN.md §7: "One radius. One style. No exceptions... Always pass
-    /// `style: .continuous`." `.anchored` keeps the unstyled default
-    /// (`.circular`) it shipped with in Phase 2; `.centered` is `.continuous`.
-    private var cornerStyle: RoundedCornerStyle {
-        switch request.presentation {
-        case .anchored: return .circular
-        case .centered: return .continuous
-        }
-    }
-
-    /// Results well cap — render evidence showed `ScrollView` never reports
-    /// an intrinsic content height, so a bare `maxHeight` (even paired with
-    /// `.fixedSize(horizontal: false, vertical: true)`) behaves as a target
-    /// rather than a cap: a two-row list opened at (near) the full 440pt
-    /// well with dead space above AND below the rows, because the ScrollView
-    /// isn't built to hug — its `sizeThatFits` answers with its own
-    /// proposed/maximum height, not its content's. `ComposerResultsTable`
-    /// instead measures its content's real height via
-    /// `ComposerResultsHeightPreferenceKey` and sets the `ScrollView`'s own
-    /// `.frame(height:)` to `min(measured, maxHeight)` explicitly, so short
-    /// lists hug and long lists stop at this cap and scroll.
-    /// `.anchored` keeps its existing 220pt (sidebar popover — a 440pt well
-    /// does not belong there; whether `.anchored` should otherwise adopt
-    /// the `.centered` list treatment is a separate, unresolved question).
-    /// `.centered` raises to 440pt — roughly 14 rows at the centered row
-    /// metrics, between Sean's requested "400 or 500," and tall enough to
-    /// leave a partial row visible at the cut so a long list reads as
-    /// scrollable rather than truncated.
-    private var resultsWellMaxHeight: CGFloat {
-        switch request.presentation {
-        case .anchored: return 220
-        case .centered: return 440
-        }
-    }
-
-    private var composerClipShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: cornerRadius, style: cornerStyle)
-    }
 
     /// Round 12: the one production call site that resolves `NSGlassEffect
     /// View`'s real runtime availability — see `ComposerSingleLineBackground
@@ -663,33 +356,6 @@ struct SessionComposerPalette: View {
         composerStore.isGitRepo
     }
 
-    /// A resolved TYPED branch (`> main > cco`) takes precedence over the
-    /// picker's current pick, mirroring `currentProject`'s
-    /// `commandProject`-before-`selectedProjectId` precedence exactly.
-    ///
-    /// Blocker 2 fix (Slice B review round 1): this collapses
-    /// `typedBranchResolution`'s three non-"not typed" cases down to a
-    /// plain optional for every call site EXCEPT `commit(template:)`, which
-    /// needs to tell "nothing typed" apart from "typed but unresolvable" —
-    /// see that function and `typedBranchResolution` below. Everywhere else
-    /// (the picker's own "already shown" comparisons), both `.isDefaultBranch`
-    /// and `.unresolved` collapse to "no override, defer to the picker" —
-    /// which is safe there because those call sites never launch a session;
-    /// only `commit(template:)` may, and it never reads this property.
-    private var typedWorktreePath: String? {
-        switch typedBranchResolution {
-        // Blocker 2 fix (Slice B review round 2): `.pending` (the cache
-        // doesn't describe the project being resolved for yet) collapses
-        // to "no override" here for the same reason `.unresolved` already
-        // does — this property never launches a session; only
-        // `commit(template:)`'s STRICT resolver below does, and it reads
-        // `typedBranchResolution` directly rather than through here.
-        case .notTyped, .unresolved, .pending: return nil
-        case .resolved(let path): return path
-        case .isDefaultBranch: return nil
-        }
-    }
-
     /// Full three-state resolution of the typed branch token, if any —
     /// backs `commit(template:)`'s loud-failure path (blocker 2). See
     /// `SessionComposerCommandParser.TypedBranchResolution`'s doc comment
@@ -775,16 +441,11 @@ struct SessionComposerPalette: View {
     }
 
     /// The 11.1 rest-state ghost placeholder (Step 3, Composer UI 11 plan
-    /// §3) — feeds `ComposerQueryField.placeholder`. Gated to `.centered`
-    /// (G-F28: `.anchored` is 11pt/30pt at sidebar width and cannot fit the
-    /// path, so it keeps the generic placeholder unconditionally). Built
+    /// §3) — the descriptor cycle's last item. Built
     /// from the exact same segments `selectedOption` and a Return commit
     /// read (D-B) — see `SessionComposerCommandParser.ghostPlaceholder`'s
     /// doc comment for the four rules and their order.
     private var ghostPlaceholder: String {
-        guard request.presentation == .centered else {
-            return "Type a project, branch, and command…"
-        }
         let segments = SessionComposerCommandParser.resolutionLineSegments(
             projectName: currentProject?.name,
             isProjectLocked: isProjectLocked,
@@ -1400,55 +1061,6 @@ struct SessionComposerPalette: View {
         return UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
     }
 
-    // MARK: - Style flag (spike, `ghostties.composerStyle`)
-
-    /// Unset/unrecognized = `.singleLine` (Sean's decision, 2026-09-13) — see
-    /// `ComposerZeroChromeStyle.swift`. Read once per render; SwiftUI
-    /// re-evaluates `body` on every relevant `@Published`/`@State` change
-    /// already, so no extra invalidation wiring is needed for `defaults
-    /// write` changes to take effect on next launch.
-    ///
-    /// `.anchored` (the sidebar popover, `ProjectDisclosureRow.swift`)
-    /// always gets `popoverComposerCard` here, regardless of the stored
-    /// style: single-line and zero-chrome were only ever built for
-    /// `.centered`, and neither renders `ComposerResultsTable` (only
-    /// `popoverComposerCard` does — the results dropdown the popover exists
-    /// to show). Card selection is keyed off PRESENTATION, not off
-    /// `ComposerStyle` — the enum has no popover case; that would let an
-    /// invalid state (a stored style trying to select the popover card in
-    /// `.centered`) exist at all.
-    /// Pure decision, unit-testable without constructing a
-    /// `SessionComposerPalette` (`request`/`styleOverrideForTesting` are
-    /// private view properties). No behaviour change — `activeCardKind`
-    /// below just forwards to this.
-    static func cardKind(
-        style: ComposerStyle,
-        presentation: SessionComposerRequest.Presentation
-    ) -> ComposerCardKind {
-        guard presentation != .anchored else { return .popover }
-        switch style {
-        case .singleLine: return .singleLine
-        case .zeroChrome: return .zeroChrome
-        }
-    }
-
-    /// The real, resolved composer style (test override, else
-    /// `UserDefaults`) — independent of presentation. Every reader of this
-    /// property outside `activeCardKind` (font sizes, alignment, reveal-
-    /// phase transitions in `newStyleField`/`commit(template:)`) is only
-    /// ever reached from inside `zeroChromeComposerCard`/
-    /// `singleLineComposerCard`'s own view tree, which `.anchored` never
-    /// mounts — see `activeCardKind` — so this never needs its own
-    /// presentation gate.
-    private var activeStyle: ComposerStyle {
-        styleOverrideForTesting ?? ComposerStyle.current(defaults: tuningDefaultsForTesting ?? .standard)
-    }
-
-    /// Which card actually renders — see `cardKind(style:presentation:)`.
-    private var activeCardKind: ComposerCardKind {
-        Self.cardKind(style: activeStyle, presentation: request.presentation)
-    }
-
     private var reduceMotionEnabled: Bool {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
@@ -1458,30 +1070,10 @@ struct SessionComposerPalette: View {
     var body: some View {
         let scheme: ColorScheme = NSColor(Color(nsColor: .windowBackgroundColor)).isLightColor ? .light : .dark
 
-        // Shake-clearance wrapper (finding: `.anchored` is an NSPopover
-        // sized exactly to its content — a shake applied to the composer's
-        // root, with no margin around it, clips or draws over the popover
-        // chrome). The card itself stays `paletteWidth` wide; this adds an
-        // 8pt clear inset on ALL FOUR SIDES (DESIGN.md §5 Layout Tokens —
-        // 8 is the nearest valid step above the ±6pt shake amplitude) so
-        // the ±6pt lateral translation has room in both `.anchored` and
-        // `.centered`. Symmetric, not horizontal-only: it's the same
-        // component in both presentations, so it gets the same pattern —
-        // an inset flush top/bottom but padded left/right would read as a
-        // clipping bug rather than a frame. `paletteWidth`'s `.anchored`
-        // case subtracts this same 16pt (8pt × 2 sides) so the net
-        // popover width still matches the sidebar exactly; `.centered`'s
-        // card width (`composerOverlayWidth`) is unaffected since only
-        // the outer padding grows.
-        // Sean's decision (2026-09-13): Classic is gone, so there is no
-        // longer a `.centered` card that wants this top-level modal shadow
-        // — `.singleLine`/`.zeroChrome` each own their own shadow treatment
-        // inside their card bodies (`ComposerSingleLineShadowDials`, the
-        // zero-chrome wash), and `.anchored` relies on the native NSPopover
-        // chrome/shadow instead. A prior `.shadow(...)` modifier here only
-        // ever fired for `.centered && .classic` — deleted, not defaulted
-        // to a no-op, since that combination can no longer exist.
-        composerCard
+        // Shake-clearance wrapper: an 8pt clear inset on all four sides
+        // (DESIGN.md §5 Layout Tokens — the nearest valid step above the
+        // ±6pt shake amplitude) so the lateral translation has room.
+        singleLineComposerCard
             .padding(8)
             .environment(\.colorScheme, scheme)
             .onAppear {
@@ -1501,22 +1093,10 @@ struct SessionComposerPalette: View {
             .onChange(of: isPresented) { presented in
                 if !presented {
                     composerStore.cancel()
-                    isAddingTemplate = false
-                    newTemplateName = ""
-                    isProjectPickerOpen = false
-                    // Finding 14 fix (Slice B review round 1): this was
-                    // missing here while `isProjectPickerOpen` right
-                    // above it was reset — leaving the branch picker
-                    // latched open across a dismiss/re-present cycle.
-                    isBranchPickerOpen = false
                     // Blocker 2 fix (Slice B review round 2): a pending
                     // debounced refresh for whatever project was typed must
                     // not land after the composer has already closed.
                     commandProjectRefreshTask?.cancel()
-                    // Fix round (finding 3): a fresh summon should always
-                    // start with the zero-chrome rows collapsed, not
-                    // reopened from whatever `↓` left behind last time.
-                    zeroChromeRowsRevealedByArrow = false
                 }
             }
             .onDisappear {
@@ -1528,23 +1108,6 @@ struct SessionComposerPalette: View {
                 // latches `SessionComposerStore.isOpen` true forever (B3).
                 composerStore.cancel()
                 commandProjectRefreshTask?.cancel()
-            }
-            // Review round 4, P2 fix: an async worktree create can time out
-            // or fail well after the user has moved on to "+ New
-            // template…" (`isAddingTemplate = true`, which — correctly,
-            // per the round-2 precedence fix — now wins the footer slot
-            // over `writeError`). Left alone, that error was never shown:
-            // `isAddingTemplate` stayed true until the user committed or
-            // cancelled the template, silently swallowing a failed/timed-
-            // out worktree creation (session would launch at the project
-            // root instead, wrong cwd, zero surfaced error). Clearing
-            // `isAddingTemplate` the instant a `writeError` arrives lets
-            // the error win the footer slot without reverting the
-            // precedence swap itself.
-            .onChange(of: composerStore.writeError) { error in
-                if error != nil {
-                    isAddingTemplate = false
-                }
             }
             // Round-4 review, Blocker: was `.onChange(of: query)`. `query`
             // is the TRIMMED search text, so a typed trailing space (the
@@ -1664,402 +1227,89 @@ struct SessionComposerPalette: View {
                 // reliably re-fire on a fast re-present).
                 witnessBeat = witnessBeat.next(.open)
             }
-            .sheet(item: $newTemplateToEdit) { template in
-                TemplateEditForm(template: template, isNewlyCreated: newTemplateToEditIsFresh)
-            }
-            .alert(
-                "Delete Template?",
-                isPresented: $showDeleteConfirmation,
-                presenting: templateToDelete
-            ) { template in
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    store.removeTemplate(id: template.id)
-                }
-            } message: { template in
-                if store.templateInUse(id: template.id) {
-                    Text("Sessions using \"\(template.name)\" will keep their current configuration but won't be relaunchable with this template.")
-                } else {
-                    Text("This will permanently remove \"\(template.name)\".")
-                }
-            }
     }
 
-    /// The composer's visible card — background, clip shape, border, the
-    /// no-match feedback overlays, and the shake itself. Kept separate from
-    /// `body` so the shake-clearance inset (`body`'s `.padding(8)`) wraps
-    /// it rather than the shake living on the true root, which
-    /// left no room to translate inside an `.anchored` NSPopover sized
-    /// exactly to its content.
-    /// Dispatches on `activeCardKind`, not `activeStyle` — `.popover`
-    /// renders the exact, byte-for-byte unchanged card this project has
-    /// shipped since PR #132 — `popoverComposerCard` below is that same
-    /// code (formerly `classicComposerCard`), renamed only, never edited.
-    @ViewBuilder
-    private var composerCard: some View {
-        switch activeCardKind {
-        case .popover:
-            popoverComposerCard
-        case .zeroChrome:
-            zeroChromeComposerCard
-        case .singleLine:
-            singleLineComposerCard
-        }
-    }
+    // MARK: - Single-line field
 
-    private var popoverComposerCard: some View {
-        let backgroundColor = Color(nsColor: .windowBackgroundColor)
-
-        return VStack(alignment: .leading, spacing: 0) {
-            queryRow
-                // A4: ⌘Z restores the chip cascade's cleared segment(s) as
-                // one step. Scoped to only exist while something is
-                // actually pending. D4 fix: this DOES contend with AppKit's
-                // own text undo, despite an earlier version of this comment
-                // claiming otherwise — this `Button`'s shortcut writes
-                // `searchText`/`selectedProjectId` directly, bypassing the
-                // field editor's undo manager entirely, so typing after a
-                // chip change followed by ⌘Z used to discard those
-                // keystrokes with NO way to get them back (a second ⌘Z had
-                // nothing left to restore them from either). Fixed by
-                // disarming `pendingChipUndo` the moment the user edits
-                // `searchText` by typing (`searchTextBinding`'s setter calls
-                // `SessionComposerStore.noteSearchTextEditedByTyping()`) —
-                // once that happens this overlay's `Button` simply stops
-                // existing, so a stray ⌘Z falls through to AppKit's own
-                // text undo instead of silently eating new keystrokes.
-                .overlay {
-                    if composerStore.pendingChipUndo != nil {
-                        Button(action: undoChipCascade) { Color.clear }
-                            .buttonStyle(PlainButtonStyle())
-                            .keyboardShortcut("z", modifiers: [.command])
-                            .frame(width: 0, height: 0)
-                            .accessibilityHidden(true)
-                    }
-                }
-
-            Divider()
-
-            ComposerResultsTable(
-                // Variant G (Pass A): visible section headers restored —
-                // RECENT/TEMPLATES/PROJECTS/COMMAND, uppercased, rendered
-                // only for non-empty lanes. `accessibilityLabel` is
-                // unchanged from the Step 2 headerless build.
-                sections: [
-                    (title: "Recent", accessibilityLabel: "Recent", options: lane1Options),
-                    (title: "Templates", accessibilityLabel: "Templates", options: lane2Options),
-                    (title: "Projects", accessibilityLabel: "Projects", options: filteredProjectOptions),
-                    (title: "Command", accessibilityLabel: "Command", options: commandOptions)
-                ],
-                query: query,
-                selectedIndex: $selectedIndex,
-                hoveredOptionID: $hoveredOptionID,
-                rowFontSize: rowFontSize,
-                subtitleFontSize: subtitleFontSize,
-                sectionHeaderFont: sectionHeaderFont,
-                rowVerticalPadding: rowVerticalPadding,
-                rowHorizontalPadding: rowHorizontalPadding,
-                rowCornerRadius: rowCornerRadius,
-                maxHeight: resultsWellMaxHeight,
-                onEditTemplate: {
-                    newTemplateToEditIsFresh = false
-                    newTemplateToEdit = $0
-                },
-                onDuplicateTemplate: { _ = store.duplicateTemplate(id: $0.id) },
-                onDuplicateAndEditTemplate: {
-                    if let copy = store.duplicateTemplate(id: $0.id) {
-                        // A duplicate carries its source's real command/agent
-                        // config forward, so abandoning this sheet leaves a
-                        // configured template behind, not an empty one —
-                        // `isNewlyCreated` stays false.
-                        newTemplateToEditIsFresh = false
-                        newTemplateToEdit = copy
-                    }
-                },
-                onEditPresetFile: { openPresetInEditor($0) },
-                onRequestDeleteTemplate: {
-                    templateToDelete = $0
-                    showDeleteConfirmation = true
-                },
-                // Fix 2 (review): pinning reshapes lane 1 (moves a row
-                // between lanes) without changing the option COUNT, so
-                // neither `clampSelectedIndex` (keyed on `selectedProjectId`)
-                // nor `reselectBestMatch` (keyed on `searchText`) ever fires
-                // here — a stale index silently pointed Return at whatever
-                // row now sits at the OLD index, not the row the user had
-                // highlighted. Capture the highlighted option's id BEFORE
-                // the toggle reorders the lanes, then re-find it by id.
-                onTogglePin: { template in
-                    let previouslySelectedId = selectedOption?.id
-                    composerStore.togglePin(templateId: template.id)
-                    reselect(preserving: previouslySelectedId)
-                },
-                // `New template` moved in-list (Step 2) — a non-option row
-                // rendered after the last lane, NOT part of `flattenedOptions`
-                // (zero index-math change, no interaction with the G-F8 seed).
-                // Hidden while naming: `newTemplateRow` below takes over in
-                // the old footer position for that state.
-                showNewTemplateRow: !isAddingTemplate,
-                onNewTemplate: {
-                    newTemplateName = ""
-                    isAddingTemplate = true
-                },
-                // Step 4 (G-F7): a zero-project composer must never render
-                // a dead-end "No matches" — the empty-state row reaches the
-                // same NSOpenPanel flow the trailing project control (Step
-                // 5) and the inline picker's own "+ Add project…" row use.
-                isProjectsEmpty: store.projects.isEmpty,
-                onAddProject: { composerStore.addProjectViaPanel(workspaceStore: store) }
-            ) { option in
-                // Does NOT dismiss the popover here — `option.action()` (a
-                // template commit) only clears `isPresented` once the store
-                // confirms the write succeeded (S6). Dismissing eagerly, as
-                // this used to, closed the composer with no session and no
-                // visible error whenever `commit()`'s pre-check failed.
-                option.action()
-            }
-
-            // Variant G Pass B: three things compete for this one footer
-            // position. `footerSlot` is a `switch`-total pure decision
-            // (`SessionComposerCommandParser.footerSlot`) — never more than
-            // one case renders, structurally, not merely by convention.
-            switch footerSlot {
-            case .error(let message):
-                Text(message)
-                    .font(.system(size: subtitleFontSize))
-                    .foregroundStyle(Color(nsColor: .systemRed))
-                    // Review round 5: reverted to 10pt — round 4's move to
-                    // `footerHorizontalPadding` (16/18pt) gave the error
-                    // text a third left edge, off both `queryRow`'s 10pt
-                    // and the naming field's matching 10pt below.
-                    .padding(.horizontal, 10)
-                    .padding(.top, 6)
-            case .newTemplateName:
-                newTemplateRow
-            case .operators(let operators):
-                operatorFooterStrip(operators)
-            case .none:
-                EmptyView()
-            }
-        }
-        .frame(width: paletteWidth)
-        .background(
-            ZStack {
-                Rectangle().fill(.regularMaterial)
-                Rectangle().fill(backgroundColor).blendMode(.color)
-            }
-            .compositingGroup()
-        )
-        .clipShape(composerClipShape)
-        .overlay(
-            composerClipShape
-                .stroke(Color(nsColor: .tertiaryLabelColor).opacity(0.75))
-        )
-        // No-match Enter feedback: a 400ms red border pulse under
-        // reduce-motion, standing in for the shake below (`triggerNoMatchFeedback`).
-        .overlay(
-            composerClipShape
-                .stroke(Color(nsColor: .systemRed), lineWidth: 2)
-                .opacity(showNoMatchBorder ? 1 : 0)
-        )
-        .modifier(ShakeEffect(animatableData: shakeTrigger))
-    }
-
-    // MARK: - Zero-chrome / single-line shared field (spike)
-
-    /// The one-line field both new styles share (brief §1): 15pt SF Pro
-    /// Text, 38pt tall, 480pt text measure via `Self.zeroChromeFieldWidth`
-    /// below, reusing the SAME Model-B ghost text field and `handle(_:)`
-    /// event routing the shipping card wires today — no new ghost/ranking
-    /// logic, just a different chrome around it. `ghostFullPath` is blanked
-    /// at rest (`query.isEmpty`) so `ComposerDescriptorGhostText` owns the
-    /// rest-state hint text instead of the field's own placeholder ghost
-    /// (which would otherwise always show the chevron path first, the
-    /// thing Sean's rule forbids).
-    /// Round 12: `.singleLine`'s field text size, row size, and container
-    /// width are now live dials (`ComposerSingleLineTuning`) — the prior
-    /// fixed 512pt width constant this replaced is gone; see that enum's
-    /// doc comment for the exact ratios it preserves from the old fixed
-    /// 15pt/512pt/8pt/16pt numbers.
-    ///
-    /// `.zeroChrome` reads `ComposerZeroChromeTypography` (32/44pt,
-    /// unchanged). `.singleLine` reads the round 12 tuning dial
-    /// (`ComposerSingleLineTuning`, default 22pt, strawman "bigger" per
-    /// Sean's round 11 debrief). Only ever read from
-    /// `zeroChromeComposerCard`/`singleLineComposerCard` — `popoverComposerCard`
-    /// (`.anchored`) never reaches these.
+    /// The one-line field (brief §1): SF Pro Text at the tuned size, reusing
+    /// the Model-B ghost text field and `handle(_:)` event routing.
+    /// `ghostFullPath` is blanked at rest (`query.isEmpty`) so
+    /// `ComposerDescriptorGhostText` owns the rest-state hint text instead
+    /// of the field's own placeholder ghost (which would otherwise always
+    /// show the chevron path first, the thing Sean's rule forbids). Field
+    /// text size, row size, and container width are live dials
+    /// (`ComposerSingleLineTuning`).
     private var tuningDefaults: UserDefaults {
         tuningDefaultsForTesting ?? .standard
     }
 
     private var newStyleFieldFontSize: CGFloat {
-        switch activeStyle {
-        case .zeroChrome: return ComposerZeroChromeTypography.fieldSize
-        case .singleLine: return ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults)
-        }
+        ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults)
     }
 
     private var newStyleFieldLineHeight: CGFloat {
-        switch activeStyle {
-        case .zeroChrome: return ComposerZeroChromeTypography.fieldLineHeight
-        case .singleLine: return ComposerSingleLineTuning.lineHeight(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
-        }
+        ComposerSingleLineTuning.lineHeight(fieldSize: ComposerSingleLineTuning.fieldSize(defaults: tuningDefaults))
     }
 
     private var newStyleFieldWidth: CGFloat {
-        switch activeStyle {
-        case .zeroChrome: return zeroChromeMeasure
-        case .singleLine: return ComposerSingleLineTuning.width(defaults: tuningDefaults)
-        }
+        ComposerSingleLineTuning.width(defaults: tuningDefaults)
     }
 
     /// R18 fix: the width `newStyleField` actually renders its content at.
-    /// `.zeroChrome` is unchanged (`newStyleField` there is the only frame
-    /// in play — nothing wraps it in additional horizontal padding, so
-    /// `newStyleFieldWidth` alone is already correct). `.singleLine` is
-    /// different: `singleLineComposerCard` wraps the field in
+    /// `singleLineComposerCard` wraps the field in
     /// `singleLineHorizontalPadding` on each side and then re-frames the
     /// WHOLE padded stack back to `newStyleFieldWidth` (the card's own
-    /// tuned width, e.g. 688pt) so the card itself never grows past that
-    /// value. Framing the field at the FULL `newStyleFieldWidth` on top of
-    /// that padding made the padded stack's ideal width `newStyleFieldWidth
-    /// + 2 * padding`, which the card's fixed-width re-frame then centred
-    /// and clipped — the padding spilled outside the card instead of
-    /// insetting the text (see this commit's message for the pixel
-    /// diagnosis: ~1.5pt of inset measured live against a ~29.9pt intended
-    /// one). Subtracting both paddings here is the ONE inner-content-width
-    /// value that makes the padded stack's ideal width exactly
-    /// `newStyleFieldWidth` again, so the card's own frame stops fighting
-    /// its content.
+    /// tuned width) so the card itself never grows past that value.
+    /// Framing the field at the FULL `newStyleFieldWidth` on top of that
+    /// padding made the padding spill outside the card instead of insetting
+    /// the text. Subtracting both paddings here is the ONE inner-content
+    /// width that makes the padded stack's ideal width exactly
+    /// `newStyleFieldWidth` again.
     private var newStyleFieldRenderWidth: CGFloat {
-        switch activeStyle {
-        case .zeroChrome: return newStyleFieldWidth
-        case .singleLine: return newStyleFieldWidth - (2 * singleLineHorizontalPadding)
-        }
-    }
-
-    /// Round 10: `.zeroChrome`'s field wraps and grows up to
-    /// `ComposerZeroChromeTypography.maxFieldLines` lines — its height is
-    /// whichever of `zeroChromeDescriptorHeight`/`zeroChromeFieldTextHeight`
-    /// is actually on screen right now (`zeroChromeFieldContentHeight`
-    /// below). `.singleLine` is unaffected — fixed
-    /// `newStyleFieldLineHeight`, exactly as before.
-    private var newStyleFieldHeight: CGFloat {
-        activeStyle == .zeroChrome ? zeroChromeFieldContentHeight : newStyleFieldLineHeight
-    }
-
-    /// Round 10: the rest-state descriptor's own wrapped height, measured
-    /// live (`updateZeroChromeDescriptorHeight`) rather than assumed to be
-    /// one line — a long descriptor (`Tab completes · ↓ next match ·
-    /// Return launches`) can wrap inside the 640pt column.
-    @State private var zeroChromeDescriptorHeight: CGFloat = ComposerZeroChromeTypography.fieldLineHeight
-
-    /// Round 10: `ComposerGhostTextField`'s own reported wrapped-content
-    /// height while `activeStyle == .zeroChrome` (`measuredHeight` binding
-    /// below) — meaningless (and never read) for `.singleLine`.
-    @State private var zeroChromeFieldTextHeight: CGFloat = ComposerZeroChromeTypography.fieldLineHeight
-
-    /// Round 10: which of the two measured heights above is actually on
-    /// screen right now — the descriptor while the field is empty (typed
-    /// text hides it), the field's own wrapped text once typing starts.
-    /// Picking rather than combining avoids a same-turn race where the
-    /// SIDE THAT JUST HID reports a stale/zero height after the other one
-    /// already reported the correct one.
-    private var zeroChromeFieldContentHeight: CGFloat {
-        query.isEmpty ? zeroChromeDescriptorHeight : zeroChromeFieldTextHeight
-    }
-
-    private func updateZeroChromeDescriptorHeight(_ height: CGFloat) {
-        let capped = min(height, ComposerZeroChromeTypography.fieldLineHeight * CGFloat(ComposerZeroChromeTypography.maxFieldLines))
-        guard abs(capped - zeroChromeDescriptorHeight) > 0.5 else { return }
-        zeroChromeDescriptorHeight = capped
-    }
-
-    /// Round 12 ("one last ditch effort"): `.zeroChrome` only — `.left`
-    /// (unchanged) or `.center`, tunable live via the DEBUG pill's
-    /// `Alignment` picker. `.singleLine` always renders `.left`.
-    private var newStyleAlignment: ComposerZeroChromeAlignment {
-        activeStyle == .zeroChrome ? ComposerZeroChromeAlignment.current() : .left
+        newStyleFieldWidth - (2 * singleLineHorizontalPadding)
     }
 
     private var newStyleField: some View {
-        ZStack(alignment: newStyleAlignment.zstackAlignment) {
+        ZStack(alignment: .leading) {
             ComposerDescriptorGhostText(
                 descriptors: ComposerDescriptorCycle.descriptors(
                     mostRecentProjectName: currentProject?.name,
                     ghostPlaceholderPath: ghostPlaceholder
                 ),
                 query: query,
-                opacity: activeStyle == .zeroChrome ? ComposerZeroChromeTypography.ghostOpacity : 0.65,
+                opacity: 0.65,
                 reduceMotion: reduceMotionEnabled
             )
-            .font(
-                .system(
-                    size: newStyleFieldFontSize,
-                    weight: activeStyle == .zeroChrome ? ComposerZeroChromeTypography.fieldWeight : .regular
-                )
-            )
-            .multilineTextAlignment(newStyleAlignment.multilineAlignment)
+            .font(.system(size: newStyleFieldFontSize, weight: .regular))
             .allowsHitTesting(false)
-            // Round 10: the descriptor wraps within the column width
-            // (plain SwiftUI `Text` word-wraps by default; no lineLimit
-            // is set anywhere on this view) instead of assuming one line —
-            // measured here so the anchor math above can react to it.
-            .frame(width: newStyleFieldRenderWidth, alignment: newStyleAlignment.frameAlignment)
+            .frame(width: newStyleFieldRenderWidth, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear
-                        .onAppear { updateZeroChromeDescriptorHeight(proxy.size.height) }
-                        .onChange(of: proxy.size.height) { updateZeroChromeDescriptorHeight($0) }
-                }
-            )
 
             ComposerGhostTextField(
                 query: searchTextBinding,
                 fontSize: newStyleFieldFontSize,
-                fontWeight: activeStyle == .zeroChrome ? .semibold : .regular,
+                fontWeight: .regular,
                 rowHeight: newStyleFieldLineHeight,
                 focusTrigger: $composerStore.focusSearchFieldTrigger,
                 hasSelection: selectedOption != nil,
                 isPickerOpen: false,
-                ghostFullPath: query.isEmpty ? "" : ghostFullPathForModelB,
-                // Round 10: wraps + grows in `.zeroChrome` only —
-                // `.singleLine` never sets this, keeping its
-                // horizontally-scrolling single-line field byte-identical.
-                wrapsAndGrows: activeStyle == .zeroChrome,
-                // Round 12: `.center` only ever applies in `.zeroChrome`
-                // (`newStyleAlignment` above); `.singleLine`
-                // always pass `.left`, this field's prior, only alignment.
-                textAlignment: newStyleAlignment.nsTextAlignment,
-                measuredHeight: $zeroChromeFieldTextHeight
+                ghostFullPath: query.isEmpty ? "" : ghostFullPathForModelB
             ) { event in
                 handle(event)
             }
             .accessibilityLabel(ComposerQueryField.accessibilityFieldLabel)
         }
-        .frame(width: newStyleFieldRenderWidth, height: newStyleFieldHeight)
-        .onChange(of: zeroChromeFieldContentHeight) { newValue in
-            guard activeStyle == .zeroChrome else { return }
-            zeroChromeFieldHeight.wrappedValue = newValue
-        }
+        .frame(width: newStyleFieldRenderWidth, height: newStyleFieldLineHeight)
     }
 
-    /// Fix round 2 (finding 2): the classic "no worktree found" message
-    /// says "Use the create-branch suggestion above" — true in the
-    /// classic results list, where that row is always visible right
-    /// there, but wrong in the new styles (zero-chrome's rows are hidden
-    /// until `↓`/typing; single-line has no results list at all). Swaps in
-    /// `SessionComposerCopy.unresolvedBranchMessageForNewStyles`
-    /// (`cli/Sources/GhosttiesCore/SessionComposerCommandParser.swift`,
-    /// ADDED beside the existing constant, which is untouched — see that
-    /// file's doc comment) ONLY when we can confirm this IS that specific
-    /// message (`typedBranchResolution` is `.unresolved` for the same
-    /// token `writeError` was set from) — every OTHER `writeError` string
-    /// (e.g. the "still checking branches" pending message) passes through
-    /// `statusStripMessage` unchanged. Reconstructs from the LIVE typed
-    /// token rather than string-matching the classic text, since this view
-    /// already has `typedBranchResolution` and doesn't need to.
+    /// The classic "no worktree found" message says "Use the create-branch
+    /// suggestion above" — wrong here, where there is no results list.
+    /// Swaps in `SessionComposerCopy.unresolvedBranchMessageForNewStyles`
+    /// ONLY when we can confirm this IS that specific message
+    /// (`typedBranchResolution` is `.unresolved` for the same token
+    /// `writeError` was set from) — every OTHER `writeError` string (e.g.
+    /// the "still checking branches" pending message) passes through
+    /// `statusStripMessage` unchanged.
     private var newStyleStatusStripMessage: String? {
         if composerStore.writeError != nil,
            case .unresolved(let token) = typedBranchResolution {
@@ -2068,148 +1318,15 @@ struct SessionComposerPalette: View {
         return statusStripMessage
     }
 
-    /// Status strip: the one thing that stays loud in both new styles
-    /// (brief §1) — rendered only when non-nil, red, directly beneath the
-    /// field.
-    private var newStyleStatusStripSize: CGFloat {
-        switch activeStyle {
-        case .zeroChrome: return ComposerZeroChromeTypography.statusStripSize
-        case .singleLine: return ComposerSingleLineTuning.rowSize(defaults: tuningDefaults)
-        }
-    }
-
+    /// Status strip: the one thing that stays loud (brief §1) — rendered
+    /// only when non-nil, red, directly beneath the field.
     @ViewBuilder
     private var newStyleStatusStrip: some View {
         if let newStyleStatusStripMessage {
-            // Round 12: `.singleLine`'s status/row text now reads the
-            // `ComposerSingleLineTuning.rowSize` dial (default 16pt, was
-            // the fixed 11pt this ternary used to fall through to) — the
-            // "row text 13→16pt" strawman from the brief's item 2.
             Text(newStyleStatusStripMessage)
-                .font(.system(size: newStyleStatusStripSize))
+                .font(.system(size: ComposerSingleLineTuning.rowSize(defaults: tuningDefaults)))
                 .foregroundStyle(Color(nsColor: .systemRed))
-                .padding(.top, activeStyle == .zeroChrome ? ComposerZeroChromeTypography.statusStripTopOffset : 0)
         }
-    }
-
-    /// Up to 5 ranked candidate rows, fixed slot count, crossfade in place
-    /// (zero-chrome typing state only, brief §2). Selected row uses
-    /// `composerSelectionAccent` text, never a filled bar. Fix round 2,
-    /// item 8: `.zeroChrome` rows read `ComposerZeroChromeTypography`
-    /// (20pt `.medium`, 30pt line height); `.singleLine` never renders
-    /// rows at all, so there's no other caller to preserve here.
-    private var newStyleCandidateRows: some View {
-        ForEach(Array(flattenedOptions.prefix(5).enumerated()), id: \.element.id) { pair in
-            let (offset, option) = pair
-            let isSelected = selectedOption?.id == option.id
-            Text(option.title)
-                .font(.system(size: ComposerZeroChromeTypography.rowSize, weight: ComposerZeroChromeTypography.rowWeight))
-                .lineSpacing(ComposerZeroChromeTypography.rowLineHeight - ComposerZeroChromeTypography.rowSize)
-                .foregroundStyle(isSelected ? WorkspaceLayout.composerSelectionAccent : Color(nsColor: .labelColor))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture { option.action() }
-                .transition(
-                    reduceMotionEnabled
-                        ? .opacity
-                        : .asymmetric(
-                            insertion: .opacity.combined(with: .offset(y: 3))
-                                .animation(.easeOut(duration: 0.09).delay(Double(offset) * 0.02)),
-                            removal: .opacity.animation(.easeIn(duration: 0.18))
-                        )
-                )
-        }
-    }
-
-    /// Fix round (finding 3): `↓` on an empty field must reveal rows too,
-    /// not just typing — `zeroChromeRowsRevealedByArrow` covers that edge,
-    /// reset on every fresh summon (`onChange(of: isPresented)` above).
-    private var showNewStyleRows: Bool {
-        activeStyle == .zeroChrome && (!query.isEmpty || zeroChromeRowsRevealedByArrow)
-    }
-
-    // MARK: - Zero-chrome style (spike)
-
-    /// No card, no border, no radius, no shadow, no scrim (brief §2).
-    /// Fix round 2, item 5: the blur wash is no longer rendered HERE at
-    /// all — `SessionComposerOverlay` now paints it full-bleed, BEHIND
-    /// this whole content (field + rows), since it covers the entire
-    /// window rather than a patch sized to the field. Vertical placement
-    /// (38% of window height) is still `SessionComposerOverlay`'s job.
-    /// Fix round (independent review, BLOCKER 1): the earlier `onAppear`
-    /// implementation forced `zeroChromeRevealed = false` THEN animated it
-    /// back to `true` — contradicting that property's own settled-by-
-    /// default contract and guaranteeing a real (if brief) unrevealed first
-    /// frame on every mount, which the offscreen snapshot harness (no
-    /// animation pump) caught as a genuinely blank capture.
-    ///
-    /// An `AnyTransition`-based replacement was tried next and ALSO
-    /// rejected (broke the adjacent row list's rendering in the same
-    /// offscreen harness). Fix round 2 lands the reviewer's actual
-    /// prescribed mechanism: `revealPhase` is owned by
-    /// `SessionComposerOverlay` (the only thing that knows "one frame
-    /// after mount"), flows in as a `Binding`, and drives per-view
-    /// `.animation(_, value:)` curves computed from the destination phase
-    /// (`zeroChromeWashAnimation`/`zeroChromeTextAnimation`,
-    /// `ComposerZeroChromeStyle.swift`) — no `onAppear` reset, no
-    /// `AnyTransition`. The snapshot harness (and every other test/call
-    /// site) defaults to `.constant(.revealed)`, so first paint is never
-    /// blank there either.
-    private var zeroChromeComposerCard: some View {
-        // Fix round 2, item 6: the outer `VStack` had no explicit
-        // `alignment:`, defaulting to `.center` — with the field's own
-        // frame (480pt) narrower than this card's (512pt), the field sat
-        // CENTERED (16pt inset each side) while the rows block below
-        // declared `alignment: .leading` explicitly, starting flush at the
-        // card's left edge — the ~12-16pt gap Sean measured between rows
-        // and the field's typed text. `.leading` here makes both align to
-        // the SAME edge.
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 6) {
-                newStyleField
-                newStyleStatusStrip
-            }
-            .opacity(revealPhase.wrappedValue == .revealed ? 1 : 0)
-            // Fix round 4, item 1: summon (`.hidden`) starts offset +4pt,
-            // sliding to 0 on the same curve as the opacity fade below —
-            // the Timing board's summon text transition is opacity 0→1
-            // AND y 4→0, not opacity-only. `.committing` keeps its own
-            // -6pt offset; `.revealed`/`.dismissing` sit at 0.
-            .offset(y: {
-                switch revealPhase.wrappedValue {
-                case .hidden: return ComposerZeroChromeTiming.summonTextOffsetY
-                case .committing: return ComposerZeroChromeTiming.commitTextOffsetY
-                case .revealed, .dismissing: return 0
-                }
-            }())
-            .animation(
-                zeroChromeTextAnimation(for: revealPhase.wrappedValue, reduceMotion: reduceMotionEnabled),
-                value: revealPhase.wrappedValue
-            )
-
-            if showNewStyleRows {
-                VStack(alignment: .leading, spacing: 4) {
-                    newStyleCandidateRows
-                }
-                .padding(.top, ComposerZeroChromeTypography.rowTopOffset - 8) // outer VStack's own 8pt spacing already covers part of the gap
-                .frame(width: newStyleFieldWidth, alignment: .leading)
-                .transition(.opacity)
-                // B1 fix: `showNewStyleRows` tracks query/arrow state only,
-                // not `revealPhase` — on `.committing`/`.dismissing` the
-                // field+status stack above fades via its own `.opacity`
-                // binding, but this block had no such gate, so the rows
-                // stayed fully painted after the field and wash were gone.
-                // Same phase check, same curve as the text block immediately
-                // above (`zeroChromeTextAnimation`), so rows and text
-                // fade out together.
-                .opacity(revealPhase.wrappedValue == .revealed ? 1 : 0)
-                .animation(
-                    zeroChromeTextAnimation(for: revealPhase.wrappedValue, reduceMotion: reduceMotionEnabled),
-                    value: revealPhase.wrappedValue
-                )
-            }
-        }
-        .frame(width: newStyleFieldWidth)
     }
 
     // MARK: - Single-line style (spike)
@@ -2237,7 +1354,7 @@ struct SessionComposerPalette: View {
     }
 
     private var singleLineClipShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: singleLineCornerRadius, style: cornerStyle)
+        RoundedRectangle(cornerRadius: singleLineCornerRadius, style: .continuous)
     }
 
     /// Pure function extracted from the overlay modifier below so it's
@@ -2356,458 +1473,6 @@ struct SessionComposerPalette: View {
         }
     }
 
-    // MARK: - Query row (type-first field, model A rebuild)
-    //
-    // Replaces Slice A/B's project/branch chips with plain text entry: the
-    // field holds `composerStore.searchText` verbatim (`searchTextBinding`).
-    // The resolution line that used to sit beneath it is deleted (Composer
-    // UI 11 plan §3 Step 5, §4 table) — its six labels and two mouse routes
-    // were each given a named successor: the ghost placeholder (Step 3) and
-    // the status strip (Step 4). The trailing `projectControl`/
-    // `branchControl` buttons that briefly stood in as the third successor
-    // are themselves gone (ultra-minimal variant C, 2026-08-30, PR #155,
-    // matching this file's own header comment above) — the results list
-    // below the field is the only remaining mouse route into
-    // projects/templates. `trailingControlVisibility`/`projectControl`/
-    // `branchControl`/`inlineProjectPicker`/`inlineBranchPicker` below still
-    // exist as unreachable dead code (Sean has not decided whether to
-    // delete them); nothing sets `isProjectPickerOpen`/`isBranchPickerOpen`
-    // to `true` any more.
-
-    /// Visibility + content for the now-unreachable `projectControl`/
-    /// `branchControl`. Unreferenced by any production call site — all 8
-    /// tests in `SessionComposerTrailingControlTests` call the
-    /// `GhosttiesCore` static `SessionComposerCommandParser
-    /// .trailingControlVisibility(...)` directly, not this property —
-    /// retained only pending Sean's decision on whether to delete it (see
-    /// the `MARK` above), not because anything still depends on it.
-    private var trailingControlVisibility: SessionComposerCommandParser.TrailingControlVisibility {
-        SessionComposerCommandParser.trailingControlVisibility(
-            isProjectLocked: isProjectLocked,
-            isBranchSegmentEligible: isBranchSegmentEligible,
-            isCreatingWorktree: composerStore.isCreatingWorktree,
-            currentBranchLabel: currentBranchLabel
-        )
-    }
-
-    private var queryRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                // Step 7: the model B swap point (plan §5 — "one `if` in
-                // `queryRow`"). `ComposerQueryField` itself is untouched;
-                // everything it needs from this view still flows through
-                // identically either way.
-                Group {
-                    if usesModelBFieldForTesting {
-                        ZStack {
-                            // Fix 1 (review, plan §5 A-F11): the four hidden
-                            // ↑/↓/⌃P/⌃N `.keyboardShortcut` Buttons and the
-                            // `isPickerOpen` mounting logic, RETAINED from
-                            // `ComposerQueryField` — restoring a construction
-                            // item the plan explicitly required kept, which
-                            // had been dropped and undocumented.
-                            // `ComposerGhostTextField`'s own arrow handling
-                            // lives only in `doCommandBySelector`, which is
-                            // FIRST-RESPONDER scoped; without these, an
-                            // `NSOpenPanel` round trip or any click landing
-                            // on a non-text subview leaves ↑/↓/⌃P/⌃N dead
-                            // with no visible cause, and ⌃P/⌃N are not key
-                            // equivalents at all so they have no
-                            // window-level fallback. Same `!isPickerOpen`
-                            // conditional MOUNTING (not action no-op) as
-                            // `ComposerQueryField.body`'s round-2 fix, so the
-                            // picker's own handlers are the only ones
-                            // registered while it's open.
-                            Group {
-                                if !(isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible)) {
-                                    Button { handle(.move(.up)) } label: { Color.clear }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .keyboardShortcut(.upArrow, modifiers: [])
-                                    Button { handle(.move(.down)) } label: { Color.clear }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .keyboardShortcut(.downArrow, modifiers: [])
-
-                                    Button { handle(.move(.up)) } label: { Color.clear }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .keyboardShortcut(.init("p"), modifiers: [.control])
-                                    Button { handle(.move(.down)) } label: { Color.clear }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .keyboardShortcut(.init("n"), modifiers: [.control])
-                                }
-                            }
-                            .frame(width: 0, height: 0)
-                            .accessibilityHidden(true)
-
-                            ComposerGhostTextField(
-                                query: searchTextBinding,
-                                fontSize: fieldFontSize,
-                                rowHeight: fieldHeight,
-                                focusTrigger: $composerStore.focusSearchFieldTrigger,
-                                hasSelection: selectedOption != nil,
-                                isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
-                                ghostFullPath: ghostFullPathForModelB
-                            ) { event in
-                                handle(event)
-                            }
-                            .accessibilityLabel(ComposerQueryField.accessibilityFieldLabel)
-                        }
-                    } else {
-                        ComposerQueryField(
-                            query: searchTextBinding,
-                            fontSize: fieldFontSize,
-                            focusTrigger: $composerStore.focusSearchFieldTrigger,
-                            hasSelection: selectedOption != nil,
-                            // D6/B3: while EITHER inline picker is open, the field's
-                            // own ↑/↓/Return handlers must go quiet — see
-                            // `ComposerQueryField.isPickerOpen`'s doc comment. The
-                            // two pickers are mutually exclusive by construction
-                            // (see `isBranchPickerOpen`'s doc comment) — the field
-                            // only needs "is ANY picker open", the OR.
-                            isPickerOpen: isProjectPickerOpen || (isBranchPickerOpen && isBranchSegmentEligible),
-                            placeholder: ghostPlaceholder
-                        ) { event in
-                            handle(event)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(height: fieldHeight)
-            .padding(.horizontal, 10)
-
-            if isProjectPickerOpen {
-                Divider()
-                inlineProjectPicker
-            } else if isBranchPickerOpen && isBranchSegmentEligible {
-                // Finding 14 fix (Slice B review round 1, still applies):
-                // gated on eligibility too, not just the flag — a project
-                // change cascades `worktrees`/`branchesWithoutWorktree` to
-                // empty (making the branch segment itself stop rendering)
-                // without necessarily flipping `isBranchPickerOpen` back to
-                // false in the same instant, which used to leave this picker
-                // expanded with no segment above it while
-                // `ComposerQueryField.isPickerOpen` still kept the field's
-                // own ↑/↓/Return handlers unmounted.
-                Divider()
-                inlineBranchPicker
-            }
-        }
-        // A5: Esc while inside the inline picker (i.e. NOT in the text
-        // field, which has its own `onExitCommand` below that routes
-        // through the same `closeChipPickerOrDismiss`) closes the picker
-        // without closing the composer.
-        .onExitCommand(perform: closeChipPickerOrDismiss)
-        // Nit fix (Slice B review round 2, still applies): `isBranchPickerOpen`
-        // was never reset when `isBranchSegmentEligible` flipped false (e.g.
-        // the resolved project changes to a non-git project while the
-        // branch picker happened to be open) — the flag latched `true`, so
-        // the picker silently re-expanded the next time eligibility
-        // returned with no click in between.
-        .onChange(of: isBranchSegmentEligible) { eligible in
-            if !eligible { isBranchPickerOpen = false }
-        }
-        // B3: opening the branch picker is also a refresh trigger (on top
-        // of the project-selection and initial-open triggers) — Sean runs
-        // 2-7 parallel sessions creating worktrees constantly, so this is
-        // the moment accuracy matters most. Lives here rather than on
-        // `branchControl`'s own `Button` since `isBranchPickerOpen` is what
-        // actually drives it, not the click itself.
-        .onChange(of: isBranchPickerOpen) { isOpen in
-            guard isOpen, let project = currentProject else { return }
-            _Concurrency.Task { await composerStore.refreshWorktrees(for: project.rootPath, projectId: project.id) }
-        }
-    }
-
-    /// `ProjectDropdownView`'s list content, reused verbatim, but presented
-    /// as an expansion inline inside the composer card instead of via
-    /// `.popover` — see the type's own doc comment for why that was
-    /// fragile. `currentProject?.id`, not the raw
-    /// `composerStore.selectedProjectId`, is the single source of truth
-    /// passed in for both cascade ordering and the selected-row highlight —
-    /// fixes the checkmark-vs-label disagreement that existed whenever a
-    /// typed command resolved a DIFFERENT project than `selectedProjectId`
-    /// still read.
-    ///
-    /// UNREACHABLE BY MOUSE as of Variant G Pass C (2026-08-30):
-    /// `isProjectPickerOpen` (the flag that mounts this view, `if
-    /// isProjectPickerOpen` above) had exactly one site that ever set it
-    /// `true` — `projectControl`'s tap handler — and that control is now
-    /// deleted. Every remaining reference to `isProjectPickerOpen` only sets
-    /// it `false` (dismiss paths) or reads it. Left working and un-deleted
-    /// per this pass's scope — it is entangled with `isBranchPickerOpen`
-    /// (mutual-exclusion invariant, see that state's doc comment) and with
-    /// `ComposerQueryField.isPickerOpen` / `ComposerGhostTextField.isPickerOpen`,
-    /// which gate the field's own ↑/↓/Return keyboard handlers; unwinding
-    /// that on a branch this long is a separate, riskier change than this
-    /// pass's brief covers.
-    private var inlineProjectPicker: some View {
-        ProjectDropdownView(selectedProjectId: currentProject?.id) { project in
-            changeProjectChip(to: project)
-        } onAddProject: {
-            composerStore.addProjectViaPanel(workspaceStore: store)
-            isProjectPickerOpen = false
-        }
-        .environmentObject(store)
-    }
-
-    // MARK: - Branch picker (Slice B, B3 — chip deleted, picker kept)
-
-    /// `WorktreeDropdownView`'s list content, presented as an inline
-    /// expansion inside the card — NEVER a `.popover`, same reasoning as
-    /// `inlineProjectPicker` (a nested popover is exactly what Slice A
-    /// deleted: a child taking key can dismiss the parent composer).
-    private var inlineBranchPicker: some View {
-        WorktreeDropdownView(
-            worktrees: composerStore.worktrees,
-            branchesWithoutWorktree: composerStore.branchesWithoutWorktree,
-            currentBranchAtProjectRoot: composerStore.currentBranchAtProjectRoot,
-            isRefreshing: composerStore.isRefreshingWorktrees,
-            selectedWorktreePath: composerStore.selectedWorktreePath,
-            onSelectDefault: {
-                composerStore.clearBranchChip()
-                isBranchPickerOpen = false
-            },
-            onSelectWorktree: { path in
-                changeBranchChip(to: path)
-            },
-            // B4 — this row NEVER launches (finding 1, review round 2): it
-            // fires from a control unrelated to the search field, so
-            // "the composer field resolves to something launchable" has no
-            // meaning here the way it does for the typed-branch row in
-            // `commandOptions` — a picker-initiated creation always takes
-            // the ruling's second half (park with the branch resolved, the
-            // composer left open, the template list focused), regardless of
-            // whatever happens to be typed in the field. Closes the picker
-            // (mirroring `onSelectDefault`/`onSelectWorktree` above) and
-            // arms creation; `reselectBestMatch()` runs once it lands so
-            // the highlight moves onto the template list.
-            onCreateWorktree: { branchName in
-                guard let project = currentProject else { return }
-                isBranchPickerOpen = false
-                composerStore.createWorktree(named: branchName, in: project) { _ in
-                    reselectBestMatch()
-                }
-            }
-        )
-    }
-
-    // MARK: - Footer: contextual operator strip (Variant G Pass B, "F" half)
-    //
-    // Renders the operators live right now — never the approved mockup's
-    // static four-chord row. `⌥↵ new worktree` does not exist anywhere in
-    // the composer (see `SessionComposerCommandParser.FooterOperatorHint`'s
-    // doc comment) and is never in `operators` below.
-
-    /// Model B's ghost remainder text, computed the same way
-    /// `ComposerGhostTextField.acceptGhost` derives what Tab would consume —
-    /// reusing that type's own pure `remainderGhost(typed:fullPath:)`
-    /// rather than re-deriving a second copy. Empty whenever the
-    /// experimental model-B field isn't the one mounted (`⇥` genuinely does
-    /// nothing against model A's plain `TextField`, which has no Tab
-    /// interception at all), matching this footer's "only what's live"
-    /// premise.
-    private var modelBGhostRemainder: String {
-        guard usesModelBFieldForTesting else { return "" }
-        return ComposerGhostTextField.remainderGhost(typed: composerStore.searchText, fullPath: ghostFullPathForModelB)
-    }
-
-    /// The operators live right now — factored out of `footerSlot` below
-    /// purely to keep that combinator's body a single call, not a testing
-    /// seam (reading it still requires the real `@EnvironmentObject`s a
-    /// hosted render provides; see `SessionComposerSnapshotTests`).
-    private var liveFooterOperators: [SessionComposerCommandParser.FooterOperatorHint] {
-        SessionComposerCommandParser.footerOperators(
-            hasSelection: selectedOption != nil,
-            hasGhostRemainder: !modelBGhostRemainder.isEmpty,
-            hasMultipleOptions: flattenedOptions.count > 1,
-            hasPendingChipUndo: composerStore.pendingChipUndo != nil
-        )
-    }
-
-    /// The three-way footer precedence, read from the one pure decision
-    /// (`SessionComposerCommandParser.footerSlot`) rather than three
-    /// independent `if`s the view body could satisfy at once.
-    private var footerSlot: SessionComposerCommandParser.FooterSlot {
-        SessionComposerCommandParser.footerSlot(
-            errorMessage: statusStripMessage,
-            isAddingTemplate: isAddingTemplate,
-            operators: liveFooterOperators
-        )
-    }
-
-    /// Round 7: rounds 3/5/6 each computed an analytic width model for this
-    /// strip and each disagreed with what the renderer actually does — round
-    /// 6's "170.14pt vs 172pt, fits" was rendered and still truncated
-    /// (`docs/plans/composer-ui-11/evidence/variant-g-anchored-three-operators-light.png`).
-    /// No further arithmetic is trusted here. `operatorFooterStrip` now uses
-    /// `ViewThatFits` (macOS 13.0+, at deployment target) to let SwiftUI
-    /// itself pick the widest child that actually fits the proposed width —
-    /// labeled when there's room, glyph-only when there isn't. Spacing is
-    /// back to 14pt (the approved Pass B value); the 11pt tightening in
-    /// round 6 was a failed fix for a problem this now solves structurally.
-
-    /// Review round 4, P3: the results VStack's own `.padding(8)`
-    /// (`ComposerResultsTable.body`) plus `rowHorizontalPadding` is the
-    /// full inset a row title sits at from the card's left edge — no
-    /// enclosing padding wraps this strip, so this value must be applied
-    /// directly as its own horizontal padding to land on that same edge.
-    /// Review round 5: this is the operator strip's padding ONLY. Round 4
-    /// also moved the error text and naming field onto this value, which
-    /// gave them a third left edge distinct from `queryRow`'s — both were
-    /// reverted to the hardcoded 10pt they share with `queryRow` (see the
-    /// `.error` case and `newTemplateRow`, both below).
-    private var footerHorizontalPadding: CGFloat {
-        8 + rowHorizontalPadding
-    }
-
-    /// Review round 4, P2 test fix: no longer `private` — the round-2/3
-    /// `fourOperatorFooterStripDoesNotWrapAtAnchoredWidth` test copied this
-    /// entire `HStack` (including `.lineLimit(1)`) into the test body,
-    /// re-implementing the exact thing under test rather than exercising
-    /// it — a tautology that stayed green even after deleting `.lineLimit(1)`
-    /// from production. `internal` visibility lets
-    /// `SessionComposerSnapshotTests` call the real production function
-    /// directly (this repo's established precedent for testing a private-
-    /// turned-internal View helper — see `ComposerCardFitTests`). Round 5:
-    /// no test calls this directly with a synthetic 4th operator anymore —
-    /// `anchoredCannotReachFourOperators` tests the structural guard
-    /// (`usesModelBFieldForTesting`) instead, since 4 labeled operators
-    /// genuinely don't fit `.anchored`'s width and the guard, not this
-    /// function's layout, is what prevents that. Visibility left `internal`
-    /// regardless — no reason to re-narrow it.
-    func operatorFooterStrip(
-        _ operators: [SessionComposerCommandParser.FooterOperatorHint]
-    ) -> some View {
-        // Round 7: `ViewThatFits` replaces the fixed-spacing + analytic-
-        // width approach (rounds 3/5/6, all wrong per the doc comment
-        // above). It renders the first child whose ideal size fits the
-        // proposed width — labeled strip when there's room, glyph-only
-        // strip when there isn't — so no width number here needs to be
-        // right. Spacing restored to 14pt (Pass B's approved value).
-        ViewThatFits(in: .horizontal) {
-            operatorRow(operators, showLabels: true, spacing: 14)
-            operatorRow(operators, showLabels: false, spacing: 14)
-        }
-        // Review round 4, P3: was a hardcoded 18pt, believed to match the
-        // row/header left edge — it did not (`.anchored`'s real row edge is
-        // 16pt; see `footerHorizontalPadding`'s doc comment and the header
-        // padding fix in `ComposerResultsTable.body`). No enclosing VStack
-        // padding wraps this strip, so this value IS the full inset from
-        // the card's left edge.
-        .padding(.horizontal, footerHorizontalPadding)
-        .frame(height: 26)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor))
-                .frame(height: 1)
-        }
-        .background(Color.secondary.opacity(0.08))
-        .accessibilityElement(children: .combine)
-        // Accessibility label announces glyph AND label together, matching
-        // what's drawn in both presentations.
-        .accessibilityLabel(operators.map { "\($0.glyph) \($0.label)" }.joined(separator: ", "))
-    }
-
-    /// One candidate strip for `ViewThatFits` — glyph-only or glyph+label,
-    /// same fonts/colors either way. `internal` for the same reason
-    /// `operatorFooterStrip` is: `SessionComposerSnapshotTests` calls
-    /// production view helpers directly rather than re-implementing them.
-    func operatorRow(
-        _ operators: [SessionComposerCommandParser.FooterOperatorHint],
-        showLabels: Bool,
-        spacing: CGFloat
-    ) -> some View {
-        HStack(spacing: spacing) {
-            ForEach(Array(operators.enumerated()), id: \.offset) { _, op in
-                HStack(spacing: 4) {
-                    Text(op.glyph)
-                        .font(footerGlyphFont)
-                        .foregroundColor(Color(nsColor: .labelColor))
-                        .lineLimit(1)
-                    if showLabels {
-                        Text(op.label)
-                            .font(footerLabelFont)
-                            .foregroundColor(Color(nsColor: .secondaryLabelColor))
-                            .lineLimit(1)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    // MARK: - Footer: naming a new template
-    //
-    // Step 2: the idle "+ New template…" affordance moved IN-LIST
-    // (`ComposerResultsTable`'s trailing row, `showNewTemplateRow`/
-    // `onNewTemplate`) — this computed property now renders ONLY the
-    // inline-naming `TextField`, in the same footer position it always
-    // rendered in, while `isAddingTemplate` is true.
-
-    @ViewBuilder
-    private var newTemplateRow: some View {
-        if isAddingTemplate {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                    .font(.system(size: 11))
-                    .frame(width: 16)
-                TextField("Template name", text: $newTemplateName)
-                    .font(.system(size: rowFontSize, weight: .medium))
-                    .textFieldStyle(.plain)
-                    .focused($newTemplateNameFocused)
-                    .onSubmit { commitNewTemplate() }
-                    .onExitCommand { cancelNewTemplate() }
-            }
-            // Review round 5: reverted to 10pt, same reasoning as the
-            // error text above — this is the composer's second text
-            // input and must align with `queryRow`'s edge, its first.
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .onAppear {
-                DispatchQueue.main.async { newTemplateNameFocused = true }
-            }
-        }
-    }
-
-    private func commitNewTemplate() {
-        guard isAddingTemplate else { return }
-        isAddingTemplate = false
-        let trimmed = newTemplateName.trimmingCharacters(in: .whitespacesAndNewlines)
-        newTemplateName = ""
-        guard !trimmed.isEmpty else { return }
-        let template = store.addTemplate(AgentTemplate(name: trimmed, kind: .custom))
-        newTemplateToEditIsFresh = true
-        newTemplateToEdit = template
-    }
-
-    private func cancelNewTemplate() {
-        isAddingTemplate = false
-        newTemplateName = ""
-    }
-
-    // MARK: - Template context menu actions (S4, ported from
-    // `TemplatePickerView` — that view now has zero callers, so everything
-    // it owned, most seriously `store.removeTemplate`'s only UI caller, was
-    // unreachable).
-
-    /// Preset files live at `~/.ghostties/presets/<slug>.md`. Duplicated
-    /// from `TemplatePickerView.openPresetInEditor` (that method is
-    /// `private` to a different file, not reachable from here).
-    private func openPresetInEditor(_ template: AgentTemplate) {
-        let filename = template.name.lowercased().replacingOccurrences(of: " ", with: "-") + ".md"
-        let path = (PresetLoader.presetsDirectoryPath as NSString).appendingPathComponent(filename)
-
-        // Validate the resolved path stays within the presets directory.
-        let resolvedPath = (path as NSString).standardizingPath
-        let presetsDir = (PresetLoader.presetsDirectoryPath as NSString).standardizingPath
-        guard resolvedPath.hasPrefix(presetsDir + "/") else { return }
-
-        let url = URL(fileURLWithPath: resolvedPath)
-        if FileManager.default.fileExists(atPath: resolvedPath) {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
     // MARK: - Actions
 
     /// Clamp `selectedIndex` into range rather than nil-ing out — the old
@@ -2846,32 +1511,6 @@ struct SessionComposerPalette: View {
             return
         }
         selectedIndex = bestSelectionIndex(in: options)
-    }
-
-    /// Fix 2 (review): reseeds `selectedIndex` to the option that was
-    /// highlighted BEFORE a pin toggle reshaped the lanes, by id rather than
-    /// by index — the option's position in `flattenedOptions` moves (lane 1
-    /// vs lane 2) but its identity doesn't. Falls back to
-    /// `reselectBestMatch()` if the id no longer resolves (defensive; not
-    /// expected on this call path since pinning never removes an option).
-    private func reselect(preserving optionId: UUID?) {
-        if let index = Self.reselectedIndex(preserving: optionId, in: flattenedOptions) {
-            selectedIndex = index
-        } else {
-            reselectBestMatch()
-        }
-    }
-
-    /// Pure seam for `reselect(preserving:)` above — extracted the same way
-    /// `composeLane1` was (this file's established pattern) so the
-    /// by-id-not-by-index fix is a testable production symbol without a
-    /// SwiftUI view-test harness. `nil` means "the id no longer resolves,
-    /// fall back to `reselectBestMatch()`" — not expected on the pin-toggle
-    /// call path, since pinning only reorders lanes, it never removes an
-    /// option.
-    static func reselectedIndex(preserving optionId: UUID?, in options: [ComposerOption]) -> UInt? {
-        guard let optionId, let index = options.firstIndex(where: { $0.id == optionId }) else { return nil }
-        return UInt(index)
     }
 
     private func commit(template: AgentTemplate) {
@@ -2919,10 +1558,6 @@ struct SessionComposerPalette: View {
         // "undo" this from here, and the palette re-shows on failure
         // anyway (S6, see `body`'s `onChange(of: isPresented)` chain) —
         // acceptable for a spike, flagged rather than engineered around.
-        if activeStyle == .zeroChrome {
-            revealPhase.wrappedValue = .committing
-        }
-
         // S1: reset the stale index up front. `recordRecent` (inside the
         // store's precommit) reorders RECENT, which would otherwise leave
         // `selectedIndex` pointing at the wrong row if the composer stays
@@ -2988,9 +1623,6 @@ struct SessionComposerPalette: View {
             // precommit. This early return skipped that restoration
             // entirely, so a rejected typed-branch commit left the
             // composer open but faded to invisible. Mirror B2's fix here.
-            if activeStyle == .zeroChrome {
-                revealPhase.wrappedValue = .revealed
-            }
             return
         }
 
@@ -3040,9 +1672,6 @@ struct SessionComposerPalette: View {
             // outside `.zeroChrome` (`revealPhase` defaults
             // `.constant(.revealed)` there, so this write matches the
             // existing value).
-            if activeStyle == .zeroChrome {
-                revealPhase.wrappedValue = .revealed
-            }
         }
     }
 
@@ -3063,10 +1692,7 @@ struct SessionComposerPalette: View {
             // opens either picker, so this is always the dismiss branch in
             // practice, but the guard matches `closeChipPickerOrDismiss`'s
             // own condition rather than assuming that.
-            if activeStyle == .zeroChrome, !isBranchPickerOpen, !isProjectPickerOpen {
-                revealPhase.wrappedValue = .dismissing
-            }
-            closeChipPickerOrDismiss()
+            dismissComposer()
 
         case .submit:
             selectedOption?.action()
@@ -3086,7 +1712,6 @@ struct SessionComposerPalette: View {
             // alongside the existing `!query.isEmpty` gate. Set
             // unconditionally (cheap, harmless for `.singleLine`,
             // which never read it).
-            zeroChromeRowsRevealedByArrow = true
             if flattenedOptions.isEmpty { break }
             let current = selectedIndex ?? UInt.max
             selectedIndex = (current >= UInt(flattenedOptions.count - 1)) ? 0 : current + 1
@@ -3106,87 +1731,13 @@ struct SessionComposerPalette: View {
         }
     }
 
-    // MARK: - Project/branch control actions (trailing controls, model A —
-    // was "Breadcrumb chip actions, Slice A" before the chips were deleted,
-    // then the resolution line's segment actions before Step 5 deleted it)
-
-    /// Change the resolved project via the inline picker. The cascade rule
-    /// (clear-on-change, no-op-on-repick) and the ⌘Z undo capture both live
-    /// on `SessionComposerStore` — testable there without constructing this
-    /// view. "Currently shown" (A6's single source of truth) is resolved
-    /// through `SessionComposerCommandParser.resolveCommitProjectId` — the
-    /// SAME precedence rule `currentProject` itself applies (a resolved
-    /// command project wins over `selectedProjectId`) — rather than
-    /// re-deriving it inline as `currentProject?.id`, so this call site is
-    /// backed by the one place that rule has real unit coverage. The
-    /// inert-test review finding (breadcrumb chip review) flagged that
-    /// coverage as call-site-only and unreachable from a store-level test;
-    /// routing through the shared, tested function is what's actually
-    /// achievable without a SwiftUI view-test harness this repo doesn't
-    /// have — see `resolveCommitProjectId`'s own doc comment for the same
-    /// honest limitation.
-    private func changeProjectChip(to project: Project) {
-        isProjectPickerOpen = false
-        let currentlyShownId = SessionComposerCommandParser.resolveCommitProjectId(
-            commandProjectId: commandProject?.id,
-            selectedProjectId: composerStore.selectedProjectId
-        )
-        composerStore.changeProjectChip(to: project.id, currentlyShown: currentlyShownId)
-    }
-
-    /// ⌘Z restores the segment(s) the most recent project-segment change
-    /// cleared, as one step.
-    private func undoChipCascade() {
-        composerStore.undoProjectChipChange()
-    }
-
-    /// Change the resolved branch via the inline picker. Same
-    /// currently-shown resolution idiom as `changeProjectChip(to:)` above
-    /// (typed wins over picked), routed through the shared, tested
-    /// `resolveCommitWorktreePath` rather than re-deriving the precedence
-    /// inline.
-    private func changeBranchChip(to worktreePath: String) {
-        isBranchPickerOpen = false
-        let currentlyShown = SessionComposerCommandParser.resolveCommitWorktreePath(
-            typedWorktreePath: typedWorktreePath,
-            selectedWorktreePath: composerStore.selectedWorktreePath
-        )
-        composerStore.changeBranchChip(to: worktreePath, currentlyShown: currentlyShown)
-    }
-
-    // `popChipToText()` used to live here — the A5 "backspace at position 0
-    // pops the chip back into raw editable text" gesture. Deleted with the
-    // chips (model A rebuild): the field has no non-editable segment for
-    // backspace to pop back to, so ordinary text editing already does the
-    // right thing. `SessionComposerStore.popChipToText(projectName:)` and
-    // its test were deleted alongside this call site.
-
-    /// A5: Esc closes the inline picker without closing the composer when
-    /// it's open; otherwise it's an ordinary composer dismiss.
-    ///
-    /// D6 fix: guarded against a same-turn double-fire, matching every other
-    /// double-fire site in this file (`isHandlingNoMatchFeedback` above is
-    /// the same pattern) — this one was the odd one out, unguarded. Reached
-    /// from TWO `.onExitCommand` sites (`queryRow`'s and `ComposerQueryField`'s
-    /// own `.exit` event) — if both fired in the same turn, the first call
-    /// closes the picker and the second, unguarded, would close the whole
-    /// composer instead of leaving it open with the picker now dismissed.
-    ///
-    /// B3: widened to check BOTH pickers — `isProjectPickerOpen` alone
-    /// would let Esc close the whole composer while the BRANCH picker was
-    /// open instead of just dismissing that picker.
-    private func closeChipPickerOrDismiss() {
+    /// Esc dismisses the composer. Guarded against a same-turn double-fire,
+    /// the same pattern as `isHandlingNoMatchFeedback` below.
+    private func dismissComposer() {
         guard !isHandlingExitCommand else { return }
         isHandlingExitCommand = true
         DispatchQueue.main.async { isHandlingExitCommand = false }
-
-        if isBranchPickerOpen {
-            isBranchPickerOpen = false
-        } else if isProjectPickerOpen {
-            isProjectPickerOpen = false
-        } else {
-            isPresented = false
-        }
+        isPresented = false
     }
 
     /// Enter with no row highlighted (empty results, or a dead-key press
@@ -3549,902 +2100,6 @@ struct ComposerQueryField: View {
                     isTextFieldFocused = true
                     focusTrigger = false
                 }
-        }
-    }
-}
-
-// MARK: - Results table
-
-/// Forked from `CommandTable`. Step 2 (Composer UI 11) made it headerless —
-/// boards `V02Quieted22.dc.html`/`V02Quieted222.dc.html` rendered no section
-/// titles, lanes separated only by whitespace, and `sections` carried only
-/// an `accessibilityLabel`. Variant G (Pass A) restores a visible `title`
-/// per lane — RECENT/TEMPLATES/PROJECTS/COMMAND, uppercased — rendered only
-/// for lanes with at least one option; `accessibilityLabel` is unchanged and
-/// still carries the VoiceOver grouping independent of the visible title.
-/// Uses a plain
-/// `VStack`, never `LazyVStack` — this repo has a known bug class where
-/// `LazyVStack` never re-invokes `ForEach`'s content closure when an element
-/// changes but its `id` does not, which froze sidebar rows at first
-/// construction (PR #121).
-/// Reports the natural (unclamped) height of `ComposerResultsTable`'s
-/// content `VStack` up through its `.background(GeometryReader { ... })`
-/// probe — see `ComposerResultsTable.body`'s doc comment for why this
-/// replaced `.fixedSize(horizontal: false, vertical: true)`.
-private struct ComposerResultsHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct ComposerResultsTable: View {
-    var sections: [(title: String, accessibilityLabel: String, options: [ComposerOption])]
-    var query: String
-    @Binding var selectedIndex: UInt?
-    @Binding var hoveredOptionID: UUID?
-    var rowFontSize: CGFloat
-    var subtitleFontSize: CGFloat
-    /// Finding 3 fix (review round 2): the section header's own font,
-    /// supplied by the caller rather than derived here from
-    /// `subtitleFontSize` — `.anchored` keeps its unstyled pre-`786f4d56f`
-    /// 10pt `.bold`, distinct from `subtitleFontSize`'s 10pt (no weight),
-    /// which is `.centered`-only-correct. See
-    /// `SessionComposerPalette.sectionHeaderFont`'s doc comment.
-    var sectionHeaderFont: Font
-    var rowVerticalPadding: CGFloat
-    var rowHorizontalPadding: CGFloat
-    var rowCornerRadius: CGFloat
-    /// The results well's cap — `SessionComposerPalette.resultsWellMaxHeight`,
-    /// 220pt `.anchored` / 440pt `.centered`. `body` measures the content's
-    /// own height via `ComposerResultsHeightPreferenceKey` and clamps the
-    /// `ScrollView`'s explicit `.frame(height:)` to `min(measured, maxHeight)`
-    /// — see `body`'s doc comment for why a bare `maxHeight` cannot do this.
-    var maxHeight: CGFloat
-    var onEditTemplate: (AgentTemplate) -> Void
-    var onDuplicateTemplate: (AgentTemplate) -> Void
-    var onDuplicateAndEditTemplate: (AgentTemplate) -> Void
-    var onEditPresetFile: (AgentTemplate) -> Void
-    var onRequestDeleteTemplate: (AgentTemplate) -> Void
-    var onTogglePin: (AgentTemplate) -> Void
-    /// `New template` (Step 2): rendered as the last list row, NOT an
-    /// option — it never appears in `flattened`/`selectedIndex` math. Hidden
-    /// while naming (`SessionComposerPalette.newTemplateRow` takes over in
-    /// the footer for that state).
-    var showNewTemplateRow: Bool
-    var onNewTemplate: () -> Void
-    /// Step 4: `store.projects.isEmpty` — swaps the empty-results row from
-    /// plain "No matches" text to a clickable "Add project…" row (G-F7).
-    var isProjectsEmpty: Bool
-    var onAddProject: () -> Void
-    var action: (ComposerOption) -> Void
-
-    private var flattened: [ComposerOption] {
-        sections.flatMap { $0.options }
-    }
-
-    /// Content's own unclamped height, read back via
-    /// `ComposerResultsHeightPreferenceKey` — see `body`'s doc comment.
-    @State private var measuredContentHeight: CGFloat = 0
-
-    var body: some View {
-        // `ScrollView` has no intrinsic content size: `.fixedSize(horizontal:
-        // false, vertical: true)` on it (the previous approach) asks the
-        // ScrollView for its ideal height ignoring the proposal, but a
-        // ScrollView's `sizeThatFits` always answers with something close to
-        // ITS OWN proposed/maximum height, never its content's — it isn't
-        // built to hug. That's why a two-row list still opened at (near) the
-        // full 440pt cap with dead space both above AND below the rows: the
-        // content is top-anchored inside an oversized scroll container, and
-        // "dead space above too" was the tell that the CONTAINER was too
-        // tall, not that it failed to shrink around correctly-positioned
-        // content. Fix: measure the content `VStack`'s real height directly
-        // (`GeometryReader` in a `.background`, reported up through
-        // `ComposerResultsHeightPreferenceKey`) and set the `ScrollView`'s
-        // own `.frame(height:)` to `min(measured, maxHeight)` explicitly —
-        // an exact height, not a cap, so short lists hug and long lists stop
-        // at 440/220 and scroll.
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 1) {
-                    if flattened.isEmpty {
-                        if isProjectsEmpty {
-                            addProjectRow
-                        } else {
-                            Text(SessionComposerCommandParser.emptyResultsCopy(isProjectsEmpty: false))
-                                .font(.system(size: rowFontSize))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, rowHorizontalPadding)
-                                .padding(.vertical, rowVerticalPadding)
-                        }
-                    }
-
-                    ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                        if !section.options.isEmpty {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(section.title.uppercased())
-                                    .font(sectionHeaderFont)
-                                    .tracking(0.6)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, 6)
-                                    // Review round 4, P3 fix: this used to
-                                    // hardcode 10pt here, which read as
-                                    // matching row titles' left edge only in
-                                    // `.centered` (8pt outer `.padding(8)`
-                                    // + 10pt `rowHorizontalPadding` = 18pt,
-                                    // same as rows there) — in `.anchored`,
-                                    // rows sit at 8 + 8 = 16pt while this
-                                    // stayed at 8 + 10 = 18pt, 2pt off. Now
-                                    // reads `rowHorizontalPadding` directly
-                                    // (already in scope, used two lines
-                                    // below by `ComposerRow`), so this
-                                    // header sits at the SAME edge as row
-                                    // titles in both presentations, not just
-                                    // `.centered`.
-                                    .padding(.leading, rowHorizontalPadding)
-                                    .padding(.bottom, 4)
-                                    // The enclosing `VStack` already carries
-                                    // `.accessibilityLabel(section.accessibilityLabel)`
-                                    // as a combined element — without this,
-                                    // VoiceOver announces this header Text a
-                                    // SECOND time as its own unhidden child
-                                    // ("Recent, group" then "RECENT").
-                                    .accessibilityHidden(true)
-
-                                ForEach(section.options) { option in
-                                    ComposerRow(
-                                        option: option,
-                                        query: query,
-                                        isSelected: isSelected(option),
-                                        hoveredID: $hoveredOptionID,
-                                        titleFontSize: rowFontSize,
-                                        subtitleFontSize: subtitleFontSize,
-                                        verticalPadding: rowVerticalPadding,
-                                        horizontalPadding: rowHorizontalPadding,
-                                        cornerRadius: rowCornerRadius,
-                                        onEditTemplate: onEditTemplate,
-                                        onDuplicateTemplate: onDuplicateTemplate,
-                                        onDuplicateAndEditTemplate: onDuplicateAndEditTemplate,
-                                        onEditPresetFile: onEditPresetFile,
-                                        onRequestDeleteTemplate: onRequestDeleteTemplate,
-                                        onTogglePin: onTogglePin
-                                    ) {
-                                        action(option)
-                                    }
-                                }
-                            }
-                            .accessibilityElement(children: .contain)
-                            .accessibilityLabel(section.accessibilityLabel)
-                        }
-                    }
-
-                    if showNewTemplateRow {
-                        newTemplateRow
-                    }
-                }
-                .padding(8)
-                // `.overlay`, not `.background` (regression fix, second
-                // investigation): `.background(GeometryReader { ... })`
-                // proposes the CONTAINER's own incoming (often unconstrained)
-                // size to the background content rather than this VStack's
-                // own resolved size, so `geometry.size.height` here read 0 on
-                // every delivery — confirmed empirically (file-logged every
-                // `onPreferenceChange` call across the full render-evidence
-                // suite: always exactly 0.0, never once nonzero, across
-                // dozens of renders with real multi-row content). Because
-                // the height was always 0, `ComposerResultsTable.body`'s
-                // ternary below always took the `nil` branch — the
-                // `.frame(height:)` cap from `3512a500a` was NEVER applied,
-                // in this file's own tests or in production; the ScrollView
-                // stayed permanently unconstrained/greedy, filling whatever
-                // height its ambient parent chain offered (up to the full
-                // window height once routed through `SessionComposerOverlay`'s
-                // `.frame(maxWidth: .infinity, maxHeight: .infinity)` — the
-                // reported card-fills-window bug). `.overlay(GeometryReader
-                // { ... })` proposes THIS VStack's own resolved size to its
-                // content instead, and reports real values (verified: 93pt
-                // for a 2-row filtered list, 189pt for the reported 7-row
-                // case, 769pt for an unfiltered 25-template list — see
-                // `ComposerDesignCallRenderTests.cardFitReproducesOnCurrentCode`
-                // et al.).
-                .overlay(
-                    GeometryReader { geometry in
-                        Color.clear.preference(
-                            key: ComposerResultsHeightPreferenceKey.self,
-                            value: geometry.size.height
-                        )
-                    }
-                )
-            }
-            .onPreferenceChange(ComposerResultsHeightPreferenceKey.self) { measuredContentHeight = $0 }
-            .frame(height: measuredContentHeight > 0 ? min(measuredContentHeight, maxHeight) : nil)
-            .onChange(of: selectedIndex) { _ in
-                guard let selectedIndex, selectedIndex < flattened.count else { return }
-                proxy.scrollTo(flattened[Int(selectedIndex)].id)
-            }
-        }
-    }
-
-    /// The `New template` in-list row (board copy, no ellipsis, no leading
-    /// icon, `#1A1A1A60` — `Color(nsColor: .labelColor).opacity(0.375)`,
-    /// 0x60/0xFF ≈ 0.375). Not an option: no selection highlight, no context
-    /// menu, action fires `onNewTemplate` directly.
-    private var newTemplateRow: some View {
-        Button(action: onNewTemplate) {
-            HStack(spacing: 8) {
-                Text("New template")
-                    .font(.system(size: rowFontSize, weight: .medium))
-                    .foregroundStyle(Color(nsColor: .labelColor).opacity(0.375))
-                Spacer()
-            }
-            .padding(.horizontal, rowHorizontalPadding)
-            .padding(.vertical, rowVerticalPadding)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// Step 4's zero-project empty-state row (G-F7) — reaches the same
-    /// `addProjectViaPanel` flow the inline project picker's own
-    /// `+ Add project…` row reaches (Step 5's `projectControl` chevron
-    /// used to reach it too; that control is deleted as of Variant G
-    /// Pass C). Row-styled to match `newTemplateRow` above it, not a
-    /// plain text dead end.
-    private var addProjectRow: some View {
-        Button(action: onAddProject) {
-            HStack(spacing: 8) {
-                Text(SessionComposerCommandParser.emptyResultsCopy(isProjectsEmpty: true))
-                    .font(.system(size: rowFontSize, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, rowHorizontalPadding)
-            .padding(.vertical, rowVerticalPadding)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func isSelected(_ option: ComposerOption) -> Bool {
-        guard let selectedIndex, let index = flattened.firstIndex(where: { $0.id == option.id }) else { return false }
-        return Int(selectedIndex) == index || (Int(selectedIndex) >= flattened.count && index == flattened.count - 1)
-    }
-}
-
-/// Forked from `CommandRow`, resized to DESIGN.md's 11pt sidebar scale.
-/// Reuses `String.matchedIndices(for:)` (`CommandPalette.swift`,
-/// module-scope) for highlighting — redeclaring it would be a compile
-/// error.
-///
-/// S4: carries a `.contextMenu`, ported from
-/// `TemplatePickerView.templateRow` (`TemplatePickerView.swift:186-217`),
-/// for template-backed rows only (`option.template != nil`) — project rows
-/// get no menu. Perf note (`project_perf-contextmenu-render-cost.md`):
-/// per-row `.contextMenu` in a long-lived sidebar list is a known
-/// bottleneck, but this is a transient popover showing ~10 rows, so it's
-/// acceptable; no `.popover`/`.draggable` is added per row alongside it.
-private struct ComposerRow: View {
-    let option: ComposerOption
-    var query: String
-    var isSelected: Bool
-    @Binding var hoveredID: UUID?
-    var titleFontSize: CGFloat
-    var subtitleFontSize: CGFloat
-    var verticalPadding: CGFloat
-    var horizontalPadding: CGFloat
-    var cornerRadius: CGFloat
-    var onEditTemplate: (AgentTemplate) -> Void
-    var onDuplicateTemplate: (AgentTemplate) -> Void
-    var onDuplicateAndEditTemplate: (AgentTemplate) -> Void
-    var onEditPresetFile: (AgentTemplate) -> Void
-    var onRequestDeleteTemplate: (AgentTemplate) -> Void
-    var onTogglePin: (AgentTemplate) -> Void
-    var action: () -> Void
-
-    private var highlightedTitle: Text {
-        guard !query.isEmpty, let indices = option.title.matchedIndices(for: query) else {
-            return Text(option.title).font(.system(size: titleFontSize, weight: .medium))
-        }
-
-        var attributed = AttributedString(option.title)
-        attributed[attributed.startIndex...].font = .system(size: titleFontSize, weight: .medium)
-
-        for idx in indices {
-            let offset = option.title.distance(from: option.title.startIndex, to: idx)
-            let attrStart = attributed.index(attributed.startIndex, offsetByCharacters: offset)
-            let attrEnd = attributed.index(attrStart, offsetByCharacters: 1)
-            attributed[attrStart..<attrEnd].font = .system(size: titleFontSize, weight: .bold)
-            attributed[attrStart..<attrEnd].foregroundColor = WorkspaceLayout.composerSelectionAccent
-        }
-
-        return Text(attributed)
-    }
-
-    /// Board row content (Step 2, `V02Quieted222.dc.html`): trailing `recent`
-    /// text for a non-pinned recent, a pin glyph for a pinned row — never
-    /// both, `option.trailingMeta` already carries whichever applies (or
-    /// `nil` for a plain template/project/command row).
-    @ViewBuilder
-    private var trailingMetaView: some View {
-        switch option.trailingMeta {
-        case .recent:
-            Text("recent")
-                .font(.system(size: subtitleFontSize))
-                .foregroundStyle(.secondary)
-        case .pinned:
-            Image(systemName: "pin.fill")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-        case nil:
-            EmptyView()
-        }
-    }
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                // Board rows are single-line with no leading icon and no
-                // subtitle (G-F9) — `option.leadingIcon`/`option.subtitle`
-                // still feed ranking and a11y, just not this row's visuals.
-                highlightedTitle
-
-                Spacer()
-
-                trailingMetaView
-            }
-            .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, verticalPadding)
-            .contentShape(Rectangle())
-            .background(
-                isSelected
-                    ? WorkspaceLayout.composerSelectionAccent.opacity(0.2)
-                    : (hoveredID == option.id ? Color.secondary.opacity(0.2) : Color.clear)
-            )
-            .cornerRadius(cornerRadius)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            hoveredID = hovering ? option.id : nil
-        }
-        .contextMenu {
-            templateContextMenu
-        }
-    }
-
-    /// Replicates `TemplatePickerView.templateRow`'s context menu, with
-    /// Pin/Unpin added as the FIRST item (Step 2) for template-backed rows.
-    /// Presets get "Duplicate and Edit..." (+ "Edit Preset File..." when a
-    /// description exists), built-ins get "Duplicate and Edit..." only,
-    /// user templates get Edit… / Duplicate / Delete. Renders nothing for
-    /// non-template rows (project options).
-    @ViewBuilder
-    private var templateContextMenu: some View {
-        if let template = option.template, let group = option.templateGroup {
-            Button(option.trailingMeta == .pinned ? "Unpin" : "Pin") { onTogglePin(template) }
-            Divider()
-            if group == .preset {
-                Button("Duplicate and Edit...") { onDuplicateAndEditTemplate(template) }
-                if template.templateDescription != nil {
-                    Button("Edit Preset File...") { onEditPresetFile(template) }
-                }
-            } else if template.isDefault {
-                Button("Duplicate and Edit...") { onDuplicateAndEditTemplate(template) }
-            } else {
-                Button("Edit...") { onEditTemplate(template) }
-                Button("Duplicate") { onDuplicateTemplate(template) }
-                Divider()
-                Button("Delete", role: .destructive) { onRequestDeleteTemplate(template) }
-            }
-        }
-    }
-}
-
-// MARK: - Project dropdown
-
-/// The project chip's picker list (formerly the trailing `▾` control's
-/// dropdown). Three-tier ordering, no visible headers: cascade pick
-/// (pre-selected) -> recently-used most-recent-first -> everything else
-/// alphabetically (locked decision). `+ Add project…` is always the last
-/// row.
-///
-/// A2 (breadcrumb spec): presented as an inline expansion INSIDE the
-/// composer card (`SessionComposerPalette.inlineProjectPicker`), never a
-/// `.popover` — this view used to be nested inside the composer's own
-/// `.popover`, on the known-fragile "child popover taking key can dismiss
-/// the parent" list and never verified. Reused verbatim here; only the
-/// presentation at the call site changed.
-///
-/// `selectedProjectId` is the CALLER's single source of truth for "what's
-/// currently shown" (A6) — the call site passes `currentProject?.id`, not
-/// a raw stored id, so the selected-row weight below and the chip's own
-/// label can never disagree about which project is current.
-private struct ProjectDropdownView: View {
-    let selectedProjectId: UUID?
-    var onSelect: (Project) -> Void
-    var onAddProject: () -> Void
-
-    @EnvironmentObject private var store: WorkspaceStore
-
-    /// D6: which row (0..<`orderedProjects.count` for project rows,
-    /// `orderedProjects.count` for the trailing "+ Add project…" row) is
-    /// keyboard-highlighted. Seeded to the currently-shown project on
-    /// appear — this view is only ever mounted while the picker is open, so
-    /// `onAppear` firing once per open is exactly the right lifetime.
-    @State private var highlightedIndex: Int = 0
-
-    // N6: this view has no search field of its own — the main composer
-    // field does the filtering (locked decision) — so a local `query`
-    // and a `filteredProjects` indirection over it were dead: always
-    // equal to `orderedProjects`. Removed rather than kept as unused
-    // scaffolding.
-    private var orderedProjects: [Project] {
-        let recentIds = SessionComposerStore.shared.recentProjectIds
-        return SessionComposerProjectOrdering.order(
-            projects: store.projects,
-            cascadePick: selectedProjectId,
-            recentProjectIds: recentIds
-        )
-    }
-
-    /// Every navigable row: project rows plus the trailing "+ Add project…"
-    /// row.
-    private var rowCount: Int { orderedProjects.count + 1 }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(Array(orderedProjects.enumerated()), id: \.element.id) { index, project in
-                    Button {
-                        onSelect(project)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(project.name)
-                                .font(.system(size: 12, weight: project.id == selectedProjectId ? .semibold : .regular))
-                            Spacer()
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .contentShape(Rectangle())
-                        // F9 (nit, round-2 review): reuses the named token
-                        // rather than re-inlining the exact expression it
-                        // was carved out of.
-                        .background(index == highlightedIndex ? WorkspaceLayout.composerChipBackground : Color.clear)
-                    }
-                    .buttonStyle(.plain)
-                    // A11y gap (round-2 review): the keyboard highlight was
-                    // background-color only, with no equivalent for
-                    // VoiceOver — it saw an ordinary row, not "currently
-                    // highlighted".
-                    .accessibilityAddTraits(index == highlightedIndex ? .isSelected : [])
-                }
-
-                Divider().padding(.horizontal, 8).padding(.vertical, 2)
-
-                Button(action: onAddProject) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .medium))
-                            .frame(width: 14)
-                        Text("Add project…")
-                            .font(.system(size: 12, weight: .medium))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .contentShape(Rectangle())
-                    .background(highlightedIndex == orderedProjects.count ? WorkspaceLayout.composerChipBackground : Color.clear)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .accessibilityAddTraits(highlightedIndex == orderedProjects.count ? .isSelected : [])
-            }
-            .padding(6)
-        }
-        // A2: no fixed `sidebarWidth` frame anymore — inline, this fills
-        // whatever width the composer card (`paletteWidth`) already gives
-        // it instead of a width sized for the old standalone popover.
-        // Pre-existing 240pt cap, not retuned as part of this pass.
-        .frame(maxHeight: 240)
-        .overlay(keyboardCaptureLayer)
-        .onAppear {
-            highlightedIndex = orderedProjects.firstIndex(where: { $0.id == selectedProjectId }) ?? 0
-        }
-    }
-
-    /// D6 fix: while this view is on screen, ↑/↓/Return must move ITS OWN
-    /// highlight and commit ITS OWN row — not the composer field's
-    /// template list. `SessionComposerPalette.ComposerQueryField.isPickerOpen`
-    /// removes the field's equivalent hidden `Button`s from the hierarchy
-    /// entirely while the picker is open (FA fix, round-2 review — not
-    /// merely no-oping their action, which left a second live
-    /// `.keyboardShortcut` registration for the same keys installed
-    /// alongside these), so these ARE the only live ↑/↓/Return handlers
-    /// while the picker is open, by construction. Same hidden-`Button` +
-    /// `.keyboardShortcut` pattern `ComposerQueryField` already uses (works
-    /// down to macOS 13, unlike `Backport.onKeyPress`).
-    private var keyboardCaptureLayer: some View {
-        Group {
-            Button {
-                highlightedIndex = (highlightedIndex - 1 + rowCount) % rowCount
-            } label: { Color.clear }
-                .buttonStyle(PlainButtonStyle())
-                .keyboardShortcut(.upArrow, modifiers: [])
-
-            Button {
-                highlightedIndex = (highlightedIndex + 1) % rowCount
-            } label: { Color.clear }
-                .buttonStyle(PlainButtonStyle())
-                .keyboardShortcut(.downArrow, modifiers: [])
-
-            Button {
-                commitHighlighted()
-            } label: { Color.clear }
-                .buttonStyle(PlainButtonStyle())
-                .keyboardShortcut(.return, modifiers: [])
-        }
-        .frame(width: 0, height: 0)
-        .accessibilityHidden(true)
-    }
-
-    private func commitHighlighted() {
-        if highlightedIndex < orderedProjects.count {
-            onSelect(orderedProjects[highlightedIndex])
-        } else {
-            onAddProject()
-        }
-    }
-}
-
-// MARK: - Branch chip picker (Slice B, B3)
-
-/// The branch chip's inline picker, modeled on `ProjectDropdownView` —
-/// presented as an expansion INSIDE the card, never a `.popover` (see that
-/// type's doc comment for why a nested popover is exactly what Slice A
-/// deleted).
-///
-/// Row order, per the spec: `Default (<current branch>)` first (clears the
-/// override); then existing worktrees (path shown secondary); then, under
-/// a divider, branches with no worktree yet — a **create** action (B4),
-/// labeled "+ worktree for "<branch>"" since the branch already exists;
-/// then a "New branch name…" field whose "+ new branch + worktree "<name>""
-/// row only appears once the typed name is genuinely novel (matches
-/// nothing already offered above) — creation is explicit only, never an
-/// implicit side effect of typing. Sean's stated reason for keeping the
-/// no-worktree-yet group at all: discoverability — nobody should have to
-/// recall a branch name.
-private struct WorktreeDropdownView: View {
-    let worktrees: [GitWorktreeEnumerator.Worktree]
-    let branchesWithoutWorktree: [String]
-    let currentBranchAtProjectRoot: String?
-    let isRefreshing: Bool
-    let selectedWorktreePath: String?
-    var onSelectDefault: () -> Void
-    var onSelectWorktree: (String) -> Void
-    /// B4: fired by BOTH the (now-live) "no worktree yet" rows (an
-    /// existing branch) and the "new branch name…" field's create row (a
-    /// branch that doesn't exist yet). `SessionComposerStore.createWorktree`
-    /// checks `GitWorktreeEnumerator.branchExists` itself to pick the right
-    /// `git worktree add` form — this view doesn't need to know which case
-    /// it is, only the name.
-    var onCreateWorktree: (String) -> Void
-
-    /// Keyboard-highlighted row, 0-based across ONLY the navigable rows:
-    /// the Default row, then existing worktrees, in that order. The "no
-    /// worktree yet" rows and the new-branch field are mouse/field-only —
-    /// same reasoning `ProjectDropdownView` applies to its own trailing
-    /// "+ Add project…" row, just with that group excluded entirely rather
-    /// than included as a navigable target.
-    @State private var highlightedIndex: Int = 0
-
-    /// The typed candidate for a brand-new branch — a dedicated field
-    /// rather than reusing the composer's own search field, which stays
-    /// live (filtering templates) the whole time this picker is open.
-    @State private var newBranchNameField: String = ""
-
-    /// Blocker 5 fix (Slice B review round 1): whether the "New branch
-    /// name…" field currently has first responder. `keyboardCaptureLayer`
-    /// installs a hidden `Button().keyboardShortcut(.return, modifiers: [])`
-    /// in the SAME window as this field's own `.onSubmit` — AppKit
-    /// dispatches key equivalents via `performKeyEquivalent` BEFORE
-    /// `keyDown` reaches the first responder, so Return in the field fired
-    /// `commitHighlighted()` (discarding the typed name with no feedback)
-    /// and ↑/↓ moved the row highlight instead of the caret. This mirrors
-    /// exactly how `ComposerQueryField` already stands its OWN equivalent
-    /// handlers down while `isPickerOpen` — the third capture layer this
-    /// picker never accounted for is itself, against its own child field.
-    @FocusState private var isNewBranchFieldFocused: Bool
-
-    /// Should-fix 12 fix (Slice B review round 2): drives a shake on the
-    /// "New branch name…" field when Return fires against a name that isn't
-    /// novel (empty, or matches an existing row) — that used to be a
-    /// silent no-op with no feedback at all, since this picker's own
-    /// `keyboardCaptureLayer` is unmounted while this field has focus
-    /// (blocker 5) and the field's own `.onSubmit` guard just returned.
-    @State private var newBranchFieldShakeTrigger: CGFloat = 0
-
-    private var rowCount: Int { 1 + worktrees.count }
-
-    private var trimmedNewBranchName: String {
-        newBranchNameField.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Whether the typed name is genuinely new — matches nothing already
-    /// offered above. Gates the create row so typing never implicitly
-    /// creates anything, and so re-typing an already-offered name doesn't
-    /// duplicate a row that already exists above it.
-    private var newBranchNameIsNovel: Bool {
-        let name = trimmedNewBranchName
-        guard !name.isEmpty else { return false }
-        if worktrees.contains(where: { $0.branch == name }) { return false }
-        if branchesWithoutWorktree.contains(name) { return false }
-        if name == currentBranchAtProjectRoot { return false }
-        return true
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
-                defaultRow
-
-                ForEach(Array(worktrees.enumerated()), id: \.element.path) { index, worktree in
-                    worktreeRow(worktree, index: index + 1)
-                }
-
-                if !branchesWithoutWorktree.isEmpty {
-                    Divider().padding(.horizontal, 8).padding(.vertical, 2)
-
-                    ForEach(branchesWithoutWorktree, id: \.self) { branch in
-                        noWorktreeRow(branch)
-                    }
-                }
-
-                if isRefreshing {
-                    Text("Refreshing…")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                }
-
-                Divider().padding(.horizontal, 8).padding(.vertical, 2)
-                newBranchField
-                newBranchCreateRow
-            }
-            .padding(6)
-        }
-        // Same pre-existing 240pt cap `ProjectDropdownView` uses — not
-        // retuned as part of this pass.
-        .frame(maxHeight: 240)
-        .overlay(keyboardCaptureLayer)
-        .onAppear {
-            highlightedIndex = worktrees.firstIndex(where: { $0.path == selectedWorktreePath }).map { $0 + 1 } ?? 0
-        }
-        // Blocker 3 fix (Slice B review round 1): clamp `highlightedIndex`
-        // whenever `worktrees` itself changes, not only in `.onAppear` — a
-        // sibling session pruning a worktree (or this store's own refresh
-        // landing) while the picker is open and highlighted at the LAST row
-        // used to leave `highlightedIndex` pointing past the shrunk array,
-        // and `commitHighlighted()` indexed it unguarded. `min` is
-        // sufficient here — `rowCount` is `1 + worktrees.count`, so a
-        // shrink can only ever move the valid upper bound down, never
-        // invalidate an index that was already in range.
-        .onChange(of: worktrees) { newWorktrees in
-            highlightedIndex = min(highlightedIndex, newWorktrees.count)
-        }
-    }
-
-    private var defaultRow: some View {
-        let isSelected = selectedWorktreePath == nil
-        let label = currentBranchAtProjectRoot.map { "Default (\($0))" } ?? "Default"
-        return Button(action: onSelectDefault) {
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                Spacer()
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .contentShape(Rectangle())
-            .background(highlightedIndex == 0 ? WorkspaceLayout.composerChipBackground : Color.clear)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(highlightedIndex == 0 ? .isSelected : [])
-    }
-
-    private func worktreeRow(_ worktree: GitWorktreeEnumerator.Worktree, index: Int) -> some View {
-        let isSelected = worktree.path == selectedWorktreePath
-        return Button {
-            onSelectWorktree(worktree.path)
-        } label: {
-            HStack(spacing: 6) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(worktree.branch ?? (worktree.path as NSString).lastPathComponent)
-                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    // Nit fix (Slice B review round 1): `isLocked` was
-                    // parsed and tested but never surfaced anywhere — a
-                    // worktree Sean has pinned against `git worktree prune`
-                    // read identically to an unlocked one. Appended to the
-                    // existing path subtitle rather than a new row/icon, to
-                    // stay inside this picker's existing two-line-per-row
-                    // shape.
-                    Text(worktree.isLocked ? "\(worktree.path) · locked" : worktree.path)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .contentShape(Rectangle())
-            .background(index == highlightedIndex ? WorkspaceLayout.composerChipBackground : Color.clear)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(index == highlightedIndex ? .isSelected : [])
-    }
-
-    /// A branch that already exists but has no worktree yet — picking it
-    /// is a CREATE action (`git worktree add <dir> <branch>`, the
-    /// existing-branch form; `SessionComposerStore.createWorktree` decides
-    /// the exact git invocation). Labeled by what it DOES, not by the
-    /// absence it used to describe (B4) — "+ worktree for "<branch>""
-    /// rather than the B3 placeholder "No worktree yet", since a plain
-    /// label reading as a dead-end fact is exactly what a live control
-    /// must not look like.
-    private func noWorktreeRow(_ branch: String) -> some View {
-        Button {
-            onCreateWorktree(branch)
-        } label: {
-            HStack(spacing: 6) {
-                Text(branch)
-                    .font(.system(size: 12, weight: .regular))
-                Spacer()
-                Text("+ worktree for \"\(branch)\"")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Create worktree for \(branch)")
-    }
-
-    /// The dedicated "type a brand-new branch name" field — deliberately
-    /// separate from the composer's own search field, which stays live the
-    /// whole time this picker is open (it filters templates, not branches).
-    private var newBranchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "plus")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .frame(width: 12)
-            TextField("New branch name…", text: $newBranchNameField)
-                .font(.system(size: 12))
-                .textFieldStyle(.plain)
-                .focused($isNewBranchFieldFocused)
-                .onSubmit {
-                    // Should-fix 12 fix (Slice B review round 2): Return
-                    // against a name that isn't novel (empty, or already
-                    // offered above) used to be a silent no-op — nothing
-                    // else is listening either, since `keyboardCaptureLayer`
-                    // below unmounts its own Return/↑/↓ handlers while this
-                    // field has focus (blocker 5). Shake for feedback on a
-                    // genuine (non-empty) attempt that didn't create
-                    // anything, and drop focus so Return/↑/↓ go back to
-                    // navigating the rows above instead of doing nothing a
-                    // second time.
-                    guard newBranchNameIsNovel else {
-                        if !trimmedNewBranchName.isEmpty {
-                            withAnimation(.linear(duration: 0.25)) {
-                                newBranchFieldShakeTrigger += 1
-                            }
-                        }
-                        isNewBranchFieldFocused = false
-                        return
-                    }
-                    onCreateWorktree(trimmedNewBranchName)
-                }
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .modifier(ShakeEffect(animatableData: newBranchFieldShakeTrigger))
-    }
-
-    /// Only rendered once the typed name is genuinely novel
-    /// (`newBranchNameIsNovel`) — creation is explicit only, never an
-    /// implicit side effect of typing a name that happens to match
-    /// nothing (yet).
-    @ViewBuilder
-    private var newBranchCreateRow: some View {
-        if newBranchNameIsNovel {
-            Button {
-                onCreateWorktree(trimmedNewBranchName)
-            } label: {
-                HStack(spacing: 6) {
-                    Text("+ new branch + worktree \"\(trimmedNewBranchName)\"")
-                        .font(.system(size: 12, weight: .regular))
-                    Spacer()
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Create new branch and worktree \(trimmedNewBranchName)")
-        }
-    }
-
-    /// Same hidden-`Button` + `.keyboardShortcut` pattern
-    /// `ProjectDropdownView.keyboardCaptureLayer` uses — works down to
-    /// macOS 13, unlike `Backport.onKeyPress`. `ComposerQueryField.isPickerOpen`
-    /// (the OR of both pickers) is what removes the field's own equivalent
-    /// handlers while this one is on screen, so these are the only live
-    /// ↑/↓/Return handlers while THIS picker is open, by construction.
-    ///
-    /// Blocker 5 fix (Slice B review round 1): this is ALSO removed from
-    /// the hierarchy entirely (not merely no-op'd) while
-    /// `isNewBranchFieldFocused` — the same `FA` pattern
-    /// `ComposerQueryField` already uses against `isPickerOpen`, applied
-    /// here against this picker's OWN child field. AppKit resolves a key
-    /// equivalent (`performKeyEquivalent`, which is how `.keyboardShortcut`
-    /// is implemented) before ordinary `keyDown` reaches the first
-    /// responder, so leaving this `Button` mounted while the "New branch
-    /// name…" field has focus meant Return there always committed the
-    /// HIGHLIGHTED ROW instead of the typed name, and ↑/↓ always moved the
-    /// row highlight instead of the caret — the field's own `.onSubmit`
-    /// (just above) never got a chance to fire. Verification note: I could
-    /// not exercise this with real keystrokes (no synthesized keyboard
-    /// input, per this task's hard constraint) — this fix is the same
-    /// architecture as the already-shipped, unmount-not-guard fix for
-    /// `ComposerQueryField`'s equivalent problem, applied symmetrically;
-    /// it is NOT independently runtime-verified here, and is flagged as
-    /// such rather than claimed proven.
-    private var keyboardCaptureLayer: some View {
-        Group {
-            if !isNewBranchFieldFocused {
-                Button {
-                    highlightedIndex = (highlightedIndex - 1 + rowCount) % rowCount
-                } label: { Color.clear }
-                    .buttonStyle(PlainButtonStyle())
-                    .keyboardShortcut(.upArrow, modifiers: [])
-
-                Button {
-                    highlightedIndex = (highlightedIndex + 1) % rowCount
-                } label: { Color.clear }
-                    .buttonStyle(PlainButtonStyle())
-                    .keyboardShortcut(.downArrow, modifiers: [])
-
-                Button {
-                    commitHighlighted()
-                } label: { Color.clear }
-                    .buttonStyle(PlainButtonStyle())
-                    .keyboardShortcut(.return, modifiers: [])
-            }
-        }
-        .frame(width: 0, height: 0)
-        .accessibilityHidden(true)
-    }
-
-    /// Blocker 3 fix (Slice B review round 1): bounds-safe, mirroring
-    /// `ProjectDropdownView.commitHighlighted`'s guard exactly — the view
-    /// this was copied from. `worktrees[highlightedIndex - 1]` unguarded
-    /// crashed whenever a refresh (opening the picker IS a refresh trigger)
-    /// landed a SHORTER list than what `highlightedIndex` was still keyed
-    /// against: open with 3 cached, arrow down to the last row, a sibling
-    /// session prunes one mid-picker, the refresh lands with 2, Return —
-    /// hard crash. The `.onChange(of: worktrees)` clamp above closes the
-    /// window further, but this guard is what actually prevents the crash
-    /// if anything ever slips past it.
-    private func commitHighlighted() {
-        if highlightedIndex == 0 {
-            onSelectDefault()
-        } else {
-            let index = highlightedIndex - 1
-            guard index >= 0, index < worktrees.count else { return }
-            onSelectWorktree(worktrees[index].path)
         }
     }
 }

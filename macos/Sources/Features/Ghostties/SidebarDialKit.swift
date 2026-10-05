@@ -7,7 +7,7 @@ import DialKit
 
 // MARK: - Sidebar DialKit tunables (session-8 brief, sidebar-presence)
 //
-// Mirrors `ComposerSingleLineTuning`'s pattern in `ComposerZeroChromeStyle.swift`
+// Mirrors `ComposerSingleLineTuning`'s pattern in `ComposerSingleLineStyle.swift`
 // exactly: one `enum` of `UserDefaults`-backed accessors, compiled in every
 // configuration (not `#if DEBUG`). Each accessor falls back to the shipped
 // `WorkspaceLayout`/`TrayGlassStyle` constant when its key is unset — a
@@ -221,7 +221,7 @@ enum SidebarDialTuning {
 // Session-8 brief: "add dial kit for the sidebar... so Sean can tune sizes
 // and spacing live in the Dev build, then Copy the values back into code."
 // Mirrors `ComposerDialKitCoordinator`/`ComposerDialKitHost` in
-// `ComposerZeroChromeStyle.swift` exactly — same `DialPanelState` ownership,
+// `ComposerSingleLineStyle.swift` exactly — same `DialPanelState` ownership,
 // same diff-based `write(from:to:)`, same `.inline` hosting in our own card,
 // same Reset-as-`.action`-control shape. Unlike the composer panel, the
 // sidebar has no Style switch that swaps the control list, so there is no

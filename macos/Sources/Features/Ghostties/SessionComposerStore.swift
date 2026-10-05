@@ -3,30 +3,21 @@ import Foundation
 import SwiftUI
 import GhosttiesCore
 
-/// Describes how a `SessionComposerPalette` was invoked (Phase 2 of
-/// session-creation-unified). Nothing else parameterizes the composer.
+/// Describes how the centered `SessionComposerPalette` was invoked. Nothing
+/// else parameterizes the composer.
 struct SessionComposerRequest {
-    /// How the composer is presented. Only `.anchored` (the sidebar
-    /// popover) is built in Phase 2 — `.centered` is declared now so the
-    /// type is stable, but Phase 3 is the first caller to actually use it.
-    enum Presentation: Equatable {
-        case anchored
-        case centered
-    }
-
     /// How the project is bound at open time.
     enum ProjectBinding {
         /// The project is fixed and cannot be changed from inside the
-        /// composer (the sidebar's per-project "+ New Session").
+        /// composer (the add-project flow).
         case locked(Project)
-        /// The project starts pre-selected but the user can change it via
-        /// the trailing dropdown.
+        /// The project starts pre-selected but the user can change it by
+        /// typing another project name (the sidebar's per-project "+").
         case prefilled(Project)
         /// No project pre-selected — the smart-default cascade decides.
         case open
     }
 
-    let presentation: Presentation
     let projectBinding: ProjectBinding
 }
 

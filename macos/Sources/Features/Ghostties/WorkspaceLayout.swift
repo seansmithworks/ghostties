@@ -760,15 +760,6 @@ extension Notification.Name {
     /// commit) into a collapsed project spawns with no visible row anywhere.
     static let workspaceDidCreateSessionInProject = Notification.Name("com.seansmithdesign.ghostties.workspace.didCreateSessionInProject")
 
-    /// Posted by `WorkspaceViewContainer.presentComposerOverlay(projectBinding:)`
-    /// right before it opens the centered composer (F5 fix, Phase 3 review).
-    /// The notification object is the originating NSWindow. `ProjectDisclosureRow`
-    /// observes this and closes its own anchored composer popover, if open —
-    /// the single-presentation invariant: the centered overlay always wins
-    /// over a per-row popover, since both share the one `SessionComposerStore`
-    /// singleton's state.
-    static let workspaceComposerOverlayWillPresent = Notification.Name("com.seansmithdesign.ghostties.workspace.composerOverlayWillPresent")
-
     /// Posted by AppDelegate's Cmd+W local-event monitor, project-first
     /// workspace mode only (see `AppDelegate.isProjectFirstWorkspaceWindow(_:)`).
     /// The notification object is the originating NSWindow.

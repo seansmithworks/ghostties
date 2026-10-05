@@ -50,7 +50,6 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var settingsProject: Project?
-    @State private var showingTemplatePicker = false
     @State private var editingSessionId: UUID?
     @State private var editingName: String = ""
     @State private var isHeaderHovered = false
@@ -135,17 +134,6 @@ private struct ProjectDisclosureRowContent: View, Equatable {
             }
         }
         .background(expandedContainerBackground)
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceComposerOverlayWillPresent)) { notification in
-            // F5 (Phase 3 review): `SessionComposerStore` is one app-wide
-            // singleton — if this row's popover stays open while the
-            // centered overlay opens, the overlay's `open(.open, ...)`
-            // silently overwrites `currentProjectBinding`/`selectedProjectId`
-            // out from under it, and `.locked`'s write-path enforcement is
-            // defeated by the second opener. Single-presentation invariant:
-            // the overlay always wins.
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            showingTemplatePicker = false
-        }
     }
 
     // MARK: - Expanded Session List
@@ -488,29 +476,31 @@ private struct ProjectDisclosureRowContent: View, Equatable {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .onHover { isNewSessionHovered = $0 }
-        .popover(isPresented: $showingTemplatePicker) {
-            SessionComposerPalette(
-                isPresented: $showingTemplatePicker,
-                request: SessionComposerRequest(presentation: .anchored, projectBinding: .prefilled(project))
-            )
-        }
     }
 
     // MARK: - Actions
 
     /// D3: the modifier is the shortcut, not the escape hatch. A plain click
-    /// opens the session composer; Option-click keeps the old instant-create
-    /// behavior when the project has a default template.
+    /// opens the centered session composer with this project pre-filled;
+    /// Option-click keeps the old instant-create behavior when the project
+    /// has a default template.
     private func handleNewSession() {
         selectedProjectId = project.id
-        if NSEvent.modifierFlags.contains(.option),
-           let defaultId = project.defaultTemplateId,
-           let template = store.templates.first(where: { $0.id == defaultId }) {
+        switch ProjectRowNewSession.action(
+            for: project,
+            optionHeld: NSEvent.modifierFlags.contains(.option),
+            templates: store.templates
+        ) {
+        case .instantCreate(let template):
             _Concurrency.Task {
                 await coordinator.createQuickSession(for: project, template: template)
             }
-        } else {
-            showingTemplatePicker = true
+        case .openComposer(let binding):
+            guard let container = coordinator.containerView as? WorkspaceViewContainer else {
+                assertionFailure("ProjectDisclosureRow: coordinator.containerView is not a WorkspaceViewContainer")
+                return
+            }
+            container.presentComposerOverlay(projectBinding: binding)
         }
     }
 
@@ -638,5 +628,25 @@ private struct SessionGroupHeader: View {
         case .inactive: return "stop.circle.fill"
         case .archive:  return "archivebox.fill"
         }
+    }
+}
+
+/// What a project row's "+ New Session" press does. Pure so the routing is
+/// testable without mounting the row: a plain press always opens the one
+/// centered composer with this project pre-filled; Option on a project with
+/// a default template creates a session instantly.
+enum ProjectRowNewSession {
+    enum Action {
+        case instantCreate(AgentTemplate)
+        case openComposer(SessionComposerRequest.ProjectBinding)
+    }
+
+    static func action(for project: Project, optionHeld: Bool, templates: [AgentTemplate]) -> Action {
+        if optionHeld,
+           let defaultId = project.defaultTemplateId,
+           let template = templates.first(where: { $0.id == defaultId }) {
+            return .instantCreate(template)
+        }
+        return .openComposer(.prefilled(project))
     }
 }
