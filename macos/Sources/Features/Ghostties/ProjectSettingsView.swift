@@ -1,7 +1,9 @@
 import SwiftUI
 import GhosttiesCore
 
-/// Popover for editing a project's display name, ghost character, and default template.
+/// Popover for editing a project's display name, ghost character, and default template,
+/// and for managing the (global) templates. Save/Cancel covers the project fields only;
+/// template changes apply immediately (see `ProjectTemplatesSection`).
 struct ProjectSettingsView: View {
     let project: Project
     var onDismiss: () -> Void
@@ -82,6 +84,10 @@ struct ProjectSettingsView: View {
                 .labelsHidden()
                 .pickerStyle(.menu)
             }
+
+            Divider()
+
+            ProjectTemplatesSection()
 
             Divider()
 
