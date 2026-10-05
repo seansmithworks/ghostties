@@ -6,26 +6,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ---
 
-## [Unreleased]
+## [0.1.0-beta.26] — 2026-10-05
 
-The sidebar gets a third state, a narrow rail, and hovering a session now tells you what it needs or is doing. Ghostties also moves onto the latest upstream Ghostty.
+The sidebar gets a third state, a narrow rail, and session status is back at a glance: spinner, `?`, check and cross glyphs return on the right of every row, in the full list and the rail. There is now one composer, a centered single line. Ghostties also moves onto the latest upstream Ghostty.
 
 ### Added
 
-- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a 128pt rail of session icons with a New Session button, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on).
+- **A collapsed sidebar rail.** The sidebar now has three states: the full list, a 128pt rail of session icons with a + (New Session) button, and fully closed. Cmd+S toggles between the full list and the rail; Cmd+Shift+S closes the sidebar completely. Dragging the edge snaps between rail and full width, and the change animates (it snaps instead when Reduce Motion is on).
 - **Hover a session to see what it needs or is doing.** A session that needs approval shows the command and the reason. A running session shows your last prompt, the current step, and how many edits it has made. The rail also shows the session name. Esc dismisses it.
+- **Templates are managed in Project settings.** Create, edit, duplicate, pin and delete templates in a Templates section there. Templates are shared across projects, and changes apply immediately, without Save or Cancel.
+- **Rail buttons are announced by VoiceOver** with the session name, project and status.
 
 ### Changed
 
+- **Status glyphs are back on session rows**, on the right edge: a spinner while a session is working, `?` when it needs you, a check when it's done, a cross on error, and nothing when it has stopped. The collapsed rail shows the same glyphs in the same position, so collapsing hides the titles but leaves the status column where it was.
+- **The rail's top spacing now matches the full list**, so its chevron lines up with the Active header and each glyph lines up with its row.
+- **The session hover card is one card.** The grey block inside it is gone, and in the rail the session name lines up with the content.
+- **There is now one composer.** Every + opens the same centered single-line composer. A project row's + opens it with that project already filled in. Option-clicking a project's + still creates a session straight away when the project has a default template. The zero-chrome style and the old template card are removed.
 - **The default theme now follows macOS.** With no theme set, Ghostties uses Apple System Colors and switches between light and dark with your system appearance. A theme in your config still wins.
 - **Ghostties now builds on the latest upstream Ghostty** (Zig 0.16), bringing in its fixes, including word selection that stops at hard line breaks and a crash fix for tmux `list-windows`.
-- **New Session moved to a button at the bottom of the sidebar**, shared by the full list and the rail.
-- **Row status shows as a single ghost per row** (gray, red when selected). <!-- pending Sean: ghost vs the beta.25 type glyphs (spinner / ? / check); PR #190 shipped the ghost "pending Sean's confirmation". Revise or drop this line once decided. -->
-- **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win. <!-- pending Sean: confirm the window-padding 20 default (PR #190). -->
+- **New Session moved to a + button at the bottom of the sidebar**, shared by the full list and the rail.
+- **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win.
+
+### Removed
+
+- **The zero-chrome composer style and the old template card** are gone. A saved composer style setting is ignored.
 
 ### Fixed
 
-- **Release builds no longer ship with code-coverage instrumentation.** The app is smaller and faster, and it no longer drops stray `default.profraw` files into the folder it ran from.
+- **Release builds no longer ship with code-coverage instrumentation.** The app no longer drops stray `default.profraw` files into the folder it ran from.
 
 ---
 
