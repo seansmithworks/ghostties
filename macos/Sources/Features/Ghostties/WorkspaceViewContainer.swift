@@ -93,6 +93,48 @@ private struct SidebarCollapseCrossfade: View {
     }
 }
 
+/// The sidebar hosting view's one root type, in every mode. Only `content`
+/// swaps (expanded list, rail, or the Flow 05 cross-fade of both); the tray
+/// sits outside it, so `SidebarTray` keeps its identity across those swaps
+/// and morphs between its horizontal bar and vertical pill instead of being
+/// torn down with one tree and rebuilt with the other. `NSHostingView` keeps
+/// the subtree when the new `rootView` wraps the same type.
+private struct SidebarHostRoot: View {
+    @ObservedObject var model: SidebarWidthModel
+    @EnvironmentObject private var store: WorkspaceStore
+    let content: AnyView
+    /// The tray's axis in a settled mode (`true` = the rail's vertical pill).
+    /// `nil` while the pinned⇄collapsed transition is hosted: the axis then
+    /// follows `model.isCollapsedPresentation`, which `transitionTo` flips
+    /// inside the same `withAnimation` as the content cross-fade, so the
+    /// morph rides the Flow 05 curve and lands with the card's width.
+    let trayIsVertical: Bool?
+    /// False for the task-first view, which has no tray.
+    let showsTrayWhenExpanded: Bool
+
+    var body: some View {
+        let vertical = trayIsVertical ?? model.isCollapsedPresentation
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                if vertical || showsTrayWhenExpanded {
+                    SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch())
+                }
+            }
+    }
+
+    /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
+    /// "Expand Sidebar" on the rail, "Open Sidebar" while overlaid — the
+    /// overlay's toggle promotes it to pinned.
+    private var toggleLabel: String {
+        switch store.sidebarMode {
+        case .collapsed: return "Expand Sidebar"
+        case .overlay: return "Open Sidebar"
+        default: return "Collapse Sidebar"
+        }
+    }
+}
+
 /// An NSView that contains the workspace sidebar alongside the existing terminal view.
 /// This replaces TerminalViewContainer as the window's contentView.
 ///
@@ -969,11 +1011,24 @@ class WorkspaceViewContainer: NSView {
         // view mode (project-first/task-first) is otherwise active — it's a
         // width state, not a third view mode, so it takes priority here.
         if sidebarMode == .collapsed {
-            hostingView.rootView = railSidebarContent()
+            hostingView.rootView = hostRoot(content: railSidebarContent(), trayIsVertical: true)
             return
         }
 
-        hostingView.rootView = fullSidebarContent()
+        hostingView.rootView = hostRoot(content: fullSidebarContent(), trayIsVertical: false)
+    }
+
+    /// Wraps sidebar content in `SidebarHostRoot` — see that type for why
+    /// every mode shares one root.
+    private func hostRoot(content: AnyView, trayIsVertical: Bool?) -> AnyView {
+        AnyView(SidebarHostRoot(
+            model: widthModel,
+            content: content,
+            trayIsVertical: trayIsVertical,
+            showsTrayWhenExpanded: currentSidebarViewMode != "taskFirst"
+        )
+        .environmentObject(WorkspaceStore.shared)
+        .environmentObject(coordinator))
     }
 
     /// The collapsed rail's content (Flow 01, sidebar-presence §02),
@@ -1085,7 +1140,7 @@ class WorkspaceViewContainer: NSView {
                 full: fullSidebarContent(),
                 rail: railSidebarContent()
             )
-            hostingView.rootView = AnyView(view)
+            hostingView.rootView = hostRoot(content: AnyView(view), trayIsVertical: nil)
             isCollapseCrossfadeHosted = true
             // Starting presentation is whatever mode we're leaving — set
             // directly (not animated) so the cross-fade animates FROM the

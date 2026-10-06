@@ -18,6 +18,10 @@ struct SidebarRailView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
 
+    private var trayItemCount: Int {
+        WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "").count
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Same top inset as the expanded list's titlebar toolbar
@@ -43,6 +47,7 @@ struct SidebarRailView: View {
                         // session shows the same glyph in the list and the rail.
                         indicatorState: store.globalIndicatorStates[session.id] ?? .inactive,
                         isActive: coordinator.activeSessionId == session.id,
+                        dialEpoch: SidebarDialTuning.epoch(),
                         onTap: { coordinator.focusSession(id: session.id) }
                     )
                 }
@@ -77,8 +82,23 @@ struct SidebarRailView: View {
 
             Spacer(minLength: 0)
 
-            RailTray()
-                .padding(.bottom, 12)
+            #if DEBUG
+            // DEBUG-only: the sidebar DialKit panel in a popover, since the
+            // rail is too narrow to host it inline. Kept out of fixture
+            // captures.
+            if !CaptureFixture.isActive {
+                SidebarRailTuningButton(
+                    defaults: .standard,
+                    onChange: { store.objectWillChange.send() }
+                )
+                .padding(.bottom, 8)
+            }
+            #endif
+
+            // The tray itself is hosted once at the sidebar root
+            // (`SidebarTray`), over both this rail and the expanded list, so
+            // it can morph between them; this reserves its space.
+            Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: true, itemCount: trayItemCount))
         }
         .frame(maxWidth: .infinity)
         .background(.clear)
@@ -107,6 +127,9 @@ struct RailSessionRow: View {
     let projectName: String
     let indicatorState: SessionIndicatorState
     let isActive: Bool
+    /// `SidebarDialTuning.epoch()`: a live Tray glass dial change must
+    /// re-render the selected pill even when nothing else about the row did.
+    var dialEpoch = 0
     let onTap: () -> Void
 
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -141,7 +164,7 @@ struct RailSessionRow: View {
     /// Sidebar vnext (pen.dev `CnDfN`): the selected glyph grows to the
     /// canvas's 35px (17.5pt).
     private var glyphSize: CGFloat {
-        isActive ? RailGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
+        isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
     }
 
     /// Sidebar vnext (pen.dev `CnDfN`, layer `EVYaZ`): the selected rail row
@@ -151,8 +174,8 @@ struct RailSessionRow: View {
     private var rowBackground: some View {
         if isActive {
             Color.clear
-                .frame(width: RailGlassStyle.pillWidth, height: RailGlassStyle.selectedRowHeight)
-                .modifier(RailGlassSurface())
+                .frame(width: SidebarDialTuning.traySelectedPillWidth(), height: SidebarDialTuning.traySelectedPillHeight())
+                .modifier(TrayGlassSurface())
         } else {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
@@ -205,33 +228,5 @@ private struct RailSectionSummaryRow: View {
         .onHover { isHovered = $0 }
         .help("\(label) (\(count))")
         .accessibilityLabel("\(label), \(count)")
-    }
-}
-
-// MARK: - Rail Tray
-
-/// The vertical `SidebarTrayPill` holding icon buttons laid out from
-/// `WorkspaceViewContainer.sidebarTrayItems` (spec §02) — currently New
-/// Session and the sidebar toggle, but the layout doesn't hardcode a count.
-/// Decision 4: no account circle, since there's no account model to show
-/// one for.
-struct RailTray: View {
-    @EnvironmentObject private var coordinator: SessionCoordinator
-    /// See `SidebarTrayPill.forceOpaque`.
-    var forceOpaque = false
-
-    var body: some View {
-        SidebarTrayPill(axis: .vertical, forceOpaque: forceOpaque) {
-            ForEach(WorkspaceViewContainer.sidebarTrayItems(
-                container: coordinator.containerView as? WorkspaceViewContainer,
-                toggleLabel: "Expand Sidebar"
-            )) { item in
-                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, tapEffect: item.tapEffect, railStyle: true, action: item.action)
-            }
-        }
-        // Hugs the icons (button + 2 x `trayInnerPadding`) and sits centered
-        // in the rail column (Sean, 2026-10-05); the expanded tray keeps its
-        // full-width bar.
-        .frame(maxWidth: .infinity)
     }
 }

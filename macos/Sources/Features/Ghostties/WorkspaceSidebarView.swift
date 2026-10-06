@@ -97,7 +97,13 @@ struct WorkspaceSidebarView: View {
 
             Spacer(minLength: 0)
 
-            SidebarBottomTray()
+            // The tray itself is hosted once at the sidebar root
+            // (`SidebarTray`), over both this list and the rail, so it can
+            // morph between them; this reserves its space.
+            Color.clear.frame(height: SidebarTray.reservedHeight(
+                isVertical: false,
+                itemCount: WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "").count
+            ))
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)
@@ -196,7 +202,7 @@ struct WorkspaceSidebarView: View {
             Spacer()
             // Projects keeps its header action (no tray equivalent exists
             // for "New Project"). Sessions no longer does — Flow 01's
-            // bottom tray (`SidebarBottomTray`) owns "New Session" now, and
+            // bottom tray (`SidebarTray`) owns "New Session" now, and
             // this header button duplicated it (spec §01: top group is
             // traffic lights → section header → rows, no header strip).
             if sidebarTab == .projects {
@@ -530,48 +536,6 @@ private struct EmptyStateAddButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(isHovered ? .primary : .secondary)
         .onHover { isHovered = $0 }
-    }
-}
-
-// MARK: - Bottom Tray
-
-/// The sidebar's bottom tray (Flow 01, sidebar-presence §01): a horizontal
-/// `SidebarTrayPill` of icon buttons — "New Session" and the sidebar
-/// toggle — centered in the sidebar's bottom area, same shared item list
-/// and pill component the collapsed rail's vertical tray uses. Decision 4
-/// (spec): no account row — no account model exists in the sidebar sources
-/// today, so the pill omits the "Sean Smith" affordance from the design
-/// canvas.
-private struct SidebarBottomTray: View {
-    @EnvironmentObject private var store: WorkspaceStore
-    @EnvironmentObject private var coordinator: SessionCoordinator
-
-    var body: some View {
-        // Full-width bar (Flow 07 round 6, layer `OEpEM`) — no longer a
-        // centered capsule between two `Spacer`s. Horizontal padding matches
-        // `RecentsRowView`/`SessionSectionHeader`'s leading inset so the
-        // tray's edges line up with row content above it.
-        SidebarTrayPill(axis: .horizontal) {
-            ForEach(WorkspaceViewContainer.sidebarTrayItems(
-                container: coordinator.containerView as? WorkspaceViewContainer,
-                toggleLabel: toggleLabel
-            )) { item in
-                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, stretch: true, tapEffect: item.tapEffect, action: item.action)
-            }
-        }
-        .padding(.horizontal, SidebarDialTuning.trayMargin())
-        .padding(.top, SidebarDialTuning.listToTrayGap())
-        .padding(.bottom, 8)
-    }
-
-    /// "Collapse Sidebar" while pinned (toggle now flips full width ↔ rail,
-    /// not closed), "Open Sidebar" while overlaid — the overlay's toggle
-    /// promotes it to pinned (existing behavior, unchanged by Flow 01).
-    /// `store.sidebarMode` covers `.collapsed` too, but the collapsed rail
-    /// hosts `RailTray`, not this view, so that case never actually renders
-    /// here.
-    private var toggleLabel: String {
-        store.sidebarMode == .overlay ? "Open Sidebar" : "Collapse Sidebar"
     }
 }
 

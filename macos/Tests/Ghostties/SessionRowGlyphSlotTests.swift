@@ -330,8 +330,8 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let size = CGSize(width: railWidth, height: 260)
 
         // Pill width: the tray's own ideal width is the pill (icons + 2 x padding).
-        let alone = NSHostingView(rootView: RailTray().environmentObject(SessionCoordinator()))
-        let expected = RailGlassStyle.pillWidth
+        let alone = NSHostingView(rootView: SidebarTray(isVertical: true, toggleLabel: "Expand Sidebar").environmentObject(SessionCoordinator()))
+        let expected = TrayGlassStyle.verticalButtonSize + 2 * TrayGlassStyle.innerPadding
         XCTAssertEqual(alone.fittingSize.width, expected, accuracy: 0.5, "pill width = icon + 2 x padding")
 
         // Centering: render in a rail-width column with the plain (non-glass) pill,
@@ -339,7 +339,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         // column is the rail's own chrome colour and the pill is found as the
         // pixels lighter than it (its shadow only darkens, so it can't widen the hit).
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
-        let hosting = NSHostingView(rootView: RailTray(forceOpaque: true)
+        let hosting = NSHostingView(rootView: SidebarTray(isVertical: true, toggleLabel: "Expand Sidebar", forceOpaque: true)
             .environmentObject(SessionCoordinator())
             .frame(width: size.width, height: size.height, alignment: .bottomLeading)
             .background(Color(nsColor: chrome)))

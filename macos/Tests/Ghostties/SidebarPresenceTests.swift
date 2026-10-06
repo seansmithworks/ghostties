@@ -70,8 +70,8 @@ struct SidebarPresenceTests {
 
     // MARK: - Tray Items — Single Source of Truth
 
-    /// `sidebarTrayItems` is the one ordered list both `SidebarBottomTray`
-    /// (expanded/overlay) and `RailTray` (collapsed) render from. Cover its
+    /// `sidebarTrayItems` is the one ordered list `SidebarTray` renders on
+    /// both axes (expanded/overlay and collapsed). Cover its
     /// order/ids directly — adding a Settings entry later should only ever
     /// require inserting into this list, not touching two views.
     @Test func trayItemsAreOrderedNewSessionThenToggle() {
@@ -127,7 +127,7 @@ struct SidebarPresenceTests {
     /// The floor only has to fit the tray pill — it must stay well under
     /// the typical hugged width, or it silently becomes a fixed width again.
     @Test func railFloorFitsTrayPillButStaysUnderTheHug() {
-        let trayPillWidth: CGFloat = 32 + 4 * 2
+        let trayPillWidth: CGFloat = TrayGlassStyle.verticalButtonSize + 2 * TrayGlassStyle.innerPadding
         #expect(WorkspaceLayout.sidebarRailWidth >= trayPillWidth)
         #expect(WorkspaceLayout.sidebarRailWidth < 98)
     }
