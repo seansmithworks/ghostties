@@ -42,6 +42,52 @@ enum CaptureFixture {
 
     #if DEBUG
 
+    // MARK: - Harness state dir + dispatch log
+
+    /// `$GHOSTTIES_STATE_DIR`, only when fixture mode is active and it is
+    /// set. Unlike `WorkspacePersistence.directory` there is no fallback to
+    /// the real Application Support path: the harness logs never go there.
+    static var harnessStateDir: URL? {
+        guard isActive,
+              let raw = ProcessInfo.processInfo.environment["GHOSTTIES_STATE_DIR"], !raw.isEmpty
+        else { return nil }
+        return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath, isDirectory: true)
+    }
+
+    /// One JSON object, no trailing newline. Optional values encode as null.
+    static func jsonLine(_ fields: [String: Any?]) -> Data {
+        let object = fields.mapValues { $0 ?? NSNull() }
+        return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data("{}".utf8)
+    }
+
+    /// Appends `line` plus a newline to `url`, creating the file (and its
+    /// directory) when missing.
+    static func appendLine(_ line: Data, to url: URL) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil) }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: line + Data("\n".utf8))
+    }
+
+    static func dispatchLine(
+        t: TimeInterval, project: String, cwd: String, command: String?, template: String?
+    ) -> Data {
+        jsonLine(["t": t, "project": project, "cwd": cwd, "command": command, "template": template])
+    }
+
+    /// `SessionCoordinator.createSession` calls this just before it spawns.
+    /// Appends to `$GHOSTTIES_STATE_DIR/dispatch.jsonl`; no-op outside fixture mode.
+    static func logDispatch(project: String, cwd: String, command: String?, template: String?) {
+        guard let dir = harnessStateDir else { return }
+        appendLine(
+            dispatchLine(t: Date().timeIntervalSince1970, project: project, cwd: cwd, command: command, template: template),
+            to: dir.appendingPathComponent("dispatch.jsonl")
+        )
+    }
+
     // MARK: - Isolated defaults
 
     /// Throwaway per-process suite for fixture runs, so a harness run never
@@ -64,9 +110,15 @@ enum CaptureFixture {
         let name = defaultsSuiteName
         UserDefaults.standard.removePersistentDomain(forName: name)
         fixtureDefaults?.removePersistentDomain(forName: name)
-        let plist = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences/\(name).plist")
-        try? FileManager.default.removeItem(at: plist)
+        // Flush the removal to cfprefsd before deleting the file, so the daemon
+        // has nothing pending to write back over the delete.
+        fixtureDefaults?.synchronize()
+        try? FileManager.default.removeItem(at: defaultsPlistURL)
+    }
+
+    static var defaultsPlistURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/\(defaultsSuiteName).plist")
     }
 
     /// Deterministic UUID so repeated captures produce byte-stable ghost

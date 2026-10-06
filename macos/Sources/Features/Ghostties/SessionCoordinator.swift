@@ -315,6 +315,17 @@ final class SessionCoordinator: ObservableObject {
             sessionId: session.id
         )
 
+        #if DEBUG
+        if CaptureFixture.isActive {
+            CaptureFixture.logDispatch(
+                project: project.name,
+                cwd: config.workingDirectory ?? project.rootPath,
+                command: resolvedCommand,
+                template: template.id.uuidString
+            )
+        }
+        #endif
+
         let newView = Ghostty.SurfaceView(ghosttyApp, baseConfig: config)
         let newTree = SplitTree(view: newView)
 

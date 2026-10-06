@@ -48,8 +48,8 @@ struct CaptureFixtureDefaultsTests {
         CaptureFixture.cleanUpDefaults(fixtureActive: true)
         #expect(UserDefaults(suiteName: suiteName)!.string(forKey: probeKey) == nil)
         #expect(defaults.string(forKey: probeKey) == nil)
-        let plist = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences/\(suiteName).plist")
-        #expect(!FileManager.default.fileExists(atPath: plist.path))
+        // cfprefsd flushes asynchronously; nothing may reappear after a beat.
+        Thread.sleep(forTimeInterval: 0.5)
+        #expect(!FileManager.default.fileExists(atPath: CaptureFixture.defaultsPlistURL.path))
     }
 }
