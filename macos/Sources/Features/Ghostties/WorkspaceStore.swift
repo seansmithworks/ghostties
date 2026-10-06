@@ -170,6 +170,23 @@ final class WorkspaceStore: ObservableObject {
         self.persistenceDisabled = true
     }
 
+    /// Test-only initializer for the persistence round trip: loads state the
+    /// way the real `init()` does (`WorkspacePersistence.load()`, from
+    /// `GHOSTTIES_STATE_DIR` when set) but leaves persistence ENABLED, and
+    /// skips the real init's preset/hook seeding, which writes under `~/`.
+    /// Pair with `flushPersistenceForTesting()` to await the debounced write.
+    init(testingStateFromDisk: ()) {
+        let state = WorkspacePersistence.load()
+        self.projects = state.projects
+        self.sessions = state.sessions
+        self.sidebarMode = state.sidebarMode
+        self.lastSelectedProjectId = state.lastSelectedProjectId
+        self.hasShownPinMigrationNotice = state.hasShownPinMigrationNotice
+        self.hasDismissedPinMigrationNotice = state.hasDismissedPinMigrationNotice
+        self.templates = AgentTemplate.defaults + state.templates.filter { !$0.isDefault }
+        self.persistenceDisabled = false
+    }
+
     /// When `true`, `persist()` is a no-op. Set by the test-only init so that
     /// mutating helpers like `recordActivity` don't pollute the real
     /// `~/Library/Application Support/Ghostties/workspace.json`.
@@ -1370,6 +1387,12 @@ final class WorkspaceStore: ObservableObject {
     /// "The write didn't fire" is exactly the assertion that would have
     /// caught the storm incident in `project_perf-activity-invalidation-storm.md`.
     private(set) var persistCallCount = 0
+
+    /// Test-only: awaits the pending debounced write (and its detached disk
+    /// save) so a test can read `workspace.json` back deterministically.
+    func flushPersistenceForTesting() async {
+        await persistTask?.value
+    }
     #endif
 
     private func persist() {

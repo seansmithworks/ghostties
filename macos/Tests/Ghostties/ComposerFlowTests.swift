@@ -493,13 +493,14 @@ struct ComposerFlowTests {
     /// own action, which runs the section's real `perform(_:on:)`.
     @MainActor
     private final class TemplatesRig {
-        let workspace = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let workspace: WorkspaceStore
         let composer = SessionComposerStore(isolatedForTesting: ())
         let window: KeyableWindow
         let hosting: NSHostingView<AnyView>
 
-        init() {
-            let view = ProjectTemplatesSection(composerStore: composer).environmentObject(workspace)
+        init(workspace: WorkspaceStore? = nil) {
+            self.workspace = workspace ?? WorkspaceStore(testingProjects: [], testingSessions: [])
+            let view = ProjectTemplatesSection(composerStore: composer).environmentObject(self.workspace)
             hosting = NSHostingView(rootView: AnyView(view))
             let size = hosting.fittingSize
             window = KeyableWindow(
@@ -628,11 +629,14 @@ struct ComposerFlowTests {
     }
 
     /// T2. Edit a user template, type a command, Save: the store holds it and
-    /// so does what a relaunch would read back. (Persistence is exercised as
-    /// the same Codable round trip `WorkspacePersistence` writes and reads;
-    /// the debounced disk write itself is off in the testing store.)
+    /// so does a fresh store loaded from disk. (The workspace here writes through
+    /// the real `persist()` to a temp `GHOSTTIES_STATE_DIR`.)
     @Test func t2_editAndSavePersistsTheCommand() async throws {
-        let rig = TemplatesRig()
+        let stateDir = Self.makeRoot("t2-state")
+        defer { try? FileManager.default.removeItem(atPath: stateDir) }
+        setenv("GHOSTTIES_STATE_DIR", stateDir, 1)
+        defer { unsetenv("GHOSTTIES_STATE_DIR") }
+        let rig = TemplatesRig(workspace: WorkspaceStore(testingStateFromDisk: ()))
         let created = rig.workspace.addTemplate(AgentTemplate(name: "Mine", kind: .custom))
         #expect(created.command == nil)
 
@@ -659,11 +663,10 @@ struct ComposerFlowTests {
         let saved = rig.workspace.templates.first { $0.id == created.id }
         #expect(saved?.command == "codex")
 
-        let state = WorkspacePersistence.State(templates: rig.workspace.templates.filter { !$0.isDefault })
-        let reloaded = try JSONDecoder().decode(
-            WorkspacePersistence.State.self,
-            from: JSONEncoder().encode(state)
-        )
+        // Real save path: flush the store's own debounced write, then build a
+        // FRESH store from the same state directory.
+        await rig.workspace.flushPersistenceForTesting()
+        let reloaded = WorkspaceStore(testingStateFromDisk: ())
         #expect(reloaded.templates.first { $0.id == created.id }?.command == "codex")
     }
 
