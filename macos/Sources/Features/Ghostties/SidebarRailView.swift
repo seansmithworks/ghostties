@@ -150,8 +150,9 @@ struct RailSessionRow: View {
     @ViewBuilder
     private var rowBackground: some View {
         if isActive {
-            RailGlassBackground()
+            Color.clear
                 .frame(width: RailGlassStyle.pillWidth, height: RailGlassStyle.selectedRowHeight)
+                .modifier(RailGlassSurface())
         } else {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isHovered ? Color.primary.opacity(0.06) : .clear)

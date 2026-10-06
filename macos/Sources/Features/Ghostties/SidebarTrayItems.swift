@@ -182,28 +182,36 @@ enum RailGlassStyle {
     }
 }
 
-/// A white Liquid Glass capsule (`RailGlassStyle`) — the rail tray's and the
-/// selected rail row's shared surface. Opaque white below macOS 26, under
+/// Puts a view on a white Liquid Glass capsule (`RailGlassStyle`) — the rail
+/// tray's and the selected rail row's shared surface. The white layer and rim
+/// sit in the view's own background, so `.glassEffect` draws the glass under
+/// them and the content stays on top. Opaque white below macOS 26, under
 /// Reduce Transparency, or with `forceOpaque` (tests: `cacheDisplay` can't
 /// capture glass).
-struct RailGlassBackground: View {
+struct RailGlassSurface: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var forceOpaque = false
+    /// The tray's press response (`.interactive()`), as before vnext. The
+    /// selected row was never interactive.
+    var interactive = false
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: RailGlassStyle.cornerRadius, style: .continuous)
     }
 
-    var body: some View {
+    func body(content: Content) -> some View {
         Group {
             if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
-                Color.clear
-                    .glassEffect(.regular.tint(RailGlassStyle.glassTint(for: colorScheme)), in: shape)
-                    .overlay(shape.fill(RailGlassStyle.surfaceFill(for: colorScheme)))
-                    .overlay(shape.strokeBorder(RailGlassStyle.rimColor(for: colorScheme), lineWidth: RailGlassStyle.rimWidth))
+                let glass = Glass.regular.tint(RailGlassStyle.glassTint(for: colorScheme))
+                GlassEffectContainer {
+                    content
+                        .background(shape.fill(RailGlassStyle.surfaceFill(for: colorScheme)))
+                        .overlay(shape.strokeBorder(RailGlassStyle.rimColor(for: colorScheme), lineWidth: RailGlassStyle.rimWidth))
+                }
+                .glassEffect(interactive ? glass.interactive() : glass, in: shape)
             } else {
-                shape.fill(RailGlassStyle.opaqueFill(for: colorScheme))
+                content.background(shape.fill(RailGlassStyle.opaqueFill(for: colorScheme)))
             }
         }
         .shadow(
@@ -253,7 +261,7 @@ struct SidebarTrayPill<Content: View>: View {
             // The collapsed rail's tray: Sidebar vnext's white glass capsule.
             VStack(spacing: RailGlassStyle.itemGap, content: content)
                 .padding(RailGlassStyle.innerPadding)
-                .background(RailGlassBackground(forceOpaque: forceOpaque))
+                .modifier(RailGlassSurface(forceOpaque: forceOpaque, interactive: true))
         } else if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
             GlassEffectContainer {
                 pillStack
@@ -279,19 +287,13 @@ struct SidebarTrayPill<Content: View>: View {
         }
     }
 
-    @ViewBuilder
+    /// The horizontal bar's stack; `body` renders the vertical (rail) pill
+    /// itself. `maxWidth: .infinity` lets the bar's flexible children
+    /// (`TrayIconButton(stretch: true)`) actually claim the full sidebar
+    /// width instead of hugging their intrinsic size.
     private var pillStack: some View {
-        switch axis {
-        case .horizontal:
-            // `maxWidth: .infinity` lets the bar's flexible children
-            // (`TrayIconButton(stretch: true)`) actually claim the full
-            // sidebar width instead of hugging their intrinsic size.
-            HStack(spacing: TrayGlassStyle.itemGap, content: content)
-                .frame(maxWidth: .infinity)
-        case .vertical:
-            // Unreached: `body` renders the vertical (rail) pill itself.
-            VStack(spacing: TrayGlassStyle.itemGap, content: content)
-        }
+        HStack(spacing: TrayGlassStyle.itemGap, content: content)
+            .frame(maxWidth: .infinity)
     }
 
     private var fill: Color {

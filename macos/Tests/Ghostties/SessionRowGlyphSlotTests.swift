@@ -331,15 +331,18 @@ final class SessionRowGlyphSlotTests: XCTestCase {
 
         // Pill width: the tray's own ideal width is the pill (icons + 2 x padding).
         let alone = NSHostingView(rootView: RailTray().environmentObject(SessionCoordinator()))
-        let expected = SidebarDialTuning.trayButtonSize() + 2 * SidebarDialTuning.trayInnerPadding()
+        let expected = RailGlassStyle.pillWidth
         XCTAssertEqual(alone.fittingSize.width, expected, accuracy: 0.5, "pill width = icon + 2 x padding")
 
         // Centering: render in a rail-width column with the plain (non-glass) pill,
-        // since cacheDisplay can't capture glass.
+        // since cacheDisplay can't capture glass. The pill is near-white, so the
+        // column is the rail's own chrome colour and the pill is found as the
+        // pixels lighter than it (its shadow only darkens, so it can't widen the hit).
+        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
         let hosting = NSHostingView(rootView: RailTray(forceOpaque: true)
             .environmentObject(SessionCoordinator())
             .frame(width: size.width, height: size.height, alignment: .bottomLeading)
-            .background(Color.white))
+            .background(Color(nsColor: chrome)))
         hosting.frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .aqua)
@@ -354,8 +357,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         var minX = Int.max, maxX = -1
         for x in 0..<rep.pixelsWide {
             guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
-            let darkness: CGFloat = 3 - c.redComponent - c.greenComponent - c.blueComponent
-            if darkness > 0.06 { minX = min(minX, x); maxX = max(maxX, x) }
+            let lift: CGFloat = (c.redComponent + c.greenComponent + c.blueComponent)
+                - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent)
+            if lift > 0.06 { minX = min(minX, x); maxX = max(maxX, x) }
         }
         XCTAssertGreaterThanOrEqual(maxX, 0, "tray pill not found")
         let pillMinX: CGFloat = CGFloat(minX) / scale
