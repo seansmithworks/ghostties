@@ -1,5 +1,6 @@
 #!/bin/bash
-# Ghostties verify rig. Subcommands: up | doctor | shot <name> | video <name> <seconds> | down
+# Ghostties verify rig. Subcommands: up | doctor | shot <name> | video <name> <seconds> [--focus x,y,w,h]
+#   | script <file.json> | report <contract.md> | down
 # Launches the Debug "Ghostties Dev" app in fixture mode and captures its window.
 # Never sends keystrokes/clicks. Never touches /Applications/Ghostties.app, the
 # com.seansmithdesign.ghostties (Release) domain, or com.mitchellh.ghostty.
@@ -82,6 +83,7 @@ cmd_up() {
   if [ -n "${VERIFY_COMPOSER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_COMPOSER=$VERIFY_COMPOSER"); fi
   if [ -n "${VERIFY_PROJECT_SETTINGS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_PROJECT_SETTINGS=$VERIFY_PROJECT_SETTINGS"); fi
   if [ -n "${VERIFY_SIDEBAR_TOGGLE_AFTER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER=$VERIFY_SIDEBAR_TOGGLE_AFTER"); fi
+  if [ -n "${VERIFY_SCRIPT:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SCRIPT=$VERIFY_SCRIPT"); fi
   env -u GHOSTTIES_SESSION_ID -u GHOSTTIES_LAUNCHER \
     GHOSTTIES_CAPTURE_FIXTURE=1 GHOSTTIES_STATE_DIR="$EV/state" ${extra[@]+"${extra[@]}"} \
     "$BIN" > "$EV/app.log" 2>&1 &
@@ -119,23 +121,104 @@ cmd_shot() {
 
 # Records only the recorded pid's largest window, then converts to an
 # H.264 mp4 (~1400px wide) next to the shots. The .mov is kept as evidence.
+# With --focus x,y,w,h (window points, origin top-left) it also writes
+# <name>.focus.mp4: that rect cropped at the backing scale, upscaled to 1080px wide.
 cmd_video() {
-  local name="${1:-}" secs="${2:-}"
-  [ -n "$name" ] && [ -n "$secs" ] || die "usage: video <name> <seconds>"
+  local name="${1:-}" secs="${2:-}" focus=""
+  [ -n "$name" ] && [ -n "$secs" ] || die "usage: video <name> <seconds> [--focus x,y,w,h]"
+  shift 2
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --focus) [ -n "${2:-}" ] || die "--focus needs x,y,w,h"; focus="$2"; shift 2 ;;
+      *) die "unknown video argument: $1" ;;
+    esac
+  done
   [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || die "video name must match [A-Za-z0-9._-]+"
   [[ "$secs" =~ ^[0-9]+$ ]] && [ "$secs" -gt 0 ] && [ "$secs" -le 60 ] || die "video seconds must be an integer 1-60"
+  local fx fy fw fh
+  if [ -n "$focus" ]; then
+    [[ "$focus" =~ ^[0-9]+(\.[0-9]+)?(,[0-9]+(\.[0-9]+)?){3}$ ]] || die "--focus must be x,y,w,h in window points"
+    IFS=, read -r fx fy fw fh <<< "$focus"
+    command -v ffprobe >/dev/null || die "ffprobe not found"
+  fi
   command -v ffmpeg >/dev/null || die "ffmpeg not found"
   alive || die "not running; run up"
   awake
   local w; w="$(swift "$HERE/windows.swift" "$(pid)" | head -1)"; set -- $w
   [ -n "${1:-}" ] || die "no window for pid $(pid)"
+  local wid="$1" wpt="$2" hpt="$3"
   local mov="$EV/shots/$name.mov" mp4="$EV/shots/$name.mp4"
-  rm -f "$mov" "$mp4"
-  screencapture -x -v -V "$secs" -l "$1" "$mov" || die "screencapture -v failed"
+  rm -f "$mov" "$mp4" "$EV/shots/$name.focus.mp4"
+  screencapture -x -v -V "$secs" -l "$wid" "$mov" || die "screencapture -v failed"
   [ -s "$mov" ] || die "no video written to $mov"
   ffmpeg -loglevel error -y -i "$mov" -vf "scale=1400:-2" -c:v libx264 -pix_fmt yuv420p -an -movflags +faststart "$mp4" \
     || die "ffmpeg conversion failed"
-  echo "video: $mp4 (window $1, ${2}x${3}, ${secs}s)"
+  echo "video: $mp4 (window $wid, ${wpt}x${hpt}, ${secs}s)"
+  if [ -n "$focus" ]; then
+    local pxw crop
+    pxw="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$mov")"
+    [[ "$pxw" =~ ^[0-9]+$ ]] || die "ffprobe could not read the clip width"
+    # scale = pixels per point; even integer crop box (yuv420p needs even sizes).
+    crop="$(awk -v pxw="$pxw" -v wpt="$wpt" -v x="$fx" -v y="$fy" -v w="$fw" -v h="$fh" 'BEGIN{
+      s=pxw/wpt; cw=int(w*s/2)*2; ch=int(h*s/2)*2; cx=int(x*s/2)*2; cy=int(y*s/2)*2;
+      if (cw<2||ch<2) exit 1; printf "crop=%d:%d:%d:%d", cw, ch, cx, cy }')" || die "--focus rect is empty"
+    ffmpeg -loglevel error -y -i "$mov" -vf "$crop,scale=1080:-2:flags=lanczos" -c:v libx264 -pix_fmt yuv420p -an -movflags +faststart "$EV/shots/$name.focus.mp4" \
+      || die "ffmpeg focus crop failed ($crop; a rect outside the window fails here)"
+    echo "video: $EV/shots/$name.focus.mp4 (focus $focus pt, $crop)"
+  fi
+}
+
+# Runs a capture script (see capture-script-schema.md). Launches like `up` with
+# GHOSTTIES_CAPTURE_SCRIPT, shoots each mark the app announces in marks.jsonl, then
+# touches marks/<name>.done so the app continues. Exits non-zero on script.error or
+# timeout (VERIFY_SCRIPT_TIMEOUT seconds, default 120). The app is left up either way: run down.
+cmd_script() {
+  local f="${1:-}"; [ -n "$f" ] || die "usage: script <file.json>"
+  [ -f "$f" ] || die "no such script file: $f"
+  f="$(cd "$(dirname "$f")" && pwd)/$(basename "$f")"
+  python3 -I - "$f" <<'PY' || die "script file is not valid JSON with a non-empty steps array"
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert isinstance(d.get("steps"), list) and d["steps"]
+PY
+  local sd="$EV/state" timeout="${VERIFY_SCRIPT_TIMEOUT:-120}"
+  [[ "$timeout" =~ ^[0-9]+$ ]] && [ "$timeout" -gt 0 ] || die "VERIFY_SCRIPT_TIMEOUT must be a positive integer"
+  mkdir -p "$sd"
+  rm -rf "$sd/marks" "$sd/marks.jsonl" "$sd/script.done" "$sd/script.error" "$sd/dispatch.jsonl"
+  mkdir -p "$sd/marks"
+  VERIFY_SCRIPT="$f" cmd_up
+  local seen=0 start now n line mark
+  start="$(date +%s)"
+  while :; do
+    if [ -f "$sd/script.error" ]; then
+      echo "FAIL: script error: $(head -1 "$sd/script.error")" >&2; return 1
+    fi
+    if [ -f "$sd/marks.jsonl" ]; then
+      n="$(wc -l < "$sd/marks.jsonl" | tr -d ' ')"
+      while [ "$seen" -lt "$n" ]; do
+        seen=$((seen + 1))
+        line="$(sed -n "${seen}p" "$sd/marks.jsonl")"
+        mark="$(python3 -I -c 'import json,sys; print(json.loads(sys.argv[1])["name"])' "$line")" \
+          || { echo "FAIL: bad marks.jsonl line $seen: $line" >&2; return 1; }
+        [[ "$mark" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "FAIL: mark name not shot-safe: $mark" >&2; return 1; }
+        cmd_shot "$mark" || return 1
+        : > "$sd/marks/$mark.done"
+      done
+    fi
+    if [ -f "$sd/script.done" ]; then
+      echo "script: done, $seen mark(s) shot, evidence $EV (dispatch: $sd/dispatch.jsonl)"; return 0
+    fi
+    alive || { echo "FAIL: app exited before script.done (see $EV/app.log)" >&2; return 1; }
+    now="$(date +%s)"
+    [ $((now - start)) -lt "$timeout" ] || { echo "FAIL: script timed out after ${timeout}s" >&2; return 1; }
+    sleep 0.1
+  done
+}
+
+cmd_report() {
+  local c="${1:-}"; [ -n "$c" ] || die "usage: report <contract.md>  (status.json is read beside it; page goes to \$VERIFY_REPORT_OUT or $EV/report.html)"
+  mkdir -p "$EV"
+  python3 -I "$HERE/contract-report.py" "$c" "${VERIFY_REPORT_OUT:-$EV/report.html}"
 }
 
 cmd_down() {
@@ -175,6 +258,8 @@ case "${1:-}" in
   doctor) cmd_doctor ;;
   shot) shift; cmd_shot "$@" ;;
   video) shift; cmd_video "$@" ;;
+  script) shift; cmd_script "$@" ;;
+  report) shift; cmd_report "$@" ;;
   down) cmd_down ;;
-  *) echo "usage: run.sh up|doctor|shot <name>|video <name> <seconds>|down  (env: VERIFY_SIDEBAR_MODE, VERIFY_POPOVER, VERIFY_SIDEBAR_TAB, VERIFY_EXPAND_PROJECT, VERIFY_COMPOSER, VERIFY_PROJECT_SETTINGS, VERIFY_SIDEBAR_TOGGLE_AFTER, VERIFY_BUILD=0)"; exit 2 ;;
+  *) echo "usage: run.sh up|doctor|shot <name>|video <name> <seconds> [--focus x,y,w,h]|script <file.json>|report <contract.md>|down  (env: VERIFY_SCRIPT_TIMEOUT, VERIFY_SIDEBAR_MODE, VERIFY_POPOVER, VERIFY_SIDEBAR_TAB, VERIFY_EXPAND_PROJECT, VERIFY_COMPOSER, VERIFY_PROJECT_SETTINGS, VERIFY_SIDEBAR_TOGGLE_AFTER, VERIFY_BUILD=0)"; exit 2 ;;
 esac
