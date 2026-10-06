@@ -109,7 +109,6 @@ struct RailSessionRow: View {
     let isActive: Bool
     let onTap: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var coordinator: SessionCoordinator
     @State private var isHovered = false
 
@@ -125,8 +124,8 @@ struct RailSessionRow: View {
         Button(action: onTap) {
             // No side padding: the card spans the rail's content margins
             // (symmetric), so centering in the card centers on the rail.
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
-                .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize)
+                .frame(width: glyphSize, height: glyphSize)
                 .frame(maxWidth: .infinity)
             .frame(height: SidebarDialTuning.rowHeight())
             .background(rowBackground)
@@ -139,20 +138,20 @@ struct RailSessionRow: View {
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
-    /// Selected rail row is the same raised card as the expanded sidebar's
-    /// selected row (`RecentsRowView.rowBackground`) — Flow 07's collapsed
-    /// export (`yhzPU.png`) shows the same white card + shadow around the
-    /// top ghost there, not a flat tint.
+    /// Sidebar vnext (pen.dev `CnDfN`): the selected glyph grows to the
+    /// canvas's 35px (17.5pt).
+    private var glyphSize: CGFloat {
+        isActive ? RailGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
+    }
+
+    /// Sidebar vnext (pen.dev `CnDfN`, layer `EVYaZ`): the selected rail row
+    /// is the tray's white glass capsule, at the tray's width, centered in
+    /// the row slot.
     @ViewBuilder
     private var rowBackground: some View {
         if isActive {
-            RoundedRectangle(cornerRadius: SidebarDialTuning.selectedCardCornerRadius())
-                .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color(WorkspaceLayout.canvasBackgroundLight))
-                .shadow(
-                    color: Color.black.opacity(SidebarDialTuning.selectedCardShadowOpacity()),
-                    radius: SidebarDialTuning.selectedCardShadowRadius(),
-                    y: SidebarDialTuning.selectedCardShadowYOffset()
-                )
+            RailGlassBackground()
+                .frame(width: RailGlassStyle.pillWidth, height: RailGlassStyle.selectedRowHeight)
         } else {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
@@ -226,7 +225,7 @@ struct RailTray: View {
                 container: coordinator.containerView as? WorkspaceViewContainer,
                 toggleLabel: "Expand Sidebar"
             )) { item in
-                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, tapEffect: item.tapEffect, action: item.action)
+                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, tapEffect: item.tapEffect, railStyle: true, action: item.action)
             }
         }
         // Hugs the icons (button + 2 x `trayInnerPadding`) and sits centered

@@ -113,6 +113,107 @@ enum TrayGlassStyle {
     static let rimOpacityDark: Double = 0.14
 }
 
+/// "Sidebar vnext" (pen.dev `CnDfN`) for the collapsed rail only: the tray
+/// and the selected rail row become the same white Liquid Glass pill. Canvas
+/// values are retina px (its traffic lights measure 28px, the built app's
+/// 14pt), so every value here is the canvas value / 2. The expanded tray
+/// keeps `TrayGlassStyle`.
+enum RailGlassStyle {
+    /// Tray button: canvas 88px (24px padding around a 40px icon frame).
+    static let buttonSize: CGFloat = 44
+    /// Tray icon: canvas 35px.
+    static let iconSize: CGFloat = 17.5
+    /// Tray button hover shape: canvas r12px.
+    static let buttonCornerRadius: CGFloat = 6
+    /// Pill padding around its buttons: canvas 8px.
+    static let innerPadding: CGFloat = 4
+    /// Canvas buttons are stacked with no gap.
+    static let itemGap: CGFloat = 0
+    /// Canvas r64px on a 104px-wide pill: clamps to a capsule.
+    static let cornerRadius: CGFloat = 32
+    /// Pill width — the column the tray and the selected row share
+    /// (canvas 104px): one button + padding on both sides.
+    static var pillWidth: CGFloat { buttonSize + 2 * innerPadding }
+
+    /// Selected rail row: canvas 72px tall (16px padding around a 40px
+    /// icon frame), glyph 35px (vs the 28px it replaces).
+    static let selectedRowHeight: CGFloat = 36
+    static let selectedGlyphSize: CGFloat = 17.5
+
+    /// Glass tint. Dark mode has no canvas; it keeps the warm chrome tint
+    /// the tray already used. Light mode tints nothing: the white comes from
+    /// `surfaceFill`, since a native `.tint(white 0.8)` blends far weaker
+    /// than the canvas's 80% white and reads grey.
+    static func glassTint(for colorScheme: ColorScheme) -> Color? {
+        colorScheme == .dark ? TrayGlassStyle.glassTint(for: .dark) : nil
+    }
+
+    /// Canvas base fill `#ffffffcc`, laid over the glass (light only).
+    static func surfaceFill(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .clear : Color.white.opacity(0.8)
+    }
+
+    /// Bright rim standing in for the shader's fresnel edge (canvas
+    /// `u_edgeWidth` 3px). Native glass can't do the chromatic fringe; this
+    /// gets the white edge only. Dark mode keeps the tray's dim rim.
+    static let rimWidth: CGFloat = 1.5
+    static func rimColor(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? TrayGlassStyle.innerHighlightStroke(for: .dark) : Color.white
+    }
+
+    /// Tray icon weight: the canvas's lucide icons are 2px strokes on a
+    /// 24px grid (~1.5pt at 17.5pt), which `.regular` matches; the expanded
+    /// tray's `.medium` reads heavier.
+    static let iconWeight: Font.Weight = .regular
+
+    /// Opaque fallback (pre-26 / Reduce Transparency).
+    static func opaqueFill(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.8)
+    }
+
+    /// Canvas outer shadow `#00000014`, y4px, blur 20px.
+    static let shadowColor = Color.black.opacity(0.078)
+    static let shadowRadius: CGFloat = 10
+    static let shadowYOffset: CGFloat = 2
+
+    /// Canvas icon fill `#636363` = `textSecondaryLight`.
+    static func iconColor(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+    }
+}
+
+/// A white Liquid Glass capsule (`RailGlassStyle`) — the rail tray's and the
+/// selected rail row's shared surface. Opaque white below macOS 26, under
+/// Reduce Transparency, or with `forceOpaque` (tests: `cacheDisplay` can't
+/// capture glass).
+struct RailGlassBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    var forceOpaque = false
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: RailGlassStyle.cornerRadius, style: .continuous)
+    }
+
+    var body: some View {
+        Group {
+            if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
+                Color.clear
+                    .glassEffect(.regular.tint(RailGlassStyle.glassTint(for: colorScheme)), in: shape)
+                    .overlay(shape.fill(RailGlassStyle.surfaceFill(for: colorScheme)))
+                    .overlay(shape.strokeBorder(RailGlassStyle.rimColor(for: colorScheme), lineWidth: RailGlassStyle.rimWidth))
+            } else {
+                shape.fill(RailGlassStyle.opaqueFill(for: colorScheme))
+            }
+        }
+        .shadow(
+            color: RailGlassStyle.shadowColor,
+            radius: RailGlassStyle.shadowRadius,
+            y: RailGlassStyle.shadowYOffset
+        )
+    }
+}
+
 /// The floating rounded pill that houses tray icon buttons. On macOS 26+,
 /// with transparency effects allowed, this is real Liquid Glass
 /// (`.glassEffect(.regular.tint(...).interactive())`) — Sean wanted to try
@@ -148,7 +249,12 @@ struct SidebarTrayPill<Content: View>: View {
     }
 
     var body: some View {
-        if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
+        if axis == .vertical {
+            // The collapsed rail's tray: Sidebar vnext's white glass capsule.
+            VStack(spacing: RailGlassStyle.itemGap, content: content)
+                .padding(RailGlassStyle.innerPadding)
+                .background(RailGlassBackground(forceOpaque: forceOpaque))
+        } else if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
             GlassEffectContainer {
                 pillStack
                     .padding(SidebarDialTuning.trayInnerPadding())
@@ -183,8 +289,7 @@ struct SidebarTrayPill<Content: View>: View {
             HStack(spacing: TrayGlassStyle.itemGap, content: content)
                 .frame(maxWidth: .infinity)
         case .vertical:
-            // The rail's pill hugs its buttons (button width + 2 x
-            // `trayInnerPadding`); the call site centers it in the rail.
+            // Unreached: `body` renders the vertical (rail) pill itself.
             VStack(spacing: TrayGlassStyle.itemGap, content: content)
         }
     }
@@ -217,11 +322,19 @@ struct TrayIconButton: View {
     var stretch: Bool = false
     /// Symbol animation to play on click — see `TrayIconTapEffect`.
     var tapEffect: TrayIconTapEffect? = nil
+    /// True in the collapsed rail: Sidebar vnext sizing and icon colour
+    /// (`RailGlassStyle`) instead of the DialKit-tuned expanded tray's.
+    var railStyle = false
     let action: () -> Void
 
     @State private var isHovered = false
     @State private var tapEffectTrigger = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var buttonSize: CGFloat {
+        railStyle ? RailGlassStyle.buttonSize : SidebarDialTuning.trayButtonSize()
+    }
 
     var body: some View {
         Button {
@@ -230,13 +343,13 @@ struct TrayIconButton: View {
         } label: {
             icon
                 .frame(
-                    minWidth: stretch ? nil : SidebarDialTuning.trayButtonSize(),
-                    maxWidth: stretch ? .infinity : SidebarDialTuning.trayButtonSize(),
-                    minHeight: SidebarDialTuning.trayButtonSize(),
-                    maxHeight: SidebarDialTuning.trayButtonSize()
+                    minWidth: stretch ? nil : buttonSize,
+                    maxWidth: stretch ? .infinity : buttonSize,
+                    minHeight: buttonSize,
+                    maxHeight: buttonSize
                 )
                 .background(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: railStyle ? RailGlassStyle.buttonCornerRadius : 6)
                         .fill(isHovered ? Color.primary.opacity(0.10) : .clear)
                 )
         }
@@ -254,8 +367,11 @@ struct TrayIconButton: View {
     @ViewBuilder
     private var icon: some View {
         let glyph = Image(systemName: systemName)
-            .font(.system(size: SidebarDialTuning.trayIconSize(), weight: TrayGlassStyle.iconWeight))
-            .foregroundStyle(.secondary)
+            .font(.system(
+                size: railStyle ? RailGlassStyle.iconSize : SidebarDialTuning.trayIconSize(),
+                weight: railStyle ? RailGlassStyle.iconWeight : TrayGlassStyle.iconWeight
+            ))
+            .foregroundStyle(railStyle ? AnyShapeStyle(RailGlassStyle.iconColor(for: colorScheme)) : AnyShapeStyle(.secondary))
 
         if reduceMotion {
             glyph
