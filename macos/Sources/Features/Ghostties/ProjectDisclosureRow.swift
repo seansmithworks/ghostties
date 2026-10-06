@@ -134,7 +134,23 @@ private struct ProjectDisclosureRowContent: View, Equatable {
             }
         }
         .background(expandedContainerBackground)
+        #if DEBUG
+        .onAppear(perform: applyCaptureProjectSettingsIfNeeded)
+        #endif
     }
+
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_PROJECT_SETTINGS`: what the context menu's
+    /// "Settings…" does. Deferred so the window is on screen before the
+    /// popover anchors to the row.
+    private func applyCaptureProjectSettingsIfNeeded() {
+        guard CaptureFixture.projectSettingsHook?.projectName == project.name,
+              CaptureFixture.claimHook("projectSettings") else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            settingsProject = project
+        }
+    }
+    #endif
 
     // MARK: - Expanded Session List
 

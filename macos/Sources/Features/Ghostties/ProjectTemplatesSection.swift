@@ -148,7 +148,33 @@ struct ProjectTemplatesSection: View {
         } message: { template in
             Text(TemplateManagement.deleteMessage(for: template, store: store))
         }
+        #if DEBUG
+        .onAppear(perform: applyCaptureTemplateActionIfNeeded)
+        #endif
     }
+
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_PROJECT_SETTINGS=<project>:templates-edit|-delete`:
+    /// what the row's "…" menu item does, on the first user template (the
+    /// first template if none is user-created). A built-in's menu offers
+    /// "Duplicate and Edit..." rather than "Edit...", so that is what runs
+    /// for one; delete has no menu path on a built-in and opens the same
+    /// alert directly.
+    private func applyCaptureTemplateActionIfNeeded() {
+        guard let hook = CaptureFixture.projectSettingsHook, hook.templateAction != .none,
+              CaptureFixture.claimHook("templateAction") else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            guard let template = store.templates.first(where: { SessionTemplateResolver.group(for: $0) == .user })
+                ?? store.templates.first else { return }
+            let offered = TemplateManagement.actions(for: template, isPinned: false)
+            switch hook.templateAction {
+            case .edit: perform(offered.contains(where: { $0 == .edit }) ? .edit : .duplicateAndEdit, on: template)
+            case .delete: perform(.delete, on: template)
+            case .none: break
+            }
+        }
+    }
+    #endif
 
     // MARK: - Rows
 

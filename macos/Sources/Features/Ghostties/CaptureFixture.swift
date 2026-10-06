@@ -282,6 +282,111 @@ enum CaptureFixture {
         }
     }
 
+    // MARK: - Launch-state hooks
+
+    // Each hook opens the app straight into a state that otherwise needs a
+    // click, by calling the same action that click calls. Agents may never
+    // send synthetic input, so these are the only way a headless capture
+    // reaches these states. All are nil unless fixture mode is active.
+    // Parsing is split out as pure functions so the env-string grammar is
+    // unit-testable without launching.
+
+    /// `GHOSTTIES_CAPTURE_COMPOSER`: `open[:delay=<s>]` (the tray "+") or
+    /// `prefilled:<project>[:delay=<s>]` (a project row's "+").
+    struct ComposerHook: Equatable {
+        enum Target: Equatable {
+            case open
+            case prefilled(projectName: String)
+        }
+        let target: Target
+        /// Seconds after the window appears. The default leaves the window
+        /// time to become key; a longer delay makes the open animation
+        /// visible in a recording.
+        let delay: TimeInterval
+        static let defaultDelay: TimeInterval = 1
+    }
+
+    /// `GHOSTTIES_CAPTURE_PROJECT_SETTINGS`:
+    /// `<project>[:templates-edit|:templates-delete]`.
+    struct ProjectSettingsHook: Equatable {
+        enum TemplateAction: Equatable {
+            case none
+            case edit
+            case delete
+        }
+        let projectName: String
+        let templateAction: TemplateAction
+    }
+
+    static func parseComposerHook(_ raw: String?) -> ComposerHook? {
+        guard let raw else { return nil }
+        var parts = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        var delay = ComposerHook.defaultDelay
+        if let last = parts.last, last.hasPrefix("delay=") {
+            guard let seconds = parsePositiveSeconds(String(last.dropFirst("delay=".count))) else { return nil }
+            delay = seconds
+            parts.removeLast()
+        }
+        switch parts.count {
+        case 1 where parts[0] == "open":
+            return ComposerHook(target: .open, delay: delay)
+        case 2 where parts[0] == "prefilled" && !parts[1].isEmpty:
+            return ComposerHook(target: .prefilled(projectName: parts[1]), delay: delay)
+        default:
+            return nil
+        }
+    }
+
+    static func parseProjectSettingsHook(_ raw: String?) -> ProjectSettingsHook? {
+        guard let raw else { return nil }
+        let parts = raw.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard let name = parts.first, !name.isEmpty else { return nil }
+        switch parts.count {
+        case 1: return ProjectSettingsHook(projectName: name, templateAction: .none)
+        case 2 where parts[1] == "templates-edit": return ProjectSettingsHook(projectName: name, templateAction: .edit)
+        case 2 where parts[1] == "templates-delete": return ProjectSettingsHook(projectName: name, templateAction: .delete)
+        default: return nil
+        }
+    }
+
+    /// `GHOSTTIES_CAPTURE_EXPAND_PROJECT=<project>`.
+    static func parseExpandProject(_ raw: String?) -> String? {
+        guard let name = raw?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return nil }
+        return name
+    }
+
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER=<seconds>`.
+    static func parseSidebarToggleAfter(_ raw: String?) -> TimeInterval? {
+        raw.flatMap(parsePositiveSeconds)
+    }
+
+    private static func parsePositiveSeconds(_ raw: String) -> TimeInterval? {
+        guard let value = Double(raw), value.isFinite, value > 0 else { return nil }
+        return value
+    }
+
+    private static func env(_ key: String) -> String? {
+        guard isActive else { return nil }
+        return ProcessInfo.processInfo.environment[key]
+    }
+
+    static var composerHook: ComposerHook? { parseComposerHook(env("GHOSTTIES_CAPTURE_COMPOSER")) }
+    static var projectSettingsHook: ProjectSettingsHook? {
+        parseProjectSettingsHook(env("GHOSTTIES_CAPTURE_PROJECT_SETTINGS"))
+    }
+    static var expandProjectName: String? { parseExpandProject(env("GHOSTTIES_CAPTURE_EXPAND_PROJECT")) }
+    static var sidebarToggleAfter: TimeInterval? {
+        parseSidebarToggleAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER"))
+    }
+
+    /// Each hook fires once per process. The views that host them re-appear
+    /// (a rail/pinned toggle remounts the sidebar), and a second firing would
+    /// re-select or re-open state the capture didn't ask for.
+    @MainActor private static var firedHooks: Set<String> = []
+    @MainActor static func claimHook(_ key: String) -> Bool {
+        firedHooks.insert(key).inserted
+    }
+
     #endif
 
     // MARK: - Transcript Script Writer
