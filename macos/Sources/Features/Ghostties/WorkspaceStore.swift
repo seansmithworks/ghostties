@@ -170,13 +170,13 @@ final class WorkspaceStore: ObservableObject {
         self.persistenceDisabled = true
     }
 
-    /// Test-only initializer for the persistence round trip: loads state the
-    /// way the real `init()` does (`WorkspacePersistence.load()`, from
-    /// `GHOSTTIES_STATE_DIR` when set) but leaves persistence ENABLED, and
-    /// skips the real init's preset/hook seeding, which writes under `~/`.
-    /// Pair with `flushPersistenceForTesting()` to await the debounced write.
-    init(testingStateFromDisk: ()) {
-        let state = WorkspacePersistence.load()
+    /// Test-only initializer for the persistence round trip: loads from, and
+    /// persists to, an INJECTED `stateDirectory` (never the env-resolved real
+    /// path), with persistence ENABLED, and skips the real init's preset/hook
+    /// seeding, which writes under `~/`. Pair with
+    /// `flushPersistenceForTesting()` to await the debounced write.
+    init(testingStateDirectory: URL) {
+        let state = WorkspacePersistence.load(from: testingStateDirectory)
         self.projects = state.projects
         self.sessions = state.sessions
         self.sidebarMode = state.sidebarMode
@@ -184,8 +184,13 @@ final class WorkspaceStore: ObservableObject {
         self.hasShownPinMigrationNotice = state.hasShownPinMigrationNotice
         self.hasDismissedPinMigrationNotice = state.hasDismissedPinMigrationNotice
         self.templates = AgentTemplate.defaults + state.templates.filter { !$0.isDefault }
+        self.stateDirectory = testingStateDirectory
         self.persistenceDisabled = false
     }
+
+    /// Where `persist()` writes. `nil` (every init but the seam above) means
+    /// the real, env-resolved `WorkspacePersistence.directory`.
+    private var stateDirectory: URL?
 
     /// When `true`, `persist()` is a no-op. Set by the test-only init so that
     /// mutating helpers like `recordActivity` don't pollute the real
@@ -1401,6 +1406,7 @@ final class WorkspaceStore: ObservableObject {
         #endif
         guard !persistenceDisabled else { return }
         persistTask?.cancel()
+        let stateDirectory = self.stateDirectory
         persistTask = _Concurrency.Task { [projects, sessions, templates, sidebarMode, lastSelectedProjectId, hasShownPinMigrationNotice, hasDismissedPinMigrationNotice] in
             try? await _Concurrency.Task.sleep(for: .milliseconds(100))
             guard !_Concurrency.Task.isCancelled else { return }
@@ -1417,7 +1423,7 @@ final class WorkspaceStore: ObservableObject {
                 hasDismissedPinMigrationNotice: hasDismissedPinMigrationNotice
             )
             await _Concurrency.Task.detached(priority: .utility) {
-                WorkspacePersistence.save(state)
+                WorkspacePersistence.save(state, to: stateDirectory ?? WorkspacePersistence.directory)
             }.value
         }
     }

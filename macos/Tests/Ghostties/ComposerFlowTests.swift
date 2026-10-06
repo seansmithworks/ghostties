@@ -630,13 +630,11 @@ struct ComposerFlowTests {
 
     /// T2. Edit a user template, type a command, Save: the store holds it and
     /// so does a fresh store loaded from disk. (The workspace here writes through
-    /// the real `persist()` to a temp `GHOSTTIES_STATE_DIR`.)
+    /// the real `persist()` to an injected temp state directory.)
     @Test func t2_editAndSavePersistsTheCommand() async throws {
         let stateDir = Self.makeRoot("t2-state")
         defer { try? FileManager.default.removeItem(atPath: stateDir) }
-        setenv("GHOSTTIES_STATE_DIR", stateDir, 1)
-        defer { unsetenv("GHOSTTIES_STATE_DIR") }
-        let rig = TemplatesRig(workspace: WorkspaceStore(testingStateFromDisk: ()))
+        let rig = TemplatesRig(workspace: WorkspaceStore(testingStateDirectory: URL(fileURLWithPath: stateDir, isDirectory: true)))
         let created = rig.workspace.addTemplate(AgentTemplate(name: "Mine", kind: .custom))
         #expect(created.command == nil)
 
@@ -664,9 +662,9 @@ struct ComposerFlowTests {
         #expect(saved?.command == "codex")
 
         // Real save path: flush the store's own debounced write, then build a
-        // FRESH store from the same state directory.
+        // FRESH store from the same injected state directory.
         await rig.workspace.flushPersistenceForTesting()
-        let reloaded = WorkspaceStore(testingStateFromDisk: ())
+        let reloaded = WorkspaceStore(testingStateDirectory: URL(fileURLWithPath: stateDir, isDirectory: true))
         #expect(reloaded.templates.first { $0.id == created.id }?.command == "codex")
     }
 
