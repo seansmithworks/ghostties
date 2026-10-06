@@ -81,20 +81,21 @@ struct ProjectTemplatesSectionTests {
         let template = TemplateManagement.addTemplate(named: "Mine", store: store)!
         let other = TemplateManagement.addTemplate(named: "Other", store: store)!
         let project = store.projects[0]
-        let users = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"].map {
-            AgentSession(name: $0, templateId: template.id, projectId: project.id)
-        }
         let bystander = AgentSession(name: "Zulu", templateId: other.id, projectId: project.id)
-        let two = WorkspaceStore(testingProjects: [project], testingSessions: [users[0], users[1], bystander])
-        let twoMessage = TemplateManagement.deleteMessage(for: template, store: two)
-        #expect(twoMessage.contains("Alpha, Beta."))
-        #expect(!twoMessage.contains("Zulu"))
-
-        let five = WorkspaceStore(testingProjects: [project], testingSessions: users + [bystander])
-        let message = TemplateManagement.deleteMessage(for: template, store: five)
-        #expect(message.contains("Alpha, Beta, Gamma and 2 more."))
-        #expect(!message.contains("Delta"))
-        #expect(message.contains("\"Mine\""))
+        func message(_ names: [String]) -> String {
+            let sessions = names.map { AgentSession(name: $0, templateId: template.id, projectId: project.id) }
+            let s = WorkspaceStore(testingProjects: [project], testingSessions: sessions + [bystander])
+            return TemplateManagement.deleteMessage(for: template, store: s)
+        }
+        // Second sentence: origin/main's in-use text, byte for byte.
+        let tail = " Sessions using \"Mine\" will keep their current configuration but won't be relaunchable with this template."
+        #expect(message(["Alpha"]) == "Used by Alpha." + tail)
+        #expect(message(["Alpha", "Beta"]) == "Used by Alpha and Beta." + tail)
+        #expect(message(["Alpha", "Beta", "Gamma"]) == "Used by Alpha, Beta and Gamma." + tail)
+        #expect(message(["Alpha", "Beta", "Gamma", "Delta"]) == "Used by Alpha, Beta, Gamma and 1 more." + tail)
+        #expect(message((1...10).map { "S\($0)" }) == "Used by S1, S2, S3 and 7 more." + tail)
+        // A trailing period on the last listed name is not doubled.
+        #expect(message(["Alpha", "v1."]) == "Used by Alpha and v1." + tail)
     }
 
     @Test func confirmingDeleteDropsTheTemplateCountByOne() {
