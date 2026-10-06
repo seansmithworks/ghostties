@@ -468,18 +468,8 @@ struct ComposerFlowTests {
         await rig.typeAndSettle("switchboard > feat-x > ccp")
         rig.pressReturn()
 
-        var spawned = await rig.settle(timeout: 12) { rig.dispatched.count >= 1 || (!rig.composer.isCreatingWorktree && rig.composer.writeError != nil) }
-        if rig.dispatched.isEmpty, rig.composer.writeError != nil {
-            // Under CPU load the post-create `git worktree list` can hit its own
-            // 2s deadline, leaving the list stale for one commit; the composer
-            // says so and keeps itself open, and the user's move is to press
-            // Return again once the periodic refresh has caught up. Do that,
-            // once, so load can't make this row flaky.
-            let caughtUp = await rig.settle(timeout: 12) { rig.composer.worktrees.contains { $0.branch == "feat-x" } }
-            #expect(caughtUp, "worktree list never caught up with the created worktree")
-            rig.pressReturn()
-            spawned = await rig.settle(timeout: 12) { rig.dispatched.count >= 1 }
-        }
+        // The FIRST Return must create the worktree and spawn in it — no retry.
+        let spawned = await rig.settle(timeout: 12) { rig.dispatched.count >= 1 }
         #expect(spawned, "no spawn; writeError=\(rig.composer.writeError ?? "nil") creating=\(rig.composer.isCreatingWorktree) text=\(rig.composer.searchText.debugDescription)")
         let after = Self.git(["worktree", "list", "--porcelain"], in: repo)
         #expect(after.contains("branch refs/heads/feat-x"))
@@ -503,13 +493,14 @@ struct ComposerFlowTests {
     /// own action, which runs the section's real `perform(_:on:)`.
     @MainActor
     private final class TemplatesRig {
-        let workspace = WorkspaceStore(testingProjects: [], testingSessions: [])
+        let workspace: WorkspaceStore
         let composer = SessionComposerStore(isolatedForTesting: ())
         let window: KeyableWindow
         let hosting: NSHostingView<AnyView>
 
-        init() {
-            let view = ProjectTemplatesSection(composerStore: composer).environmentObject(workspace)
+        init(workspace: WorkspaceStore? = nil) {
+            self.workspace = workspace ?? WorkspaceStore(testingProjects: [], testingSessions: [])
+            let view = ProjectTemplatesSection(composerStore: composer).environmentObject(self.workspace)
             hosting = NSHostingView(rootView: AnyView(view))
             let size = hosting.fittingSize
             window = KeyableWindow(
@@ -638,11 +629,12 @@ struct ComposerFlowTests {
     }
 
     /// T2. Edit a user template, type a command, Save: the store holds it and
-    /// so does what a relaunch would read back. (Persistence is exercised as
-    /// the same Codable round trip `WorkspacePersistence` writes and reads;
-    /// the debounced disk write itself is off in the testing store.)
+    /// so does a fresh store loaded from disk. (The workspace here writes through
+    /// the real `persist()` to an injected temp state directory.)
     @Test func t2_editAndSavePersistsTheCommand() async throws {
-        let rig = TemplatesRig()
+        let stateDir = Self.makeRoot("t2-state")
+        defer { try? FileManager.default.removeItem(atPath: stateDir) }
+        let rig = TemplatesRig(workspace: WorkspaceStore(testingStateDirectory: URL(fileURLWithPath: stateDir, isDirectory: true)))
         let created = rig.workspace.addTemplate(AgentTemplate(name: "Mine", kind: .custom))
         #expect(created.command == nil)
 
@@ -669,11 +661,10 @@ struct ComposerFlowTests {
         let saved = rig.workspace.templates.first { $0.id == created.id }
         #expect(saved?.command == "codex")
 
-        let state = WorkspacePersistence.State(templates: rig.workspace.templates.filter { !$0.isDefault })
-        let reloaded = try JSONDecoder().decode(
-            WorkspacePersistence.State.self,
-            from: JSONEncoder().encode(state)
-        )
+        // Real save path: flush the store's own debounced write, then build a
+        // FRESH store from the same injected state directory.
+        await rig.workspace.flushPersistenceForTesting()
+        let reloaded = WorkspaceStore(testingStateDirectory: URL(fileURLWithPath: stateDir, isDirectory: true))
         #expect(reloaded.templates.first { $0.id == created.id }?.command == "codex")
     }
 

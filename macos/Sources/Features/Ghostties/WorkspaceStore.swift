@@ -170,12 +170,35 @@ final class WorkspaceStore: ObservableObject {
         self.persistenceDisabled = true
     }
 
+    /// Test-only initializer for the persistence round trip: loads from, and
+    /// persists to, an INJECTED `stateDirectory` (never the env-resolved real
+    /// path), with persistence ENABLED, and skips the real init's preset/hook
+    /// seeding, which writes under `~/`. Pair with
+    /// `flushPersistenceForTesting()` to await the debounced write.
+    init(testingStateDirectory: URL) {
+        let state = WorkspacePersistence.load(from: testingStateDirectory)
+        self.projects = state.projects
+        self.sessions = state.sessions
+        self.sidebarMode = state.sidebarMode
+        self.lastSelectedProjectId = state.lastSelectedProjectId
+        self.hasShownPinMigrationNotice = state.hasShownPinMigrationNotice
+        self.hasDismissedPinMigrationNotice = state.hasDismissedPinMigrationNotice
+        self.templates = Self.mergedTemplates(presets: [], persisted: state.templates)
+        self.stateDirectory = testingStateDirectory
+        self.persistenceDisabled = false
+    }
+
+    /// Where `persist()` writes. `nil` (every init but the seam above) means
+    /// the real, env-resolved `WorkspacePersistence.directory`.
+    private var stateDirectory: URL?
+
     /// When `true`, `persist()` is a no-op. Set by the test-only init so that
     /// mutating helpers like `recordActivity` don't pollute the real
     /// `~/Library/Application Support/Ghostties/workspace.json`.
     private let persistenceDisabled: Bool
     #else
     private let persistenceDisabled: Bool = false
+    private let stateDirectory: URL? = nil
     #endif
 
     private init() {
@@ -207,8 +230,7 @@ final class WorkspaceStore: ObservableObject {
 
         // Merge persisted custom templates with built-in defaults and presets.
         // Order: presets first, then built-in defaults, then custom templates.
-        let customTemplates = state.templates.filter { !$0.isDefault }
-        self.templates = presets + AgentTemplate.defaults + customTemplates
+        self.templates = Self.mergedTemplates(presets: presets, persisted: state.templates)
 
         // `sessions` is never pruned — every agent session ever spawned stays
         // in workspace.json forever, so this list grows unbounded over the
@@ -226,6 +248,12 @@ final class WorkspaceStore: ObservableObject {
         // pruning so it never assigns (and persists) a ghost for a session
         // that's about to be dropped.
         backfillGhostCharactersAtLaunch()
+    }
+
+    /// Order: presets first, then built-in defaults, then persisted custom
+    /// templates. Shared by the real init and the test seam.
+    static func mergedTemplates(presets: [AgentTemplate], persisted: [AgentTemplate]) -> [AgentTemplate] {
+        presets + AgentTemplate.defaults + persisted.filter { !$0.isDefault }
     }
 
     // MARK: - Session Pruning
@@ -1370,6 +1398,12 @@ final class WorkspaceStore: ObservableObject {
     /// "The write didn't fire" is exactly the assertion that would have
     /// caught the storm incident in `project_perf-activity-invalidation-storm.md`.
     private(set) var persistCallCount = 0
+
+    /// Test-only: awaits the pending debounced write (and its detached disk
+    /// save) so a test can read `workspace.json` back deterministically.
+    func flushPersistenceForTesting() async {
+        await persistTask?.value
+    }
     #endif
 
     private func persist() {
@@ -1378,6 +1412,7 @@ final class WorkspaceStore: ObservableObject {
         #endif
         guard !persistenceDisabled else { return }
         persistTask?.cancel()
+        let stateDirectory = self.stateDirectory
         persistTask = _Concurrency.Task { [projects, sessions, templates, sidebarMode, lastSelectedProjectId, hasShownPinMigrationNotice, hasDismissedPinMigrationNotice] in
             try? await _Concurrency.Task.sleep(for: .milliseconds(100))
             guard !_Concurrency.Task.isCancelled else { return }
@@ -1394,7 +1429,7 @@ final class WorkspaceStore: ObservableObject {
                 hasDismissedPinMigrationNotice: hasDismissedPinMigrationNotice
             )
             await _Concurrency.Task.detached(priority: .utility) {
-                WorkspacePersistence.save(state)
+                WorkspacePersistence.save(state, to: stateDirectory ?? WorkspacePersistence.directory)
             }.value
         }
     }

@@ -1187,6 +1187,24 @@ final class SessionComposerStore: ObservableObject {
                 // returned) still landed A's new worktree path into B's
                 // now-current composer.
                 guard token == worktreeCreationToken else { return }
+                // P5: `refreshWorktrees` above has its own 2s deadline and,
+                // when it hits it under load, leaves `worktrees` /
+                // `branchesWithoutWorktree` stale — so the commit `onSuccess`
+                // triggers read the branch as still unresolved and was
+                // rejected, and the user had to press Return again. `add`
+                // already told us exactly what it created, so reconcile the
+                // cache from that instead of depending on the list winning
+                // a wall-clock race. No-op when the refresh did land.
+                let canonical = await _Concurrency.Task.detached { GitWorktreeEnumerator.canonicalPath(path) }.value
+                guard token == worktreeCreationToken else { return }
+                // Only while the cache still belongs to the project this
+                // creation ran in — a mid-create project change resets it.
+                if worktreesProjectId == project.id {
+                    if !worktrees.contains(where: { $0.branch == branchName }) {
+                        worktrees.append(GitWorktreeEnumerator.Worktree(path: canonical, branch: branchName, isLocked: false))
+                    }
+                    branchesWithoutWorktree.removeAll { $0 == branchName }
+                }
                 if selectedWorktreePath == selectionAtStart {
                     selectedWorktreePath = path
                 }

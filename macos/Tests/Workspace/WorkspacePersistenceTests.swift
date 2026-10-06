@@ -623,20 +623,14 @@ struct WorkspacePersistenceTests {
 
     @Test func stateDirOverrideIsUsedWhenSet() {
         let overridePath = NSTemporaryDirectory().appending("ghostties-state-dir-override-test-\(UUID().uuidString)")
-        setenv("GHOSTTIES_STATE_DIR", overridePath, 1)
-        defer {
-            unsetenv("GHOSTTIES_STATE_DIR")
-            try? FileManager.default.removeItem(atPath: overridePath)
-        }
+        defer { try? FileManager.default.removeItem(atPath: overridePath) }
 
-        let resolved = WorkspacePersistence.directory
+        let resolved = WorkspacePersistence.directory(env: ["GHOSTTIES_STATE_DIR": overridePath])
         #expect(resolved.path == overridePath)
     }
 
     @Test func stateDirOverrideUnsetUsesBundleDerivedDirectory() {
-        unsetenv("GHOSTTIES_STATE_DIR")
-
-        let resolved = WorkspacePersistence.directory
+        let resolved = WorkspacePersistence.directory(env: [:])
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         #expect(resolved.deletingLastPathComponent().path == appSupport.path)
         #expect(resolved.lastPathComponent == "Ghostties" || resolved.lastPathComponent == "Ghostties Dev")

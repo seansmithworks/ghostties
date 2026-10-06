@@ -49,7 +49,13 @@ struct WorkspacePersistence {
     /// without touching the shipping path. Unset/empty → unaffected, exactly
     /// today's bundle-ID-derived Application Support path.
     static var directory: URL {
-        if let raw = ProcessInfo.processInfo.environment["GHOSTTIES_STATE_DIR"],
+        directory(env: ProcessInfo.processInfo.environment)
+    }
+
+    /// `directory` with the environment injected, so a test can exercise the
+    /// override without mutating the process-wide environment.
+    static func directory(env: [String: String]) -> URL {
+        if let raw = env["GHOSTTIES_STATE_DIR"],
            !raw.isEmpty {
             let expanded = (raw as NSString).expandingTildeInPath
             let overrideURL = URL(fileURLWithPath: expanded, isDirectory: true)
@@ -69,6 +75,10 @@ struct WorkspacePersistence {
     }
 
     private static var fileURL: URL {
+        fileURL(in: directory)
+    }
+
+    private static func fileURL(in directory: URL) -> URL {
         directory.appendingPathComponent("workspace.json")
     }
 
@@ -174,9 +184,13 @@ struct WorkspacePersistence {
     // MARK: - Read / Write
 
     static func load() -> State {
+        load(from: directory)
+    }
+
+    static func load(from directory: URL) -> State {
         let signpostState = Perf.signposter.beginInterval("workspace.load")
         defer { Perf.signposter.endInterval("workspace.load", signpostState) }
-        let url = fileURL
+        let url = fileURL(in: directory)
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()
@@ -186,7 +200,7 @@ struct WorkspacePersistence {
             // If migration actually changed state, persist immediately so the
             // flag survives even if the user quits before the next debounced write.
             if migrated.hasShownPinMigrationNotice && !state.hasShownPinMigrationNotice {
-                save(migrated)
+                save(migrated, to: directory)
             }
             return migrated
         } catch is DecodingError {
@@ -330,9 +344,13 @@ struct WorkspacePersistence {
     }
 
     static func save(_ state: State) {
+        save(state, to: directory)
+    }
+
+    static func save(_ state: State, to directory: URL) {
         let signpostState = Perf.signposter.beginInterval("workspace.save")
         defer { Perf.signposter.endInterval("workspace.save", signpostState) }
-        let url = fileURL
+        let url = fileURL(in: directory)
         do {
             try FileManager.default.createDirectory(
                 at: directory,
