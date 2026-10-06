@@ -163,14 +163,13 @@ struct RailSessionRow: View {
     }
 
     /// Sidebar vnext (pen.dev `CnDfN`, layer `EVYaZ`): the selected rail row
-    /// is the tray's white glass capsule, at the tray's width, centered in
-    /// the row slot.
+    /// is `SidebarSelectedSurface` (the expanded row's surface too), at the
+    /// tray's width, centered in the row slot.
     @ViewBuilder
     private var rowBackground: some View {
         if isActive {
-            Color.clear
+            SidebarSelectedSurface()
                 .frame(width: SidebarDialTuning.traySelectedPillWidth(), height: SidebarDialTuning.traySelectedPillHeight())
-                .modifier(TrayGlassSurface())
         } else {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isHovered ? Color.primary.opacity(0.06) : .clear)

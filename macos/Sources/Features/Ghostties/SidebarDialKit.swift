@@ -19,7 +19,7 @@ import DialkitmacOSAgent
 // dial in this app already uses, so a Release binary staying dial-free is
 // really "nobody ever wrote these keys," not a compiled-out code path.
 enum SidebarDialTuning {
-    // MARK: Tray glass (both axes + the selected rail pill; `TrayGlassStyle`)
+    // MARK: Tray glass (both axes + the selected session row; `TrayGlassStyle`)
     static let trayMarginKey = "ghostties.sidebarDial.trayMargin"
     static let trayInnerPaddingKey = "ghostties.sidebarDial.trayInnerPadding"
     /// Dark-mode warm tint opacity.
@@ -51,7 +51,7 @@ enum SidebarDialTuning {
     static let traySpecularStrengthKey = "ghostties.sidebarDial.trayGlass.specularStrength"
     static let traySpecularAngleKey = "ghostties.sidebarDial.trayGlass.specularAngle"
 
-    // MARK: Rows (expanded) + the selected-card treatment shared by rows/tray/rail
+    // MARK: Rows (expanded)
     static let rowHeightKey = "ghostties.sidebarDial.rowHeight"
     static let rowGapKey = "ghostties.sidebarDial.rowGap"
     static let rowTitleSizeKey = "ghostties.sidebarDial.rowTitleSize"
@@ -59,10 +59,6 @@ enum SidebarDialTuning {
     static let rowGhostSizeKey = "ghostties.sidebarDial.rowGhostSize"
     static let rowLeadingPaddingKey = "ghostties.sidebarDial.rowLeadingPadding"
     static let rowTrailingPaddingKey = "ghostties.sidebarDial.rowTrailingPadding"
-    static let selectedCardCornerRadiusKey = "ghostties.sidebarDial.selectedCardCornerRadius"
-    static let selectedCardShadowOpacityKey = "ghostties.sidebarDial.selectedCardShadowOpacity"
-    static let selectedCardShadowRadiusKey = "ghostties.sidebarDial.selectedCardShadowRadius"
-    static let selectedCardShadowYOffsetKey = "ghostties.sidebarDial.selectedCardShadowYOffset"
 
     // MARK: Section headers
     static let headerTextSizeKey = "ghostties.sidebarDial.headerTextSize"
@@ -221,20 +217,6 @@ enum SidebarDialTuning {
     static func rowTrailingPadding(defaults: UserDefaults = .standard) -> CGFloat {
         cgFloat(rowTrailingPaddingKey, default: WorkspaceLayout.recentsRowTrailingPadding, defaults: defaults)
     }
-    /// The selected expanded row card's radius. The tray's shape has its own
-    /// dials in the Tray glass section.
-    static func selectedCardCornerRadius(defaults: UserDefaults = .standard) -> CGFloat {
-        cgFloat(selectedCardCornerRadiusKey, default: WorkspaceLayout.selectedRowCornerRadius, defaults: defaults)
-    }
-    static func selectedCardShadowOpacity(defaults: UserDefaults = .standard) -> Double {
-        double(selectedCardShadowOpacityKey, default: WorkspaceLayout.selectedRowShadowOpacity, defaults: defaults)
-    }
-    static func selectedCardShadowRadius(defaults: UserDefaults = .standard) -> CGFloat {
-        cgFloat(selectedCardShadowRadiusKey, default: WorkspaceLayout.selectedRowShadowRadius, defaults: defaults)
-    }
-    static func selectedCardShadowYOffset(defaults: UserDefaults = .standard) -> CGFloat {
-        cgFloat(selectedCardShadowYOffsetKey, default: WorkspaceLayout.selectedRowShadowYOffset, defaults: defaults)
-    }
 
     static func headerTextSize(defaults: UserDefaults = .standard) -> CGFloat {
         cgFloat(headerTextSizeKey, default: WorkspaceLayout.sessionSectionHeaderTextSize, defaults: defaults)
@@ -292,8 +274,7 @@ enum SidebarDialTuning {
         trayChromaticBlurKey, trayChromaticPaletteKey, trayChromaticBlendKey,
         traySpecularStrengthKey, traySpecularAngleKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
-        rowLeadingPaddingKey, rowTrailingPaddingKey, selectedCardCornerRadiusKey,
-        selectedCardShadowOpacityKey, selectedCardShadowRadiusKey, selectedCardShadowYOffsetKey,
+        rowLeadingPaddingKey, rowTrailingPaddingKey,
         headerTextSizeKey, headerTopPaddingKey, headerBottomPaddingKey, headerChevronSizeKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         railExtraWidthKey
@@ -360,10 +341,6 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var rowGhostSize: Double
     var rowLeadingPadding: Double
     var rowTrailingPadding: Double
-    var selectedCardCornerRadius: Double
-    var selectedCardShadowOpacity: Double
-    var selectedCardShadowRadius: Double
-    var selectedCardShadowYOffset: Double
 
     var headerTextSize: Double
     var headerTopPadding: Double
@@ -469,10 +446,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             rowGhostSize: Double(SidebarDialTuning.rowGhostSize(defaults: defaults)),
             rowLeadingPadding: Double(SidebarDialTuning.rowLeadingPadding(defaults: defaults)),
             rowTrailingPadding: Double(SidebarDialTuning.rowTrailingPadding(defaults: defaults)),
-            selectedCardCornerRadius: Double(SidebarDialTuning.selectedCardCornerRadius(defaults: defaults)),
-            selectedCardShadowOpacity: SidebarDialTuning.selectedCardShadowOpacity(defaults: defaults),
-            selectedCardShadowRadius: Double(SidebarDialTuning.selectedCardShadowRadius(defaults: defaults)),
-            selectedCardShadowYOffset: Double(SidebarDialTuning.selectedCardShadowYOffset(defaults: defaults)),
             headerTextSize: Double(SidebarDialTuning.headerTextSize(defaults: defaults)),
             headerTopPadding: Double(SidebarDialTuning.headerTopPadding(defaults: defaults)),
             headerBottomPadding: Double(SidebarDialTuning.headerBottomPadding(defaults: defaults)),
@@ -538,10 +511,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.rowGhostSizeKey, previous.rowGhostSize, model.rowGhostSize)
         setIfChanged(SidebarDialTuning.rowLeadingPaddingKey, previous.rowLeadingPadding, model.rowLeadingPadding)
         setIfChanged(SidebarDialTuning.rowTrailingPaddingKey, previous.rowTrailingPadding, model.rowTrailingPadding)
-        setIfChanged(SidebarDialTuning.selectedCardCornerRadiusKey, previous.selectedCardCornerRadius, model.selectedCardCornerRadius)
-        setIfChanged(SidebarDialTuning.selectedCardShadowOpacityKey, previous.selectedCardShadowOpacity, model.selectedCardShadowOpacity)
-        setIfChanged(SidebarDialTuning.selectedCardShadowRadiusKey, previous.selectedCardShadowRadius, model.selectedCardShadowRadius)
-        setIfChanged(SidebarDialTuning.selectedCardShadowYOffsetKey, previous.selectedCardShadowYOffset, model.selectedCardShadowYOffset)
         setIfChanged(SidebarDialTuning.headerTextSizeKey, previous.headerTextSize, model.headerTextSize)
         setIfChanged(SidebarDialTuning.headerTopPaddingKey, previous.headerTopPadding, model.headerTopPadding)
         setIfChanged(SidebarDialTuning.headerBottomPaddingKey, previous.headerBottomPadding, model.headerBottomPadding)
@@ -561,7 +530,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
     private static let resetActionPath = "resetSidebar"
 
     private static let controls: [DialControl<SidebarDialKitTuningModel>] = [
-        // Tray glass: the tray on both axes, plus the selected rail pill.
+        // Tray glass: the tray on both axes, plus the selected session row
+        // (rail pill and expanded row, `SidebarSelectedSurface`).
         .group("trayGlass", label: "Tray glass", children: [
             .select("trayGlassVariant", keyPath: \.trayGlassVariant, label: "Glass variant",
                     options: TrayGlassStyle.Variant.allCases.map(\.rawValue)),
@@ -605,10 +575,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .slider("rowGhostSize", keyPath: \.rowGhostSize, label: "Row ghost size", range: 8...24, unit: "pt"),
         .slider("rowLeadingPadding", keyPath: \.rowLeadingPadding, label: "Row leading padding", range: 0...24, unit: "pt"),
         .slider("rowTrailingPadding", keyPath: \.rowTrailingPadding, label: "Row trailing padding", range: 0...24, unit: "pt"),
-        .slider("selectedCardCornerRadius", keyPath: \.selectedCardCornerRadius, label: "Selected card radius", range: 0...24, unit: "pt"),
-        .slider("selectedCardShadowOpacity", keyPath: \.selectedCardShadowOpacity, label: "Selected card shadow opacity", range: 0...0.4, step: 0.02),
-        .slider("selectedCardShadowRadius", keyPath: \.selectedCardShadowRadius, label: "Selected card shadow radius", range: 0...32, unit: "pt"),
-        .slider("selectedCardShadowYOffset", keyPath: \.selectedCardShadowYOffset, label: "Selected card shadow Y", range: 0...16, unit: "pt"),
         // Section headers
         .slider("headerTextSize", keyPath: \.headerTextSize, label: "Header text size", range: 8...16, unit: "pt"),
         .slider("headerTopPadding", keyPath: \.headerTopPadding, label: "Header top padding", range: 0...20, unit: "pt"),

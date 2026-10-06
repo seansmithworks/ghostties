@@ -46,7 +46,8 @@ enum TrayIconTapEffect {
 }
 
 /// "Sidebar vnext" (pen.dev `CnDfN`): the sidebar tray, on both axes, and the
-/// selected rail row share one white Liquid Glass surface. Canvas values are
+/// selected session row (rail and expanded, `SidebarSelectedSurface`) share
+/// one white Liquid Glass surface. Canvas values are
 /// retina px (its traffic lights measure 28px, the built app's 14pt), so each
 /// value here is the canvas value / 2. These are the compiled defaults; every
 /// one is read through `SidebarDialTuning` so the DialKit "Tray glass"
@@ -323,6 +324,18 @@ struct TrayGlassSurface: ViewModifier {
                 ))
                 .allowsHitTesting(false)
         }
+    }
+}
+
+/// The selected session row's surface, in the rail and the expanded list
+/// alike: the tray's white glass (`TrayGlassSurface`, never interactive), so
+/// the tray's one "Tray glass" dial set drives the tray, the rail pill and
+/// the expanded row. Only the size adapts: the caller frames it (the rail's
+/// fixed pill, the expanded row's full row frame), and the corner shape
+/// follows the tray's corner style dial.
+struct SidebarSelectedSurface: View {
+    var body: some View {
+        Color.clear.modifier(TrayGlassSurface())
     }
 }
 

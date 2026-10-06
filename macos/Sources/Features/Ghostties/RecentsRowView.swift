@@ -202,21 +202,14 @@ struct RecentsRowView: View, Equatable {
 
     // MARK: - Row Background
 
-    /// The selected row is a raised card (Flow 07 round 6, layer
-    /// `XHBC1`/"Bottom Group"): opaque canvas-surface fill at a fixed 12pt
-    /// radius plus a soft drop shadow, not a flat tint at the width-driven
-    /// resting/traveled radius every other row uses. Unselected rows are
-    /// unchanged — same `rowCornerRadius`/hover fill as before.
+    /// The selected row is the rail's selected pill adapted to the row
+    /// (`SidebarSelectedSurface`): the tray's white glass, filling the row
+    /// frame, its corners from the tray's corner style dial. Unselected rows
+    /// are unchanged — same `rowCornerRadius`/hover fill as before.
     @ViewBuilder
     private var rowBackground: some View {
         if isActive {
-            RoundedRectangle(cornerRadius: SidebarDialTuning.selectedCardCornerRadius())
-                .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color(WorkspaceLayout.canvasBackgroundLight))
-                .shadow(
-                    color: Color.black.opacity(SidebarDialTuning.selectedCardShadowOpacity()),
-                    radius: SidebarDialTuning.selectedCardShadowRadius(),
-                    y: SidebarDialTuning.selectedCardShadowYOffset()
-                )
+            SidebarSelectedSurface()
         } else {
             RoundedRectangle(cornerRadius: rowCornerRadius)
                 .fill(rowFill)

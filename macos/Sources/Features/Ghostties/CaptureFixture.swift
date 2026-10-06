@@ -214,7 +214,7 @@ enum CaptureFixture {
 
     /// Round 6 follow-up: the one session the fixture marks focused, so a
     /// capture actually exercises the sidebar's selected-row styling
-    /// (raised card — see `WorkspaceLayout.selectedRowCornerRadius`)
+    /// (`SidebarSelectedSurface`)
     /// instead of leaving every row in its resting state. The first entry ("Claude Code 4", switchboard, top of
     /// Active) — same row position Flow 07's own "portfolio" occupies.
     /// Wired in by `SessionCoordinator.applyCaptureFixtureFocusIfNeeded()`,
