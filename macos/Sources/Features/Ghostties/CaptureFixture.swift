@@ -103,16 +103,16 @@ enum CaptureFixture {
         return suite
     }
 
-    /// Removes the suite's domain and any plist it left behind. Called from
+    /// Removes the suite's domain and the plist it left behind. Called from
     /// `applicationWillTerminate`; a no-op outside fixture mode.
     static func cleanUpDefaults(fixtureActive: Bool) {
         guard fixtureActive else { return }
         let name = defaultsSuiteName
         UserDefaults.standard.removePersistentDomain(forName: name)
         fixtureDefaults?.removePersistentDomain(forName: name)
-        // Flush the removal to cfprefsd before deleting the file, so the daemon
-        // has nothing pending to write back over the delete.
-        fixtureDefaults?.synchronize()
+        // cfprefsd may still re-create an EMPTY plist after the process exits
+        // (observed ~1 run in 2); `run.sh` deletes the file once the pid is
+        // gone. `synchronize()` here made it worse, so it is not called.
         try? FileManager.default.removeItem(at: defaultsPlistURL)
     }
 

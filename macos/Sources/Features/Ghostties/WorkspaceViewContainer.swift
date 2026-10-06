@@ -283,6 +283,15 @@ class WorkspaceViewContainer: NSView {
     static func composerPreferenceDefaults(fixtureActive: Bool) -> UserDefaults {
         CaptureFixture.defaults(fixtureActive: fixtureActive)
     }
+
+    /// Capture-script `pref` op. `nil` removes the key.
+    static func setNewSessionOpensComposerForCapture(_ value: Bool?, in defaults: UserDefaults) {
+        if let value {
+            defaults.set(value, forKey: newSessionOpensComposerDefaultsKey)
+        } else {
+            defaults.removeObject(forKey: newSessionOpensComposerDefaultsKey)
+        }
+    }
     #endif
 
     /// The overlay panel's opaque content (Flow 01, sidebar-presence §04):
@@ -714,6 +723,13 @@ class WorkspaceViewContainer: NSView {
                     case .instantCreate: break
                     }
                 }
+            }
+        }
+        if let path = CaptureFixture.scriptPath, let dir = CaptureFixture.harnessStateDir,
+           CaptureFixture.claimHook("script") {
+            _Concurrency.Task { @MainActor [weak self] in
+                guard let self else { return }
+                await CaptureScript.launch(scriptAt: path, host: self, stateDir: dir)
             }
         }
         if let seconds = CaptureFixture.sidebarToggleAfter, CaptureFixture.claimHook("sidebarToggle") {
@@ -2862,3 +2878,43 @@ private class PanelDragHandleView: NSView {
         onDragEnd?()
     }
 }
+
+#if DEBUG
+/// Host for the capture script. Each op calls the seam its click or shortcut
+/// calls; keys go through `NSWindow.sendEvent`.
+extension WorkspaceViewContainer: CaptureScript.Host {
+    var isReady: Bool {
+        (window?.isKeyWindow ?? false) && !WorkspaceStore.shared.projects.isEmpty
+    }
+
+    func composerOpen() { presentComposerOverlay(projectBinding: .open) }
+
+    func rowPlus(project name: String, option: Bool) throws {
+        let store = WorkspaceStore.shared
+        guard let project = store.projects.first(where: { $0.name == name }) else {
+            throw CaptureScript.Failure("rowPlus: no project named '\(name)'")
+        }
+        switch ProjectRowNewSession.action(for: project, optionHeld: option, templates: store.templates) {
+        case .openComposer(let binding):
+            presentComposerOverlay(projectBinding: binding)
+        case .instantCreate(let template):
+            _Concurrency.Task { await coordinator.createQuickSession(for: project, template: template) }
+        }
+    }
+
+    func newSession() { NotificationCenter.default.post(name: .workspaceNewSession, object: window) }
+    func newSessionInstant() { NotificationCenter.default.post(name: .workspaceNewSessionInstant, object: window) }
+
+    func type(_ text: String) {
+        guard let window else { return }
+        CaptureScript.type(text, to: window)
+    }
+
+    func key(_ spec: CaptureScript.KeySpec) {
+        guard let window else { return }
+        CaptureScript.send(spec, to: window)
+    }
+
+    func setPref(_ value: Bool?) { CaptureScript.applyPref(value) }
+}
+#endif
