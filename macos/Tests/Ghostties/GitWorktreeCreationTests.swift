@@ -275,22 +275,32 @@ struct GitWorktreeCreationTests {
     /// the mutant-catching half: an implementation that awaited
     /// `task.value` directly (no independent race) would hang this test
     /// instead of failing it fast.
-    @Test func raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes() async {
+    ///
+    /// No wall-clock upper bound is asserted: under full-suite load the
+    /// cooperative pool starves and a 0.2s sleep legitimately resumes
+    /// seconds late (observed 4-14s), so any `elapsed < N` is a load
+    /// meter, not a hang detector. The hang is caught by `.timeLimit`
+    /// instead, which fails the test (rather than wedging the suite) if
+    /// `race` never returns. The deterministic lower bound below still
+    /// proves the outcome came from the deadline, not an early return.
+    @Test(.timeLimit(.minutes(1)))
+    func raceReturnsTimedOutWhenTheUnderlyingTaskNeverCompletes() async {
         let neverFinishes: _Concurrency.Task<Result<String, GitWorktreeEnumerator.GitWorktreeCreationError>, Never> = _Concurrency.Task {
             try? await _Concurrency.Task.sleep(for: .seconds(3600))
             return .success("unreachable")
         }
         defer { neverFinishes.cancel() }
 
-        let start = Date()
+        let clock = ContinuousClock()
+        let start = clock.now
         let outcome = await SessionComposerStore.race(neverFinishes, timeoutSeconds: 0.2)
-        let elapsed = Date().timeIntervalSince(start)
+        let elapsed = start.duration(to: clock.now)
 
         guard case .timedOut = outcome else {
             Issue.record("expected .timedOut, got \(outcome)")
             return
         }
-        #expect(elapsed < 2.0)
+        #expect(elapsed >= .milliseconds(150))
     }
 
     // MARK: - canonicalPath / mainWorktreePath / isInsideWorkTree (should-fix 10)
