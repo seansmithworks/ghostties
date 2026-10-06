@@ -133,6 +133,7 @@ struct WorkspaceSidebarView: View {
             // own doc comment for why `SidebarRailView` needs the same call).
             #if DEBUG
             coordinator.applyCaptureFixtureFocusIfNeeded()
+            applyCaptureExpandProjectIfNeeded()
             #endif
         }
         .onChange(of: selectedProjectId) { newId in
@@ -234,6 +235,20 @@ struct WorkspaceSidebarView: View {
             set: { if $0 { expandedProjectIds.insert(id) } else { expandedProjectIds.remove(id) } }
         )
     }
+
+    #if DEBUG
+    /// `GHOSTTIES_CAPTURE_EXPAND_PROJECT`: what a click on the project's
+    /// header does — expand it and select it (`ProjectDisclosureRow`'s
+    /// header button). Projects tab only; the capture rig sets the tab.
+    private func applyCaptureExpandProjectIfNeeded() {
+        guard sidebarTab == .projects,
+              let name = CaptureFixture.expandProjectName,
+              let project = store.projects.first(where: { $0.name == name }),
+              CaptureFixture.claimHook("expand") else { return }
+        expandedBinding(for: project.id).wrappedValue = true
+        selectedProjectId = project.id
+    }
+    #endif
 
     /// Auto-expand the project that contains the currently active session.
     private func autoExpandActiveProject() {

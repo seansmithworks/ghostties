@@ -19,6 +19,11 @@ All mechanics are in `.claude/skills/verify/run.sh`. Run it from the repo/worktr
 VERIFY_SIDEBAR_MODE=pinned VERIFY_SIDEBAR_TAB=sessions .claude/skills/verify/run.sh up
 ```
 Env knobs: `VERIFY_SIDEBAR_MODE=pinned|collapsed|closed` (`closed` needs ~10s to settle), `VERIFY_POPOVER=needs-bash|needs-edit|running|done`, `VERIFY_SIDEBAR_TAB=sessions|projects`, `VERIFY_BUILD=0` to skip xcodebuild when the app is already built from this tree.
+Launch-state hooks (DEBUG only, `CaptureFixture.swift`; each calls the action its click or shortcut calls, once per launch; names are fixture projects: atlas-api, fieldwork, pendulum, silo, switchboard, trove, wren):
+- `VERIFY_EXPAND_PROJECT=<project>`: expands and selects that project (implies `TAB=projects`).
+- `VERIFY_COMPOSER=open|prefilled:<project>[:delay=<s>]`: `open` is the tray +, `prefilled:` is a project row's +. Fires 1s after the window appears unless `:delay=` says otherwise.
+- `VERIFY_PROJECT_SETTINGS=<project>[:templates-edit|:templates-delete]`: opens that project's settings popover; a suffix also opens the template edit sheet or delete alert for the first user template (first template if none; a built-in gets "Duplicate and Edit...", as its menu offers). Implies `TAB=projects`.
+- `VERIFY_SIDEBAR_TOGGLE_AFTER=<s>`: runs Cmd+S's action after N s (pinned to rail), again after 2N s (back).
 `up` launches the binary directly (not `open`, which only focuses a running Dev build sharing the bundle id), strips `GHOSTTIES_SESSION_ID`/`GHOSTTIES_LAUNCHER`, sets `GHOSTTIES_STATE_DIR` to the evidence dir, records the pid, and records the old `ghostties.sidebarTab` value if a tab was requested. Mode is fixed at launch: one flow = one `up`/`down` cycle.
 
 ## Doctor
@@ -30,13 +35,17 @@ Each flow is `down`, `up` with that flow's env, `doctor`, wait ~5s, `shot <name>
 - **B. Collapsed rail** (`MODE=collapsed TAB=sessions`). Look for: ~128pt-ish narrow rail, glyphs centered in the rail (not right-aligned), section chevrons, and the tray as a thin centered pill with + / folder / gear / sidebar stacked.
 - **C. Projects tab** (`MODE=pinned TAB=projects`). Look for: project list instead of sessions; same tray.
 - **D. Popover states** (`MODE=pinned POPOVER=<needs-bash|needs-edit|running|done>`, one launch each). Look for: card anchored to its row, tool/command or file path (needs-*), prompt + current step (running). `done` shows no card by design. If the popover is its own window, the largest-window capture misses it: check the first PNG.
+- **E. Expanded project** (`MODE=pinned EXPAND_PROJECT=switchboard`). Look for: session rows under the project with type glyphs on the right, not ghosts. The Projects tab reads `coordinator.indicatorState(for:)`, not the fixture's seeded states, so these rows show checks where the Sessions tab shows spinners.
+- **F. Composer** (`COMPOSER=open` or `COMPOSER=prefilled:switchboard`). Look for: single-line card centred in the window; the Witness ghost on the card is grey for `open` and the project's ghost for `prefilled`. For the open animation: `COMPOSER=open:delay=4`, then `video <name> 7` right after `up`.
+- **G. Project settings** (`PROJECT_SETTINGS=switchboard`, then `:templates-edit`, `:templates-delete`). Look for: the Templates section; with a suffix, whether the popover is still on screen behind the sheet/alert. The popover, sheet and alert are child windows and the main-window shot includes them; `swift .claude/skills/verify/windows.swift <pid>` lists them.
+- **H. Sidebar toggle video** (`MODE=pinned TAB=sessions SIDEBAR_TOGGLE_AFTER=4`, then `video <name> 10` right after `up`). Look for: width animation both ways, glyphs moving to the rail centre and back. Find the transitions with `ffmpeg -i <mp4> -vf "select='gt(scene,0.003)',showinfo" -f null -`.
 Also check the PNG for regressions in the area you changed, not just the checklist.
 
 ## Evidence
-`/tmp/verify-ghostties-<hash of tree path>/`: `shots/<name>.png`, `build.log`, `app.log`, `state/`. `shot` captures only the largest on-screen window of the recorded pid via `screencapture -x -o -l <windowid>` (the first windows found are a blank one and a 33pt menu-bar strip). Never full-screen. Evidence is never committed (public repo).
+`/tmp/verify-ghostties-<hash of tree path>/`: `shots/<name>.png`, `build.log`, `app.log`, `state/`. `shot` captures only the largest on-screen window of the recorded pid via `screencapture -x -o -l <windowid>` (the first windows found are a blank one and a 33pt menu-bar strip). Never full-screen. `video <name> <s>` records the same window with `screencapture -v -V <s> -l <windowid>` (the .mov includes the window shadow margin; macOS draws its recording pill over the traffic lights) and converts it to a ~1400px H.264 `<name>.mp4`. Evidence is never committed (public repo).
 
 ## What this can't reach
-Needs a launch hook (see `docs/plans/headless-smoke-harness.html`) or Sean: composer open, Project settings popover, expanding a project, hover states, anything needing a click or key.
+Needs a new launch hook (see `docs/plans/headless-smoke-harness.html`) or Sean: hover states, typing into the composer, the click-to-action wiring itself (a hook proves the state, not that the button calls it), anything else needing a click or key.
 
 ## Gotchas
 - **No synthetic input, ever**: no keystrokes, clicks, AX actions, System Events. An agent once typed into Sean's live session, and Cmd+Q once hit his real Ghostties. Stop Dev with `kill <pid>` only (`down` does this).

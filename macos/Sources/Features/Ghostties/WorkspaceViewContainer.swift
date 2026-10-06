@@ -673,7 +673,50 @@ class WorkspaceViewContainer: NSView {
         // Release-signed lab build can also be driven without GUI automation —
         // this is the only way to reproduce against the Release CEF profile.
         WorkspaceViewContainer.triggerDebugAutoOpenBrowserIfNeeded(on: self)
+
+        #if DEBUG
+        triggerCaptureLaunchHooksIfNeeded()
+        #endif
     }
+
+    #if DEBUG
+    /// Capture-rig launch hooks that live on the container because it exists
+    /// in every sidebar mode (the sidebar itself is unmounted when closed).
+    /// Each calls the action its click or shortcut calls.
+    private func triggerCaptureLaunchHooksIfNeeded() {
+        if let hook = CaptureFixture.composerHook, CaptureFixture.claimHook("composer") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + hook.delay) { [weak self] in
+                guard let self else { return }
+                switch hook.target {
+                case .open:
+                    // The tray "+" (`SidebarTrayItems.sidebarTrayItems`).
+                    self.presentComposerOverlay(projectBinding: .open)
+                case .prefilled(let name):
+                    // A project row's "+" (`ProjectDisclosureRow.handleNewSession`).
+                    let store = WorkspaceStore.shared
+                    guard let project = store.projects.first(where: { $0.name == name }) else {
+                        NSLog("[CaptureFixture] GHOSTTIES_CAPTURE_COMPOSER: no project named \(name)")
+                        return
+                    }
+                    switch ProjectRowNewSession.action(for: project, optionHeld: false, templates: store.templates) {
+                    case .openComposer(let binding): self.presentComposerOverlay(projectBinding: binding)
+                    case .instantCreate: break
+                    }
+                }
+            }
+        }
+        if let seconds = CaptureFixture.sidebarToggleAfter, CaptureFixture.claimHook("sidebarToggle") {
+            // Cmd+S (`TerminalController.toggleWorkspaceSidebar`), twice:
+            // pinned -> rail, then rail -> pinned.
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                self?.toggleSidebar()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2 * seconds) { [weak self] in
+                self?.toggleSidebar()
+            }
+        }
+    }
+    #endif
 
     /// Fires exactly once per process, guarded by `GHOSTTIES_DEBUG_AUTO_OPEN_BROWSER=1`.
     /// Runtime-gated (was `#if DEBUG`) so it survives into Release builds;
