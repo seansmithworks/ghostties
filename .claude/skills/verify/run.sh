@@ -19,6 +19,15 @@ pid() { cat "$EV/pid" 2>/dev/null || true; }
 alive() { local p; p="$(pid)"; [ -n "$p" ] && kill -0 "$p" 2>/dev/null && [[ "$(ps -p "$p" -o command=)" == *"$APP/Contents/MacOS"* ]]; }
 awake() { swift "$HERE/windows.swift" asleep >/dev/null || die "display is asleep; captures would be black"; }
 status() { git -C "$TREE" status --porcelain; }
+# macOS's prefs daemon can re-create an empty ghostties.capture.<pid>.plist after the app exits.
+# Remove the one for this exact pid (never a glob); retry once in case it reappears.
+# VERIFY_PREFS_DIR is a test seam.
+rm_capture_plist() {
+  local p="${1:-}" f
+  [[ "$p" =~ ^[0-9]+$ ]] || return 0
+  f="${VERIFY_PREFS_DIR:-$HOME/Library/Preferences}/ghostties.capture.$p.plist"
+  rm -f "$f"; sleep 1; rm -f "$f"
+}
 
 check_inputs() {
   [ -f "$ENGINE" ] || die "engine missing. Copy macos/GhosttyKit.xcframework and zig-out from a fresh tree (see SKILL.md Build), or: PATH=/opt/homebrew/opt/zig@0.16/bin:\$PATH zig build -Doptimize=Debug -Demit-macos-app=false -Demit-xcframework=true (~2 min on 0.16)"
@@ -208,7 +217,7 @@ PY
     if [ -f "$sd/script.done" ]; then
       echo "script: done, $seen mark(s) shot, evidence $EV (dispatch: $sd/dispatch.jsonl)"; return 0
     fi
-    alive || { echo "FAIL: app exited before script.done (see $EV/app.log)" >&2; return 1; }
+    alive || { rm_capture_plist "$(pid)"; echo "FAIL: app exited before script.done (see $EV/app.log)" >&2; return 1; }
     now="$(date +%s)"
     [ $((now - start)) -lt "$timeout" ] || { echo "FAIL: script timed out after ${timeout}s" >&2; return 1; }
     sleep 0.1
@@ -233,6 +242,7 @@ cmd_down() {
   else
     echo "down: pid ${p:-none} already gone"
   fi
+  rm_capture_plist "$p"
   local rc=0
   if [ -f "$EV/sidebarTab.old" ]; then
     local old; old="$(cat "$EV/sidebarTab.old")"
