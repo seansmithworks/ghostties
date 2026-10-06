@@ -720,80 +720,82 @@ struct ComposerFlowTests {
     /// giving the throwaway workspace every template id the Dev domain has
     /// pinned, and asserts the composer's keys in `.standard` are untouched.
     @Test func x2_clickOutsideClosesButTheTitlebarBandDoesNot() async {
-        let shared = SessionComposerStore.shared
-        let standard = UserDefaults.standard
-        func composerKeys() -> [String: String] {
-            Dictionary(uniqueKeysWithValues: standard.dictionaryRepresentation()
-                .filter { $0.key.lowercased().contains("composer") }
-                .map { ($0.key, String(describing: $0.value)) })
-        }
-        let defaultsBefore = composerKeys()
-        defer {
-            shared.cancel()
-            #expect(composerKeys() == defaultsBefore, "x2 changed the Dev domain's composer keys")
-        }
-        #expect(!shared.isOpen, "shared composer was already open")
-
-        let project = Project(name: "switchboard", rootPath: Self.makeRoot("x2"))
-        defer { try? FileManager.default.removeItem(atPath: project.rootPath) }
-        let workspace = WorkspaceStore(testingProjects: [project], testingSessions: [])
-        for (index, id) in shared.pinnedTemplateIds.enumerated()
-        where !workspace.templates.contains(where: { $0.id == id }) {
-            workspace.addTemplate(AgentTemplate(id: id, name: "pinned-guard-\(index)", kind: .custom))
-        }
-
-        let size = NSSize(width: 900, height: 600)
-        let overlay = SessionComposerOverlay(
-            request: SessionComposerRequest(projectBinding: .open),
-            centeringModel: ComposerCenteringModel()
-        )
-        .environmentObject(workspace)
-        .environmentObject(SessionCoordinator())
-        // The container's `composerOverlayHostingView` class. The app is not
-        // active in a test run, so this window can't be key; in the app it is,
-        // where a click is never a "first mouse". Accepting it here is that.
-        let hosting = ClickThroughHost(rootView: AnyView(overlay))
-        hosting.sizingOptions = []
-        let window = KeyableWindow(
-            contentRect: NSRect(origin: NSPoint(x: -20_000, y: -20_000), size: size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        hosting.frame = NSRect(origin: .zero, size: size)
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        window.makeKey()
-        hosting.layoutSubtreeIfNeeded()
-        defer { window.orderOut(nil) }
-
-        #expect(await Self.poll { shared.isOpen }, "overlay never opened the composer")
-        _ = await Self.poll(timeout: 0.5) { false }  // let layout settle
-
-        func click(at point: NSPoint) {
-            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                guard let event = NSEvent.mouseEvent(
-                    with: type,
-                    location: point,
-                    modifierFlags: [],
-                    timestamp: ProcessInfo.processInfo.systemUptime,
-                    windowNumber: window.windowNumber,
-                    context: nil,
-                    eventNumber: 0,
-                    clickCount: 1,
-                    pressure: 1
-                ) else { Issue.record("could not build mouse event"); return }
-                window.sendEvent(event)
+        await withSharedComposerStore {
+            let shared = SessionComposerStore.shared
+            let standard = UserDefaults.standard
+            func composerKeys() -> [String: String] {
+                Dictionary(uniqueKeysWithValues: standard.dictionaryRepresentation()
+                    .filter { $0.key.lowercased().contains("composer") }
+                    .map { ($0.key, String(describing: $0.value)) })
             }
+            let defaultsBefore = composerKeys()
+            defer {
+                shared.cancel()
+                #expect(composerKeys() == defaultsBefore, "x2 changed the Dev domain's composer keys")
+            }
+            #expect(!shared.isOpen, "shared composer was already open")
+
+            let project = Project(name: "switchboard", rootPath: Self.makeRoot("x2"))
+            defer { try? FileManager.default.removeItem(atPath: project.rootPath) }
+            let workspace = WorkspaceStore(testingProjects: [project], testingSessions: [])
+            for (index, id) in shared.pinnedTemplateIds.enumerated()
+            where !workspace.templates.contains(where: { $0.id == id }) {
+                workspace.addTemplate(AgentTemplate(id: id, name: "pinned-guard-\(index)", kind: .custom))
+            }
+
+            let size = NSSize(width: 900, height: 600)
+            let overlay = SessionComposerOverlay(
+                request: SessionComposerRequest(projectBinding: .open),
+                centeringModel: ComposerCenteringModel()
+            )
+            .environmentObject(workspace)
+            .environmentObject(SessionCoordinator())
+            // The container's `composerOverlayHostingView` class. The app is not
+            // active in a test run, so this window can't be key; in the app it is,
+            // where a click is never a "first mouse". Accepting it here is that.
+            let hosting = ClickThroughHost(rootView: AnyView(overlay))
+            hosting.sizingOptions = []
+            let window = KeyableWindow(
+                contentRect: NSRect(origin: NSPoint(x: -20_000, y: -20_000), size: size),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            hosting.frame = NSRect(origin: .zero, size: size)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            window.makeKey()
+            hosting.layoutSubtreeIfNeeded()
+            defer { window.orderOut(nil) }
+
+            #expect(await Self.poll { shared.isOpen }, "overlay never opened the composer")
+            _ = await Self.poll(timeout: 0.5) { false }  // let layout settle
+
+            func click(at point: NSPoint) {
+                for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                    guard let event = NSEvent.mouseEvent(
+                        with: type,
+                        location: point,
+                        modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: window.windowNumber,
+                        context: nil,
+                        eventNumber: 0,
+                        clickCount: 1,
+                        pressure: 1
+                    ) else { Issue.record("could not build mouse event"); return }
+                    window.sendEvent(event)
+                }
+            }
+
+            // Window coordinates are bottom-left origin: y near `size.height` is
+            // the top, inside the 28pt band.
+            click(at: NSPoint(x: 30, y: size.height - 10))
+            _ = await Self.poll(timeout: 0.5) { false }
+            #expect(shared.isOpen, "a click in the titlebar band closed the composer")
+
+            click(at: NSPoint(x: 30, y: 30))
+            #expect(await Self.poll { !shared.isOpen }, "a click on the terminal area did not close the composer")
         }
-
-        // Window coordinates are bottom-left origin: y near `size.height` is
-        // the top, inside the 28pt band.
-        click(at: NSPoint(x: 30, y: size.height - 10))
-        _ = await Self.poll(timeout: 0.5) { false }
-        #expect(shared.isOpen, "a click in the titlebar band closed the composer")
-
-        click(at: NSPoint(x: 30, y: 30))
-        #expect(await Self.poll { !shared.isOpen }, "a click on the terminal area did not close the composer")
     }
 }

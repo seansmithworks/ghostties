@@ -38,7 +38,12 @@ struct CaptureScriptComposerFocusTests {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("script-\(UUID().uuidString)")
         defer {
             SessionComposerStore.shared.cancel()
+            // Leave nothing behind for the next test on the shared store: this
+            // container's `$isOpen` sink and overlay would otherwise react to it.
+            SessionComposerStore.shared.owningWindow = nil
+            window.contentView = nil
             window.orderOut(nil)
+            window.close()
             try? FileManager.default.removeItem(at: dir)
         }
         await CaptureScript.Runner(host: container, stateDir: dir).run([.composerOpen, .type("switchboard")])
@@ -47,20 +52,13 @@ struct CaptureScriptComposerFocusTests {
         return SessionComposerStore.shared.searchText
     }
 
-    /// `SessionComposerStore.shared` is process-wide and `ComposerFlowTests.x2`
-    /// opens and cancels it concurrently, which can close this test's composer
-    /// mid-run. That interference is transient; a missing focus wait loses the
-    /// text on every attempt. So: wait for the store to be free, and pass if
-    /// any of three attempts lands the whole text.
+    /// Holds `SharedComposerStoreGate` (as does `ComposerFlowTests.x2`), so
+    /// nothing else touches `SessionComposerStore.shared` while this runs.
+    /// One attempt, and it must land the whole text.
     @Test func typeAfterComposerOpenLandsInTheField() async {
-        var last = ""
-        for _ in 0..<3 {
-            for _ in 0..<150 where SessionComposerStore.shared.isOpen {
-                try? await _Concurrency.Task.sleep(for: .milliseconds(20))
-            }
-            last = await typedText()
-            if last == "switchboard" { break }
+        await withSharedComposerStore {
+            #expect(!SessionComposerStore.shared.isOpen, "shared composer was already open")
+            #expect(await typedText() == "switchboard")
         }
-        #expect(last == "switchboard")
     }
 }
