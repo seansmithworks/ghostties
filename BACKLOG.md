@@ -1,5 +1,23 @@
 # Ghostties — Backlog
 
+## 2026-10-05 (late) — beta.26 gate moved: test contract first (session eb2c4576)
+
+State: #192–#197 MERGED (main @ 089adb62f). Tag v0.1.0-beta.26 NOT pushed. Sean moved the gate: the tag now waits on a composer go/no-go contract run (headless harness) plus SEAN-tagged checks. Plan: memory `beta26-test-harness/` (draft-plan.md, refuter-prompt.txt, refutation.md once written, revised plan to follow), and the plan Sean approves goes to his phone as an Artifact.
+
+- [ ] Approve the composer acceptance contract (Sean, from phone) → then build phase 1 of the harness. | open
+- [ ] `feat/smoke-launch-hooks` @ `2e0bef87b` (pushed, no PR): 4 DEBUG launch hooks + `run.sh video`; release binary has 0 hook strings; suite 1463/1 known flake. Review → PR → merge. | open
+- [ ] D4 BLOCKS TAG: cancelling Template "Duplicate and Edit" leaves the copy (`ProjectTemplatesSection.swift:212-215` → `TemplateEditForm.swift:40-41`). New in beta.26. | open
+- [ ] D1: sidebar pinned⇄rail collapse snaps, row names blank ~0.2s on expand (Debug fixture capture). Blocks only if Sean sees it in SEAN-3. | open
+- [ ] D3 settings popover overflows window (no height cap, `ProjectSettingsView.swift:109`); D5 ⊖ cursor bubble still shows on macOS 27 and its test passes on broken output; D6 resize overlay on toggle (upstream default, design fork); D7 project ghost color differs sidebar vs composer witness (design fork). D2 Projects/Sessions glyph mismatch = fixture artifact. | open
+- [ ] SEAN smoke rows (≈6 min, Dev build from main): typing + split; Cmd+1…9, Cmd+Shift+[ ], Cmd+Ctrl+], Cmd+Shift+T, Cmd+W; Cmd+S animation; `ghostties ccp` spawn; Option-click instant-create; composer click-outside; template Duplicate/Cancel + Delete/Cancel; tray folder → new project. | open
+- [ ] CI never runs app tests (build-for-testing only; host hangs on GitHub runners, `test-ghostties.yml:139-155`). One time-boxed ad-hoc-signing experiment, else gate on local `-only-testing:GhosttyTests`. | open
+- [ ] Coverage map (125 surfaces, 75 unchecked wiring) → per-release ~21-flow action-channel smoke. Map is in the session scratchpad; move it into docs/ with the plan. | open
+- [ ] Report-out: every contract run → phone report page (Artifact) + evidence clips. Each contract row names a focus rect; `run.sh video` emits the full-window clip plus a zoomed crop of that rect (ffmpeg crop/scale, low effort; no generated visuals). | open
+- [ ] Video track (Sean 2026-10-05: "brain dump, not now"): per-beta changelog video from harness clips (rough OK) and a human-gated promo video (`content-cascade` + Remotion on `feat/ghostties-animation`). Video-gen landscape moves fast; scout before building. | parked
+- [ ] Process: acceptance contract up front, approved by Sean, enforced by hook (proposal in plan); test plan precedes every build. | open
+- [ ] NO VM for now (storage: 96GB free). Lost without it: real input feel (hover/drag, IME), system prompts, clean-install + Sparkle upgrade path → SEAN rows or named risks. Revisit as an ephemeral release-time VM or cloud runner. | parked
+- [ ] Cleanup (original thread objective): 18 worktrees, superseded branches; list dirty ones for Sean, delete only on his go. | open
+
 ## 2026-10-05 — beta.26 wave (session 018XCPmh checkpoint)
 
 Merged to main: #187, #190 (sidebar presence + popover), #191 (release builds no longer coverage-instrumented). Release dry run on main green.
@@ -19,6 +37,13 @@ Parked:
 - [ ] Approve/Deny + popover 06 still need the key-press spike (Sean-run). | parked
 - [ ] Stale docs: AGENTS.md "zig build broken" (0.16 works), docs/release-checklist.md appcast-description and `gh release edit` steps (CI does both). MEMORY.md links reference_indicator-state-two-cache-coupling.md, which does not exist. | parked
 - [ ] DMG-motion note from origin/worktree-session-3 (c3b77ec5b) not yet folded into BACKLOG. | parked
+
+Decided by Claude 2026-10-05 (Sean: "just get it done"). Defaults shipped; revisit only if they bother you:
+- [ ] Composer: a row's + pre-fills the project, but nothing shows it until the 2nd rest hint (~2.6s). Kept as-is; option: name the project in the first hint. | parked
+- [ ] Cmd+T with "new session opens composer" off still instant-creates (pre-existing preference). Kept as the exemption to "every + opens the composer". | parked
+- [ ] Tray New Project doesn't select/expand the new project in the sidebar the way the header button does; composer still opens locked to it. | parked
+- [ ] Header "+ New Project" kept alongside the new tray folder button. Remove one if the duplication bothers you. | parked
+- [ ] Composer nits from round 3: create-branch action re-reads state on fire (`SessionComposerPalette.swift:~744`); `testComposerQueryFieldHasLabel…` name is stale; `ProjectTemplatesSection*` comments name the deleted `ComposerRow`. | parked
 
 ## 2026-09-30 — sidebar-presence round 7: popover build + Sean's review (carried)
 
