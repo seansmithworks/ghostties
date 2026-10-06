@@ -501,23 +501,13 @@ private struct ProjectDisclosureRowContent: View, Equatable {
     /// Option-click keeps the old instant-create behavior when the project
     /// has a default template.
     private func handleNewSession() {
-        selectedProjectId = project.id
-        switch ProjectRowNewSession.action(
-            for: project,
+        ProjectRowNewSession.perform(
+            project: project,
             optionHeld: NSEvent.modifierFlags.contains(.option),
-            templates: store.templates
-        ) {
-        case .instantCreate(let template):
-            _Concurrency.Task {
-                await coordinator.createQuickSession(for: project, template: template)
-            }
-        case .openComposer(let binding):
-            guard let container = coordinator.containerView as? WorkspaceViewContainer else {
-                assertionFailure("ProjectDisclosureRow: coordinator.containerView is not a WorkspaceViewContainer")
-                return
-            }
-            container.presentComposerOverlay(projectBinding: binding)
-        }
+            templates: store.templates,
+            coordinator: coordinator,
+            select: { selectedProjectId = $0 }
+        )
     }
 
     private func relaunchSession(_ session: AgentSession, mode: SessionCoordinator.RelaunchMode) {
@@ -655,6 +645,33 @@ enum ProjectRowNewSession {
     enum Action {
         case instantCreate(AgentTemplate)
         case openComposer(SessionComposerRequest.ProjectBinding)
+    }
+
+    /// The row's "+" press, end to end. The capture script calls this too, so
+    /// the two can't drift. Returns true when the composer is opening.
+    @MainActor @discardableResult
+    static func perform(
+        project: Project,
+        optionHeld: Bool,
+        templates: [AgentTemplate],
+        coordinator: SessionCoordinator,
+        select: (UUID) -> Void
+    ) -> Bool {
+        select(project.id)
+        switch action(for: project, optionHeld: optionHeld, templates: templates) {
+        case .instantCreate(let template):
+            _Concurrency.Task {
+                await coordinator.createQuickSession(for: project, template: template)
+            }
+            return false
+        case .openComposer(let binding):
+            guard let container = coordinator.containerView as? WorkspaceViewContainer else {
+                assertionFailure("ProjectDisclosureRow: coordinator.containerView is not a WorkspaceViewContainer")
+                return false
+            }
+            container.presentComposerOverlay(projectBinding: binding)
+            return true
+        }
     }
 
     static func action(for project: Project, optionHeld: Bool, templates: [AgentTemplate]) -> Action {
