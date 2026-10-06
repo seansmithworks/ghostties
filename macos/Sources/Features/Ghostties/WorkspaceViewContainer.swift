@@ -2919,12 +2919,18 @@ extension WorkspaceViewContainer: CaptureScript.Host {
     func newSessionInstant() { NotificationCenter.default.post(name: .workspaceNewSessionInstant, object: window) }
 
     func waitForComposerFocus() async -> Bool {
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            if window?.firstResponder is ComposerGhostNSTextView { return true }
+        func ready() -> Bool {
+            window?.firstResponder is ComposerGhostNSTextView && SessionComposerStore.shared.isOpen
+        }
+        let deadline = Date().addingTimeInterval(CaptureScript.composerFocusTimeout)
+        while !ready() {
+            guard Date() < deadline else { return false }
             try? await _Concurrency.Task.sleep(for: .milliseconds(20))
         }
-        return window?.firstResponder is ComposerGhostNSTextView
+        // One more beat: the palette's own `onAppear` re-opens the store, and
+        // text typed before that lands is wiped. Re-check after it.
+        try? await _Concurrency.Task.sleep(for: .milliseconds(100))
+        return ready()
     }
 
     func type(_ text: String) {

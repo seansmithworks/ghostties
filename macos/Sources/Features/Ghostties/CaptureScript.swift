@@ -36,6 +36,10 @@ enum CaptureScript {
     static let namedKeys: Set<String> = ["return", "escape", "tab", "up", "down", "left", "right", "delete"]
     static let prefKey = "newSessionOpensComposer"
 
+    /// How long a step that opens the composer waits for its field (seconds).
+    /// The contract says about 2; a test on a loaded machine may widen it.
+    static var composerFocusTimeout: TimeInterval = 2
+
     // MARK: - Parsing
 
     /// Parses the whole script up front, so a bad step 7 fails before step 1

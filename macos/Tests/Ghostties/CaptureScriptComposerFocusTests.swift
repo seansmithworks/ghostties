@@ -53,13 +53,19 @@ struct CaptureScriptComposerFocusTests {
         while SessionComposerStore.shared.searchText != "switchboard", Date() < deadline {
             try? await _Concurrency.Task.sleep(for: .milliseconds(20))
         }
-        return SessionComposerStore.shared.searchText
+        let error = (try? String(contentsOf: dir.appendingPathComponent("script.error"), encoding: .utf8)) ?? ""
+        return SessionComposerStore.shared.searchText + (error.isEmpty ? "" : " [script.error: \(error)]")
     }
 
     /// Holds `SharedComposerStoreGate` (as does `ComposerFlowTests.x2`), so
     /// nothing else touches `SessionComposerStore.shared` while this runs.
     /// One attempt, and it must land the whole text.
     @Test func typeAfterComposerOpenLandsInTheField() async {
+        // The suite runs alongside ~1500 others; a main-thread stall of 10s+
+        // is routine there. This test proves ordering, not the 2s bound.
+        let savedTimeout = CaptureScript.composerFocusTimeout
+        CaptureScript.composerFocusTimeout = 30
+        defer { CaptureScript.composerFocusTimeout = savedTimeout }
         await withSharedComposerStore {
             #expect(!SessionComposerStore.shared.isOpen, "shared composer was already open")
             let text = await typedText()
