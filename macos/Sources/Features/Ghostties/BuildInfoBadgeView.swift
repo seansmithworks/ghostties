@@ -2,8 +2,9 @@ import AppKit
 import Darwin
 import SwiftUI
 
-/// `@AppStorage` key gating the dev build-info badge. Default ON in Debug
-/// builds, OFF in Release. Toggle manually with:
+/// `@AppStorage` key gating the dev build-info badge. Default OFF in every
+/// build (the About window carries the same facts); the DEBUG-only
+/// "Show Build Info" app-menu item turns it on. Toggle manually with:
 ///
 ///   defaults write com.seansmithdesign.ghostties.dev ghostties.devBuildInfoBadge.enabled -bool true
 ///   defaults write com.seansmithdesign.ghostties.dev ghostties.devBuildInfoBadge.enabled -bool false
@@ -15,7 +16,7 @@ import SwiftUI
 let buildInfoBadgeStorageKey = "ghostties.devBuildInfoBadge.enabled"
 
 #if DEBUG
-    private let buildInfoBadgeDefaultEnabled = true
+    private let buildInfoBadgeDefaultEnabled = false
 #else
     private let buildInfoBadgeDefaultEnabled = false
 #endif
@@ -115,6 +116,21 @@ struct BuildInfoSnapshot {
             return "\(shortVersion) · \(devThreadName) @ \(devBuildSHA) · built \(builtText) · up \(upText)"
         }
         return "\(shortVersion) (\(buildNumber)) · built \(builtText) · up \(upText)"
+    }
+
+    /// Rows for the About window. Only the dev fields (present on
+    /// Debug/Dev/Demo builds); empty on Release, where About already shows
+    /// version and build.
+    var aboutRows: [(label: String, text: String)] {
+        guard let devThreadName, let devBuildSHA else { return [] }
+        let builtText = buildDate.map { Self.fullTimeFormatter.string(from: $0) } ?? "unknown"
+        let upText = Self.durationFormatter.string(from: launchDate, to: Date()) ?? "0m"
+        return [
+            (label: "Thread", text: devThreadName),
+            (label: "SHA", text: devBuildSHA),
+            (label: "Built", text: builtText),
+            (label: "Up", text: upText),
+        ]
     }
 
     /// Full multi-line detail copied to the pasteboard on click.
