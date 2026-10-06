@@ -3181,3 +3181,5 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
   listed at the end of the spec. Canvas `mkJau`. | craft | new
 
 - [ ] Tab title sometimes misses the Claude thread name set via /rename (seen 2026-09-25, "Jev adoption" thread). Statusline now reads `session_name` reliably; tab-title path should use the same source.
+
+- [ ] **Faded row labels after rail → closed → pinned** (found in vnext review, 2026-10-06; also on main `3468b7028`): `isCollapsedPresentation` is written only in `applyCollapseCrossfadeSidebarView`, so a closed→pinned swap can leave `RecentsRowView` labels faded until the next Cmd+S. Fix: reset the flag in `applySidebarView`.
