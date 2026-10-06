@@ -37,10 +37,31 @@ struct CaptureDispatchLogTests {
         #expect(lines[1].contains("\"project\":\"b\""))
     }
 
-    @Test func logDispatchIsANoOpOutsideFixtureMode() {
-        // The suite never runs in fixture mode, so this must write nothing
-        // and must not resolve a state dir.
-        #expect(CaptureFixture.harnessStateDir == nil)
-        CaptureFixture.logDispatch(project: "p", cwd: "/", command: nil, template: nil)
+    @Test func stateDirResolvesOnlyInFixtureMode() {
+        let env = ["GHOSTTIES_STATE_DIR": "/tmp/sd"]
+        #expect(CaptureFixture.stateDir(fixtureActive: false, env: env) == nil)
+        #expect(CaptureFixture.stateDir(fixtureActive: true, env: [:]) == nil)
+        #expect(CaptureFixture.stateDir(fixtureActive: true, env: ["GHOSTTIES_STATE_DIR": ""]) == nil)
+        #expect(CaptureFixture.stateDir(fixtureActive: true, env: env)?.path == "/tmp/sd")
+    }
+
+    @Test func logDispatchWritesNothingWithoutAStateDir() throws {
+        // What a non-fixture launch resolves to, even with the env var set.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dispatch-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let resolved = CaptureFixture.stateDir(fixtureActive: false, env: ["GHOSTTIES_STATE_DIR": dir.path])
+        CaptureFixture.logDispatch(project: "p", cwd: "/", command: nil, template: nil, stateDir: resolved)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+    }
+
+    @Test func logDispatchWritesOneLineWithAStateDir() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dispatch-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        CaptureFixture.logDispatch(project: "p", cwd: "/", command: "c", template: "t", stateDir: dir)
+        let text = try String(contentsOf: dir.appendingPathComponent("dispatch.jsonl"), encoding: .utf8)
+        #expect(text.split(separator: "\n").count == 1)
     }
 }

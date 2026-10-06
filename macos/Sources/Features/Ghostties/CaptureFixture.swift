@@ -48,9 +48,11 @@ enum CaptureFixture {
     /// set. Unlike `WorkspacePersistence.directory` there is no fallback to
     /// the real Application Support path: the harness logs never go there.
     static var harnessStateDir: URL? {
-        guard isActive,
-              let raw = ProcessInfo.processInfo.environment["GHOSTTIES_STATE_DIR"], !raw.isEmpty
-        else { return nil }
+        stateDir(fixtureActive: isActive, env: ProcessInfo.processInfo.environment)
+    }
+
+    static func stateDir(fixtureActive: Bool, env: [String: String]) -> URL? {
+        guard fixtureActive, let raw = env["GHOSTTIES_STATE_DIR"], !raw.isEmpty else { return nil }
         return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath, isDirectory: true)
     }
 
@@ -80,8 +82,10 @@ enum CaptureFixture {
 
     /// `SessionCoordinator.createSession` calls this just before it spawns.
     /// Appends to `$GHOSTTIES_STATE_DIR/dispatch.jsonl`; no-op outside fixture mode.
-    static func logDispatch(project: String, cwd: String, command: String?, template: String?) {
-        guard let dir = harnessStateDir else { return }
+    static func logDispatch(
+        project: String, cwd: String, command: String?, template: String?, stateDir dir: URL? = harnessStateDir
+    ) {
+        guard let dir else { return }
         appendLine(
             dispatchLine(t: Date().timeIntervalSince1970, project: project, cwd: cwd, command: command, template: template),
             to: dir.appendingPathComponent("dispatch.jsonl")
@@ -99,7 +103,11 @@ enum CaptureFixture {
     /// The defaults the composer store and the Cmd+T pref read/write:
     /// the throwaway suite in fixture mode, `.standard` otherwise.
     static func defaults(fixtureActive: Bool) -> UserDefaults {
-        guard fixtureActive, let suite = fixtureDefaults else { return .standard }
+        guard fixtureActive else { return .standard }
+        // Fixture mode must never fall back to `.standard`: that is Sean's Dev domain.
+        guard let suite = fixtureDefaults else {
+            preconditionFailure("could not create the capture defaults suite \(defaultsSuiteName)")
+        }
         return suite
     }
 
