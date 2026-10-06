@@ -198,6 +198,7 @@ final class WorkspaceStore: ObservableObject {
     private let persistenceDisabled: Bool
     #else
     private let persistenceDisabled: Bool = false
+    private let stateDirectory: URL? = nil
     #endif
 
     private init() {
