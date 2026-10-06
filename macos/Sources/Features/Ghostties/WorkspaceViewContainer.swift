@@ -271,8 +271,19 @@ class WorkspaceViewContainer: NSView {
     }
 
     private var newSessionOpensComposerPreference: Bool {
+        #if DEBUG
+        Self.newSessionOpensComposer(in: Self.composerPreferenceDefaults(fixtureActive: CaptureFixture.isActive))
+        #else
         Self.newSessionOpensComposer(in: .standard)
+        #endif
     }
+
+    #if DEBUG
+    /// Fixture mode reads the throwaway capture suite, never `.standard`.
+    static func composerPreferenceDefaults(fixtureActive: Bool) -> UserDefaults {
+        CaptureFixture.defaults(fixtureActive: fixtureActive)
+    }
+    #endif
 
     /// The overlay panel's opaque content (Flow 01, sidebar-presence §04):
     /// fill `#1c1c1c`, radius 18, 1pt stroke `#00000026`. Only visible in

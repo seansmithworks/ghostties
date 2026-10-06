@@ -42,6 +42,33 @@ enum CaptureFixture {
 
     #if DEBUG
 
+    // MARK: - Isolated defaults
+
+    /// Throwaway per-process suite for fixture runs, so a harness run never
+    /// writes Sean's real Dev settings (composer state, the Cmd+T pref).
+    static var defaultsSuiteName: String { "ghostties.capture.\(ProcessInfo.processInfo.processIdentifier)" }
+
+    private static let fixtureDefaults: UserDefaults? = UserDefaults(suiteName: defaultsSuiteName)
+
+    /// The defaults the composer store and the Cmd+T pref read/write:
+    /// the throwaway suite in fixture mode, `.standard` otherwise.
+    static func defaults(fixtureActive: Bool) -> UserDefaults {
+        guard fixtureActive, let suite = fixtureDefaults else { return .standard }
+        return suite
+    }
+
+    /// Removes the suite's domain and any plist it left behind. Called from
+    /// `applicationWillTerminate`; a no-op outside fixture mode.
+    static func cleanUpDefaults(fixtureActive: Bool) {
+        guard fixtureActive else { return }
+        let name = defaultsSuiteName
+        UserDefaults.standard.removePersistentDomain(forName: name)
+        fixtureDefaults?.removePersistentDomain(forName: name)
+        let plist = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/\(name).plist")
+        try? FileManager.default.removeItem(at: plist)
+    }
+
     /// Deterministic UUID so repeated captures produce byte-stable ghost
     /// assignments and ordering — never `UUID()`, which would reshuffle the
     /// sidebar (and the ghost pick) on every relaunch.

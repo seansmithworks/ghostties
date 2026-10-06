@@ -563,6 +563,10 @@ class AppDelegate: NSObject,
         // so remove them all now. In the future we may want to be
         // more selective and only remove surface-targeted notifications.
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+
+        #if DEBUG
+        CaptureFixture.cleanUpDefaults(fixtureActive: CaptureFixture.isActive)
+        #endif
     }
 
     /// This is called when the application is already open and someone double-clicks the icon
