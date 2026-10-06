@@ -49,10 +49,22 @@ final class SessionComposerStore: ObservableObject {
     private let defaults: UserDefaults
 
     private init() {
+        #if DEBUG
+        self.defaults = CaptureFixture.defaults(fixtureActive: CaptureFixture.isActive)
+        #else
         self.defaults = .standard
+        #endif
     }
 
     #if DEBUG
+    /// Same resolution `shared` uses, with fixture mode injectable.
+    init(captureFixtureActive: Bool) {
+        self.defaults = CaptureFixture.defaults(fixtureActive: captureFixtureActive)
+    }
+
+    /// The domain this store persists through.
+    var defaultsForTesting: UserDefaults { defaults }
+
     /// Test-only initialiser — a private `UserDefaults` suite, no singleton
     /// side-effects, and no risk of a test polluting real recents.
     init(isolatedForTesting: Void) {

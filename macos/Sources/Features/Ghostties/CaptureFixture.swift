@@ -42,6 +42,93 @@ enum CaptureFixture {
 
     #if DEBUG
 
+    // MARK: - Harness state dir + dispatch log
+
+    /// `$GHOSTTIES_STATE_DIR`, only when fixture mode is active and it is
+    /// set. Unlike `WorkspacePersistence.directory` there is no fallback to
+    /// the real Application Support path: the harness logs never go there.
+    static var harnessStateDir: URL? {
+        stateDir(fixtureActive: isActive, env: ProcessInfo.processInfo.environment)
+    }
+
+    static func stateDir(fixtureActive: Bool, env: [String: String]) -> URL? {
+        guard fixtureActive, let raw = env["GHOSTTIES_STATE_DIR"], !raw.isEmpty else { return nil }
+        return URL(fileURLWithPath: (raw as NSString).expandingTildeInPath, isDirectory: true)
+    }
+
+    /// One JSON object, no trailing newline. Optional values encode as null.
+    static func jsonLine(_ fields: [String: Any?]) -> Data {
+        let object = fields.mapValues { $0 ?? NSNull() }
+        return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data("{}".utf8)
+    }
+
+    /// Appends `line` plus a newline to `url`, creating the file (and its
+    /// directory) when missing.
+    static func appendLine(_ line: Data, to url: URL) {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil) }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: line + Data("\n".utf8))
+    }
+
+    static func dispatchLine(
+        t: TimeInterval, project: String, cwd: String, command: String?, template: String?
+    ) -> Data {
+        jsonLine(["t": t, "project": project, "cwd": cwd, "command": command, "template": template])
+    }
+
+    /// `SessionCoordinator.createSession` calls this just before it spawns.
+    /// Appends to `$GHOSTTIES_STATE_DIR/dispatch.jsonl`; no-op outside fixture mode.
+    static func logDispatch(
+        project: String, cwd: String, command: String?, template: String?, stateDir dir: URL? = harnessStateDir
+    ) {
+        guard let dir else { return }
+        appendLine(
+            dispatchLine(t: Date().timeIntervalSince1970, project: project, cwd: cwd, command: command, template: template),
+            to: dir.appendingPathComponent("dispatch.jsonl")
+        )
+    }
+
+    // MARK: - Isolated defaults
+
+    /// Throwaway per-process suite for fixture runs, so a harness run never
+    /// writes Sean's real Dev settings (composer state, the Cmd+T pref).
+    static var defaultsSuiteName: String { "ghostties.capture.\(ProcessInfo.processInfo.processIdentifier)" }
+
+    private static let fixtureDefaults: UserDefaults? = UserDefaults(suiteName: defaultsSuiteName)
+
+    /// The defaults the composer store and the Cmd+T pref read/write:
+    /// the throwaway suite in fixture mode, `.standard` otherwise.
+    static func defaults(fixtureActive: Bool) -> UserDefaults {
+        guard fixtureActive else { return .standard }
+        // Fixture mode must never fall back to `.standard`: that is Sean's Dev domain.
+        guard let suite = fixtureDefaults else {
+            preconditionFailure("could not create the capture defaults suite \(defaultsSuiteName)")
+        }
+        return suite
+    }
+
+    /// Removes the suite's domain and the plist it left behind. Called from
+    /// `applicationWillTerminate`; a no-op outside fixture mode.
+    static func cleanUpDefaults(fixtureActive: Bool) {
+        guard fixtureActive else { return }
+        let name = defaultsSuiteName
+        UserDefaults.standard.removePersistentDomain(forName: name)
+        fixtureDefaults?.removePersistentDomain(forName: name)
+        // cfprefsd may still re-create an EMPTY plist after the process exits
+        // (observed ~1 run in 2); `run.sh` deletes the file once the pid is
+        // gone. `synchronize()` here made it worse, so it is not called.
+        try? FileManager.default.removeItem(at: defaultsPlistURL)
+    }
+
+    static var defaultsPlistURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/\(defaultsSuiteName).plist")
+    }
+
     /// Deterministic UUID so repeated captures produce byte-stable ghost
     /// assignments and ordering — never `UUID()`, which would reshuffle the
     /// sidebar (and the ghost pick) on every relaunch.
@@ -190,6 +277,39 @@ enum CaptureFixture {
             store.updateSidebarMode(mode)
         }
         return store
+    }
+
+    // MARK: - Coordinator seeding (D2)
+
+    /// Far-future output timestamp, so `indicatorState(for:)` keeps reading
+    /// "producing output" instead of decaying after the 2s activity window.
+    private static let alwaysRecentOutputSecondsAgo = -31_536_000
+
+    /// Seeds the coordinator for every fixture session that is alive, then
+    /// copies what the coordinator derives into the store. The Sessions tab
+    /// (store cache) and the Projects tab (`coordinator.indicatorState`) then
+    /// read one source, as the live app does after each 1Hz tick. Sessions
+    /// the coordinator cannot derive a state for (an agent session with no
+    /// evidence resolves to `.idle`, never `.waiting`) show what the live app
+    /// would show. Not-alive sessions (inactive, error) fall back to the
+    /// store's statuses, which `makeStore` already set.
+    @MainActor
+    static func seedCoordinator(_ coordinator: SessionCoordinator, store: WorkspaceStore) {
+        for (fs, session) in zip(fixtureSessions, sessions) {
+            switch fs.state {
+            case .processing, .longRunning:
+                coordinator.seedIndicatorStateForTesting(
+                    id: session.id, lastOutputSecondsAgo: alwaysRecentOutputSecondsAgo)
+            case .needsAttention:
+                coordinator.seedIndicatorStateForTesting(
+                    id: session.id, lastSurfaceTitle: "Allow this edit? (y/n)")
+            case .waiting, .idle:
+                coordinator.seedIndicatorStateForTesting(id: session.id)
+            case .inactive, .error:
+                continue
+            }
+            store.updateIndicatorState(id: session.id, state: coordinator.indicatorState(for: session.id))
+        }
     }
 
     // MARK: - Session popover fixture

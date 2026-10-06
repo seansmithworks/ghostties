@@ -271,8 +271,28 @@ class WorkspaceViewContainer: NSView {
     }
 
     private var newSessionOpensComposerPreference: Bool {
+        #if DEBUG
+        Self.newSessionOpensComposer(in: Self.composerPreferenceDefaults(fixtureActive: CaptureFixture.isActive))
+        #else
         Self.newSessionOpensComposer(in: .standard)
+        #endif
     }
+
+    #if DEBUG
+    /// Fixture mode reads the throwaway capture suite, never `.standard`.
+    static func composerPreferenceDefaults(fixtureActive: Bool) -> UserDefaults {
+        CaptureFixture.defaults(fixtureActive: fixtureActive)
+    }
+
+    /// Capture-script `pref` op. `nil` removes the key.
+    static func setNewSessionOpensComposerForCapture(_ value: Bool?, in defaults: UserDefaults) {
+        if let value {
+            defaults.set(value, forKey: newSessionOpensComposerDefaultsKey)
+        } else {
+            defaults.removeObject(forKey: newSessionOpensComposerDefaultsKey)
+        }
+    }
+    #endif
 
     /// The overlay panel's opaque content (Flow 01, sidebar-presence §04):
     /// fill `#1c1c1c`, radius 18, 1pt stroke `#00000026`. Only visible in
@@ -703,6 +723,13 @@ class WorkspaceViewContainer: NSView {
                     case .instantCreate: break
                     }
                 }
+            }
+        }
+        if let path = CaptureFixture.scriptPath, let dir = CaptureFixture.harnessStateDir,
+           CaptureFixture.claimHook("script") {
+            _Concurrency.Task { @MainActor [weak self] in
+                guard let self else { return }
+                await CaptureScript.launch(scriptAt: path, host: self, stateDir: dir)
             }
         }
         if let seconds = CaptureFixture.sidebarToggleAfter, CaptureFixture.claimHook("sidebarToggle") {
@@ -2851,3 +2878,71 @@ private class PanelDragHandleView: NSView {
         onDragEnd?()
     }
 }
+
+#if DEBUG
+/// Host for the capture script. Each op calls the seam its click or shortcut
+/// calls; keys go through `NSWindow.sendEvent`.
+extension WorkspaceViewContainer: CaptureScript.Host {
+    var isReady: Bool {
+        (window?.isKeyWindow ?? false) && !WorkspaceStore.shared.projects.isEmpty
+    }
+
+    func composerOpen() -> Bool {
+        presentComposerOverlay(projectBinding: .open)
+        return true
+    }
+
+    func rowPlus(project name: String, option: Bool) throws -> Bool {
+        let store = WorkspaceStore.shared
+        guard let project = store.projects.first(where: { $0.name == name }) else {
+            throw CaptureScript.Failure("rowPlus: no project named '\(name)'")
+        }
+        // Same route as the row's "+" (`ProjectDisclosureRow.handleNewSession`)
+        // and the smoke-hooks launch hook. The sidebar highlight is not moved:
+        // that selection is private state in `WorkspaceSidebarView`.
+        switch ProjectRowNewSession.action(for: project, optionHeld: option, templates: store.templates) {
+        case .openComposer(let binding):
+            presentComposerOverlay(projectBinding: binding)
+            return true
+        case .instantCreate(let template):
+            _Concurrency.Task { await coordinator.createQuickSession(for: project, template: template) }
+            return false
+        }
+    }
+
+    func newSession() -> Bool {
+        let opens = newSessionOpensComposerPreference
+        NotificationCenter.default.post(name: .workspaceNewSession, object: window)
+        return opens
+    }
+
+    func newSessionInstant() { NotificationCenter.default.post(name: .workspaceNewSessionInstant, object: window) }
+
+    func waitForComposerFocus() async -> Bool {
+        func ready() -> Bool {
+            window?.firstResponder is ComposerGhostNSTextView && SessionComposerStore.shared.isOpen
+        }
+        let deadline = Date().addingTimeInterval(CaptureScript.composerFocusTimeout)
+        while !ready() {
+            guard Date() < deadline else { return false }
+            try? await _Concurrency.Task.sleep(for: .milliseconds(20))
+        }
+        // One more beat: the palette's own `onAppear` re-opens the store, and
+        // text typed before that lands is wiped. Re-check after it.
+        try? await _Concurrency.Task.sleep(for: .milliseconds(100))
+        return ready()
+    }
+
+    func type(_ text: String) {
+        guard let window else { return }
+        CaptureScript.type(text, to: window)
+    }
+
+    func key(_ spec: CaptureScript.KeySpec) {
+        guard let window else { return }
+        CaptureScript.send(spec, to: window)
+    }
+
+    func setPref(_ value: Bool?) { CaptureScript.applyPref(value) }
+}
+#endif

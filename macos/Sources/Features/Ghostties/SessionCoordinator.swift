@@ -315,6 +315,17 @@ final class SessionCoordinator: ObservableObject {
             sessionId: session.id
         )
 
+        #if DEBUG
+        if CaptureFixture.isActive {
+            CaptureFixture.logDispatch(
+                project: project.name,
+                cwd: config.workingDirectory ?? project.rootPath,
+                command: resolvedCommand,
+                template: template.id.uuidString
+            )
+        }
+        #endif
+
         let newView = Ghostty.SurfaceView(ghosttyApp, baseConfig: config)
         let newTree = SplitTree(view: newView)
 
@@ -1781,6 +1792,7 @@ final class SessionCoordinator: ObservableObject {
     func applyCaptureFixtureFocusIfNeeded() {
         guard CaptureFixture.isActive else { return }
         #if DEBUG
+        CaptureFixture.seedCoordinator(self, store: WorkspaceStore.shared)
         if let id = CaptureFixture.focusedSessionId {
             activeSessionId = id
         }
