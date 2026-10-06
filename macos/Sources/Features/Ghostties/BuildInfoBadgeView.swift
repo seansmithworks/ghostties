@@ -134,7 +134,7 @@ struct BuildInfoSnapshot {
     }
 }
 
-/// Tiny diagnostic label pinned to the bottom-left corner of the window.
+/// Tiny diagnostic label pinned to the top-right corner of the window.
 /// Answers "is this the latest build, and when did this instance start" at a
 /// glance; click copies the full detail to the pasteboard. Sizes itself to
 /// its content (`.fixedSize()`) so it never intercepts clicks outside its

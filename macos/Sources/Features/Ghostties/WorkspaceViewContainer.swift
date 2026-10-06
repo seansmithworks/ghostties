@@ -220,7 +220,8 @@ class WorkspaceViewContainer: NSView {
     /// The browser panel content (navigation bar + content area placeholder).
     private let browserPanelView = BrowserPanelView()
 
-    /// Diagnostic build/launch info badge — bottom-left corner of the window,
+    /// Diagnostic build/launch info badge — top-right corner of the window,
+    /// just left of the DEBUG DialKit collapse pill,
     /// click-to-copy. `@AppStorage`-gated; sizes itself to its content so it
     /// never intercepts clicks outside its own bounds. See `BuildInfoBadgeView.swift`.
     private let buildInfoBadgeHostingView: NSHostingView<BuildInfoBadgeView> = {
@@ -2508,11 +2509,14 @@ class WorkspaceViewContainer: NSView {
             sidebarDragHandle.leadingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
             sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
 
-            // Build-info badge: bottom-left corner of the whole window, on top
-            // of sidebar and terminal alike. Unconstrained width/height — the
-            // hosting view sizes to its SwiftUI content (`.fixedSize()`).
-            buildInfoBadgeHostingView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            buildInfoBadgeHostingView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+            // Build-info badge: top-right corner of the whole window, on top
+            // of sidebar and terminal alike. Trailing inset clears the DEBUG
+            // DialKit collapse pill (12pt padding + 32pt circle + 8pt gap) that
+            // `SessionComposerOverlay` pins to the same corner. Unconstrained
+            // width/height — the hosting view sizes to its SwiftUI content
+            // (`.fixedSize()`).
+            buildInfoBadgeHostingView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -52),
+            buildInfoBadgeHostingView.topAnchor.constraint(equalTo: topAnchor, constant: 4),
         ])
 
         // Closed launches at the same card radius as every other mode —
