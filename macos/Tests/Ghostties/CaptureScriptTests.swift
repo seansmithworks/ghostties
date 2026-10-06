@@ -73,6 +73,40 @@ struct CaptureScriptTests {
             == "step 0: pref needs a value (true, false or null)")
     }
 
+    @Test func rejectsUnknownFieldsPerOp() {
+        #expect(failure(#"{"steps":[{"op":"key","key":"a","modifier":["cmd"]}]}"#)
+            == "step 0: unknown field 'modifier' for op 'key'")
+        #expect(failure(#"{"steps":[{"op":"newSession","project":"x"}]}"#)
+            == "step 0: unknown field 'project' for op 'newSession'")
+        #expect(failure(#"{"steps":[{"op":"wait","seconds":1,"secs":2}]}"#)
+            == "step 0: unknown field 'secs' for op 'wait'")
+    }
+
+    @Test func rejectsDuplicateMarkNames() {
+        #expect(failure(#"{"steps":[{"op":"mark","name":"a"},{"op":"wait","seconds":0},{"op":"mark","name":"a"}]}"#)
+            == "step 2: duplicate mark 'a'")
+        #expect(failure(#"{"steps":[{"op":"mark","name":"a"},{"op":"mark","name":"b"}]}"#) == nil)
+    }
+
+    @Test func composerFocusTimeoutWritesErrorAndStops() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("script-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let host = FakeHost()
+        host.focusResult = false
+        await CaptureScript.Runner(host: host, stateDir: dir).run([.composerOpen, .type("lost")])
+        #expect(host.calls == ["composer.open", "waitFocus"])
+        #expect(try String(contentsOf: dir.appendingPathComponent("script.error"), encoding: .utf8)
+            == "step 0: composer field never became first responder\n")
+    }
+
+    @Test func noFocusWaitWhenTheComposerIsNotOpening() async {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("script-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let host = FakeHost()
+        await CaptureScript.Runner(host: host, stateDir: dir).run([.newSession, .rowPlus(project: "p", option: true)])
+        #expect(!host.calls.contains("waitFocus"))
+    }
+
     // MARK: - pref lands in the capture suite only
 
     @Test func prefWritesTheCaptureSuiteNotStandard() {
@@ -100,12 +134,15 @@ struct CaptureScriptTests {
     private final class FakeHost: CaptureScript.Host {
         var calls: [String] = []
         var isReady = true
-        func composerOpen() { calls.append("composer.open") }
-        func rowPlus(project: String, option: Bool) throws {
+        var focusResult = true
+        func composerOpen() -> Bool { calls.append("composer.open"); return true }
+        func rowPlus(project: String, option: Bool) throws -> Bool {
             if project == "ghost" { throw CaptureScript.Failure("rowPlus: no project named 'ghost'") }
             calls.append("rowPlus:\(project):\(option)")
+            return !option
         }
-        func newSession() { calls.append("newSession") }
+        func newSession() -> Bool { calls.append("newSession"); return false }
+        func waitForComposerFocus() async -> Bool { calls.append("waitFocus"); return focusResult }
         func newSessionInstant() { calls.append("newSessionInstant") }
         func type(_ text: String) { calls.append("type:\(text)") }
         func key(_ spec: CaptureScript.KeySpec) { calls.append("key:\(spec.key)") }
@@ -126,7 +163,7 @@ struct CaptureScriptTests {
         await CaptureScript.Runner(host: host, stateDir: dir).run([
             .composerOpen, .type("a"), .key(.init(key: "return", modifiers: [])), .rowPlus(project: "wren", option: true), .wait(0),
         ])
-        #expect(host.calls == ["composer.open", "type:a", "key:return", "rowPlus:wren:true"])
+        #expect(host.calls == ["composer.open", "waitFocus", "type:a", "key:return", "rowPlus:wren:true"])
         #expect(exists(dir, "script.done"))
         #expect(!exists(dir, "script.error"))
     }

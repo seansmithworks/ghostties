@@ -2887,23 +2887,39 @@ extension WorkspaceViewContainer: CaptureScript.Host {
         (window?.isKeyWindow ?? false) && !WorkspaceStore.shared.projects.isEmpty
     }
 
-    func composerOpen() { presentComposerOverlay(projectBinding: .open) }
+    func composerOpen() -> Bool {
+        presentComposerOverlay(projectBinding: .open)
+        return true
+    }
 
-    func rowPlus(project name: String, option: Bool) throws {
+    func rowPlus(project name: String, option: Bool) throws -> Bool {
         let store = WorkspaceStore.shared
         guard let project = store.projects.first(where: { $0.name == name }) else {
             throw CaptureScript.Failure("rowPlus: no project named '\(name)'")
         }
-        switch ProjectRowNewSession.action(for: project, optionHeld: option, templates: store.templates) {
-        case .openComposer(let binding):
-            presentComposerOverlay(projectBinding: binding)
-        case .instantCreate(let template):
-            _Concurrency.Task { await coordinator.createQuickSession(for: project, template: template) }
-        }
+        // The sidebar's own row selection is view @State the container can't
+        // reach; everything else is the real handler.
+        return ProjectRowNewSession.perform(
+            project: project, optionHeld: option, templates: store.templates,
+            coordinator: coordinator, select: { _ in })
     }
 
-    func newSession() { NotificationCenter.default.post(name: .workspaceNewSession, object: window) }
+    func newSession() -> Bool {
+        let opens = newSessionOpensComposerPreference
+        NotificationCenter.default.post(name: .workspaceNewSession, object: window)
+        return opens
+    }
+
     func newSessionInstant() { NotificationCenter.default.post(name: .workspaceNewSessionInstant, object: window) }
+
+    func waitForComposerFocus() async -> Bool {
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if window?.firstResponder is ComposerGhostNSTextView { return true }
+            try? await _Concurrency.Task.sleep(for: .milliseconds(20))
+        }
+        return window?.firstResponder is ComposerGhostNSTextView
+    }
 
     func type(_ text: String) {
         guard let window else { return }

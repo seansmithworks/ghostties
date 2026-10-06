@@ -45,14 +45,31 @@ enum CaptureScript {
             throw Failure("script is not a JSON object")
         }
         guard let raw = root["steps"] as? [Any] else { throw Failure("missing steps array") }
+        var markNames: Set<String> = []
         return try raw.enumerated().map { index, item in
             guard let dict = item as? [String: Any] else { throw Failure("step \(index): not an object") }
-            do { return try parseStep(dict) } catch let f as Failure { throw Failure("step \(index): \(f.message)") }
+            do {
+                let step = try parseStep(dict)
+                if case .mark(let name) = step, !markNames.insert(name).inserted {
+                    throw Failure("duplicate mark '\(name)'")
+                }
+                return step
+            } catch let f as Failure { throw Failure("step \(index): \(f.message)") }
         }
     }
 
+    /// Fields each op accepts; anything else is a typo and an error.
+    private static let allowedFields: [String: Set<String>] = [
+        "composer.open": ["op"], "newSession": ["op"], "newSessionInstant": ["op"],
+        "rowPlus": ["op", "project", "option"], "type": ["op", "text"], "key": ["op", "key", "modifiers"],
+        "mark": ["op", "name"], "wait": ["op", "seconds"], "pref": ["op", "key", "value"],
+    ]
+
     private static func parseStep(_ d: [String: Any]) throws -> Step {
         guard let op = d["op"] as? String else { throw Failure("missing op") }
+        if let allowed = allowedFields[op], let extra = d.keys.filter({ !allowed.contains($0) }).sorted().first {
+            throw Failure("unknown field '\(extra)' for op '\(op)'")
+        }
         switch op {
         case "composer.open": return .composerOpen
         case "newSession": return .newSession
@@ -160,10 +177,14 @@ enum CaptureScript {
     @MainActor
     protocol Host: AnyObject {
         var isReady: Bool { get }
-        func composerOpen()
-        func rowPlus(project: String, option: Bool) throws
-        func newSession()
+        /// These three return true when the composer is opening, so the
+        /// runner can wait for its field before the next step types into it.
+        func composerOpen() -> Bool
+        func rowPlus(project: String, option: Bool) throws -> Bool
+        func newSession() -> Bool
         func newSessionInstant()
+        /// Polls (about 2s) until the composer's field is first responder.
+        func waitForComposerFocus() async -> Bool
         func type(_ text: String)
         func key(_ spec: KeySpec)
         func setPref(_ value: Bool?)
@@ -212,15 +233,22 @@ enum CaptureScript {
 
         private func perform(_ step: Step) async throws {
             switch step {
-            case .composerOpen: host.composerOpen()
-            case .rowPlus(let project, let option): try host.rowPlus(project: project, option: option)
-            case .newSession: host.newSession()
+            case .composerOpen: try await awaitComposer(host.composerOpen())
+            case .rowPlus(let project, let option): try await awaitComposer(try host.rowPlus(project: project, option: option))
+            case .newSession: try await awaitComposer(host.newSession())
             case .newSessionInstant: host.newSessionInstant()
             case .type(let text): host.type(text)
             case .key(let spec): host.key(spec)
             case .pref(let value): host.setPref(value)
             case .wait(let seconds): try await Task.sleep(for: .seconds(seconds))
             case .mark(let name): try await mark(name)
+            }
+        }
+
+        private func awaitComposer(_ opening: Bool) async throws {
+            guard opening else { return }
+            guard await host.waitForComposerFocus() else {
+                throw Failure("composer field never became first responder")
             }
         }
 
