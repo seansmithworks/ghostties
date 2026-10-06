@@ -76,10 +76,16 @@ enum TemplateManagement {
         return URL(fileURLWithPath: resolvedPath)
     }
 
+    /// The in-use delete alert names this many sessions, then "and N more".
+    static let maxListedSessions = 3
+
     @MainActor
     static func deleteMessage(for template: AgentTemplate, store: WorkspaceStore) -> String {
         if store.templateInUse(id: template.id) {
-            return "Sessions using \"\(template.name)\" will keep their current configuration but won't be relaunchable with this template."
+            let names = store.sessions.filter { $0.templateId == template.id }.map(\.name)
+            let shown = names.prefix(maxListedSessions).joined(separator: ", ")
+            let more = names.count > maxListedSessions ? " and \(names.count - maxListedSessions) more" : ""
+            return "In use by \(shown)\(more). They will keep their current configuration but won't be relaunchable with \"\(template.name)\"."
         }
         return "This will permanently remove \"\(template.name)\"."
     }

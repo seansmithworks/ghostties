@@ -76,6 +76,35 @@ struct ProjectTemplatesSectionTests {
         #expect(TemplateManagement.deleteMessage(for: template, store: store) == "This will permanently remove \"Mine\".")
     }
 
+    @Test func deleteMessageNamesTheSessionsUsingTheTemplate() {
+        let store = makeStore()
+        let template = TemplateManagement.addTemplate(named: "Mine", store: store)!
+        let other = TemplateManagement.addTemplate(named: "Other", store: store)!
+        let project = store.projects[0]
+        let users = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"].map {
+            AgentSession(name: $0, templateId: template.id, projectId: project.id)
+        }
+        let bystander = AgentSession(name: "Zulu", templateId: other.id, projectId: project.id)
+        let two = WorkspaceStore(testingProjects: [project], testingSessions: [users[0], users[1], bystander])
+        let twoMessage = TemplateManagement.deleteMessage(for: template, store: two)
+        #expect(twoMessage.contains("Alpha, Beta."))
+        #expect(!twoMessage.contains("Zulu"))
+
+        let five = WorkspaceStore(testingProjects: [project], testingSessions: users + [bystander])
+        let message = TemplateManagement.deleteMessage(for: template, store: five)
+        #expect(message.contains("Alpha, Beta, Gamma and 2 more."))
+        #expect(!message.contains("Delta"))
+        #expect(message.contains("\"Mine\""))
+    }
+
+    @Test func confirmingDeleteDropsTheTemplateCountByOne() {
+        let store = makeStore()
+        let template = TemplateManagement.addTemplate(named: "Mine", store: store)!
+        let before = store.templates.count
+        store.removeTemplate(id: template.id)
+        #expect(store.templates.count == before - 1)
+    }
+
     @Test func pinTogglesThroughTheComposerStore() {
         let composerStore = SessionComposerStore(isolatedForTesting: ())
         let id = UUID()
