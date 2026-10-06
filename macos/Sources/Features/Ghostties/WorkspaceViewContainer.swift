@@ -2897,11 +2897,17 @@ extension WorkspaceViewContainer: CaptureScript.Host {
         guard let project = store.projects.first(where: { $0.name == name }) else {
             throw CaptureScript.Failure("rowPlus: no project named '\(name)'")
         }
-        // The sidebar's own row selection is view @State the container can't
-        // reach; everything else is the real handler.
-        return ProjectRowNewSession.perform(
-            project: project, optionHeld: option, templates: store.templates,
-            coordinator: coordinator, select: { _ in })
+        // Same route as the row's "+" (`ProjectDisclosureRow.handleNewSession`)
+        // and the smoke-hooks launch hook. The sidebar highlight is not moved:
+        // that selection is private state in `WorkspaceSidebarView`.
+        switch ProjectRowNewSession.action(for: project, optionHeld: option, templates: store.templates) {
+        case .openComposer(let binding):
+            presentComposerOverlay(projectBinding: binding)
+            return true
+        case .instantCreate(let template):
+            _Concurrency.Task { await coordinator.createQuickSession(for: project, template: template) }
+            return false
+        }
     }
 
     func newSession() -> Bool {
