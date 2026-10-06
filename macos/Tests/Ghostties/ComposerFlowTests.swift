@@ -468,18 +468,8 @@ struct ComposerFlowTests {
         await rig.typeAndSettle("switchboard > feat-x > ccp")
         rig.pressReturn()
 
-        var spawned = await rig.settle(timeout: 12) { rig.dispatched.count >= 1 || (!rig.composer.isCreatingWorktree && rig.composer.writeError != nil) }
-        if rig.dispatched.isEmpty, rig.composer.writeError != nil {
-            // Under CPU load the post-create `git worktree list` can hit its own
-            // 2s deadline, leaving the list stale for one commit; the composer
-            // says so and keeps itself open, and the user's move is to press
-            // Return again once the periodic refresh has caught up. Do that,
-            // once, so load can't make this row flaky.
-            let caughtUp = await rig.settle(timeout: 12) { rig.composer.worktrees.contains { $0.branch == "feat-x" } }
-            #expect(caughtUp, "worktree list never caught up with the created worktree")
-            rig.pressReturn()
-            spawned = await rig.settle(timeout: 12) { rig.dispatched.count >= 1 }
-        }
+        // The FIRST Return must create the worktree and spawn in it — no retry.
+        let spawned = await rig.settle(timeout: 12) { rig.dispatched.count >= 1 }
         #expect(spawned, "no spawn; writeError=\(rig.composer.writeError ?? "nil") creating=\(rig.composer.isCreatingWorktree) text=\(rig.composer.searchText.debugDescription)")
         let after = Self.git(["worktree", "list", "--porcelain"], in: repo)
         #expect(after.contains("branch refs/heads/feat-x"))
