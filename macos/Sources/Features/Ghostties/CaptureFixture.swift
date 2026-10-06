@@ -498,6 +498,10 @@ enum CaptureFixture {
     static var sidebarToggleAfter: TimeInterval? {
         parseSidebarToggleAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER"))
     }
+    /// `GHOSTTIES_CAPTURE_TRAY_HOVER=<SidebarTrayItem.id>` (e.g. `newSession`):
+    /// draws that tray button's hover highlight without a pointer, so the
+    /// hovered state can be captured without synthetic input.
+    static var trayHoverItemId: String? { env("GHOSTTIES_CAPTURE_TRAY_HOVER").flatMap { $0.isEmpty ? nil : $0 } }
 
     /// Each hook fires once per process. The views that host them re-appear
     /// (a rail/pinned toggle remounts the sidebar), and a second firing would

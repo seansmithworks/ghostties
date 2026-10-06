@@ -126,8 +126,6 @@ enum TrayGlassStyle {
     /// Canvas buttons are stacked with no gap; the horizontal bar keeps 2pt.
     static let verticalItemGap: CGFloat = 0
     static let horizontalItemGap: CGFloat = 2
-    /// Tray button hover shape: canvas r12px.
-    static let buttonCornerRadius: CGFloat = 6
     /// Canvas r64px on a 104px-wide pill: clamps to a capsule.
     static let cornerStyle: CornerStyle = .capsule
     static let capsuleCornerRadius: CGFloat = 32
@@ -205,6 +203,23 @@ enum TrayGlassStyle {
             ]
         case .rainbow:
             return [.red, .orange, .yellow, .green, .cyan, .blue, .purple, .red]
+        }
+    }
+
+    /// Tray button hover/press highlight, concentric with the pill it sits
+    /// in: inner radius = outer radius − `innerPadding`. Capsule style: the
+    /// pill is a full capsule, so its buttons' highlight is one too (a circle
+    /// on the rail's square buttons). Radius style: `cornerRadius − innerPadding`.
+    static func buttonHighlightShape(
+        cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
+        cornerRadius: CGFloat = SidebarDialTuning.trayGlassCornerRadius(),
+        innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
+    ) -> AnyShape {
+        switch cornerStyle {
+        case .capsule:
+            return AnyShape(Capsule(style: .continuous))
+        case .radius:
+            return AnyShape(RoundedRectangle(cornerRadius: max(0, cornerRadius - innerPadding), style: .continuous))
         }
     }
 
@@ -393,6 +408,7 @@ struct SidebarTray: View {
                 toggleLabel: toggleLabel
             )) { item in
                 TrayIconButton(
+                    itemId: item.id,
                     systemName: item.systemName,
                     label: item.label,
                     helpText: item.helpText,
@@ -423,6 +439,8 @@ struct TrayIconButton: View {
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
     @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
+    /// `SidebarTrayItem.id`; only read by the capture fixture's hover hook.
+    var itemId: String? = nil
     let systemName: String
     let label: String
     var helpText: String? = nil
@@ -447,6 +465,11 @@ struct TrayIconButton: View {
             action()
         } label: {
             icon
+                // Hover lift on the glyph only: scaling the highlight too
+                // would push it off its concentric inset. The glass path's
+                // own `.interactive()` reacts to press, not hover. Reduce
+                // Motion suppresses it like every other animation here.
+                .scaleEffect(!reduceMotion && showsHover ? 1.06 : 1.0)
                 .frame(
                     minWidth: isVertical ? size : nil,
                     maxWidth: isVertical ? size : .infinity,
@@ -454,19 +477,19 @@ struct TrayIconButton: View {
                     maxHeight: size
                 )
                 .background(
-                    RoundedRectangle(cornerRadius: TrayGlassStyle.buttonCornerRadius)
-                        .fill(isHovered ? Color.primary.opacity(0.10) : .clear)
+                    TrayGlassStyle.buttonHighlightShape()
+                        .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
                 )
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        // Hover lift — the glass path's own `.interactive()` reacts to
-        // press, not hover, so this is additive rather than doubled-up with
-        // it. Reduce Motion suppresses it like every other animation here.
-        .scaleEffect(!reduceMotion && isHovered ? 1.06 : 1.0)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: isHovered)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: showsHover)
         .help(helpText ?? label)
         .accessibilityLabel(label)
+    }
+
+    private var showsHover: Bool {
+        isHovered || (itemId != nil && itemId == CaptureFixture.trayHoverItemId)
     }
 
     @ViewBuilder
