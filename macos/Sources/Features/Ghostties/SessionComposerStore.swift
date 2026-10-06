@@ -1197,10 +1197,14 @@ final class SessionComposerStore: ObservableObject {
                 // a wall-clock race. No-op when the refresh did land.
                 let canonical = await _Concurrency.Task.detached { GitWorktreeEnumerator.canonicalPath(path) }.value
                 guard token == worktreeCreationToken else { return }
-                if !worktrees.contains(where: { $0.branch == branchName }) {
-                    worktrees.append(GitWorktreeEnumerator.Worktree(path: canonical, branch: branchName, isLocked: false))
+                // Only while the cache still belongs to the project this
+                // creation ran in — a mid-create project change resets it.
+                if worktreesProjectId == project.id {
+                    if !worktrees.contains(where: { $0.branch == branchName }) {
+                        worktrees.append(GitWorktreeEnumerator.Worktree(path: canonical, branch: branchName, isLocked: false))
+                    }
+                    branchesWithoutWorktree.removeAll { $0 == branchName }
                 }
-                branchesWithoutWorktree.removeAll { $0 == branchName }
                 if selectedWorktreePath == selectionAtStart {
                     selectedWorktreePath = path
                 }
