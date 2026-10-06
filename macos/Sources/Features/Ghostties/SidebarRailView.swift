@@ -15,6 +15,10 @@ import GhosttiesCore
 /// Decision 4 (spec): no account row — no account model exists in the
 /// sidebar sources today, so the footer omits it.
 struct SidebarRailView: View {
+    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
+    /// SwiftUI skips a body whose inputs are unchanged, and these views read
+    /// `UserDefaults` inside it, so without this a live dial change never lands.
+    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
 
@@ -82,19 +86,6 @@ struct SidebarRailView: View {
 
             Spacer(minLength: 0)
 
-            #if DEBUG
-            // DEBUG-only: the sidebar DialKit panel in a popover, since the
-            // rail is too narrow to host it inline. Kept out of fixture
-            // captures.
-            if !CaptureFixture.isActive {
-                SidebarRailTuningButton(
-                    defaults: .standard,
-                    onChange: { store.objectWillChange.send() }
-                )
-                .padding(.bottom, 8)
-            }
-            #endif
-
             // The tray itself is hosted once at the sidebar root
             // (`SidebarTray`), over both this rail and the expanded list, so
             // it can morph between them; this reserves its space.
@@ -122,6 +113,10 @@ struct SidebarRailView: View {
 /// keeps its glyph on the trailing edge). The label is dropped; the per-row
 /// tap target stays.
 struct RailSessionRow: View {
+    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
+    /// SwiftUI skips a body whose inputs are unchanged, and these views read
+    /// `UserDefaults` inside it, so without this a live dial change never lands.
+    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
     let sessionId: UUID
     let name: String
     let projectName: String
@@ -190,6 +185,10 @@ struct RailSessionRow: View {
 /// size) with the title dropped, centered horizontally so the chevron sits in
 /// the same column as the centered row glyphs below it and at the header's y.
 private struct RailChevronRow: View {
+    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
+    /// SwiftUI skips a body whose inputs are unchanged, and these views read
+    /// `UserDefaults` inside it, so without this a live dial change never lands.
+    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
     var isHovered = false
 
     var body: some View {

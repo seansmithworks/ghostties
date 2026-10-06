@@ -222,6 +222,10 @@ enum TrayGlassStyle {
 /// Opaque white below macOS 26, under Reduce Transparency, or with
 /// `forceOpaque` (tests: `cacheDisplay` can't capture glass).
 struct TrayGlassSurface: ViewModifier {
+    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
+    /// SwiftUI skips a body whose inputs are unchanged, and these views read
+    /// `UserDefaults` inside it, so without this a live dial change never lands.
+    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var forceOpaque = false
@@ -314,6 +318,10 @@ struct TrayGlassSurface: ViewModifier {
 /// reflows the same buttons (the pinned⇄rail morph) instead of
 /// cross-fading two pills.
 struct SidebarTrayPill<Content: View>: View {
+    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
+    /// SwiftUI skips a body whose inputs are unchanged, and these views read
+    /// `UserDefaults` inside it, so without this a live dial change never lands.
+    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
     let axis: Axis
     /// Skips the glass effect so the pill renders as plain fill — the same
     /// path Reduce Transparency takes. Test seam: `cacheDisplay` can't capture
@@ -342,6 +350,10 @@ struct SidebarTrayPill<Content: View>: View {
 /// between the two shapes on the pinned⇄rail transition. Under Reduce
 /// Motion the axis change snaps instead.
 struct SidebarTray: View {
+    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
+    /// SwiftUI skips a body whose inputs are unchanged, and these views read
+    /// `UserDefaults` inside it, so without this a live dial change never lands.
+    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
     @EnvironmentObject private var coordinator: SessionCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -402,6 +414,10 @@ struct SidebarTray: View {
 /// `TrayGlassStyle`. The pill has no visible text, so the item's title
 /// carries over as a tooltip and an accessibility label instead.
 struct TrayIconButton: View {
+    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
+    /// SwiftUI skips a body whose inputs are unchanged, and these views read
+    /// `UserDefaults` inside it, so without this a live dial change never lands.
+    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
     let systemName: String
     let label: String
     var helpText: String? = nil

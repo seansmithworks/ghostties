@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 #if DEBUG
 import Combine
-import DialKit
+import DialkitmacOS
+import DialkitmacOSAgent
 #endif
 
 // MARK: - Sidebar DialKit tunables (session-8 brief, sidebar-presence)
@@ -12,8 +13,8 @@ import DialKit
 // configuration (not `#if DEBUG`). Each accessor falls back to the shipped
 // `WorkspaceLayout`/`TrayGlassStyle` constant when its key is unset — a
 // Release build (or a Dev build nobody has ever opened the panel in) reads
-// exactly that constant, byte-for-byte. The DialKit panel UI itself (below)
-// IS `#if DEBUG`-gated; these accessors are not DialKit — they're the same
+// exactly that constant, byte-for-byte. The dial panel (below, hosted by the
+// floating DialkitmacOS inspector) IS `#if DEBUG`-gated; these accessors are not DialKit — they're the same
 // "read a UserDefaults double, else the code default" shape every other
 // dial in this app already uses, so a Release binary staying dial-free is
 // really "nobody ever wrote these keys," not a compiled-out code path.
@@ -300,24 +301,19 @@ enum SidebarDialTuning {
     }
 }
 
-// MARK: - DialKit panel (macOS 14+, DEBUG only)
+// MARK: - Dial panel (macOS 14+, DEBUG only)
 //
-// Session-8 brief: "add dial kit for the sidebar... so Sean can tune sizes
-// and spacing live in the Dev build, then Copy the values back into code."
-// Mirrors `ComposerDialKitCoordinator`/`ComposerDialKitHost` in
-// `ComposerSingleLineStyle.swift` exactly — same `DialPanelState` ownership,
-// same diff-based `write(from:to:)`, same `.inline` hosting in our own card,
-// same Reset-as-`.action`-control shape. Unlike the composer panel, the
-// sidebar has no Style switch that swaps the control list, so there is no
-// `configure(controls:)` re-invocation and no re-entrancy guard to carry
-// over — `controls` is a single static list, set once at construction.
+// The panel is no longer drawn inside the sidebar. It is exposed to the
+// floating DialkitmacOS inspector (github.com/mikelikesdesign/dialkit-macos,
+// a separate Mac app that talks to this one over 127.0.0.1:44777). Same
+// `DialPanelState` ownership, diff-based `write(from:to:)`, and
+// Reset-as-`.action` shape as `ComposerDialKitCoordinator`; the composer
+// keeps its own in-app DialKit. `SidebarDialInspector.start()` (called from
+// `AppDelegate`) builds the one coordinator for the process and starts the
+// agent. DEBUG only: Release neither imports nor starts any of it.
 //
-// No macOS-13 legacy-slider fallback: the composer's fallback exists only
-// because round 12's sliders shipped before round 13 added DialKit and had
-// to keep working on the floor OS. This panel is new; macOS 13 users simply
-// don't get a tuning UI (every dial still has a working `defaults write`
-// escape hatch via `SidebarDialTuning`, matching every other knob in this
-// file), which is a reasonable floor for a Dev-only diagnostic tool.
+// No macOS-13 fallback: the inspector package needs macOS 14; every dial
+// still has a working `defaults write` escape hatch via `SidebarDialTuning`.
 #if DEBUG
 @available(macOS 14, *)
 struct SidebarDialKitTuningModel: Codable, Equatable {
@@ -629,123 +625,22 @@ private final class SidebarDialKitCoordinatorBox {
     weak var coordinator: SidebarDialKitCoordinator?
 }
 
-/// Hosts DialKit **inline** in a narrow container we own, exactly like
-/// `ComposerDialKitHost` — see that type's doc comment for why `.inline`
-/// (not `.drawer`) and why a `@StateObject` coordinator. Defaults collapsed
-/// (composer's default is expanded because the composer only mounts while
-/// summoned; the sidebar is permanent chrome, so this panel starts out of
-/// the way and Sean opens it with the same chevron/gear toggle).
+/// DEBUG-only: owns the process-wide sidebar panel and starts the inspector
+/// agent. Called once from `AppDelegate.applicationDidFinishLaunching`.
 @available(macOS 14, *)
-private struct SidebarDialKitHost: View {
-    @StateObject private var coordinator: SidebarDialKitCoordinator
+@MainActor
+enum SidebarDialInspector {
+    private static var coordinator: SidebarDialKitCoordinator?
 
-    static let collapsedDefaultsKey = "ghostties.sidebarDialKitPanelCollapsed"
-    private static let panelWidth: CGFloat = 320
-
-    @AppStorage private var isCollapsed: Bool
-
-    init(defaults: UserDefaults, onChange: @escaping () -> Void) {
-        _coordinator = StateObject(wrappedValue: SidebarDialKitCoordinator(defaults: defaults, onChange: onChange))
-        _isCollapsed = AppStorage(wrappedValue: true, Self.collapsedDefaultsKey, store: defaults)
-    }
-
-    var body: some View {
-        GeometryReader { geometry in
-            VStack(alignment: .trailing, spacing: 8) {
-                collapseControl
-                if !isCollapsed {
-                    ScrollView(showsIndicators: false) {
-                        DialRoot(mode: .inline)
-                    }
-                    .frame(maxHeight: max(0, geometry.size.height - collapsedControlReservedHeight))
-                }
-            }
-            .frame(width: Self.panelWidth, alignment: .trailing)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        }
-    }
-
-    private var collapsedControlReservedHeight: CGFloat { 40 }
-
-    private var collapseControl: some View {
-        Button {
-            isCollapsed.toggle()
-        } label: {
-            Image(systemName: isCollapsed ? "slider.horizontal.3" : "chevron.up")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(Color(white: 0.13)))
-                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
-                .shadow(color: .black.opacity(0.45), radius: 18, y: 6)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// The same panel, in a popover, for the collapsed rail — the rail is too
-/// narrow to host the 320pt panel inline, and the expanded sidebar (which
-/// hosts `SidebarDialKitHost`) isn't mounted while the rail shows. Popover
-/// content owns its own coordinator, so it reads the current defaults each
-/// time it opens.
-@available(macOS 14, *)
-private struct SidebarDialKitPopoverContent: View {
-    @StateObject private var coordinator: SidebarDialKitCoordinator
-
-    init(defaults: UserDefaults, onChange: @escaping () -> Void) {
-        _coordinator = StateObject(wrappedValue: SidebarDialKitCoordinator(defaults: defaults, onChange: onChange))
-    }
-
-    var body: some View {
-        ScrollView(showsIndicators: false) {
-            DialRoot(mode: .inline)
-        }
-        .frame(width: 320, height: 560)
-    }
-}
-
-/// DEBUG-only: the rail's gear button that opens `SidebarDialKitPopoverContent`.
-struct SidebarRailTuningButton: View {
-    let defaults: UserDefaults
-    let onChange: () -> Void
-    @State private var isPresented = false
-
-    var body: some View {
-        if #available(macOS 14, *) {
-            Button {
-                isPresented.toggle()
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Circle().fill(Color(white: 0.13)))
-            }
-            .buttonStyle(.plain)
-            .help("Sidebar Tuning")
-            .popover(isPresented: $isPresented, arrowEdge: .trailing) {
-                SidebarDialKitPopoverContent(defaults: defaults, onChange: onChange)
-            }
-        }
-    }
-}
-
-/// DEBUG-only entry point, hosted by `WorkspaceSidebarView` in a
-/// `.topTrailing` overlay — the same mount pattern `SessionComposerOverlay`
-/// uses for `ComposerDebugTuningControl`. macOS 14+ only (see the file's
-/// top-of-section doc comment); below that, nothing renders (no legacy
-/// fallback), same "every dial still reachable via `defaults write`, just
-/// no live panel" floor.
-struct SidebarDebugTuningControl: View {
-    let defaults: UserDefaults
-    let onChange: () -> Void
-
-    var body: some View {
-        if #available(macOS 14, *) {
-            SidebarDialKitHost(defaults: defaults, onChange: onChange)
-        } else {
-            EmptyView()
-        }
+    static func start() {
+        guard coordinator == nil else { return }
+        coordinator = SidebarDialKitCoordinator(
+            defaults: .standard,
+            // A row's `.equatable()` gate can't see a tuning change on its
+            // own; poking the store re-renders the sidebar and tray.
+            onChange: { WorkspaceStore.shared.objectWillChange.send() }
+        )
+        DialKitAgent.shared.start(appName: "Ghostties")
     }
 }
 #endif

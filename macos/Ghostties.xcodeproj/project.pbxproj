@@ -26,6 +26,8 @@
 		AA1BFC302B30F1B800E92F16 /* GhosttiesMCPClient in Frameworks */ = {isa = PBXBuildFile; productRef = AA1BFC312B30F1B800E92F16 /* GhosttiesMCPClient */; };
 		AA1BFC322B30F1B800E92F16 /* GhosttiesCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA1BFC332B30F1B800E92F16 /* GhosttiesCore */; };
 		DA11DA1100000000000000A3 /* DialKit in Frameworks */ = {isa = PBXBuildFile; productRef = DA11DA1100000000000000A2 /* DialKit */; };
+		DA11DA1100000000000000B3 /* DialkitmacOS in Frameworks */ = {isa = PBXBuildFile; productRef = DA11DA1100000000000000B2 /* DialkitmacOS */; };
+		DA11DA1100000000000000C3 /* DialkitmacOSAgent in Frameworks */ = {isa = PBXBuildFile; productRef = DA11DA1100000000000000C2 /* DialkitmacOSAgent */; };
 		B0A55ABE2F72F4C100018CBF /* debugger.md in Resources */ = {isa = PBXBuildFile; fileRef = B0A55AB92F72F4C100018CBF /* debugger.md */; };
 		B0E55A912F80000000000091 /* THIRD-PARTY-NOTICES.md in Resources */ = {isa = PBXBuildFile; fileRef = B0E55A902F80000000000090 /* THIRD-PARTY-NOTICES.md */; };
 		B0A55ABF2F72F4C100018CBF /* code-reviewer.md in Resources */ = {isa = PBXBuildFile; fileRef = B0A55AB82F72F4C100018CBF /* code-reviewer.md */; };
@@ -176,6 +178,8 @@
 				AA1BFC302B30F1B800E92F16 /* GhosttiesMCPClient in Frameworks */,
 				AA1BFC322B30F1B800E92F16 /* GhosttiesCore in Frameworks */,
 				DA11DA1100000000000000A3 /* DialKit in Frameworks */,
+				DA11DA1100000000000000B3 /* DialkitmacOS in Frameworks */,
+				DA11DA1100000000000000C3 /* DialkitmacOSAgent in Frameworks */,
 				A56B880B2A840447007A0E29 /* Carbon.framework in Frameworks */,
 				083C03B4502D0B9F35DC74C7 /* SystemConfiguration.framework in Frameworks */,
 				A571AB1D2A206FCF00248498 /* GhosttyKit.xcframework in Frameworks */,
@@ -356,6 +360,8 @@
 				AA1BFC312B30F1B800E92F16 /* GhosttiesMCPClient */,
 				AA1BFC332B30F1B800E92F16 /* GhosttiesCore */,
 				DA11DA1100000000000000A2 /* DialKit */,
+				DA11DA1100000000000000B2 /* DialkitmacOS */,
+				DA11DA1100000000000000C2 /* DialkitmacOSAgent */,
 			);
 			productName = Ghostties;
 			productReference = A5B30531299BEAAA0047F10C /* Ghostties Dev.app */;
@@ -401,6 +407,7 @@
 				A51BFC252B30F1B700E92F16 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				AA1BFC282B30F1B700E92F16 /* XCLocalSwiftPackageReference "../cli" */,
 				DA11DA1100000000000000A1 /* XCLocalSwiftPackageReference "Packages/DialKit" */,
+				DA11DA1100000000000000B1 /* XCLocalSwiftPackageReference "Packages/DialkitmacOS" */,
 			);
 			productRefGroup = A5B30532299BEAAA0047F10C /* Products */;
 			projectDirPath = "";
@@ -1277,6 +1284,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/DialKit;
 		};
+		DA11DA1100000000000000B1 /* XCLocalSwiftPackageReference "Packages/DialkitmacOS" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DialkitmacOS;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1310,6 +1321,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DA11DA1100000000000000A1 /* XCLocalSwiftPackageReference "Packages/DialKit" */;
 			productName = DialKit;
+		};
+		DA11DA1100000000000000B2 /* DialkitmacOS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA11DA1100000000000000B1 /* XCLocalSwiftPackageReference "Packages/DialkitmacOS" */;
+			productName = DialkitmacOS;
+		};
+		DA11DA1100000000000000C2 /* DialkitmacOSAgent */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA11DA1100000000000000B1 /* XCLocalSwiftPackageReference "Packages/DialkitmacOS" */;
+			productName = DialkitmacOSAgent;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

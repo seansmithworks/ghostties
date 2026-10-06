@@ -285,6 +285,13 @@ class AppDelegate: NSObject,
         // Store our start time
         applicationLaunchTime = ProcessInfo.processInfo.systemUptime
 
+        #if DEBUG
+        // Sidebar dial panel -> floating DialkitmacOS inspector (loopback only).
+        if #available(macOS 14, *) {
+            SidebarDialInspector.start()
+        }
+        #endif
+
         // Sweep stale per-session launcher scripts (>24h old) left behind by
         // crashes or force-quits that skipped normal session teardown. Each
         // script can carry session context, so they shouldn't accumulate.

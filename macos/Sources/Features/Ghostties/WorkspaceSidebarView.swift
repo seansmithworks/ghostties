@@ -107,19 +107,6 @@ struct WorkspaceSidebarView: View {
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)
-        #if DEBUG
-        // DEBUG-only live tuning control (session-8 brief) — same mount
-        // pattern as `SessionComposerOverlay`'s `ComposerDebugTuningControl`.
-        // Compiled out of Release entirely; every symbol it touches lives in
-        // `SidebarDialKit.swift`'s `#if DEBUG` block.
-        .overlay(alignment: .topTrailing) {
-            SidebarDebugTuningControl(
-                defaults: .standard,
-                onChange: { store.objectWillChange.send() }
-            )
-            .padding(12)
-        }
-        #endif
         .onAppear {
             // Restore persisted project selection, or default to the first project.
             if selectedProjectId == nil {
