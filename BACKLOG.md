@@ -1,18 +1,32 @@
 # Ghostties — Backlog
 
+## 2026-10-06 — beta.26 contract run 1 (session 71606cce): tag still gated
+
+State: main @ `5e3641da2` (#198 launch hooks, #199 harness Phase 1 merged). Contract run 1: 23 PASS / 3 FAIL / 10 PENDING / 11 SEAN (`beta26-test-harness/status.json`, verifier `verifier-run1.json`, mutation proof 13/13 `mutation-proof-run1.json`). Sean's page: https://claude.ai/artifact/PunkoB6rxhP2mtEivCkN9k
+
+- [ ] Sean's 6 decisions on the page (defaults `1 yes, 2 yes, 3 yes, 4 yes, 5 window, 6 now`). | carried
+- [ ] Merge `fix/race-timedout-flake` @ `4aeaa1594` (test-only; reviewer APPROVE). | carried, awaiting Sean
+- [ ] Merge `fix/contract-t6-x5` @ `a037c1a88` (T6 delete warning names sessions; reviewer APPROVE r2). | carried, awaiting Sean
+- [ ] Merge `fix/contract-p5-t2` @ `6e428c1e0` (P5 worktree-cache reconcile, T2 real reload, state-dir injection; reviewer APPROVE r3 + Release build confirmed). | carried, awaiting Sean
+- [ ] Contract amendments A1 X7 reword, A2 X3 note, A3 P1 argv, A4 X5 copy waiver (`beta26-test-harness/contract-amendments-proposed.md`). Approval = edit contract + new sha in status.json. | carried
+- [ ] Run 2: 10 PENDING rows (E1 E5 E6 S1 P6 X1 X3 I1 + P5/T2 re-grade after merge). Needs Mac unlocked, Dev quit; the A channel can't make a window key while locked. | carried
+- [ ] SEAN-1..8 on a Dev build of main after merges; then `contract-check.sh --require-signed` → tag. | carried
+- [ ] Post-tag: other wall-clock tests (`SessionNameSyncTests.swift:155-157`, `WorkspaceStoreSectionsTests.swift:1389-1397`); `GHOSTTIES_CAPTURE_FIXTURE` setenv in `ComposerSingleLineStyleTests.swift:822-828` (likely pixel-flake source); test-host empty `ghostties.capture.<pid>.plist`; no SIGTERM cleanup; P5 not deterministically pinned; T6 confirm press untested; X5 dead `emptyResultsCopy` (build row or delete); D1 D3 D5 D6 D7. | parked
+- [ ] Cleanup: this session's worktrees (`harness-p1*`, `contract-run`, `fix-*`, `mutation-proof`) are clean; remove after the tag with the rest. | parked
+
 ## 2026-10-05 (late) — beta.26 gate moved: test contract first (session eb2c4576)
 
 State: #192–#197 MERGED (main @ 089adb62f). Tag v0.1.0-beta.26 NOT pushed. Sean moved the gate: the tag now waits on a composer go/no-go contract run (headless harness) plus SEAN-tagged checks. Plan: memory `beta26-test-harness/` (draft-plan.md, refuter-prompt.txt, refutation.md once written, revised plan to follow), and the plan Sean approves goes to his phone as an Artifact.
 
-- [ ] Approve the composer acceptance contract (Sean, from phone) → then build phase 1 of the harness. | open
-- [ ] `feat/smoke-launch-hooks` @ `2e0bef87b` (pushed, no PR): 4 DEBUG launch hooks + `run.sh video`; release binary has 0 hook strings; suite 1463/1 known flake. Review → PR → merge. | open
-- [ ] D4 BLOCKS TAG: cancelling Template "Duplicate and Edit" leaves the copy (`ProjectTemplatesSection.swift:212-215` → `TemplateEditForm.swift:40-41`). New in beta.26. | open
+- [x] Approve the composer acceptance contract (Sean, from phone) → then build phase 1 of the harness. | done 2026-10-06 (Sean "1"; Phase 1 merged #199)
+- [x] `feat/smoke-launch-hooks` @ `2e0bef87b`: 4 DEBUG launch hooks + `run.sh video`. | done 2026-10-06 (#198)
+- [x] D4: Cancel after "Duplicate and Edit" keeps the copy. | decided 2026-10-06: keep (2a, deliberate since beta.25); not a blocker
 - [ ] D1: sidebar pinned⇄rail collapse snaps, row names blank ~0.2s on expand (Debug fixture capture). Blocks only if Sean sees it in SEAN-3. | open
 - [ ] D3 settings popover overflows window (no height cap, `ProjectSettingsView.swift:109`); D5 ⊖ cursor bubble still shows on macOS 27 and its test passes on broken output; D6 resize overlay on toggle (upstream default, design fork); D7 project ghost color differs sidebar vs composer witness (design fork). D2 Projects/Sessions glyph mismatch = fixture artifact. | open
 - [ ] SEAN smoke rows (≈6 min, Dev build from main): typing + split; Cmd+1…9, Cmd+Shift+[ ], Cmd+Ctrl+], Cmd+Shift+T, Cmd+W; Cmd+S animation; `ghostties ccp` spawn; Option-click instant-create; composer click-outside; template Duplicate/Cancel + Delete/Cancel; tray folder → new project. | open
 - [ ] CI never runs app tests (build-for-testing only; host hangs on GitHub runners, `test-ghostties.yml:139-155`). One time-boxed ad-hoc-signing experiment, else gate on local `-only-testing:GhosttyTests`. | open
 - [ ] Coverage map (125 surfaces, 75 unchecked wiring) → per-release ~21-flow action-channel smoke. Map is in the session scratchpad; move it into docs/ with the plan. | open
-- [ ] Report-out: every contract run → phone report page (Artifact) + evidence clips. Each contract row names a focus rect; `run.sh video` emits the full-window clip plus a zoomed crop of that rect (ffmpeg crop/scale, low effort; no generated visuals). | open
+- [x] Report-out: every contract run → phone report page (Artifact) + evidence clips. Built in Phase 1 (`run.sh video --focus`, `contract-report.py`); done 2026-10-06. Each contract row names a focus rect; `run.sh video` emits the full-window clip plus a zoomed crop of that rect (ffmpeg crop/scale, low effort; no generated visuals). | open
 - [ ] Video track (Sean 2026-10-05: "brain dump, not now"): per-beta changelog video from harness clips (rough OK) and a human-gated promo video (`content-cascade` + Remotion on `feat/ghostties-animation`). Video-gen landscape moves fast; scout before building. | parked
 - [ ] Process: acceptance contract up front, approved by Sean, enforced by hook (proposal in plan); test plan precedes every build. | open
 - [ ] NO VM for now (storage: 96GB free). Lost without it: real input feel (hover/drag, IME), system prompts, clean-install + Sparkle upgrade path → SEAN rows or named risks. Revisit as an ephemeral release-time VM or cloud runner. | parked
