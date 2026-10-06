@@ -109,7 +109,10 @@ struct WorkspaceSidebarView: View {
         .overlay(alignment: .topTrailing) {
             SidebarDebugTuningControl(
                 defaults: .standard,
-                onChange: { store.objectWillChange.send() }
+                onChange: {
+                    store.objectWillChange.send()
+                    (coordinator.containerView as? WorkspaceViewContainer)?.applySidebarCardGap()
+                }
             )
             .padding(12)
         }
@@ -561,7 +564,7 @@ private struct SidebarBottomTray: View {
         }
         .padding(.horizontal, SidebarDialTuning.trayMargin())
         .padding(.top, SidebarDialTuning.listToTrayGap())
-        .padding(.bottom, 8)
+        .padding(.bottom, SidebarDialTuning.trayBottomMargin())
     }
 
     /// "Collapse Sidebar" while pinned (toggle now flips full width ↔ rail,

@@ -51,6 +51,9 @@ enum SidebarDialTuning {
     static let contentPaddingLeadingKey = "ghostties.sidebarDial.contentPaddingLeading"
     static let contentPaddingTrailingKey = "ghostties.sidebarDial.contentPaddingTrailing"
     static let listToTrayGapKey = "ghostties.sidebarDial.listToTrayGap"
+    static let sidebarCardGapKey = "ghostties.sidebarDial.sidebarCardGap"
+    static let trayBottomMarginKey = "ghostties.sidebarDial.trayBottomMargin"
+    static let railTrayBottomMarginKey = "ghostties.sidebarDial.railTrayBottomMargin"
 
     // MARK: Rail
     static let railExtraWidthKey = "ghostties.sidebarDial.railExtraWidth"
@@ -163,6 +166,15 @@ enum SidebarDialTuning {
     static func listToTrayGap(defaults: UserDefaults = .standard) -> CGFloat {
         cgFloat(listToTrayGapKey, default: WorkspaceLayout.sidebarListToTrayGap, defaults: defaults)
     }
+    static func sidebarCardGap(defaults: UserDefaults = .standard) -> CGFloat {
+        cgFloat(sidebarCardGapKey, default: WorkspaceLayout.sidebarCardGap, defaults: defaults)
+    }
+    static func trayBottomMargin(defaults: UserDefaults = .standard) -> CGFloat {
+        cgFloat(trayBottomMarginKey, default: WorkspaceLayout.trayBottomMargin, defaults: defaults)
+    }
+    static func railTrayBottomMargin(defaults: UserDefaults = .standard) -> CGFloat {
+        cgFloat(railTrayBottomMarginKey, default: WorkspaceLayout.railTrayBottomMargin, defaults: defaults)
+    }
 
     /// Added on top of `WorkspaceLayout.collapsedRailWidth`'s computed hug
     /// width — see that function's own doc comment. Not folded into
@@ -184,6 +196,7 @@ enum SidebarDialTuning {
         selectedCardShadowOpacityKey, selectedCardShadowRadiusKey, selectedCardShadowYOffsetKey,
         headerTextSizeKey, headerTopPaddingKey, headerBottomPaddingKey, headerChevronSizeKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
+        sidebarCardGapKey, trayBottomMarginKey, railTrayBottomMarginKey,
         railExtraWidthKey
     ]
 
@@ -245,6 +258,9 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var contentPaddingLeading: Double
     var contentPaddingTrailing: Double
     var listToTrayGap: Double
+    var sidebarCardGap: Double
+    var trayBottomMargin: Double
+    var railTrayBottomMargin: Double
 
     var railExtraWidth: Double
 }
@@ -330,6 +346,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
             contentPaddingLeading: Double(SidebarDialTuning.contentPaddingLeading(defaults: defaults)),
             contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
             listToTrayGap: Double(SidebarDialTuning.listToTrayGap(defaults: defaults)),
+            sidebarCardGap: Double(SidebarDialTuning.sidebarCardGap(defaults: defaults)),
+            trayBottomMargin: Double(SidebarDialTuning.trayBottomMargin(defaults: defaults)),
+            railTrayBottomMargin: Double(SidebarDialTuning.railTrayBottomMargin(defaults: defaults)),
             railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults))
         )
     }
@@ -369,6 +388,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.contentPaddingLeadingKey, previous.contentPaddingLeading, model.contentPaddingLeading)
         setIfChanged(SidebarDialTuning.contentPaddingTrailingKey, previous.contentPaddingTrailing, model.contentPaddingTrailing)
         setIfChanged(SidebarDialTuning.listToTrayGapKey, previous.listToTrayGap, model.listToTrayGap)
+        setIfChanged(SidebarDialTuning.sidebarCardGapKey, previous.sidebarCardGap, model.sidebarCardGap)
+        setIfChanged(SidebarDialTuning.trayBottomMarginKey, previous.trayBottomMargin, model.trayBottomMargin)
+        setIfChanged(SidebarDialTuning.railTrayBottomMarginKey, previous.railTrayBottomMargin, model.railTrayBottomMargin)
         setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
         // Any write at all is a tuning change a row's `.equatable()` gate
         // can't see on its own — see `SidebarDialTuning.epochKey`'s doc
@@ -410,6 +432,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .slider("contentPaddingLeading", keyPath: \.contentPaddingLeading, label: "Content padding leading", range: 0...24, unit: "pt"),
         .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Content padding trailing", range: 0...24, unit: "pt"),
         .slider("listToTrayGap", keyPath: \.listToTrayGap, label: "List-to-tray gap", range: 0...24, unit: "pt"),
+        .slider("sidebarCardGap", keyPath: \.sidebarCardGap, label: "Sidebar-to-card gap", range: 0...24, unit: "pt"),
+        .slider("trayBottomMargin", keyPath: \.trayBottomMargin, label: "Tray bottom margin", range: 0...24, unit: "pt"),
+        .slider("railTrayBottomMargin", keyPath: \.railTrayBottomMargin, label: "Rail tray bottom margin", range: 0...24, unit: "pt"),
         // Rail
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
         .action(resetActionPath, label: "Reset sidebar")

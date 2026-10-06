@@ -78,7 +78,7 @@ struct SidebarRailView: View {
             Spacer(minLength: 0)
 
             RailTray()
-                .padding(.bottom, 12)
+                .padding(.bottom, SidebarDialTuning.railTrayBottomMargin())
         }
         .frame(maxWidth: .infinity)
         .background(.clear)

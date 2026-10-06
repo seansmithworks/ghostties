@@ -429,6 +429,28 @@ enum WorkspaceLayout {
     /// `Spacer` already pushes the tray to the bottom).
     static let sidebarListToTrayGap: CGFloat = 0
 
+    /// Gap between the sidebar column's trailing edge and the terminal card,
+    /// while the sidebar occupies space (pinned and collapsed rail). 0: the
+    /// sidebar column ends where the card begins, so every inset inside the
+    /// sidebar (tray margin, content padding, the rail's traffic-light hug)
+    /// measures to the card itself and the same value reads the same on both
+    /// sides. It was `terminalInset` (8pt), which stacked on top of those
+    /// insets: the tray pill sat 8pt from the window edge but 16pt from the
+    /// card, and the rail's traffic lights had an extra 8pt on their right.
+    /// Closed and overlay modes keep `terminalInset` off the window edge.
+    static let sidebarCardGap: CGFloat = 0
+
+    /// Width of the invisible sidebar resize hit strip. It covers the
+    /// sidebar's trailing edge (inside the column) plus any `sidebarCardGap`,
+    /// so resizing keeps an 8pt target when the gap is 0.
+    static let sidebarDragHandleWidth: CGFloat = 8
+
+    /// Bottom margin under the expanded sidebar's tray pill.
+    static let trayBottomMargin: CGFloat = 8
+
+    /// Bottom margin under the collapsed rail's tray pill.
+    static let railTrayBottomMargin: CGFloat = 12
+
     /// Added on top of `collapsedRailWidth`'s computed hug width — parked
     /// tuning knob (Sean, sidebar-presence review round 3: "the fixed 128pt
     /// rail read too wide," resolved by hugging the traffic lights instead).

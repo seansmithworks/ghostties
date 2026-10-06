@@ -411,9 +411,9 @@ class WorkspaceViewContainer: NSView {
         return handle
     }()
 
-    /// Drag handle on the sidebar's trailing edge for resizing. Sits in the
-    /// same 8pt inset gap the browser drag handle sits in (proven pattern),
-    /// just on the other side of the terminal card. Visible when the
+    /// Drag handle on the sidebar's trailing edge for resizing. Covers the
+    /// sidebar's trailing `sidebarDragHandleWidth` strip up to the terminal
+    /// card (see its constraints in `setup()`). Visible when the
     /// sidebar is pinned or collapsed; hidden when closed or overlaid.
     private lazy var sidebarDragHandle: PanelDragHandleView = {
         let handle = PanelDragHandleView()
@@ -788,13 +788,13 @@ class WorkspaceViewContainer: NSView {
         case .pinned:
             let inset = WorkspaceLayout.terminalInset
             return NSSize(
-                width: termSize.width + currentSidebarWidth + inset * 2,
+                width: termSize.width + currentSidebarWidth + SidebarDialTuning.sidebarCardGap() + inset,
                 height: termSize.height + inset * 2
             )
         case .collapsed:
             let inset = WorkspaceLayout.terminalInset
             return NSSize(
-                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self) + inset * 2,
+                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self) + SidebarDialTuning.sidebarCardGap() + inset,
                 height: termSize.height + inset * 2
             )
         case .closed:
@@ -821,10 +821,14 @@ class WorkspaceViewContainer: NSView {
     /// written when transitioning to `.closed`), which is fine because both
     /// consumers here gate on `sidebarMode == .pinned` anyway.
     private var resizableWidth: CGFloat {
-        let sidebarWidth = (sidebarMode == .pinned || sidebarMode == .collapsed) ? widthModel.width : 0
+        let occupiesSpace = sidebarMode == .pinned || sidebarMode == .collapsed
+        let sidebarWidth = occupiesSpace ? widthModel.width : 0
         let inset = WorkspaceLayout.terminalInset
-        // Three inset slots: leading of terminal, gap between panels, trailing of browser.
-        return bounds.width - sidebarWidth - inset * 3
+        // Three slots: leading of terminal (the sidebar-to-card gap when the
+        // sidebar occupies space, else the window inset), gap between
+        // panels, trailing of browser.
+        let leading = occupiesSpace ? SidebarDialTuning.sidebarCardGap() : inset
+        return bounds.width - sidebarWidth - leading - inset * 2
     }
 
     override func layout() {
@@ -868,7 +872,7 @@ class WorkspaceViewContainer: NSView {
         // to the right place.
         if sidebarMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating {
             let inset = WorkspaceLayout.terminalInset
-            let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
+            let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - SidebarDialTuning.sidebarCardGap() - inset
             let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
             let reclamped = min(max(currentSidebarWidth, WorkspaceLayout.sidebarMinWidth), upperBound)
             if reclamped != widthModel.width {
@@ -1357,7 +1361,7 @@ class WorkspaceViewContainer: NSView {
         // for the terminal's minimum usable width (mirrors the browser drag
         // handle's clamp against `WorkspaceLayout.terminalMinWidth`).
         let inset = WorkspaceLayout.terminalInset
-        let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
+        let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - SidebarDialTuning.sidebarCardGap() - inset
         let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
         let target = Self.sidebarDragTarget(
             pointerWidth: pointer,
@@ -1812,6 +1816,15 @@ class WorkspaceViewContainer: NSView {
     /// animated group covering geometry + alpha together) and the reduced-
     /// motion path (geometry snaps at duration 0, alpha cross-fades
     /// separately over 120ms) share one implementation instead of drifting.
+    #if DEBUG
+    /// Re-reads the "Sidebar-to-card gap" dial so the sidebar DialKit panel
+    /// moves the card live; every mode transition reads it on its own.
+    func applySidebarCardGap() {
+        guard sidebarMode == .pinned || sidebarMode == .collapsed else { return }
+        shadowHostLeadingToSidebar.constant = SidebarDialTuning.sidebarCardGap()
+    }
+    #endif
+
     private func applyTransitionConstraints(for newMode: SidebarMode, inset: CGFloat, animated: Bool = true) {
         // `.animator()` on an `NSLayoutConstraint` only produces a reliable
         // Auto Layout animation inside a real (non-zero-duration) animation
@@ -1838,7 +1851,7 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.width = currentSidebarWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, inset)
+            set(shadowHostLeadingToSidebar, SidebarDialTuning.sidebarCardGap())
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -1857,7 +1870,7 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, railWidth)
             widthModel.width = railWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, inset)
+            set(shadowHostLeadingToSidebar, SidebarDialTuning.sidebarCardGap())
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -2437,7 +2450,7 @@ class WorkspaceViewContainer: NSView {
 
         // Dual leading constraints (mutually exclusive).
         shadowHostLeadingToSidebar = terminalShadowHost.leadingAnchor.constraint(
-            equalTo: sidebarHostingView.trailingAnchor, constant: inset)
+            equalTo: sidebarHostingView.trailingAnchor, constant: SidebarDialTuning.sidebarCardGap())
         shadowHostLeadingToSuperview = terminalShadowHost.leadingAnchor.constraint(
             equalTo: leadingAnchor, constant: hasCardInset ? inset : 0)
         shadowHostLeadingToSidebar.isActive = occupiesSpace
@@ -2498,14 +2511,17 @@ class WorkspaceViewContainer: NSView {
             browserDragHandle.leadingAnchor.constraint(equalTo: terminalShadowHost.trailingAnchor),
             browserDragHandle.trailingAnchor.constraint(equalTo: browserShadowHost.leadingAnchor),
 
-            // Sidebar drag handle sits in the 8pt gap between sidebar and terminal
-            // (same gap the shadowHostLeadingToSidebar inset constant reserves).
-            // In overlay mode `shadowHostLeadingToSuperview` is active instead, so
-            // this leading/trailing pair can resolve to a hidden negative-width
+            // Sidebar drag handle covers the sidebar's trailing
+            // `sidebarDragHandleWidth` strip plus the `sidebarCardGap` (0 by
+            // default) up to the terminal card, so the resize target stays
+            // 8pt wide with no gutter. In overlay mode
+            // `shadowHostLeadingToSuperview` is active instead, so this
+            // leading/trailing pair can resolve to a hidden negative-width
             // frame — harmless, since the handle is hidden in overlay mode anyway.
             sidebarDragHandle.topAnchor.constraint(equalTo: sidebarHostingView.topAnchor),
             sidebarDragHandle.bottomAnchor.constraint(equalTo: sidebarHostingView.bottomAnchor),
-            sidebarDragHandle.leadingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
+            sidebarDragHandle.leadingAnchor.constraint(
+                equalTo: sidebarHostingView.trailingAnchor, constant: -WorkspaceLayout.sidebarDragHandleWidth),
             sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
 
             // Build-info badge: bottom-left corner of the whole window, on top

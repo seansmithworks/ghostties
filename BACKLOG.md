@@ -13,6 +13,7 @@ State: main @ `5e3641da2` (#198 launch hooks, #199 harness Phase 1 merged). Cont
 - [ ] SEAN-1..8 on a Dev build of main after merges; then `contract-check.sh --require-signed` → tag. | carried
 - [ ] Post-tag: other wall-clock tests (`SessionNameSyncTests.swift:155-157`, `WorkspaceStoreSectionsTests.swift:1389-1397`); `GHOSTTIES_CAPTURE_FIXTURE` setenv in `ComposerSingleLineStyleTests.swift:822-828` (likely pixel-flake source); test-host empty `ghostties.capture.<pid>.plist`; no SIGTERM cleanup; P5 not deterministically pinned; T6 confirm press untested; X5 dead `emptyResultsCopy` (build row or delete); D1 D3 D5 D6 D7. | parked
 - [ ] Cleanup: this session's worktrees (`harness-p1*`, `contract-run`, `fix-*`, `mutation-proof`) are clean; remove after the tag with the rest. | parked
+- [ ] Sidebar spacing: Sean tunes new DialKit spacing dials on Dev, then bake values (fix/sidebar-spacing)
 
 ## 2026-10-05 (late) — beta.26 gate moved: test contract first (session eb2c4576)
 
