@@ -76,6 +76,36 @@ struct ProjectTemplatesSectionTests {
         #expect(TemplateManagement.deleteMessage(for: template, store: store) == "This will permanently remove \"Mine\".")
     }
 
+    @Test func deleteMessageNamesTheSessionsUsingTheTemplate() {
+        let store = makeStore()
+        let template = TemplateManagement.addTemplate(named: "Mine", store: store)!
+        let other = TemplateManagement.addTemplate(named: "Other", store: store)!
+        let project = store.projects[0]
+        let bystander = AgentSession(name: "Zulu", templateId: other.id, projectId: project.id)
+        func message(_ names: [String]) -> String {
+            let sessions = names.map { AgentSession(name: $0, templateId: template.id, projectId: project.id) }
+            let s = WorkspaceStore(testingProjects: [project], testingSessions: sessions + [bystander])
+            return TemplateManagement.deleteMessage(for: template, store: s)
+        }
+        // Second sentence: origin/main's in-use text, byte for byte.
+        let tail = " Sessions using \"Mine\" will keep their current configuration but won't be relaunchable with this template."
+        #expect(message(["Alpha"]) == "Used by Alpha." + tail)
+        #expect(message(["Alpha", "Beta"]) == "Used by Alpha and Beta." + tail)
+        #expect(message(["Alpha", "Beta", "Gamma"]) == "Used by Alpha, Beta and Gamma." + tail)
+        #expect(message(["Alpha", "Beta", "Gamma", "Delta"]) == "Used by Alpha, Beta, Gamma and 1 more." + tail)
+        #expect(message((1...10).map { "S\($0)" }) == "Used by S1, S2, S3 and 7 more." + tail)
+        // A trailing period on the last listed name is not doubled.
+        #expect(message(["Alpha", "v1."]) == "Used by Alpha and v1." + tail)
+    }
+
+    @Test func confirmingDeleteDropsTheTemplateCountByOne() {
+        let store = makeStore()
+        let template = TemplateManagement.addTemplate(named: "Mine", store: store)!
+        let before = store.templates.count
+        store.removeTemplate(id: template.id)
+        #expect(store.templates.count == before - 1)
+    }
+
     @Test func pinTogglesThroughTheComposerStore() {
         let composerStore = SessionComposerStore(isolatedForTesting: ())
         let id = UUID()
