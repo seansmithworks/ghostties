@@ -266,21 +266,48 @@ struct SidebarPresenceTests {
         #expect(WorkspaceLayout.terminalInset == 8)
     }
 
-    /// Sean's follow-up decision (sidebar-presence review round 2): confirm
-    /// the card's LEFT gap is the same 8pt in every state, not just closed —
-    /// pinned, collapsed (rail), and closed all read their leading inset
-    /// from this one `terminalInset` token in `WorkspaceViewContainer`
-    /// (`applyTransitionConstraints`'s `.pinned`/`.collapsed`/`.closed`
-    /// branches and `setup()`'s cold-launch path), so there is exactly one
-    /// number to retune, not three that can drift apart.
-    @Test func cardLeftGapIsTheSameEightPointsAcrossEveryMode() {
-        let pinnedGap = WorkspaceLayout.terminalInset
-        let collapsedGap = WorkspaceLayout.terminalInset
-        let closedGap = WorkspaceLayout.terminalInset
-        #expect(pinnedGap == 8)
-        #expect(collapsedGap == 8)
-        #expect(closedGap == 8)
-        #expect(pinnedGap == collapsedGap && collapsedGap == closedGap)
+    /// The card's leading gap per mode (fix/sidebar-spacing): while the
+    /// sidebar occupies space (pinned, collapsed rail) the card starts
+    /// `sidebarCardGap` (0) after the sidebar column, so the sidebar's own
+    /// margins measure to the card and read the same on both sides; closed
+    /// and overlay keep the 8pt `terminalInset` off the window edge. Reads
+    /// `cardLeadingGap(for:)`, the function every leading-constraint site in
+    /// `WorkspaceViewContainer` uses — red if pinned/collapsed went back to
+    /// `terminalInset` (the stacked 8pt that made the tray 8pt/16pt).
+    @Test func cardLeadingGapIsSidebarCardGapWhileSidebarOccupiesSpaceElseTerminalInset() {
+        let suite = UserDefaults(suiteName: "ghostties.sidebarSpacing.gap.test.\(UUID().uuidString)")!
+        #expect(WorkspaceViewContainer.cardLeadingGap(for: .pinned, defaults: suite) == 0)
+        #expect(WorkspaceViewContainer.cardLeadingGap(for: .collapsed, defaults: suite) == 0)
+        #expect(WorkspaceViewContainer.cardLeadingGap(for: .closed, defaults: suite) == 8)
+        #expect(WorkspaceViewContainer.cardLeadingGap(for: .overlay, defaults: suite) == 8)
+        // The dial moves only the sidebar-occupying modes.
+        suite.set(6.0, forKey: SidebarDialTuning.sidebarCardGapKey)
+        #expect(WorkspaceViewContainer.cardLeadingGap(for: .pinned, defaults: suite) == 6)
+        #expect(WorkspaceViewContainer.cardLeadingGap(for: .collapsed, defaults: suite) == 6)
+        #expect(WorkspaceViewContainer.cardLeadingGap(for: .closed, defaults: suite) == 8)
+        #expect(WorkspaceViewContainer.cardLeadingGap(for: .overlay, defaults: suite) == 8)
+    }
+
+    /// Shipped spacing constants and the new dials' unset-key fallbacks —
+    /// a Release build (no keys written) must read these constants exactly.
+    @Test func sidebarSpacingDefaultsAndDialFallbacks() {
+        #expect(WorkspaceLayout.sidebarCardGap == 0)
+        #expect(WorkspaceLayout.sidebarDragHandleWidth == 8)
+        #expect(WorkspaceLayout.trayBottomMargin == 8)
+        #expect(WorkspaceLayout.railTrayBottomMargin == 12)
+
+        let suite = UserDefaults(suiteName: "ghostties.sidebarSpacing.dials.test.\(UUID().uuidString)")!
+        #expect(SidebarDialTuning.sidebarCardGap(defaults: suite) == WorkspaceLayout.sidebarCardGap)
+        #expect(SidebarDialTuning.trayBottomMargin(defaults: suite) == WorkspaceLayout.trayBottomMargin)
+        #expect(SidebarDialTuning.railTrayBottomMargin(defaults: suite) == WorkspaceLayout.railTrayBottomMargin)
+
+        // Each dial reads its own key, not a literal.
+        suite.set(3.0, forKey: SidebarDialTuning.sidebarCardGapKey)
+        suite.set(5.0, forKey: SidebarDialTuning.trayBottomMarginKey)
+        suite.set(7.0, forKey: SidebarDialTuning.railTrayBottomMarginKey)
+        #expect(SidebarDialTuning.sidebarCardGap(defaults: suite) == 3)
+        #expect(SidebarDialTuning.trayBottomMargin(defaults: suite) == 5)
+        #expect(SidebarDialTuning.railTrayBottomMargin(defaults: suite) == 7)
     }
 
     // MARK: - Flow 05 Content Choreography — Row-Level

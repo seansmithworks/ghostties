@@ -411,14 +411,21 @@ class WorkspaceViewContainer: NSView {
         return handle
     }()
 
-    /// Drag handle on the sidebar's trailing edge for resizing. Covers the
-    /// sidebar's trailing `sidebarDragHandleWidth` strip up to the terminal
-    /// card (see its constraints in `setup()`). Visible when the
+    /// Drag handle on the sidebar's trailing edge for resizing. Centred on
+    /// the sidebar/card seam: half of `sidebarDragHandleWidth` over the
+    /// sidebar's trailing margin, half over the card's terminal text padding
+    /// (see its constraints in `setup()`). It takes only clicks and drags:
+    /// scrolling and the list's scroller pass through to the view beneath
+    /// (`PanelDragHandleView.viewsBeneath`). Visible when the
     /// sidebar is pinned or collapsed; hidden when closed or overlaid.
     private lazy var sidebarDragHandle: PanelDragHandleView = {
         let handle = PanelDragHandleView()
         handle.translatesAutoresizingMaskIntoConstraints = false
         handle.isHidden = true  // corrected to match initialMode in setup()
+        handle.viewsBeneath = { [weak self] in
+            guard let self else { return [] }
+            return [self.terminalShadowHost, self.sidebarHostingView]
+        }
         handle.onDragStart = { [weak self] in
             self?.beginSidebarDrag()
         }
@@ -827,7 +834,7 @@ class WorkspaceViewContainer: NSView {
         // Three slots: leading of terminal (the sidebar-to-card gap when the
         // sidebar occupies space, else the window inset), gap between
         // panels, trailing of browser.
-        let leading = occupiesSpace ? SidebarDialTuning.sidebarCardGap() : inset
+        let leading = Self.cardLeadingGap(for: sidebarMode)
         return bounds.width - sidebarWidth - leading - inset * 2
     }
 
@@ -1329,6 +1336,19 @@ class WorkspaceViewContainer: NSView {
     /// way down must not overwrite the width the toggle expands back to.
     private var sidebarWidthBeforeDrag: CGFloat = 0
 
+    /// The terminal card's leading gap per sidebar mode: measured from the
+    /// sidebar column's trailing edge while the sidebar occupies space
+    /// (`sidebarCardGap`, 0 by default), from the window edge otherwise
+    /// (`terminalInset`). Every leading-constraint site reads this.
+    static func cardLeadingGap(for mode: SidebarMode, defaults: UserDefaults = .standard) -> CGFloat {
+        switch mode {
+        case .pinned, .collapsed:
+            return SidebarDialTuning.sidebarCardGap(defaults: defaults)
+        case .closed, .overlay:
+            return WorkspaceLayout.terminalInset
+        }
+    }
+
     /// Where a sidebar drag lands for a given pointer width: the rail below
     /// the midpoint between the rail and `sidebarMinWidth`, pinned (clamped
     /// to min…upperBound) at or above it — the same collapse point
@@ -1821,7 +1841,7 @@ class WorkspaceViewContainer: NSView {
     /// moves the card live; every mode transition reads it on its own.
     func applySidebarCardGap() {
         guard sidebarMode == .pinned || sidebarMode == .collapsed else { return }
-        shadowHostLeadingToSidebar.constant = SidebarDialTuning.sidebarCardGap()
+        shadowHostLeadingToSidebar.constant = Self.cardLeadingGap(for: sidebarMode)
     }
     #endif
 
@@ -1851,7 +1871,7 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.width = currentSidebarWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, SidebarDialTuning.sidebarCardGap())
+            set(shadowHostLeadingToSidebar, Self.cardLeadingGap(for: newMode))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -1870,7 +1890,7 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, railWidth)
             widthModel.width = railWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, SidebarDialTuning.sidebarCardGap())
+            set(shadowHostLeadingToSidebar, Self.cardLeadingGap(for: newMode))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -1891,7 +1911,7 @@ class WorkspaceViewContainer: NSView {
             // bleed — overrides Flow 05's own "card padding-left 8 → 0."
             set(sidebarWidthConstraint, 0)
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSuperview, inset)
+            set(shadowHostLeadingToSuperview, Self.cardLeadingGap(for: newMode))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -1916,7 +1936,7 @@ class WorkspaceViewContainer: NSView {
             // as pinned/closed. The sidebar (z-order above the card) floats
             // over its left edge rather than sharing space with it.
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSuperview, inset)
+            set(shadowHostLeadingToSuperview, Self.cardLeadingGap(for: newMode))
             set(shadowHostTrailingConstraint, -inset)
             set(shadowHostBottomConstraint, -inset)
             set(terminalTopConstraint, 0)
@@ -2358,12 +2378,14 @@ class WorkspaceViewContainer: NSView {
         // Canvas layer — the warm background visible behind the floating card.
         wantsLayer = true
 
-        // Z-order: background material → overlay background → sidebar → sidebar drag handle → terminal → browser drag handle → browser → build-info badge (topmost).
+        // Z-order: background material → overlay background → sidebar → terminal → sidebar drag handle → browser drag handle → browser → build-info badge (topmost).
+        // The sidebar drag handle sits above the terminal because it
+        // straddles the sidebar/card seam (see its constraints below).
         addSubview(backgroundEffectView)
         addSubview(sidebarOverlayBackground)
         addSubview(sidebarHostingView)
-        addSubview(sidebarDragHandle)
         addSubview(terminalShadowHost)
+        addSubview(sidebarDragHandle)
         addSubview(browserDragHandle)
         addSubview(browserShadowHost)
         addSubview(buildInfoBadgeHostingView)
@@ -2450,7 +2472,7 @@ class WorkspaceViewContainer: NSView {
 
         // Dual leading constraints (mutually exclusive).
         shadowHostLeadingToSidebar = terminalShadowHost.leadingAnchor.constraint(
-            equalTo: sidebarHostingView.trailingAnchor, constant: SidebarDialTuning.sidebarCardGap())
+            equalTo: sidebarHostingView.trailingAnchor, constant: Self.cardLeadingGap(for: .pinned))
         shadowHostLeadingToSuperview = terminalShadowHost.leadingAnchor.constraint(
             equalTo: leadingAnchor, constant: hasCardInset ? inset : 0)
         shadowHostLeadingToSidebar.isActive = occupiesSpace
@@ -2511,18 +2533,21 @@ class WorkspaceViewContainer: NSView {
             browserDragHandle.leadingAnchor.constraint(equalTo: terminalShadowHost.trailingAnchor),
             browserDragHandle.trailingAnchor.constraint(equalTo: browserShadowHost.leadingAnchor),
 
-            // Sidebar drag handle covers the sidebar's trailing
-            // `sidebarDragHandleWidth` strip plus the `sidebarCardGap` (0 by
-            // default) up to the terminal card, so the resize target stays
-            // 8pt wide with no gutter. In overlay mode
+            // Sidebar drag handle straddles the sidebar/card seam: half of
+            // `sidebarDragHandleWidth` over each side, plus any
+            // `sidebarCardGap` between them. The sidebar half (4pt) stays
+            // inside the 8pt tray margin and content padding; the card half
+            // (4pt) stays inside the terminal's 20pt text padding
+            // (`GhosttiesConfigDefaults`). In overlay mode
             // `shadowHostLeadingToSuperview` is active instead, so this
             // leading/trailing pair can resolve to a hidden negative-width
             // frame — harmless, since the handle is hidden in overlay mode anyway.
             sidebarDragHandle.topAnchor.constraint(equalTo: sidebarHostingView.topAnchor),
             sidebarDragHandle.bottomAnchor.constraint(equalTo: sidebarHostingView.bottomAnchor),
             sidebarDragHandle.leadingAnchor.constraint(
-                equalTo: sidebarHostingView.trailingAnchor, constant: -WorkspaceLayout.sidebarDragHandleWidth),
-            sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
+                equalTo: sidebarHostingView.trailingAnchor, constant: -WorkspaceLayout.sidebarDragHandleWidth / 2),
+            sidebarDragHandle.trailingAnchor.constraint(
+                equalTo: terminalShadowHost.leadingAnchor, constant: WorkspaceLayout.sidebarDragHandleWidth / 2),
 
             // Build-info badge: bottom-left corner of the whole window, on top
             // of sidebar and terminal alike. Unconstrained width/height — the
@@ -2837,8 +2862,46 @@ private class PanelDragHandleView: NSView {
     /// persist the final width; unused (nil) by the browser handle.
     var onDragEnd: (() -> Void)?
 
+    /// Sibling views this handle overlaps, front-most first. When set, the
+    /// handle takes only clicks and drags: scroll events go to whatever is
+    /// beneath, and a click over a scroller beneath (the sidebar list's
+    /// overlay scrollbar) falls through to it. Empty for the browser
+    /// handle, which overlaps nothing.
+    var viewsBeneath: () -> [NSView] = { [] }
+
     /// Track the last mouse X position during a drag.
     private var lastDragX: CGFloat = 0
+
+    /// The deepest view beneath the handle at `point` (in the superview's
+    /// coordinates, the space `hitTest` receives), or nil.
+    private func viewBeneath(at point: NSPoint) -> NSView? {
+        for view in viewsBeneath() {
+            guard let parent = view.superview else { continue }
+            let local = parent.convert(point, from: superview)
+            if let hit = view.hitTest(local) { return hit }
+        }
+        return nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        var view = viewBeneath(at: point)
+        while let current = view {
+            if current is NSScroller { return nil }
+            view = current.superview
+        }
+        return hit
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let superview else { return super.scrollWheel(with: event) }
+        let point = superview.convert(event.locationInWindow, from: nil)
+        if let target = viewBeneath(at: point) {
+            target.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
+        }
+    }
 
     /// Tracking area for cursor changes on hover.
     private var hoverTrackingArea: NSTrackingArea?
