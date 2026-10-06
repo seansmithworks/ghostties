@@ -271,6 +271,39 @@ enum CaptureFixture {
         return store
     }
 
+    // MARK: - Coordinator seeding (D2)
+
+    /// Far-future output timestamp, so `indicatorState(for:)` keeps reading
+    /// "producing output" instead of decaying after the 2s activity window.
+    private static let alwaysRecentOutputSecondsAgo = -31_536_000
+
+    /// Seeds the coordinator for every fixture session that is alive, then
+    /// copies what the coordinator derives into the store. The Sessions tab
+    /// (store cache) and the Projects tab (`coordinator.indicatorState`) then
+    /// read one source, as the live app does after each 1Hz tick. Sessions
+    /// the coordinator cannot derive a state for (an agent session with no
+    /// evidence resolves to `.idle`, never `.waiting`) show what the live app
+    /// would show. Not-alive sessions (inactive, error) fall back to the
+    /// store's statuses, which `makeStore` already set.
+    @MainActor
+    static func seedCoordinator(_ coordinator: SessionCoordinator, store: WorkspaceStore) {
+        for (fs, session) in zip(fixtureSessions, sessions) {
+            switch fs.state {
+            case .processing, .longRunning:
+                coordinator.seedIndicatorStateForTesting(
+                    id: session.id, lastOutputSecondsAgo: alwaysRecentOutputSecondsAgo)
+            case .needsAttention:
+                coordinator.seedIndicatorStateForTesting(
+                    id: session.id, lastSurfaceTitle: "Allow this edit? (y/n)")
+            case .waiting, .idle:
+                coordinator.seedIndicatorStateForTesting(id: session.id)
+            case .inactive, .error:
+                continue
+            }
+            store.updateIndicatorState(id: session.id, state: coordinator.indicatorState(for: session.id))
+        }
+    }
+
     // MARK: - Session popover fixture
 
     /// `GHOSTTIES_CAPTURE_POPOVER` (`needs-bash`, `needs-edit`, `running`, `done`):

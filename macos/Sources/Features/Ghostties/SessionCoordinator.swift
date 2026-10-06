@@ -1792,6 +1792,7 @@ final class SessionCoordinator: ObservableObject {
     func applyCaptureFixtureFocusIfNeeded() {
         guard CaptureFixture.isActive else { return }
         #if DEBUG
+        CaptureFixture.seedCoordinator(self, store: WorkspaceStore.shared)
         if let id = CaptureFixture.focusedSessionId {
             activeSessionId = id
         }
