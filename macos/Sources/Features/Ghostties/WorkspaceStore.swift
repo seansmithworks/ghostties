@@ -183,7 +183,7 @@ final class WorkspaceStore: ObservableObject {
         self.lastSelectedProjectId = state.lastSelectedProjectId
         self.hasShownPinMigrationNotice = state.hasShownPinMigrationNotice
         self.hasDismissedPinMigrationNotice = state.hasDismissedPinMigrationNotice
-        self.templates = AgentTemplate.defaults + state.templates.filter { !$0.isDefault }
+        self.templates = Self.mergedTemplates(presets: [], persisted: state.templates)
         self.stateDirectory = testingStateDirectory
         self.persistenceDisabled = false
     }
@@ -229,8 +229,7 @@ final class WorkspaceStore: ObservableObject {
 
         // Merge persisted custom templates with built-in defaults and presets.
         // Order: presets first, then built-in defaults, then custom templates.
-        let customTemplates = state.templates.filter { !$0.isDefault }
-        self.templates = presets + AgentTemplate.defaults + customTemplates
+        self.templates = Self.mergedTemplates(presets: presets, persisted: state.templates)
 
         // `sessions` is never pruned — every agent session ever spawned stays
         // in workspace.json forever, so this list grows unbounded over the
@@ -248,6 +247,12 @@ final class WorkspaceStore: ObservableObject {
         // pruning so it never assigns (and persists) a ghost for a session
         // that's about to be dropped.
         backfillGhostCharactersAtLaunch()
+    }
+
+    /// Order: presets first, then built-in defaults, then persisted custom
+    /// templates. Shared by the real init and the test seam.
+    static func mergedTemplates(presets: [AgentTemplate], persisted: [AgentTemplate]) -> [AgentTemplate] {
+        presets + AgentTemplate.defaults + persisted.filter { !$0.isDefault }
     }
 
     // MARK: - Session Pruning
