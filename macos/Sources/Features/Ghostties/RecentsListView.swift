@@ -14,6 +14,8 @@ import UniformTypeIdentifiers
 struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
+    /// See `EnvironmentValues.sidebarTrailingGutter`.
+    @Environment(\.sidebarTrailingGutter) private var trailingGutter
 
     @State private var editingSessionId: UUID?
     @State private var editingName: String = ""
@@ -170,7 +172,7 @@ struct RecentsListView: View {
                         archiveExpanded: true
                     )
                     .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-                    .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                    .padding(.trailing, SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
                     .padding(.top, SidebarDialTuning.contentPaddingTop())
                     .padding(.bottom, 4)
                 } else {
@@ -370,7 +372,7 @@ struct RecentsListView: View {
                     archiveExpanded: archiveExpanded
                 )
                 .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-                .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                .padding(.trailing, SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
                 .padding(.top, SidebarDialTuning.contentPaddingTop())
                 .padding(.bottom, 4)
                 .animation(reflowAnimation, value: dragState)

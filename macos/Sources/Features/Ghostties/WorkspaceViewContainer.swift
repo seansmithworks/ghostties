@@ -111,6 +111,10 @@ private struct SidebarHostRoot: View {
     let trayIsVertical: Bool?
     /// False for the task-first view, which has no tray.
     let showsTrayWhenExpanded: Bool
+    /// `WorkspaceLayout.sidebarTrailingGutter(for:)` for the mode this root
+    /// was built for — the expanded list and tray pad their trailing edge
+    /// by only what the gutter doesn't already provide.
+    let trailingGutter: CGFloat
 
     var body: some View {
         let vertical = trayIsVertical ?? model.isCollapsedPresentation
@@ -121,6 +125,7 @@ private struct SidebarHostRoot: View {
                     SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch())
                 }
             }
+            .environment(\.sidebarTrailingGutter, trailingGutter)
     }
 
     /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
@@ -1025,7 +1030,8 @@ class WorkspaceViewContainer: NSView {
             model: widthModel,
             content: content,
             trayIsVertical: trayIsVertical,
-            showsTrayWhenExpanded: currentSidebarViewMode != "taskFirst"
+            showsTrayWhenExpanded: currentSidebarViewMode != "taskFirst",
+            trailingGutter: WorkspaceLayout.sidebarTrailingGutter(for: sidebarMode)
         )
         .environmentObject(WorkspaceStore.shared)
         .environmentObject(coordinator))

@@ -356,6 +356,8 @@ struct SidebarTray: View {
     @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
     @EnvironmentObject private var coordinator: SessionCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// See `EnvironmentValues.sidebarTrailingGutter`.
+    @Environment(\.sidebarTrailingGutter) private var trailingGutter
 
     let isVertical: Bool
     /// "Collapse Sidebar" / "Expand Sidebar" / "Open Sidebar" — see
@@ -400,7 +402,10 @@ struct SidebarTray: View {
                 )
             }
         }
-        .padding(.horizontal, isVertical ? 0 : SidebarDialTuning.trayMargin())
+        // `trayMargin` is the visible gap on each side; on the trailing side
+        // the gutter outside the column already provides part of it.
+        .padding(.leading, isVertical ? 0 : SidebarDialTuning.trayMargin())
+        .padding(.trailing, isVertical ? 0 : max(0, SidebarDialTuning.trayMargin() - trailingGutter))
         .padding(.bottom, Self.bottomPadding(isVertical: isVertical))
         // Centers the hugging vertical pill in the rail column.
         .frame(maxWidth: .infinity)

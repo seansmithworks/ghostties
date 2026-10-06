@@ -258,6 +258,12 @@ enum SidebarDialTuning {
     static func contentPaddingTrailing(defaults: UserDefaults = .standard) -> CGFloat {
         cgFloat(contentPaddingTrailingKey, default: WorkspaceLayout.sidebarContentPaddingTrailing, defaults: defaults)
     }
+    /// The expanded list column's own trailing padding: the visible inset
+    /// (`contentPaddingTrailing`) less the gutter already outside the column
+    /// (`WorkspaceLayout.sidebarTrailingGutter`).
+    static func contentColumnTrailingPadding(gutter: CGFloat, defaults: UserDefaults = .standard) -> CGFloat {
+        max(0, contentPaddingTrailing(defaults: defaults) - gutter)
+    }
     static func listToTrayGap(defaults: UserDefaults = .standard) -> CGFloat {
         cgFloat(listToTrayGapKey, default: WorkspaceLayout.sidebarListToTrayGap, defaults: defaults)
     }
@@ -571,7 +577,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .slider("trayGlassShadowRadius", keyPath: \.trayGlassShadowRadius, label: "Shadow radius", range: 0...32, step: 0.5, unit: "pt"),
             .slider("trayHorizontalButtonSize", keyPath: \.trayHorizontalButtonSize, label: "Bar button height (expanded)", range: 24...56, step: 0.5, unit: "pt"),
             .slider("trayHorizontalIconSize", keyPath: \.trayHorizontalIconSize, label: "Bar icon size (expanded)", range: 10...24, step: 0.5, unit: "pt"),
-            .slider("trayMargin", keyPath: \.trayMargin, label: "Bar side margin (expanded)", range: 0...24, unit: "pt"),
+            .slider("trayMargin", keyPath: \.trayMargin, label: "Bar side margin (expanded, visible)", range: 0...24, unit: "pt"),
             .slider("trayVerticalButtonSize", keyPath: \.trayVerticalButtonSize, label: "Pill button size (rail)", range: 24...56, step: 0.5, unit: "pt"),
             .slider("trayVerticalIconSize", keyPath: \.trayVerticalIconSize, label: "Pill icon size (rail)", range: 10...24, step: 0.5, unit: "pt"),
             .slider("trayInnerPadding", keyPath: \.trayInnerPadding, label: "Inner padding", range: 0...16, step: 0.5, unit: "pt"),
@@ -611,7 +617,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         // Sidebar layout
         .slider("contentPaddingTop", keyPath: \.contentPaddingTop, label: "Content padding top", range: 0...24, unit: "pt"),
         .slider("contentPaddingLeading", keyPath: \.contentPaddingLeading, label: "Content padding leading", range: 0...24, unit: "pt"),
-        .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Content padding trailing", range: 0...24, unit: "pt"),
+        .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Content padding trailing (visible)", range: 0...24, unit: "pt"),
         .slider("listToTrayGap", keyPath: \.listToTrayGap, label: "List-to-tray gap", range: 0...24, unit: "pt"),
         // Rail
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),

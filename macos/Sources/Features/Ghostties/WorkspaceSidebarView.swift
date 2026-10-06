@@ -29,6 +29,8 @@ enum SidebarTab: String {
 struct WorkspaceSidebarView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
+    /// See `EnvironmentValues.sidebarTrailingGutter`.
+    @Environment(\.sidebarTrailingGutter) private var trailingGutter
 
     /// Per-window selection state — each window can focus a different project.
     @State private var selectedProjectId: UUID?
@@ -81,7 +83,7 @@ struct WorkspaceSidebarView: View {
                             }
                         }
                         .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-                        .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+                        .padding(.trailing, SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
                         .padding(.top, SidebarDialTuning.contentPaddingTop())
                         .padding(.bottom, 4)
                         .animation(

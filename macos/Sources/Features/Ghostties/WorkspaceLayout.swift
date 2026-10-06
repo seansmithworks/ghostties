@@ -35,8 +35,10 @@ enum WorkspaceLayout {
     static let sidebarRailWidth: CGFloat = 60
 
     /// Horizontal margin between the expanded sidebar's horizontal tray bar
-    /// (`SidebarTray`) and the sidebar's edges: bar width = sidebar width −
-    /// 2×margin. The rail's vertical pill hugs its icons instead.
+    /// (`SidebarTray`) and the surfaces either side of it (window edge,
+    /// terminal card). The trailing side pads only what
+    /// `sidebarTrailingGutter(for:)` doesn't already provide. The rail's
+    /// vertical pill hugs its icons instead.
     static let trayHorizontalMargin: CGFloat = 8
 
     /// Pure width calculation for the collapsed rail: hugs the macOS
@@ -416,8 +418,22 @@ enum WorkspaceLayout {
     /// Leading padding of the scrollable list content in both sidebar tabs.
     static let sidebarContentPaddingLeading: CGFloat = 8
 
-    /// Trailing padding of the scrollable list content in both sidebar tabs.
+    /// VISIBLE trailing inset of the scrollable list content in both sidebar
+    /// tabs: the gap between the content and the next surface to its right.
+    /// Not all of it is the column's own padding — see
+    /// `sidebarTrailingGutter(for:)`.
     static let sidebarContentPaddingTrailing: CGFloat = 8
+
+    /// Space outside the sidebar column's trailing edge before the next
+    /// visible surface. Pinned/collapsed: the terminal card's leading
+    /// `terminalInset` (the gap the sidebar drag handle sits in), so that
+    /// much of a visible trailing inset is already there and the column pads
+    /// only the rest. Without this the expanded list and tray sat 8pt from
+    /// the window edge but 16pt from the card. Overlay/closed: the column's
+    /// trailing edge IS the panel edge, so 0.
+    static func sidebarTrailingGutter(for mode: SidebarMode) -> CGFloat {
+        (mode == .pinned || mode == .collapsed) ? terminalInset : 0
+    }
 
     /// Extra top padding on the bottom tray, opening a gap between the list
     /// above and the tray below. 0 = today's flush layout (the list's
@@ -775,4 +791,18 @@ extension Notification.Name {
     /// `RowClickRouter.shared.handleRowClick` through their existing SwiftUI
     /// environment, preserving correct window-scoped coordinator references.
     static let ghosttiesActivateFocusedTaskRow = Notification.Name("com.seansmithdesign.ghostties.activateFocusedTaskRow")
+}
+
+private struct SidebarTrailingGutterKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    /// `WorkspaceLayout.sidebarTrailingGutter(for:)`, injected once at the
+    /// sidebar root (`SidebarHostRoot`). 0 outside it, so a view hosted on
+    /// its own (tests, previews) pads its full visible inset.
+    var sidebarTrailingGutter: CGFloat {
+        get { self[SidebarTrailingGutterKey.self] }
+        set { self[SidebarTrailingGutterKey.self] = newValue }
+    }
 }
