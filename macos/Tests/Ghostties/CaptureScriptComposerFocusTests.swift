@@ -47,8 +47,12 @@ struct CaptureScriptComposerFocusTests {
             try? FileManager.default.removeItem(at: dir)
         }
         await CaptureScript.Runner(host: container, stateDir: dir).run([.composerOpen, .type("switchboard")])
-        // Let any late delivery land before reading.
-        try? await _Concurrency.Task.sleep(for: .milliseconds(300))
+        // The field reports into the store a turn or more later; under load
+        // that takes longer. Wait for the whole text, bounded.
+        let deadline = Date().addingTimeInterval(3)
+        while SessionComposerStore.shared.searchText != "switchboard", Date() < deadline {
+            try? await _Concurrency.Task.sleep(for: .milliseconds(20))
+        }
         return SessionComposerStore.shared.searchText
     }
 
@@ -58,7 +62,8 @@ struct CaptureScriptComposerFocusTests {
     @Test func typeAfterComposerOpenLandsInTheField() async {
         await withSharedComposerStore {
             #expect(!SessionComposerStore.shared.isOpen, "shared composer was already open")
-            #expect(await typedText() == "switchboard")
+            let text = await typedText()
+            #expect(text == "switchboard", "composer search text was '\(text)'")
         }
     }
 }
