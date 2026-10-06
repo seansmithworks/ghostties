@@ -1066,7 +1066,7 @@ class AppDelegate: NSObject,
     /// `.workspaceCloseSession` / `.workspaceFocusSessionAtIndex`) — falls
     /// through to upstream Ghostty ⌘T/⌘W behavior instead of going silently
     /// dead. Non-workspace windows (e.g. Quick Terminal) always fall through.
-    private static func isProjectFirstWorkspaceWindow(_ window: NSWindow) -> Bool {
+    static func isProjectFirstWorkspaceWindow(_ window: NSWindow) -> Bool {
         guard window.contentView is WorkspaceViewContainer else { return false }
         let mode = UserDefaults.standard.string(forKey: "ghostties.sidebarViewMode") ?? "projectFirst"
         return mode == "projectFirst"
@@ -1084,7 +1084,7 @@ class AppDelegate: NSObject,
     /// and Cmd+1-9 stay on `isProjectFirstWorkspaceWindow(_:)` — they're
     /// genuinely project-first-only (task-first has no session list for
     /// them to act on).
-    private static func isWorkspaceWindow(_ window: NSWindow) -> Bool {
+    static func isWorkspaceWindow(_ window: NSWindow) -> Bool {
         window.contentView is WorkspaceViewContainer
     }
 
