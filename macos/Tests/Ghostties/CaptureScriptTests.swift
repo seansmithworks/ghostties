@@ -79,7 +79,12 @@ struct CaptureScriptTests {
         let key = "ghostties.newSessionOpensComposer"
         let standardBefore = UserDefaults.standard.object(forKey: key) as? Bool
         let suite = UserDefaults(suiteName: CaptureFixture.defaultsSuiteName)!
-        defer { CaptureFixture.cleanUpDefaults(fixtureActive: true) }
+        defer {
+            CaptureFixture.cleanUpDefaults(fixtureActive: true)
+            // A regression would have written Dev's domain; put it back.
+            if let standardBefore { UserDefaults.standard.set(standardBefore, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
 
         CaptureScript.applyPref(!(standardBefore ?? true))
         #expect(suite.object(forKey: key) as? Bool == !(standardBefore ?? true))

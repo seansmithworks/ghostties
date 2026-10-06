@@ -34,8 +34,15 @@ struct CaptureFixtureDefaultsTests {
 
     @Test func prefResolvesToCaptureSuiteInFixtureMode() {
         let defaults = WorkspaceViewContainer.composerPreferenceDefaults(fixtureActive: true)
-        defer { CaptureFixture.cleanUpDefaults(fixtureActive: true) }
-        defaults.set(false, forKey: "ghostties.newSessionOpensComposer")
+        let key = "ghostties.newSessionOpensComposer"
+        let standardBefore = UserDefaults.standard.object(forKey: key)
+        defer {
+            CaptureFixture.cleanUpDefaults(fixtureActive: true)
+            // A regression would have written Dev's domain; put it back.
+            if let standardBefore { UserDefaults.standard.set(standardBefore, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        defaults.set(false, forKey: key)
         #expect(WorkspaceViewContainer.newSessionOpensComposer(in: defaults) == false)
         #expect(UserDefaults(suiteName: suiteName)!.object(forKey: "ghostties.newSessionOpensComposer") != nil)
         #expect(WorkspaceViewContainer.composerPreferenceDefaults(fixtureActive: false) === UserDefaults.standard)
