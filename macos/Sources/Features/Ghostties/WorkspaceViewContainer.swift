@@ -2282,17 +2282,22 @@ class WorkspaceViewContainer: NSView {
         selectAdjacentProject(offset: -1)
     }
 
-    /// Moves the selected project through the sidebar's visual order,
-    /// wrapping; with no valid selection, selects the first. Selection lives
-    /// in `store.lastSelectedProjectId` (the list restores from it on
-    /// mount), and selecting a project focuses its last session, as a click
-    /// does. The list mirrors the selection via
-    /// `.workspaceDidSelectProjectFromShortcut`.
+    /// Moves through the sidebar's projects in visual order, wrapping,
+    /// starting from THIS window's project: its active session's project,
+    /// else the last selected project, else none (selects the first). The
+    /// store is shared by every window, so its selection alone would make
+    /// one window step from another's project. Selecting a project focuses
+    /// its last session, as a click does, and records it in
+    /// `store.lastSelectedProjectId` (the list restores from it on mount);
+    /// the list mirrors it via `.workspaceDidSelectProjectFromShortcut`.
     private func selectAdjacentProject(offset: Int) {
         let order = store.flatProjectsInVisualOrder
         guard !order.isEmpty else { return }
+        let activeProject = coordinator.activeSessionId.flatMap { id in
+            store.sessions.first(where: { $0.id == id })?.projectId
+        }
         let target: UUID
-        if let current = store.lastSelectedProjectId,
+        if let current = activeProject ?? store.lastSelectedProjectId,
            let index = order.firstIndex(where: { $0.id == current }) {
             target = order[(index + offset + order.count) % order.count].id
         } else {

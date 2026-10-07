@@ -1862,11 +1862,14 @@ extension TerminalController {
         // loose: it only greys out on zero projects, even though with exactly
         // one project already selected, `selectAdjacentProject(offset:)`
         // in `WorkspaceViewContainer` is also a no-op (mirrors the documented
-        // behavior of Next/Previous Session below). It isn't tightened to
-        // `count > 1`: a stale selection (e.g. the selected project was
-        // deleted) makes `count > 1` actively wrong: `firstIndex(where:)`
-        // then returns nil and the action takes the meaningful
-        // reset-to-first branch, which a tighter predicate would
+        // behavior of Next/Previous Session below). It can't be tightened
+        // to `count > 1` from here — the starting project is per-window
+        // (each window steps from its own active session's project; see
+        // `selectAdjacentProject(offset:)`), which `validateMenuItem` doesn't
+        // resolve. And a stale starting project (e.g. it was deleted) makes
+        // `count > 1` actively wrong: `firstIndex(where:)` then returns nil
+        // and the action takes the meaningful reset-to-first branch, which a
+        // tighter predicate would
         // have greyed out. Staying loose is correct: greying a working command
         // is worse than failing to grey a no-op one.
         //
