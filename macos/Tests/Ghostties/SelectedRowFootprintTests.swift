@@ -22,11 +22,11 @@ final class SelectedRowFootprintTests: XCTestCase {
     override func setUp() {
         super.setUp()
         XCTAssertTrue(SidebarDialTuning.store !== UserDefaults.standard, "dial store must be the isolated suite")
-        SidebarDialTuning.store.set(TrayGlassStyle.SelectedStyle.flat.rawValue, forKey: SidebarDialTuning.selectedStyleKey)
+        SidebarDialTuning.store.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
     }
 
     override func tearDown() {
-        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.selectedStyleKey)
+        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.selectedRowStyleKey)
         super.tearDown()
     }
 

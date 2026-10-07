@@ -54,7 +54,8 @@ enum SidebarDialTuning {
     static let trayGlassCornerStyleKey = "ghostties.sidebarDial.trayGlass.cornerStyle"
     static let trayGlassCornerRadiusKey = "ghostties.sidebarDial.trayGlass.cornerRadius"
     static let traySelectedPillWidthKey = "ghostties.sidebarDial.trayGlass.selectedPillWidth"
-    static let selectedStyleKey = "ghostties.sidebarDial.trayGlass.selectedStyle"
+    /// Retired "Selected style" dial; read only to migrate (`selectedRowStyle`).
+    static let legacySelectedStyleKey = "ghostties.sidebarDial.trayGlass.selectedStyle"
     static let selectedTitleWeightKey = "ghostties.sidebarDial.selectedTitleWeight"
 
     // MARK: Glass colour and material, one key set per appearance (`TrayGlassStyle.Look`)
@@ -254,10 +255,6 @@ enum SidebarDialTuning {
             selectedShadowYOffset: cgFloat(keys.selectedShadowYOffset, default: base.selectedShadowYOffset, defaults: defaults)
         )
     }
-    /// The selected session row's style (`TrayGlassStyle.SelectedStyle`).
-    static func selectedStyle(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.SelectedStyle {
-        choice(selectedStyleKey, default: TrayGlassStyle.selectedStyle, defaults: defaults)
-    }
     /// The selected expanded row's title weight (`TrayGlassStyle.SelectedTitleWeight`).
     static func selectedTitleWeight(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.SelectedTitleWeight {
         choice(selectedTitleWeightKey, default: TrayGlassStyle.selectedTitleWeight, defaults: defaults)
@@ -343,8 +340,19 @@ enum SidebarDialTuning {
     }
 
     /// How the selected session row is marked (`TrayGlassStyle.SelectedRowStyle`).
+    /// Reads the "Selected row" key; if it is absent, migrates (read-only)
+    /// from the retired "Selected style" key (`legacySelectedStyleKey`, which
+    /// shared the `glass` and `flat` names), else the compiled default.
     static func selectedRowStyle(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.SelectedRowStyle {
-        choice(selectedRowStyleKey, default: TrayGlassStyle.selectedRowStyle, defaults: defaults)
+        if let raw = defaults.string(forKey: selectedRowStyleKey),
+           let style = TrayGlassStyle.SelectedRowStyle(rawValue: raw) {
+            return style
+        }
+        if let raw = defaults.string(forKey: legacySelectedStyleKey),
+           let style = TrayGlassStyle.SelectedRowStyle(rawValue: raw) {
+            return style
+        }
+        return TrayGlassStyle.selectedRowStyle
     }
 
     /// Added on top of `WorkspaceLayout.collapsedRailWidth`'s computed hug
@@ -364,7 +372,7 @@ enum SidebarDialTuning {
         trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
         trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
-        traySelectedPillWidthKey, selectedStyleKey, selectedTitleWeightKey,
+        traySelectedPillWidthKey, selectedTitleWeightKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
@@ -372,7 +380,7 @@ enum SidebarDialTuning {
     ]
 
     static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
-        for key in allKeys {
+        for key in allKeys + [legacySelectedStyleKey] {
             defaults.removeObject(forKey: key)
         }
         defaults.set(epoch(defaults: defaults) + 1, forKey: epochKey)
@@ -495,7 +503,6 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayGlassCornerStyle: String
     var trayGlassCornerRadius: Double
     var traySelectedPillWidth: Double
-    var selectedStyle: String
     var selectedTitleWeight: String
 
     var rowHeight: Double
@@ -589,7 +596,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             trayGlassCornerStyle: SidebarDialTuning.trayGlassCornerStyle(defaults: defaults).rawValue,
             trayGlassCornerRadius: Double(SidebarDialTuning.trayGlassCornerRadius(defaults: defaults)),
             traySelectedPillWidth: Double(SidebarDialTuning.traySelectedPillWidth(defaults: defaults)),
-            selectedStyle: SidebarDialTuning.selectedStyle(defaults: defaults).rawValue,
             selectedTitleWeight: SidebarDialTuning.selectedTitleWeight(defaults: defaults).rawValue,
             rowHeight: Double(SidebarDialTuning.rowHeight(defaults: defaults)),
             rowGap: Double(SidebarDialTuning.rowGap(defaults: defaults)),
@@ -673,7 +679,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setStringIfChanged(SidebarDialTuning.trayGlassCornerStyleKey, previous.trayGlassCornerStyle, model.trayGlassCornerStyle)
         setIfChanged(SidebarDialTuning.trayGlassCornerRadiusKey, previous.trayGlassCornerRadius, model.trayGlassCornerRadius)
         setIfChanged(SidebarDialTuning.traySelectedPillWidthKey, previous.traySelectedPillWidth, model.traySelectedPillWidth)
-        setStringIfChanged(SidebarDialTuning.selectedStyleKey, previous.selectedStyle, model.selectedStyle)
         setStringIfChanged(SidebarDialTuning.selectedTitleWeightKey, previous.selectedTitleWeight, model.selectedTitleWeight)
         setIfChanged(SidebarDialTuning.rowHeightKey, previous.rowHeight, model.rowHeight)
         setIfChanged(SidebarDialTuning.rowGapKey, previous.rowGap, model.rowGap)
@@ -747,8 +752,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .group("glassDark", label: "Glass — Dark", children: glassControls("dark", \.glassDark)),
         // Shape and behaviour, shared by both appearances.
         .group("trayGlass", label: "Tray — shared", children: [
-            .select("selectedStyle", keyPath: \.selectedStyle, label: "Selected style",
-                    options: TrayGlassStyle.SelectedStyle.allCases.map(\.rawValue)),
             .select("selectedTitleWeight", keyPath: \.selectedTitleWeight, label: "Selected title weight (expanded)",
                     options: TrayGlassStyle.SelectedTitleWeight.allCases.map(\.rawValue)),
             .toggle("trayGlassInteractive", keyPath: \.trayGlassInteractive, label: "Glass interactive (tray)"),

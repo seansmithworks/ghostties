@@ -20,11 +20,11 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     override func setUp() {
         super.setUp()
         XCTAssertTrue(SidebarDialTuning.store !== UserDefaults.standard, "dial store must be the isolated suite")
-        SidebarDialTuning.store.set(TrayGlassStyle.SelectedStyle.flat.rawValue, forKey: SidebarDialTuning.selectedStyleKey)
+        SidebarDialTuning.store.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
     }
 
     override func tearDown() {
-        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.selectedStyleKey)
+        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.selectedRowStyleKey)
         SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.historyPlacementKey)
         super.tearDown()
     }
@@ -113,10 +113,10 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     private func render(rail: Bool, placement: Placement, sessionCount: Int, height: CGFloat, selectHistory: Bool = true) throws -> Render {
         for _ in 0..<5 {
             let store = SidebarDialTuning.store
-            store.set(TrayGlassStyle.SelectedStyle.flat.rawValue, forKey: SidebarDialTuning.selectedStyleKey)
+            store.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
             store.set(placement.rawValue, forKey: SidebarDialTuning.historyPlacementKey)
             let r = try renderOnce(rail: rail, sessionCount: sessionCount, height: height, selectHistory: selectHistory)
-            if SidebarDialTuning.historyPlacement() == placement && SidebarDialTuning.selectedStyle() == .flat { return r }
+            if SidebarDialTuning.historyPlacement() == placement && SidebarDialTuning.selectedRowStyle() == .flat { return r }
         }
         struct DialsKeptChanging: Error {}
         throw DialsKeptChanging()

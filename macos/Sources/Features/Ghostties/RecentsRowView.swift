@@ -214,6 +214,9 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
     /// stagger (`WorkspaceLayout.expandLabelDelay`).
     var staggerIndex: Int = 0
     let redlineID: String
+    /// "Type" selected-row style dims unselected session rows; the History
+    /// row opts out.
+    var dimsUnselected = true
     @ViewBuilder let title: () -> Title
     @ViewBuilder let trailing: () -> Trailing
 
@@ -225,7 +228,7 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
     /// "Type" selected-row style: unselected rows recede to 50%, hover lifts
     /// them to 78%. Every other style leaves rows at full opacity.
     private var rowOpacity: Double {
-        guard SidebarDialTuning.selectedRowStyle() == .type, !isActive else { return 1 }
+        guard dimsUnselected, SidebarDialTuning.selectedRowStyle() == .type, !isActive else { return 1 }
         return isHovered ? 0.78 : 0.5
     }
 

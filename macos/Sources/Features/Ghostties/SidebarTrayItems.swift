@@ -73,16 +73,6 @@ enum TrayGlassStyle {
         case pastel, rainbow
     }
 
-    /// Blend mode the chromatic rim composites with.
-    /// How the selected session row (rail pill and expanded row) is drawn.
-    /// `glass`: the tray's full glass treatment (`TrayGlassSurface`).
-    /// `flat`: the tray's fill colour and corner shape only, with no glass,
-    /// rims or specular, and a softer, closer shadow (`Look.selectedShadow…`),
-    /// so the row reads as the tray's sibling rather than a second tray.
-    enum SelectedStyle: String, CaseIterable {
-        case glass, flat
-    }
-
     /// How the tray is drawn. `glass`: the glass capsules. `bare`: no
     /// capsules, just the icons on the sidebar background, with a circular
     /// hover fill behind the hovered icon. Same sizes and positions either way.
@@ -91,19 +81,20 @@ enum TrayGlassStyle {
     }
 
     /// How the selected session row is marked, expanded and (where it makes
-    /// sense) rail. `glass` is the shipped look, still governed by the
-    /// `SelectedStyle` dial; the rest replace it. Row geometry is identical
-    /// across all of them.
+    /// sense) rail: the one "Selected row" dial. `glass` is the tray's glass
+    /// card; `flat` is the shipped default (tray fill and soft shadow, drawn
+    /// by `SidebarSelectedSurface`); the rest are drawn by
+    /// `SidebarRowCardBackground`. Row geometry is identical across all of
+    /// them, and every one is selected-state only (plain hover stays neutral).
     enum SelectedRowStyle: String, CaseIterable {
         case glass, flat, solid, accent, bar, type
 
-        /// Hover fill on a non-selected row; nil = no fill (`type` lifts text instead).
+        /// Hover fill on a non-selected row; nil = the caller's own (`glass`,
+        /// `flat`) or none (`type` lifts text instead).
         var hoverOpacity: Double? {
             switch self {
-            case .glass: return nil
-            case .flat: return 0.035
+            case .glass, .flat, .type: return nil
             case .solid, .accent, .bar: return 0.04
-            case .type: return nil
             }
         }
     }
@@ -277,13 +268,11 @@ enum TrayGlassStyle {
     static let capsuleCornerRadius: CGFloat = 32
     static let cornerRadius: CGFloat = 16.5
     /// Default selected-row marking (see `SelectedRowStyle`).
-    static let selectedRowStyle: SelectedRowStyle = .glass
+    static let selectedRowStyle: SelectedRowStyle = .flat
     /// Default tray style (see `TrayStyle`).
     static let trayStyle: TrayStyle = .glass
     /// Default expanded tray width (see `TrayWidth`).
     static let trayWidth: TrayWidth = .fill
-    /// Default selected-row style (see `SelectedStyle`).
-    static let selectedStyle: SelectedStyle = .flat
     /// Default selected-row title weight (see `SelectedTitleWeight`).
     static let selectedTitleWeight: SelectedTitleWeight = .semibold
     /// Rail hairline width (`SidebarSectionHairlineSlot`), the vertical
@@ -471,7 +460,7 @@ struct TrayGlassSurface: ViewModifier {
 }
 
 /// The selected session row's surface, in the rail and the expanded list
-/// alike, in the "Selected style" dial's style (`TrayGlassStyle.SelectedStyle`):
+/// alike, in the "Selected row" dial's style (`TrayGlassStyle.SelectedRowStyle`):
 /// `glass` is the tray's glass (`TrayGlassSurface`, never interactive);
 /// `flat` is the tray's fill colour and corner shape with the look's softer
 /// selected shadow and nothing else. Either way the same per-appearance
@@ -487,10 +476,10 @@ struct SidebarSelectedSurface: View {
     let shape: RoundedRectangle
 
     var body: some View {
-        switch SidebarDialTuning.selectedStyle() {
+        switch SidebarDialTuning.selectedRowStyle() {
         case .glass:
             Color.clear.modifier(TrayGlassSurface(shapeOverride: shape))
-        case .flat:
+        case .flat, .solid, .accent, .bar, .type:
             let look = SidebarDialTuning.trayGlass(for: colorScheme)
             shape
                 .fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
@@ -521,7 +510,7 @@ struct SidebarRowCardBackground: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius)
         let style = SidebarDialTuning.selectedRowStyle()
-        if style != .glass {
+        if style != .glass && style != .flat {
             styled(style, shape: shape)
         } else if isActive {
             SidebarSelectedSurface(shape: shape)
@@ -536,8 +525,6 @@ struct SidebarRowCardBackground: View {
     private func styled(_ style: TrayGlassStyle.SelectedRowStyle, shape: RoundedRectangle) -> some View {
         if isActive {
             switch style {
-            case .flat:
-                shape.fill(Color.primary.opacity(0.075))
             case .solid:
                 shape
                     .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color.white)
@@ -552,7 +539,7 @@ struct SidebarRowCardBackground: View {
                         .frame(width: 3, height: 24)
                         .padding(.leading, 4)
                 }
-            case .type, .glass:
+            case .type, .glass, .flat:
                 Color.clear
             }
         } else {

@@ -205,7 +205,8 @@ struct HistoryRowView: View {
             subtitle: subtitle,
             isActive: isActive,
             staggerIndex: staggerIndex,
-            redlineID: Self.redlineID
+            redlineID: Self.redlineID,
+            dimsUnselected: false
         ) {
             SidebarListRowTitle(text: "History", isActive: isActive)
         } trailing: {
