@@ -439,7 +439,7 @@ struct SidebarSelectedSurface: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
-    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {

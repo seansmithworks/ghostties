@@ -193,7 +193,7 @@ enum SidebarDialTuning {
         cgFloat(trayInnerPaddingKey, default: TrayGlassStyle.innerPadding, defaults: defaults)
     }
     /// Gap between the tray's Create and Toggle capsules, on both axes.
-    static func trayGroupGap(defaults: UserDefaults = .standard) -> CGFloat {
+    static func trayGroupGap(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayGroupGapKey, default: TrayGlassStyle.groupGap, defaults: defaults)
     }
     /// The glass's colour/material set for one appearance: each value its
@@ -224,11 +224,11 @@ enum SidebarDialTuning {
         )
     }
     /// The selected session row's style (`TrayGlassStyle.SelectedStyle`).
-    static func selectedStyle(defaults: UserDefaults = .standard) -> TrayGlassStyle.SelectedStyle {
+    static func selectedStyle(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.SelectedStyle {
         choice(selectedStyleKey, default: TrayGlassStyle.selectedStyle, defaults: defaults)
     }
     /// The selected expanded row's title weight (`TrayGlassStyle.SelectedTitleWeight`).
-    static func selectedTitleWeight(defaults: UserDefaults = .standard) -> TrayGlassStyle.SelectedTitleWeight {
+    static func selectedTitleWeight(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.SelectedTitleWeight {
         choice(selectedTitleWeightKey, default: TrayGlassStyle.selectedTitleWeight, defaults: defaults)
     }
     static func trayGlassInteractive(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
