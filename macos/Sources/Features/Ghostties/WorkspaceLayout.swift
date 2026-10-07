@@ -428,6 +428,25 @@ enum WorkspaceLayout {
         mode == .pinned ? margin : 0
     }
 
+    /// Hit width of the sidebar drag handle on the rail: a strip over the
+    /// rail's trailing edge, ending at the card's leading edge. Rail A2 has
+    /// no sidebar-to-card gap for the handle to fill, and the tray capsules'
+    /// `railTrayCapsuleInset` already leaves this strip clear.
+    static let railDragHandleHitWidth: CGFloat = 8
+
+    /// Width of the sidebar drag handle, whose trailing edge always sits on
+    /// the card's leading edge. Pinned: the sidebar-to-card gap it sits in
+    /// (`sidebarTrailingGutter`). Collapsed: `railDragHandleHitWidth`, over
+    /// the rail, so the handle never depends on the gap. Overlay/closed: 0
+    /// (the handle is hidden there).
+    static func sidebarDragHandleWidth(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
+        switch mode {
+        case .pinned: return sidebarTrailingGutter(for: .pinned, margin: margin)
+        case .collapsed: return railDragHandleHitWidth
+        case .closed, .overlay: return 0
+        }
+    }
+
     /// Inset of each rail tray capsule from the window's leading edge and
     /// from the canvas card (rail A2): the capsules stretch to
     /// `railWidth - 2 * railTrayCapsuleInset`, buttons centred inside.
