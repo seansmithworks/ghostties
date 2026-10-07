@@ -185,11 +185,34 @@ final class SidebarSectionsHistoryTests: XCTestCase {
         XCTAssertEqual(coordinator.sidebarSelectedSessionId, prior)
     }
 
+    /// Selecting a session whose terminal is open shows it and closes History.
     func testSelectingASessionClosesHistory() {
+        let live = session("rail spacing", ago: 10)
         let coordinator = SessionCoordinator()
+        coordinator.seedEmptySessionTreeForTesting(id: live.id)
         coordinator.presentHistory()
-        coordinator.focusSession(id: UUID())
+
+        coordinator.focusSession(id: live.id)
+
         XCTAssertFalse(coordinator.isHistoryPresented)
+        XCTAssertEqual(coordinator.activeSessionId, live.id)
+        XCTAssertEqual(coordinator.sidebarSelectedSessionId, live.id)
+    }
+
+    /// A pinned session whose terminal is closed has nothing to show, so
+    /// clicking it must not dismiss History and leave nothing selected.
+    func testSelectingAClosedPinnedSessionKeepsHistoryOpen() {
+        let closedPinned = session("inbox agent", ago: 600, isPinned: true)
+        let coordinator = SessionCoordinator()
+        let prior = UUID()
+        coordinator.setActiveSessionIdForTesting(prior)
+        coordinator.presentHistory()
+
+        coordinator.focusSession(id: closedPinned.id)
+
+        XCTAssertTrue(coordinator.isHistoryPresented, "History stays open when the focus has nothing to show")
+        XCTAssertEqual(coordinator.activeSessionId, prior)
+        XCTAssertNil(coordinator.sidebarSelectedSessionId, "the History row keeps the selected card")
     }
 
     func testResumeRoutesTheIdToTheRelaunchFlowWithTheRightMode() {

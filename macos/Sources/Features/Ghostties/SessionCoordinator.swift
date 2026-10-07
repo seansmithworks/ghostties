@@ -598,11 +598,14 @@ final class SessionCoordinator: ObservableObject {
     /// This is the "vertical tab" behavior — clicking a session in the sidebar
     /// replaces the terminal content with the target session's full split tree.
     func focusSession(id: UUID) {
-        // Any explicit session selection replaces the history browser.
-        isHistoryPresented = false
+        // A selection that actually shows something replaces the history
+        // browser (`isHistoryPresented = false` below, on each success path).
+        // A session with nothing to show (e.g. a closed pinned row) leaves
+        // History open and selected rather than selecting nothing.
 
         // Browser session path.
         if let manager = browserManagers[id] {
+            isHistoryPresented = false
             snapshotActiveTree()
             activeSessionId = id
             showBrowserInContainer(manager)
@@ -619,6 +622,8 @@ final class SessionCoordinator: ObservableObject {
         }
 
         guard let tree = sessionTrees[id] else { return }
+
+        isHistoryPresented = false
 
         // Snapshot the outgoing session's tree first.
         snapshotActiveTree()
