@@ -47,15 +47,19 @@ struct RailSessionShortcutTests {
 
     /// Three live, running sessions in one project, sidebar on the rail.
     private func makeRailRig() async -> Rig {
+        await makeRig(names: ["a", "b", "c"], mode: .collapsed)
+    }
+
+    private func makeRig(names: [String], mode: SidebarMode) async -> Rig {
         let project = Project(name: "p", rootPath: "~/p")
         let store = WorkspaceStore(testingProjects: [project])
         var sessions: [AgentSession] = []
-        for name in ["a", "b", "c"] {
+        for name in names {
             let session = store.addSession(name: name, templateId: UUID(), projectId: project.id)
             store.updateSessionStatus(id: session.id, status: .running)
             sessions.append(session)
         }
-        store.updateSidebarMode(.collapsed)
+        store.updateSidebarMode(mode)
 
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         for session in sessions {
@@ -71,7 +75,7 @@ struct RailSessionShortcutTests {
         await settle()
 
         let railOrder = store.railSessions()
-        #expect(railOrder.count == 3, "rig: all three sessions should be rail rows")
+        #expect(railOrder.count == names.count, "rig: every session should be a rail row")
         return Rig(container: container, window: window, store: store, railOrder: railOrder)
     }
 
@@ -114,6 +118,21 @@ struct RailSessionShortcutTests {
             object: rig.window,
             userInfo: ["index": 2]
         )
+        await settle()
+
+        #expect(rig.coordinator.activeSessionId == rig.railOrder[1].id)
+    }
+
+    /// Pinned mounts the expanded list. One Cmd+Shift+] must step exactly
+    /// once: with two sessions a double fire lands back where it started.
+    /// Holds whichever tab or view mode the host's defaults select.
+    @Test func pinnedNextSessionStepsExactlyOnce() async {
+        let rig = await makeRig(names: ["a", "b"], mode: .pinned)
+        defer { rig.tearDown() }
+        let start = rig.railOrder[0].id
+        rig.coordinator.focusSession(id: start)
+
+        NotificationCenter.default.post(name: .workspaceSelectNextSession, object: rig.window)
         await settle()
 
         #expect(rig.coordinator.activeSessionId == rig.railOrder[1].id)

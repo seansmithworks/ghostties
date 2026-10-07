@@ -146,22 +146,19 @@ struct WorkspaceSidebarView: View {
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             selectAdjacentProject(offset: -1)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectNextSession)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            selectAdjacentLiveSession(offset: 1)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectPreviousSession)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            selectAdjacentLiveSession(offset: -1)
-        }
         .onReceive(NotificationCenter.default.publisher(for: .workspaceCloseSession)) { notification in
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
             coordinator.closeCurrentSessionWithConfirmation()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceFocusSessionAtIndex)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceDidFocusSessionFromShortcut)) { notification in
+            // Cmd+Shift+[/] and Cmd+1-9 are handled by `WorkspaceViewContainer`
+            // (it exists in every sidebar mode; this view doesn't). The
+            // project expand/select is this view's own state, so it stays here.
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            guard let index = notification.userInfo?["index"] as? Int else { return }
-            focusVisibleSession(atIndex: index)
+            guard sidebarTab == .projects,
+                  let projectId = notification.userInfo?["projectId"] as? UUID else { return }
+            expandedProjectIds.insert(projectId)
+            selectedProjectId = projectId
         }
         .onReceive(NotificationCenter.default.publisher(for: .workspaceDidCreateSessionInProject)) { notification in
             // F1 (Phase 3 review): auto-expand the project a session was
@@ -284,72 +281,6 @@ struct WorkspaceSidebarView: View {
         expandedProjectIds.insert(targetId)
     }
 
-    /// Cmd+Shift+]/[ in Projects/Sessions tabs. Cycles focus through the
-    /// sessions visible in whichever tab is active, wrapping at both ends.
-    /// No-ops (no beep, no crash) when there are zero live sessions; is a
-    /// no-op when there is exactly one.
-    ///
-    /// - Projects tab: every session with a live surface
-    ///   (`store.sessionsInVisualOrder(coordinator:)` — not just `.running`
-    ///   ones, so cycling matches the browser-tab mental model and what's
-    ///   actually visible in the sidebar).
-    /// - Sessions tab: the ACTIVE zone only, in exactly the order
-    ///   `RecentsListView` renders it (`RecentsListView.activeSessions`) —
-    ///   the same static both use, so render order and cycle order can never
-    ///   drift apart. Archive rows are skipped.
-    ///
-    /// `expandedProjectIds`/`selectedProjectId` are Projects-tab-only
-    /// concepts. On the Sessions tab, writing them would be inert: nothing
-    /// there reads either — `RecentsListView` derives row highlight and
-    /// auto-expand from `coordinator.activeSessionId`. On the Projects tab,
-    /// writing them is redundant with `focusSession`, which already updates
-    /// `lastActiveSessionPerProject`. Scoped to the Projects-tab branch only.
-    private func selectAdjacentLiveSession(offset: Int) {
-        let liveSessions = currentTabLiveSessions()
-        guard let target = coordinator.focusAdjacentLiveSession(offset: offset, in: liveSessions) else { return }
-        if sidebarTab == .projects {
-            expandedProjectIds.insert(target.projectId)
-            selectedProjectId = target.projectId
-        }
-    }
-
-    /// The visible session list for whichever sidebar tab is showing right
-    /// now — shared by Cmd+Shift+[/] cycling (`selectAdjacentLiveSession`)
-    /// and Cmd+1-9 positional focus (`focusVisibleSession(atIndex:)`) so
-    /// both shortcuts always agree with what's actually on screen. See
-    /// `selectAdjacentLiveSession`'s doc comment for why the two tabs pull
-    /// from different sources.
-    private func currentTabLiveSessions() -> [AgentSession] {
-        if sidebarTab == .sessions {
-            return Self.sessionsTabCycleOrder(
-                sessions: store.sessions,
-                statuses: store.globalStatuses,
-                coordinator: coordinator
-            )
-        } else {
-            return store.sessionsInVisualOrder(coordinator: coordinator)
-        }
-    }
-
-    /// Cmd+1..8 focuses the Nth visible session (1-indexed); Cmd+9 always
-    /// focuses the LAST visible session regardless of how many there are.
-    /// Out-of-range (e.g. Cmd+7 with 4 sessions visible) is a no-op — no
-    /// wrap, no clamp, matching browser-tab convention. `index` is the raw
-    /// digit pressed (1-9).
-    private func focusVisibleSession(atIndex index: Int) {
-        let liveSessions = currentTabLiveSessions()
-        guard let target = index == 9
-            ? Self.lastSession(in: liveSessions)
-            : Self.session(at: index, in: liveSessions)
-        else { return }
-
-        coordinator.focusSession(id: target.id)
-        if sidebarTab == .projects {
-            expandedProjectIds.insert(target.projectId)
-            selectedProjectId = target.projectId
-        }
-    }
-
     /// Pure index lookup for Cmd+1..8 — static so tests can call it without
     /// a view instance, same pattern as `sessionsTabCycleOrder`. `index` is
     /// 1-indexed; anything outside `1...liveSessions.count` is a no-op.
@@ -368,7 +299,7 @@ struct WorkspaceSidebarView: View {
     /// render order — Pinned renders above Active in `RecentsListView`, so
     /// cycling matches what's on screen — filtered to sessions that still
     /// have a live surface. Extracted as a static so tests can call the
-    /// exact composition `selectAdjacentLiveSession` uses without
+    /// exact composition `WorkspaceViewContainer.shortcutSessions` uses without
     /// instantiating a view inside SwiftUI's environment.
     ///
     /// `RecentsListView.pinnedSessions`/`activeSessions` never overlap

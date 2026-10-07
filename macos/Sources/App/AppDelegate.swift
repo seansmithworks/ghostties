@@ -1143,9 +1143,9 @@ class AppDelegate: NSObject,
     /// (which act on real NSWindow tabs — irrelevant here, the sidebar IS
     /// the tab strip; see `TerminalController.relabelTabs()`). Posts
     /// `.workspaceFocusSessionAtIndex` with the pressed digit in `userInfo`;
-    /// `WorkspaceSidebarView` resolves it against whichever list the current
-    /// sidebar tab renders. ⌘9 always means "last visible session", not
-    /// literally the 9th.
+    /// `WorkspaceViewContainer` resolves it against whichever list the
+    /// mounted sidebar renders (the rail's rows when collapsed). ⌘9 always
+    /// means "last visible session", not literally the 9th.
     private func setupSessionIndexShortcuts() {
         _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],

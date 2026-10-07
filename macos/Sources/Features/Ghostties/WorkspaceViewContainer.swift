@@ -693,6 +693,9 @@ class WorkspaceViewContainer: NSView {
         NotificationCenter.default.removeObserver(self, name: NSWindow.didExitFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: .workspaceNewSession, object: nil)
         NotificationCenter.default.removeObserver(self, name: .workspaceNewSessionInstant, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceSelectNextSession, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceSelectPreviousSession, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceFocusSessionAtIndex, object: nil)
 
         guard let window = window else { return }
         // Give the coordinator a reference to this view so it can discover
@@ -768,6 +771,27 @@ class WorkspaceViewContainer: NSView {
             self,
             selector: #selector(handleWorkspaceNewSessionInstant(_:)),
             name: .workspaceNewSessionInstant,
+            object: window
+        )
+
+        // Cmd+Shift+]/[ and Cmd+1-9 — here for the same reason as Cmd+T:
+        // the rail unmounts the expanded list that used to observe them.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSelectNextSession(_:)),
+            name: .workspaceSelectNextSession,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSelectPreviousSession(_:)),
+            name: .workspaceSelectPreviousSession,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleFocusSessionAtIndex(_:)),
+            name: .workspaceFocusSessionAtIndex,
             object: window
         )
 
@@ -2190,6 +2214,86 @@ class WorkspaceViewContainer: NSView {
     /// never consulted here.
     @objc private func handleWorkspaceNewSessionInstant(_ notification: Notification) {
         instantCreateSession()
+    }
+
+    // MARK: - Session Switching Shortcuts (Cmd+Shift+[/], Cmd+1-9)
+
+    /// Cmd+Shift+]. Handled here, not in a sidebar view, for the same reason
+    /// as Cmd+T: the container exists in every sidebar mode, while each
+    /// sidebar view is only mounted in some (the rail replaces the expanded
+    /// list when collapsed), and a shortcut observed by an unmounted view
+    /// silently does nothing.
+    @objc private func handleSelectNextSession(_ notification: Notification) {
+        focusShortcutTarget(coordinator.focusAdjacentLiveSession(offset: 1, in: shortcutSessions()))
+    }
+
+    /// Cmd+Shift+[. See `handleSelectNextSession(_:)`.
+    @objc private func handleSelectPreviousSession(_ notification: Notification) {
+        focusShortcutTarget(coordinator.focusAdjacentLiveSession(offset: -1, in: shortcutSessions()))
+    }
+
+    /// Cmd+1..8 focuses the Nth listed session; Cmd+9 always the last.
+    /// Out of range is a no-op. See `handleSelectNextSession(_:)`.
+    @objc private func handleFocusSessionAtIndex(_ notification: Notification) {
+        guard let index = notification.userInfo?["index"] as? Int else { return }
+        let sessions = shortcutSessions()
+        guard let target = index == 9
+            ? WorkspaceSidebarView.lastSession(in: sessions)
+            : WorkspaceSidebarView.session(at: index, in: sessions)
+        else { return }
+        coordinator.focusSession(id: target.id)
+        focusShortcutTarget(target)
+    }
+
+    /// Lets the Projects tab expand and select the focused session's
+    /// project — that selection is the list view's own state.
+    private func focusShortcutTarget(_ target: AgentSession?) {
+        guard let target else { return }
+        NotificationCenter.default.post(
+            name: .workspaceDidFocusSessionFromShortcut,
+            object: window,
+            userInfo: ["projectId": target.projectId]
+        )
+    }
+
+    /// The sessions the switching shortcuts act on, for this container's
+    /// current state.
+    private func shortcutSessions() -> [AgentSession] {
+        let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+        return Self.shortcutSessions(
+            sidebarMode: sidebarMode,
+            sidebarViewMode: currentSidebarViewMode,
+            sidebarTab: tab,
+            store: store,
+            coordinator: coordinator
+        )
+    }
+
+    /// The live sessions in the order the mounted sidebar lists them, so the
+    /// shortcuts always agree with what's on screen:
+    /// - collapsed: the rail's rows (`WorkspaceStore.railSessions()`), in
+    ///   both view modes — the rail replaces whichever list is otherwise up;
+    /// - task-first, or the Projects tab: `sessionsInVisualOrder`;
+    /// - the Sessions tab: Pinned then Active, as `RecentsListView` renders.
+    /// Pinned, overlay and closed all host the full list, so they share it.
+    static func shortcutSessions(
+        sidebarMode: SidebarMode,
+        sidebarViewMode: String,
+        sidebarTab: SidebarTab,
+        store: WorkspaceStore,
+        coordinator: SessionCoordinator
+    ) -> [AgentSession] {
+        if sidebarMode == .collapsed {
+            return store.railSessions().filter { coordinator.hasLiveSurface(id: $0.id) }
+        }
+        if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
+            return store.sessionsInVisualOrder(coordinator: coordinator)
+        }
+        return WorkspaceSidebarView.sessionsTabCycleOrder(
+            sessions: store.sessions,
+            statuses: store.globalStatuses,
+            coordinator: coordinator
+        )
     }
 
     /// Opens the centered session composer overlay. Called from Cmd+T

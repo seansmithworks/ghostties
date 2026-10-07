@@ -1393,9 +1393,9 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     /// "Next Session" — Cmd+Shift+]. Cycles the active terminal session — the
-    /// same behavior in every sidebar view (Projects, Sessions, task-first).
-    /// `WorkspaceSidebarView` and `TaskSidebarView` both observe
-    /// `.workspaceSelectNextSession` and call
+    /// same behavior in every sidebar view (Projects, Sessions, task-first)
+    /// and every sidebar mode, rail included. `WorkspaceViewContainer`
+    /// observes `.workspaceSelectNextSession` and calls
     /// `SessionCoordinator.focusAdjacentLiveSession(offset:in:)`.
     ///
     /// Reachable via the "Next Session" menu item (mouse click) or the
@@ -1863,7 +1863,7 @@ extension TerminalController {
         // loose: it only greys out on zero projects, even though with exactly
         // one project already selected and expanded, `selectAdjacentProject(offset:)`
         // in `WorkspaceSidebarView` is also a no-op (mirrors the documented
-        // behavior of `selectAdjacentLiveSession` below). It can't be tightened
+        // behavior of Next/Previous Session below). It can't be tightened
         // to `count > 1` from here — `selectedProjectId` is per-window SwiftUI
         // `@State` that `TerminalController` (AppKit) can't read. And a stale
         // `selectedProjectId` (e.g. the selected project was deleted) makes
@@ -1876,7 +1876,7 @@ extension TerminalController {
         // NOTE: "Next Session" / "Previous Session" (`selectNextSession(_:)` /
         // `selectPreviousSession(_:)`) have the identical bug (always enabled,
         // silent no-op with zero live sessions) but are NOT fixed here.
-        // `selectAdjacentLiveSession` validates against
+        // `WorkspaceViewContainer.shortcutSessions` validates against
         // `WorkspaceStore.sessionsInVisualOrder(coordinator:)`, which requires
         // a `SessionCoordinator` reference. `TerminalController` has no path to
         // the per-window `SessionCoordinator` — it's a private property on

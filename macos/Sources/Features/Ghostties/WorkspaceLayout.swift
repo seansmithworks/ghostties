@@ -680,16 +680,16 @@ extension Notification.Name {
     /// The notification object is the originating NSWindow.
     static let workspaceSelectPreviousProject = Notification.Name("com.seansmithdesign.ghostties.workspace.selectPreviousProject")
 
-    /// Posted by TerminalController when the user presses Cmd+Shift+] in
-    /// project-first sidebar mode. The notification object is the originating
-    /// NSWindow. `WorkspaceSidebarView` observes this to cycle focus forward
-    /// through live (running) sessions in sidebar visual order.
+    /// Posted by TerminalController when the user presses Cmd+Shift+]. The
+    /// notification object is the originating NSWindow. `WorkspaceViewContainer`
+    /// observes this, in every sidebar mode, to cycle focus forward through
+    /// live sessions in the order the mounted sidebar lists them.
     static let workspaceSelectNextSession = Notification.Name("com.seansmithdesign.ghostties.workspace.selectNextSession")
 
-    /// Posted by TerminalController when the user presses Cmd+Shift+[ in
-    /// project-first sidebar mode. The notification object is the originating
-    /// NSWindow. `WorkspaceSidebarView` observes this to cycle focus backward
-    /// through live (running) sessions in sidebar visual order.
+    /// Posted by TerminalController when the user presses Cmd+Shift+[. The
+    /// notification object is the originating NSWindow. `WorkspaceViewContainer`
+    /// observes this, in every sidebar mode, to cycle focus backward through
+    /// live sessions in the order the mounted sidebar lists them.
     static let workspaceSelectPreviousSession = Notification.Name("com.seansmithdesign.ghostties.workspace.selectPreviousSession")
 
     /// Posted by TerminalController when the user presses Cmd+Shift+] in
@@ -745,9 +745,16 @@ extension Notification.Name {
     /// workspace mode only. The notification object is the originating
     /// NSWindow; `userInfo["index"]` carries the digit pressed (1-9, where 9
     /// always means "last visible session", not literally the 9th).
-    /// `WorkspaceSidebarView` resolves the index against whichever list the
-    /// active sidebar tab renders.
+    /// `WorkspaceViewContainer` resolves the index against whichever list the
+    /// mounted sidebar renders (the rail's rows when collapsed).
     static let workspaceFocusSessionAtIndex = Notification.Name("com.seansmithdesign.ghostties.workspace.focusSessionAtIndex")
+
+    /// Posted by `WorkspaceViewContainer` after Cmd+Shift+[/] or Cmd+1-9
+    /// focuses a session. The notification object is the window;
+    /// `userInfo["projectId"]` is the session's project `UUID`.
+    /// `WorkspaceSidebarView` observes this to expand and select that
+    /// project on the Projects tab.
+    static let workspaceDidFocusSessionFromShortcut = Notification.Name("com.seansmithdesign.ghostties.workspace.didFocusSessionFromShortcut")
 
     /// Posted by MenuBarDropdownView when the user clicks a session row.
     /// userInfo contains "sessionId" (UUID). SessionCoordinators observe this
