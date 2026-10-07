@@ -53,13 +53,18 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         XCTAssertEqual(Placement.allCases.map(\.rawValue), ["afterActive", "bottom"])
     }
 
+    /// On a private suite: a reset of the shared dial suite would clear the
+    /// dials of tests running in parallel processes.
     func testResetClearsThePlacementDial() {
-        let store = SidebarDialTuning.store
+        let name = "com.seansmithdesign.ghostties.tests.history-placement-reset"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        defer { d.removePersistentDomain(forName: name) }
         XCTAssertTrue(SidebarDialTuning.allKeys.contains(SidebarDialTuning.historyPlacementKey))
-        store.set("afterActive", forKey: SidebarDialTuning.historyPlacementKey)
-        SidebarDialTuning.reset()
-        XCTAssertNil(store.object(forKey: SidebarDialTuning.historyPlacementKey))
-        XCTAssertEqual(SidebarDialTuning.historyPlacement(), .bottom)
+        d.set("afterActive", forKey: SidebarDialTuning.historyPlacementKey)
+        SidebarDialTuning.reset(defaults: d)
+        XCTAssertNil(d.object(forKey: SidebarDialTuning.historyPlacementKey))
+        XCTAssertEqual(SidebarDialTuning.historyPlacement(defaults: d), .bottom)
     }
 
     // MARK: - Section model
@@ -100,8 +105,24 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     /// (mirroring `WorkspaceSidebarView`: titlebar band, list, spacer, the
     /// tray's reserved space) or the rail, with the opaque tray overlaid at
     /// the bottom the way the sidebar root hosts it.
+    ///
+    /// The dial suite is one on-disk domain shared by every parallel test
+    /// process, and a process starting up clears it
+    /// (`GhosttiesTestIsolation`), so a dial can vanish mid-render. The
+    /// render is retried until the dials it set held from start to finish.
     private func render(rail: Bool, placement: Placement, sessionCount: Int, height: CGFloat, selectHistory: Bool = true) throws -> Render {
-        SidebarDialTuning.store.set(placement.rawValue, forKey: SidebarDialTuning.historyPlacementKey)
+        for _ in 0..<5 {
+            let store = SidebarDialTuning.store
+            store.set(TrayGlassStyle.SelectedStyle.flat.rawValue, forKey: SidebarDialTuning.selectedStyleKey)
+            store.set(placement.rawValue, forKey: SidebarDialTuning.historyPlacementKey)
+            let r = try renderOnce(rail: rail, sessionCount: sessionCount, height: height, selectHistory: selectHistory)
+            if SidebarDialTuning.historyPlacement() == placement && SidebarDialTuning.selectedStyle() == .flat { return r }
+        }
+        struct DialsKeptChanging: Error {}
+        throw DialsKeptChanging()
+    }
+
+    private func renderOnce(rail: Bool, sessionCount: Int, height: CGFloat, selectHistory: Bool) throws -> Render {
         let project = Project(name: "atlas-api", rootPath: "~/Code/atlas-api")
         let sessions = (0..<sessionCount).map { i in
             AgentSession(
