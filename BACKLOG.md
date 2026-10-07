@@ -3183,3 +3183,5 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 - [ ] Tab title sometimes misses the Claude thread name set via /rename (seen 2026-09-25, "Jev adoption" thread). Statusline now reads `session_name` reliably; tab-title path should use the same source.
 
 - [ ] **Faded row labels after rail → closed → pinned** (found in vnext review, 2026-10-06; also on main `3468b7028`): `isCollapsedPresentation` is written only in `applyCollapseCrossfadeSidebarView`, so a closed→pinned swap can leave `RecentsRowView` labels faded until the next Cmd+S. Fix: reset the flag in `applySidebarView`.
+
+- [ ] **Sidebar tests read the live Dev dial defaults** (found 2026-10-06; also on main `3468b7028`): `SessionRowGlyphSlotTests/testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail` reads `SidebarDialTuning.*` from `UserDefaults.standard` (the Dev domain in the hosted test process) and compares against code constants, so it fails whenever Sean has tuned `trayInnerPadding`. Fix: tests inject a throwaway defaults suite (same rule as the injected state dir), never read Dev's domain.
