@@ -83,6 +83,13 @@ enum TrayGlassStyle {
         case glass, flat
     }
 
+    /// How the tray is drawn. `glass`: the glass capsules. `bare`: no
+    /// capsules, just the icons on the sidebar background, with a circular
+    /// hover fill behind the hovered icon. Same sizes and positions either way.
+    enum TrayStyle: String, CaseIterable {
+        case glass, bare
+    }
+
     /// The expanded tray's width. `fill`: the Create capsule stretches across
     /// the bar, from the leading margin to the group gap before the Toggle
     /// capsule, and its buttons share that width evenly. `hug`: both capsules
@@ -251,6 +258,8 @@ enum TrayGlassStyle {
     static let cornerStyle: CornerStyle = .radius
     static let capsuleCornerRadius: CGFloat = 32
     static let cornerRadius: CGFloat = 16.5
+    /// Default tray style (see `TrayStyle`).
+    static let trayStyle: TrayStyle = .glass
     /// Default expanded tray width (see `TrayWidth`).
     static let trayWidth: TrayWidth = .fill
     /// Default selected-row style (see `SelectedStyle`).
@@ -517,18 +526,24 @@ struct SidebarTrayPill<Content: View>: View {
     /// Rail A2: the capsule fills the width it is offered instead of hugging,
     /// its buttons (still their dial size) centred inside.
     var stretchesAcross = false
+    /// "Tray style: Bare": same frame and padding, no glass surface.
+    var bare = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         let layout = axis == .vertical
             ? AnyLayout(VStackLayout(spacing: TrayGlassStyle.verticalItemGap))
             : AnyLayout(HStackLayout(spacing: TrayGlassStyle.horizontalItemGap))
-        layout(content)
+        let framed = layout(content)
             .frame(maxWidth: stretchesAcross ? .infinity : nil)
             .redlineFrame(redlineID.map { $0 + ".content" })
             .padding(SidebarDialTuning.trayInnerPadding())
             .redlineFrame(redlineID)
-            .modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive()))
+        if bare {
+            framed
+        } else {
+            framed.modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive()))
+        }
     }
 }
 
@@ -610,9 +625,30 @@ struct SidebarTray: View {
         // Expanded "Tray width: fill": the Create capsule takes the bar's
         // spare width (its buttons flex; the Toggle capsule's stay square).
         let fillsCreate = !isVertical && SidebarDialTuning.trayWidth() == .fill
+        let bare = SidebarDialTuning.trayStyle() == .bare
         groupLayout {
+            if bare && !isVertical {
+                // Bare, expanded: one row, every icon an equal share of the
+                // tray width, at the capsule's height (same padding).
+                HStack(spacing: 0) {
+                    ForEach(items) { item in
+                        TrayIconButton(
+                            itemId: item.id,
+                            systemName: item.systemName,
+                            label: item.label,
+                            isVertical: false,
+                            fillsWidth: true,
+                            bare: true,
+                            tapEffect: item.tapEffect,
+                            action: item.action
+                        )
+                    }
+                }
+                .padding(SidebarDialTuning.trayInnerPadding())
+                .redlineFrame(RedlineID.trayPill("bare"))
+            } else {
             ForEach(groups, id: \.self) { group in
-                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue), stretchesAcross: isVertical) {
+                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue), stretchesAcross: isVertical, bare: bare) {
                     ForEach(items.filter { $0.group == group }) { item in
                         TrayIconButton(
                             itemId: item.id,
@@ -620,15 +656,17 @@ struct SidebarTray: View {
                             label: item.label,
                             isVertical: isVertical,
                             fillsWidth: fillsCreate && group == .create,
+                            bare: bare,
                             tapEffect: item.tapEffect,
                             action: item.action
                         )
                     }
                 }
             }
+            }
         }
         // One glass container for both capsules, so neither samples the other.
-        .modifier(TrayGlassGroupContainer(forceOpaque: forceOpaque))
+        .modifier(TrayGlassGroupContainer(forceOpaque: forceOpaque || bare))
         .redlineFrame(RedlineID.trayGroup)
         // Expanded: the window margin is the visible gap on each side; on
         // the trailing side the gutter outside the column already provides
@@ -682,6 +720,9 @@ struct TrayIconButton: View {
     /// is fixed either way, and the hover highlight fills the cell, so it
     /// keeps the capsule's concentric inset.
     var fillsWidth = false
+    /// "Tray style: Bare": the hover fill is a circle of the button size
+    /// behind the icon, not the capsule-concentric highlight.
+    var bare = false
     /// Symbol animation to play on click — see `TrayIconTapEffect`.
     var tapEffect: TrayIconTapEffect? = nil
     let action: () -> Void
@@ -714,10 +755,16 @@ struct TrayIconButton: View {
                     minHeight: size,
                     maxHeight: size
                 )
-                .background(
-                    TrayGlassStyle.buttonHighlightShape()
-                        .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
-                )
+                .background {
+                    if bare {
+                        Circle()
+                            .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
+                            .frame(width: size, height: size)
+                    } else {
+                        TrayGlassStyle.buttonHighlightShape()
+                            .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
+                    }
+                }
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
