@@ -214,6 +214,7 @@ struct RecentsListView: View {
                 subtitle: HistorySummary.subtitle(count: sections.historyCount, lastActiveAt: sections.historyLastActiveAt),
                 isActive: coordinator.isHistoryPresented,
                 staggerIndex: sections.active.count,
+                dialEpoch: SidebarDialTuning.epoch(),
                 onTap: { coordinator.presentHistory() }
             )
         }

@@ -145,6 +145,9 @@ struct HistoryRowView: View {
     let subtitle: String
     let isActive: Bool
     var staggerIndex: Int = 0
+    /// `SidebarDialTuning.epoch()`, as on `RecentsRowView`: a changed input
+    /// so a live dial edit re-renders this row like the session rows.
+    var dialEpoch: Int = 0
     let onTap: () -> Void
 
     static let redlineID = "row.history"
