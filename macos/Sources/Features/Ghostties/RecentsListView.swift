@@ -155,7 +155,7 @@ struct RecentsListView: View {
 
     // MARK: - Sections Content
 
-    /// The Sessions tab's actual section list — headers, rows, the History
+    /// The Sessions tab's actual section list — rows, hairlines, the History
     /// row, the live-reflow gap, and every drop zone. Factored out of
     /// `sessionsScrollView` so `body` can also render it unwrapped by
     /// `ScrollView` under `skipScrollViewForTesting` (`#if DEBUG` only) — see
@@ -181,17 +181,17 @@ struct RecentsListView: View {
             // instead (item 2) so pinning a first session no
             // longer requires the context menu.
             if !sections.pinned.isEmpty {
-                SessionSectionHeader(title: "Pinned", count: sections.pinned.count)
                 sectionRows(sections.pinned, section: .pinned)
                 endDropZone(section: .pinned, sectionList: sections.pinned)
             } else if dragState.isDragging {
-                SessionSectionHeader(title: "Pinned", count: 0)
                 emptyPinnedDropZone
             }
 
             // Active always renders (when there's at least one session
-            // anywhere); every header carries a count.
-            SessionSectionHeader(title: "Active", count: sections.active.count)
+            // anywhere). A hairline separates it from Pinned, same as the rail.
+            if !sections.pinned.isEmpty && !sections.active.isEmpty {
+                SidebarSectionHairlineSlot(width: nil)
+            }
             // Keyed on the stable `\.id` (default Identifiable) —
             // NOT `\.self`. `\.self` was tried and reverted: it makes
             // row identity churn on every `lastActiveAt` write (see
@@ -206,6 +206,10 @@ struct RecentsListView: View {
             // layered on top, not what makes rows fresh.
             sectionRows(sections.active, section: .active)
             endDropZone(section: .active, sectionList: sections.active)
+
+            if !sections.rowSessions.isEmpty {
+                SidebarSectionHairlineSlot(width: nil)
+            }
 
             // Inactive and archived sessions never render as rows — one
             // History row stands in for them (mock I3) and opens the
@@ -845,37 +849,6 @@ struct RecentsListView: View {
                 return lhs.offset < rhs.offset
             }
             .map(\.element)
-    }
-}
-
-// MARK: - Section Header
-
-/// A quiet, non-interactive section label with its count — "Pinned 2"
-/// (mock I3). No chevron: sections no longer collapse. The rail reuses it,
-/// hidden, as a label-less slot of the same height (`RailSectionHeaderSlot`).
-struct SessionSectionHeader: View {
-    let title: String
-    let count: Int
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        HStack(spacing: 0) {
-            (Text(title)
-                .font(.system(size: SidebarDialTuning.headerTextSize(), weight: .medium))
-             + Text(" \(count)")
-                .font(.system(size: SidebarDialTuning.headerTextSize(), weight: .regular)))
-                .foregroundColor(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
-        .padding(.trailing, WorkspaceLayout.sessionSectionHeaderTrailingPadding)
-        .padding(.top, SidebarDialTuning.headerTopPadding())
-        .padding(.bottom, SidebarDialTuning.headerBottomPadding())
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityLabel("\(title), \(count)")
     }
 }
 

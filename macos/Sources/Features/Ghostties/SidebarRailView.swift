@@ -35,11 +35,9 @@ struct SidebarRailView: View {
             // Same structure and rhythm as the expanded Sessions list
             // (`RecentsListView`, mock I3/H), element for element, so every
             // rail glyph sits at its expanded row's y across the pinned⇄rail
-            // morph: each section header becomes a label-less slot of the
-            // header's own height, and each zero-height end-of-section drop
-            // zone a zero-height marker. Hairlines ride on those slots —
-            // between Pinned and Active, and before the History clock. No
-            // labels, counts or chevrons.
+            // morph: each zero-height end-of-section drop zone becomes a
+            // zero-height marker, and the hairline slots (between Pinned and
+            // Active, and before the History clock) are the same slot in both.
             let sections = SidebarSessionSections.make(
                 sessions: store.sessions,
                 statuses: store.globalStatuses,
@@ -47,17 +45,21 @@ struct SidebarRailView: View {
             )
             VStack(spacing: SidebarDialTuning.rowGap()) {
                 if !sections.pinned.isEmpty {
-                    RailSectionHeaderSlot(showsHairline: false)
                     ForEach(sections.pinned) { session in
                         railRow(for: session)
                     }
-                    RailSectionEndMarker(showsHairline: false)
+                    RailSectionEndMarker()
                 }
-                RailSectionHeaderSlot(showsHairline: !sections.pinned.isEmpty)
+                if !sections.pinned.isEmpty && !sections.active.isEmpty {
+                    SidebarSectionHairlineSlot(width: SidebarDialTuning.traySelectedPillWidth())
+                }
                 ForEach(sections.active) { session in
                     railRow(for: session)
                 }
-                RailSectionEndMarker(showsHairline: !sections.rowSessions.isEmpty)
+                RailSectionEndMarker()
+                if !sections.rowSessions.isEmpty {
+                    SidebarSectionHairlineSlot(width: SidebarDialTuning.traySelectedPillWidth())
+                }
                 RailHistoryRow(
                     subtitle: HistorySummary.subtitle(count: sections.historyCount, lastActiveAt: sections.historyLastActiveAt),
                     isActive: coordinator.isHistoryPresented,

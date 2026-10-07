@@ -158,12 +158,6 @@ enum SidebarDialTuning {
     static let rowLeadingPaddingKey = "ghostties.sidebarDial.rowLeadingPadding"
     static let rowTrailingPaddingKey = "ghostties.sidebarDial.rowTrailingPadding"
 
-    // MARK: Section headers
-    static let headerTextSizeKey = "ghostties.sidebarDial.headerTextSize"
-    static let headerTopPaddingKey = "ghostties.sidebarDial.headerTopPadding"
-    static let headerBottomPaddingKey = "ghostties.sidebarDial.headerBottomPadding"
-    static let headerChevronSizeKey = "ghostties.sidebarDial.headerChevronSize"
-
     // MARK: Sidebar layout
     static let contentPaddingTopKey = "ghostties.sidebarDial.contentPaddingTop"
     static let contentPaddingLeadingKey = "ghostties.sidebarDial.contentPaddingLeading"
@@ -320,18 +314,6 @@ enum SidebarDialTuning {
         cgFloat(rowTrailingPaddingKey, default: WorkspaceLayout.recentsRowTrailingPadding, defaults: defaults)
     }
 
-    static func headerTextSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(headerTextSizeKey, default: WorkspaceLayout.sessionSectionHeaderTextSize, defaults: defaults)
-    }
-    static func headerTopPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(headerTopPaddingKey, default: WorkspaceLayout.sessionSectionHeaderTopPadding, defaults: defaults)
-    }
-    static func headerBottomPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(headerBottomPaddingKey, default: WorkspaceLayout.sessionSectionHeaderBottomPadding, defaults: defaults)
-    }
-    static func headerChevronSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(headerChevronSizeKey, default: WorkspaceLayout.sessionSectionHeaderChevronSize, defaults: defaults)
-    }
 
     static func contentPaddingTop(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(contentPaddingTopKey, default: WorkspaceLayout.sidebarContentPaddingTop, defaults: defaults)
@@ -373,7 +355,6 @@ enum SidebarDialTuning {
         traySelectedPillWidthKey, traySelectedPillHeightKey, selectedStyleKey, selectedTitleWeightKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
-        headerTextSizeKey, headerTopPaddingKey, headerBottomPaddingKey, headerChevronSizeKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         railExtraWidthKey
     ]
@@ -514,10 +495,6 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var rowLeadingPadding: Double
     var rowTrailingPadding: Double
 
-    var headerTextSize: Double
-    var headerTopPadding: Double
-    var headerBottomPadding: Double
-    var headerChevronSize: Double
 
     var contentPaddingTop: Double
     var contentPaddingLeading: Double
@@ -608,10 +585,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             rowGhostSize: Double(SidebarDialTuning.rowGhostSize(defaults: defaults)),
             rowLeadingPadding: Double(SidebarDialTuning.rowLeadingPadding(defaults: defaults)),
             rowTrailingPadding: Double(SidebarDialTuning.rowTrailingPadding(defaults: defaults)),
-            headerTextSize: Double(SidebarDialTuning.headerTextSize(defaults: defaults)),
-            headerTopPadding: Double(SidebarDialTuning.headerTopPadding(defaults: defaults)),
-            headerBottomPadding: Double(SidebarDialTuning.headerBottomPadding(defaults: defaults)),
-            headerChevronSize: Double(SidebarDialTuning.headerChevronSize(defaults: defaults)),
             contentPaddingTop: Double(SidebarDialTuning.contentPaddingTop(defaults: defaults)),
             contentPaddingLeading: Double(SidebarDialTuning.contentPaddingLeading(defaults: defaults)),
             contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
@@ -694,10 +667,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.rowGhostSizeKey, previous.rowGhostSize, model.rowGhostSize)
         setIfChanged(SidebarDialTuning.rowLeadingPaddingKey, previous.rowLeadingPadding, model.rowLeadingPadding)
         setIfChanged(SidebarDialTuning.rowTrailingPaddingKey, previous.rowTrailingPadding, model.rowTrailingPadding)
-        setIfChanged(SidebarDialTuning.headerTextSizeKey, previous.headerTextSize, model.headerTextSize)
-        setIfChanged(SidebarDialTuning.headerTopPaddingKey, previous.headerTopPadding, model.headerTopPadding)
-        setIfChanged(SidebarDialTuning.headerBottomPaddingKey, previous.headerBottomPadding, model.headerBottomPadding)
-        setIfChanged(SidebarDialTuning.headerChevronSizeKey, previous.headerChevronSize, model.headerChevronSize)
         setIfChanged(SidebarDialTuning.contentPaddingTopKey, previous.contentPaddingTop, model.contentPaddingTop)
         setIfChanged(SidebarDialTuning.contentPaddingLeadingKey, previous.contentPaddingLeading, model.contentPaddingLeading)
         setIfChanged(SidebarDialTuning.contentPaddingTrailingKey, previous.contentPaddingTrailing, model.contentPaddingTrailing)
@@ -787,11 +756,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .slider("rowGhostSize", keyPath: \.rowGhostSize, label: "Row ghost size", range: 8...24, unit: "pt"),
         .slider("rowLeadingPadding", keyPath: \.rowLeadingPadding, label: "Row leading padding", range: 0...24, unit: "pt"),
         .slider("rowTrailingPadding", keyPath: \.rowTrailingPadding, label: "Row trailing padding", range: 0...24, unit: "pt"),
-        // Section headers
-        .slider("headerTextSize", keyPath: \.headerTextSize, label: "Header text size", range: 8...16, unit: "pt"),
-        .slider("headerTopPadding", keyPath: \.headerTopPadding, label: "Header top padding", range: 0...20, unit: "pt"),
-        .slider("headerBottomPadding", keyPath: \.headerBottomPadding, label: "Header bottom padding", range: 0...20, unit: "pt"),
-        .slider("headerChevronSize", keyPath: \.headerChevronSize, label: "Header chevron size", range: 8...24, unit: "pt"),
         // Sidebar layout. Window margin is every outer gutter; the content
         // paddings below are inner spacing inside it.
         .slider("windowMargin", keyPath: \.windowMargin, label: "Window margin", range: 0...32, unit: "pt"),

@@ -217,46 +217,33 @@ struct RailHistoryRow: View {
     }
 }
 
-/// The rail's hairline between Pinned, Active and History (mock H).
-struct RailSectionHairline: View {
+/// The slot that carries a hairline between sidebar groups. One fixed height
+/// in both the expanded list (full width) and the rail (`width` = the pill
+/// width), so rows keep the same y through the pinned⇄rail morph.
+struct SidebarSectionHairlineSlot: View {
+    let width: CGFloat?
+
     var body: some View {
-        Rectangle()
-            .fill(WorkspaceLayout.railSectionHairline)
-            .frame(width: SidebarDialTuning.traySelectedPillWidth(), height: 1)
+        Color.clear
+            .frame(height: WorkspaceLayout.sessionSectionHairlineSlotHeight)
             .frame(maxWidth: .infinity)
-            .accessibilityHidden(true)
-    }
-}
-
-/// Stands in for an expanded section header in the rail: the header itself,
-/// hidden, so the slot is exactly the header's height; optionally a hairline
-/// centred in it.
-struct RailSectionHeaderSlot: View {
-    let showsHairline: Bool
-
-    var body: some View {
-        SessionSectionHeader(title: "Active", count: 0)
-            .hidden()
             .overlay {
-                if showsHairline { RailSectionHairline() }
+                Rectangle()
+                    .fill(WorkspaceLayout.railSectionHairline)
+                    .frame(width: width, height: 1)
+                    .padding(.horizontal, width == nil ? WorkspaceLayout.sidebarRowLeadingPadding : 0)
             }
             .accessibilityHidden(true)
     }
 }
 
-/// Stands in for the expanded list's zero-height end-of-section drop zone,
-/// so the rail keeps the same row-gap rhythm; optionally carries a hairline
-/// centred between the rows on either side.
+/// Stands in for the expanded list's zero-height end-of-section drop
+/// zone, so the rail keeps the same row-gap rhythm.
 struct RailSectionEndMarker: View {
-    let showsHairline: Bool
-
     var body: some View {
         Color.clear
             .frame(height: 0)
             .frame(maxWidth: .infinity)
-            .overlay {
-                if showsHairline { RailSectionHairline() }
-            }
             .accessibilityHidden(true)
     }
 }
