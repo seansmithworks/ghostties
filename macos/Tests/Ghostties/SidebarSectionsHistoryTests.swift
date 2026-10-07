@@ -408,4 +408,47 @@ final class SidebarSectionsHistoryTests: XCTestCase {
         XCTAssertEqual((clock.minX + clock.maxX) / 2, width / 2, accuracy: 0.5)
         XCTAssertEqual((clock.minY + clock.maxY) / 2, rowHeight / 2, accuracy: 1.0)
     }
+
+    // MARK: - No section titles
+
+    /// "No more section titles": the first row of the expanded list sits where
+    /// a bare row would, directly under the list's top padding. A "Pinned" or
+    /// "Active" header above it would push its ink down by the header's height
+    /// (about 25pt). Tested for a pinned first row and for an active first row.
+    func testExpandedListRendersNoSectionTitles() throws {
+        let bare = try XCTUnwrap(render(SessionRowHarness()))
+        let bareInk = try XCTUnwrap(ink(bare, fromX: 0, toX: width - 60), "bare row ink")
+        let expectedTop = SidebarDialTuning.contentPaddingTop() + bareInk.minY
+
+        for pinned in [true, false] {
+            let project = Project(name: "3 sessions · last 2h ago", rootPath: "~/Code/x")
+            let row = AgentSession(
+                name: "History", templateId: UUID(), projectId: project.id,
+                lastActiveAt: now, lastOutputAt: now, isPinned: pinned
+            )
+            let store = WorkspaceStore(
+                testingProjects: [project], testingSessions: [row],
+                hasShownPinMigrationNotice: true, hasDismissedPinMigrationNotice: true
+            )
+            store.updateIndicatorState(id: row.id, state: .idle)
+            store.updateSessionStatus(id: row.id, status: .running)
+            let list = RecentsListView(previewDragState: SessionDragState())
+                .environmentObject(store).environmentObject(SessionCoordinator())
+                .environmentObject(SidebarWidthModel(width: width))
+                .frame(width: width, height: 300, alignment: .top)
+                .background(Color.white)
+            let hosting = NSHostingView(rootView: list)
+            hosting.frame = NSRect(x: 0, y: 0, width: width, height: 300)
+            let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.appearance = NSAppearance(named: .aqua)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            defer { window.orderOut(nil) }
+            hosting.layoutSubtreeIfNeeded()
+            let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+            hosting.cacheDisplay(in: hosting.bounds, to: rep)
+            let first = try XCTUnwrap(ink(rep, fromX: 0, toX: width - 60), "list ink (pinned: \(pinned))")
+            XCTAssertEqual(first.minY, expectedTop, accuracy: 3, "first row sits directly under the list top, no header above it (pinned: \(pinned))")
+        }
+    }
 }

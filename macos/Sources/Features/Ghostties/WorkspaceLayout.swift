@@ -374,25 +374,10 @@ enum WorkspaceLayout {
     /// `sidebarRowLeadingPadding`, shared with every other sidebar row/header).
     static let recentsRowTrailingPadding: CGFloat = 10
 
-    /// Section header ("Pinned"/"Active"/"Inactive"/"Archive") title/count
-    /// text size in `RecentsListView`'s `SessionSectionHeader`.
-    static let sessionSectionHeaderTextSize: CGFloat = 11
-
-    /// Section header top padding (`SessionSectionHeader`).
-    static let sessionSectionHeaderTopPadding: CGFloat = 8
-
-    /// Section header bottom padding (`SessionSectionHeader`).
-    static let sessionSectionHeaderBottomPadding: CGFloat = 4
-
-    /// Section header chevron size (`SessionSectionHeader`'s `PixelChevronView`
-    /// frame). A dial independent of `sidebarIconColumnWidth`, even though it
-    /// defaults to the same 16pt value — the two are visually related, not
-    /// structurally tied.
-    static let sessionSectionHeaderChevronSize: CGFloat = 16
-
-    /// Trailing padding of a Sessions-list section header (and the rail's
-    /// chevron rows, which mirror it).
-    static let sessionSectionHeaderTrailingPadding: CGFloat = 12
+    /// Height of the slot that carries a hairline between sidebar groups
+    /// (Pinned / Active / History). Shared by the expanded list and the rail
+    /// so every row sits at the same y in both.
+    static let sessionSectionHairlineSlotHeight: CGFloat = 9
 
     /// Top padding of the scrollable list content in both sidebar tabs
     /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s
