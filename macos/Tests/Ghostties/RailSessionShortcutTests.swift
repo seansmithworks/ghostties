@@ -185,9 +185,12 @@ struct RailSessionShortcutTests {
         #expect(rig.store.lastSelectedProjectId == rig.projectOrder[1])
     }
 
-    /// Pinned mounts the expanded list. One Next Project must step exactly
-    /// once: with two projects a double fire lands back where it started.
-    @Test func pinnedNextProjectStepsExactlyOnce() async {
+    /// Pinned mounts the expanded list, which no longer observes Next
+    /// Project itself; the container still moves the selection. (Not a
+    /// double-fire guard: the list writes its selection back to the store
+    /// on the next render, so a duplicate list handler would read the same
+    /// starting project and land on the same target.)
+    @Test func pinnedNextProjectSelectsTheNextProject() async {
         let rig = await makeRig(names: ["a"], mode: .pinned, projectCount: 2)
         defer { rig.tearDown() }
         #expect(rig.store.lastSelectedProjectId == rig.projectOrder[0], "rig: first project starts selected")
