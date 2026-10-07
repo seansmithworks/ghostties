@@ -199,7 +199,7 @@ enum SidebarDialTuning {
     }
     /// Expanded tray only: whether the Create capsule fills the bar's width
     /// or hugs its buttons (`TrayGlassStyle.TrayWidth`).
-    static func trayWidth(defaults: UserDefaults = .standard) -> TrayGlassStyle.TrayWidth {
+    static func trayWidth(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.TrayWidth {
         choice(trayWidthKey, default: TrayGlassStyle.trayWidth, defaults: defaults)
     }
     /// The glass's colour/material set for one appearance: each value its
