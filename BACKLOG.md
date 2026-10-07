@@ -3205,3 +3205,4 @@ Status of the items above: faded labels → fixed on `fix/faded-row-labels` @`14
 - [ ] *parked* Save pen.dev frame `bA1y9` "Tray layout options" (unsaved in `3-edff08ac-5MB.pen`).
 
 - Test runs leak one `~/Library/Preferences/ghostties.capture.<pid>.plist` per unfiltered suite run (26 stale as of 2026-10-07); `CaptureFixtureDefaultsTests.cleanupRemovesTheSuite` is flaky on the cfprefsd flush race. Also flaky: `SidebarSettledPresentationTests.railThenClosedThenPinnedSettlesWithFullLabels` (fixed 400ms settle against the 0.25s transition debounce; fails under load) and the 3 `SessionComposerWorktreeLaunchTests` (failed on the pre-merge baseline too).
+- Also flaky: `SessionRowGlyphSlotTests.testExpandedTrayHugCapsulesHugTheirIconsAndSitLeadingSideBySide` rendered as Fill once (235 vs 82) in a full run. Reviewer suggests injecting `trayWidth` into `SidebarTray` like `dialEpoch` instead of reading the shared store at render.
