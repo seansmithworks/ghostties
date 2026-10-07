@@ -1063,6 +1063,12 @@ class WorkspaceViewContainer: NSView {
     private func applySidebarView() {
         guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
 
+        // Every settled mode states its own presentation. The crossfade
+        // writes this flag mid-animation, but it is the only other writer,
+        // so a path that never crossfades (rail -> closed -> pinned) would
+        // otherwise leave the previous mode's value behind.
+        widthModel.isCollapsedPresentation = sidebarMode == .collapsed
+
         // Collapsed rail (Flow 01, sidebar-presence §02) replaces whichever
         // view mode (project-first/task-first) is otherwise active — it's a
         // width state, not a third view mode, so it takes priority here.
