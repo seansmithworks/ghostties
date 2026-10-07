@@ -15,7 +15,7 @@ enum QuietTestHost {
     }
 
     static func isActive(env: [String: String]) -> Bool {
-        env["XCTestConfigurationFilePath"] != nil || env["XCTestSessionIdentifier"] != nil
+        env["XCTestConfigurationFilePath"] != nil
     }
 
     /// Far outside any plausible multi-display arrangement.
