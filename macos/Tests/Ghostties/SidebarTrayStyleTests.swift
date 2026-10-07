@@ -36,6 +36,8 @@ final class SidebarTrayStyleTests: XCTestCase {
         XCTAssertNil(d.object(forKey: SidebarDialTuning.selectedRowStyleKey))
         // The new key wins over the legacy one, for every option.
         d.set("glass", forKey: SidebarDialTuning.legacySelectedStyleKey)
+        XCTAssertEqual(TrayGlassStyle.SelectedRowStyle.tintShimmer.rawValue, "tintShimmer")
+        XCTAssertEqual(TrayGlassStyle.SelectedRowStyle.allCases.count, 7)
         for style in TrayGlassStyle.SelectedRowStyle.allCases {
             d.set(style.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
             XCTAssertEqual(SidebarDialTuning.selectedRowStyle(defaults: d), style)

@@ -87,14 +87,14 @@ enum TrayGlassStyle {
     /// `SidebarRowCardBackground`. Row geometry is identical across all of
     /// them, and every one is selected-state only (plain hover stays neutral).
     enum SelectedRowStyle: String, CaseIterable {
-        case glass, flat, solid, accent, bar, type
+        case glass, flat, solid, accent, bar, type, tintShimmer
 
         /// Hover fill on a non-selected row; nil = the caller's own (`glass`,
         /// `flat`) or none (`type` lifts text instead).
         var hoverOpacity: Double? {
             switch self {
             case .glass, .flat, .type: return nil
-            case .solid, .accent, .bar: return 0.04
+            case .solid, .accent, .bar, .tintShimmer: return 0.04
             }
         }
     }
@@ -362,6 +362,32 @@ enum TrayGlassStyle {
     }
 }
 
+/// The iridescent edge, in either appearance: the tray glass's and the
+/// "Tint + shimmer" selected row's shared rim. Not in the tree at all at
+/// intensity 0, so the default look is untouched.
+struct TrayChromaticRim: View {
+    let look: TrayGlassStyle.Look
+    let shape: RoundedRectangle
+
+    var body: some View {
+        if look.chromaticIntensity > 0 {
+            shape
+                .strokeBorder(
+                    AngularGradient(
+                        colors: TrayGlassStyle.chromaticColors(look.chromaticPalette),
+                        center: .center,
+                        angle: .degrees(look.chromaticRotation)
+                    ),
+                    lineWidth: look.chromaticWidth
+                )
+                .blur(radius: look.chromaticBlur)
+                .opacity(look.chromaticIntensity)
+                .blendMode(look.chromaticBlend.blendMode)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
 /// Puts a view on the tray's white Liquid Glass (`TrayGlassStyle`) — the
 /// tray's (both axes) and the selected rail row's shared surface. The white
 /// layer, highlight and rims sit in the view's own background/overlay, so
@@ -422,25 +448,8 @@ struct TrayGlassSurface: ViewModifier {
         return interactive ? tinted.interactive() : tinted
     }
 
-    /// Iridescent edge, in either appearance. Not in the tree at all at
-    /// intensity 0, so the default look is untouched.
-    @ViewBuilder
     private func chromaticRim(_ look: TrayGlassStyle.Look) -> some View {
-        if look.chromaticIntensity > 0 {
-            shape
-                .strokeBorder(
-                    AngularGradient(
-                        colors: TrayGlassStyle.chromaticColors(look.chromaticPalette),
-                        center: .center,
-                        angle: .degrees(look.chromaticRotation)
-                    ),
-                    lineWidth: look.chromaticWidth
-                )
-                .blur(radius: look.chromaticBlur)
-                .opacity(look.chromaticIntensity)
-                .blendMode(look.chromaticBlend.blendMode)
-                .allowsHitTesting(false)
-        }
+        TrayChromaticRim(look: look, shape: shape)
     }
 
     /// White highlight clipped to the pill. Not in the tree at strength 0.
@@ -479,7 +488,7 @@ struct SidebarSelectedSurface: View {
         switch SidebarDialTuning.selectedRowStyle() {
         case .glass:
             Color.clear.modifier(TrayGlassSurface(shapeOverride: shape))
-        case .flat, .solid, .accent, .bar, .type:
+        case .flat, .solid, .accent, .bar, .type, .tintShimmer:
             let look = SidebarDialTuning.trayGlass(for: colorScheme)
             shape
                 .fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
@@ -530,6 +539,12 @@ struct SidebarRowCardBackground: View {
                     .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color.white)
                     .overlay(shape.strokeBorder(Color.primary.opacity(0.1), lineWidth: 1))
                     .shadow(color: Color.black.opacity(0.06), radius: 2, y: 1)
+            case .tintShimmer:
+                shape
+                    .fill(Color.primary.opacity(0.075))
+                    .overlay {
+                        TrayChromaticRim(look: SidebarDialTuning.trayGlass(for: colorScheme), shape: shape)
+                    }
             case .accent:
                 shape.fill(WorkspaceLayout.composerSelectionAccent.opacity(0.14))
             case .bar:
