@@ -343,37 +343,51 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         return runs.map { CGFloat($0.0) / scale...CGFloat($0.1 + 1) / scale }
     }
 
-    func testRailTrayCapsulesHugTheirIconsAndStackCenteredOnTheRail() throws {
-        let railWidth: CGFloat = 98
+    // MARK: - Rail A2 geometry
+
+    /// The stock traffic-light cluster of a titled window, in window
+    /// coordinates, and the collapsed-rail width and centre derived from it:
+    /// nothing hard-coded, so it holds on any macOS titlebar layout.
+    private func realRailGeometry() throws -> (railWidth: CGFloat, clusterCentre: CGFloat) {
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: true)
+        let close = try XCTUnwrap(window.standardWindowButton(.closeButton))
+        let zoom = try XCTUnwrap(window.standardWindowButton(.zoomButton))
+        let closeMinX = close.convert(close.bounds, to: nil).minX
+        let zoomMaxX = zoom.convert(zoom.bounds, to: nil).maxX
+        let railWidth = WorkspaceLayout.collapsedRailWidth(zoomButtonMaxX: zoomMaxX, leadingInset: closeMinX)
+        return (railWidth, (closeMinX + zoomMaxX) / 2)
+    }
+
+    /// Rail A2: capsules stretch to 8pt from the window's leading edge and
+    /// 8pt from the canvas edge (width = railWidth - 16), centred; the
+    /// buttons inside keep their dial size, so heights are unchanged.
+    func testRailTrayCapsulesStretchToEightPointsEitherSide() throws {
+        let (railWidth, clusterCentre) = try realRailGeometry()
+        XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: 0.01, "rail centre is the cluster centre")
         let size = CGSize(width: railWidth, height: 260)
         let button = SidebarDialTuning.trayVerticalButtonSize()
         let padding = SidebarDialTuning.trayInnerPadding()
         let gap = SidebarDialTuning.trayGroupGap()
-        let capsuleWidth = button + 2 * padding
+        let capsuleWidth = railWidth - 16
         let createHeight = 2 * button + TrayGlassStyle.verticalItemGap + 2 * padding
         let toggleHeight = button + 2 * padding
 
-        // Hugging: the tray's own ideal width is one capsule (the rail pads
-        // no sides, so the pill centres on the full rail).
-        let alone = NSHostingView(rootView: SidebarTray(isVertical: true, toggleLabel: "Expand Sidebar").environmentObject(SessionCoordinator()))
-        XCTAssertEqual(alone.fittingSize.width, capsuleWidth, accuracy: 0.5, "tray width = icon + 2 x padding")
-
-        // The gutter the rail really has outside its column: the card's inset.
         let (rep, scale) = try renderTray(vertical: true, size: size, gutter: WorkspaceLayout.sidebarTrailingGutter(for: .collapsed))
         let toggleBottom = size.height - SidebarTray.bottomPadding(isVertical: true)
         let toggleMidY = toggleBottom - toggleHeight / 2
         let createMidY = toggleBottom - toggleHeight - gap - createHeight / 2
 
-        // Each capsule: its width, centred on the rail.
         for (name, midY) in [("create", createMidY), ("toggle", toggleMidY)] {
             let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: midY)
             XCTAssertEqual(spans.count, 1, "\(name) capsule: one span across the rail, got \(spans)")
             let span = try XCTUnwrap(spans.first)
-            XCTAssertEqual(span.upperBound - span.lowerBound, capsuleWidth, accuracy: 1.0, "\(name) capsule width")
-            XCTAssertEqual((span.lowerBound + span.upperBound) / 2, railWidth / 2, accuracy: 0.5, "\(name) capsule centred on the rail")
+            XCTAssertEqual(span.lowerBound, 8, accuracy: 1.0, "\(name) capsule leading edge is 8pt from the window edge")
+            XCTAssertEqual(railWidth - span.upperBound, 8, accuracy: 1.0, "\(name) capsule trailing edge is 8pt from the canvas edge")
+            XCTAssertEqual(span.upperBound - span.lowerBound, capsuleWidth, accuracy: 1.0, "\(name) capsule width = railWidth - 16")
+            XCTAssertEqual((span.lowerBound + span.upperBound) / 2, clusterCentre, accuracy: 0.5, "\(name) capsule centred on the cluster")
         }
 
-        // Down the rail's centre: Create above Toggle, their heights, the gap.
+        // Heights, gap and bottom sit unchanged (buttons keep the dial size).
         let spans = try capsuleSpans(rep, scale: scale, alongX: false, at: railWidth / 2)
         XCTAssertEqual(spans.count, 2, "two capsules stacked, got \(spans)")
         guard spans.count == 2 else { return }
@@ -418,12 +432,14 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     }
 
     /// The rail's row glyphs, its tray pill and the rail itself share one
-    /// centre, under the rail's real gutter (the window margin outside it)
+    /// centre, the traffic-light cluster's, with no gutter outside the rail,
     /// and whatever the leading/trailing content-padding dials hold.
     func testRailRowGlyphAndTrayPillShareTheRailCentre() throws {
-        let railWidth: CGFloat = 98
+        // Rail A2: the rail adds no trailing gutter, and everything centres
+        // on the traffic-light cluster, derived from real button frames.
+        let (railWidth, clusterCentre) = try realRailGeometry()
         let gutter = WorkspaceLayout.sidebarTrailingGutter(for: .collapsed)
-        XCTAssertGreaterThan(gutter, 0, "the rail has a gutter: the card's inset")
+        XCTAssertEqual(gutter, 0, "the rail has no trailing gutter")
 
         let glyphX = try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter)
         let (rep, scale) = try renderTray(vertical: true, size: CGSize(width: railWidth, height: 260), gutter: gutter)
@@ -432,8 +448,8 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let pill = try XCTUnwrap(try capsuleSpans(rep, scale: scale, alongX: true, at: toggleMidY).first)
         let pillX = (pill.lowerBound + pill.upperBound) / 2
 
-        XCTAssertEqual(glyphX, railWidth / 2, accuracy: 0.5, "rail row glyph centre x")
-        XCTAssertEqual(pillX, railWidth / 2, accuracy: 0.5, "rail tray pill centre x")
+        XCTAssertEqual(glyphX, clusterCentre, accuracy: 0.5, "rail row glyph centre x vs cluster centre")
+        XCTAssertEqual(pillX, clusterCentre, accuracy: 0.5, "rail tray pill centre x vs cluster centre")
         XCTAssertEqual(glyphX, pillX, accuracy: 0.5, "rail row glyph and tray pill share a centre")
 
         // Asymmetric content-padding dials (Sean's Dev holds leading 8,
@@ -441,7 +457,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let store = SidebarDialTuning.store
         store.set(8.0, forKey: SidebarDialTuning.contentPaddingLeadingKey)
         defer { store.removeObject(forKey: SidebarDialTuning.contentPaddingLeadingKey) }
-        XCTAssertEqual(try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter), railWidth / 2, accuracy: 0.5, "rail glyph centre x with leading padding 8")
+        XCTAssertEqual(try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter), clusterCentre, accuracy: 0.5, "rail glyph centre x with leading padding 8")
     }
 
     /// Renders the expanded tray under one "Tray width" mode and returns the

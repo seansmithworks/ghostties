@@ -16,12 +16,13 @@ struct WindowMarginLiveTests {
         var updateOverlayIsVisible: Bool { false }
     }
 
-    private func makeContainer(mode: SidebarMode) -> (WorkspaceViewContainer, NSWindow) {
+    private func makeContainer(mode: SidebarMode, realChrome: Bool = false) -> (WorkspaceViewContainer, NSWindow) {
         let store = WorkspaceStore(testingProjects: [])
         store.updateSidebarMode(mode)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 900, height: 600),
-                              styleMask: [.titled], backing: .buffered, defer: true)
+                              styleMask: realChrome ? [.titled, .closable, .miniaturizable, .resizable] : [.titled],
+                              backing: .buffered, defer: true)
         window.contentView = container
         return (container, window)
     }
@@ -33,8 +34,13 @@ struct WindowMarginLiveTests {
         #expect(card.minY - bounds.minY == margin, "bottom inset at \(margin), \(mode)")
         #expect(bounds.maxY - card.maxY == margin, "top inset at \(margin), \(mode)")
         #expect(bounds.maxX - card.maxX == margin, "trailing inset at \(margin), \(mode)")
-        if mode == .pinned || mode == .collapsed {
+        if mode == .pinned {
             #expect(card.minX - container.sidebarFrameForTesting.maxX == margin, "sidebar-to-card gap at \(margin), \(mode)")
+        } else if mode == .collapsed {
+            // Rail A2: the rail adds no margin on its trailing side. The
+            // trailing gap is already the rail's own leadingInset, so the
+            // card butts the rail column.
+            #expect(card.minX - container.sidebarFrameForTesting.maxX == 0, "rail-to-card gap at \(margin), \(mode)")
         } else {
             #expect(card.minX - bounds.minX == margin, "leading inset at \(margin), \(mode)")
         }
@@ -69,5 +75,48 @@ struct WindowMarginLiveTests {
         store.removeObject(forKey: SidebarDialTuning.windowMarginKey)
         NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
         expectInsets(container, defaultMargin, .pinned)
+    }
+
+    // MARK: - Rail A2 spacing (collapsed rail only)
+
+    /// The stock traffic-light cluster as the container sees it:
+    /// `closeMinX` is the leading inset, `zoomMaxX` the cluster's far edge.
+    private func clusterInContainer(_ container: WorkspaceViewContainer, _ window: NSWindow) throws -> (closeMinX: CGFloat, zoomMaxX: CGFloat) {
+        let close = try #require(window.standardWindowButton(.closeButton))
+        let zoom = try #require(window.standardWindowButton(.zoomButton))
+        return (close.convert(close.bounds, to: container).minX, zoom.convert(zoom.bounds, to: container).maxX)
+    }
+
+    /// The canvas card's leading edge sits at `zoomMaxX + leadingInset`, the
+    /// same on every Window margin: the rail's trailing side adds no margin
+    /// or gutter. Top/right/bottom keep following the dial.
+    @Test func collapsedCardLeadingEdgeIsZoomMaxPlusLeadingInset() throws {
+        let (container, window) = makeContainer(mode: .collapsed, realChrome: true)
+        defer { window.contentView = nil }
+        container.layoutSubtreeIfNeeded()
+        let cluster = try clusterInContainer(container, window)
+        let expectedX = cluster.zoomMaxX + cluster.closeMinX
+        for margin: CGFloat in [16, 4, SidebarDialTuning.windowMargin()] {
+            container.applyWindowMarginForTesting(margin)
+            container.layoutSubtreeIfNeeded()
+            let card = container.cardFrameForTesting
+            #expect(card.minX == expectedX, "card leading x at margin \(margin): expected \(expectedX) (zoom.maxX \(cluster.zoomMaxX) + leadingInset \(cluster.closeMinX)), got \(card.minX)")
+            #expect(container.bounds.maxX - card.maxX == margin, "trailing inset at \(margin)")
+            #expect(container.bounds.maxY - card.maxY == margin, "top inset at \(margin)")
+            #expect(card.minY - container.bounds.minY == margin, "bottom inset at \(margin)")
+        }
+    }
+
+    /// Rail content centre == cluster centre, which with the card rule above
+    /// equals the rail column's centre. The rail has no trailing gutter.
+    @Test func collapsedRailCentreIsTheClusterCentreWithNoTrailingGutter() throws {
+        let (container, window) = makeContainer(mode: .collapsed, realChrome: true)
+        defer { window.contentView = nil }
+        container.layoutSubtreeIfNeeded()
+        let cluster = try clusterInContainer(container, window)
+        let sidebar = container.sidebarFrameForTesting
+        #expect(sidebar.midX == (cluster.closeMinX + cluster.zoomMaxX) / 2, "rail centre \(sidebar.midX) vs cluster centre \((cluster.closeMinX + cluster.zoomMaxX) / 2)")
+        #expect(WorkspaceLayout.sidebarTrailingGutter(for: .collapsed) == 0, "the rail adds no trailing gutter")
+        #expect(WorkspaceLayout.sidebarTrailingGutter(for: .pinned) == SidebarDialTuning.windowMargin(), "pinned keeps its gutter")
     }
 }
