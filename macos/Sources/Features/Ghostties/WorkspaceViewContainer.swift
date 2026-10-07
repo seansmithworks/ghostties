@@ -451,6 +451,8 @@ class WorkspaceViewContainer: NSView {
     /// Test seam: the terminal card's and the sidebar's frames.
     var cardFrameForTesting: NSRect { terminalShadowHost.frame }
     var sidebarFrameForTesting: NSRect { sidebarHostingView.frame }
+    var sidebarDragHandleFrameForTesting: NSRect { sidebarDragHandle.frame }
+    var sidebarDragHandleIsHiddenForTesting: Bool { sidebarDragHandle.isHidden }
     /// Test seam: the live Window margin path, with the margin passed in
     /// rather than written to the shared dial store.
     func applyWindowMarginForTesting(_ inset: CGFloat) { applyWindowMargin(inset) }
@@ -469,6 +471,9 @@ class WorkspaceViewContainer: NSView {
     /// `.pinned`: terminal leading follows sidebar trailing (pushed right).
     /// `.closed`/`.overlay`: terminal leading follows superview leading (full-width).
     private var shadowHostLeadingToSidebar: NSLayoutConstraint!
+    /// `WorkspaceLayout.sidebarDragHandleWidth(for:margin:)`; the handle's
+    /// trailing edge is pinned to the card, so this alone places it.
+    private var sidebarDragHandleWidthConstraint: NSLayoutConstraint!
     private var shadowHostLeadingToSuperview: NSLayoutConstraint!
 
     /// Whether the browser panel is currently visible (expanded).
@@ -491,9 +496,11 @@ class WorkspaceViewContainer: NSView {
         return handle
     }()
 
-    /// Drag handle on the sidebar's trailing edge for resizing. Sits in the
-    /// same 8pt inset gap the browser drag handle sits in (proven pattern),
-    /// just on the other side of the terminal card. Visible when the
+    /// Drag handle on the sidebar's trailing edge for resizing. Pinned, it
+    /// sits in the same inset gap the browser drag handle sits in (proven
+    /// pattern), just on the other side of the terminal card; on the rail,
+    /// which has no gap, it is a strip over the rail's trailing edge
+    /// (`WorkspaceLayout.sidebarDragHandleWidth`). Visible when the
     /// sidebar is pinned or collapsed; hidden when closed or overlaid.
     private lazy var sidebarDragHandle: PanelDragHandleView = {
         let handle = PanelDragHandleView()
@@ -730,7 +737,8 @@ class WorkspaceViewContainer: NSView {
         shadowHostBottomConstraint.constant = -inset
         shadowHostTrailingConstraint.constant = -inset
         shadowHostTrailingToBrowser.constant = -inset
-        shadowHostLeadingToSidebar.constant = inset
+        shadowHostLeadingToSidebar.constant = WorkspaceLayout.sidebarTrailingGutter(for: sidebarMode, margin: inset)
+        sidebarDragHandleWidthConstraint.constant = WorkspaceLayout.sidebarDragHandleWidth(for: sidebarMode, margin: inset)
         shadowHostLeadingToSuperview.constant = inset
         // Overlay collapses the browser to zero insets; leave it there.
         if sidebarMode != .overlay {
@@ -1013,7 +1021,8 @@ class WorkspaceViewContainer: NSView {
         case .collapsed:
             let inset = SidebarDialTuning.windowMargin()
             return NSSize(
-                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self) + inset * 2,
+                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self)
+                    + WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset) + inset,
                 height: termSize.height + inset * 2
             )
         case .closed:
@@ -2081,7 +2090,8 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.width = currentSidebarWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, inset)
+            set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset))
+            set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .pinned, margin: inset))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -2100,7 +2110,8 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, railWidth)
             widthModel.width = railWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, inset)
+            set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset))
+            set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .collapsed, margin: inset))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -2814,11 +2825,14 @@ class WorkspaceViewContainer: NSView {
 
         // Dual leading constraints (mutually exclusive).
         shadowHostLeadingToSidebar = terminalShadowHost.leadingAnchor.constraint(
-            equalTo: sidebarHostingView.trailingAnchor, constant: inset)
+            equalTo: sidebarHostingView.trailingAnchor,
+            constant: WorkspaceLayout.sidebarTrailingGutter(for: initialMode, margin: inset))
         shadowHostLeadingToSuperview = terminalShadowHost.leadingAnchor.constraint(
             equalTo: leadingAnchor, constant: hasCardInset ? inset : 0)
         shadowHostLeadingToSidebar.isActive = occupiesSpace
         shadowHostLeadingToSuperview.isActive = !occupiesSpace
+        sidebarDragHandleWidthConstraint = sidebarDragHandle.widthAnchor.constraint(
+            equalToConstant: WorkspaceLayout.sidebarDragHandleWidth(for: initialMode, margin: inset))
 
         // Terminal top offset inside the shadow host. Reference states 01-04
         // all show no terminal-card top bar, so every mode starts at 0 —
@@ -2875,14 +2889,14 @@ class WorkspaceViewContainer: NSView {
             browserDragHandle.leadingAnchor.constraint(equalTo: terminalShadowHost.trailingAnchor),
             browserDragHandle.trailingAnchor.constraint(equalTo: browserShadowHost.leadingAnchor),
 
-            // Sidebar drag handle sits in the 8pt gap between sidebar and terminal
-            // (same gap the shadowHostLeadingToSidebar inset constant reserves).
-            // In overlay mode `shadowHostLeadingToSuperview` is active instead, so
-            // this leading/trailing pair can resolve to a hidden negative-width
-            // frame — harmless, since the handle is hidden in overlay mode anyway.
+            // Sidebar drag handle: trailing edge on the card's leading edge,
+            // width from `sidebarDragHandleWidthConstraint`. Pinned, that is
+            // the sidebar-to-card gap; on the rail (no gap, rail A2) it is a
+            // strip over the rail's trailing edge. Never over the card.
+            // Hidden in overlay/closed.
             sidebarDragHandle.topAnchor.constraint(equalTo: sidebarHostingView.topAnchor),
             sidebarDragHandle.bottomAnchor.constraint(equalTo: sidebarHostingView.bottomAnchor),
-            sidebarDragHandle.leadingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
+            sidebarDragHandleWidthConstraint,
             sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
 
             // Build-info badge: bottom-left corner of the whole window, on top
