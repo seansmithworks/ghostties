@@ -22,10 +22,6 @@ struct SidebarRailView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
 
-    private var trayItemCount: Int {
-        WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "").count
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             // Same top inset as the expanded list's titlebar toolbar
@@ -89,7 +85,7 @@ struct SidebarRailView: View {
             // The tray itself is hosted once at the sidebar root
             // (`SidebarTray`), over both this rail and the expanded list, so
             // it can morph between them; this reserves its space.
-            Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: true, itemCount: trayItemCount))
+            Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: true))
         }
         .frame(maxWidth: .infinity)
         .background(.clear)

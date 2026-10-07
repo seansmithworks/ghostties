@@ -22,6 +22,7 @@ enum SidebarDialTuning {
     // MARK: Tray glass (both axes + the selected session row; `TrayGlassStyle`)
     static let trayMarginKey = "ghostties.sidebarDial.trayMargin"
     static let trayInnerPaddingKey = "ghostties.sidebarDial.trayInnerPadding"
+    static let trayGroupGapKey = "ghostties.sidebarDial.trayGroupGap"
     static let trayGlassInteractiveKey = "ghostties.sidebarDial.trayGlass.interactive"
     static let trayVerticalButtonSizeKey = "ghostties.sidebarDial.trayGlass.verticalButtonSize"
     static let trayVerticalIconSizeKey = "ghostties.sidebarDial.trayGlass.verticalIconSize"
@@ -184,6 +185,10 @@ enum SidebarDialTuning {
     static func trayInnerPadding(defaults: UserDefaults = .standard) -> CGFloat {
         cgFloat(trayInnerPaddingKey, default: TrayGlassStyle.innerPadding, defaults: defaults)
     }
+    /// Gap between the tray's Create and Toggle capsules, on both axes.
+    static func trayGroupGap(defaults: UserDefaults = .standard) -> CGFloat {
+        cgFloat(trayGroupGapKey, default: TrayGlassStyle.groupGap, defaults: defaults)
+    }
     /// The glass's colour/material set for one appearance: each value its
     /// own saved dial, else `TrayGlassStyle.light`/`.dark`.
     static func trayGlass(for colorScheme: ColorScheme, defaults: UserDefaults = .standard) -> TrayGlassStyle.Look {
@@ -314,7 +319,7 @@ enum SidebarDialTuning {
     /// back to code defaults in one pass, same shape as
     /// `ComposerSingleLineReset.resetKeys`.
     static let allKeys: [String] = lightGlassKeys.all + darkGlassKeys.all + [
-        trayMarginKey, trayInnerPaddingKey, trayGlassInteractiveKey,
+        trayMarginKey, trayInnerPaddingKey, trayGroupGapKey, trayGlassInteractiveKey,
         trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
         traySelectedPillWidthKey, traySelectedPillHeightKey, selectedStyleKey, selectedTitleWeightKey,
@@ -443,6 +448,7 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayVerticalButtonSize: Double
     var trayVerticalIconSize: Double
     var trayInnerPadding: Double
+    var trayGroupGap: Double
     var trayGlassCornerStyle: String
     var trayGlassCornerRadius: Double
     var traySelectedPillWidth: Double
@@ -536,6 +542,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
             trayVerticalButtonSize: Double(SidebarDialTuning.trayVerticalButtonSize(defaults: defaults)),
             trayVerticalIconSize: Double(SidebarDialTuning.trayVerticalIconSize(defaults: defaults)),
             trayInnerPadding: Double(SidebarDialTuning.trayInnerPadding(defaults: defaults)),
+            trayGroupGap: Double(SidebarDialTuning.trayGroupGap(defaults: defaults)),
             trayGlassCornerStyle: SidebarDialTuning.trayGlassCornerStyle(defaults: defaults).rawValue,
             trayGlassCornerRadius: Double(SidebarDialTuning.trayGlassCornerRadius(defaults: defaults)),
             traySelectedPillWidth: Double(SidebarDialTuning.traySelectedPillWidth(defaults: defaults)),
@@ -619,6 +626,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.trayVerticalButtonSizeKey, previous.trayVerticalButtonSize, model.trayVerticalButtonSize)
         setIfChanged(SidebarDialTuning.trayVerticalIconSizeKey, previous.trayVerticalIconSize, model.trayVerticalIconSize)
         setIfChanged(SidebarDialTuning.trayInnerPaddingKey, previous.trayInnerPadding, model.trayInnerPadding)
+        setIfChanged(SidebarDialTuning.trayGroupGapKey, previous.trayGroupGap, model.trayGroupGap)
         setStringIfChanged(SidebarDialTuning.trayGlassCornerStyleKey, previous.trayGlassCornerStyle, model.trayGlassCornerStyle)
         setIfChanged(SidebarDialTuning.trayGlassCornerRadiusKey, previous.trayGlassCornerRadius, model.trayGlassCornerRadius)
         setIfChanged(SidebarDialTuning.traySelectedPillWidthKey, previous.traySelectedPillWidth, model.traySelectedPillWidth)
@@ -701,12 +709,13 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .select("selectedTitleWeight", keyPath: \.selectedTitleWeight, label: "Selected title weight (expanded)",
                     options: TrayGlassStyle.SelectedTitleWeight.allCases.map(\.rawValue)),
             .toggle("trayGlassInteractive", keyPath: \.trayGlassInteractive, label: "Glass interactive (tray)"),
-            .slider("trayHorizontalButtonSize", keyPath: \.trayHorizontalButtonSize, label: "Bar button height (expanded)", range: 24...56, step: 0.5, unit: "pt"),
+            .slider("trayHorizontalButtonSize", keyPath: \.trayHorizontalButtonSize, label: "Bar button size (expanded)", range: 24...56, step: 0.5, unit: "pt"),
             .slider("trayHorizontalIconSize", keyPath: \.trayHorizontalIconSize, label: "Bar icon size (expanded)", range: 10...24, step: 0.5, unit: "pt"),
             .slider("trayMargin", keyPath: \.trayMargin, label: "Bar side margin (expanded, visible)", range: 0...24, unit: "pt"),
             .slider("trayVerticalButtonSize", keyPath: \.trayVerticalButtonSize, label: "Pill button size (rail)", range: 24...56, step: 0.5, unit: "pt"),
             .slider("trayVerticalIconSize", keyPath: \.trayVerticalIconSize, label: "Pill icon size (rail)", range: 10...24, step: 0.5, unit: "pt"),
             .slider("trayInnerPadding", keyPath: \.trayInnerPadding, label: "Inner padding", range: 0...16, step: 0.5, unit: "pt"),
+            .slider("trayGroupGap", keyPath: \.trayGroupGap, label: "Tray group gap", range: 0...16, step: 0.5, unit: "pt"),
             .select("trayGlassCornerStyle", keyPath: \.trayGlassCornerStyle, label: "Corner style",
                     options: TrayGlassStyle.CornerStyle.allCases.map(\.rawValue)),
             .slider("trayGlassCornerRadius", keyPath: \.trayGlassCornerRadius, label: "Corner radius (radius style)", range: 0...32, step: 0.5, unit: "pt"),

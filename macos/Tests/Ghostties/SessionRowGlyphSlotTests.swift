@@ -323,23 +323,19 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         XCTAssertEqual((CGFloat(minX) / scale + CGFloat(maxX + 1) / scale) / 2, width / 2, accuracy: 0.5)
     }
 
-    // MARK: - Rail tray pill hugs its icons and is centered
+    // MARK: - Tray capsules (layout B: Create capsule, gap, Toggle capsule)
 
-    func testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail() throws {
-        let railWidth: CGFloat = 98
-        let size = CGSize(width: railWidth, height: 260)
-
-        // Pill width: the tray's own ideal width is the pill (icons + 2 x padding).
-        let alone = NSHostingView(rootView: SidebarTray(isVertical: true, toggleLabel: "Expand Sidebar").environmentObject(SessionCoordinator()))
-        let expected = TrayGlassStyle.verticalButtonSize + 2 * TrayGlassStyle.innerPadding
-        XCTAssertEqual(alone.fittingSize.width, expected, accuracy: 0.5, "pill width = icon + 2 x padding")
-
-        // Centering: render in a rail-width column with the plain (non-glass) pill,
-        // since cacheDisplay can't capture glass. The pill is near-white, so the
-        // column is the rail's own chrome colour and the pill is found as the
-        // pixels lighter than it (its shadow only darkens, so it can't widen the hit).
+    /// Renders the tray alone, bottom-aligned in a chrome-coloured column,
+    /// with the plain (non-glass) capsules, since `cacheDisplay` can't
+    /// capture glass. Expected geometry below reads the same live dial
+    /// accessors the tray does, so it holds at any saved dial value.
+    private func renderTray(vertical: Bool, size: CGSize) throws -> (NSBitmapImageRep, CGFloat) {
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
-        let hosting = NSHostingView(rootView: SidebarTray(isVertical: true, toggleLabel: "Expand Sidebar", forceOpaque: true)
+        let hosting = NSHostingView(rootView: SidebarTray(
+            isVertical: vertical,
+            toggleLabel: vertical ? "Expand Sidebar" : "Collapse Sidebar",
+            forceOpaque: true
+        )
             .environmentObject(SessionCoordinator())
             .frame(width: size.width, height: size.height, alignment: .bottomLeading)
             .background(Color(nsColor: chrome)))
@@ -352,22 +348,97 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         hosting.layoutSubtreeIfNeeded()
         let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
-        let scale = CGFloat(rep.pixelsWide) / railWidth
-        let y = Int((size.height - 12 - 40) * scale)
-        var minX = Int.max, maxX = -1
-        for x in 0..<rep.pixelsWide {
-            guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
-            let lift: CGFloat = (c.redComponent + c.greenComponent + c.blueComponent)
-                - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent)
-            if lift > 0.06 { minX = min(minX, x); maxX = max(maxX, x) }
+        return (rep, CGFloat(rep.pixelsWide) / size.width)
+    }
+
+    /// Capsule spans (in points) along one pixel line. A pixel is capsule if
+    /// it is lighter than the chrome (the near-white fill) or much darker
+    /// (icon ink); the shadow only darkens slightly, so it never counts.
+    /// Gaps of up to 3px (anti-aliased icon edges) are bridged.
+    private func capsuleSpans(_ rep: NSBitmapImageRep, scale: CGFloat, alongX: Bool, at fixed: CGFloat) throws -> [ClosedRange<CGFloat>] {
+        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chromeSum = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
+        let count = alongX ? rep.pixelsWide : rep.pixelsHigh
+        let fixedPx = Int(fixed * scale)
+        var runs: [(Int, Int)] = []
+        for i in 0..<count {
+            guard let c = (alongX ? rep.colorAt(x: i, y: fixedPx) : rep.colorAt(x: fixedPx, y: i))?.usingColorSpace(.sRGB) else { continue }
+            let lift = c.redComponent + c.greenComponent + c.blueComponent - chromeSum
+            guard lift > 0.06 || lift < -0.45 else { continue }
+            if let last = runs.last, i - last.1 <= 4 {
+                runs[runs.count - 1].1 = i
+            } else {
+                runs.append((i, i))
+            }
         }
-        XCTAssertGreaterThanOrEqual(maxX, 0, "tray pill not found")
-        let pillMinX: CGFloat = CGFloat(minX) / scale
-        let pillMaxX: CGFloat = CGFloat(maxX + 1) / scale
-        let pillWidth: CGFloat = pillMaxX - pillMinX
-        let pillCenter: CGFloat = (pillMinX + pillMaxX) / 2
-        XCTAssertEqual(pillWidth, expected, accuracy: 1.0, "rendered pill width")
-        XCTAssertEqual(pillCenter, railWidth / 2, accuracy: 0.5, "pill center x = rail center x")
+        return runs.map { CGFloat($0.0) / scale...CGFloat($0.1 + 1) / scale }
+    }
+
+    func testRailTrayCapsulesHugTheirIconsAndStackCenteredOnTheRail() throws {
+        let railWidth: CGFloat = 98
+        let size = CGSize(width: railWidth, height: 260)
+        let button = SidebarDialTuning.trayVerticalButtonSize()
+        let padding = SidebarDialTuning.trayInnerPadding()
+        let gap = SidebarDialTuning.trayGroupGap()
+        let capsuleWidth = button + 2 * padding
+        let createHeight = 2 * button + TrayGlassStyle.verticalItemGap + 2 * padding
+        let toggleHeight = button + 2 * padding
+
+        // Hugging: the tray's own ideal width is one capsule.
+        let alone = NSHostingView(rootView: SidebarTray(isVertical: true, toggleLabel: "Expand Sidebar").environmentObject(SessionCoordinator()))
+        XCTAssertEqual(alone.fittingSize.width, capsuleWidth, accuracy: 0.5, "tray width = icon + 2 x padding")
+
+        let (rep, scale) = try renderTray(vertical: true, size: size)
+        let toggleBottom = size.height - SidebarTray.bottomPadding(isVertical: true)
+        let toggleMidY = toggleBottom - toggleHeight / 2
+        let createMidY = toggleBottom - toggleHeight - gap - createHeight / 2
+
+        // Each capsule: its width, centred on the rail.
+        for (name, midY) in [("create", createMidY), ("toggle", toggleMidY)] {
+            let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: midY)
+            XCTAssertEqual(spans.count, 1, "\(name) capsule: one span across the rail, got \(spans)")
+            let span = try XCTUnwrap(spans.first)
+            XCTAssertEqual(span.upperBound - span.lowerBound, capsuleWidth, accuracy: 1.0, "\(name) capsule width")
+            XCTAssertEqual((span.lowerBound + span.upperBound) / 2, railWidth / 2, accuracy: 0.5, "\(name) capsule centred on the rail")
+        }
+
+        // Down the rail's centre: Create above Toggle, their heights, the gap.
+        let spans = try capsuleSpans(rep, scale: scale, alongX: false, at: railWidth / 2)
+        XCTAssertEqual(spans.count, 2, "two capsules stacked, got \(spans)")
+        guard spans.count == 2 else { return }
+        XCTAssertEqual(spans[0].upperBound - spans[0].lowerBound, createHeight, accuracy: 1.0, "create capsule height")
+        XCTAssertEqual(spans[1].upperBound - spans[1].lowerBound, toggleHeight, accuracy: 1.0, "toggle capsule height")
+        XCTAssertEqual(spans[1].lowerBound - spans[0].upperBound, gap, accuracy: 1.0, "gap between the capsules")
+        XCTAssertEqual(spans[1].upperBound, toggleBottom, accuracy: 1.0, "toggle capsule sits on the bottom padding")
+    }
+
+    func testExpandedTrayCapsulesHugTheirIconsAndSitLeadingSideBySide() throws {
+        let columnWidth: CGFloat = 300
+        let size = CGSize(width: columnWidth, height: 120)
+        let button = SidebarDialTuning.trayHorizontalButtonSize()
+        let padding = SidebarDialTuning.trayInnerPadding()
+        let gap = SidebarDialTuning.trayGroupGap()
+        let createWidth = 2 * button + TrayGlassStyle.horizontalItemGap + 2 * padding
+        let toggleWidth = button + 2 * padding
+        let height = button + 2 * padding
+
+        let (rep, scale) = try renderTray(vertical: false, size: size)
+        let bottom = size.height - SidebarTray.bottomPadding(isVertical: false)
+        let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: bottom - height / 2)
+        XCTAssertEqual(spans.count, 2, "two capsules side by side, got \(spans)")
+        guard spans.count == 2 else { return }
+        XCTAssertEqual(spans[0].lowerBound, SidebarDialTuning.trayMargin(), accuracy: 1.0, "create capsule starts at the tray margin")
+        XCTAssertEqual(spans[0].upperBound - spans[0].lowerBound, createWidth, accuracy: 1.0, "create capsule width")
+        XCTAssertEqual(spans[1].lowerBound - spans[0].upperBound, gap, accuracy: 1.0, "gap between the capsules")
+        XCTAssertEqual(spans[1].upperBound - spans[1].lowerBound, toggleWidth, accuracy: 1.0, "toggle capsule width")
+
+        // Both capsules share one baseline: the same height, bottom-aligned.
+        for (name, span) in [("create", spans[0]), ("toggle", spans[1])] {
+            let column = try capsuleSpans(rep, scale: scale, alongX: false, at: (span.lowerBound + span.upperBound) / 2)
+            let capsule = try XCTUnwrap(column.last, "\(name) capsule not found vertically")
+            XCTAssertEqual(capsule.upperBound - capsule.lowerBound, height, accuracy: 1.5, "\(name) capsule height")
+            XCTAssertEqual(capsule.upperBound, bottom, accuracy: 1.0, "\(name) capsule bottom")
+        }
     }
 
     // MARK: - Rail VoiceOver label

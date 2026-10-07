@@ -102,10 +102,7 @@ struct WorkspaceSidebarView: View {
             // The tray itself is hosted once at the sidebar root
             // (`SidebarTray`), over both this list and the rail, so it can
             // morph between them; this reserves its space.
-            Color.clear.frame(height: SidebarTray.reservedHeight(
-                isVertical: false,
-                itemCount: WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "").count
-            ))
+            Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: false))
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)

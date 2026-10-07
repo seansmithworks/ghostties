@@ -1,20 +1,24 @@
 import SwiftUI
 
-/// One entry in the sidebar's bottom tray — icon, label, and action.
+/// The tray's capsules, in order (pen.dev `bA1y9`, layout "B — Split
+/// (2 + 1)"): Create (new session, new project), then the sidebar toggle on
+/// its own. Leading to trailing in the expanded bar, top to bottom on the rail.
+enum SidebarTrayGroup: String, CaseIterable {
+    case create, toggle
+}
+
+/// One entry in the sidebar's bottom tray — icon, label, capsule, and action.
 ///
 /// The single source of truth for what's in the tray. `SidebarTray` renders
-/// this same ordered list on both axes (expanded/overlay and collapsed), so
-/// adding an item (e.g. a Settings entry) is one new entry here, not new
-/// layout code.
+/// this same ordered list on both axes (expanded/overlay and collapsed),
+/// split into its `group`'s capsule, so adding an item is one new entry
+/// here, not new layout code.
 struct SidebarTrayItem: Identifiable {
     let id: String
     let systemName: String
+    /// Accessibility label and hover tooltip.
     let label: String
-    /// Hover tooltip text. Defaults to `label`; only the Settings item
-    /// (round 4) diverges — its accessibility label is "Settings" but its
-    /// tooltip names the concrete action, "Open Config".
-    var helpText: String { helpTextOverride ?? label }
-    let helpTextOverride: String?
+    let group: SidebarTrayGroup
     /// Which symbol animation `TrayIconButton` plays on click. `nil` = none.
     let tapEffect: TrayIconTapEffect?
     let action: () -> Void
@@ -23,26 +27,24 @@ struct SidebarTrayItem: Identifiable {
         id: String,
         systemName: String,
         label: String,
-        helpText: String? = nil,
+        group: SidebarTrayGroup,
         tapEffect: TrayIconTapEffect? = nil,
         action: @escaping () -> Void
     ) {
         self.id = id
         self.systemName = systemName
         self.label = label
-        self.helpTextOverride = helpText
+        self.group = group
         self.tapEffect = tapEffect
         self.action = action
     }
 }
 
 /// The click-triggered SF Symbol animation a `TrayIconButton` plays, gated
-/// by `#available` (symbolEffect needs macOS 14+, `.rotate` needs 15+) and
-/// always suppressed under Reduce Motion. Strawman for Sean to react to —
-/// restrained on purpose.
+/// by `#available` (symbolEffect needs macOS 14+) and always suppressed
+/// under Reduce Motion. Strawman for Sean to react to — restrained on purpose.
 enum TrayIconTapEffect {
     case bounce
-    case rotate
 }
 
 /// "Sidebar vnext" (pen.dev `CnDfN`): the sidebar tray, on both axes, and the
@@ -225,8 +227,9 @@ enum TrayGlassStyle {
     /// icon frame). Icon: canvas 35px.
     static let verticalButtonSize: CGFloat = 44
     static let verticalIconSize: CGFloat = 17.5
-    /// Horizontal (expanded) tray: Flow 07's 20×20 icon frame plus 8pt
-    /// padding, so the bar is 44pt tall with `innerPadding`.
+    /// Horizontal (expanded) tray button, square like the rail's: Flow 07's
+    /// 20×20 icon frame plus 8pt padding, so a capsule is 44pt tall with
+    /// `innerPadding`.
     static let horizontalButtonSize: CGFloat = 36
     static let horizontalIconSize: CGFloat = 16
     /// Pill padding around its buttons: canvas 8px.
@@ -234,6 +237,9 @@ enum TrayGlassStyle {
     /// Canvas buttons are stacked with no gap; the horizontal bar keeps 2pt.
     static let verticalItemGap: CGFloat = 0
     static let horizontalItemGap: CGFloat = 2
+    /// Gap between the Create and Toggle capsules, on both axes: canvas 10px
+    /// (`bA1y9` layout B).
+    static let groupGap: CGFloat = 5
     /// Canvas r64px on a 104px-wide pill: clamps to a capsule.
     static let cornerStyle: CornerStyle = .capsule
     static let capsuleCornerRadius: CGFloat = 32
@@ -453,12 +459,12 @@ struct SidebarSelectedSurface: View {
     }
 }
 
-/// The glass pill that houses tray icon buttons, on either axis. One view,
-/// not two: the axis switches its stack between `HStackLayout` and
-/// `VStackLayout` through `AnyLayout`, which keeps every button's identity,
-/// so flipping the axis inside an animation stretches the same capsule and
-/// reflows the same buttons (the pinned⇄rail morph) instead of
-/// cross-fading two pills.
+/// One glass capsule of tray icon buttons, on either axis; it hugs its
+/// buttons. One view, not two: the axis switches its stack between
+/// `HStackLayout` and `VStackLayout` through `AnyLayout`, which keeps every
+/// button's identity, so flipping the axis inside an animation stretches the
+/// same capsule and reflows the same buttons (the pinned⇄rail morph) instead
+/// of cross-fading two pills.
 struct SidebarTrayPill<Content: View>: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
@@ -476,21 +482,20 @@ struct SidebarTrayPill<Content: View>: View {
             ? AnyLayout(VStackLayout(spacing: TrayGlassStyle.verticalItemGap))
             : AnyLayout(HStackLayout(spacing: TrayGlassStyle.horizontalItemGap))
         layout(content)
-            // The horizontal bar's flexible buttons claim the full width; the
-            // vertical pill hugs its buttons.
-            .frame(maxWidth: axis == .horizontal ? .infinity : nil)
             .padding(SidebarDialTuning.trayInnerPadding())
             .modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive()))
     }
 }
 
-/// The sidebar's one tray: the expanded sidebar's full-width horizontal bar
-/// and the rail's vertical pill are this same view with a different axis.
-/// Hosted once at the sidebar root (`SidebarHostRoot` in
-/// `WorkspaceViewContainer`), outside the expanded/rail content it sits
-/// over, so it keeps its identity while that content swaps and morphs
-/// between the two shapes on the pinned⇄rail transition. Under Reduce
-/// Motion the axis change snaps instead.
+/// The sidebar's one tray: two capsules (`SidebarTrayGroup`), Create then
+/// Toggle, side by side and leading-aligned in the expanded sidebar, stacked
+/// and centred on the rail. Both axes are this same view: an outer
+/// `AnyLayout` places the capsules and each capsule's own `AnyLayout` places
+/// its buttons, so every capsule and button keeps its identity. Hosted once
+/// at the sidebar root (`SidebarHostRoot` in `WorkspaceViewContainer`),
+/// outside the expanded/rail content it sits over, so it keeps its identity
+/// while that content swaps, and both capsules morph and reflow on the
+/// pinned⇄rail transition. Under Reduce Motion the axis change snaps instead.
 struct SidebarTray: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
@@ -510,15 +515,21 @@ struct SidebarTray: View {
     var dialEpoch = 0
 
     /// Space the tray occupies at the bottom of the sidebar, for the content
-    /// underneath to reserve. Horizontal: bar + `bottomPadding`, plus the
-    /// list-to-tray gap. Vertical: pill + `bottomPadding`.
-    static func reservedHeight(isVertical: Bool, itemCount: Int) -> CGFloat {
+    /// underneath to reserve. Horizontal: one capsule row + `bottomPadding`,
+    /// plus the list-to-tray gap. Vertical: the stacked capsules, the gaps
+    /// between them, and `bottomPadding`.
+    static func reservedHeight(isVertical: Bool) -> CGFloat {
         let padding = SidebarDialTuning.trayInnerPadding()
         if isVertical {
-            let count = CGFloat(itemCount)
-            let buttons = count * SidebarDialTuning.trayVerticalButtonSize()
-                + max(0, count - 1) * TrayGlassStyle.verticalItemGap
-            return buttons + 2 * padding + bottomPadding(isVertical: true)
+            let counts = groupItemCounts()
+            let capsules = counts.map { n -> CGFloat in
+                let count = CGFloat(n)
+                return count * SidebarDialTuning.trayVerticalButtonSize()
+                    + max(0, count - 1) * TrayGlassStyle.verticalItemGap
+                    + 2 * padding
+            }
+            let gaps = CGFloat(max(0, counts.count - 1)) * SidebarDialTuning.trayGroupGap()
+            return capsules.reduce(0, +) + gaps + bottomPadding(isVertical: true)
         }
         return SidebarDialTuning.listToTrayGap() + SidebarDialTuning.trayHorizontalButtonSize()
             + 2 * padding + bottomPadding(isVertical: false)
@@ -528,39 +539,77 @@ struct SidebarTray: View {
         isVertical ? 12 : 8
     }
 
+    /// Item count per capsule, in `SidebarTrayGroup` order, empty capsules
+    /// dropped.
+    static func groupItemCounts() -> [Int] {
+        let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "")
+        return SidebarTrayGroup.allCases
+            .map { group in items.filter { $0.group == group }.count }
+            .filter { $0 > 0 }
+    }
+
     var body: some View {
-        SidebarTrayPill(axis: isVertical ? .vertical : .horizontal, forceOpaque: forceOpaque) {
-            ForEach(WorkspaceViewContainer.sidebarTrayItems(
-                container: coordinator.containerView as? WorkspaceViewContainer,
-                toggleLabel: toggleLabel
-            )) { item in
-                TrayIconButton(
-                    itemId: item.id,
-                    systemName: item.systemName,
-                    label: item.label,
-                    helpText: item.helpText,
-                    isVertical: isVertical,
-                    tapEffect: item.tapEffect,
-                    action: item.action
-                )
+        let items = WorkspaceViewContainer.sidebarTrayItems(
+            container: coordinator.containerView as? WorkspaceViewContainer,
+            toggleLabel: toggleLabel
+        )
+        let groups = SidebarTrayGroup.allCases.filter { group in items.contains { $0.group == group } }
+        let axis: Axis = isVertical ? .vertical : .horizontal
+        let gap = SidebarDialTuning.trayGroupGap()
+        let groupLayout = isVertical
+            ? AnyLayout(VStackLayout(alignment: .center, spacing: gap))
+            : AnyLayout(HStackLayout(alignment: .bottom, spacing: gap))
+        groupLayout {
+            ForEach(groups, id: \.self) { group in
+                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque) {
+                    ForEach(items.filter { $0.group == group }) { item in
+                        TrayIconButton(
+                            itemId: item.id,
+                            systemName: item.systemName,
+                            label: item.label,
+                            isVertical: isVertical,
+                            tapEffect: item.tapEffect,
+                            action: item.action
+                        )
+                    }
+                }
             }
         }
+        // One glass container for both capsules, so neither samples the other.
+        .modifier(TrayGlassGroupContainer(forceOpaque: forceOpaque))
         // `trayMargin` is the visible gap on each side; on the trailing side
         // the gutter outside the column already provides part of it.
         .padding(.leading, isVertical ? 0 : SidebarDialTuning.trayMargin())
         .padding(.trailing, isVertical ? 0 : max(0, SidebarDialTuning.trayMargin() - trailingGutter))
         .padding(.bottom, Self.bottomPadding(isVertical: isVertical))
-        // Centers the hugging vertical pill in the rail column.
-        .frame(maxWidth: .infinity)
+        // Leading in the expanded sidebar (layout B); centred on the rail.
+        .frame(maxWidth: .infinity, alignment: isVertical ? .center : .leading)
         .transaction { transaction in
             if reduceMotion { transaction.animation = nil }
         }
     }
 }
 
-/// An icon-only button hosted inside `SidebarTrayPill`, sized per axis from
-/// `TrayGlassStyle`. The pill has no visible text, so the item's title
-/// carries over as a tooltip and an accessibility label instead.
+/// Wraps both tray capsules in one `GlassEffectContainer` on the glass path,
+/// so their glass renders together instead of one sampling the other.
+/// Spacing 0: the capsules never melt into each other across the group gap.
+/// A pass-through wherever `TrayGlassSurface` draws no glass.
+private struct TrayGlassGroupContainer: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    var forceOpaque = false
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
+            GlassEffectContainer(spacing: 0) { content }
+        } else {
+            content
+        }
+    }
+}
+
+/// An icon-only square button hosted inside `SidebarTrayPill`, sized per
+/// axis from `TrayGlassStyle`. The pill has no visible text, so the item's
+/// title carries over as a tooltip and an accessibility label instead.
 struct TrayIconButton: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
@@ -570,11 +619,7 @@ struct TrayIconButton: View {
     var itemId: String? = nil
     let systemName: String
     let label: String
-    var helpText: String? = nil
-    /// False in the expanded horizontal tray, where each icon takes an equal
-    /// flexible share of the full-width bar (Flow 07 layer `wy7vi` et al.:
-    /// each wrapper is `flex: 1 1 0`). True in the rail's vertical pill,
-    /// where each button is a fixed square.
+    /// Picks the size dials: the rail's (true) or the expanded bar's (false).
     var isVertical = false
     /// Symbol animation to play on click — see `TrayIconTapEffect`.
     var tapEffect: TrayIconTapEffect? = nil
@@ -597,12 +642,7 @@ struct TrayIconButton: View {
                 // own `.interactive()` reacts to press, not hover. Reduce
                 // Motion suppresses it like every other animation here.
                 .scaleEffect(!reduceMotion && showsHover ? 1.06 : 1.0)
-                .frame(
-                    minWidth: isVertical ? size : nil,
-                    maxWidth: isVertical ? size : .infinity,
-                    minHeight: size,
-                    maxHeight: size
-                )
+                .frame(width: size, height: size)
                 .background(
                     TrayGlassStyle.buttonHighlightShape()
                         .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
@@ -611,7 +651,7 @@ struct TrayIconButton: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: showsHover)
-        .help(helpText ?? label)
+        .help(label)
         .accessibilityLabel(label)
     }
 
@@ -644,14 +684,6 @@ struct TrayIconButton: View {
                 } else {
                     glyph
                 }
-            case .rotate:
-                if #available(macOS 15.0, *) {
-                    glyph.symbolEffect(.rotate, value: tapEffectTrigger)
-                } else if #available(macOS 14.0, *) {
-                    glyph.symbolEffect(.bounce, value: tapEffectTrigger)
-                } else {
-                    glyph
-                }
             }
         }
     }
@@ -675,7 +707,8 @@ extension WorkspaceViewContainer {
     }
 
     /// Builds the ordered tray item list shared by the expanded tray and the
-    /// collapsed rail's tray pill.
+    /// collapsed rail's tray, each item tagged with its capsule. Settings is
+    /// not in the tray; it lives in the app menu (Preferences…, Cmd+,).
     ///
     /// - Parameters:
     ///   - container: The owning `WorkspaceViewContainer`, resolved by each
@@ -691,7 +724,7 @@ extension WorkspaceViewContainer {
         toggleLabel: String
     ) -> [SidebarTrayItem] {
         [
-            SidebarTrayItem(id: "newSession", systemName: "plus", label: "New Session", tapEffect: .bounce) {
+            SidebarTrayItem(id: "newSession", systemName: "plus", label: "New Session", group: .create, tapEffect: .bounce) {
                 guard let container else {
                     assertionFailure("sidebarTrayItems: coordinator.containerView is not a WorkspaceViewContainer")
                     return
@@ -701,30 +734,19 @@ extension WorkspaceViewContainer {
             // Same path as the header's "+ New Project" button
             // (`WorkspaceSidebarView.presentFolderPicker`): folder picker, then
             // the composer locked to the new project.
-            SidebarTrayItem(id: "newProject", systemName: "folder.badge.plus", label: "New Project", tapEffect: .bounce) {
+            SidebarTrayItem(id: "newProject", systemName: "folder.badge.plus", label: "New Project", group: .create, tapEffect: .bounce) {
                 guard let container else {
                     assertionFailure("sidebarTrayItems: coordinator.containerView is not a WorkspaceViewContainer")
                     return
                 }
                 _ = container.addProjectViaFolderPickerAndOpenComposer()
             },
-            // Round 4: reuses the app's existing "Open Config" action
-            // (`AppDelegate.openConfig` -> `Ghostty.App.openConfig()`) rather
-            // than a new file-opening path — this container already holds
-            // the same `Ghostty.App` instance.
-            SidebarTrayItem(id: "settings", systemName: "gearshape", label: "Settings", helpText: "Open Config", tapEffect: .rotate) {
-                guard let container else {
-                    assertionFailure("sidebarTrayItems: coordinator.containerView is not a WorkspaceViewContainer")
-                    return
-                }
-                container.openConfig()
-            },
             // No `.contentTransition(.symbolEffect(.replace))` here: the icon
             // is the static "sidebar.left" glyph in every mode (pinned,
             // rail, overlay) — only `toggleLabel` changes — so there's no
             // natural pinned↔rail symbol pair to cross-fade between. Falls
             // back to `.bounce` per the brief.
-            SidebarTrayItem(id: "toggleSidebar", systemName: "sidebar.left", label: toggleLabel, tapEffect: .bounce) {
+            SidebarTrayItem(id: "toggleSidebar", systemName: "sidebar.left", label: toggleLabel, group: .toggle, tapEffect: .bounce) {
                 container?.toggleSidebar()
             }
         ]

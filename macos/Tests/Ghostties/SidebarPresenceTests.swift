@@ -72,22 +72,20 @@ struct SidebarPresenceTests {
 
     /// `sidebarTrayItems` is the one ordered list `SidebarTray` renders on
     /// both axes (expanded/overlay and collapsed). Cover its
-    /// order/ids directly — adding a Settings entry later should only ever
-    /// require inserting into this list, not touching two views.
+    /// order/ids directly. Settings is not in the tray (layout B); it lives
+    /// in the app menu.
     @Test func trayItemsAreOrderedNewSessionThenToggle() {
         let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "Collapse Sidebar")
-        #expect(items.map(\.id) == ["newSession", "newProject", "settings", "toggleSidebar"])
-        #expect(items.map(\.systemName) == ["plus", "folder.badge.plus", "gearshape", "sidebar.left"])
+        #expect(items.map(\.id) == ["newSession", "newProject", "toggleSidebar"])
+        #expect(items.map(\.systemName) == ["plus", "folder.badge.plus", "sidebar.left"])
     }
 
-    /// Round 4: Settings sits between `+` and the sidebar toggle (matching
-    /// the design), and its accessibility label ("Settings") is distinct
-    /// from its tooltip, which names the concrete action ("Open Config").
-    @Test func trayItemsIncludeSettingsWithDistinctAccessibilityLabelAndTooltip() {
+    /// Layout B splits the tray into two capsules: Create (new session, new
+    /// project) and the sidebar toggle on its own, in that order.
+    @Test func trayItemsSplitIntoCreateThenToggleCapsules() {
         let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "Collapse Sidebar")
-        let settings = items.first(where: { $0.id == "settings" })
-        #expect(settings?.label == "Settings")
-        #expect(settings?.helpText == "Open Config")
+        #expect(items.map(\.group) == [.create, .create, .toggle])
+        #expect(SidebarTray.groupItemCounts() == [2, 1])
     }
 
     /// The toggle item's label is the one piece of state callers still
