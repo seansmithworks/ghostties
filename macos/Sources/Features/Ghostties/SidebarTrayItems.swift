@@ -84,6 +84,14 @@ enum TrayGlassStyle {
     }
 
     /// The selected expanded row's title weight. The rail has no title.
+    /// The expanded tray's width. `fill`: the Create capsule stretches across
+    /// the bar, from the leading margin to the group gap before the Toggle
+    /// capsule, and its buttons share that width evenly. `hug`: both capsules
+    /// hug their buttons, leading-aligned. The rail always hugs.
+    enum TrayWidth: String, CaseIterable {
+        case fill, hug
+    }
+
     enum SelectedTitleWeight: String, CaseIterable {
         case regular, semibold
 
@@ -244,6 +252,8 @@ enum TrayGlassStyle {
     static let cornerStyle: CornerStyle = .capsule
     static let capsuleCornerRadius: CGFloat = 32
     static let cornerRadius: CGFloat = 12
+    /// Default expanded tray width (see `TrayWidth`).
+    static let trayWidth: TrayWidth = .fill
     /// Default selected-row style (see `SelectedStyle`).
     static let selectedStyle: SelectedStyle = .flat
     /// Default selected-row title weight (see `SelectedTitleWeight`).
@@ -460,7 +470,7 @@ struct SidebarSelectedSurface: View {
 }
 
 /// One glass capsule of tray icon buttons, on either axis; it hugs its
-/// buttons. One view, not two: the axis switches its stack between
+/// buttons, which may themselves flex (`TrayIconButton.fillsWidth`). One view, not two: the axis switches its stack between
 /// `HStackLayout` and `VStackLayout` through `AnyLayout`, which keeps every
 /// button's identity, so flipping the axis inside an animation stretches the
 /// same capsule and reflows the same buttons (the pinned⇄rail morph) instead
@@ -488,8 +498,9 @@ struct SidebarTrayPill<Content: View>: View {
 }
 
 /// The sidebar's one tray: two capsules (`SidebarTrayGroup`), Create then
-/// Toggle, side by side and leading-aligned in the expanded sidebar, stacked
-/// and centred on the rail. Both axes are this same view: an outer
+/// Toggle, side by side in the expanded sidebar (Create filling the bar, or
+/// both hugging and leading-aligned, per the "Tray width" dial), stacked and
+/// centred on the rail. Both axes are this same view: an outer
 /// `AnyLayout` places the capsules and each capsule's own `AnyLayout` places
 /// its buttons, so every capsule and button keeps its identity. Hosted once
 /// at the sidebar root (`SidebarHostRoot` in `WorkspaceViewContainer`),
@@ -559,6 +570,9 @@ struct SidebarTray: View {
         let groupLayout = isVertical
             ? AnyLayout(VStackLayout(alignment: .center, spacing: gap))
             : AnyLayout(HStackLayout(alignment: .bottom, spacing: gap))
+        // Expanded "Tray width: fill": the Create capsule takes the bar's
+        // spare width (its buttons flex; the Toggle capsule's stay square).
+        let fillsCreate = !isVertical && SidebarDialTuning.trayWidth() == .fill
         groupLayout {
             ForEach(groups, id: \.self) { group in
                 SidebarTrayPill(axis: axis, forceOpaque: forceOpaque) {
@@ -568,6 +582,7 @@ struct SidebarTray: View {
                             systemName: item.systemName,
                             label: item.label,
                             isVertical: isVertical,
+                            fillsWidth: fillsCreate && group == .create,
                             tapEffect: item.tapEffect,
                             action: item.action
                         )
@@ -621,6 +636,11 @@ struct TrayIconButton: View {
     let label: String
     /// Picks the size dials: the rail's (true) or the expanded bar's (false).
     var isVertical = false
+    /// Takes an equal share of its capsule's spare width instead of staying
+    /// square (the expanded Create capsule under "Tray width: fill"). Height
+    /// is fixed either way, and the hover highlight fills the cell, so it
+    /// keeps the capsule's concentric inset.
+    var fillsWidth = false
     /// Symbol animation to play on click — see `TrayIconTapEffect`.
     var tapEffect: TrayIconTapEffect? = nil
     let action: () -> Void
@@ -642,7 +662,17 @@ struct TrayIconButton: View {
                 // own `.interactive()` reacts to press, not hover. Reduce
                 // Motion suppresses it like every other animation here.
                 .scaleEffect(!reduceMotion && showsHover ? 1.06 : 1.0)
-                .frame(width: size, height: size)
+                // One flexible frame for both widths, so flipping
+                // `fillsWidth` (the pinned⇄rail morph) animates the cell's
+                // width instead of swapping modifiers. min = ideal = max =
+                // `size` is the square cell.
+                .frame(
+                    minWidth: size,
+                    idealWidth: size,
+                    maxWidth: fillsWidth ? .infinity : size,
+                    minHeight: size,
+                    maxHeight: size
+                )
                 .background(
                     TrayGlassStyle.buttonHighlightShape()
                         .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
