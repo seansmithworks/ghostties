@@ -730,7 +730,7 @@ class WorkspaceViewContainer: NSView {
         shadowHostBottomConstraint.constant = -inset
         shadowHostTrailingConstraint.constant = -inset
         shadowHostTrailingToBrowser.constant = -inset
-        shadowHostLeadingToSidebar.constant = inset
+        shadowHostLeadingToSidebar.constant = WorkspaceLayout.sidebarTrailingGutter(for: sidebarMode, margin: inset)
         shadowHostLeadingToSuperview.constant = inset
         // Overlay collapses the browser to zero insets; leave it there.
         if sidebarMode != .overlay {
@@ -1013,7 +1013,8 @@ class WorkspaceViewContainer: NSView {
         case .collapsed:
             let inset = SidebarDialTuning.windowMargin()
             return NSSize(
-                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self) + inset * 2,
+                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self)
+                    + WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset) + inset,
                 height: termSize.height + inset * 2
             )
         case .closed:
@@ -2081,7 +2082,7 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.width = currentSidebarWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, inset)
+            set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -2100,7 +2101,7 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, railWidth)
             widthModel.width = railWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, inset)
+            set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -2814,7 +2815,8 @@ class WorkspaceViewContainer: NSView {
 
         // Dual leading constraints (mutually exclusive).
         shadowHostLeadingToSidebar = terminalShadowHost.leadingAnchor.constraint(
-            equalTo: sidebarHostingView.trailingAnchor, constant: inset)
+            equalTo: sidebarHostingView.trailingAnchor,
+            constant: WorkspaceLayout.sidebarTrailingGutter(for: initialMode, margin: inset))
         shadowHostLeadingToSuperview = terminalShadowHost.leadingAnchor.constraint(
             equalTo: leadingAnchor, constant: hasCardInset ? inset : 0)
         shadowHostLeadingToSidebar.isActive = occupiesSpace

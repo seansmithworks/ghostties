@@ -487,6 +487,9 @@ struct SidebarTrayPill<Content: View>: View {
     var forceOpaque = false
     /// DEBUG Redlines tag for this capsule (its content is `<id>.content`).
     var redlineID: String? = nil
+    /// Rail A2: the capsule fills the width it is offered instead of hugging,
+    /// its buttons (still their dial size) centred inside.
+    var stretchesAcross = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -494,6 +497,7 @@ struct SidebarTrayPill<Content: View>: View {
             ? AnyLayout(VStackLayout(spacing: TrayGlassStyle.verticalItemGap))
             : AnyLayout(HStackLayout(spacing: TrayGlassStyle.horizontalItemGap))
         layout(content)
+            .frame(maxWidth: stretchesAcross ? .infinity : nil)
             .redlineFrame(redlineID.map { $0 + ".content" })
             .padding(SidebarDialTuning.trayInnerPadding())
             .redlineFrame(redlineID)
@@ -581,7 +585,7 @@ struct SidebarTray: View {
         let fillsCreate = !isVertical && SidebarDialTuning.trayWidth() == .fill
         groupLayout {
             ForEach(groups, id: \.self) { group in
-                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue)) {
+                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue), stretchesAcross: isVertical) {
                     ForEach(items.filter { $0.group == group }) { item in
                         TrayIconButton(
                             itemId: item.id,
@@ -601,10 +605,11 @@ struct SidebarTray: View {
         .redlineFrame(RedlineID.trayGroup)
         // Expanded: the window margin is the visible gap on each side; on
         // the trailing side the gutter outside the column already provides
-        // part of it. Rail: no side padding, so the pill centres on the full
-        // rail, the same centre as the rail's symmetric row column.
-        .padding(.leading, isVertical ? 0 : SidebarDialTuning.windowMargin())
-        .padding(.trailing, isVertical ? 0 : max(0, SidebarDialTuning.windowMargin() - trailingGutter))
+        // part of it. Rail (A2): the stretched capsules sit
+        // `railTrayCapsuleInset` from the window edge and from the card,
+        // centred on the full rail, the same centre as its row column.
+        .padding(.leading, isVertical ? WorkspaceLayout.railTrayCapsuleInset : SidebarDialTuning.windowMargin())
+        .padding(.trailing, isVertical ? WorkspaceLayout.railTrayCapsuleInset : max(0, SidebarDialTuning.windowMargin() - trailingGutter))
         .padding(.bottom, Self.bottomPadding(isVertical: isVertical))
         // Leading in the expanded sidebar (layout B); centred on the rail.
         .frame(maxWidth: .infinity, alignment: isVertical ? .center : .leading)

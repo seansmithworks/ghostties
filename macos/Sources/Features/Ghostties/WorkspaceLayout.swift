@@ -410,15 +410,28 @@ enum WorkspaceLayout {
     static let sidebarContentPaddingTrailing: CGFloat = 0
 
     /// Space outside the sidebar column's trailing edge before the next
-    /// visible surface. Pinned/collapsed: the terminal card's leading inset,
-    /// the window margin (the gap the sidebar drag handle sits in), so that
-    /// much of a visible trailing inset is already there and the column pads
-    /// only the rest. Without this the expanded list and tray sat 8pt from
-    /// the window edge but 16pt from the card. Overlay/closed: the column's
-    /// trailing edge IS the panel edge, so 0.
+    /// visible surface: the one source for the sidebar-to-card gap, read by
+    /// both the card's leading constraint and the column's own padding.
+    /// Pinned: the window margin (the gap the sidebar drag handle sits in),
+    /// so that much of a visible trailing inset is already there and the
+    /// column pads only the rest. Without this the expanded list and tray
+    /// sat 8pt from the window edge but 16pt from the card. Collapsed (rail
+    /// A2): 0, the card butts the rail, whose own width already ends a
+    /// `leadingInset` past the traffic lights (`collapsedRailWidth`).
+    /// Overlay/closed: the column's trailing edge IS the panel edge, so 0.
     static func sidebarTrailingGutter(for mode: SidebarMode, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        (mode == .pinned || mode == .collapsed) ? SidebarDialTuning.windowMargin(defaults: defaults) : 0
+        sidebarTrailingGutter(for: mode, margin: SidebarDialTuning.windowMargin(defaults: defaults))
     }
+
+    /// `sidebarTrailingGutter(for:)` at an explicit window margin.
+    static func sidebarTrailingGutter(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
+        mode == .pinned ? margin : 0
+    }
+
+    /// Inset of each rail tray capsule from the window's leading edge and
+    /// from the canvas card (rail A2): the capsules stretch to
+    /// `railWidth - 2 * railTrayCapsuleInset`, buttons centred inside.
+    static let railTrayCapsuleInset: CGFloat = 8
 
     /// Extra top padding on the bottom tray, opening a gap between the list
     /// above and the tray below. 0 = today's flush layout (the list's
