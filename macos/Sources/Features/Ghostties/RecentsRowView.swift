@@ -130,6 +130,7 @@ struct RecentsRowView: View, Equatable {
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
+        .redlineFrame(RedlineID.row(session.id) + ".content")
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
         // 46pt + the enclosing `VStack(spacing: 2)`'s 2pt inter-row gap
@@ -141,6 +142,7 @@ struct RecentsRowView: View, Equatable {
         // pass used 40 (before that, 36), both too tight — Sean's round-6
         // follow-up review called this out as ~30% tighter than the design.
         .frame(height: SidebarDialTuning.rowHeight())
+        .redlineFrame(RedlineID.row(session.id))
         .background(rowBackground)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }

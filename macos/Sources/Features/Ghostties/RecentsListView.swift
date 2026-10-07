@@ -14,8 +14,6 @@ import UniformTypeIdentifiers
 struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
-    /// See `EnvironmentValues.sidebarTrailingGutter`.
-    @Environment(\.sidebarTrailingGutter) private var trailingGutter
 
     @State private var editingSessionId: UUID?
     @State private var editingName: String = ""
@@ -171,10 +169,7 @@ struct RecentsListView: View {
                         inactiveExpanded: true,
                         archiveExpanded: true
                     )
-                    .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-                    .padding(.trailing, SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
-                    .padding(.top, SidebarDialTuning.contentPaddingTop())
-                    .padding(.bottom, 4)
+                    .modifier(SidebarColumnPadding())
                 } else {
                     sessionsScrollView(
                         pinned: pinned,
@@ -371,13 +366,11 @@ struct RecentsListView: View {
                     inactiveExpanded: inactiveExpanded,
                     archiveExpanded: archiveExpanded
                 )
-                .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-                .padding(.trailing, SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
-                .padding(.top, SidebarDialTuning.contentPaddingTop())
-                .padding(.bottom, 4)
+                .modifier(SidebarColumnPadding())
                 .animation(reflowAnimation, value: dragState)
             }
             .accessibilityLabel("Sessions")
+            .redlineFrame(RedlineID.listViewport)
             .overlay(alignment: .top) { autoScrollEdgeZone(direction: -1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
             .overlay(alignment: .bottom) { autoScrollEdgeZone(direction: 1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
         }

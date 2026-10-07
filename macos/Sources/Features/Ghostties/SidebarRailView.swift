@@ -75,10 +75,10 @@ struct SidebarRailView: View {
                     ).count
                 )
             }
-            .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-            .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
-            .padding(.top, SidebarDialTuning.contentPaddingTop())
-            .padding(.bottom, 4)
+            // Same column padding as the expanded list: the window margin
+            // outside, the content paddings inside, so the rail's row cards
+            // and the tray centre in the same span.
+            .modifier(SidebarColumnPadding())
 
             Spacer(minLength: 0)
 

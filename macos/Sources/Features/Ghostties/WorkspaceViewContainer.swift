@@ -111,13 +111,17 @@ private struct SidebarHostRoot: View {
     let trayIsVertical: Bool?
     /// False for the task-first view, which has no tray.
     let showsTrayWhenExpanded: Bool
-    /// `WorkspaceLayout.sidebarTrailingGutter(for:)` for the mode this root
-    /// was built for — the expanded list and tray pad their trailing edge
-    /// by only what the gutter doesn't already provide.
-    let trailingGutter: CGFloat
+    /// The mode this root was built for. Its
+    /// `WorkspaceLayout.sidebarTrailingGutter(for:)` — read live, so the
+    /// Window margin dial lands without a rebuild — is what the expanded
+    /// list and tray leave out of their own trailing padding.
+    let gutterMode: SidebarMode
+    /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
     var body: some View {
         let vertical = trayIsVertical ?? model.isCollapsedPresentation
+        let trailingGutter = WorkspaceLayout.sidebarTrailingGutter(for: gutterMode)
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .bottom) {
@@ -275,6 +279,16 @@ class WorkspaceViewContainer: NSView {
 
     /// The browser panel content (navigation bar + content area placeholder).
     private let browserPanelView = BrowserPanelView()
+
+    #if DEBUG
+    /// DEBUG Redlines overlay (`SidebarRedlines.swift`): spacing bands over
+    /// the whole workspace, hidden unless the inspector's Redlines is on.
+    private lazy var redlineOverlay = RedlineOverlayView(
+        sidebarHost: sidebarHostingView,
+        cardHost: terminalShadowHost,
+        browserHost: browserShadowHost
+    )
+    #endif
 
     /// Diagnostic build/launch info badge — bottom-left corner of the window,
     /// click-to-copy. `@AppStorage`-gated; sizes itself to its content so it
@@ -434,6 +448,12 @@ class WorkspaceViewContainer: NSView {
     /// Test seam: what the pinned rows would render toward right now.
     var isCollapsedPresentationForTesting: Bool { widthModel.isCollapsedPresentation }
     var sidebarModeForTesting: SidebarMode { sidebarMode }
+    /// Test seam: the terminal card's and the sidebar's frames.
+    var cardFrameForTesting: NSRect { terminalShadowHost.frame }
+    var sidebarFrameForTesting: NSRect { sidebarHostingView.frame }
+    /// Test seam: the live Window margin path, with the margin passed in
+    /// rather than written to the shared dial store.
+    func applyWindowMarginForTesting(_ inset: CGFloat) { applyWindowMargin(inset) }
 
     /// Stored constraints for animating sidebar show/hide and terminal insets.
     private var sidebarWidthConstraint: NSLayoutConstraint!
@@ -661,6 +681,14 @@ class WorkspaceViewContainer: NSView {
             object: nil
         )
 
+        // A live Window margin dial change re-applies the card insets.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sidebarDialsChanged),
+            name: SidebarDialTuning.didChangeNotification,
+            object: nil
+        )
+
         #if DEBUG
         NotificationCenter.default.addObserver(
             self,
@@ -676,6 +704,36 @@ class WorkspaceViewContainer: NSView {
         applyChromeColor()
     }
     #endif
+
+    @objc private func sidebarDialsChanged() {
+        applyWindowMargin()
+        #if DEBUG
+        redlineOverlay.refresh()
+        #endif
+    }
+
+    /// Re-applies the Window margin dial (`SidebarDialTuning.windowMargin`)
+    /// to every card inset constraint, so a live dial change lands without a
+    /// mode change or relaunch. The same constants `setup()` and
+    /// `applyTransitionConstraints` write; skipped mid-transition, where the
+    /// animator owns them (the next settled change re-applies).
+    private func applyWindowMargin(_ inset: CGFloat = SidebarDialTuning.windowMargin()) {
+        guard !isSidebarTransitionAnimating else { return }
+        shadowHostTopConstraint.constant = inset
+        shadowHostBottomConstraint.constant = -inset
+        shadowHostTrailingConstraint.constant = -inset
+        shadowHostTrailingToBrowser.constant = -inset
+        shadowHostLeadingToSidebar.constant = inset
+        shadowHostLeadingToSuperview.constant = inset
+        // Overlay collapses the browser to zero insets; leave it there.
+        if sidebarMode != .overlay {
+            browserShadowHostTopConstraint.constant = inset
+            browserShadowHostBottomConstraint.constant = -inset
+            browserShadowHostTrailingConstraint.constant = -inset
+        }
+        needsLayout = true
+        invalidateIntrinsicContentSize()
+    }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
@@ -940,19 +998,19 @@ class WorkspaceViewContainer: NSView {
         guard termSize.width != NSView.noIntrinsicMetric else { return termSize }
         switch sidebarMode {
         case .pinned:
-            let inset = WorkspaceLayout.terminalInset
+            let inset = SidebarDialTuning.windowMargin()
             return NSSize(
                 width: termSize.width + currentSidebarWidth + inset * 2,
                 height: termSize.height + inset * 2
             )
         case .collapsed:
-            let inset = WorkspaceLayout.terminalInset
+            let inset = SidebarDialTuning.windowMargin()
             return NSSize(
                 width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self) + inset * 2,
                 height: termSize.height + inset * 2
             )
         case .closed:
-            let inset = WorkspaceLayout.terminalInset
+            let inset = SidebarDialTuning.windowMargin()
             return NSSize(
                 width: termSize.width + inset * 2,
                 height: termSize.height + inset * 2
@@ -976,13 +1034,16 @@ class WorkspaceViewContainer: NSView {
     /// consumers here gate on `sidebarMode == .pinned` anyway.
     private var resizableWidth: CGFloat {
         let sidebarWidth = (sidebarMode == .pinned || sidebarMode == .collapsed) ? widthModel.width : 0
-        let inset = WorkspaceLayout.terminalInset
+        let inset = SidebarDialTuning.windowMargin()
         // Three inset slots: leading of terminal, gap between panels, trailing of browser.
         return bounds.width - sidebarWidth - inset * 3
     }
 
     override func layout() {
         super.layout()
+        #if DEBUG
+        if !redlineOverlay.isHidden { redlineOverlay.needsDisplay = true }
+        #endif
 
         // Re-clamp the sidebar width when the window shrinks. The sidebar
         // previously never re-clamped on resize, so a sidebar sitting near
@@ -1021,7 +1082,7 @@ class WorkspaceViewContainer: NSView {
         // flight — the animation itself is already driving the constraint
         // to the right place.
         if sidebarMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating {
-            let inset = WorkspaceLayout.terminalInset
+            let inset = SidebarDialTuning.windowMargin()
             let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
             let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
             let reclamped = min(max(currentSidebarWidth, WorkspaceLayout.sidebarMinWidth), upperBound)
@@ -1139,15 +1200,20 @@ class WorkspaceViewContainer: NSView {
     /// Wraps sidebar content in `SidebarHostRoot` — see that type for why
     /// every mode shares one root.
     private func hostRoot(content: AnyView, trayIsVertical: Bool?) -> AnyView {
-        AnyView(SidebarHostRoot(
+        let root = SidebarHostRoot(
             model: widthModel,
             content: content,
             trayIsVertical: trayIsVertical,
             showsTrayWhenExpanded: currentSidebarViewMode != "taskFirst",
-            trailingGutter: WorkspaceLayout.sidebarTrailingGutter(for: sidebarMode)
+            gutterMode: sidebarMode
         )
         .environmentObject(store)
-        .environmentObject(coordinator))
+        .environmentObject(coordinator)
+        #if DEBUG
+        return AnyView(root.environment(\.redlineRegistry, redlineOverlay.registry))
+        #else
+        return AnyView(root)
+        #endif
     }
 
     /// The collapsed rail's content (Flow 01, sidebar-presence §02),
@@ -1523,7 +1589,7 @@ class WorkspaceViewContainer: NSView {
         // Upper bound: the design-token max, but never wider than leaves room
         // for the terminal's minimum usable width (mirrors the browser drag
         // handle's clamp against `WorkspaceLayout.terminalMinWidth`).
-        let inset = WorkspaceLayout.terminalInset
+        let inset = SidebarDialTuning.windowMargin()
         let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
         let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
         let target = Self.sidebarDragTarget(
@@ -1768,7 +1834,7 @@ class WorkspaceViewContainer: NSView {
         // clear it and fall back to the OS appearance.
         applyChromeColor()
 
-        let inset = WorkspaceLayout.terminalInset
+        let inset = SidebarDialTuning.windowMargin()
 
         // Content differs by mode (rail vs. full sidebar). The pinned⇄
         // collapsed pair — the ONLY pair Flow 05's content choreography
@@ -2646,6 +2712,15 @@ class WorkspaceViewContainer: NSView {
         addSubview(browserDragHandle)
         addSubview(browserShadowHost)
         addSubview(buildInfoBadgeHostingView)
+        #if DEBUG
+        addSubview(redlineOverlay)
+        NSLayoutConstraint.activate([
+            redlineOverlay.topAnchor.constraint(equalTo: topAnchor),
+            redlineOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            redlineOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            redlineOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        #endif
 
         sidebarHostingView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -2703,7 +2778,7 @@ class WorkspaceViewContainer: NSView {
         // mode (Sean's closed-state layout call — see `transitionTo`'s
         // `applyTransitionConstraints(for:.closed:)` doc comment); it is
         // never full bleed.
-        let inset: CGFloat = WorkspaceLayout.terminalInset
+        let inset: CGFloat = SidebarDialTuning.windowMargin()
         // Inset constraints target the shadow host, not the terminal directly.
         shadowHostTopConstraint = terminalShadowHost.topAnchor.constraint(
             equalTo: topAnchor, constant: inset)

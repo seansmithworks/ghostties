@@ -26,7 +26,26 @@ enum SidebarDialTuning {
     /// default argument and every dial `@AppStorage` goes through it.
     nonisolated(unsafe) static var store: UserDefaults = .standard
 
+    // MARK: Window
+    /// Every outer gutter in the window: the terminal (and browser) card's
+    /// inset on all four sides, the gap between the sidebar and the card,
+    /// and the sidebar's own outer edge (list column leading, tray leading/
+    /// trailing visible margin, tray bottom), in every sidebar mode.
+    static let windowMarginKey = "ghostties.sidebarDial.windowMargin"
+    /// DEBUG-only Redlines overlay (`SidebarRedlines.swift`): spacing bands
+    /// measured from real frames. Read in every configuration but only a
+    /// DEBUG build draws anything.
+    static let redlinesKey = "ghostties.sidebarDial.redlines"
+
+    /// Posted by the dial panel after every write or reset, so AppKit-side
+    /// geometry (the card's inset constraints) can re-read its dials live.
+    /// SwiftUI views re-render through `epochKey` instead.
+    static let didChangeNotification = Notification.Name("ghostties.sidebarDial.didChange")
+
     // MARK: Tray glass (both axes + the selected session row; `TrayGlassStyle`)
+    /// RETIRED: the tray's side margin is now the window margin
+    /// (`windowMargin`), so every outer gutter matches. The key is kept so
+    /// Reset still clears a saved value; nothing reads it.
     static let trayMarginKey = "ghostties.sidebarDial.trayMargin"
     static let trayInnerPaddingKey = "ghostties.sidebarDial.trayInnerPadding"
     static let trayGroupGapKey = "ghostties.sidebarDial.trayGroupGap"
@@ -169,13 +188,21 @@ enum SidebarDialTuning {
     }
 
     private static func cgFloat(_ key: String, default value: CGFloat, defaults: UserDefaults) -> CGFloat {
-        let stored = defaults.object(forKey: key) as? Double
-        return CGFloat(stored ?? Double(value))
+        CGFloat(number(key, defaults: defaults) ?? Double(value))
     }
 
     private static func double(_ key: String, default value: Double, defaults: UserDefaults) -> Double {
-        let stored = defaults.object(forKey: key) as? Double
-        return stored ?? value
+        number(key, defaults: defaults) ?? value
+    }
+
+    /// A stored number, or a launch argument (`-<key> 16` arrives as a
+    /// string in the argument domain), else nil.
+    private static func number(_ key: String, defaults: UserDefaults) -> Double? {
+        switch defaults.object(forKey: key) {
+        case let stored as Double: return stored
+        case let argument as String: return Double(argument)
+        default: return nil
+        }
     }
 
     private static func bool(_ key: String, default value: Bool, defaults: UserDefaults) -> Bool {
@@ -186,9 +213,15 @@ enum SidebarDialTuning {
         defaults.string(forKey: key).flatMap(T.init(rawValue:)) ?? value
     }
 
-    /// Horizontal tray only: gap between the bar and the sidebar's edges.
-    static func trayMargin(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(trayMarginKey, default: WorkspaceLayout.trayHorizontalMargin, defaults: defaults)
+    /// See `windowMarginKey`. Defaults to `WorkspaceLayout.terminalInset`.
+    static func windowMargin(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(windowMarginKey, default: WorkspaceLayout.terminalInset, defaults: defaults)
+    }
+    /// See `redlinesKey`. Off by default. `bool(forKey:)`, not a cast, so
+    /// a `-ghostties.sidebarDial.redlines YES` launch argument (a string)
+    /// reads as on, the same way `@AppStorage` reads it.
+    static func redlines(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
+        defaults.bool(forKey: redlinesKey)
     }
     static func trayInnerPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayInnerPaddingKey, default: TrayGlassStyle.innerPadding, defaults: defaults)
@@ -309,11 +342,12 @@ enum SidebarDialTuning {
     static func contentPaddingTrailing(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(contentPaddingTrailingKey, default: WorkspaceLayout.sidebarContentPaddingTrailing, defaults: defaults)
     }
-    /// The expanded list column's own trailing padding: the visible inset
-    /// (`contentPaddingTrailing`) less the gutter already outside the column
-    /// (`WorkspaceLayout.sidebarTrailingGutter`).
+    /// The list column's outer trailing padding: the window margin less the
+    /// gutter already outside the column (`WorkspaceLayout.sidebarTrailingGutter`),
+    /// so the visible gap to the next surface is the window margin. The
+    /// inner `contentPaddingTrailing` is applied on top of this.
     static func contentColumnTrailingPadding(gutter: CGFloat, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        max(0, contentPaddingTrailing(defaults: defaults) - gutter)
+        max(0, windowMargin(defaults: defaults) - gutter)
     }
     static func listToTrayGap(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(listToTrayGapKey, default: WorkspaceLayout.sidebarListToTrayGap, defaults: defaults)
@@ -332,6 +366,7 @@ enum SidebarDialTuning {
     /// back to code defaults in one pass, same shape as
     /// `ComposerSingleLineReset.resetKeys`.
     static let allKeys: [String] = lightGlassKeys.all + darkGlassKeys.all + [
+        windowMarginKey, redlinesKey,
         trayMarginKey, trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
         trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
@@ -450,6 +485,8 @@ struct SidebarDialKitGlassModel: Codable, Equatable {
 struct SidebarDialKitTuningModel: Codable, Equatable {
     /// `SidebarAppearancePreview.Mode` — never persisted.
     var previewAppearance: String
+    var redlines: Bool
+    var windowMargin: Double
 
     var glassLight: SidebarDialKitGlassModel
     var glassDark: SidebarDialKitGlassModel
@@ -457,7 +494,6 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayGlassInteractive: Bool
     var trayHorizontalButtonSize: Double
     var trayHorizontalIconSize: Double
-    var trayMargin: Double
     var trayVerticalButtonSize: Double
     var trayVerticalIconSize: Double
     var trayInnerPadding: Double
@@ -547,12 +583,13 @@ final class SidebarDialKitCoordinator: ObservableObject {
     private static func readModel(defaults: UserDefaults) -> SidebarDialKitTuningModel {
         SidebarDialKitTuningModel(
             previewAppearance: SidebarAppearancePreview.mode.rawValue,
+            redlines: SidebarDialTuning.redlines(defaults: defaults),
+            windowMargin: Double(SidebarDialTuning.windowMargin(defaults: defaults)),
             glassLight: SidebarDialKitGlassModel(SidebarDialTuning.trayGlass(for: .light, defaults: defaults)),
             glassDark: SidebarDialKitGlassModel(SidebarDialTuning.trayGlass(for: .dark, defaults: defaults)),
             trayGlassInteractive: SidebarDialTuning.trayGlassInteractive(defaults: defaults),
             trayHorizontalButtonSize: Double(SidebarDialTuning.trayHorizontalButtonSize(defaults: defaults)),
             trayHorizontalIconSize: Double(SidebarDialTuning.trayHorizontalIconSize(defaults: defaults)),
-            trayMargin: Double(SidebarDialTuning.trayMargin(defaults: defaults)),
             trayVerticalButtonSize: Double(SidebarDialTuning.trayVerticalButtonSize(defaults: defaults)),
             trayVerticalIconSize: Double(SidebarDialTuning.trayVerticalIconSize(defaults: defaults)),
             trayInnerPadding: Double(SidebarDialTuning.trayInnerPadding(defaults: defaults)),
@@ -632,12 +669,13 @@ final class SidebarDialKitCoordinator: ObservableObject {
             setIfChanged(keys.selectedShadowRadius, old.selectedShadowRadius, new.selectedShadowRadius)
             setIfChanged(keys.selectedShadowYOffset, old.selectedShadowYOffset, new.selectedShadowYOffset)
         }
+        setBoolIfChanged(SidebarDialTuning.redlinesKey, previous.redlines, model.redlines)
+        setIfChanged(SidebarDialTuning.windowMarginKey, previous.windowMargin, model.windowMargin)
         writeGlass(SidebarDialTuning.lightGlassKeys, previous.glassLight, model.glassLight)
         writeGlass(SidebarDialTuning.darkGlassKeys, previous.glassDark, model.glassDark)
         setBoolIfChanged(SidebarDialTuning.trayGlassInteractiveKey, previous.trayGlassInteractive, model.trayGlassInteractive)
         setIfChanged(SidebarDialTuning.trayHorizontalButtonSizeKey, previous.trayHorizontalButtonSize, model.trayHorizontalButtonSize)
         setIfChanged(SidebarDialTuning.trayHorizontalIconSizeKey, previous.trayHorizontalIconSize, model.trayHorizontalIconSize)
-        setIfChanged(SidebarDialTuning.trayMarginKey, previous.trayMargin, model.trayMargin)
         setIfChanged(SidebarDialTuning.trayVerticalButtonSizeKey, previous.trayVerticalButtonSize, model.trayVerticalButtonSize)
         setIfChanged(SidebarDialTuning.trayVerticalIconSizeKey, previous.trayVerticalIconSize, model.trayVerticalIconSize)
         setIfChanged(SidebarDialTuning.trayInnerPaddingKey, previous.trayInnerPadding, model.trayInnerPadding)
@@ -713,6 +751,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
         // session only, so each glass group can be tuned on its own look.
         .select("previewAppearance", keyPath: \.previewAppearance, label: "Preview appearance",
                 options: SidebarAppearancePreview.Mode.allCases.map(\.rawValue)),
+        // Not a dial either: spacing bands measured off the live layout.
+        .toggle("redlines", keyPath: \.redlines, label: "Redlines"),
         // Colour and material, one group per appearance. Each drives the
         // tray on both axes plus the selected session row (rail pill and
         // expanded row, `SidebarSelectedSurface`).
@@ -727,7 +767,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .toggle("trayGlassInteractive", keyPath: \.trayGlassInteractive, label: "Glass interactive (tray)"),
             .slider("trayHorizontalButtonSize", keyPath: \.trayHorizontalButtonSize, label: "Bar button size (expanded)", range: 24...56, step: 0.5, unit: "pt"),
             .slider("trayHorizontalIconSize", keyPath: \.trayHorizontalIconSize, label: "Bar icon size (expanded)", range: 10...24, step: 0.5, unit: "pt"),
-            .slider("trayMargin", keyPath: \.trayMargin, label: "Bar side margin (expanded, visible)", range: 0...24, unit: "pt"),
             .select("trayWidth", keyPath: \.trayWidth, label: "Tray width",
                     options: TrayGlassStyle.TrayWidth.allCases.map(\.rawValue)),
             .slider("trayVerticalButtonSize", keyPath: \.trayVerticalButtonSize, label: "Pill button size (rail)", range: 24...56, step: 0.5, unit: "pt"),
@@ -753,10 +792,12 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .slider("headerTopPadding", keyPath: \.headerTopPadding, label: "Header top padding", range: 0...20, unit: "pt"),
         .slider("headerBottomPadding", keyPath: \.headerBottomPadding, label: "Header bottom padding", range: 0...20, unit: "pt"),
         .slider("headerChevronSize", keyPath: \.headerChevronSize, label: "Header chevron size", range: 8...24, unit: "pt"),
-        // Sidebar layout
+        // Sidebar layout. Window margin is every outer gutter; the content
+        // paddings below are inner spacing inside it.
+        .slider("windowMargin", keyPath: \.windowMargin, label: "Window margin", range: 0...32, unit: "pt"),
         .slider("contentPaddingTop", keyPath: \.contentPaddingTop, label: "Content padding top", range: 0...24, unit: "pt"),
-        .slider("contentPaddingLeading", keyPath: \.contentPaddingLeading, label: "Content padding leading", range: 0...24, unit: "pt"),
-        .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Content padding trailing (visible)", range: 0...24, unit: "pt"),
+        .slider("contentPaddingLeading", keyPath: \.contentPaddingLeading, label: "Content padding leading (inner)", range: 0...24, unit: "pt"),
+        .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Content padding trailing (inner)", range: 0...24, unit: "pt"),
         .slider("listToTrayGap", keyPath: \.listToTrayGap, label: "List-to-tray gap", range: 0...24, unit: "pt"),
         // Rail
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
@@ -783,7 +824,12 @@ enum SidebarDialInspector {
             defaults: SidebarDialTuning.store,
             // A row's `.equatable()` gate can't see a tuning change on its
             // own; poking the store re-renders the sidebar and tray.
-            onChange: { WorkspaceStore.shared.objectWillChange.send() }
+            // AppKit geometry (the card's inset constraints) listens for
+            // `didChangeNotification` instead.
+            onChange: {
+                WorkspaceStore.shared.objectWillChange.send()
+                NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
+            }
         )
         DialKitAgent.shared.start(appName: "Ghostties")
     }

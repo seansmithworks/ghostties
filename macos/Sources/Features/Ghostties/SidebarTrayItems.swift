@@ -485,6 +485,8 @@ struct SidebarTrayPill<Content: View>: View {
     /// path Reduce Transparency takes. Test seam: `cacheDisplay` can't capture
     /// glass, and the system setting can't be set from a test.
     var forceOpaque = false
+    /// DEBUG Redlines tag for this capsule (its content is `<id>.content`).
+    var redlineID: String? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -492,7 +494,9 @@ struct SidebarTrayPill<Content: View>: View {
             ? AnyLayout(VStackLayout(spacing: TrayGlassStyle.verticalItemGap))
             : AnyLayout(HStackLayout(spacing: TrayGlassStyle.horizontalItemGap))
         layout(content)
+            .redlineFrame(redlineID.map { $0 + ".content" })
             .padding(SidebarDialTuning.trayInnerPadding())
+            .redlineFrame(redlineID)
             .modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive()))
     }
 }
@@ -546,8 +550,10 @@ struct SidebarTray: View {
             + 2 * padding + bottomPadding(isVertical: false)
     }
 
+    /// The tray's gap to the window's bottom edge: the window margin, on
+    /// both axes, so it matches the terminal card's bottom inset.
     static func bottomPadding(isVertical: Bool) -> CGFloat {
-        isVertical ? 12 : 8
+        SidebarDialTuning.windowMargin()
     }
 
     /// Item count per capsule, in `SidebarTrayGroup` order, empty capsules
@@ -575,7 +581,7 @@ struct SidebarTray: View {
         let fillsCreate = !isVertical && SidebarDialTuning.trayWidth() == .fill
         groupLayout {
             ForEach(groups, id: \.self) { group in
-                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque) {
+                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue)) {
                     ForEach(items.filter { $0.group == group }) { item in
                         TrayIconButton(
                             itemId: item.id,
@@ -592,10 +598,12 @@ struct SidebarTray: View {
         }
         // One glass container for both capsules, so neither samples the other.
         .modifier(TrayGlassGroupContainer(forceOpaque: forceOpaque))
-        // `trayMargin` is the visible gap on each side; on the trailing side
-        // the gutter outside the column already provides part of it.
-        .padding(.leading, isVertical ? 0 : SidebarDialTuning.trayMargin())
-        .padding(.trailing, isVertical ? 0 : max(0, SidebarDialTuning.trayMargin() - trailingGutter))
+        .redlineFrame(RedlineID.trayGroup)
+        // The window margin is the visible gap on each side, on both axes
+        // (the rail centres the pill inside it); on the trailing side the
+        // gutter outside the column already provides part of it.
+        .padding(.leading, SidebarDialTuning.windowMargin())
+        .padding(.trailing, max(0, SidebarDialTuning.windowMargin() - trailingGutter))
         .padding(.bottom, Self.bottomPadding(isVertical: isVertical))
         // Leading in the expanded sidebar (layout B); centred on the rail.
         .frame(maxWidth: .infinity, alignment: isVertical ? .center : .leading)

@@ -34,13 +34,6 @@ enum WorkspaceLayout {
     /// whatever width is applied.
     static let sidebarRailWidth: CGFloat = 60
 
-    /// Horizontal margin between the expanded sidebar's horizontal tray bar
-    /// (`SidebarTray`) and the surfaces either side of it (window edge,
-    /// terminal card). The trailing side pads only what
-    /// `sidebarTrailingGutter(for:)` doesn't already provide. The rail's
-    /// vertical pill hugs its icons instead.
-    static let trayHorizontalMargin: CGFloat = 8
-
     /// Pure width calculation for the collapsed rail: hugs the macOS
     /// traffic-light cluster — the cluster's rightmost edge (zoom button
     /// `maxX`) plus a trailing gap equal to its leading inset (close button
@@ -180,6 +173,9 @@ enum WorkspaceLayout {
 
     /// Inset around the terminal panel when sidebar is visible (floating card effect).
     /// The design uses 8pt on all four sides (top, bottom, left, right).
+    /// The compiled default of the "Window margin" dial — read it through
+    /// `SidebarDialTuning.windowMargin()`, which also drives the sidebar's
+    /// outer edge, so every outer gutter in the window stays one value.
     static let terminalInset: CGFloat = 8
 
     /// Width of the invisible hover trigger strip at the left edge (closed mode).
@@ -402,24 +398,26 @@ enum WorkspaceLayout {
     /// replaces).
     static let sidebarContentPaddingTop: CGFloat = 4
 
-    /// Leading padding of the scrollable list content in both sidebar tabs.
-    static let sidebarContentPaddingLeading: CGFloat = 8
+    /// INNER leading padding of the scrollable list content (both tabs and
+    /// the rail), inside the window margin (`SidebarDialTuning.windowMargin`)
+    /// that already sets the content's outer edge. 0 = content sits at the
+    /// window margin, the same gutter as the terminal card's.
+    static let sidebarContentPaddingLeading: CGFloat = 0
 
-    /// VISIBLE trailing inset of the scrollable list content in both sidebar
-    /// tabs: the gap between the content and the next surface to its right.
-    /// Not all of it is the column's own padding — see
-    /// `sidebarTrailingGutter(for:)`.
-    static let sidebarContentPaddingTrailing: CGFloat = 8
+    /// INNER trailing padding of the scrollable list content, inside the
+    /// window-margin gutter to the next surface (`sidebarTrailingGutter`
+    /// plus `SidebarDialTuning.contentColumnTrailingPadding`).
+    static let sidebarContentPaddingTrailing: CGFloat = 0
 
     /// Space outside the sidebar column's trailing edge before the next
-    /// visible surface. Pinned/collapsed: the terminal card's leading
-    /// `terminalInset` (the gap the sidebar drag handle sits in), so that
+    /// visible surface. Pinned/collapsed: the terminal card's leading inset,
+    /// the window margin (the gap the sidebar drag handle sits in), so that
     /// much of a visible trailing inset is already there and the column pads
     /// only the rest. Without this the expanded list and tray sat 8pt from
     /// the window edge but 16pt from the card. Overlay/closed: the column's
     /// trailing edge IS the panel edge, so 0.
-    static func sidebarTrailingGutter(for mode: SidebarMode) -> CGFloat {
-        (mode == .pinned || mode == .collapsed) ? terminalInset : 0
+    static func sidebarTrailingGutter(for mode: SidebarMode, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        (mode == .pinned || mode == .collapsed) ? SidebarDialTuning.windowMargin(defaults: defaults) : 0
     }
 
     /// Extra top padding on the bottom tray, opening a gap between the list
@@ -806,5 +804,30 @@ extension EnvironmentValues {
     var sidebarTrailingGutter: CGFloat {
         get { self[SidebarTrailingGutterKey.self] }
         set { self[SidebarTrailingGutterKey.self] = newValue }
+    }
+}
+
+/// The sidebar list column's padding, shared by both tabs and the rail. The
+/// window margin (`SidebarDialTuning.windowMargin`) sets the column's outer
+/// edge — leading from the window edge; trailing so the visible gap to the
+/// next surface, gutter included, is the same margin — and the content-
+/// padding dials add inner spacing inside it. Tagged for the DEBUG Redlines
+/// overlay before and after each layer, so it can measure both.
+struct SidebarColumnPadding: ViewModifier {
+    /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    /// See `EnvironmentValues.sidebarTrailingGutter`.
+    @Environment(\.sidebarTrailingGutter) private var trailingGutter
+
+    func body(content: Content) -> some View {
+        content
+            .redlineFrame(RedlineID.listContent)
+            .padding(.leading, SidebarDialTuning.contentPaddingLeading())
+            .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+            .padding(.top, SidebarDialTuning.contentPaddingTop())
+            .redlineFrame(RedlineID.listInner)
+            .padding(.leading, SidebarDialTuning.windowMargin())
+            .padding(.trailing, SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
+            .padding(.bottom, 4)
     }
 }
