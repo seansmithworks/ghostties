@@ -96,8 +96,13 @@ struct RecentsRowView: View, Equatable {
                             }
                         }
                 } else {
+                    // The selected row's title takes the "Selected title
+                    // weight" dial (macOS 27 sidebar selection: semibold).
                     Text(session.name)
-                        .font(.system(size: SidebarDialTuning.rowTitleSize()))
+                        .font(.system(
+                            size: SidebarDialTuning.rowTitleSize(),
+                            weight: isActive ? SidebarDialTuning.selectedTitleWeight().fontWeight : .regular
+                        ))
                         .foregroundStyle(Color.primary)
                         .lineLimit(1)
                 }

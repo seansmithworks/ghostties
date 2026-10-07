@@ -72,6 +72,24 @@ enum TrayGlassStyle {
     }
 
     /// Blend mode the chromatic rim composites with.
+    /// How the selected session row (rail pill and expanded row) is drawn.
+    /// `glass`: the tray's full glass treatment (`TrayGlassSurface`).
+    /// `flat`: the tray's fill colour and corner shape only, with no glass,
+    /// rims or specular, and a softer, closer shadow (`Look.selectedShadow…`),
+    /// so the row reads as the tray's sibling rather than a second tray.
+    enum SelectedStyle: String, CaseIterable {
+        case glass, flat
+    }
+
+    /// The selected expanded row's title weight. The rail has no title.
+    enum SelectedTitleWeight: String, CaseIterable {
+        case regular, semibold
+
+        var fontWeight: Font.Weight {
+            self == .semibold ? .semibold : .regular
+        }
+    }
+
     enum ChromaticBlend: String, CaseIterable {
         case normal, plusLighter, screen, overlay
 
@@ -127,6 +145,11 @@ enum TrayGlassStyle {
         /// Direction the light comes from, in degrees (0 = from the right,
         /// 90 = from the top).
         var specularAngle: Double
+        /// The selected row's shadow in the `flat` selected style. The glass
+        /// style uses the tray's shadow above.
+        var selectedShadowOpacity: Double
+        var selectedShadowRadius: CGFloat
+        var selectedShadowYOffset: CGFloat
     }
 
     /// Light: the canvas (pen.dev `CnDfN`) values, unchanged from before the
@@ -155,7 +178,11 @@ enum TrayGlassStyle {
         chromaticBlend: .normal,
         // Off by default.
         specularStrength: 0,
-        specularAngle: 135
+        specularAngle: 135,
+        // Flat selected row: a soft contact shadow, well under the tray's.
+        selectedShadowOpacity: 0.06,
+        selectedShadowRadius: 4,
+        selectedShadowYOffset: 1
     )
 
     /// Dark: a raised canvas-grey pill (`canvasBackgroundDark` #2D2D2D over
@@ -180,7 +207,12 @@ enum TrayGlassStyle {
         chromaticPalette: .pastel,
         chromaticBlend: .plusLighter,
         specularStrength: 0,
-        specularAngle: 135
+        specularAngle: 135,
+        // Flat selected row: the canvas-grey fill already sits lighter than
+        // the chrome; a faint, tight shadow edges it without a halo.
+        selectedShadowOpacity: 0.22,
+        selectedShadowRadius: 3,
+        selectedShadowYOffset: 1
     )
 
     static func defaultLook(for colorScheme: ColorScheme) -> Look {
@@ -206,6 +238,10 @@ enum TrayGlassStyle {
     static let cornerStyle: CornerStyle = .capsule
     static let capsuleCornerRadius: CGFloat = 32
     static let cornerRadius: CGFloat = 12
+    /// Default selected-row style (see `SelectedStyle`).
+    static let selectedStyle: SelectedStyle = .flat
+    /// Default selected-row title weight (see `SelectedTitleWeight`).
+    static let selectedTitleWeight: SelectedTitleWeight = .semibold
     /// Selected rail row: the vertical tray's width (canvas 104px), canvas
     /// 72px tall; glyph 35px (vs the 28px it replaces).
     static let selectedPillWidth: CGFloat = verticalButtonSize + 2 * innerPadding
@@ -216,6 +252,15 @@ enum TrayGlassStyle {
     static let iconWeight: Font.Weight = .regular
 
     // MARK: Derived
+
+    /// The pill shape the tray and the selected row share, from the corner
+    /// style dial.
+    static func pillShape() -> RoundedRectangle {
+        let radius = SidebarDialTuning.trayGlassCornerStyle() == .capsule
+            ? capsuleCornerRadius
+            : SidebarDialTuning.trayGlassCornerRadius()
+        return RoundedRectangle(cornerRadius: radius, style: .continuous)
+    }
 
     static func glassTint(_ look: Look, for colorScheme: ColorScheme) -> Color? {
         if colorScheme == .dark {
@@ -299,12 +344,7 @@ struct TrayGlassSurface: ViewModifier {
     var forceOpaque = false
     var interactive = false
 
-    private var shape: RoundedRectangle {
-        let radius = SidebarDialTuning.trayGlassCornerStyle() == .capsule
-            ? TrayGlassStyle.capsuleCornerRadius
-            : SidebarDialTuning.trayGlassCornerRadius()
-        return RoundedRectangle(cornerRadius: radius, style: .continuous)
-    }
+    private var shape: RoundedRectangle { TrayGlassStyle.pillShape() }
 
     func body(content: Content) -> some View {
         let look = SidebarDialTuning.trayGlass(for: colorScheme)
@@ -383,14 +423,33 @@ struct TrayGlassSurface: ViewModifier {
 }
 
 /// The selected session row's surface, in the rail and the expanded list
-/// alike: the tray's glass (`TrayGlassSurface`, never interactive), so the
-/// same per-appearance glass dials drive the tray, the rail pill and the
-/// expanded row. Only the size adapts: the caller frames it (the rail's
-/// fixed pill, the expanded row's full row frame), and the corner shape
-/// follows the tray's corner style dial.
+/// alike, in the "Selected style" dial's style (`TrayGlassStyle.SelectedStyle`):
+/// `glass` is the tray's glass (`TrayGlassSurface`, never interactive);
+/// `flat` is the tray's fill colour and corner shape with the look's softer
+/// selected shadow and nothing else. Either way the same per-appearance
+/// dials drive the tray and this surface. Only the size adapts: the caller
+/// frames it (the rail's fixed pill, the expanded row's full row frame).
 struct SidebarSelectedSurface: View {
+    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
+    /// SwiftUI skips a body whose inputs are unchanged, and these views read
+    /// `UserDefaults` inside it, so without this a live dial change never lands.
+    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        Color.clear.modifier(TrayGlassSurface())
+        switch SidebarDialTuning.selectedStyle() {
+        case .glass:
+            Color.clear.modifier(TrayGlassSurface())
+        case .flat:
+            let look = SidebarDialTuning.trayGlass(for: colorScheme)
+            TrayGlassStyle.pillShape()
+                .fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
+                .shadow(
+                    color: Color.black.opacity(look.selectedShadowOpacity),
+                    radius: look.selectedShadowRadius,
+                    y: look.selectedShadowYOffset
+                )
+        }
     }
 }
 

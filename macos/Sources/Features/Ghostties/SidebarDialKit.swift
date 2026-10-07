@@ -31,6 +31,8 @@ enum SidebarDialTuning {
     static let trayGlassCornerRadiusKey = "ghostties.sidebarDial.trayGlass.cornerRadius"
     static let traySelectedPillWidthKey = "ghostties.sidebarDial.trayGlass.selectedPillWidth"
     static let traySelectedPillHeightKey = "ghostties.sidebarDial.trayGlass.selectedPillHeight"
+    static let selectedStyleKey = "ghostties.sidebarDial.trayGlass.selectedStyle"
+    static let selectedTitleWeightKey = "ghostties.sidebarDial.selectedTitleWeight"
 
     // MARK: Glass colour and material, one key set per appearance (`TrayGlassStyle.Look`)
 
@@ -52,12 +54,16 @@ enum SidebarDialTuning {
         let chromaticBlend: String
         let specularStrength: String
         let specularAngle: String
+        let selectedShadowOpacity: String
+        let selectedShadowRadius: String
+        let selectedShadowYOffset: String
 
         var all: [String] {
             [variant, tintOpacity, surfaceOpacity, rimWidth, rimOpacity,
              shadowOpacity, shadowRadius, shadowYOffset,
              chromaticIntensity, chromaticWidth, chromaticRotation, chromaticBlur,
-             chromaticPalette, chromaticBlend, specularStrength, specularAngle]
+             chromaticPalette, chromaticBlend, specularStrength, specularAngle,
+             selectedShadowOpacity, selectedShadowRadius, selectedShadowYOffset]
         }
     }
 
@@ -81,7 +87,10 @@ enum SidebarDialTuning {
         chromaticPalette: "ghostties.sidebarDial.trayGlass.chromaticPalette",
         chromaticBlend: "ghostties.sidebarDial.trayGlass.chromaticBlend",
         specularStrength: "ghostties.sidebarDial.trayGlass.specularStrength",
-        specularAngle: "ghostties.sidebarDial.trayGlass.specularAngle"
+        specularAngle: "ghostties.sidebarDial.trayGlass.specularAngle",
+        selectedShadowOpacity: "ghostties.sidebarDial.trayGlass.selectedShadowOpacity",
+        selectedShadowRadius: "ghostties.sidebarDial.trayGlass.selectedShadowRadius",
+        selectedShadowYOffset: "ghostties.sidebarDial.trayGlass.selectedShadowYOffset"
     )
 
     /// Dark keeps its two pre-split dark-only keys (warm tint, rim opacity);
@@ -102,7 +111,10 @@ enum SidebarDialTuning {
         chromaticPalette: "ghostties.sidebarDial.trayGlass.dark.chromaticPalette",
         chromaticBlend: "ghostties.sidebarDial.trayGlass.dark.chromaticBlend",
         specularStrength: "ghostties.sidebarDial.trayGlass.dark.specularStrength",
-        specularAngle: "ghostties.sidebarDial.trayGlass.dark.specularAngle"
+        specularAngle: "ghostties.sidebarDial.trayGlass.dark.specularAngle",
+        selectedShadowOpacity: "ghostties.sidebarDial.trayGlass.dark.selectedShadowOpacity",
+        selectedShadowRadius: "ghostties.sidebarDial.trayGlass.dark.selectedShadowRadius",
+        selectedShadowYOffset: "ghostties.sidebarDial.trayGlass.dark.selectedShadowYOffset"
     )
 
     static func glassKeys(for colorScheme: ColorScheme) -> GlassKeys {
@@ -193,8 +205,19 @@ enum SidebarDialTuning {
             chromaticPalette: choice(keys.chromaticPalette, default: base.chromaticPalette, defaults: defaults),
             chromaticBlend: choice(keys.chromaticBlend, default: base.chromaticBlend, defaults: defaults),
             specularStrength: double(keys.specularStrength, default: base.specularStrength, defaults: defaults),
-            specularAngle: double(keys.specularAngle, default: base.specularAngle, defaults: defaults)
+            specularAngle: double(keys.specularAngle, default: base.specularAngle, defaults: defaults),
+            selectedShadowOpacity: double(keys.selectedShadowOpacity, default: base.selectedShadowOpacity, defaults: defaults),
+            selectedShadowRadius: cgFloat(keys.selectedShadowRadius, default: base.selectedShadowRadius, defaults: defaults),
+            selectedShadowYOffset: cgFloat(keys.selectedShadowYOffset, default: base.selectedShadowYOffset, defaults: defaults)
         )
+    }
+    /// The selected session row's style (`TrayGlassStyle.SelectedStyle`).
+    static func selectedStyle(defaults: UserDefaults = .standard) -> TrayGlassStyle.SelectedStyle {
+        choice(selectedStyleKey, default: TrayGlassStyle.selectedStyle, defaults: defaults)
+    }
+    /// The selected expanded row's title weight (`TrayGlassStyle.SelectedTitleWeight`).
+    static func selectedTitleWeight(defaults: UserDefaults = .standard) -> TrayGlassStyle.SelectedTitleWeight {
+        choice(selectedTitleWeightKey, default: TrayGlassStyle.selectedTitleWeight, defaults: defaults)
     }
     static func trayGlassInteractive(defaults: UserDefaults = .standard) -> Bool {
         bool(trayGlassInteractiveKey, default: TrayGlassStyle.interactive, defaults: defaults)
@@ -294,7 +317,7 @@ enum SidebarDialTuning {
         trayMarginKey, trayInnerPaddingKey, trayGlassInteractiveKey,
         trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
-        traySelectedPillWidthKey, traySelectedPillHeightKey,
+        traySelectedPillWidthKey, traySelectedPillHeightKey, selectedStyleKey, selectedTitleWeightKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         headerTextSizeKey, headerTopPaddingKey, headerBottomPaddingKey, headerChevronSizeKey,
@@ -378,6 +401,9 @@ struct SidebarDialKitGlassModel: Codable, Equatable {
     var chromaticBlend: String
     var specularStrength: Double
     var specularAngle: Double
+    var selectedShadowOpacity: Double
+    var selectedShadowRadius: Double
+    var selectedShadowYOffset: Double
 
     init(_ look: TrayGlassStyle.Look) {
         variant = look.variant.rawValue
@@ -396,6 +422,9 @@ struct SidebarDialKitGlassModel: Codable, Equatable {
         chromaticBlend = look.chromaticBlend.rawValue
         specularStrength = look.specularStrength
         specularAngle = look.specularAngle
+        selectedShadowOpacity = look.selectedShadowOpacity
+        selectedShadowRadius = Double(look.selectedShadowRadius)
+        selectedShadowYOffset = Double(look.selectedShadowYOffset)
     }
 }
 
@@ -418,6 +447,8 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayGlassCornerRadius: Double
     var traySelectedPillWidth: Double
     var traySelectedPillHeight: Double
+    var selectedStyle: String
+    var selectedTitleWeight: String
 
     var rowHeight: Double
     var rowGap: Double
@@ -509,6 +540,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
             trayGlassCornerRadius: Double(SidebarDialTuning.trayGlassCornerRadius(defaults: defaults)),
             traySelectedPillWidth: Double(SidebarDialTuning.traySelectedPillWidth(defaults: defaults)),
             traySelectedPillHeight: Double(SidebarDialTuning.traySelectedPillHeight(defaults: defaults)),
+            selectedStyle: SidebarDialTuning.selectedStyle(defaults: defaults).rawValue,
+            selectedTitleWeight: SidebarDialTuning.selectedTitleWeight(defaults: defaults).rawValue,
             rowHeight: Double(SidebarDialTuning.rowHeight(defaults: defaults)),
             rowGap: Double(SidebarDialTuning.rowGap(defaults: defaults)),
             rowTitleSize: Double(SidebarDialTuning.rowTitleSize(defaults: defaults)),
@@ -573,6 +606,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
             setStringIfChanged(keys.chromaticBlend, old.chromaticBlend, new.chromaticBlend)
             setIfChanged(keys.specularStrength, old.specularStrength, new.specularStrength)
             setIfChanged(keys.specularAngle, old.specularAngle, new.specularAngle)
+            setIfChanged(keys.selectedShadowOpacity, old.selectedShadowOpacity, new.selectedShadowOpacity)
+            setIfChanged(keys.selectedShadowRadius, old.selectedShadowRadius, new.selectedShadowRadius)
+            setIfChanged(keys.selectedShadowYOffset, old.selectedShadowYOffset, new.selectedShadowYOffset)
         }
         writeGlass(SidebarDialTuning.lightGlassKeys, previous.glassLight, model.glassLight)
         writeGlass(SidebarDialTuning.darkGlassKeys, previous.glassDark, model.glassDark)
@@ -587,6 +623,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.trayGlassCornerRadiusKey, previous.trayGlassCornerRadius, model.trayGlassCornerRadius)
         setIfChanged(SidebarDialTuning.traySelectedPillWidthKey, previous.traySelectedPillWidth, model.traySelectedPillWidth)
         setIfChanged(SidebarDialTuning.traySelectedPillHeightKey, previous.traySelectedPillHeight, model.traySelectedPillHeight)
+        setStringIfChanged(SidebarDialTuning.selectedStyleKey, previous.selectedStyle, model.selectedStyle)
+        setStringIfChanged(SidebarDialTuning.selectedTitleWeightKey, previous.selectedTitleWeight, model.selectedTitleWeight)
         setIfChanged(SidebarDialTuning.rowHeightKey, previous.rowHeight, model.rowHeight)
         setIfChanged(SidebarDialTuning.rowGapKey, previous.rowGap, model.rowGap)
         setIfChanged(SidebarDialTuning.rowTitleSizeKey, previous.rowTitleSize, model.rowTitleSize)
@@ -639,7 +677,10 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .select("\(prefix)ChromaticBlend", keyPath: glass.appending(path: \.chromaticBlend), label: "Chromatic blend",
                     options: TrayGlassStyle.ChromaticBlend.allCases.map(\.rawValue)),
             .slider("\(prefix)SpecularStrength", keyPath: glass.appending(path: \.specularStrength), label: "Specular strength", range: 0...1, step: 0.05),
-            .slider("\(prefix)SpecularAngle", keyPath: glass.appending(path: \.specularAngle), label: "Specular angle", range: 0...360, step: 1, unit: "°")
+            .slider("\(prefix)SpecularAngle", keyPath: glass.appending(path: \.specularAngle), label: "Specular angle", range: 0...360, step: 1, unit: "°"),
+            .slider("\(prefix)SelectedShadowOpacity", keyPath: glass.appending(path: \.selectedShadowOpacity), label: "Selected shadow opacity (flat)", range: 0...0.6, step: 0.002),
+            .slider("\(prefix)SelectedShadowRadius", keyPath: glass.appending(path: \.selectedShadowRadius), label: "Selected shadow radius (flat)", range: 0...32, step: 0.5, unit: "pt"),
+            .slider("\(prefix)SelectedShadowYOffset", keyPath: glass.appending(path: \.selectedShadowYOffset), label: "Selected shadow Y (flat)", range: 0...16, step: 0.5, unit: "pt")
         ]
     }
 
@@ -655,6 +696,10 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .group("glassDark", label: "Glass — Dark", children: glassControls("dark", \.glassDark)),
         // Shape and behaviour, shared by both appearances.
         .group("trayGlass", label: "Tray — shared", children: [
+            .select("selectedStyle", keyPath: \.selectedStyle, label: "Selected style",
+                    options: TrayGlassStyle.SelectedStyle.allCases.map(\.rawValue)),
+            .select("selectedTitleWeight", keyPath: \.selectedTitleWeight, label: "Selected title weight (expanded)",
+                    options: TrayGlassStyle.SelectedTitleWeight.allCases.map(\.rawValue)),
             .toggle("trayGlassInteractive", keyPath: \.trayGlassInteractive, label: "Glass interactive (tray)"),
             .slider("trayHorizontalButtonSize", keyPath: \.trayHorizontalButtonSize, label: "Bar button height (expanded)", range: 24...56, step: 0.5, unit: "pt"),
             .slider("trayHorizontalIconSize", keyPath: \.trayHorizontalIconSize, label: "Bar icon size (expanded)", range: 10...24, step: 0.5, unit: "pt"),
