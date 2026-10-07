@@ -259,8 +259,12 @@ struct TrayGlassSurface: ViewModifier {
             if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
                 GlassEffectContainer {
                     content
-                        .background(shape.fill(TrayGlassStyle.surfaceFill(for: colorScheme)))
-                        .overlay { specular }
+                        .background {
+                            ZStack {
+                                shape.fill(TrayGlassStyle.surfaceFill(for: colorScheme))
+                                specular
+                            }
+                        }
                         .overlay(shape.strokeBorder(TrayGlassStyle.rimColor(for: colorScheme), lineWidth: SidebarDialTuning.trayGlassRimWidth()))
                         .overlay { chromaticRim }
                 }
