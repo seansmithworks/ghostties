@@ -502,7 +502,11 @@ struct TrayIconButton: View {
     }
 
     private var showsHover: Bool {
+        #if DEBUG
         isHovered || (itemId != nil && itemId == CaptureFixture.trayHoverItemId)
+        #else
+        isHovered
+        #endif
     }
 
     @ViewBuilder
