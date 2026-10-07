@@ -3187,3 +3187,5 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 - [ ] **Sidebar tests read the live Dev dial defaults** (found 2026-10-06; also on main `3468b7028`): `SessionRowGlyphSlotTests/testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail` reads `SidebarDialTuning.*` from `UserDefaults.standard` (the Dev domain in the hosted test process) and compares against code constants, so it fails whenever Sean has tuned `trayInnerPadding`. Fix: tests inject a throwaway defaults suite (same rule as the injected state dir), never read Dev's domain.
 
 - [ ] **Light/dark switch only refreshes some sessions** (Sean, 2026-10-06, installed app): after macOS flipped appearance, the sidebar chrome went light but some session terminals stayed dark (e.g. "pen.dev pickup") while others updated. Fixing on its own branch off main.
+
+- [ ] **Session-switch shortcuts dead in the rail** (Sean, 2026-10-06, `feat/sidebar-vnext` Dev build): Cmd+Shift+[ / ] and Cmd+1…9 don't move between sessions when the sidebar is collapsed to the rail; they work in the expanded sidebar. Unknown yet whether main has it too.
