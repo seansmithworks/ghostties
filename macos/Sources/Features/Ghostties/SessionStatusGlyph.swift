@@ -106,6 +106,8 @@ extension SessionIndicatorState {
 struct SessionStatusGlyph: View {
     let kind: SessionStatusGlyphKind
     var size: CGFloat = WorkspaceLayout.sessionGhostSize
+    /// On the selected row; the "Accent" selected-row style tints the glyph.
+    var isSelected = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -141,7 +143,10 @@ struct SessionStatusGlyph: View {
     }
 
     private var secondaryTextColor: Color {
-        colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
+        if isSelected && SidebarDialTuning.selectedRowStyle() == .accent {
+            return WorkspaceLayout.composerSelectionAccent
+        }
+        return colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
     }
 
     private func glyph(_ symbol: String, color: Color) -> some View {

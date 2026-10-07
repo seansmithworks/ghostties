@@ -112,7 +112,7 @@ struct RecentsRowView: View, Equatable {
             // (`RailSessionRow`) draws the same glyph centered in the rail,
             // so across the pinned⇄rail transition the glyph moves from this
             // trailing slot to the center (it snaps under Reduce Motion).
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize(), isSelected: isActive)
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
         .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
@@ -187,13 +187,16 @@ struct SidebarListRowTitle: View {
     let text: String
     let isActive: Bool
 
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
     var body: some View {
+        let rowStyle = SidebarDialTuning.selectedRowStyle()
         Text(text)
             .font(.system(
                 size: SidebarDialTuning.rowTitleSize(),
-                weight: isActive ? SidebarDialTuning.selectedTitleWeight().fontWeight : .regular
+                weight: isActive ? (rowStyle == .bar || rowStyle == .type ? .semibold : SidebarDialTuning.selectedTitleWeight().fontWeight) : .regular
             ))
-            .foregroundStyle(Color.primary)
+            .foregroundStyle(isActive && rowStyle == .accent ? WorkspaceLayout.composerSelectionAccent : Color.primary)
             .lineLimit(1)
     }
 }
@@ -217,6 +220,14 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @State private var isHovered = false
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
+    /// "Type" selected-row style: unselected rows recede to 50%, hover lifts
+    /// them to 78%. Every other style leaves rows at full opacity.
+    private var rowOpacity: Double {
+        guard SidebarDialTuning.selectedRowStyle() == .type, !isActive else { return 1 }
+        return isHovered ? 0.78 : 0.5
+    }
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
@@ -236,6 +247,7 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
 
             trailing()
         }
+        .opacity(rowOpacity)
         .redlineFrame(redlineID + ".content")
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())

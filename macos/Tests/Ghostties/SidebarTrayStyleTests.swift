@@ -18,4 +18,20 @@ final class SidebarTrayStyleTests: XCTestCase {
         XCTAssertEqual(SidebarDialTuning.trayStyle(defaults: d), .glass)
         XCTAssertTrue(SidebarDialTuning.allKeys.contains(SidebarDialTuning.trayStyleKey))
     }
+
+    func testSelectedRowStyleDefaultsToGlassAndRoundTripsEveryOption() {
+        let name = "com.seansmithdesign.ghostties.tests.selected-row-style"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        defer { d.removePersistentDomain(forName: name) }
+        XCTAssertEqual(SidebarDialTuning.selectedRowStyleKey, "ghostties.sidebarDial.selectedRowStyle")
+        XCTAssertEqual(SidebarDialTuning.selectedRowStyle(defaults: d), .glass)
+        for style in TrayGlassStyle.SelectedRowStyle.allCases {
+            d.set(style.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
+            XCTAssertEqual(SidebarDialTuning.selectedRowStyle(defaults: d), style)
+        }
+        d.set("nonsense", forKey: SidebarDialTuning.selectedRowStyleKey)
+        XCTAssertEqual(SidebarDialTuning.selectedRowStyle(defaults: d), .glass)
+        XCTAssertTrue(SidebarDialTuning.allKeys.contains(SidebarDialTuning.selectedRowStyleKey))
+    }
 }

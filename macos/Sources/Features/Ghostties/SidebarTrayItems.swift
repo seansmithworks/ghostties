@@ -90,6 +90,24 @@ enum TrayGlassStyle {
         case glass, bare
     }
 
+    /// How the selected session row is marked, expanded and (where it makes
+    /// sense) rail. `glass` is the shipped look, still governed by the
+    /// `SelectedStyle` dial; the rest replace it. Row geometry is identical
+    /// across all of them.
+    enum SelectedRowStyle: String, CaseIterable {
+        case glass, flat, solid, accent, bar, type
+
+        /// Hover fill on a non-selected row; nil = no fill (`type` lifts text instead).
+        var hoverOpacity: Double? {
+            switch self {
+            case .glass: return nil
+            case .flat: return 0.035
+            case .solid, .accent, .bar: return 0.04
+            case .type: return nil
+            }
+        }
+    }
+
     /// The expanded tray's width. `fill`: the Create capsule stretches across
     /// the bar, from the leading margin to the group gap before the Toggle
     /// capsule, and its buttons share that width evenly. `hug`: both capsules
@@ -258,6 +276,8 @@ enum TrayGlassStyle {
     static let cornerStyle: CornerStyle = .radius
     static let capsuleCornerRadius: CGFloat = 32
     static let cornerRadius: CGFloat = 16.5
+    /// Default selected-row marking (see `SelectedRowStyle`).
+    static let selectedRowStyle: SelectedRowStyle = .glass
     /// Default tray style (see `TrayStyle`).
     static let trayStyle: TrayStyle = .glass
     /// Default expanded tray width (see `TrayWidth`).
@@ -495,12 +515,48 @@ struct SidebarRowCardBackground: View {
     var cornerRadius: CGFloat = WorkspaceLayout.sidebarRowCornerRadiusResting
     let hoverOpacity: Double
 
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius)
-        if isActive {
+        let style = SidebarDialTuning.selectedRowStyle()
+        if style != .glass {
+            styled(style, shape: shape)
+        } else if isActive {
             SidebarSelectedSurface(shape: shape)
         } else {
             shape.fill(isHovered ? Color.primary.opacity(hoverOpacity) : .clear)
+        }
+    }
+
+    /// The non-glass selected-row styles. Hover stays subordinate: it is
+    /// fainter than the selected fill, and the selected row ignores it.
+    @ViewBuilder
+    private func styled(_ style: TrayGlassStyle.SelectedRowStyle, shape: RoundedRectangle) -> some View {
+        if isActive {
+            switch style {
+            case .flat:
+                shape.fill(Color.primary.opacity(0.075))
+            case .solid:
+                shape
+                    .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color.white)
+                    .overlay(shape.strokeBorder(Color.primary.opacity(0.1), lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.06), radius: 2, y: 1)
+            case .accent:
+                shape.fill(WorkspaceLayout.composerSelectionAccent.opacity(0.14))
+            case .bar:
+                Color.clear.overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(WorkspaceLayout.composerSelectionAccent)
+                        .frame(width: 3, height: 24)
+                        .padding(.leading, 4)
+                }
+            case .type, .glass:
+                Color.clear
+            }
+        } else {
+            shape.fill(isHovered ? Color.primary.opacity(style.hoverOpacity ?? 0) : .clear)
         }
     }
 }

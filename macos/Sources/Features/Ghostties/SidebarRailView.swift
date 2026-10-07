@@ -170,8 +170,9 @@ struct RailSessionRow: View {
         Button(action: onTap) {
             // No side padding: the card spans the rail's content margins
             // (symmetric), so centering in the card centers on the rail.
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize, isSelected: isActive)
                 .frame(width: glyphSize, height: glyphSize)
+                .opacity(typeOpacity)
                 .frame(maxWidth: .infinity)
             .frame(height: SidebarDialTuning.rowHeight())
             .background(rowBackground)
@@ -182,6 +183,12 @@ struct RailSessionRow: View {
         .sessionPopoverAnchor(sessionId: sessionId, controller: coordinator.sessionPopover, showsName: true)
         .accessibilityLabel(Self.accessibilityLabel(name: name, projectName: projectName, kind: indicatorState.statusGlyphKind, isActive: isActive))
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
+    /// "Type" selected-row style, as in `SidebarListRowChrome.rowOpacity`.
+    private var typeOpacity: Double {
+        guard SidebarDialTuning.selectedRowStyle() == .type, !isActive else { return 1 }
+        return isHovered ? 0.78 : 0.5
     }
 
     /// Sidebar vnext (pen.dev `CnDfN`): the selected glyph grows to the
