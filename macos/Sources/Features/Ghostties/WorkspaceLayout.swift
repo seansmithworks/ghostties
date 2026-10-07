@@ -337,7 +337,7 @@ enum WorkspaceLayout {
     /// Render size of the per-session ghost glyph in `RecentsRowView` (Sessions
     /// tab). Smaller than `sidebarIconColumnWidth` — the ghost sits centered
     /// inside that column, not filling it.
-    static let sessionGhostSize: CGFloat = 14
+    static let sessionGhostSize: CGFloat = 20
 
     /// Padding between the session popover card's edge and its content. The
     /// card used to nest a grey block (14pt inner padding) inside a 10pt
@@ -355,24 +355,27 @@ enum WorkspaceLayout {
     // never re-derive a literal at a second call site. Grouped by the same
     // sections the DialKit panel presents them in.
 
-    /// `RecentsRowView` row height — 46pt + the 2pt inter-row gap
-    /// (`recentsRowGap`) below gives the 48pt row-to-row pitch measured off
-    /// Flow 07's export. See `RecentsRowView.body`'s `.frame(height:)` comment.
-    static let recentsRowHeight: CGFloat = 46
+    /// `RecentsRowView` row height. With the 4pt inter-row gap
+    /// (`recentsRowGap`) below, the row-to-row pitch is 52pt. See `RecentsRowView.body`'s `.frame(height:)` comment.
+    static let recentsRowHeight: CGFloat = 48
 
     /// Inter-row gap in the Sessions tab's section `VStack`
     /// (`RecentsListView.sectionsContent`).
-    static let recentsRowGap: CGFloat = 2
+    static let recentsRowGap: CGFloat = 4
 
     /// Session name / inline-rename field text size in `RecentsRowView`.
-    static let recentsRowTitleSize: CGFloat = 12
+    static let recentsRowTitleSize: CGFloat = 14
 
     /// Project-name subtitle text size in `RecentsRowView`.
-    static let recentsRowSubtitleSize: CGFloat = 10
+    static let recentsRowSubtitleSize: CGFloat = 11
 
     /// `RecentsRowView`'s trailing edge padding (leading uses
     /// `sidebarRowLeadingPadding`, shared with every other sidebar row/header).
-    static let recentsRowTrailingPadding: CGFloat = 10
+    static let recentsRowTrailingPadding: CGFloat = 16
+
+    /// `RecentsRowView`'s leading edge padding. Its own value: the shared
+    /// `sidebarRowLeadingPadding` (8) still sets project rows and headers.
+    static let recentsRowLeadingPadding: CGFloat = 16
 
     /// Height of the slot that carries a hairline between sidebar groups
     /// (Pinned / Active / History). Shared by the expanded list and the rail
@@ -384,7 +387,7 @@ enum WorkspaceLayout {
     /// Sessions `sectionsContent` — both currently `.padding(.vertical, 4)`,
     /// split here into a dialable top value; bottom stays the fixed 4pt this
     /// replaces).
-    static let sidebarContentPaddingTop: CGFloat = 4
+    static let sidebarContentPaddingTop: CGFloat = 0
 
     /// INNER leading padding of the scrollable list content (both tabs and
     /// the rail), inside the window margin (`SidebarDialTuning.windowMargin`)

@@ -165,59 +165,58 @@ enum TrayGlassStyle {
     /// Light: the canvas (pen.dev `CnDfN`) values, unchanged from before the
     /// light/dark split.
     static let light = Look(
-        variant: .regular,
+        variant: .identity,
         // 0 = untinted: the white comes from `surfaceOpacity`, since a native
         // `.tint(white 0.8)` blends far weaker than the canvas's 80% white
         // and reads grey.
-        tintOpacity: 0,
+        tintOpacity: 0.15,
         // Canvas base fill `#ffffffcc`.
-        surfaceOpacity: 0.8,
+        surfaceOpacity: 0.7,
         // Canvas `u_edgeWidth` 3px.
-        rimWidth: 1.5,
-        rimOpacity: 1,
+        rimWidth: 1.25,
+        rimOpacity: 0.25,
         // Canvas outer shadow `#00000014`, y4px, blur 20px.
-        shadowOpacity: 0.078,
-        shadowRadius: 10,
-        shadowYOffset: 2,
-        // Off by default. Canvas `chromatic` 0.116, `splitAngle` 136.8°.
-        chromaticIntensity: 0,
-        chromaticWidth: 1.5,
-        chromaticRotation: 136.8,
-        chromaticBlur: 0,
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        shadowYOffset: 3,
+        // Tuned in the Dev DialKit (locked for beta.26).
+        chromaticIntensity: 0.3,
+        chromaticWidth: 2.25,
+        chromaticRotation: 202.7,
+        chromaticBlur: 1.7,
         chromaticPalette: .pastel,
         chromaticBlend: .normal,
-        // Off by default.
-        specularStrength: 0,
-        specularAngle: 135,
+        specularStrength: 0.5,
+        specularAngle: 189,
         // Flat selected row: a soft contact shadow, well under the tray's.
-        selectedShadowOpacity: 0.06,
+        selectedShadowOpacity: 0.078,
         selectedShadowRadius: 4,
-        selectedShadowYOffset: 1
+        selectedShadowYOffset: 0
     )
 
     /// Dark: a raised canvas-grey pill (`canvasBackgroundDark` #2D2D2D over
     /// the #242424 chrome) on the warm-tinted glass, with a faint white rim
     /// and a deeper shadow, since an 8% black shadow vanishes on dark chrome.
-    /// No specular and no chromatic: a white highlight on dark glass lifts
+    /// Specular is kept faint and no chromatic: a strong white highlight on dark glass lifts
     /// the background toward the grey text and icons and collapses their
     /// contrast.
     static let dark = Look(
         variant: .regular,
         tintOpacity: 0.55,
         surfaceOpacity: 0.9,
-        rimWidth: 1,
-        rimOpacity: 0.14,
-        shadowOpacity: 0.3,
+        rimWidth: 0.75,
+        rimOpacity: 0.12,
+        shadowOpacity: 0.506,
         shadowRadius: 8,
         shadowYOffset: 2,
         chromaticIntensity: 0,
-        chromaticWidth: 1.5,
-        chromaticRotation: 136.8,
+        chromaticWidth: 1,
+        chromaticRotation: 72.9,
         chromaticBlur: 0,
         chromaticPalette: .pastel,
         chromaticBlend: .plusLighter,
-        specularStrength: 0,
-        specularAngle: 135,
+        specularStrength: 0.1,
+        specularAngle: 268,
         // Flat selected row: the canvas-grey fill already sits lighter than
         // the chrome; a faint, tight shadow edges it without a halo.
         selectedShadowOpacity: 0.22,
@@ -234,14 +233,14 @@ enum TrayGlassStyle {
     /// Vertical (rail) tray button: canvas 88px (24px padding around a 40px
     /// icon frame). Icon: canvas 35px.
     static let verticalButtonSize: CGFloat = 44
-    static let verticalIconSize: CGFloat = 17.5
+    static let verticalIconSize: CGFloat = 18
     /// Horizontal (expanded) tray button, square like the rail's: Flow 07's
     /// 20×20 icon frame plus 8pt padding, so a capsule is 44pt tall with
     /// `innerPadding`.
-    static let horizontalButtonSize: CGFloat = 36
-    static let horizontalIconSize: CGFloat = 16
+    static let horizontalButtonSize: CGFloat = 44
+    static let horizontalIconSize: CGFloat = 18
     /// Pill padding around its buttons: canvas 8px.
-    static let innerPadding: CGFloat = 4
+    static let innerPadding: CGFloat = 8
     /// Canvas buttons are stacked with no gap; the horizontal bar keeps 2pt.
     static let verticalItemGap: CGFloat = 0
     static let horizontalItemGap: CGFloat = 2
@@ -249,9 +248,9 @@ enum TrayGlassStyle {
     /// (`bA1y9` layout B).
     static let groupGap: CGFloat = 5
     /// Canvas r64px on a 104px-wide pill: clamps to a capsule.
-    static let cornerStyle: CornerStyle = .capsule
+    static let cornerStyle: CornerStyle = .radius
     static let capsuleCornerRadius: CGFloat = 32
-    static let cornerRadius: CGFloat = 12
+    static let cornerRadius: CGFloat = 16.5
     /// Default expanded tray width (see `TrayWidth`).
     static let trayWidth: TrayWidth = .fill
     /// Default selected-row style (see `SelectedStyle`).
@@ -260,7 +259,7 @@ enum TrayGlassStyle {
     static let selectedTitleWeight: SelectedTitleWeight = .semibold
     /// Selected rail row: the vertical tray's width (canvas 104px), canvas
     /// 72px tall; glyph 35px (vs the 28px it replaces).
-    static let selectedPillWidth: CGFloat = verticalButtonSize + 2 * innerPadding
+    static let selectedPillWidth: CGFloat = 44
     static let selectedPillHeight: CGFloat = 36
     static let selectedGlyphSize: CGFloat = 17.5
     /// Tray icon weight: the canvas's lucide icons are 2px strokes on a 24px

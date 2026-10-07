@@ -43,10 +43,6 @@ enum SidebarDialTuning {
     static let didChangeNotification = Notification.Name("ghostties.sidebarDial.didChange")
 
     // MARK: Tray glass (both axes + the selected session row; `TrayGlassStyle`)
-    /// RETIRED: the tray's side margin is now the window margin
-    /// (`windowMargin`), so every outer gutter matches. The key is kept so
-    /// Reset still clears a saved value; nothing reads it.
-    static let trayMarginKey = "ghostties.sidebarDial.trayMargin"
     static let trayInnerPaddingKey = "ghostties.sidebarDial.trayInnerPadding"
     static let trayGroupGapKey = "ghostties.sidebarDial.trayGroupGap"
     static let trayWidthKey = "ghostties.sidebarDial.trayWidth"
@@ -308,7 +304,7 @@ enum SidebarDialTuning {
         cgFloat(rowGhostSizeKey, default: WorkspaceLayout.sessionGhostSize, defaults: defaults)
     }
     static func rowLeadingPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(rowLeadingPaddingKey, default: WorkspaceLayout.sidebarRowLeadingPadding, defaults: defaults)
+        cgFloat(rowLeadingPaddingKey, default: WorkspaceLayout.recentsRowLeadingPadding, defaults: defaults)
     }
     static func rowTrailingPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowTrailingPaddingKey, default: WorkspaceLayout.recentsRowTrailingPadding, defaults: defaults)
@@ -349,7 +345,7 @@ enum SidebarDialTuning {
     /// `ComposerSingleLineReset.resetKeys`.
     static let allKeys: [String] = lightGlassKeys.all + darkGlassKeys.all + [
         windowMarginKey, redlinesKey,
-        trayMarginKey, trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
+        trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
         trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
         traySelectedPillWidthKey, traySelectedPillHeightKey, selectedStyleKey, selectedTitleWeightKey,
