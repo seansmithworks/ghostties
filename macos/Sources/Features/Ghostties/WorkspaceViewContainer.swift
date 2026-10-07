@@ -422,6 +422,10 @@ class WorkspaceViewContainer: NSView {
     /// — see that method's doc comment.
     private var isCollapseCrossfadeHosted = false
 
+    /// Test seam: what the pinned rows would render toward right now.
+    var isCollapsedPresentationForTesting: Bool { widthModel.isCollapsedPresentation }
+    var sidebarModeForTesting: SidebarMode { sidebarMode }
+
     /// Stored constraints for animating sidebar show/hide and terminal insets.
     private var sidebarWidthConstraint: NSLayoutConstraint!
     private var shadowHostTopConstraint: NSLayoutConstraint!
@@ -823,6 +827,19 @@ class WorkspaceViewContainer: NSView {
                 self?.toggleSidebar()
             }
         }
+        if let seconds = CaptureFixture.sidebarRailClosePinAfter, CaptureFixture.claimHook("sidebarRailClosePin") {
+            // Cmd+S (pinned -> rail), Cmd+Shift+S (rail -> closed), then
+            // Cmd+Shift+S again (closed -> pinned).
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                self?.toggleSidebar()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2 * seconds) { [weak self] in
+                self?.toggleSidebarFullyClosed()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3 * seconds) { [weak self] in
+                self?.toggleSidebarFullyClosed()
+            }
+        }
     }
     #endif
 
@@ -1045,6 +1062,12 @@ class WorkspaceViewContainer: NSView {
     /// traffic-light region stays consistent across modes.
     private func applySidebarView() {
         guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
+
+        // Every settled mode states its own presentation. The crossfade
+        // writes this flag mid-animation, but it is the only other writer,
+        // so a path that never crossfades (rail -> closed -> pinned) would
+        // otherwise leave the previous mode's value behind.
+        widthModel.isCollapsedPresentation = sidebarMode == .collapsed
 
         // Collapsed rail (Flow 01, sidebar-presence §02) replaces whichever
         // view mode (project-first/task-first) is otherwise active — it's a

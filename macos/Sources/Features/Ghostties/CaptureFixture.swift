@@ -480,6 +480,12 @@ enum CaptureFixture {
         raw.flatMap(parsePositiveSeconds)
     }
 
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_RAIL_CLOSE_PIN_AFTER=<seconds>` — drives
+    /// pinned -> rail -> closed -> pinned, one step per interval.
+    static func parseSidebarRailClosePinAfter(_ raw: String?) -> TimeInterval? {
+        raw.flatMap(parsePositiveSeconds)
+    }
+
     private static func parsePositiveSeconds(_ raw: String) -> TimeInterval? {
         guard let value = Double(raw), value.isFinite, value > 0 else { return nil }
         return value
@@ -495,6 +501,9 @@ enum CaptureFixture {
         parseProjectSettingsHook(env("GHOSTTIES_CAPTURE_PROJECT_SETTINGS"))
     }
     static var expandProjectName: String? { parseExpandProject(env("GHOSTTIES_CAPTURE_EXPAND_PROJECT")) }
+    static var sidebarRailClosePinAfter: TimeInterval? {
+        parseSidebarRailClosePinAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_RAIL_CLOSE_PIN_AFTER"))
+    }
     static var sidebarToggleAfter: TimeInterval? {
         parseSidebarToggleAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER"))
     }
