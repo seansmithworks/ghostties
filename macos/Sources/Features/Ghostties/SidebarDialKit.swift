@@ -19,6 +19,13 @@ import DialkitmacOSAgent
 // dial in this app already uses, so a Release binary staying dial-free is
 // really "nobody ever wrote these keys," not a compiled-out code path.
 enum SidebarDialTuning {
+    /// The defaults domain every dial is read from and written to. Production
+    /// never touches it (`.standard`). The test bundle swaps in a throwaway
+    /// suite at load (`GhosttiesTestIsolation`) so a hosted test never reads
+    /// the dial values tuned in the live Dev app's domain. Every reader's
+    /// default argument and every dial `@AppStorage` goes through it.
+    nonisolated(unsafe) static var store: UserDefaults = .standard
+
     // MARK: Tray glass (both axes + the selected session row; `TrayGlassStyle`)
     static let trayMarginKey = "ghostties.sidebarDial.trayMargin"
     static let trayInnerPaddingKey = "ghostties.sidebarDial.trayInnerPadding"
@@ -143,7 +150,7 @@ enum SidebarDialTuning {
     /// mutation happened to force a re-render.
     static let epochKey = "ghostties.sidebarDial.epoch"
 
-    static func epoch(defaults: UserDefaults = .standard) -> Int {
+    static func epoch(defaults: UserDefaults = SidebarDialTuning.store) -> Int {
         defaults.integer(forKey: epochKey)
     }
 
@@ -166,15 +173,15 @@ enum SidebarDialTuning {
     }
 
     /// Horizontal tray only: gap between the bar and the sidebar's edges.
-    static func trayMargin(defaults: UserDefaults = .standard) -> CGFloat {
+    static func trayMargin(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayMarginKey, default: WorkspaceLayout.trayHorizontalMargin, defaults: defaults)
     }
-    static func trayInnerPadding(defaults: UserDefaults = .standard) -> CGFloat {
+    static func trayInnerPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayInnerPaddingKey, default: TrayGlassStyle.innerPadding, defaults: defaults)
     }
     /// The glass's colour/material set for one appearance: each value its
     /// own saved dial, else `TrayGlassStyle.light`/`.dark`.
-    static func trayGlass(for colorScheme: ColorScheme, defaults: UserDefaults = .standard) -> TrayGlassStyle.Look {
+    static func trayGlass(for colorScheme: ColorScheme, defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.Look {
         let keys = glassKeys(for: colorScheme)
         let base = TrayGlassStyle.defaultLook(for: colorScheme)
         return TrayGlassStyle.Look(
@@ -196,85 +203,85 @@ enum SidebarDialTuning {
             specularAngle: double(keys.specularAngle, default: base.specularAngle, defaults: defaults)
         )
     }
-    static func trayGlassInteractive(defaults: UserDefaults = .standard) -> Bool {
+    static func trayGlassInteractive(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
         bool(trayGlassInteractiveKey, default: TrayGlassStyle.interactive, defaults: defaults)
     }
-    static func trayVerticalButtonSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func trayVerticalButtonSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayVerticalButtonSizeKey, default: TrayGlassStyle.verticalButtonSize, defaults: defaults)
     }
-    static func trayVerticalIconSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func trayVerticalIconSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayVerticalIconSizeKey, default: TrayGlassStyle.verticalIconSize, defaults: defaults)
     }
-    static func trayHorizontalButtonSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func trayHorizontalButtonSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayHorizontalButtonSizeKey, default: TrayGlassStyle.horizontalButtonSize, defaults: defaults)
     }
-    static func trayHorizontalIconSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func trayHorizontalIconSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayHorizontalIconSizeKey, default: TrayGlassStyle.horizontalIconSize, defaults: defaults)
     }
-    static func trayGlassCornerStyle(defaults: UserDefaults = .standard) -> TrayGlassStyle.CornerStyle {
+    static func trayGlassCornerStyle(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.CornerStyle {
         choice(trayGlassCornerStyleKey, default: TrayGlassStyle.cornerStyle, defaults: defaults)
     }
-    static func trayGlassCornerRadius(defaults: UserDefaults = .standard) -> CGFloat {
+    static func trayGlassCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayGlassCornerRadiusKey, default: TrayGlassStyle.cornerRadius, defaults: defaults)
     }
-    static func traySelectedPillWidth(defaults: UserDefaults = .standard) -> CGFloat {
+    static func traySelectedPillWidth(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(traySelectedPillWidthKey, default: TrayGlassStyle.selectedPillWidth, defaults: defaults)
     }
-    static func traySelectedPillHeight(defaults: UserDefaults = .standard) -> CGFloat {
+    static func traySelectedPillHeight(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(traySelectedPillHeightKey, default: TrayGlassStyle.selectedPillHeight, defaults: defaults)
     }
 
-    static func rowHeight(defaults: UserDefaults = .standard) -> CGFloat {
+    static func rowHeight(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowHeightKey, default: WorkspaceLayout.recentsRowHeight, defaults: defaults)
     }
-    static func rowGap(defaults: UserDefaults = .standard) -> CGFloat {
+    static func rowGap(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowGapKey, default: WorkspaceLayout.recentsRowGap, defaults: defaults)
     }
-    static func rowTitleSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func rowTitleSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowTitleSizeKey, default: WorkspaceLayout.recentsRowTitleSize, defaults: defaults)
     }
-    static func rowSubtitleSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func rowSubtitleSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowSubtitleSizeKey, default: WorkspaceLayout.recentsRowSubtitleSize, defaults: defaults)
     }
-    static func rowGhostSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func rowGhostSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowGhostSizeKey, default: WorkspaceLayout.sessionGhostSize, defaults: defaults)
     }
-    static func rowLeadingPadding(defaults: UserDefaults = .standard) -> CGFloat {
+    static func rowLeadingPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowLeadingPaddingKey, default: WorkspaceLayout.sidebarRowLeadingPadding, defaults: defaults)
     }
-    static func rowTrailingPadding(defaults: UserDefaults = .standard) -> CGFloat {
+    static func rowTrailingPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowTrailingPaddingKey, default: WorkspaceLayout.recentsRowTrailingPadding, defaults: defaults)
     }
 
-    static func headerTextSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func headerTextSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(headerTextSizeKey, default: WorkspaceLayout.sessionSectionHeaderTextSize, defaults: defaults)
     }
-    static func headerTopPadding(defaults: UserDefaults = .standard) -> CGFloat {
+    static func headerTopPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(headerTopPaddingKey, default: WorkspaceLayout.sessionSectionHeaderTopPadding, defaults: defaults)
     }
-    static func headerBottomPadding(defaults: UserDefaults = .standard) -> CGFloat {
+    static func headerBottomPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(headerBottomPaddingKey, default: WorkspaceLayout.sessionSectionHeaderBottomPadding, defaults: defaults)
     }
-    static func headerChevronSize(defaults: UserDefaults = .standard) -> CGFloat {
+    static func headerChevronSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(headerChevronSizeKey, default: WorkspaceLayout.sessionSectionHeaderChevronSize, defaults: defaults)
     }
 
-    static func contentPaddingTop(defaults: UserDefaults = .standard) -> CGFloat {
+    static func contentPaddingTop(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(contentPaddingTopKey, default: WorkspaceLayout.sidebarContentPaddingTop, defaults: defaults)
     }
-    static func contentPaddingLeading(defaults: UserDefaults = .standard) -> CGFloat {
+    static func contentPaddingLeading(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(contentPaddingLeadingKey, default: WorkspaceLayout.sidebarContentPaddingLeading, defaults: defaults)
     }
-    static func contentPaddingTrailing(defaults: UserDefaults = .standard) -> CGFloat {
+    static func contentPaddingTrailing(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(contentPaddingTrailingKey, default: WorkspaceLayout.sidebarContentPaddingTrailing, defaults: defaults)
     }
     /// The expanded list column's own trailing padding: the visible inset
     /// (`contentPaddingTrailing`) less the gutter already outside the column
     /// (`WorkspaceLayout.sidebarTrailingGutter`).
-    static func contentColumnTrailingPadding(gutter: CGFloat, defaults: UserDefaults = .standard) -> CGFloat {
+    static func contentColumnTrailingPadding(gutter: CGFloat, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         max(0, contentPaddingTrailing(defaults: defaults) - gutter)
     }
-    static func listToTrayGap(defaults: UserDefaults = .standard) -> CGFloat {
+    static func listToTrayGap(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(listToTrayGapKey, default: WorkspaceLayout.sidebarListToTrayGap, defaults: defaults)
     }
 
@@ -283,7 +290,7 @@ enum SidebarDialTuning {
     /// `WorkspaceLayout.railExtraWidth` (the compiled default both this and
     /// that function read) because the hug-width call sites are pure/testable
     /// functions that must not read `UserDefaults` directly.
-    static func railExtraWidth(defaults: UserDefaults = .standard) -> CGFloat {
+    static func railExtraWidth(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(railExtraWidthKey, default: WorkspaceLayout.railExtraWidth, defaults: defaults)
     }
 
@@ -302,7 +309,7 @@ enum SidebarDialTuning {
         railExtraWidthKey
     ]
 
-    static func reset(defaults: UserDefaults = .standard) {
+    static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
         for key in allKeys {
             defaults.removeObject(forKey: key)
         }
@@ -708,7 +715,7 @@ enum SidebarDialInspector {
     static func start() {
         guard coordinator == nil else { return }
         coordinator = SidebarDialKitCoordinator(
-            defaults: .standard,
+            defaults: SidebarDialTuning.store,
             // A row's `.equatable()` gate can't see a tuning change on its
             // own; poking the store re-renders the sidebar and tray.
             onChange: { WorkspaceStore.shared.objectWillChange.send() }
