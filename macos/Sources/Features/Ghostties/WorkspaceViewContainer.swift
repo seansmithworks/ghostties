@@ -176,6 +176,15 @@ class WorkspaceViewContainer: NSView {
     private(set) var terminalContainer: TerminalViewContainer
     private let coordinator: SessionCoordinator
     private let ghostty: Ghostty.App
+    /// `WorkspaceStore.shared` in the app. Injectable so a test can host a
+    /// real container on a persistence-disabled store — the shared one
+    /// writes the Dev app's real `workspace.json`.
+    private let store: WorkspaceStore
+
+    #if DEBUG
+    /// Test-only: the container's own coordinator, for seeding live surfaces.
+    var coordinatorForTesting: SessionCoordinator { coordinator }
+    #endif
 
     /// v0 task-first sidebar store. Loads `.ghostties/tasks/*.md` fixtures once.
     /// Instantiated lazily on first access (always on the main thread via AppKit
@@ -371,10 +380,10 @@ class WorkspaceViewContainer: NSView {
     /// also cancel our subscription whenever the active session changes.
     private weak var observedSurface: Ghostty.SurfaceView?
 
-    /// Current sidebar state — always kept in sync with `WorkspaceStore.shared.sidebarMode`.
+    /// Current sidebar state — always kept in sync with `store.sidebarMode`.
     private var sidebarMode: SidebarMode = .pinned
 
-    /// Last published value of `WorkspaceStore.shared.toolbarRowTopAnchorConstant`.
+    /// Last published value of `store.toolbarRowTopAnchorConstant`.
     /// Updated in layout() from the live close-button frame so the SwiftUI
     /// sidebar's own toolbar row (the "+" button) survives macOS version
     /// bumps and upstream titlebar refactors. There's no longer an AppKit
@@ -585,8 +594,9 @@ class WorkspaceViewContainer: NSView {
         return luminance < 0.5
     }
 
-    init<ViewModel: TerminalViewModel>(ghostty: Ghostty.App, viewModel: ViewModel, delegate: (any TerminalViewDelegate)? = nil) {
+    init<ViewModel: TerminalViewModel>(ghostty: Ghostty.App, viewModel: ViewModel, delegate: (any TerminalViewDelegate)? = nil, store: WorkspaceStore = .shared) {
         self.ghostty = ghostty
+        self.store = store
         self.terminalContainer = TerminalViewContainer {
             TerminalView(ghostty: ghostty, viewModel: viewModel, delegate: delegate)
         }
@@ -763,7 +773,7 @@ class WorkspaceViewContainer: NSView {
 
         // If the window is already key when we move into it, freeze immediately.
         if window.isKeyWindow {
-            WorkspaceStore.shared.freezeSnapshot()
+            store.freezeSnapshot()
         }
 
         // Automated CEF browser crash repro (see scripts/debug/cef-repro.sh).
@@ -794,7 +804,7 @@ class WorkspaceViewContainer: NSView {
                     self.presentComposerOverlay(projectBinding: .open)
                 case .prefilled(let name):
                     // A project row's "+" (`ProjectDisclosureRow.handleNewSession`).
-                    let store = WorkspaceStore.shared
+                    let store = self.store
                     guard let project = store.projects.first(where: { $0.name == name }) else {
                         NSLog("[CaptureFixture] GHOSTTIES_CAPTURE_COMPOSER: no project named \(name)")
                         return
@@ -1014,8 +1024,8 @@ class WorkspaceViewContainer: NSView {
                 lastPublishedToolbarRowTopAnchorConstant = constant
             }
             // Publish to SwiftUI sidebar so the + button stays in sync.
-            if abs(WorkspaceStore.shared.toolbarRowTopAnchorConstant - constant) > 0.5 {
-                WorkspaceStore.shared.toolbarRowTopAnchorConstant = constant
+            if abs(store.toolbarRowTopAnchorConstant - constant) > 0.5 {
+                store.toolbarRowTopAnchorConstant = constant
             }
         }
 
@@ -1067,7 +1077,7 @@ class WorkspaceViewContainer: NSView {
             showsTrayWhenExpanded: currentSidebarViewMode != "taskFirst",
             trailingGutter: WorkspaceLayout.sidebarTrailingGutter(for: sidebarMode)
         )
-        .environmentObject(WorkspaceStore.shared)
+        .environmentObject(store)
         .environmentObject(coordinator))
     }
 
@@ -1079,7 +1089,7 @@ class WorkspaceViewContainer: NSView {
     /// swap.
     private func railSidebarContent() -> AnyView {
         let content = SidebarRailView()
-            .environmentObject(WorkspaceStore.shared)
+            .environmentObject(store)
             .environmentObject(coordinator)
             .environmentObject(widthModel)
             .ignoresSafeArea(.container, edges: .top)
@@ -1124,12 +1134,12 @@ class WorkspaceViewContainer: NSView {
                 // The store is observed so the row sees a current projects list.
                 .environmentObject(taskStore)
                 .environmentObject(coordinator)
-                .environmentObject(WorkspaceStore.shared)
+                .environmentObject(store)
                 .environmentObject(sessionDraftStore)
             return AnyView(view)
         } else {
             let content = WorkspaceSidebarView()
-                .environmentObject(WorkspaceStore.shared)
+                .environmentObject(store)
                 .environmentObject(coordinator)
                 .environmentObject(widthModel)
                 .ignoresSafeArea(.container, edges: .top)
@@ -1330,8 +1340,8 @@ class WorkspaceViewContainer: NSView {
             if let manager = existingManager {
                 embedBrowserInPanel(manager)
                 animateBrowserPanel(visible: true)
-            } else if let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: WorkspaceStore.shared),
-                      let project = WorkspaceStore.shared.projects.first(where: { $0.id == projectId }) {
+            } else if let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
+                      let project = store.projects.first(where: { $0.id == projectId }) {
                 // Phase 4: use the composer's smart-default cascade instead
                 // of an arbitrary `.first` pick (see
                 // docs/plans/session-creation-unified.html).
@@ -1897,7 +1907,7 @@ class WorkspaceViewContainer: NSView {
         }
 
         // 8. Persist (overlay is transient — store persists it as .closed).
-        WorkspaceStore.shared.updateSidebarMode(newMode)
+        store.updateSidebarMode(newMode)
 
         invalidateIntrinsicContentSize()
     }
@@ -2130,7 +2140,7 @@ class WorkspaceViewContainer: NSView {
         // in a hosting view. The window-key signal is coarser but bulletproof:
         // any time the user is interacting with this window, the sidebar's
         // bucketing is frozen.
-        WorkspaceStore.shared.releaseSnapshot()
+        store.releaseSnapshot()
     }
 
     /// Blocker 3 (Phase 3 review round 3): the genuine "user left the app"
@@ -2148,7 +2158,7 @@ class WorkspaceViewContainer: NSView {
         // Sidebar smart-sections freeze-on-focus (plan unit 4):
         // freeze the section layout while this window is the user's focus.
         // No-op if already frozen — `freezeSnapshot()` guards against clobber.
-        WorkspaceStore.shared.freezeSnapshot()
+        store.freezeSnapshot()
     }
 
     @objc private func windowDidEnterOrExitFullScreen() {
@@ -2213,7 +2223,7 @@ class WorkspaceViewContainer: NSView {
             let request = SessionComposerRequest(projectBinding: projectBinding)
             self.composerOverlayHostingView.rootView = AnyView(
                 SessionComposerOverlay(request: request, centeringModel: self.composerCenteringModel)
-                    .environmentObject(WorkspaceStore.shared)
+                    .environmentObject(store)
                     .environmentObject(self.coordinator)
             )
 
@@ -2230,7 +2240,7 @@ class WorkspaceViewContainer: NSView {
             // and when the store was already open this also sets
             // `focusSearchFieldTrigger`, so Cmd+T while open refocuses the
             // search field rather than doing nothing.
-            SessionComposerStore.shared.open(projectBinding: projectBinding, workspaceStore: WorkspaceStore.shared)
+            SessionComposerStore.shared.open(projectBinding: projectBinding, workspaceStore: store)
 
             // F7 follow-up: correct even if the composer opens while
             // already fullscreen, not just on a later enter/exit transition.
@@ -2408,7 +2418,7 @@ class WorkspaceViewContainer: NSView {
     /// `WorkspaceSidebarView.createNewSessionForSelectedProject()`, but uses
     /// the cascade pick instead of the sidebar's `selectedProjectId`.
     private func instantCreateSession() {
-        let store = WorkspaceStore.shared
+        let store = self.store
         guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
               let project = store.projects.first(where: { $0.id == projectId }) else { return }
 
@@ -2488,7 +2498,7 @@ class WorkspaceViewContainer: NSView {
         browserShadowHost.addSubview(browserPanelView)
 
         // Read persisted sidebar mode.
-        let initialMode = WorkspaceStore.shared.sidebarMode
+        let initialMode = store.sidebarMode
         self.sidebarMode = initialMode
         let isPinned = initialMode == .pinned
         // Pinned and collapsed both push the terminal right and share space
@@ -2977,7 +2987,7 @@ private class PanelDragHandleView: NSView {
 /// calls; keys go through `NSWindow.sendEvent`.
 extension WorkspaceViewContainer: CaptureScript.Host {
     var isReady: Bool {
-        (window?.isKeyWindow ?? false) && !WorkspaceStore.shared.projects.isEmpty
+        (window?.isKeyWindow ?? false) && !store.projects.isEmpty
     }
 
     func composerOpen() -> Bool {
@@ -2986,7 +2996,7 @@ extension WorkspaceViewContainer: CaptureScript.Host {
     }
 
     func rowPlus(project name: String, option: Bool) throws -> Bool {
-        let store = WorkspaceStore.shared
+        let store = self.store
         guard let project = store.projects.first(where: { $0.name == name }) else {
             throw CaptureScript.Failure("rowPlus: no project named '\(name)'")
         }
