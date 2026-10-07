@@ -69,13 +69,6 @@ struct HistoryBrowserView: View {
                 .focused($isQueryFocused)
                 .onSubmit { handle(.resume) }
                 .onExitCommand { handle(.close) }
-                .onMoveCommand { direction in
-                    switch direction {
-                    case .up: handle(.up)
-                    case .down: handle(.down)
-                    default: break
-                    }
-                }
                 .accessibilityLabel("Search history")
         }
         .font(Style.font)
@@ -241,6 +234,18 @@ private struct HistoryBrowserRow: View {
         }
         .padding(.vertical, 3)
         .background(isSelected ? Style.selectionFill(colorScheme) : .clear)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityText)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// "project, title, age, archived|inactive[, pinned]" — the padded,
+    /// truncated visual line reads badly aloud.
+    private var accessibilityText: String {
+        let e = row.entry
+        var parts = [e.projectName, e.title, HistoryBrowserModel.age(of: e.lastActiveAt, now: columns.now), e.isArchived ? "archived" : "inactive"]
+        if e.isPinned { parts.append("pinned") }
+        return parts.joined(separator: ", ")
     }
 
     private var line: AttributedString {
