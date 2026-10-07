@@ -388,12 +388,13 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let createHeight = 2 * button + TrayGlassStyle.verticalItemGap + 2 * padding
         let toggleHeight = button + 2 * padding
 
-        // Hugging: the tray's own ideal width is one capsule plus the window
-        // margin either side (no gutter outside the column here).
+        // Hugging: the tray's own ideal width is one capsule (the rail pads
+        // no sides, so the pill centres on the full rail).
         let alone = NSHostingView(rootView: SidebarTray(isVertical: true, toggleLabel: "Expand Sidebar").environmentObject(SessionCoordinator()))
-        XCTAssertEqual(alone.fittingSize.width, capsuleWidth + 2 * SidebarDialTuning.windowMargin(), accuracy: 0.5, "tray width = icon + 2 x padding + 2 x window margin")
+        XCTAssertEqual(alone.fittingSize.width, capsuleWidth, accuracy: 0.5, "tray width = icon + 2 x padding")
 
-        let (rep, scale) = try renderTray(vertical: true, size: size)
+        // The gutter the rail really has outside its column: the card's inset.
+        let (rep, scale) = try renderTray(vertical: true, size: size, gutter: WorkspaceLayout.sidebarTrailingGutter(for: .collapsed))
         let toggleBottom = size.height - SidebarTray.bottomPadding(isVertical: true)
         let toggleMidY = toggleBottom - toggleHeight / 2
         let createMidY = toggleBottom - toggleHeight - gap - createHeight / 2
@@ -415,6 +416,67 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         XCTAssertEqual(spans[1].upperBound - spans[1].lowerBound, toggleHeight, accuracy: 1.0, "toggle capsule height")
         XCTAssertEqual(spans[1].lowerBound - spans[0].upperBound, gap, accuracy: 1.0, "gap between the capsules")
         XCTAssertEqual(spans[1].upperBound, toggleBottom, accuracy: 1.0, "toggle capsule sits on the bottom padding")
+    }
+
+    /// The rail column (`SidebarRailView.columnPadding`) with one row, under
+    /// the rail's real trailing gutter, on white. Returns the row glyph's
+    /// ink centre x in points.
+    private func railRowGlyphCenterX(railWidth: CGFloat, gutter: CGFloat) throws -> CGFloat {
+        let column = VStack(spacing: 0) {
+            RailSessionRow(sessionId: UUID(), name: "Claude Code 6", projectName: "atlas-api", indicatorState: .needsAttention, isActive: false, onTap: {})
+        }
+            .modifier(SidebarRailView.columnPadding)
+            .frame(width: railWidth, height: 100, alignment: .top)
+            .environment(\.sidebarTrailingGutter, gutter)
+            .environmentObject(SessionCoordinator())
+            .background(Color.white)
+        let hosting = NSHostingView(rootView: column)
+        hosting.frame = NSRect(x: 0, y: 0, width: railWidth, height: 100)
+        let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        hosting.layoutSubtreeIfNeeded()
+        let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        let scale = CGFloat(rep.pixelsWide) / railWidth
+        var minX = Int.max, maxX = -1
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide {
+                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if c.redComponent + c.greenComponent + c.blueComponent < 1.5 { minX = min(minX, x); maxX = max(maxX, x) }
+            }
+        }
+        XCTAssertGreaterThanOrEqual(maxX, 0, "no glyph ink found in the rail row")
+        return (CGFloat(minX) + CGFloat(maxX + 1)) / 2 / scale
+    }
+
+    /// The rail's row glyphs, its tray pill and the rail itself share one
+    /// centre, under the rail's real gutter (the window margin outside it)
+    /// and whatever the leading/trailing content-padding dials hold.
+    func testRailRowGlyphAndTrayPillShareTheRailCentre() throws {
+        let railWidth: CGFloat = 98
+        let gutter = WorkspaceLayout.sidebarTrailingGutter(for: .collapsed)
+        XCTAssertGreaterThan(gutter, 0, "the rail has a gutter: the card's inset")
+
+        let glyphX = try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter)
+        let (rep, scale) = try renderTray(vertical: true, size: CGSize(width: railWidth, height: 260), gutter: gutter)
+        let toggleMidY = 260 - SidebarTray.bottomPadding(isVertical: true)
+            - (SidebarDialTuning.trayVerticalButtonSize() + 2 * SidebarDialTuning.trayInnerPadding()) / 2
+        let pill = try XCTUnwrap(try capsuleSpans(rep, scale: scale, alongX: true, at: toggleMidY).first)
+        let pillX = (pill.lowerBound + pill.upperBound) / 2
+
+        XCTAssertEqual(glyphX, railWidth / 2, accuracy: 0.5, "rail row glyph centre x")
+        XCTAssertEqual(pillX, railWidth / 2, accuracy: 0.5, "rail tray pill centre x")
+        XCTAssertEqual(glyphX, pillX, accuracy: 0.5, "rail row glyph and tray pill share a centre")
+
+        // Asymmetric content-padding dials (Sean's Dev holds leading 8,
+        // trailing unset) must not move the rail's centre.
+        let store = SidebarDialTuning.store
+        store.set(8.0, forKey: SidebarDialTuning.contentPaddingLeadingKey)
+        defer { store.removeObject(forKey: SidebarDialTuning.contentPaddingLeadingKey) }
+        XCTAssertEqual(try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter), railWidth / 2, accuracy: 0.5, "rail glyph centre x with leading padding 8")
     }
 
     /// Renders the expanded tray under one "Tray width" mode and returns the
