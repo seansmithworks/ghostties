@@ -413,9 +413,55 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         XCTAssertEqual(spans[1].upperBound, toggleBottom, accuracy: 1.0, "toggle capsule sits on the bottom padding")
     }
 
-    func testExpandedTrayCapsulesHugTheirIconsAndSitLeadingSideBySide() throws {
-        let columnWidth: CGFloat = 300
+    /// Renders the expanded tray under one "Tray width" mode and returns the
+    /// capsule spans on the shared baseline. The dial is set only through the
+    /// isolated `SidebarDialTuning.store`, and cleared afterward.
+    private func expandedTraySpans(mode: TrayGlassStyle.TrayWidth, columnWidth: CGFloat, height: CGFloat) throws -> (rep: NSBitmapImageRep, scale: CGFloat, spans: [ClosedRange<CGFloat>], bottom: CGFloat) {
+        XCTAssertTrue(SidebarDialTuning.store !== UserDefaults.standard, "dial store must be the isolated suite")
+        let store = SidebarDialTuning.store
+        store.set(mode.rawValue, forKey: SidebarDialTuning.trayWidthKey)
+        defer { store.removeObject(forKey: SidebarDialTuning.trayWidthKey) }
+        XCTAssertEqual(SidebarDialTuning.trayWidth(), mode)
+
         let size = CGSize(width: columnWidth, height: 120)
+        let (rep, scale) = try renderTray(vertical: false, size: size)
+        let bottom = size.height - SidebarTray.bottomPadding(isVertical: false)
+        let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: bottom - height / 2)
+        return (rep, scale, spans, bottom)
+    }
+
+    private func assertSharedBaseline(_ spans: [ClosedRange<CGFloat>], rep: NSBitmapImageRep, scale: CGFloat, height: CGFloat, bottom: CGFloat) throws {
+        for (name, span) in [("create", spans[0]), ("toggle", spans[1])] {
+            let column = try capsuleSpans(rep, scale: scale, alongX: false, at: (span.lowerBound + span.upperBound) / 2)
+            let capsule = try XCTUnwrap(column.last, "\(name) capsule not found vertically")
+            XCTAssertEqual(capsule.upperBound - capsule.lowerBound, height, accuracy: 1.5, "\(name) capsule height")
+            XCTAssertEqual(capsule.upperBound, bottom, accuracy: 1.0, "\(name) capsule bottom")
+        }
+    }
+
+    func testExpandedTrayFillStretchesCreateToTheGroupGapBeforeToggle() throws {
+        let columnWidth: CGFloat = 300
+        let button = SidebarDialTuning.trayHorizontalButtonSize()
+        let padding = SidebarDialTuning.trayInnerPadding()
+        let gap = SidebarDialTuning.trayGroupGap()
+        let margin = SidebarDialTuning.trayMargin()
+        let toggleWidth = button + 2 * padding
+        let height = button + 2 * padding
+
+        let (rep, scale, spans, bottom) = try expandedTraySpans(mode: .fill, columnWidth: columnWidth, height: height)
+        XCTAssertEqual(spans.count, 2, "one span per capsule, got \(spans)")
+        guard spans.count == 2 else { return }
+        XCTAssertEqual(spans[0].lowerBound, margin, accuracy: 1.0, "create capsule starts at the leading margin")
+        XCTAssertEqual(spans[0].upperBound + gap, spans[1].lowerBound, accuracy: 1.0, "create's right edge plus the group gap meets toggle's left edge")
+        XCTAssertEqual(spans[1].upperBound - spans[1].lowerBound, toggleWidth, accuracy: 1.0, "toggle capsule stays button size plus padding")
+        // The test environment's trailing gutter is 0, so the tray's trailing
+        // padding is the full trayMargin: toggle's visible margin mirrors create's.
+        XCTAssertEqual(columnWidth - spans[1].upperBound, margin, accuracy: 1.0, "toggle's trailing visible margin matches the leading margin")
+        try assertSharedBaseline(spans, rep: rep, scale: scale, height: height, bottom: bottom)
+    }
+
+    func testExpandedTrayHugCapsulesHugTheirIconsAndSitLeadingSideBySide() throws {
+        let columnWidth: CGFloat = 300
         let button = SidebarDialTuning.trayHorizontalButtonSize()
         let padding = SidebarDialTuning.trayInnerPadding()
         let gap = SidebarDialTuning.trayGroupGap()
@@ -423,23 +469,14 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let toggleWidth = button + 2 * padding
         let height = button + 2 * padding
 
-        let (rep, scale) = try renderTray(vertical: false, size: size)
-        let bottom = size.height - SidebarTray.bottomPadding(isVertical: false)
-        let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: bottom - height / 2)
+        let (rep, scale, spans, bottom) = try expandedTraySpans(mode: .hug, columnWidth: columnWidth, height: height)
         XCTAssertEqual(spans.count, 2, "two capsules side by side, got \(spans)")
         guard spans.count == 2 else { return }
         XCTAssertEqual(spans[0].lowerBound, SidebarDialTuning.trayMargin(), accuracy: 1.0, "create capsule starts at the tray margin")
         XCTAssertEqual(spans[0].upperBound - spans[0].lowerBound, createWidth, accuracy: 1.0, "create capsule width")
         XCTAssertEqual(spans[1].lowerBound - spans[0].upperBound, gap, accuracy: 1.0, "gap between the capsules")
         XCTAssertEqual(spans[1].upperBound - spans[1].lowerBound, toggleWidth, accuracy: 1.0, "toggle capsule width")
-
-        // Both capsules share one baseline: the same height, bottom-aligned.
-        for (name, span) in [("create", spans[0]), ("toggle", spans[1])] {
-            let column = try capsuleSpans(rep, scale: scale, alongX: false, at: (span.lowerBound + span.upperBound) / 2)
-            let capsule = try XCTUnwrap(column.last, "\(name) capsule not found vertically")
-            XCTAssertEqual(capsule.upperBound - capsule.lowerBound, height, accuracy: 1.5, "\(name) capsule height")
-            XCTAssertEqual(capsule.upperBound, bottom, accuracy: 1.0, "\(name) capsule bottom")
-        }
+        try assertSharedBaseline(spans, rep: rep, scale: scale, height: height, bottom: bottom)
     }
 
     // MARK: - Rail VoiceOver label
