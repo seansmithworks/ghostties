@@ -451,6 +451,8 @@ class WorkspaceViewContainer: NSView {
     /// Test seam: the terminal card's and the sidebar's frames.
     var cardFrameForTesting: NSRect { terminalShadowHost.frame }
     var sidebarFrameForTesting: NSRect { sidebarHostingView.frame }
+    var sidebarDragHandleFrameForTesting: NSRect { sidebarDragHandle.frame }
+    var sidebarDragHandleIsHiddenForTesting: Bool { sidebarDragHandle.isHidden }
     /// Test seam: the live Window margin path, with the margin passed in
     /// rather than written to the shared dial store.
     func applyWindowMarginForTesting(_ inset: CGFloat) { applyWindowMargin(inset) }
