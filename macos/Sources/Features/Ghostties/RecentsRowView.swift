@@ -54,10 +54,7 @@ struct RecentsRowView: View, Equatable {
     /// every Release build, where the key is never written) is unaffected.
     var dialEpoch: Int = 0
 
-    @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var widthModel: SidebarWidthModel
     @EnvironmentObject private var coordinator: SessionCoordinator
-    @State private var isHovered = false
 
     /// Every field that affects rendered output. Deliberately excludes
     /// `editingName`/`isRenameFocused`/the closures — those are live
@@ -75,48 +72,36 @@ struct RecentsRowView: View, Equatable {
     }
 
     var body: some View {
-        HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Session name + project name stacked
-            VStack(alignment: .leading, spacing: 1) {
-                if isEditing {
-                    TextField("Session name", text: $editingName)
-                        .font(.system(size: SidebarDialTuning.rowTitleSize()))
-                        .textFieldStyle(.plain)
-                        .focused(isRenameFocused)
-                        .onSubmit { onCommitRename() }
-                        .onExitCommand { onCancelRename() }
-                        .onChange(of: isRenameFocused.wrappedValue) { focused in
-                            // Deferred: Esc can drop focus (firing this) before
-                            // SwiftUI's onExitCommand runs cancelRename(). Dispatching
-                            // async lets cancelRename() clear editingSessionId first,
-                            // so the id guard in commitRename(session:) rejects this
-                            // call instead of writing a stale name to the store.
-                            if !focused, isEditing {
-                                DispatchQueue.main.async { onCommitRename() }
-                            }
+        // The row's visuals (layout, padding, height, selected surface,
+        // hover, Flow 05 label choreography) live in `SidebarListRowChrome`,
+        // shared with the History row so the two can never drift.
+        SidebarListRowChrome(
+            subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName,
+            isActive: isActive,
+            staggerIndex: staggerIndex,
+            redlineID: RedlineID.row(session.id)
+        ) {
+            if isEditing {
+                TextField("Session name", text: $editingName)
+                    .font(.system(size: SidebarDialTuning.rowTitleSize()))
+                    .textFieldStyle(.plain)
+                    .focused(isRenameFocused)
+                    .onSubmit { onCommitRename() }
+                    .onExitCommand { onCancelRename() }
+                    .onChange(of: isRenameFocused.wrappedValue) { focused in
+                        // Deferred: Esc can drop focus (firing this) before
+                        // SwiftUI's onExitCommand runs cancelRename(). Dispatching
+                        // async lets cancelRename() clear editingSessionId first,
+                        // so the id guard in commitRename(session:) rejects this
+                        // call instead of writing a stale name to the store.
+                        if !focused, isEditing {
+                            DispatchQueue.main.async { onCommitRename() }
                         }
-                } else {
-                    // The selected row's title takes the "Selected title
-                    // weight" dial (macOS 27 sidebar selection: semibold).
-                    Text(session.name)
-                        .font(.system(
-                            size: SidebarDialTuning.rowTitleSize(),
-                            weight: isActive ? SidebarDialTuning.selectedTitleWeight().fontWeight : .regular
-                        ))
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(1)
-                }
-
-                Text(hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName)
-                    .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
-                    .lineLimit(1)
+                    }
+            } else {
+                SidebarListRowTitle(text: session.name, isActive: isActive)
             }
-            .opacity(labelOpacity)
-            .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
-
-            Spacer(minLength: 4)
-
+        } trailing: {
             // No timestamp — Flow 07 round 6 drops the relative-time label
             // from the row entirely. `relativeLabel` is kept (it still backs
             // the accessibility label below); only the visible `Text` is gone.
@@ -130,7 +115,128 @@ struct RecentsRowView: View, Equatable {
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
-        .redlineFrame(RedlineID.row(session.id) + ".content")
+        .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
+        .onTapGesture {
+            guard !isEditing else { return }
+            onTap()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
+    // MARK: - Accessibility
+
+    private var accessibilityLabel: String {
+        // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
+        // renders from — this row previously stated no status at all.
+        var parts = [session.name, "in \(projectName)", indicatorState.statusGlyphKind.spokenStatus]
+        if hookUnconfirmed {
+            parts.append("Approve the Ghostties hook in Codex")
+        }
+        if let ts = session.displayTimestamp {
+            // "last output" — not a bare relative token — so a screen reader
+            // has a noun for what this measures. Browsing (focus/selection)
+            // no longer advances this value; without the noun, "2m" reads as
+            // an event the user didn't cause. A11y string only — the visual
+            // row keeps the bare relative label. See RecentsRowView.body.
+            parts.append("last output \(Self.relativeLabel(ts))")
+        }
+        if isActive { parts.append("active") }
+        return parts.joined(separator: ", ")
+    }
+
+    // MARK: - Relative Time
+
+    /// Formats a past date as a compact relative string.
+    /// - "just now" for < 1 min
+    /// - "2m", "45m" for < 1 hr
+    /// - "3h" for < 24 hr
+    /// - Day abbreviation ("Mon") for < 7 days
+    /// - "May 5" for older
+    static func relativeLabel(_ date: Date) -> String {
+        let elapsed = Date.now.timeIntervalSince(date)
+        if elapsed < 60 { return "just now" }
+        if elapsed < 3600 { return "\(Int(elapsed / 60))m" }
+        if elapsed < 86400 { return "\(Int(elapsed / 3600))h" }
+        if elapsed < 604800 { return dayFormatter.string(from: date) }
+        return monthDayFormatter.string(from: date)
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "EEE"
+        return f
+    }()
+
+    private static let monthDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MMM d"
+        return f
+    }()
+}
+
+// MARK: - Shared Row Chrome
+
+/// A sidebar list row's title line: the row title size, and the "Selected
+/// title weight" dial on the selected row (macOS 27 sidebar selection:
+/// semibold).
+struct SidebarListRowTitle: View {
+    let text: String
+    let isActive: Bool
+
+    var body: some View {
+        Text(text)
+            .font(.system(
+                size: SidebarDialTuning.rowTitleSize(),
+                weight: isActive ? SidebarDialTuning.selectedTitleWeight().fontWeight : .regular
+            ))
+            .foregroundStyle(Color.primary)
+            .lineLimit(1)
+    }
+}
+
+/// The visual shell of a sidebar list row — title over subtitle on the
+/// leading side, one glyph in the trailing status slot, the row height and
+/// padding dials, the selected surface, hover fill, and the Flow 05 label
+/// choreography. Shared by session rows (`RecentsRowView`) and the History
+/// row (`HistoryRowView`) so both render identically by construction.
+/// Callers add tap, popover and accessibility on top.
+struct SidebarListRowChrome<Title: View, Trailing: View>: View {
+    let subtitle: String
+    let isActive: Bool
+    /// Position within the rendered section — feeds the Flow 05 expand
+    /// stagger (`WorkspaceLayout.expandLabelDelay`).
+    var staggerIndex: Int = 0
+    let redlineID: String
+    @ViewBuilder let title: () -> Title
+    @ViewBuilder let trailing: () -> Trailing
+
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var widthModel: SidebarWidthModel
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+            // Title + subtitle stacked
+            VStack(alignment: .leading, spacing: 1) {
+                title()
+
+                Text(subtitle)
+                    .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                    .lineLimit(1)
+            }
+            .opacity(labelOpacity)
+            .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
+
+            Spacer(minLength: 4)
+
+            trailing()
+        }
+        .redlineFrame(redlineID + ".content")
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
         // 46pt + the enclosing `VStack(spacing: 2)`'s 2pt inter-row gap
@@ -142,18 +248,10 @@ struct RecentsRowView: View, Equatable {
         // pass used 40 (before that, 36), both too tight — Sean's round-6
         // follow-up review called this out as ~30% tighter than the design.
         .frame(height: SidebarDialTuning.rowHeight())
-        .redlineFrame(RedlineID.row(session.id))
+        .redlineFrame(redlineID)
         .background(rowBackground)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
-        .onTapGesture {
-            guard !isEditing else { return }
-            onTap()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
     // MARK: - Flow 05 Content Choreography (sidebar-presence)
@@ -238,56 +336,4 @@ struct RecentsRowView: View, Equatable {
         }
         return Color.clear
     }
-
-    // MARK: - Accessibility
-
-    private var accessibilityLabel: String {
-        // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
-        // renders from — this row previously stated no status at all.
-        var parts = [session.name, "in \(projectName)", indicatorState.statusGlyphKind.spokenStatus]
-        if hookUnconfirmed {
-            parts.append("Approve the Ghostties hook in Codex")
-        }
-        if let ts = session.displayTimestamp {
-            // "last output" — not a bare relative token — so a screen reader
-            // has a noun for what this measures. Browsing (focus/selection)
-            // no longer advances this value; without the noun, "2m" reads as
-            // an event the user didn't cause. A11y string only — the visual
-            // row keeps the bare relative label. See RecentsRowView.body.
-            parts.append("last output \(Self.relativeLabel(ts))")
-        }
-        if isActive { parts.append("active") }
-        return parts.joined(separator: ", ")
-    }
-
-    // MARK: - Relative Time
-
-    /// Formats a past date as a compact relative string.
-    /// - "just now" for < 1 min
-    /// - "2m", "45m" for < 1 hr
-    /// - "3h" for < 24 hr
-    /// - Day abbreviation ("Mon") for < 7 days
-    /// - "May 5" for older
-    static func relativeLabel(_ date: Date) -> String {
-        let elapsed = Date.now.timeIntervalSince(date)
-        if elapsed < 60 { return "just now" }
-        if elapsed < 3600 { return "\(Int(elapsed / 60))m" }
-        if elapsed < 86400 { return "\(Int(elapsed / 3600))h" }
-        if elapsed < 604800 { return dayFormatter.string(from: date) }
-        return monthDayFormatter.string(from: date)
-    }
-
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "EEE"
-        return f
-    }()
-
-    private static let monthDayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "MMM d"
-        return f
-    }()
 }

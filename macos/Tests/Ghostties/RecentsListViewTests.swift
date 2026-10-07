@@ -186,14 +186,10 @@ final class RecentsListViewTests: XCTestCase {
 
     // MARK: - Active/Inactive/Archive Sessions (pure helpers)
 
-    /// Sean hit this directly: at cold launch every session has no
-    /// `globalStatuses` entry yet (no live surface), Active is empty, nothing
-    /// is selected, and Archive's stored preference is `false` (its default).
-    /// Archive must render COLLAPSED — an empty Active section is not a
-    /// reason to override the user's collapsed/expanded choice for Archive.
-    /// A bare sidebar in this state is the accepted outcome; it is not this
-    /// helper's job to prevent it.
-    func testColdLaunchArchiveStaysCollapsedWhenActiveIsEmpty() {
+    /// At cold launch every session has no `globalStatuses` entry yet (no
+    /// live surface): Active is empty and every session is archived (shown
+    /// through the History row).
+    func testColdLaunchPutsEverySessionInArchive() {
         let sessions = (0..<14).map { session(name: "s\($0)") }
 
         let active = RecentsListView.activeSessions(from: sessions, statuses: [:])
@@ -203,19 +199,11 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertTrue(active.isEmpty)
         XCTAssertTrue(inactive.isEmpty)
         XCTAssertEqual(archive.count, 14)
-
-        let archiveExpanded = RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .archive,
-            sectionContainsSelectedSession: false
-        )
-        XCTAssertFalse(archiveExpanded, "Archive must honor the collapsed stored preference even when Active is empty")
     }
 
     /// FIX 6: a selected session that belongs in Archive stays in Archive
-    /// (no promotion) — but its section renders expanded via the auto-expand
-    /// override, so it's still visible without moving.
-    func testSelectedArchiveSessionStaysInArchiveButSectionExpands() {
+    /// (no promotion into Active).
+    func testSelectedArchiveSessionStaysInArchive() {
         let selected = session(name: "selected")
         let other = session(name: "other")
         let sessions = [selected, other]
@@ -226,23 +214,12 @@ final class RecentsListViewTests: XCTestCase {
 
         XCTAssertTrue(archive.contains { $0.id == selected.id }, "selected session must stay in Archive")
         XCTAssertFalse(active.contains { $0.id == selected.id }, "selected session must NOT be promoted into Active")
-
-        let archiveExpanded = RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .archive,
-            sectionContainsSelectedSession: archive.contains { $0.id == selected.id }
-        )
-        XCTAssertTrue(archiveExpanded, "Archive must expand because it contains the selected session")
     }
 
-    /// Same as above, but for the new INACTIVE section: a selected session
-    /// that ran-then-stopped (started at some point this launch) stays in
-    /// Inactive — no promotion into Active, no relocation into Archive — but
-    /// its section force-expands so it's visible without moving. This is the
-    /// exact case Sean hit: stop a running session, expect it somewhere
-    /// other than Archive, and it must be reachable even if Inactive were
-    /// collapsed.
-    func testSelectedInactiveSessionStaysInInactiveButSectionExpands() {
+    /// Same as above, but for INACTIVE: a selected session that
+    /// ran-then-stopped (started at some point this launch) stays in
+    /// Inactive — no promotion into Active, no relocation into Archive.
+    func testSelectedInactiveSessionStaysInInactive() {
         let selected = session(name: "selected")
         let other = session(name: "other")
         let sessions = [selected, other]
@@ -261,45 +238,6 @@ final class RecentsListViewTests: XCTestCase {
 
         XCTAssertTrue(inactive.contains { $0.id == selected.id }, "stopped-but-started-this-launch session must land in Inactive")
         XCTAssertFalse(archive.contains { $0.id == selected.id }, "must NOT be lumped into Archive")
-
-        let inactiveExpanded = RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .inactive,
-            sectionContainsSelectedSession: true
-        )
-        XCTAssertTrue(inactiveExpanded, "Inactive must expand because it contains the selected session")
-    }
-
-    /// The auto-expand override is render-time only — it must never depend on
-    /// (or imply writing to) the stored `@AppStorage` preference. Passing a
-    /// `storedPreference` of `false` still yields `true` under the override
-    /// condition, proving the override doesn't require/mutate storage.
-    func testEffectiveExpandedOverrideIgnoresStoredPreferenceWhenTriggered() {
-        XCTAssertTrue(RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .archive,
-            sectionContainsSelectedSession: true
-        ))
-        // No override condition met — falls through to the stored preference.
-        XCTAssertFalse(RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .archive,
-            sectionContainsSelectedSession: false
-        ))
-    }
-
-    /// FIX (dead ACTIVE header): the selected-session override must exclude
-    /// `.active`. A selected, running session lives in Active essentially
-    /// all the time during normal use, so applying the override there would
-    /// make the ACTIVE header collapse control permanently dead — tapping it
-    /// while a session is selected must actually collapse the section, honoring
-    /// the stored preference the same way as when nothing is selected.
-    func testActiveSectionRespectsStoredPreferenceEvenWhenItContainsSelectedSession() {
-        XCTAssertFalse(RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .active,
-            sectionContainsSelectedSession: true
-        ), "Active must not force-expand for the selected session — only Inactive/Archive get that override")
     }
 
     /// The three static buckets must be an EXACT partition: every session

@@ -258,7 +258,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
 
     /// Bounds (points) of pixels that differ between two renders, within the
     /// trailing 60pt and the top 150pt — the glyph slot, found by diffing a
-    /// `?` row against a check row so the section chevron (identical in both)
+    /// `?` row against a check row so everything else (identical in both)
     /// cancels out.
     private func diffBounds(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep, fromX: CGFloat? = nil) -> (minY: CGFloat, maxY: CGFloat)? {
         let scale = CGFloat(a.pixelsWide) / width
@@ -275,19 +275,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         return maxY >= 0 ? (CGFloat(minY) / scale, CGFloat(maxY + 1) / scale) : nil
     }
 
-    private func topInkY(_ rep: NSBitmapImageRep, fromX: CGFloat? = nil) -> CGFloat? {
-        let scale = CGFloat(rep.pixelsWide) / width
-        guard let bg = rep.colorAt(x: rep.pixelsWide - 1, y: 0)?.usingColorSpace(.sRGB) else { return nil }
-        for y in 0..<Int(150 * scale) {
-            for x in Int((fromX ?? (width - 60)) * scale)..<rep.pixelsWide {
-                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
-                if abs(c.redComponent - bg.redComponent) + abs(c.greenComponent - bg.greenComponent) > 0.2 { return CGFloat(y) / scale }
-            }
-        }
-        return nil
-    }
-
-    func testFirstSessionGlyphAndSectionChevronSitAtTheSameYInExpandedAndRail() throws {
+    func testFirstSessionGlyphSitsAtTheSameYInExpandedAndRail() throws {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let eNeeds = try XCTUnwrap(renderWholeSidebar(expanded: true, state: .needsAttention, appearance: appearance))
             let eIdle = try XCTUnwrap(renderWholeSidebar(expanded: true, state: .idle, appearance: appearance))
@@ -297,30 +285,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             let r = try XCTUnwrap(diffBounds(rNeeds, rIdle, fromX: 0), "rail glyph not found")
             XCTAssertEqual(e.minY, r.minY, accuracy: 0.6, "first session glyph top (\(appearance))")
             XCTAssertEqual(e.maxY, r.maxY, accuracy: 0.6, "first session glyph bottom (\(appearance))")
-            // Topmost ink in the trailing column is the section chevron.
-            let ec = try XCTUnwrap(topInkY(eNeeds)), rc = try XCTUnwrap(topInkY(rNeeds, fromX: 0))
-            XCTAssertEqual(ec, rc, accuracy: 0.6, "section chevron top (\(appearance))")
         }
-    }
-
-    func testRailChevronIsCenteredOnTheRail() throws {
-        let rNeeds = try XCTUnwrap(renderWholeSidebar(expanded: false, state: .needsAttention, appearance: .aqua))
-        let scale = CGFloat(rNeeds.pixelsWide) / width
-        let bg = try XCTUnwrap(rNeeds.colorAt(x: rNeeds.pixelsWide - 1, y: 0)?.usingColorSpace(.sRGB))
-        var minX = Int.max, maxX = -1
-        // Only the header band: chevron top to bottom, above the first row.
-        let headerTop = (WorkspaceStore(testingProjects: []).toolbarRowTopAnchorConstant * 2 + SidebarDialTuning.contentPaddingTop() + SidebarDialTuning.headerTopPadding()) * scale
-        let headerBottom = headerTop + SidebarDialTuning.headerChevronSize() * scale
-        for y in Int(headerTop)..<Int(headerBottom) {
-            for x in 0..<rNeeds.pixelsWide {
-                guard let c = rNeeds.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
-                if abs(c.redComponent - bg.redComponent) + abs(c.greenComponent - bg.greenComponent) > 0.2 {
-                    minX = min(minX, x); maxX = max(maxX, x)
-                }
-            }
-        }
-        XCTAssertGreaterThanOrEqual(maxX, 0, "rail chevron not found")
-        XCTAssertEqual((CGFloat(minX) / scale + CGFloat(maxX + 1) / scale) / 2, width / 2, accuracy: 0.5)
     }
 
     // MARK: - Tray capsules (layout B: Create capsule, gap, Toggle capsule)

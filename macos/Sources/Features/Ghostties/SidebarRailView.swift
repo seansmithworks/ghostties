@@ -6,8 +6,8 @@ import GhosttiesCore
 ///
 /// Content-agnostic across project-first/task-first sidebar view modes —
 /// it lists Pinned + Active sessions (`WorkspaceStore.railSessions()`, same
-/// membership/order as `RecentsListView`) regardless of which full sidebar
-/// view is otherwise mounted, since the rail has no room for the
+/// membership/order as `RecentsListView`) and the History row, regardless
+/// of which full sidebar view is otherwise mounted, since the rail has no room for the
 /// project/task distinction. Hosted by `WorkspaceViewContainer.applySidebarView()`
 /// in place of `WorkspaceSidebarView`/`TaskSidebarView` whenever
 /// `sidebarMode == .collapsed`.
@@ -33,49 +33,35 @@ struct SidebarRailView: View {
             Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
 
             // Same structure and rhythm as the expanded Sessions list
-            // (`RecentsListView`): header, rows, then the Inactive/Archive
-            // headers. The rail has no room for header text, so each header
-            // collapses to its chevron (`RailChevronRow`, header geometry) —
-            // the top one stands in for Active/Pinned. Margins, row gap and
-            // top padding are the list's own tokens.
+            // (`RecentsListView`, mock I3/H), element for element, so every
+            // rail glyph sits at its expanded row's y across the pinned⇄rail
+            // morph: each section header becomes a label-less slot of the
+            // header's own height, and each zero-height end-of-section drop
+            // zone a zero-height marker. Hairlines ride on those slots —
+            // between Pinned and Active, and before the History clock. No
+            // labels, counts or chevrons.
+            let sections = SidebarSessionSections.make(
+                sessions: store.sessions,
+                statuses: store.globalStatuses,
+                sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
+            )
             VStack(spacing: SidebarDialTuning.rowGap()) {
-                RailChevronRow()
-
-                ForEach(store.railSessions()) { session in
-                    RailSessionRow(
-                        sessionId: session.id,
-                        name: session.name,
-                        projectName: store.projects.first { $0.id == session.projectId }?.name ?? "Unknown",
-                        // Same source as `RecentsListView.sessionRow`, so a
-                        // session shows the same glyph in the list and the rail.
-                        indicatorState: store.globalIndicatorStates[session.id] ?? .inactive,
-                        isActive: coordinator.activeSessionId == session.id,
-                        dialEpoch: SidebarDialTuning.epoch(),
-                        onTap: { coordinator.focusSession(id: session.id) }
-                    )
+                if !sections.pinned.isEmpty {
+                    RailSectionHeaderSlot(showsHairline: false)
+                    ForEach(sections.pinned) { session in
+                        railRow(for: session)
+                    }
+                    RailSectionEndMarker(showsHairline: false)
                 }
-
-                // Two bare chevron rows summarizing Inactive/Archived — the
-                // rail is too narrow for their counts to render, so the
-                // count only reaches VoiceOver/the tooltip. Counts come from
-                // `RecentsListView`'s own static bucket functions
-                // (`inactiveSessions`/`archiveSessions`) — the same source
-                // its section headers read.
-                RailSectionSummaryRow(
-                    label: "Inactive",
-                    count: RecentsListView.inactiveSessions(
-                        from: store.sessions,
-                        statuses: store.globalStatuses,
-                        sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
-                    ).count
-                )
-                RailSectionSummaryRow(
-                    label: "Archived",
-                    count: RecentsListView.archiveSessions(
-                        from: store.sessions,
-                        statuses: store.globalStatuses,
-                        sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
-                    ).count
+                RailSectionHeaderSlot(showsHairline: !sections.pinned.isEmpty)
+                ForEach(sections.active) { session in
+                    railRow(for: session)
+                }
+                RailSectionEndMarker(showsHairline: !sections.rowSessions.isEmpty)
+                RailHistoryRow(
+                    subtitle: HistorySummary.subtitle(count: sections.historyCount, lastActiveAt: sections.historyLastActiveAt),
+                    isActive: coordinator.isHistoryPresented,
+                    onTap: { coordinator.presentHistory() }
                 )
             }
             // The window margin on both sides (`columnPadding`), so the
@@ -100,6 +86,20 @@ struct SidebarRailView: View {
             coordinator.applyCaptureFixtureFocusIfNeeded()
             #endif
         }
+    }
+
+    private func railRow(for session: AgentSession) -> some View {
+        RailSessionRow(
+            sessionId: session.id,
+            name: session.name,
+            projectName: store.projects.first { $0.id == session.projectId }?.name ?? "Unknown",
+            // Same source as `RecentsListView.sessionRow`, so a
+            // session shows the same glyph in the list and the rail.
+            indicatorState: store.globalIndicatorStates[session.id] ?? .inactive,
+            isActive: coordinator.sidebarSelectedSessionId == session.id,
+            dialEpoch: SidebarDialTuning.epoch(),
+            onTap: { coordinator.focusSession(id: session.id) }
+        )
     }
 }
 
@@ -172,57 +172,5 @@ struct RailSessionRow: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
         }
-    }
-}
-
-// MARK: - Rail Section Chevron Rows
-
-/// A section header collapsed to its chevron: the expanded
-/// `SessionSectionHeader`'s vertical geometry (top/bottom padding, chevron
-/// size) with the title dropped, centered horizontally so the chevron sits in
-/// the same column as the centered row glyphs below it and at the header's y.
-private struct RailChevronRow: View {
-    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
-    /// SwiftUI skips a body whose inputs are unchanged, and these views read
-    /// `UserDefaults` inside it, so without this a live dial change never lands.
-    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    var isHovered = false
-
-    var body: some View {
-        PixelChevronView(isExpanded: false)
-            .frame(width: SidebarDialTuning.headerChevronSize(), height: SidebarDialTuning.headerChevronSize())
-            .frame(maxWidth: .infinity)
-        .padding(.top, SidebarDialTuning.headerTopPadding())
-        .padding(.bottom, SidebarDialTuning.headerBottomPadding())
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
-        )
-        .contentShape(Rectangle())
-    }
-}
-
-/// A chevron row summarizing a collapsed-away section (Inactive/Archived).
-/// Not a disclosure control: tapping it expands the full sidebar (Cmd+S)
-/// rather than inline-listing session rows the rail has no room for, so
-/// `count` only reaches VoiceOver and the tooltip.
-private struct RailSectionSummaryRow: View {
-    let label: String
-    let count: Int
-
-    @EnvironmentObject private var coordinator: SessionCoordinator
-    @State private var isHovered = false
-
-    var body: some View {
-        Button {
-            (coordinator.containerView as? WorkspaceViewContainer)?.toggleSidebar()
-        } label: {
-            RailChevronRow(isHovered: isHovered)
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .help("\(label) (\(count))")
-        .accessibilityLabel("\(label), \(count)")
     }
 }

@@ -316,6 +316,22 @@ class WorkspaceViewContainer: NSView {
         return view
     }()
 
+    /// Hosting view for the history browser (mock I3), shown over the
+    /// terminal inside the canvas card while
+    /// `SessionCoordinator.isHistoryPresented` — see
+    /// `applyHistoryPresentation()`. The terminal stays mounted underneath,
+    /// so closing the browser returns to it untouched.
+    private lazy var historyHostingView: NSHostingView<AnyView> = {
+        let view = NSHostingView<AnyView>(rootView: AnyView(EmptyView()))
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.sizingOptions = []
+        view.wantsLayer = true
+        view.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = true
+        return view
+    }()
+
     /// UserDefaults key for the Cmd+T preference — composer (default) vs.
     /// instant create. Mirrors `Ghostty.Config.autoUpdateChannel`'s
     /// resolution pattern (`ghostties.autoUpdateChannel`): a plain
@@ -3026,7 +3042,49 @@ class WorkspaceViewContainer: NSView {
         // Initial bind so we pick up whatever surface exists at launch before
         // the publisher fires.
         rebindFocusedSurfaceTheme()
+
+        // Show/hide the history browser in the canvas card. `@Published`
+        // emits in `willSet`; the main-queue hop lets the sink read the
+        // post-write value (same reasoning as the composer sink above).
+        coordinator.$isHistoryPresented
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.applyHistoryPresentation()
+            }
+            .store(in: &cancellables)
     }
+
+    /// Mounts the history browser over the terminal, inside the canvas card,
+    /// while History is selected; unmounts it otherwise. Focus goes to the
+    /// browser on open; on close `SessionCoordinator.dismissHistory()` hands
+    /// it back to the previously selected session's terminal.
+    private func applyHistoryPresentation() {
+        if coordinator.isHistoryPresented {
+            guard historyHostingView.superview == nil else { return }
+            historyHostingView.rootView = AnyView(
+                HistoryCanvasHost()
+                    .environmentObject(store)
+                    .environmentObject(coordinator)
+            )
+            terminalShadowHost.addSubview(historyHostingView, positioned: .above, relativeTo: terminalContainer)
+            NSLayoutConstraint.activate([
+                historyHostingView.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+                historyHostingView.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+                historyHostingView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+                historyHostingView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+            ])
+            window?.makeFirstResponder(historyHostingView)
+        } else {
+            guard historyHostingView.superview != nil else { return }
+            historyHostingView.removeFromSuperview()
+            historyHostingView.rootView = AnyView(EmptyView())
+        }
+    }
+
+    #if DEBUG
+    /// Test seam: whether the history browser is mounted in the canvas.
+    var isHistoryBrowserMountedForTesting: Bool { historyHostingView.superview != nil }
+    #endif
 
     // MARK: - Focused Surface Theme Binding
 
