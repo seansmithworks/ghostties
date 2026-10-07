@@ -186,10 +186,14 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         SidebarDialTuning.windowMargin() + (rail ? 0 : SidebarDialTuning.contentPaddingLeading()) + 3
     }
 
-    /// The selected card: the lifted run one row tall.
+    /// The selected card: the lifted run one row tall, above the tray (a
+    /// tray capsule can be one row tall too).
     private func selectedCard(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
         let rowHeight = SidebarDialTuning.rowHeight()
-        let cards = runsDown(r, atX: cardProbeX(rail: rail)).filter { abs(($0.upperBound - $0.lowerBound) - rowHeight) <= 1.5 }
+        let trayHeight = SidebarTray.reservedHeight(isVertical: rail) - (rail ? 0 : SidebarDialTuning.listToTrayGap())
+        let cards = runsDown(r, atX: cardProbeX(rail: rail)).filter {
+            abs(($0.upperBound - $0.lowerBound) - rowHeight) <= 1.5 && $0.upperBound <= r.height - trayHeight
+        }
         return try XCTUnwrap(cards.first, "no selected card found (rail: \(rail))")
     }
 
