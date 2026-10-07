@@ -3191,3 +3191,15 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 - [ ] **Session-switch shortcuts dead in the rail** (Sean, 2026-10-06, `feat/sidebar-vnext` Dev build): Cmd+Shift+[ / ] and Cmd+1…9 don't move between sessions when the sidebar is collapsed to the rail; they work in the expanded sidebar. Unknown yet whether main has it too.
 
 - [ ] **New-session template menu has no side padding** (Sean, 2026-10-06, `Ghostties Demo.app` installed 15:47 by another thread): rows and the "Templates · shared across projects" header touch the popover edges, the top field renders as an empty band, and the "Changes here apply immediately." footer is clipped at the bottom.
+
+## 2026-10-06 — Sidebar vnext checkpoint (session fd55d575)
+
+Status of the items above: faded labels → fixed on `fix/faded-row-labels` @`14203326d` (approved); tests read live dials → fixed on `fix/sidebar-tests-isolated-defaults` @`3a7637d0c` (approved); appearance switch → fixed on `fix/appearance-refresh-all-sessions` @`b8ad26f42` (approved, targets main); rail shortcuts → fixed on `fix/rail-session-shortcuts` @`020554b39` (multi-window fix awaiting re-review). All pushed, none merged.
+
+- [ ] *carried* Re-review `fix/rail-session-shortcuts` (per-window project stepping, 2-window test), then merge into vnext on Sean's go.
+- [ ] *carried* Merge the three approved fix branches on Sean's go. The test-isolation merge conflicts in `SidebarDialKit.swift`: every dial accessor (incl. `trayGroupGap`, `selectedStyle`, `selectedTitleWeight`) must default to `SidebarDialTuning.store`.
+- [ ] *carried* "Lock it": bake Sean's live Dev dial values (`defaults read com.seansmithdesign.ghostties.dev | grep sidebarDial`) into code defaults; expanded button default 36→44.
+- [ ] *carried* Full unfiltered suite on vnext after merges, then PR with before/after images and Merge Danger.
+- [ ] *parked* Retire native Liquid Glass for a plain "pill" component (Sean's light variant is already `identity`; he's "not a huge Liquid Glass fan"). Sean's call after layout B.
+- [ ] *parked* Layout B morph: Create capsule passes under Toggle for ~30ms mid-flight (`scratchpad/vnext/layout-b-morph.png`). Sean to judge live.
+- [ ] *parked* Save pen.dev frame `bA1y9` "Tray layout options" (unsaved in `3-edff08ac-5MB.pen`).
