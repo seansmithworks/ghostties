@@ -823,6 +823,19 @@ class WorkspaceViewContainer: NSView {
                 self?.toggleSidebar()
             }
         }
+        if let seconds = CaptureFixture.sidebarRailClosePinAfter, CaptureFixture.claimHook("sidebarRailClosePin") {
+            // Cmd+S (pinned -> rail), Cmd+Shift+S (rail -> closed), then
+            // Cmd+Shift+S again (closed -> pinned).
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                self?.toggleSidebar()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2 * seconds) { [weak self] in
+                self?.toggleSidebarFullyClosed()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3 * seconds) { [weak self] in
+                self?.toggleSidebarFullyClosed()
+            }
+        }
     }
     #endif
 
