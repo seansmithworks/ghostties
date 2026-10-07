@@ -56,6 +56,12 @@ cmd_up() {
   if [ -n "${VERIFY_SIDEBAR_TOGGLE_AFTER:-}" ]; then
     [[ "$VERIFY_SIDEBAR_TOGGLE_AFTER" =~ ^[0-9]+(\.[0-9]+)?$ ]] && [ "$VERIFY_SIDEBAR_TOGGLE_AFTER" != 0 ] || die "VERIFY_SIDEBAR_TOGGLE_AFTER must be seconds > 0"
   fi
+  if [ -n "${VERIFY_FIXTURE_PROJECTS:-}" ]; then
+    [ "$VERIFY_FIXTURE_PROJECTS" = none ] || die "VERIFY_FIXTURE_PROJECTS must be none"
+  fi
+  if [ -n "${VERIFY_FIXTURE_TEMPLATE_IN_USE:-}" ]; then
+    [ "$VERIFY_FIXTURE_TEMPLATE_IN_USE" = 1 ] || die "VERIFY_FIXTURE_TEMPLATE_IN_USE must be 1"
+  fi
   # Expanding a project and its settings popover live on the Projects tab.
   if [ -n "${VERIFY_EXPAND_PROJECT:-}${VERIFY_PROJECT_SETTINGS:-}" ]; then
     [ "${VERIFY_SIDEBAR_TAB:-projects}" = projects ] || die "VERIFY_EXPAND_PROJECT/VERIFY_PROJECT_SETTINGS need VERIFY_SIDEBAR_TAB=projects"
@@ -92,6 +98,8 @@ cmd_up() {
   if [ -n "${VERIFY_COMPOSER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_COMPOSER=$VERIFY_COMPOSER"); fi
   if [ -n "${VERIFY_PROJECT_SETTINGS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_PROJECT_SETTINGS=$VERIFY_PROJECT_SETTINGS"); fi
   if [ -n "${VERIFY_SIDEBAR_TOGGLE_AFTER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER=$VERIFY_SIDEBAR_TOGGLE_AFTER"); fi
+  if [ -n "${VERIFY_FIXTURE_PROJECTS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_FIXTURE_PROJECTS=$VERIFY_FIXTURE_PROJECTS"); fi
+  if [ -n "${VERIFY_FIXTURE_TEMPLATE_IN_USE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE=$VERIFY_FIXTURE_TEMPLATE_IN_USE"); fi
   if [ -n "${VERIFY_SCRIPT:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SCRIPT=$VERIFY_SCRIPT"); fi
   env -u GHOSTTIES_SESSION_ID -u GHOSTTIES_LAUNCHER \
     GHOSTTIES_CAPTURE_FIXTURE=1 GHOSTTIES_STATE_DIR="$EV/state" ${extra[@]+"${extra[@]}"} \

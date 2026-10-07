@@ -171,20 +171,52 @@ enum CaptureFixture {
         return dir.path
     }
 
-    static let projects: [Project] = fixtureProjects.map { fp in
-        Project(
-            id: fixedId(String(format: "%04d", fixtureProjects.firstIndex { $0.name == fp.name }! + 1)),
-            name: fp.name,
-            rootPath: fixtureWorkingDirectory(for: fp.name),
-            isPinned: fp.isPinned,
-            ghostCharacter: fp.ghost,
-            lastActiveAt: Date()
+    // MARK: - Opt-in seed knobs
+
+    /// Two opt-in variations on the seeded cast, for contract rows that need
+    /// a state the default cast can't show. Both are off unless set, and the
+    /// default cast is byte-for-byte the same with both off.
+    ///   - `VERIFY_FIXTURE_PROJECTS=none` -> `GHOSTTIES_CAPTURE_FIXTURE_PROJECTS=none`:
+    ///     0 projects and 0 sessions (X3: the Run row accepts any text once a
+    ///     project exists).
+    ///   - `VERIFY_FIXTURE_TEMPLATE_IN_USE=1` -> `GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE=1`:
+    ///     one user template, "Mine", used by two trove sessions (T6: the
+    ///     in-use delete alert).
+    struct SeedKnobs: Equatable {
+        var zeroProjects = false
+        var templateInUse = false
+    }
+
+    static func parseSeedKnobs(_ env: [String: String]) -> SeedKnobs {
+        SeedKnobs(
+            zeroProjects: env["GHOSTTIES_CAPTURE_FIXTURE_PROJECTS"] == "none",
+            templateInUse: env["GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE"] == "1"
         )
     }
 
-    private static func projectId(_ name: String) -> UUID {
-        projects.first { $0.name == name }!.id
+    static let seedKnobs: SeedKnobs = isActive ? parseSeedKnobs(ProcessInfo.processInfo.environment) : SeedKnobs()
+
+    /// The in-use user template. Fixed id so the sessions can reference it.
+    static let inUseTemplate = AgentTemplate(id: fixedId("9001"), name: "Mine", kind: .custom)
+
+    /// Fixture sessions that use `inUseTemplate` under the knob.
+    private static let inUseTemplateSessionNames: Set<String> = ["build fix", "release notes"]
+
+    static func seededProjects(_ knobs: SeedKnobs) -> [Project] {
+        if knobs.zeroProjects { return [] }
+        return fixtureProjects.map { fp in
+            Project(
+                id: fixedId(String(format: "%04d", fixtureProjects.firstIndex { $0.name == fp.name }! + 1)),
+                name: fp.name,
+                rootPath: fixtureWorkingDirectory(for: fp.name),
+                isPinned: fp.isPinned,
+                ghostCharacter: fp.ghost,
+                lastActiveAt: Date()
+            )
+        }
     }
+
+    static let projects: [Project] = seededProjects(seedKnobs)
 
     /// `(name, project, ghost, indicator state)` — mirrors the rebuild
     /// reference's session cast: switchboard has 4 live sessions (2 waiting,
@@ -224,20 +256,26 @@ enum CaptureFixture {
         sessions.first?.id
     }
 
-    static let sessions: [AgentSession] = fixtureSessions.enumerated().map { index, fs in
-        let now = Date()
-        return AgentSession(
-            id: fixedId(String(format: "%04d", 100 + index)),
-            name: fs.name,
-            templateId: AgentTemplate.claudeCode.id,
-            projectId: projectId(fs.project),
-            sortOrder: index,
-            lastActiveAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
-            lastOutputAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
-            isNamePinned: true,
-            ghostCharacter: fs.ghost
-        )
+    static func seededSessions(_ knobs: SeedKnobs, projects: [Project]) -> [AgentSession] {
+        if knobs.zeroProjects { return [] }
+        return fixtureSessions.enumerated().map { index, fs in
+            let now = Date()
+            let usesInUseTemplate = knobs.templateInUse && inUseTemplateSessionNames.contains(fs.name)
+            return AgentSession(
+                id: fixedId(String(format: "%04d", 100 + index)),
+                name: fs.name,
+                templateId: usesInUseTemplate ? inUseTemplate.id : AgentTemplate.claudeCode.id,
+                projectId: projects.first { $0.name == fs.project }!.id,
+                sortOrder: index,
+                lastActiveAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
+                lastOutputAt: now.addingTimeInterval(-fs.hoursAgo * 3600),
+                isNamePinned: true,
+                ghostCharacter: fs.ghost
+            )
+        }
     }
+
+    static let sessions: [AgentSession] = seededSessions(seedKnobs, projects: projects)
 
     /// Build the seeded `WorkspaceStore` and apply the canned indicator
     /// states — indicator state is separate, ephemeral, non-persisted
@@ -255,14 +293,16 @@ enum CaptureFixture {
     /// a non-alive session; every other non-`.inactive` state reports
     /// `.running` (a real open terminal), landing in Active.
     @MainActor
-    static func makeStore() -> WorkspaceStore {
+    static func makeStore(knobs: SeedKnobs = seedKnobs) -> WorkspaceStore {
+        let seededProjects = seededProjects(knobs)
         let store = WorkspaceStore(
-            testingProjects: projects,
-            testingSessions: sessions,
+            testingProjects: seededProjects,
+            testingSessions: seededSessions(knobs, projects: seededProjects),
             hasShownPinMigrationNotice: true,
             hasDismissedPinMigrationNotice: true
         )
-        for (fs, session) in zip(fixtureSessions, sessions) {
+        if knobs.templateInUse { store.addTemplate(inUseTemplate) }
+        for (fs, session) in zip(fixtureSessions, store.sessions) {
             store.updateIndicatorState(id: session.id, state: fs.state)
             switch fs.state {
             case .inactive:
