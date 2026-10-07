@@ -3189,3 +3189,5 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 - [ ] **Light/dark switch only refreshes some sessions** (Sean, 2026-10-06, installed app): after macOS flipped appearance, the sidebar chrome went light but some session terminals stayed dark (e.g. "pen.dev pickup") while others updated. Fixing on its own branch off main.
 
 - [ ] **Session-switch shortcuts dead in the rail** (Sean, 2026-10-06, `feat/sidebar-vnext` Dev build): Cmd+Shift+[ / ] and Cmd+1…9 don't move between sessions when the sidebar is collapsed to the rail; they work in the expanded sidebar. Unknown yet whether main has it too.
+
+- [ ] **New-session template menu has no side padding** (Sean, 2026-10-06, `Ghostties Demo.app` installed 15:47 by another thread): rows and the "Templates · shared across projects" header touch the popover edges, the top field renders as an empty band, and the "Changes here apply immediately." footer is clipped at the bottom.
