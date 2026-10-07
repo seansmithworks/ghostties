@@ -422,6 +422,10 @@ class WorkspaceViewContainer: NSView {
     /// — see that method's doc comment.
     private var isCollapseCrossfadeHosted = false
 
+    /// Test seam: what the pinned rows would render toward right now.
+    var isCollapsedPresentationForTesting: Bool { widthModel.isCollapsedPresentation }
+    var sidebarModeForTesting: SidebarMode { sidebarMode }
+
     /// Stored constraints for animating sidebar show/hide and terminal insets.
     private var sidebarWidthConstraint: NSLayoutConstraint!
     private var shadowHostTopConstraint: NSLayoutConstraint!
