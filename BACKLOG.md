@@ -3185,3 +3185,5 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 - [ ] **Faded row labels after rail → closed → pinned** (found in vnext review, 2026-10-06; also on main `3468b7028`): `isCollapsedPresentation` is written only in `applyCollapseCrossfadeSidebarView`, so a closed→pinned swap can leave `RecentsRowView` labels faded until the next Cmd+S. Fix: reset the flag in `applySidebarView`.
 
 - [ ] **Sidebar tests read the live Dev dial defaults** (found 2026-10-06; also on main `3468b7028`): `SessionRowGlyphSlotTests/testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail` reads `SidebarDialTuning.*` from `UserDefaults.standard` (the Dev domain in the hosted test process) and compares against code constants, so it fails whenever Sean has tuned `trayInnerPadding`. Fix: tests inject a throwaway defaults suite (same rule as the injected state dir), never read Dev's domain.
+
+- [ ] **Light/dark switch only refreshes some sessions** (Sean, 2026-10-06, installed app): after macOS flipped appearance, the sidebar chrome went light but some session terminals stayed dark (e.g. "pen.dev pickup") while others updated. Fixing on its own branch off main.
