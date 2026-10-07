@@ -259,6 +259,45 @@ final class SidebarSectionsHistoryTests: XCTestCase {
         XCTAssertFalse(container.isHistoryBrowserMountedForTesting)
     }
 
+    private final class KeyableWindow: NSWindow {
+        override var canBecomeKey: Bool { true }
+    }
+
+    /// Opening History must take keyboard focus off the terminal so the
+    /// browser's ⏎/esc/⌘P/arrows reach it: the query field ends up first
+    /// responder. A text view inside the terminal card stands in for the
+    /// focused terminal surface.
+    func testOpeningHistoryMovesKeyFocusFromTheTerminalToTheBrowser() {
+        let store = WorkspaceStore(testingProjects: [projectA])
+        let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
+        let window = KeyableWindow(
+            contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 600),
+            styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = container
+        window.orderFrontRegardless()
+        window.makeKey()
+        defer {
+            window.contentView = nil
+            window.orderOut(nil)
+            window.close()
+        }
+        container.layoutSubtreeIfNeeded()
+        let terminalStandIn = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 20))
+        container.terminalContainer.addSubview(terminalStandIn)
+        XCTAssertTrue(window.makeFirstResponder(terminalStandIn))
+
+        container.coordinatorForTesting.presentHistory()
+        let deadline = Date().addingTimeInterval(5)
+        while !(container.historyBrowserHasKeyFocusForTesting && window.firstResponder is NSTextView), Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
+
+        XCTAssertTrue(container.historyBrowserHasKeyFocusForTesting, "first responder: \(String(describing: window.firstResponder))")
+        XCTAssertTrue(window.firstResponder is NSTextView, "the query field's editor should hold focus")
+        XCTAssertFalse(window.firstResponder === terminalStandIn)
+    }
+
     // MARK: - The History row is the session row
 
     private let width: CGFloat = 220

@@ -3098,6 +3098,13 @@ class WorkspaceViewContainer: NSView {
     #if DEBUG
     /// Test seam: whether the history browser is mounted in the canvas.
     var isHistoryBrowserMountedForTesting: Bool { historyHostingView.superview != nil }
+
+    /// Test seam: whether the window's first responder (e.g. the query
+    /// field's editor) lives inside the mounted history browser.
+    var historyBrowserHasKeyFocusForTesting: Bool {
+        guard let responder = window?.firstResponder as? NSView else { return false }
+        return responder.isDescendant(of: historyHostingView)
+    }
     #endif
 
     // MARK: - Focused Surface Theme Binding
