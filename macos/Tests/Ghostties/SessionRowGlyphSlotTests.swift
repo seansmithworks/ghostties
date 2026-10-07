@@ -352,8 +352,9 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     }
 
     /// Capsule spans (in points) along one pixel line. A pixel is capsule if
-    /// it is lighter than the chrome (the near-white fill) or much darker
-    /// (icon ink); the shadow only darkens slightly, so it never counts.
+    /// it is lighter than the chrome (the near-white fill) or clearly darker
+    /// (icon ink, including the toggle glyph's divider, which this SDK draws
+    /// at about -0.43); the shadow only darkens slightly, so it never counts.
     /// Gaps of up to 3px (anti-aliased icon edges) are bridged.
     private func capsuleSpans(_ rep: NSBitmapImageRep, scale: CGFloat, alongX: Bool, at fixed: CGFloat) throws -> [ClosedRange<CGFloat>] {
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
@@ -364,7 +365,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         for i in 0..<count {
             guard let c = (alongX ? rep.colorAt(x: i, y: fixedPx) : rep.colorAt(x: fixedPx, y: i))?.usingColorSpace(.sRGB) else { continue }
             let lift = c.redComponent + c.greenComponent + c.blueComponent - chromeSum
-            guard lift > 0.06 || lift < -0.45 else { continue }
+            guard lift > 0.06 || lift < -0.3 else { continue }
             if let last = runs.last, i - last.1 <= 4 {
                 runs[runs.count - 1].1 = i
             } else {
