@@ -413,6 +413,19 @@ class AppDelegate: NSObject,
             }
 
             ghostty_app_set_color_scheme(app, scheme)
+
+            // MARK: - Ghostties fork fence (color scheme reaches every surface)
+            // The call above only re-themes the app-level config and surfaces
+            // created from now on. Each existing surface keeps its own
+            // light/dark state in libghostty, and upstream only pushes it to
+            // the tree currently shown in a window. The sidebar keeps every
+            // other session alive off-window, so broadcast to all of them.
+            NotificationCenter.default.post(
+                name: .ghosttyColorSchemeDidChange,
+                object: self.ghostty,
+                userInfo: [Notification.Name.GhosttyColorSchemeKey: scheme]
+            )
+            // MARK: - End Ghostties fork fence (color scheme reaches every surface)
         }
 
         // Setup our menu
