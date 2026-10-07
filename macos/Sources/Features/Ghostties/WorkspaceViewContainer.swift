@@ -706,6 +706,12 @@ class WorkspaceViewContainer: NSView {
     #endif
 
     @objc private func sidebarDialsChanged() {
+        // Constraints are main-thread only; the panel posts from the main
+        // actor, but a selector observer runs on the posting thread.
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.sidebarDialsChanged() }
+            return
+        }
         applyWindowMargin()
         #if DEBUG
         redlineOverlay.refresh()
@@ -716,7 +722,8 @@ class WorkspaceViewContainer: NSView {
     /// to every card inset constraint, so a live dial change lands without a
     /// mode change or relaunch. The same constants `setup()` and
     /// `applyTransitionConstraints` write; skipped mid-transition, where the
-    /// animator owns them (the next settled change re-applies).
+    /// animator owns them — both transition completions call this again, so
+    /// a dial change made mid-flight lands when the motion settles.
     private func applyWindowMargin(_ inset: CGFloat = SidebarDialTuning.windowMargin()) {
         guard !isSidebarTransitionAnimating else { return }
         shadowHostTopConstraint.constant = inset
@@ -1384,6 +1391,7 @@ class WorkspaceViewContainer: NSView {
         }, completionHandler: { [weak self] in
             guard let self, self.sidebarTransitionGeneration == generation else { return }
             self.isSidebarTransitionAnimating = false
+            self.applyWindowMargin()
             // The resize reclamp in `layout()` was deferred for the duration of
             // this animation. Force one more layout pass now that the flag is
             // clear, or a window shrink that happened mid-animation may never
@@ -1913,6 +1921,8 @@ class WorkspaceViewContainer: NSView {
         let animationCompletion: () -> Void = { [weak self] in
             guard let self, self.sidebarTransitionGeneration == generation else { return }
             self.isSidebarTransitionAnimating = false
+            // A Window margin change made mid-transition was skipped.
+            self.applyWindowMargin()
             // Settle the Flow 05 collapse cross-fade (if this transition
             // mounted one) back down to the cheap single-tree steady state —
             // see `applyCollapseCrossfadeSidebarView`'s doc comment on why

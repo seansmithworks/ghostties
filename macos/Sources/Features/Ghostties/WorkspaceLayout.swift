@@ -807,27 +807,37 @@ extension EnvironmentValues {
     }
 }
 
-/// The sidebar list column's padding, shared by both tabs and the rail. The
-/// window margin (`SidebarDialTuning.windowMargin`) sets the column's outer
-/// edge — leading from the window edge; trailing so the visible gap to the
-/// next surface, gutter included, is the same margin — and the content-
-/// padding dials add inner spacing inside it. Tagged for the DEBUG Redlines
-/// overlay before and after each layer, so it can measure both.
+/// The sidebar list column's padding, for both expanded tabs and the rail.
+/// Tagged for the DEBUG Redlines overlay before and after each layer, so it
+/// can measure both.
+///
+/// Expanded (`symmetric: false`): the window margin
+/// (`SidebarDialTuning.windowMargin`) sets the column's outer edge — leading
+/// from the window edge; trailing so the visible gap to the next surface,
+/// gutter included, is the same margin — and the content-padding dials add
+/// inner spacing inside it.
+///
+/// Rail (`symmetric: true`): one inset, the window margin, on BOTH sides of
+/// the rail column, and no inner horizontal dials. The rail's row cards and
+/// its tray pill (`SidebarTray`, centred on the full rail) then share one
+/// centre by construction, whatever the leading/trailing dials hold.
 struct SidebarColumnPadding: ViewModifier {
     /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     /// See `EnvironmentValues.sidebarTrailingGutter`.
     @Environment(\.sidebarTrailingGutter) private var trailingGutter
+    var symmetric = false
 
     func body(content: Content) -> some View {
+        let margin = SidebarDialTuning.windowMargin()
         content
             .redlineFrame(RedlineID.listContent)
-            .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-            .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+            .padding(.leading, symmetric ? 0 : SidebarDialTuning.contentPaddingLeading())
+            .padding(.trailing, symmetric ? 0 : SidebarDialTuning.contentPaddingTrailing())
             .padding(.top, SidebarDialTuning.contentPaddingTop())
             .redlineFrame(RedlineID.listInner)
-            .padding(.leading, SidebarDialTuning.windowMargin())
-            .padding(.trailing, SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
+            .padding(.leading, margin)
+            .padding(.trailing, symmetric ? margin : SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
             .padding(.bottom, 4)
     }
 }

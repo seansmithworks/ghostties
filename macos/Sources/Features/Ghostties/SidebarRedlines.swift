@@ -107,10 +107,25 @@ private struct RedlineFrameReporter: ViewModifier {
                     let frame = geo.frame(in: .global)
                     Color.clear
                         .onAppear { registry.set(id, frame) }
-                        .onChange(of: frame) { registry.set(id, $0) }
+                        .modifier(FrameChangeReporter(frame: frame) { registry.set(id, $0) })
                         .onDisappear { registry.remove(id) }
                 }
             }
+        }
+    }
+}
+
+/// `onChange(of:)`'s two-parameter form where it exists (macOS 14); the app's
+/// floor is macOS 13, which only has the one-parameter form.
+private struct FrameChangeReporter: ViewModifier {
+    let frame: CGRect
+    let report: (CGRect) -> Void
+
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content.onChange(of: frame) { _, newFrame in report(newFrame) }
+        } else {
+            content.onChange(of: frame) { report($0) }
         }
     }
 }

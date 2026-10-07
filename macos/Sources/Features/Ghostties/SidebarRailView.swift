@@ -15,6 +15,9 @@ import GhosttiesCore
 /// Decision 4 (spec): no account row — no account model exists in the
 /// sidebar sources today, so the footer omits it.
 struct SidebarRailView: View {
+    /// The rail column's padding: symmetric, so rows and the tray pill
+    /// share the rail's centre (`SidebarColumnPadding`).
+    static let columnPadding = SidebarColumnPadding(symmetric: true)
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
@@ -75,10 +78,9 @@ struct SidebarRailView: View {
                     ).count
                 )
             }
-            // Same column padding as the expanded list: the window margin
-            // outside, the content paddings inside, so the rail's row cards
-            // and the tray centre in the same span.
-            .modifier(SidebarColumnPadding())
+            // The window margin on both sides (`columnPadding`), so the
+            // row cards centre on the rail, as the tray pill does.
+            .modifier(Self.columnPadding)
 
             Spacer(minLength: 0)
 

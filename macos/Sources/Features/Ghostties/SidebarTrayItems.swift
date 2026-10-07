@@ -599,11 +599,12 @@ struct SidebarTray: View {
         // One glass container for both capsules, so neither samples the other.
         .modifier(TrayGlassGroupContainer(forceOpaque: forceOpaque))
         .redlineFrame(RedlineID.trayGroup)
-        // The window margin is the visible gap on each side, on both axes
-        // (the rail centres the pill inside it); on the trailing side the
-        // gutter outside the column already provides part of it.
-        .padding(.leading, SidebarDialTuning.windowMargin())
-        .padding(.trailing, max(0, SidebarDialTuning.windowMargin() - trailingGutter))
+        // Expanded: the window margin is the visible gap on each side; on
+        // the trailing side the gutter outside the column already provides
+        // part of it. Rail: no side padding, so the pill centres on the full
+        // rail, the same centre as the rail's symmetric row column.
+        .padding(.leading, isVertical ? 0 : SidebarDialTuning.windowMargin())
+        .padding(.trailing, isVertical ? 0 : max(0, SidebarDialTuning.windowMargin() - trailingGutter))
         .padding(.bottom, Self.bottomPadding(isVertical: isVertical))
         // Leading in the expanded sidebar (layout B); centred on the rail.
         .frame(maxWidth: .infinity, alignment: isVertical ? .center : .leading)
