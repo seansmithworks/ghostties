@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 
 package enum DialMotionDefaults {
@@ -25,3 +26,5 @@ package extension DialKitSpringValue {
         }
     }
 }
+
+#endif

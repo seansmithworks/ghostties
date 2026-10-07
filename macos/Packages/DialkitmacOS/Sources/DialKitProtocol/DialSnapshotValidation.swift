@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 
 package extension DialKitSpringValue {
@@ -65,3 +66,5 @@ package extension DialKitSessionSnapshot {
         return (snapshot, paths)
     }
 }
+
+#endif

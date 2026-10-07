@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 import DialkitmacOSProtocol
 
@@ -229,3 +230,5 @@ private func performRemoteAction(in controls: [DialResolvedControl], path: Strin
 
     return false
 }
+
+#endif

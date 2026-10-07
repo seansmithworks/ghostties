@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Combine
 import Foundation
 
@@ -272,3 +273,5 @@ public extension Combine.Publisher where Failure == Never, Output: Codable & Equ
         published.assign(from: self)
     }
 }
+
+#endif

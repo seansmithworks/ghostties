@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 import DialkitmacOSProtocol
 
@@ -603,3 +604,5 @@ package extension DialControlNode where Model: Codable & Equatable {
         }
     }
 }
+
+#endif

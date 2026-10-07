@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 
 public enum DialKitConnectionDefaults {
@@ -238,3 +239,5 @@ public enum DialKitWireError: Error, Equatable, LocalizedError {
         }
     }
 }
+
+#endif

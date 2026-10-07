@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Combine
 import Foundation
 import DialkitmacOSProtocol
@@ -190,3 +191,5 @@ public extension DialStore {
         return true
     }
 }
+
+#endif

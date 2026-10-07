@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Combine
 import Foundation
 import Network
@@ -298,3 +299,5 @@ public final class DialKitAgent {
             ?? "App"
     }
 }
+
+#endif

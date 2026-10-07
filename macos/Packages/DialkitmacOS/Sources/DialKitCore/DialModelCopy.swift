@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 
 /// Codable round-tripping separates reference models (including references
@@ -25,3 +26,5 @@ package func dialCopyModel<Model: Codable>(_ model: Model) -> Model {
         preconditionFailure("DialKit models must support Codable round-tripping: \(error)")
     }
 }
+
+#endif

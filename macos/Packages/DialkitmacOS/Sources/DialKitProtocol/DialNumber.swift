@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 
 /// Shared by the local controls and the remote inspector. Editor text uses a
@@ -51,3 +52,5 @@ package enum DialNumber {
         return min(max(result, range.lowerBound), range.upperBound)
     }
 }
+
+#endif

@@ -22,5 +22,10 @@ upstream checkout: `swift run dialkit-macos`.
    with no other network use. The app starts it from `SidebarDialInspector`,
    `#if DEBUG` only.
 
+3. **Every source file is wrapped in `#if DIALKIT_ENABLED` / `#endif`** (first and last
+   line), and `Package.swift` defines it for the debug configuration only, so a Release
+   build links empty modules and `scripts/assert-no-dialkit.sh` passes. Re-apply the
+   wrapper when updating.
+
 To update: re-copy `Sources/{DialKitProtocol,DialKitCore,DialKit,DialKitAgent}`
 from a new commit, re-read the agent's networking code, bump the commit above.

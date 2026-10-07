@@ -1,3 +1,4 @@
+#if DIALKIT_ENABLED
 import Foundation
 
 /// Each edit changes only its own field in the app's current motion value.
@@ -47,3 +48,5 @@ public enum DialKitMotionComponent: Codable, Equatable {
         }
     }
 }
+
+#endif
