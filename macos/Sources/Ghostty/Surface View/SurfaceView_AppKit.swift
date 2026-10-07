@@ -378,6 +378,13 @@ extension Ghostty {
                 selector: #selector(ghosttyColorDidChange(_:)),
                 name: .ghosttyColorDidChange,
                 object: self)
+            // MARK: - Ghostties fork fence (color scheme reaches every surface)
+            center.addObserver(
+                self,
+                selector: #selector(ghosttyColorSchemeDidChange(_:)),
+                name: .ghosttyColorSchemeDidChange,
+                object: nil)
+            // MARK: - End Ghostties fork fence (color scheme reaches every surface)
             center.addObserver(
                 self,
                 selector: #selector(ghosttyBellDidRing(_:)),
@@ -854,6 +861,24 @@ extension Ghostty {
                 break
             }
         }
+
+        // MARK: - Ghostties fork fence (color scheme reaches every surface)
+        // Every surface follows its app's light/dark scheme for its whole life,
+        // whether or not it is in a window. Upstream pushes the scheme only to
+        // the tree a controller currently shows, deduped per controller; the
+        // sidebar swaps many sessions through one controller and keeps the rest
+        // off-window, so they kept the old scheme. libghostty ignores a repeat
+        // of the current scheme, so overlapping with that push is harmless.
+        @objc private func ghosttyColorSchemeDidChange(_ notification: SwiftUI.Notification) {
+            guard let surface = self.surface,
+                  let app = notification.object as? Ghostty.App,
+                  app.app == ghostty_surface_app(surface),
+                  let scheme = notification.userInfo?[
+                    SwiftUI.Notification.Name.GhosttyColorSchemeKey
+                  ] as? ghostty_color_scheme_e else { return }
+            ghostty_surface_set_color_scheme(surface, scheme)
+        }
+        // MARK: - End Ghostties fork fence (color scheme reaches every surface)
 
         @objc private func ghosttyBellDidRing(_ notification: SwiftUI.Notification) {
             // Bell state goes to true
