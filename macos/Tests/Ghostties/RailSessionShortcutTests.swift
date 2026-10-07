@@ -66,9 +66,18 @@ struct RailSessionShortcutTests {
             sessions.append(session)
         }
         store.updateSidebarMode(mode)
-        let projectOrder = store.flatProjectsInVisualOrder.map(\.id)
-        store.lastSelectedProjectId = projectOrder.first
+        store.lastSelectedProjectId = store.flatProjectsInVisualOrder.first?.id
 
+        let rig = await mount(store: store, liveSessions: sessions)
+        #expect(rig.railOrder.count == names.count, "rig: every session should be a rail row")
+        return rig
+    }
+
+    /// Hosts a container on `store` in its own window, with live surfaces
+    /// for `liveSessions` in that container's coordinator. Several rigs can
+    /// share one store, as windows share `WorkspaceStore.shared`.
+    private func mount(store: WorkspaceStore, liveSessions sessions: [AgentSession]) async -> Rig {
+        let projectOrder = store.flatProjectsInVisualOrder.map(\.id)
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
         // Closing a session clears its Claude state; keep that off the real
         // `~/.ghostties/state/`.
@@ -89,7 +98,6 @@ struct RailSessionShortcutTests {
         await settle()
 
         let railOrder = store.railSessions()
-        #expect(railOrder.count == names.count, "rig: every session should be a rail row")
         return Rig(
             container: container, window: window, store: store, railOrder: railOrder,
             projectOrder: projectOrder, claudeStateDir: claudeStateDir
@@ -199,5 +207,73 @@ struct RailSessionShortcutTests {
         await settle()
 
         #expect(rig.store.lastSelectedProjectId == rig.projectOrder[1])
+    }
+
+    // MARK: - Project cycling starts from this window's own project
+
+    /// Three projects with one running session each, on the rail.
+    private func makeThreeProjectStore() -> (store: WorkspaceStore, sessionInProject: [UUID: AgentSession]) {
+        let projects = (0..<3).map { Project(name: "p\($0)", rootPath: "~/p\($0)") }
+        let store = WorkspaceStore(testingProjects: projects)
+        var sessionInProject: [UUID: AgentSession] = [:]
+        for project in projects {
+            let session = store.addSession(name: "s-\(project.name)", templateId: UUID(), projectId: project.id)
+            store.updateSessionStatus(id: session.id, status: .running)
+            sessionInProject[project.id] = session
+        }
+        store.updateSidebarMode(.collapsed)
+        return (store, sessionInProject)
+    }
+
+    /// Each window steps from the project of ITS active session, not the
+    /// selection another window last made (the list's selection is
+    /// per-window; `WorkspaceStore` is shared). Window A moves the shared
+    /// selection to X2; window B, active in Y, must land on Y's neighbour.
+    @Test func nextProjectStepsFromThisWindowsActiveProject() async {
+        let (store, sessionInProject) = makeThreeProjectStore()
+        let order = store.flatProjectsInVisualOrder.map(\.id)
+        let x1 = order[0], x2 = order[1], y = order[2]
+        store.lastSelectedProjectId = x1
+
+        let a = await mount(store: store, liveSessions: [sessionInProject[x1]!])
+        defer { a.tearDown() }
+        let b = await mount(store: store, liveSessions: [sessionInProject[y]!])
+        defer { b.tearDown() }
+        a.coordinator.focusSession(id: sessionInProject[x1]!.id)
+        b.coordinator.focusSession(id: sessionInProject[y]!.id)
+
+        NotificationCenter.default.post(name: .workspaceSelectNextProject, object: a.window)
+        await settle()
+        #expect(store.lastSelectedProjectId == x2, "rig: window A moved the shared selection to X2")
+
+        NotificationCenter.default.post(name: .workspaceSelectNextProject, object: b.window)
+        await settle()
+
+        // Y is last in visual order, so its neighbour wraps to the first.
+        #expect(store.lastSelectedProjectId == order[0], "B must step from Y, not from A's X2")
+    }
+
+    /// Cmd+Shift+] on the rail can land in another project; Next Project
+    /// then steps from that session's project.
+    @Test func railNextProjectStepsFromTheProjectSessionCyclingReached() async {
+        let (store, sessionInProject) = makeThreeProjectStore()
+        let order = store.flatProjectsInVisualOrder.map(\.id)
+        // The selection starts on the first rail row's project, which
+        // session cycling then leaves.
+        store.lastSelectedProjectId = store.railSessions()[0].projectId
+        let rig = await mount(store: store, liveSessions: Array(sessionInProject.values))
+        defer { rig.tearDown() }
+        rig.coordinator.focusSession(id: rig.railOrder[0].id)
+
+        NotificationCenter.default.post(name: .workspaceSelectNextSession, object: rig.window)
+        await settle()
+        let reached = rig.railOrder[1]
+        #expect(rig.coordinator.activeSessionId == reached.id, "rig: session cycling moved focus")
+        let reachedIndex = order.firstIndex(of: reached.projectId)!
+
+        NotificationCenter.default.post(name: .workspaceSelectNextProject, object: rig.window)
+        await settle()
+
+        #expect(store.lastSelectedProjectId == order[(reachedIndex + 1) % order.count])
     }
 }
