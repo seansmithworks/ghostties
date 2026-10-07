@@ -3182,13 +3182,13 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 
 - [ ] Tab title sometimes misses the Claude thread name set via /rename (seen 2026-09-25, "Jev adoption" thread). Statusline now reads `session_name` reliably; tab-title path should use the same source.
 
-- [ ] **Faded row labels after rail → closed → pinned** (found in vnext review, 2026-10-06; also on main `3468b7028`): `isCollapsedPresentation` is written only in `applyCollapseCrossfadeSidebarView`, so a closed→pinned swap can leave `RecentsRowView` labels faded until the next Cmd+S. Fix: reset the flag in `applySidebarView`.
+- [x] **Faded row labels after rail → closed → pinned** (found in vnext review, 2026-10-06; also on main `3468b7028`): `isCollapsedPresentation` is written only in `applyCollapseCrossfadeSidebarView`, so a closed→pinned swap can leave `RecentsRowView` labels faded until the next Cmd+S. Fix: reset the flag in `applySidebarView`.
 
-- [ ] **Sidebar tests read the live Dev dial defaults** (found 2026-10-06; also on main `3468b7028`): `SessionRowGlyphSlotTests/testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail` reads `SidebarDialTuning.*` from `UserDefaults.standard` (the Dev domain in the hosted test process) and compares against code constants, so it fails whenever Sean has tuned `trayInnerPadding`. Fix: tests inject a throwaway defaults suite (same rule as the injected state dir), never read Dev's domain.
+- [x] **Sidebar tests read the live Dev dial defaults** (found 2026-10-06; also on main `3468b7028`): `SessionRowGlyphSlotTests/testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail` reads `SidebarDialTuning.*` from `UserDefaults.standard` (the Dev domain in the hosted test process) and compares against code constants, so it fails whenever Sean has tuned `trayInnerPadding`. Fix: tests inject a throwaway defaults suite (same rule as the injected state dir), never read Dev's domain.
 
-- [ ] **Light/dark switch only refreshes some sessions** (Sean, 2026-10-06, installed app): after macOS flipped appearance, the sidebar chrome went light but some session terminals stayed dark (e.g. "pen.dev pickup") while others updated. Fixing on its own branch off main.
+- [x] **Light/dark switch only refreshes some sessions** (Sean, 2026-10-06, installed app): after macOS flipped appearance, the sidebar chrome went light but some session terminals stayed dark (e.g. "pen.dev pickup") while others updated. Fixing on its own branch off main.
 
-- [ ] **Session-switch shortcuts dead in the rail** (Sean, 2026-10-06, `feat/sidebar-vnext` Dev build): Cmd+Shift+[ / ] and Cmd+1…9 don't move between sessions when the sidebar is collapsed to the rail; they work in the expanded sidebar. Unknown yet whether main has it too.
+- [x] **Session-switch shortcuts dead in the rail** (Sean, 2026-10-06, `feat/sidebar-vnext` Dev build): Cmd+Shift+[ / ] and Cmd+1…9 don't move between sessions when the sidebar is collapsed to the rail; they work in the expanded sidebar. Unknown yet whether main has it too.
 
 - [ ] **New-session template menu has no side padding** (Sean, 2026-10-06, `Ghostties Demo.app` installed 15:47 by another thread): rows and the "Templates · shared across projects" header touch the popover edges, the top field renders as an empty band, and the "Changes here apply immediately." footer is clipped at the bottom.
 
@@ -3196,8 +3196,8 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
 
 Status of the items above: faded labels → fixed on `fix/faded-row-labels` @`14203326d` (approved); tests read live dials → fixed on `fix/sidebar-tests-isolated-defaults` @`3a7637d0c` (approved); appearance switch → fixed on `fix/appearance-refresh-all-sessions` @`b8ad26f42` (approved, targets main); rail shortcuts → fixed on `fix/rail-session-shortcuts` @`020554b39` (multi-window fix awaiting re-review). All pushed, none merged.
 
-- [ ] *carried* Re-review `fix/rail-session-shortcuts` (per-window project stepping, 2-window test), then merge into vnext on Sean's go.
-- [ ] *carried* Merge the three approved fix branches on Sean's go. The test-isolation merge conflicts in `SidebarDialKit.swift`: every dial accessor (incl. `trayGroupGap`, `selectedStyle`, `selectedTitleWeight`) must default to `SidebarDialTuning.store`.
+- [x] *carried* Re-review `fix/rail-session-shortcuts` (per-window project stepping, 2-window test), then merge into vnext on Sean's go.
+- [x] *carried* Merge the three approved fix branches on Sean's go. The test-isolation merge conflicts in `SidebarDialKit.swift`: every dial accessor (incl. `trayGroupGap`, `selectedStyle`, `selectedTitleWeight`) must default to `SidebarDialTuning.store`.
 - [ ] *carried* "Lock it": bake Sean's live Dev dial values (`defaults read com.seansmithdesign.ghostties.dev | grep sidebarDial`) into code defaults; expanded button default 36→44.
 - [ ] *carried* Full unfiltered suite on vnext after merges, then PR with before/after images and Merge Danger.
 - [ ] *parked* Retire native Liquid Glass for a plain "pill" component (Sean's light variant is already `identity`; he's "not a huge Liquid Glass fan"). Sean's call after layout B.
@@ -3206,3 +3206,12 @@ Status of the items above: faded labels → fixed on `fix/faded-row-labels` @`14
 
 - Test runs leak one `~/Library/Preferences/ghostties.capture.<pid>.plist` per unfiltered suite run (26 stale as of 2026-10-07); `CaptureFixtureDefaultsTests.cleanupRemovesTheSuite` is flaky on the cfprefsd flush race. Also flaky: `SidebarSettledPresentationTests.railThenClosedThenPinnedSettlesWithFullLabels` (fixed 400ms settle against the 0.25s transition debounce; fails under load) and the 3 `SessionComposerWorktreeLaunchTests` (failed on the pre-merge baseline too).
 - Also flaky: `SessionRowGlyphSlotTests.testExpandedTrayHugCapsulesHugTheirIconsAndSitLeadingSideBySide` rendered as Fill once (235 vs 82) in a full run. Reviewer suggests injecting `trayWidth` into `SidebarTray` like `dialEpoch` instead of reading the shared store at render.
+
+## 2026-10-07 — Sidebar vnext: fixes merged, Fill, Window margin, Redlines (session 8244cd3e)
+
+Done: all four fix branches merged (appearance → main as #204; others into vnext); tray Fill + Fill/Hug dial; Window margin dial (card + sidebar outer edges, trayMargin retired); DEBUG Redlines overlay; rail centring fix; DialkitmacOS gated out of Release. vnext pushed @`fe97d9272`, every commit reviewer-APPROVED.
+
+- [ ] *carried* Sean tunes in Dev (`devbuild2` build has the rail fix), sets Content padding leading → 0, then "lock it": bake `defaults read com.seansmithdesign.ghostties.dev | grep sidebarDial` into code defaults (expanded button 36→44), full suite, PR to main with before/after + Merge Danger.
+- [ ] *parked* Global `running-claim-gate` stop hook probes `pgrep -xi dev`, which never matches (Dev's process is `ghostty`); it blocks every turn that mentions Dev. Probe `pgrep -f "Ghostties Dev.app"` instead. Lives in `~/.claude/hooks/`, not this repo.
+- [ ] *parked* Redline bands can flicker for ~0.3s during the pinned⇄rail crossfade (both trees share tag ids).
+
