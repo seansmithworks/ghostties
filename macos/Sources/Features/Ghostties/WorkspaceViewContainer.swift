@@ -467,6 +467,7 @@ class WorkspaceViewContainer: NSView {
     /// Test seam: the terminal card's and the sidebar's frames.
     var cardFrameForTesting: NSRect { terminalShadowHost.frame }
     var sidebarFrameForTesting: NSRect { sidebarHostingView.frame }
+    var sidebarHostingViewForTesting: NSView { sidebarHostingView }
     var sidebarDragHandleFrameForTesting: NSRect { sidebarDragHandle.frame }
     var sidebarDragHandleIsHiddenForTesting: Bool { sidebarDragHandle.isHidden }
     /// Test seam: the live Window margin path, with the margin passed in
@@ -522,6 +523,11 @@ class WorkspaceViewContainer: NSView {
         let handle = PanelDragHandleView()
         handle.translatesAutoresizingMaskIntoConstraints = false
         handle.isHidden = true  // corrected to match initialMode in setup()
+        // On the rail the strip overlays the list's trailing edge: scrolling
+        // and the list's scroller pass through to the sidebar beneath.
+        handle.viewsBeneath = { [weak self] in
+            self.map { [$0.sidebarHostingView] } ?? []
+        }
         handle.onDragStart = { [weak self] in
             self?.beginSidebarDrag()
         }
@@ -3275,8 +3281,44 @@ private class PanelDragHandleView: NSView {
     /// persist the final width; unused (nil) by the browser handle.
     var onDragEnd: (() -> Void)?
 
+    /// Views the handle overlays, topmost first. Scrolling over the handle
+    /// is forwarded to the deepest hit view among them, and a click over a
+    /// scroller among them falls through to it. Empty for handles that
+    /// overlap nothing (the browser handle, the pinned sidebar handle).
+    var viewsBeneath: () -> [NSView] = { [] }
+
     /// Track the last mouse X position during a drag.
     private var lastDragX: CGFloat = 0
+
+    /// The deepest view beneath the handle at `point` (in the superview's
+    /// coordinates, the space `hitTest` receives), or nil.
+    private func viewBeneath(at point: NSPoint) -> NSView? {
+        for view in viewsBeneath() {
+            guard let parent = view.superview else { continue }
+            if let hit = view.hitTest(parent.convert(point, from: superview)) { return hit }
+        }
+        return nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        var view = viewBeneath(at: point)
+        while let current = view {
+            if current is NSScroller { return nil }
+            view = current.superview
+        }
+        return hit
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let superview else { return super.scrollWheel(with: event) }
+        let point = superview.convert(event.locationInWindow, from: nil)
+        if let target = viewBeneath(at: point) {
+            target.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
+        }
+    }
 
     /// Tracking area for cursor changes on hover.
     private var hoverTrackingArea: NSTrackingArea?
