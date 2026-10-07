@@ -138,17 +138,14 @@ struct WorkspaceSidebarView: View {
                 coordinator.focusLastSession(forProject: projectId)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectNextProject)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceDidSelectProjectFromShortcut)) { notification in
+            // Next/Previous Project is handled by `WorkspaceViewContainer`
+            // (it exists in every sidebar mode; this view doesn't), which
+            // owns the selection in `store.lastSelectedProjectId`. Mirror it.
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            selectAdjacentProject(offset: 1)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectPreviousProject)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            selectAdjacentProject(offset: -1)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceCloseSession)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            coordinator.closeCurrentSessionWithConfirmation()
+            guard let projectId = notification.userInfo?["projectId"] as? UUID else { return }
+            expandedProjectIds.insert(projectId)
+            selectedProjectId = projectId
         }
         .onReceive(NotificationCenter.default.publisher(for: .workspaceDidFocusSessionFromShortcut)) { notification in
             // Cmd+Shift+[/] and Cmd+1-9 are handled by `WorkspaceViewContainer`
@@ -259,26 +256,6 @@ struct WorkspaceSidebarView: View {
         guard let id = container.addProjectViaFolderPickerAndOpenComposer() else { return }
         selectedProjectId = id
         expandedProjectIds.insert(id)
-    }
-
-    /// Move selection to the next or previous project in the flattened section
-    /// order (the visual order the user sees on screen), auto-expanding the
-    /// target project.
-    private func selectAdjacentProject(offset: Int) {
-        let visualOrder = store.flatProjectsInVisualOrder
-        guard !visualOrder.isEmpty else { return }
-
-        guard let currentId = selectedProjectId,
-              let currentIndex = visualOrder.firstIndex(where: { $0.id == currentId }) else {
-            selectedProjectId = visualOrder.first?.id
-            if let id = visualOrder.first?.id { expandedProjectIds.insert(id) }
-            return
-        }
-
-        let newIndex = (currentIndex + offset + visualOrder.count) % visualOrder.count
-        let targetId = visualOrder[newIndex].id
-        selectedProjectId = targetId
-        expandedProjectIds.insert(targetId)
     }
 
     /// Pure index lookup for Cmd+1..8 — static so tests can call it without

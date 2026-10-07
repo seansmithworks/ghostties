@@ -696,6 +696,9 @@ class WorkspaceViewContainer: NSView {
         NotificationCenter.default.removeObserver(self, name: .workspaceSelectNextSession, object: nil)
         NotificationCenter.default.removeObserver(self, name: .workspaceSelectPreviousSession, object: nil)
         NotificationCenter.default.removeObserver(self, name: .workspaceFocusSessionAtIndex, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceCloseSession, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceSelectNextProject, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceSelectPreviousProject, object: nil)
 
         guard let window = window else { return }
         // Give the coordinator a reference to this view so it can discover
@@ -774,8 +777,27 @@ class WorkspaceViewContainer: NSView {
             object: window
         )
 
-        // Cmd+Shift+]/[ and Cmd+1-9 — here for the same reason as Cmd+T:
-        // the rail unmounts the expanded list that used to observe them.
+        // Cmd+Shift+]/[, Cmd+1-9, Cmd+W and Cmd+Ctrl+]/[ — here for the same
+        // reason as Cmd+T: the rail unmounts the expanded list that used to
+        // observe them.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCloseSession(_:)),
+            name: .workspaceCloseSession,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSelectNextProject(_:)),
+            name: .workspaceSelectNextProject,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSelectPreviousProject(_:)),
+            name: .workspaceSelectPreviousProject,
+            object: window
+        )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleSelectNextSession(_:)),
@@ -2243,6 +2265,46 @@ class WorkspaceViewContainer: NSView {
         else { return }
         coordinator.focusSession(id: target.id)
         focusShortcutTarget(target)
+    }
+
+    /// Cmd+W. See `handleSelectNextSession(_:)` for why it's handled here.
+    @objc private func handleCloseSession(_ notification: Notification) {
+        coordinator.closeCurrentSessionWithConfirmation()
+    }
+
+    /// Next Project (Cmd+Ctrl+]). See `handleSelectNextSession(_:)`.
+    @objc private func handleSelectNextProject(_ notification: Notification) {
+        selectAdjacentProject(offset: 1)
+    }
+
+    /// Previous Project (Cmd+Ctrl+[). See `handleSelectNextSession(_:)`.
+    @objc private func handleSelectPreviousProject(_ notification: Notification) {
+        selectAdjacentProject(offset: -1)
+    }
+
+    /// Moves the selected project through the sidebar's visual order,
+    /// wrapping; with no valid selection, selects the first. Selection lives
+    /// in `store.lastSelectedProjectId` (the list restores from it on
+    /// mount), and selecting a project focuses its last session, as a click
+    /// does. The list mirrors the selection via
+    /// `.workspaceDidSelectProjectFromShortcut`.
+    private func selectAdjacentProject(offset: Int) {
+        let order = store.flatProjectsInVisualOrder
+        guard !order.isEmpty else { return }
+        let target: UUID
+        if let current = store.lastSelectedProjectId,
+           let index = order.firstIndex(where: { $0.id == current }) {
+            target = order[(index + offset + order.count) % order.count].id
+        } else {
+            target = order[0].id
+        }
+        store.lastSelectedProjectId = target
+        coordinator.focusLastSession(forProject: target)
+        NotificationCenter.default.post(
+            name: .workspaceDidSelectProjectFromShortcut,
+            object: window,
+            userInfo: ["projectId": target]
+        )
     }
 
     /// Lets the Projects tab expand and select the focused session's

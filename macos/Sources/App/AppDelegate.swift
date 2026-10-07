@@ -1122,7 +1122,7 @@ class AppDelegate: NSObject,
     /// overriding Ghostty's native `close_surface` binding (which closes the
     /// terminal surface with its own "Close Terminal?" confirmation and no
     /// notion of a sidebar session). Posts `.workspaceCloseSession`;
-    /// `WorkspaceSidebarView` observes it and calls
+    /// `WorkspaceViewContainer` observes it and calls
     /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`, which owns
     /// the confirm / focus-neighbor / close-window logic.
     private func setupCloseSessionShortcut() {

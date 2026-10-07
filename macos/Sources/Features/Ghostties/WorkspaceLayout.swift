@@ -672,12 +672,14 @@ extension Animation {
 // MARK: - Workspace Notifications
 
 extension Notification.Name {
-    /// Posted by TerminalController when the user presses Cmd+Shift+].
-    /// The notification object is the originating NSWindow.
+    /// Posted by TerminalController for Next Project (Cmd+Ctrl+]). The
+    /// notification object is the originating NSWindow. Observed by
+    /// `WorkspaceViewContainer`, in every sidebar mode.
     static let workspaceSelectNextProject = Notification.Name("com.seansmithdesign.ghostties.workspace.selectNextProject")
 
-    /// Posted by TerminalController when the user presses Cmd+Shift+[.
-    /// The notification object is the originating NSWindow.
+    /// Posted by TerminalController for Previous Project (Cmd+Ctrl+[). The
+    /// notification object is the originating NSWindow. Observed by
+    /// `WorkspaceViewContainer`, in every sidebar mode.
     static let workspaceSelectPreviousProject = Notification.Name("com.seansmithdesign.ghostties.workspace.selectPreviousProject")
 
     /// Posted by TerminalController when the user presses Cmd+Shift+]. The
@@ -737,8 +739,8 @@ extension Notification.Name {
     /// Posted by AppDelegate's Cmd+W local-event monitor, project-first
     /// workspace mode only (see `AppDelegate.isProjectFirstWorkspaceWindow(_:)`).
     /// The notification object is the originating NSWindow.
-    /// `WorkspaceSidebarView` observes this and calls
-    /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`.
+    /// `WorkspaceViewContainer` observes this, in every sidebar mode, and
+    /// calls `SessionCoordinator.closeCurrentSessionWithConfirmation()`.
     static let workspaceCloseSession = Notification.Name("com.seansmithdesign.ghostties.workspace.closeSession")
 
     /// Posted by AppDelegate's Cmd+1-9 local-event monitor, project-first
@@ -755,6 +757,12 @@ extension Notification.Name {
     /// `WorkspaceSidebarView` observes this to expand and select that
     /// project on the Projects tab.
     static let workspaceDidFocusSessionFromShortcut = Notification.Name("com.seansmithdesign.ghostties.workspace.didFocusSessionFromShortcut")
+
+    /// Posted by `WorkspaceViewContainer` after Next/Previous Project moves
+    /// the selection. The notification object is the window;
+    /// `userInfo["projectId"]` is the selected project's `UUID`.
+    /// `WorkspaceSidebarView` observes this to expand and select it.
+    static let workspaceDidSelectProjectFromShortcut = Notification.Name("com.seansmithdesign.ghostties.workspace.didSelectProjectFromShortcut")
 
     /// Posted by MenuBarDropdownView when the user clicks a session row.
     /// userInfo contains "sessionId" (UUID). SessionCoordinators observe this
