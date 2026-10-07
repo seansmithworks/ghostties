@@ -50,8 +50,9 @@ enum TrayIconTapEffect {
 /// one white Liquid Glass surface. Canvas values are
 /// retina px (its traffic lights measure 28px, the built app's 14pt), so each
 /// value here is the canvas value / 2. These are the compiled defaults; every
-/// one is read through `SidebarDialTuning` so the DialKit "Tray glass"
-/// section can tune it live, and an untouched key reads exactly this value.
+/// one is read through `SidebarDialTuning` so the DialKit inspector can tune
+/// it live, and an untouched key reads exactly this value. Colour and
+/// material are per appearance (`Look`); geometry is shared.
 enum TrayGlassStyle {
     /// Native `Glass` base variant.
     enum Variant: String, CaseIterable {
@@ -84,33 +85,107 @@ enum TrayGlassStyle {
         }
     }
 
-    // MARK: Native glass
+    // MARK: Behaviour (shared by both appearances)
 
-    static let variant: Variant = .regular
     /// The tray's press response (`.interactive()`). The selected row is
     /// never interactive.
     static let interactive = true
-    /// White tint on the native glass in light mode. 0 = untinted: the white
-    /// comes from `surfaceOpacity`, since a native `.tint(white 0.8)` blends
-    /// far weaker than the canvas's 80% white and reads grey.
-    static let tintOpacityLight: Double = 0
-    /// Dark mode has no canvas; it keeps the warm chrome tint
-    /// (`WorkspaceLayout.chromeBackgroundDark`), never the terracotta accent.
-    static let tintOpacityDark: Double = 0.55
 
-    // MARK: White layer, rim, shadow
+    // MARK: Colour and material, per appearance
 
-    /// Canvas base fill `#ffffffcc`, laid over the glass (light only).
-    static let surfaceOpacity: Double = 0.8
-    /// Bright rim standing in for the shader's fresnel edge (canvas
-    /// `u_edgeWidth` 3px).
-    static let rimWidth: CGFloat = 1.5
-    static let rimOpacityLight: Double = 1
-    static let rimOpacityDark: Double = 0.14
-    /// Canvas outer shadow `#00000014`, y4px, blur 20px.
-    static let shadowOpacity: Double = 0.078
-    static let shadowRadius: CGFloat = 10
-    static let shadowYOffset: CGFloat = 2
+    /// Every colour/material value the glass draws with, for one appearance.
+    /// Light and dark each have their own set (`light`, `dark`), each tuned
+    /// by its own DialKit group ("Glass — Light", "Glass — Dark"); geometry
+    /// (sizes, padding, corners) stays shared below. Read the live set with
+    /// `SidebarDialTuning.trayGlass(for:)`.
+    struct Look: Equatable {
+        /// Native `Glass` base variant.
+        var variant: Variant
+        /// Tint on the native glass: white in light, the warm chrome
+        /// (`WorkspaceLayout.chromeBackgroundDark`) in dark — never the
+        /// terracotta accent.
+        var tintOpacity: Double
+        /// The layer laid over the glass: white in light, the dark canvas
+        /// token (`WorkspaceLayout.canvasBackgroundDark`) in dark.
+        var surfaceOpacity: Double
+        /// White rim standing in for the shader's fresnel edge.
+        var rimWidth: CGFloat
+        var rimOpacity: Double
+        var shadowOpacity: Double
+        var shadowRadius: CGFloat
+        var shadowYOffset: CGFloat
+        /// The canvas shader's iridescent edge, approximated as an
+        /// angular-gradient stroke. 0 = not drawn at all.
+        var chromaticIntensity: Double
+        var chromaticWidth: CGFloat
+        var chromaticRotation: Double
+        var chromaticBlur: CGFloat
+        var chromaticPalette: ChromaticPalette
+        var chromaticBlend: ChromaticBlend
+        /// White linear highlight clipped to the pill. 0 = not drawn at all.
+        var specularStrength: Double
+        /// Direction the light comes from, in degrees (0 = from the right,
+        /// 90 = from the top).
+        var specularAngle: Double
+    }
+
+    /// Light: the canvas (pen.dev `CnDfN`) values, unchanged from before the
+    /// light/dark split.
+    static let light = Look(
+        variant: .regular,
+        // 0 = untinted: the white comes from `surfaceOpacity`, since a native
+        // `.tint(white 0.8)` blends far weaker than the canvas's 80% white
+        // and reads grey.
+        tintOpacity: 0,
+        // Canvas base fill `#ffffffcc`.
+        surfaceOpacity: 0.8,
+        // Canvas `u_edgeWidth` 3px.
+        rimWidth: 1.5,
+        rimOpacity: 1,
+        // Canvas outer shadow `#00000014`, y4px, blur 20px.
+        shadowOpacity: 0.078,
+        shadowRadius: 10,
+        shadowYOffset: 2,
+        // Off by default. Canvas `chromatic` 0.116, `splitAngle` 136.8°.
+        chromaticIntensity: 0,
+        chromaticWidth: 1.5,
+        chromaticRotation: 136.8,
+        chromaticBlur: 0,
+        chromaticPalette: .pastel,
+        chromaticBlend: .normal,
+        // Off by default.
+        specularStrength: 0,
+        specularAngle: 135
+    )
+
+    /// Dark: a raised canvas-grey pill (`canvasBackgroundDark` #2D2D2D over
+    /// the #242424 chrome) on the warm-tinted glass, with a faint white rim
+    /// and a deeper shadow, since an 8% black shadow vanishes on dark chrome.
+    /// No specular and no chromatic: a white highlight on dark glass lifts
+    /// the background toward the grey text and icons and collapses their
+    /// contrast.
+    static let dark = Look(
+        variant: .regular,
+        tintOpacity: 0.55,
+        surfaceOpacity: 0.9,
+        rimWidth: 1,
+        rimOpacity: 0.14,
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowYOffset: 2,
+        chromaticIntensity: 0,
+        chromaticWidth: 1.5,
+        chromaticRotation: 136.8,
+        chromaticBlur: 0,
+        chromaticPalette: .pastel,
+        chromaticBlend: .plusLighter,
+        specularStrength: 0,
+        specularAngle: 135
+    )
+
+    static func defaultLook(for colorScheme: ColorScheme) -> Look {
+        colorScheme == .dark ? dark : light
+    }
 
     // MARK: Sizes
 
@@ -140,50 +215,27 @@ enum TrayGlassStyle {
     /// grid (~1.5pt at 17.5pt), which `.regular` matches.
     static let iconWeight: Font.Weight = .regular
 
-    // MARK: Chromatic rim (light only) — off by default
-
-    /// The canvas shader's iridescent edge (`chromatic` 0.116, `split` 0.19),
-    /// approximated as an angular-gradient stroke. 0 = not drawn at all.
-    static let chromaticIntensity: Double = 0
-    static let chromaticWidth: CGFloat = 1.5
-    /// Canvas `splitAngle` 136.8°.
-    static let chromaticRotation: Double = 136.8
-    static let chromaticBlur: CGFloat = 0
-    static let chromaticPalette: ChromaticPalette = .pastel
-    static let chromaticBlend: ChromaticBlend = .normal
-
-    // MARK: Specular highlight — off by default
-
-    /// White linear highlight clipped to the pill. 0 = not drawn at all.
-    static let specularStrength: Double = 0
-    /// Direction the light comes from, in degrees (0 = from the right,
-    /// 90 = from the top).
-    static let specularAngle: Double = 135
-
     // MARK: Derived
 
-    static func glassTint(for colorScheme: ColorScheme) -> Color? {
+    static func glassTint(_ look: Look, for colorScheme: ColorScheme) -> Color? {
         if colorScheme == .dark {
-            return Color(WorkspaceLayout.chromeBackgroundDark).opacity(SidebarDialTuning.trayTintOpacity())
+            return Color(WorkspaceLayout.chromeBackgroundDark).opacity(look.tintOpacity)
         }
-        let light = SidebarDialTuning.trayGlassTintOpacityLight()
-        return light > 0 ? Color.white.opacity(light) : nil
+        return look.tintOpacity > 0 ? Color.white.opacity(look.tintOpacity) : nil
     }
 
-    static func surfaceFill(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? .clear : Color.white.opacity(SidebarDialTuning.trayGlassSurfaceOpacity())
+    /// The layer over the glass, and the whole fill on the opaque fallback
+    /// (pre-26 / Reduce Transparency / tests).
+    static func surfaceFill(_ look: Look, for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? Color(WorkspaceLayout.canvasBackgroundDark).opacity(look.surfaceOpacity)
+            : Color.white.opacity(look.surfaceOpacity)
     }
 
-    static func rimColor(for colorScheme: ColorScheme) -> Color {
-        Color.white.opacity(colorScheme == .dark
-            ? SidebarDialTuning.trayRimOpacityDark()
-            : SidebarDialTuning.trayGlassRimOpacityLight())
+    static func rimColor(_ look: Look) -> Color {
+        Color.white.opacity(look.rimOpacity)
     }
 
-    /// Opaque fallback (pre-26 / Reduce Transparency / tests).
-    static func opaqueFill(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(SidebarDialTuning.trayGlassSurfaceOpacity())
-    }
 
     /// Canvas icon fill `#636363` = `textSecondaryLight`.
     static func iconColor(for colorScheme: ColorScheme) -> Color {
@@ -255,74 +307,73 @@ struct TrayGlassSurface: ViewModifier {
     }
 
     func body(content: Content) -> some View {
+        let look = SidebarDialTuning.trayGlass(for: colorScheme)
         Group {
             if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
                 GlassEffectContainer {
                     content
                         .background {
                             ZStack {
-                                shape.fill(TrayGlassStyle.surfaceFill(for: colorScheme))
-                                specular
+                                shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
+                                specular(look)
                             }
                         }
-                        .overlay(shape.strokeBorder(TrayGlassStyle.rimColor(for: colorScheme), lineWidth: SidebarDialTuning.trayGlassRimWidth()))
-                        .overlay { chromaticRim }
+                        .overlay(shape.strokeBorder(TrayGlassStyle.rimColor(look), lineWidth: look.rimWidth))
+                        .overlay { chromaticRim(look) }
                 }
-                .glassEffect(glass, in: shape)
+                .glassEffect(glass(look), in: shape)
             } else {
-                content.background(shape.fill(TrayGlassStyle.opaqueFill(for: colorScheme)))
+                content.background(shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme)))
             }
         }
         .shadow(
-            color: Color.black.opacity(SidebarDialTuning.trayGlassShadowOpacity()),
-            radius: SidebarDialTuning.trayGlassShadowRadius(),
-            y: SidebarDialTuning.trayGlassShadowYOffset()
+            color: Color.black.opacity(look.shadowOpacity),
+            radius: look.shadowRadius,
+            y: look.shadowYOffset
         )
     }
 
     @available(macOS 26.0, *)
-    private var glass: Glass {
+    private func glass(_ look: TrayGlassStyle.Look) -> Glass {
         let base: Glass
-        switch SidebarDialTuning.trayGlassVariant() {
+        switch look.variant {
         case .regular: base = .regular
         case .clear: base = .clear
         case .identity: base = .identity
         }
-        let tinted = base.tint(TrayGlassStyle.glassTint(for: colorScheme))
+        let tinted = base.tint(TrayGlassStyle.glassTint(look, for: colorScheme))
         return interactive ? tinted.interactive() : tinted
     }
 
-    /// Light-only iridescent edge. Not in the tree at all at intensity 0, so
-    /// the default look is untouched.
+    /// Iridescent edge, in either appearance. Not in the tree at all at
+    /// intensity 0, so the default look is untouched.
     @ViewBuilder
-    private var chromaticRim: some View {
-        let intensity = SidebarDialTuning.trayChromaticIntensity()
-        if colorScheme != .dark, intensity > 0 {
+    private func chromaticRim(_ look: TrayGlassStyle.Look) -> some View {
+        if look.chromaticIntensity > 0 {
             shape
                 .strokeBorder(
                     AngularGradient(
-                        colors: TrayGlassStyle.chromaticColors(SidebarDialTuning.trayChromaticPalette()),
+                        colors: TrayGlassStyle.chromaticColors(look.chromaticPalette),
                         center: .center,
-                        angle: .degrees(SidebarDialTuning.trayChromaticRotation())
+                        angle: .degrees(look.chromaticRotation)
                     ),
-                    lineWidth: SidebarDialTuning.trayChromaticWidth()
+                    lineWidth: look.chromaticWidth
                 )
-                .blur(radius: SidebarDialTuning.trayChromaticBlur())
-                .opacity(intensity)
-                .blendMode(SidebarDialTuning.trayChromaticBlend().blendMode)
+                .blur(radius: look.chromaticBlur)
+                .opacity(look.chromaticIntensity)
+                .blendMode(look.chromaticBlend.blendMode)
                 .allowsHitTesting(false)
         }
     }
 
     /// White highlight clipped to the pill. Not in the tree at strength 0.
     @ViewBuilder
-    private var specular: some View {
-        let strength = SidebarDialTuning.traySpecularStrength()
-        if strength > 0 {
-            let start = TrayGlassStyle.specularStart(angle: SidebarDialTuning.traySpecularAngle())
+    private func specular(_ look: TrayGlassStyle.Look) -> some View {
+        if look.specularStrength > 0 {
+            let start = TrayGlassStyle.specularStart(angle: look.specularAngle)
             shape
                 .fill(LinearGradient(
-                    colors: [Color.white.opacity(strength), Color.white.opacity(0)],
+                    colors: [Color.white.opacity(look.specularStrength), Color.white.opacity(0)],
                     startPoint: start,
                     endPoint: UnitPoint(x: 1 - start.x, y: 1 - start.y)
                 ))
@@ -332,9 +383,9 @@ struct TrayGlassSurface: ViewModifier {
 }
 
 /// The selected session row's surface, in the rail and the expanded list
-/// alike: the tray's white glass (`TrayGlassSurface`, never interactive), so
-/// the tray's one "Tray glass" dial set drives the tray, the rail pill and
-/// the expanded row. Only the size adapts: the caller frames it (the rail's
+/// alike: the tray's glass (`TrayGlassSurface`, never interactive), so the
+/// same per-appearance glass dials drive the tray, the rail pill and the
+/// expanded row. Only the size adapts: the caller frames it (the rail's
 /// fixed pill, the expanded row's full row frame), and the corner shape
 /// follows the tray's corner style dial.
 struct SidebarSelectedSurface: View {

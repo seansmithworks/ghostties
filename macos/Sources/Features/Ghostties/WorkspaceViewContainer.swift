@@ -490,7 +490,26 @@ class WorkspaceViewContainer: NSView {
     private var activeTrackingArea: NSTrackingArea?
 
     private var isLightAppearance: Bool {
-        effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+        #if DEBUG
+        // The inspector's "Preview appearance" repaints the chrome behind the
+        // sidebar too, so the forced glass is judged on its real background.
+        if let forced = SidebarAppearancePreview.forcedAppearance {
+            return forced.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+        }
+        #endif
+        return effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+    }
+
+    /// `sidebarHostingView`'s appearance: the DEBUG preview when one is
+    /// forced; otherwise pinned to the overlay fill's luminance in overlay
+    /// mode, and nil (follow the window) in every other mode.
+    private var sidebarAppearanceOverride: NSAppearance? {
+        #if DEBUG
+        if let forced = SidebarAppearancePreview.forcedAppearance { return forced }
+        #endif
+        return sidebarMode == .overlay
+            ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
+            : nil
     }
 
     /// Canvas palette color for the current OS appearance. The canvas layer
@@ -627,7 +646,22 @@ class WorkspaceViewContainer: NSView {
             name: NSApplication.didResignActiveNotification,
             object: nil
         )
+
+        #if DEBUG
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sidebarAppearancePreviewChanged),
+            name: SidebarAppearancePreview.didChangeNotification,
+            object: nil
+        )
+        #endif
     }
+
+    #if DEBUG
+    @objc private func sidebarAppearancePreviewChanged() {
+        applyChromeColor()
+    }
+    #endif
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
@@ -2793,9 +2827,7 @@ class WorkspaceViewContainer: NSView {
     /// through.
     private func applyChromeColor() {
         sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
-        sidebarHostingView.appearance = sidebarMode == .overlay
-            ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
-            : nil
+        sidebarHostingView.appearance = sidebarAppearanceOverride
         guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
         terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
         browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor

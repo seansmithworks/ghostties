@@ -502,6 +502,10 @@ enum CaptureFixture {
     /// draws that tray button's hover highlight without a pointer, so the
     /// hovered state can be captured without synthetic input.
     static var trayHoverItemId: String? { env("GHOSTTIES_CAPTURE_TRAY_HOVER").flatMap { $0.isEmpty ? nil : $0 } }
+    /// `GHOSTTIES_CAPTURE_APPEARANCE=light|dark`: the launch value of
+    /// `SidebarAppearancePreview`, so a capture can show either glass set
+    /// regardless of the terminal theme.
+    static var appearancePreview: String? { env("GHOSTTIES_CAPTURE_APPEARANCE") }
 
     /// Each hook fires once per process. The views that host them re-appear
     /// (a rail/pinned toggle remounts the sidebar), and a second firing would
