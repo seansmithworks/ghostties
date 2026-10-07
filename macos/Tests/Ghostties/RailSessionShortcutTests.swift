@@ -35,6 +35,9 @@ struct RailSessionShortcutTests {
         let store: WorkspaceStore
         /// What the rail renders, in its order.
         let railOrder: [AgentSession]
+        /// The projects in sidebar visual order; the first is selected.
+        let projectOrder: [UUID]
+        let claudeStateDir: URL
 
         var coordinator: SessionCoordinator { container.coordinatorForTesting }
 
@@ -42,6 +45,7 @@ struct RailSessionShortcutTests {
             window.contentView = nil
             window.orderOut(nil)
             window.close()
+            try? FileManager.default.removeItem(at: claudeStateDir)
         }
     }
 
@@ -50,9 +54,11 @@ struct RailSessionShortcutTests {
         await makeRig(names: ["a", "b", "c"], mode: .collapsed)
     }
 
-    private func makeRig(names: [String], mode: SidebarMode) async -> Rig {
-        let project = Project(name: "p", rootPath: "~/p")
-        let store = WorkspaceStore(testingProjects: [project])
+    /// Sessions all go in the first project; any further projects are empty.
+    private func makeRig(names: [String], mode: SidebarMode, projectCount: Int = 1) async -> Rig {
+        let projects = (0..<projectCount).map { Project(name: "p\($0)", rootPath: "~/p\($0)") }
+        let project = projects[0]
+        let store = WorkspaceStore(testingProjects: projects)
         var sessions: [AgentSession] = []
         for name in names {
             let session = store.addSession(name: name, templateId: UUID(), projectId: project.id)
@@ -60,8 +66,16 @@ struct RailSessionShortcutTests {
             sessions.append(session)
         }
         store.updateSidebarMode(mode)
+        let projectOrder = store.flatProjectsInVisualOrder.map(\.id)
+        store.lastSelectedProjectId = projectOrder.first
 
         let container = WorkspaceViewContainer(ghostty: Ghostty.App(), viewModel: StubViewModel(), store: store)
+        // Closing a session clears its Claude state; keep that off the real
+        // `~/.ghostties/state/`.
+        let claudeStateDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rail-shortcuts-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: claudeStateDir, withIntermediateDirectories: true)
+        container.coordinatorForTesting.claudeStateStoreForTesting = ClaudeStateStore(directoryURL: claudeStateDir)
         for session in sessions {
             container.coordinatorForTesting.seedEmptySessionTreeForTesting(id: session.id)
         }
@@ -76,7 +90,10 @@ struct RailSessionShortcutTests {
 
         let railOrder = store.railSessions()
         #expect(railOrder.count == names.count, "rig: every session should be a rail row")
-        return Rig(container: container, window: window, store: store, railOrder: railOrder)
+        return Rig(
+            container: container, window: window, store: store, railOrder: railOrder,
+            projectOrder: projectOrder, claudeStateDir: claudeStateDir
+        )
     }
 
     /// Lets the hosting view install its SwiftUI graph and any queued work run.
@@ -136,5 +153,48 @@ struct RailSessionShortcutTests {
         await settle()
 
         #expect(rig.coordinator.activeSessionId == rig.railOrder[1].id)
+    }
+
+    /// Cmd+W (`AppDelegate.setupCloseSessionShortcut()` posts
+    /// `.workspaceCloseSession`) closes the focused session on the rail. No
+    /// terminal controller in this window, so no confirmation sheet.
+    @Test func railCommandWClosesTheFocusedSession() async {
+        let rig = await makeRailRig()
+        defer { rig.tearDown() }
+        let focused = rig.railOrder[1].id
+        rig.coordinator.focusSession(id: focused)
+        #expect(rig.coordinator.hasLiveSurface(id: focused), "rig: focused session starts live")
+
+        NotificationCenter.default.post(name: .workspaceCloseSession, object: rig.window)
+        await settle()
+
+        #expect(!rig.coordinator.hasLiveSurface(id: focused))
+        #expect(rig.coordinator.hasLiveSurface(id: rig.railOrder[0].id), "only the focused session closes")
+        #expect(rig.coordinator.hasLiveSurface(id: rig.railOrder[2].id), "only the focused session closes")
+    }
+
+    /// Next Project (Cmd+Ctrl+], `TerminalController.selectNextProject(_:)`)
+    /// moves the selected project on the rail.
+    @Test func railNextProjectSelectsTheNextProject() async {
+        let rig = await makeRig(names: ["a"], mode: .collapsed, projectCount: 2)
+        defer { rig.tearDown() }
+
+        NotificationCenter.default.post(name: .workspaceSelectNextProject, object: rig.window)
+        await settle()
+
+        #expect(rig.store.lastSelectedProjectId == rig.projectOrder[1])
+    }
+
+    /// Pinned mounts the expanded list. One Next Project must step exactly
+    /// once: with two projects a double fire lands back where it started.
+    @Test func pinnedNextProjectStepsExactlyOnce() async {
+        let rig = await makeRig(names: ["a"], mode: .pinned, projectCount: 2)
+        defer { rig.tearDown() }
+        #expect(rig.store.lastSelectedProjectId == rig.projectOrder[0], "rig: first project starts selected")
+
+        NotificationCenter.default.post(name: .workspaceSelectNextProject, object: rig.window)
+        await settle()
+
+        #expect(rig.store.lastSelectedProjectId == rig.projectOrder[1])
     }
 }
