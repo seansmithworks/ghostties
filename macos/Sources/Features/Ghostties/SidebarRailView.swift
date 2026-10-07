@@ -18,7 +18,7 @@ struct SidebarRailView: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
-    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
 
@@ -112,7 +112,7 @@ struct RailSessionRow: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
-    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     let sessionId: UUID
     let name: String
     let projectName: String
@@ -183,7 +183,7 @@ private struct RailChevronRow: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
-    @AppStorage(SidebarDialTuning.epochKey) private var dialEpochTick = 0
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     var isHovered = false
 
     var body: some View {

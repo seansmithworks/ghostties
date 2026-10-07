@@ -48,7 +48,7 @@ enum WorkspaceLayout {
     /// visually centered in the rail. Native (AppKit-default) inset lands
     /// around ~94pt on macOS 26. Never returns less than `sidebarRailWidth`,
     /// so a narrow or unusual cluster never squeezes the tray pill.
-    static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat, defaults: UserDefaults = .standard) -> CGFloat {
+    static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         max(sidebarRailWidth, zoomButtonMaxX + leadingInset + SidebarDialTuning.railExtraWidth(defaults: defaults))
     }
 
