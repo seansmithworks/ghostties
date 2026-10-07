@@ -83,7 +83,6 @@ enum TrayGlassStyle {
         case glass, flat
     }
 
-    /// The selected expanded row's title weight. The rail has no title.
     /// The expanded tray's width. `fill`: the Create capsule stretches across
     /// the bar, from the leading margin to the group gap before the Toggle
     /// capsule, and its buttons share that width evenly. `hug`: both capsules
@@ -92,6 +91,7 @@ enum TrayGlassStyle {
         case fill, hug
     }
 
+    /// The selected expanded row's title weight. The rail has no title.
     enum SelectedTitleWeight: String, CaseIterable {
         case regular, semibold
 
