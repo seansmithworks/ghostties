@@ -205,15 +205,8 @@ struct RailHistoryRow: View {
         isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
     }
 
-    @ViewBuilder
     private var rowBackground: some View {
-        if isActive {
-            SidebarSelectedSurface()
-                .frame(width: SidebarDialTuning.traySelectedPillWidth(), height: SidebarDialTuning.traySelectedPillHeight())
-        } else {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
-        }
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, hoverOpacity: 0.06)
     }
 }
 

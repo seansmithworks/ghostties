@@ -257,10 +257,11 @@ enum TrayGlassStyle {
     static let selectedStyle: SelectedStyle = .flat
     /// Default selected-row title weight (see `SelectedTitleWeight`).
     static let selectedTitleWeight: SelectedTitleWeight = .semibold
-    /// Selected rail row: the vertical tray's width (canvas 104px), canvas
-    /// 72px tall; glyph 35px (vs the 28px it replaces).
+    /// Rail hairline width (`SidebarSectionHairlineSlot`), the vertical
+    /// tray's width (canvas 104px). Selected rows no longer read it: they
+    /// fill the hover card (`SidebarRowCardBackground`).
     static let selectedPillWidth: CGFloat = 44
-    static let selectedPillHeight: CGFloat = 36
+    /// Selected rail glyph: canvas 35px (vs the 28px it replaces).
     static let selectedGlyphSize: CGFloat = 17.5
     /// Tray icon weight: the canvas's lucide icons are 2px strokes on a 24px
     /// grid (~1.5pt at 17.5pt), which `.regular` matches.
@@ -358,8 +359,11 @@ struct TrayGlassSurface: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var forceOpaque = false
     var interactive = false
+    /// The selected row card passes its own shape (`SidebarRowCardBackground`);
+    /// the tray uses the pill shape.
+    var shapeOverride: RoundedRectangle? = nil
 
-    private var shape: RoundedRectangle { TrayGlassStyle.pillShape() }
+    private var shape: RoundedRectangle { shapeOverride ?? TrayGlassStyle.pillShape() }
 
     func body(content: Content) -> some View {
         let look = SidebarDialTuning.trayGlass(for: colorScheme)
@@ -442,28 +446,52 @@ struct TrayGlassSurface: ViewModifier {
 /// `glass` is the tray's glass (`TrayGlassSurface`, never interactive);
 /// `flat` is the tray's fill colour and corner shape with the look's softer
 /// selected shadow and nothing else. Either way the same per-appearance
-/// dials drive the tray and this surface. Only the size adapts: the caller
-/// frames it (the rail's fixed pill, the expanded row's full row frame).
+/// dials drive the tray and this surface. Its footprint is the row card's,
+/// not the tray's: `shape` and frame come from `SidebarRowCardBackground`,
+/// the same as the hover fill.
 struct SidebarSelectedSurface: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @Environment(\.colorScheme) private var colorScheme
+    let shape: RoundedRectangle
 
     var body: some View {
         switch SidebarDialTuning.selectedStyle() {
         case .glass:
-            Color.clear.modifier(TrayGlassSurface())
+            Color.clear.modifier(TrayGlassSurface(shapeOverride: shape))
         case .flat:
             let look = SidebarDialTuning.trayGlass(for: colorScheme)
-            TrayGlassStyle.pillShape()
+            shape
                 .fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
                 .shadow(
                     color: Color.black.opacity(look.selectedShadowOpacity),
                     radius: look.selectedShadowRadius,
                     y: look.selectedShadowYOffset
                 )
+        }
+    }
+}
+
+/// A sidebar row card's background, hover and selected alike, in the rail
+/// and the expanded list. Both states draw the same shape filling the row
+/// frame, so the selected card's footprint is the hover's by construction
+/// (Sean, 2026-10-07: "the size of the hover feels good to me, filling the
+/// space"). Selected is `SidebarSelectedSurface` in that shape, its fill and
+/// shadow still from the selected-style dials; hover is a faint primary fill.
+struct SidebarRowCardBackground: View {
+    let isActive: Bool
+    let isHovered: Bool
+    var cornerRadius: CGFloat = WorkspaceLayout.sidebarRowCornerRadiusResting
+    let hoverOpacity: Double
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        if isActive {
+            SidebarSelectedSurface(shape: shape)
+        } else {
+            shape.fill(isHovered ? Color.primary.opacity(hoverOpacity) : .clear)
         }
     }
 }

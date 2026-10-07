@@ -307,33 +307,19 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
 
     // MARK: - Row Background
 
-    /// The selected row is the rail's selected pill adapted to the row
-    /// (`SidebarSelectedSurface`): the tray's white glass, filling the row
-    /// frame, its corners from the tray's corner style dial. Unselected rows
-    /// are unchanged — same `rowCornerRadius`/hover fill as before.
-    @ViewBuilder
+    /// Hover and selected share one footprint (`SidebarRowCardBackground`):
+    /// the row frame, at `rowCornerRadius`. Selected is the selected style's
+    /// surface in that shape.
     private var rowBackground: some View {
-        if isActive {
-            SidebarSelectedSurface()
-        } else {
-            RoundedRectangle(cornerRadius: rowCornerRadius)
-                .fill(rowFill)
-                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
-        }
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: rowCornerRadius, hoverOpacity: 0.05)
+            .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
     }
 
     /// Row corner radius — the canvas's "8 → 16px" row, same window as the
-    /// glyph travel above. Unselected rows only — see `rowBackground`.
+    /// glyph travel above.
     private var rowCornerRadius: CGFloat {
         widthModel.isCollapsedPresentation
             ? WorkspaceLayout.sidebarRowCornerRadiusTraveled
             : WorkspaceLayout.sidebarRowCornerRadiusResting
-    }
-
-    private var rowFill: Color {
-        if isHovered {
-            return Color.primary.opacity(0.05)
-        }
-        return Color.clear
     }
 }

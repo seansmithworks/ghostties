@@ -162,17 +162,9 @@ struct RailSessionRow: View {
         isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
     }
 
-    /// Sidebar vnext (pen.dev `CnDfN`, layer `EVYaZ`): the selected rail row
-    /// is `SidebarSelectedSurface` (the expanded row's surface too), at the
-    /// tray's width, centered in the row slot.
-    @ViewBuilder
+    /// The selected card fills the hover card's footprint
+    /// (`SidebarRowCardBackground`), in the selected style's surface.
     private var rowBackground: some View {
-        if isActive {
-            SidebarSelectedSurface()
-                .frame(width: SidebarDialTuning.traySelectedPillWidth(), height: SidebarDialTuning.traySelectedPillHeight())
-        } else {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
-        }
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, hoverOpacity: 0.06)
     }
 }

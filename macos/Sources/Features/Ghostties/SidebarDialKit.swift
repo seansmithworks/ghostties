@@ -54,7 +54,6 @@ enum SidebarDialTuning {
     static let trayGlassCornerStyleKey = "ghostties.sidebarDial.trayGlass.cornerStyle"
     static let trayGlassCornerRadiusKey = "ghostties.sidebarDial.trayGlass.cornerRadius"
     static let traySelectedPillWidthKey = "ghostties.sidebarDial.trayGlass.selectedPillWidth"
-    static let traySelectedPillHeightKey = "ghostties.sidebarDial.trayGlass.selectedPillHeight"
     static let selectedStyleKey = "ghostties.sidebarDial.trayGlass.selectedStyle"
     static let selectedTitleWeightKey = "ghostties.sidebarDial.selectedTitleWeight"
 
@@ -284,9 +283,6 @@ enum SidebarDialTuning {
     static func traySelectedPillWidth(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(traySelectedPillWidthKey, default: TrayGlassStyle.selectedPillWidth, defaults: defaults)
     }
-    static func traySelectedPillHeight(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(traySelectedPillHeightKey, default: TrayGlassStyle.selectedPillHeight, defaults: defaults)
-    }
 
     static func rowHeight(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowHeightKey, default: WorkspaceLayout.recentsRowHeight, defaults: defaults)
@@ -348,7 +344,7 @@ enum SidebarDialTuning {
         trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
         trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
-        traySelectedPillWidthKey, traySelectedPillHeightKey, selectedStyleKey, selectedTitleWeightKey,
+        traySelectedPillWidthKey, selectedStyleKey, selectedTitleWeightKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
@@ -479,7 +475,6 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayGlassCornerStyle: String
     var trayGlassCornerRadius: Double
     var traySelectedPillWidth: Double
-    var traySelectedPillHeight: Double
     var selectedStyle: String
     var selectedTitleWeight: String
 
@@ -571,7 +566,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             trayGlassCornerStyle: SidebarDialTuning.trayGlassCornerStyle(defaults: defaults).rawValue,
             trayGlassCornerRadius: Double(SidebarDialTuning.trayGlassCornerRadius(defaults: defaults)),
             traySelectedPillWidth: Double(SidebarDialTuning.traySelectedPillWidth(defaults: defaults)),
-            traySelectedPillHeight: Double(SidebarDialTuning.traySelectedPillHeight(defaults: defaults)),
             selectedStyle: SidebarDialTuning.selectedStyle(defaults: defaults).rawValue,
             selectedTitleWeight: SidebarDialTuning.selectedTitleWeight(defaults: defaults).rawValue,
             rowHeight: Double(SidebarDialTuning.rowHeight(defaults: defaults)),
@@ -653,7 +647,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setStringIfChanged(SidebarDialTuning.trayGlassCornerStyleKey, previous.trayGlassCornerStyle, model.trayGlassCornerStyle)
         setIfChanged(SidebarDialTuning.trayGlassCornerRadiusKey, previous.trayGlassCornerRadius, model.trayGlassCornerRadius)
         setIfChanged(SidebarDialTuning.traySelectedPillWidthKey, previous.traySelectedPillWidth, model.traySelectedPillWidth)
-        setIfChanged(SidebarDialTuning.traySelectedPillHeightKey, previous.traySelectedPillHeight, model.traySelectedPillHeight)
         setStringIfChanged(SidebarDialTuning.selectedStyleKey, previous.selectedStyle, model.selectedStyle)
         setStringIfChanged(SidebarDialTuning.selectedTitleWeightKey, previous.selectedTitleWeight, model.selectedTitleWeight)
         setIfChanged(SidebarDialTuning.rowHeightKey, previous.rowHeight, model.rowHeight)
@@ -741,8 +734,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .select("trayGlassCornerStyle", keyPath: \.trayGlassCornerStyle, label: "Corner style",
                     options: TrayGlassStyle.CornerStyle.allCases.map(\.rawValue)),
             .slider("trayGlassCornerRadius", keyPath: \.trayGlassCornerRadius, label: "Corner radius (radius style)", range: 0...32, step: 0.5, unit: "pt"),
-            .slider("traySelectedPillWidth", keyPath: \.traySelectedPillWidth, label: "Selected pill width (rail)", range: 24...96, step: 0.5, unit: "pt"),
-            .slider("traySelectedPillHeight", keyPath: \.traySelectedPillHeight, label: "Selected pill height (rail)", range: 20...64, step: 0.5, unit: "pt")
+            .slider("traySelectedPillWidth", keyPath: \.traySelectedPillWidth, label: "Hairline width (rail)", range: 24...96, step: 0.5, unit: "pt"),
         ]),
         // Rows
         .slider("rowHeight", keyPath: \.rowHeight, label: "Row height", range: 32...64, unit: "pt"),
