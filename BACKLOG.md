@@ -3203,3 +3203,5 @@ Status of the items above: faded labels → fixed on `fix/faded-row-labels` @`14
 - [ ] *parked* Retire native Liquid Glass for a plain "pill" component (Sean's light variant is already `identity`; he's "not a huge Liquid Glass fan"). Sean's call after layout B.
 - [ ] *parked* Layout B morph: Create capsule passes under Toggle for ~30ms mid-flight (`scratchpad/vnext/layout-b-morph.png`). Sean to judge live.
 - [ ] *parked* Save pen.dev frame `bA1y9` "Tray layout options" (unsaved in `3-edff08ac-5MB.pen`).
+
+- Test runs leak one `~/Library/Preferences/ghostties.capture.<pid>.plist` per unfiltered suite run (26 stale as of 2026-10-07); `CaptureFixtureDefaultsTests.cleanupRemovesTheSuite` is flaky on the cfprefsd flush race.
