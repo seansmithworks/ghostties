@@ -304,6 +304,9 @@ enum WorkspaceLayout {
         colorScheme == .dark ? textSecondaryDark : textSecondaryLight
     }
 
+    /// The rail's hairline between Pinned, Active and History (mock H).
+    static let railSectionHairline = Color.primary.opacity(0.1)
+
     /// Foreground for the smaller in-row session group headers ("Active",
     /// "Recent", "Idle") inside an expanded project. One tier quieter than the
     /// top-level section headers since they're nested. Same `textSecondary`

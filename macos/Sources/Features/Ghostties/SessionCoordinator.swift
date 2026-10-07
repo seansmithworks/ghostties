@@ -38,6 +38,55 @@ final class SessionCoordinator: ObservableObject {
     /// The currently displayed session. Nil before any session is created.
     @Published private(set) var activeSessionId: UUID?
 
+    /// True while the sidebar's History row is selected and the canvas shows
+    /// the history browser (mock I3). `activeSessionId` is left untouched
+    /// underneath, so closing the browser returns to the session that was
+    /// selected before. Cleared by any explicit session selection
+    /// (`focusSession`) and by a new or relaunched session taking the canvas.
+    @Published private(set) var isHistoryPresented = false
+
+    /// The session the sidebar draws as selected: none while History is
+    /// selected, so exactly one row (History) carries the selected card.
+    var sidebarSelectedSessionId: UUID? {
+        isHistoryPresented ? nil : activeSessionId
+    }
+
+    /// Selects the History row: the canvas shows the history browser
+    /// (`WorkspaceViewContainer` observes `isHistoryPresented`).
+    func presentHistory() {
+        isHistoryPresented = true
+    }
+
+    /// Closes the history browser and returns to the session selected
+    /// before it opened, refocusing its terminal.
+    func dismissHistory() {
+        guard isHistoryPresented else { return }
+        isHistoryPresented = false
+        if let id = activeSessionId {
+            focusSession(id: id)
+        }
+    }
+
+    /// The history browser's resume action: the existing relaunch flow,
+    /// resuming the conversation when the session has a resume record and
+    /// starting fresh otherwise — the same mode choice a drag from a closed
+    /// section onto Active makes (`RecentsListView.applySectionDropAction`).
+    /// A successful relaunch takes the canvas, which closes the browser.
+    func resumeFromHistory(id: UUID, in store: WorkspaceStore? = nil, relaunch: ((AgentSession, RelaunchMode) -> Void)? = nil) {
+        guard let session = (store ?? .shared).sessions.first(where: { $0.id == id }) else { return }
+        let mode = Self.historyRelaunchMode(for: session)
+        if let relaunch {
+            relaunch(session, mode)
+            return
+        }
+        _Concurrency.Task { await self.relaunch(session: session, mode: mode) }
+    }
+
+    /// `.resume` when the session carries a resume record, else `.fresh`.
+    static func historyRelaunchMode(for session: AgentSession) -> RelaunchMode {
+        session.resume != nil ? .resume : .fresh
+    }
+
     /// Maps session IDs to their full split trees. Trees are kept alive here even
     /// when not displayed — this preserves both the surfaces and any user-created
     /// splits. The active session's tree may be stale (the controller owns the
@@ -337,6 +386,7 @@ final class SessionCoordinator: ObservableObject {
         setStatus(.running, for: session.id)
         subscribeToOutput(surface: newView, sessionId: session.id)
         activeSessionId = session.id
+        isHistoryPresented = false
         lastActiveSessionPerProject[session.projectId] = session.id
 
         // Session-hybrid: register an anonymous draft row in the sidebar
@@ -491,6 +541,7 @@ final class SessionCoordinator: ObservableObject {
         sessionIdsStartedThisLaunch.insert(session.id)
         setStatus(.running, for: session.id)
         activeSessionId = session.id
+        isHistoryPresented = false
         lastActiveSessionPerProject[session.projectId] = session.id
         // Stamp creation as activity so the project surfaces in `.recent`
         // right away (browser sessions don't emit terminal output events).
@@ -547,8 +598,14 @@ final class SessionCoordinator: ObservableObject {
     /// This is the "vertical tab" behavior — clicking a session in the sidebar
     /// replaces the terminal content with the target session's full split tree.
     func focusSession(id: UUID) {
+        // A selection that actually shows something replaces the history
+        // browser (`isHistoryPresented = false` below, on each success path).
+        // A session with nothing to show (e.g. a closed pinned row) leaves
+        // History open and selected rather than selecting nothing.
+
         // Browser session path.
         if let manager = browserManagers[id] {
+            isHistoryPresented = false
             snapshotActiveTree()
             activeSessionId = id
             showBrowserInContainer(manager)
@@ -565,6 +622,8 @@ final class SessionCoordinator: ObservableObject {
         }
 
         guard let tree = sessionTrees[id] else { return }
+
+        isHistoryPresented = false
 
         // Snapshot the outgoing session's tree first.
         snapshotActiveTree()
@@ -1759,6 +1818,12 @@ final class SessionCoordinator: ObservableObject {
         if activityTimer == nil {
             startActivityTimer()
         }
+    }
+
+    /// Test-only: selects a session without a terminal tree (and so
+    /// without `focusSession`'s surface swap or `WorkspaceStore.shared`).
+    func setActiveSessionIdForTesting(_ id: UUID?) {
+        activeSessionId = id
     }
 
     /// Test-only seam for exercising the `nameSyncSubscriptions` teardown
