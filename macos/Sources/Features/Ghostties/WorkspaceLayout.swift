@@ -844,23 +844,28 @@ extension EnvironmentValues {
 /// the rail column, and no inner horizontal dials. The rail's row cards and
 /// its tray pill (`SidebarTray`, centred on the full rail) then share one
 /// centre by construction, whatever the leading/trailing dials hold.
+///
+/// `horizontalOnly`: the pinned History footer below the list
+/// (`SidebarSessionSections.Layout.footer`) takes the column's horizontal
+/// insets but none of the list's vertical padding or redline frames.
 struct SidebarColumnPadding: ViewModifier {
     /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     /// See `EnvironmentValues.sidebarTrailingGutter`.
     @Environment(\.sidebarTrailingGutter) private var trailingGutter
     var symmetric = false
+    var horizontalOnly = false
 
     func body(content: Content) -> some View {
         let margin = SidebarDialTuning.windowMargin()
         content
-            .redlineFrame(RedlineID.listContent)
+            .redlineFrame(horizontalOnly ? nil : RedlineID.listContent)
             .padding(.leading, symmetric ? 0 : SidebarDialTuning.contentPaddingLeading())
             .padding(.trailing, symmetric ? 0 : SidebarDialTuning.contentPaddingTrailing())
-            .padding(.top, SidebarDialTuning.contentPaddingTop())
-            .redlineFrame(RedlineID.listInner)
+            .padding(.top, horizontalOnly ? 0 : SidebarDialTuning.contentPaddingTop())
+            .redlineFrame(horizontalOnly ? nil : RedlineID.listInner)
             .padding(.leading, margin)
             .padding(.trailing, symmetric ? margin : SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
-            .padding(.bottom, 4)
+            .padding(.bottom, horizontalOnly ? 0 : 4)
     }
 }

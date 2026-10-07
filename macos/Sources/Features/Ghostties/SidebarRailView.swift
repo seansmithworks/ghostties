@@ -18,6 +18,9 @@ struct SidebarRailView: View {
     /// The rail column's padding: symmetric, so rows and the tray pill
     /// share the rail's centre (`SidebarColumnPadding`).
     static let columnPadding = SidebarColumnPadding(symmetric: true)
+    /// The pinned History footer's padding: the column's insets, no
+    /// vertical padding.
+    static let footerPadding = SidebarColumnPadding(symmetric: true, horizontalOnly: true)
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
     /// `UserDefaults` inside it, so without this a live dial change never lands.
@@ -33,44 +36,43 @@ struct SidebarRailView: View {
             Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
 
             // Same structure and rhythm as the expanded Sessions list
-            // (`RecentsListView`, mock I3/H), element for element, so every
-            // rail glyph sits at its expanded row's y across the pinned⇄rail
-            // morph: each zero-height end-of-section drop zone becomes a
-            // zero-height marker, and the hairline slots (between Pinned and
-            // Active, and before the History clock) are the same slot in both.
+            // (`RecentsListView`, mock I3/H): both render the one section
+            // layout (`SidebarSessionSections.layout`), slot for slot, so
+            // every rail glyph sits at its expanded row's y across the
+            // pinned⇄rail morph: each zero-height end-of-section drop zone
+            // becomes a zero-height marker, and the hairline slots (between
+            // Pinned and Active, and before the History clock) are the same
+            // slot in both.
             let sections = SidebarSessionSections.make(
                 sessions: store.sessions,
                 statuses: store.globalStatuses,
                 sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
             )
+            let layout = sections.layout(historyPlacement: SidebarDialTuning.historyPlacement())
             VStack(spacing: SidebarDialTuning.rowGap()) {
-                if !sections.pinned.isEmpty {
-                    ForEach(sections.pinned) { session in
-                        railRow(for: session)
-                    }
-                    RailSectionEndMarker()
+                ForEach(layout.list, id: \.self) { slot in
+                    railSlot(slot, sections)
                 }
-                if !sections.pinned.isEmpty && !sections.active.isEmpty {
-                    SidebarSectionHairlineSlot(width: SidebarDialTuning.traySelectedPillWidth())
-                }
-                ForEach(sections.active) { session in
-                    railRow(for: session)
-                }
-                RailSectionEndMarker()
-                if !sections.rowSessions.isEmpty {
-                    SidebarSectionHairlineSlot(width: SidebarDialTuning.traySelectedPillWidth())
-                }
-                RailHistoryRow(
-                    subtitle: HistorySummary.subtitle(count: sections.historyCount, lastActiveAt: sections.historyLastActiveAt),
-                    isActive: coordinator.isHistoryPresented,
-                    onTap: { coordinator.presentHistory() }
-                )
             }
             // The window margin on both sides (`columnPadding`), so the
             // row cards centre on the rail, as the tray pill does.
             .modifier(Self.columnPadding)
 
             Spacer(minLength: 0)
+
+            // `bottom`: the History clock and its hairline, just above the
+            // tray, the same gap from it as in the expanded list (the
+            // rail's reserved space holds no list-to-tray gap, so all of it
+            // is added here).
+            if !layout.footer.isEmpty {
+                VStack(spacing: SidebarDialTuning.rowGap()) {
+                    ForEach(layout.footer, id: \.self) { slot in
+                        railSlot(slot, sections)
+                    }
+                }
+                .modifier(Self.footerPadding)
+                .padding(.bottom, SidebarSessionSections.historyToTrayGap())
+            }
 
             // The tray itself is hosted once at the sidebar root
             // (`SidebarTray`), over both this rail and the expanded list, so
@@ -87,6 +89,32 @@ struct SidebarRailView: View {
             #if DEBUG
             coordinator.applyCaptureFixtureFocusIfNeeded()
             #endif
+        }
+    }
+
+    /// One slot of the section layout, as `RecentsListView.slotContent`
+    /// renders it in the expanded list.
+    @ViewBuilder
+    private func railSlot(_ slot: SidebarSessionSections.Slot, _ sections: SidebarSessionSections) -> some View {
+        switch slot {
+        case .pinnedRows:
+            ForEach(sections.pinned) { session in
+                railRow(for: session)
+            }
+        case .activeRows:
+            ForEach(sections.active) { session in
+                railRow(for: session)
+            }
+        case .pinnedEnd, .activeEnd:
+            RailSectionEndMarker()
+        case .pinnedHairline, .historyHairline:
+            SidebarSectionHairlineSlot(width: SidebarDialTuning.traySelectedPillWidth())
+        case .history:
+            RailHistoryRow(
+                subtitle: HistorySummary.subtitle(count: sections.historyCount, lastActiveAt: sections.historyLastActiveAt),
+                isActive: coordinator.isHistoryPresented,
+                onTap: { coordinator.presentHistory() }
+            )
         }
     }
 

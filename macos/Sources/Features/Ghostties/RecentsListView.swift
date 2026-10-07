@@ -8,7 +8,8 @@ import UniformTypeIdentifiers
 ///   Pinned 2  (isPinned — hidden when empty; stays pinned whether open or closed)
 ///   Active 5  (the session's terminal is open — see `SessionBucket.membership`)
 ///   History   (one row standing in for every inactive + archived session;
-///              selecting it opens the history browser in the canvas)
+///              selecting it opens the history browser in the canvas). After
+///              Active, or pinned above the tray (`SidebarDialTuning.historyPlacement`)
 /// Section labels are quiet, non-collapsible headers — no chevrons.
 struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
@@ -119,6 +120,11 @@ struct RecentsListView: View {
         // or persistence.
         let orderedRowIds = displaySections.rowSessions.map { $0.id.uuidString }
 
+        // Where History sits (the "History placement" dial): in the list
+        // after Active, or pinned below it as `layout.footer`. The rail
+        // renders the same layout (`SidebarRailView`).
+        let layout = displaySections.layout(historyPlacement: SidebarDialTuning.historyPlacement())
+
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
                 emptyState
@@ -126,17 +132,31 @@ struct RecentsListView: View {
                 #if DEBUG
                 if skipScrollViewForTesting {
                     // See the doc comment on the `previewDragState` init.
-                    sectionsContent(displaySections)
+                    sectionsContent(displaySections, slots: layout.list)
                         .modifier(SidebarColumnPadding())
                 } else {
-                    sessionsScrollView(displaySections, orderedRowIds: orderedRowIds)
+                    sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds)
                 }
                 #else
-                sessionsScrollView(displaySections, orderedRowIds: orderedRowIds)
+                sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds)
                 #endif
             }
 
             Spacer(minLength: 0)
+
+            // `bottom`: History and its hairline, outside the scrolling
+            // area, so a long list never scrolls it away. The tray's
+            // reserved space (`WorkspaceSidebarView`) already holds the
+            // list-to-tray gap; this adds the row gap above it.
+            if !store.sessions.isEmpty && !layout.footer.isEmpty {
+                VStack(spacing: SidebarDialTuning.rowGap()) {
+                    ForEach(layout.footer, id: \.self) { slot in
+                        slotContent(slot, displaySections)
+                    }
+                }
+                .modifier(SidebarColumnPadding(horizontalOnly: true))
+                .padding(.bottom, SidebarSessionSections.historyToTrayGap() - SidebarDialTuning.listToTrayGap())
+            }
         }
         .background(.clear)
         .onChange(of: dragState.isDragging) { isDragging in
@@ -162,7 +182,7 @@ struct RecentsListView: View {
     /// that flag's doc comment. Nothing here is test-only: production's
     /// `ScrollView` wraps this exact same content.
     @ViewBuilder
-    private func sectionsContent(_ sections: SidebarSessionSections) -> some View {
+    private func sectionsContent(_ sections: SidebarSessionSections, slots: [SidebarSessionSections.Slot]) -> some View {
         // Deliberately a plain VStack, NOT `LazyVStack`. A lazy
         // container realizes each row once and retains it — when
         // a session's fields (e.g. name) change but its `\.id`
@@ -180,18 +200,29 @@ struct RecentsListView: View {
             // drag renders an explicit "Drop to pin" zone here
             // instead (item 2) so pinning a first session no
             // longer requires the context menu.
-            if !sections.pinned.isEmpty {
-                sectionRows(sections.pinned, section: .pinned)
-                endDropZone(section: .pinned, sectionList: sections.pinned)
-            } else if dragState.isDragging {
+            if sections.pinned.isEmpty && dragState.isDragging {
                 emptyPinnedDropZone
             }
-
-            // Active always renders (when there's at least one session
-            // anywhere). A hairline separates it from Pinned, same as the rail.
-            if !sections.pinned.isEmpty && !sections.active.isEmpty {
-                SidebarSectionHairlineSlot(width: nil)
+            ForEach(slots, id: \.self) { slot in
+                slotContent(slot, sections)
             }
+        }
+    }
+
+    /// One slot of the section layout (`SidebarSessionSections.Slot`), the
+    /// same sequence `SidebarRailView` renders.
+    @ViewBuilder
+    private func slotContent(_ slot: SidebarSessionSections.Slot, _ sections: SidebarSessionSections) -> some View {
+        switch slot {
+        case .pinnedRows:
+            sectionRows(sections.pinned, section: .pinned)
+        case .pinnedEnd:
+            endDropZone(section: .pinned, sectionList: sections.pinned)
+        case .pinnedHairline, .historyHairline:
+            // A hairline separates Active from Pinned, and History from
+            // the rows, same as the rail.
+            SidebarSectionHairlineSlot(width: nil)
+        case .activeRows:
             // Keyed on the stable `\.id` (default Identifiable) —
             // NOT `\.self`. `\.self` was tried and reverted: it makes
             // row identity churn on every `lastActiveAt` write (see
@@ -205,12 +236,9 @@ struct RecentsListView: View {
             // in `sessionRow(for:)` is a body-re-execution perf gate
             // layered on top, not what makes rows fresh.
             sectionRows(sections.active, section: .active)
+        case .activeEnd:
             endDropZone(section: .active, sectionList: sections.active)
-
-            if !sections.rowSessions.isEmpty {
-                SidebarSectionHairlineSlot(width: nil)
-            }
-
+        case .history:
             // Inactive and archived sessions never render as rows — one
             // History row stands in for them (mock I3) and opens the
             // history browser in the canvas.
@@ -228,10 +256,10 @@ struct RecentsListView: View {
     /// animation, accessibility label, and the auto-scroll edge zones (item
     /// 4), which need `scrollProxy` and so make no sense outside a
     /// `ScrollViewReader`.
-    private func sessionsScrollView(_ sections: SidebarSessionSections, orderedRowIds: [String]) -> some View {
+    private func sessionsScrollView(_ sections: SidebarSessionSections, slots: [SidebarSessionSections.Slot], orderedRowIds: [String]) -> some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
-                sectionsContent(sections)
+                sectionsContent(sections, slots: slots)
                     .modifier(SidebarColumnPadding())
                     .animation(reflowAnimation, value: dragState)
             }

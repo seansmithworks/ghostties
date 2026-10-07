@@ -158,6 +158,7 @@ enum SidebarDialTuning {
     static let contentPaddingLeadingKey = "ghostties.sidebarDial.contentPaddingLeading"
     static let contentPaddingTrailingKey = "ghostties.sidebarDial.contentPaddingTrailing"
     static let listToTrayGapKey = "ghostties.sidebarDial.listToTrayGap"
+    static let historyPlacementKey = "ghostties.sidebarDial.historyPlacement"
 
     // MARK: Rail
     static let railExtraWidthKey = "ghostties.sidebarDial.railExtraWidth"
@@ -327,6 +328,12 @@ enum SidebarDialTuning {
         cgFloat(listToTrayGapKey, default: WorkspaceLayout.sidebarListToTrayGap, defaults: defaults)
     }
 
+    /// Where the History row sits, in the expanded list and the rail
+    /// (`SidebarSessionSections.HistoryPlacement`).
+    static func historyPlacement(defaults: UserDefaults = SidebarDialTuning.store) -> SidebarSessionSections.HistoryPlacement {
+        choice(historyPlacementKey, default: SidebarSessionSections.historyPlacement, defaults: defaults)
+    }
+
     /// Added on top of `WorkspaceLayout.collapsedRailWidth`'s computed hug
     /// width — see that function's own doc comment. Not folded into
     /// `WorkspaceLayout.railExtraWidth` (the compiled default both this and
@@ -348,7 +355,7 @@ enum SidebarDialTuning {
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
-        railExtraWidthKey
+        historyPlacementKey, railExtraWidthKey
     ]
 
     static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
@@ -491,6 +498,7 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var contentPaddingLeading: Double
     var contentPaddingTrailing: Double
     var listToTrayGap: Double
+    var historyPlacement: String
 
     var railExtraWidth: Double
 }
@@ -579,6 +587,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
             contentPaddingLeading: Double(SidebarDialTuning.contentPaddingLeading(defaults: defaults)),
             contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
             listToTrayGap: Double(SidebarDialTuning.listToTrayGap(defaults: defaults)),
+            historyPlacement: SidebarDialTuning.historyPlacement(defaults: defaults).rawValue,
             railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults))
         )
     }
@@ -660,6 +669,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.contentPaddingLeadingKey, previous.contentPaddingLeading, model.contentPaddingLeading)
         setIfChanged(SidebarDialTuning.contentPaddingTrailingKey, previous.contentPaddingTrailing, model.contentPaddingTrailing)
         setIfChanged(SidebarDialTuning.listToTrayGapKey, previous.listToTrayGap, model.listToTrayGap)
+        setStringIfChanged(SidebarDialTuning.historyPlacementKey, previous.historyPlacement, model.historyPlacement)
         setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
         // Any write at all is a tuning change a row's `.equatable()` gate
         // can't see on its own — see `SidebarDialTuning.epochKey`'s doc
@@ -751,6 +761,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .slider("contentPaddingLeading", keyPath: \.contentPaddingLeading, label: "Content padding leading (inner)", range: 0...24, unit: "pt"),
         .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Content padding trailing (inner)", range: 0...24, unit: "pt"),
         .slider("listToTrayGap", keyPath: \.listToTrayGap, label: "List-to-tray gap", range: 0...24, unit: "pt"),
+        .select("historyPlacement", keyPath: \.historyPlacement, label: "History placement",
+                options: SidebarSessionSections.HistoryPlacement.allCases.map(\.rawValue)),
         // Rail
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
         .action(resetActionPath, label: "Reset sidebar")
