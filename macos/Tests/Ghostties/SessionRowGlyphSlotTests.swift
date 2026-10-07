@@ -43,8 +43,8 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     }
 
     /// Both rows sit inside the same horizontal margins the real lists apply
-    /// (`contentPaddingLeading/Trailing`), so the inset measured is the one a
-    /// user sees.
+    /// (the window margin plus the inner `contentPaddingLeading/Trailing`,
+    /// with no gutter outside), so the inset measured is the one a user sees.
     private func renderExpanded(_ state: SessionIndicatorState, appearance: NSAppearance.Name) -> NSBitmapImageRep? {
         render(
             ExpandedHarness(state: state)
@@ -90,8 +90,8 @@ final class SessionRowGlyphSlotTests: XCTestCase {
 
     private func render<V: View>(_ row: V, appearance: NSAppearance.Name) -> NSBitmapImageRep? {
         let framed = row
-            .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-            .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
+            .padding(.leading, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading())
+            .padding(.trailing, SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingTrailing())
             .frame(width: width, height: rowHeight)
             .background(Color(nsColor: appearance == .darkAqua ? .black : .white))
         let hosting = NSHostingView(rootView: framed)
@@ -188,7 +188,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             let r = try XCTUnwrap(inkBounds(try XCTUnwrap(renderRail(state, appearance: .aqua)), fromX: 0))
             // Expanded: the ink stays inside the glyph's box, which ends at the list
             // margin + row trailing padding (measured: ink sits up to ~5pt inside it).
-            let boxMaxX = width - SidebarDialTuning.contentPaddingTrailing() - SidebarDialTuning.rowTrailingPadding()
+            let boxMaxX = width - SidebarDialTuning.windowMargin() - SidebarDialTuning.contentPaddingTrailing() - SidebarDialTuning.rowTrailingPadding()
             let boxMinX = boxMaxX - SidebarDialTuning.rowGhostSize()
             XCTAssertLessThanOrEqual(e.maxX, boxMaxX + 0.6, "expanded glyph ink right edge, \(state)")
             XCTAssertGreaterThanOrEqual(e.minX, boxMinX - 0.6, "expanded glyph ink left edge, \(state)")
@@ -329,13 +329,16 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// with the plain (non-glass) capsules, since `cacheDisplay` can't
     /// capture glass. Expected geometry below reads the same live dial
     /// accessors the tray does, so it holds at any saved dial value.
-    private func renderTray(vertical: Bool, size: CGSize) throws -> (NSBitmapImageRep, CGFloat) {
+    /// `gutter`: the space outside the column's trailing edge, injected the
+    /// way `SidebarHostRoot` does (`WorkspaceLayout.sidebarTrailingGutter`).
+    private func renderTray(vertical: Bool, size: CGSize, gutter: CGFloat = 0) throws -> (NSBitmapImageRep, CGFloat) {
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
         let hosting = NSHostingView(rootView: SidebarTray(
             isVertical: vertical,
             toggleLabel: vertical ? "Expand Sidebar" : "Collapse Sidebar",
             forceOpaque: true
         )
+            .environment(\.sidebarTrailingGutter, gutter)
             .environmentObject(SessionCoordinator())
             .frame(width: size.width, height: size.height, alignment: .bottomLeading)
             .background(Color(nsColor: chrome)))
@@ -385,9 +388,10 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let createHeight = 2 * button + TrayGlassStyle.verticalItemGap + 2 * padding
         let toggleHeight = button + 2 * padding
 
-        // Hugging: the tray's own ideal width is one capsule.
+        // Hugging: the tray's own ideal width is one capsule plus the window
+        // margin either side (no gutter outside the column here).
         let alone = NSHostingView(rootView: SidebarTray(isVertical: true, toggleLabel: "Expand Sidebar").environmentObject(SessionCoordinator()))
-        XCTAssertEqual(alone.fittingSize.width, capsuleWidth, accuracy: 0.5, "tray width = icon + 2 x padding")
+        XCTAssertEqual(alone.fittingSize.width, capsuleWidth + 2 * SidebarDialTuning.windowMargin(), accuracy: 0.5, "tray width = icon + 2 x padding + 2 x window margin")
 
         let (rep, scale) = try renderTray(vertical: true, size: size)
         let toggleBottom = size.height - SidebarTray.bottomPadding(isVertical: true)
@@ -416,7 +420,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     /// Renders the expanded tray under one "Tray width" mode and returns the
     /// capsule spans on the shared baseline. The dial is set only through the
     /// isolated `SidebarDialTuning.store`, and cleared afterward.
-    private func expandedTraySpans(mode: TrayGlassStyle.TrayWidth, columnWidth: CGFloat, height: CGFloat) throws -> (rep: NSBitmapImageRep, scale: CGFloat, spans: [ClosedRange<CGFloat>], bottom: CGFloat) {
+    private func expandedTraySpans(mode: TrayGlassStyle.TrayWidth, columnWidth: CGFloat, height: CGFloat, gutter: CGFloat = 0) throws -> (rep: NSBitmapImageRep, scale: CGFloat, spans: [ClosedRange<CGFloat>], bottom: CGFloat) {
         XCTAssertTrue(SidebarDialTuning.store !== UserDefaults.standard, "dial store must be the isolated suite")
         let store = SidebarDialTuning.store
         store.set(mode.rawValue, forKey: SidebarDialTuning.trayWidthKey)
@@ -424,7 +428,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         XCTAssertEqual(SidebarDialTuning.trayWidth(), mode)
 
         let size = CGSize(width: columnWidth, height: 120)
-        let (rep, scale) = try renderTray(vertical: false, size: size)
+        let (rep, scale) = try renderTray(vertical: false, size: size, gutter: gutter)
         let bottom = size.height - SidebarTray.bottomPadding(isVertical: false)
         let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: bottom - height / 2)
         return (rep, scale, spans, bottom)
@@ -444,19 +448,24 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let button = SidebarDialTuning.trayHorizontalButtonSize()
         let padding = SidebarDialTuning.trayInnerPadding()
         let gap = SidebarDialTuning.trayGroupGap()
-        let margin = SidebarDialTuning.trayMargin()
+        let margin = SidebarDialTuning.windowMargin()
+        // The gutter the pinned app really has outside the column: the card's
+        // leading inset. The column is `columnWidth` wide; the card starts
+        // `gutter` past its edge.
+        let gutter = WorkspaceLayout.sidebarTrailingGutter(for: .pinned)
         let toggleWidth = button + 2 * padding
         let height = button + 2 * padding
 
-        let (rep, scale, spans, bottom) = try expandedTraySpans(mode: .fill, columnWidth: columnWidth, height: height)
+        let (rep, scale, spans, bottom) = try expandedTraySpans(mode: .fill, columnWidth: columnWidth, height: height, gutter: gutter)
         XCTAssertEqual(spans.count, 2, "one span per capsule, got \(spans)")
         guard spans.count == 2 else { return }
         XCTAssertEqual(spans[0].lowerBound, margin, accuracy: 1.0, "create capsule starts at the leading margin")
         XCTAssertEqual(spans[0].upperBound + gap, spans[1].lowerBound, accuracy: 1.0, "create's right edge plus the group gap meets toggle's left edge")
         XCTAssertEqual(spans[1].upperBound - spans[1].lowerBound, toggleWidth, accuracy: 1.0, "toggle capsule stays button size plus padding")
-        // The test environment's trailing gutter is 0, so the tray's trailing
-        // padding is the full trayMargin: toggle's visible margin mirrors create's.
-        XCTAssertEqual(columnWidth - spans[1].upperBound, margin, accuracy: 1.0, "toggle's trailing visible margin matches the leading margin")
+        // Visible trailing margin = the column's own trailing padding plus the
+        // gutter outside it, up to the card: the window margin, like the leading side.
+        XCTAssertEqual(columnWidth + gutter - spans[1].upperBound, margin, accuracy: 1.0, "toggle's visible trailing margin to the card is the window margin")
+        XCTAssertEqual(bottom, 120 - margin, accuracy: 0.01, "tray bottom margin is the window margin")
         try assertSharedBaseline(spans, rep: rep, scale: scale, height: height, bottom: bottom)
     }
 
@@ -472,7 +481,7 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let (rep, scale, spans, bottom) = try expandedTraySpans(mode: .hug, columnWidth: columnWidth, height: height)
         XCTAssertEqual(spans.count, 2, "two capsules side by side, got \(spans)")
         guard spans.count == 2 else { return }
-        XCTAssertEqual(spans[0].lowerBound, SidebarDialTuning.trayMargin(), accuracy: 1.0, "create capsule starts at the tray margin")
+        XCTAssertEqual(spans[0].lowerBound, SidebarDialTuning.windowMargin(), accuracy: 1.0, "create capsule starts at the window margin")
         XCTAssertEqual(spans[0].upperBound - spans[0].lowerBound, createWidth, accuracy: 1.0, "create capsule width")
         XCTAssertEqual(spans[1].lowerBound - spans[0].upperBound, gap, accuracy: 1.0, "gap between the capsules")
         XCTAssertEqual(spans[1].upperBound - spans[1].lowerBound, toggleWidth, accuracy: 1.0, "toggle capsule width")
