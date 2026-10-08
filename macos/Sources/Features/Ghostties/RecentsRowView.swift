@@ -117,7 +117,7 @@ struct RecentsRowView: View, Equatable {
             // (`RailSessionRow`) draws the same glyph centered in the rail,
             // so across the pinned⇄rail transition the glyph moves from this
             // trailing slot to the center (it snaps under Reduce Motion).
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize(), isSelected: isActive)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
         .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
@@ -195,13 +195,12 @@ struct SidebarListRowTitle: View {
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
     var body: some View {
-        let rowStyle = SidebarDialTuning.selectedRowStyle()
         Text(text)
             .font(.system(
                 size: SidebarDialTuning.rowTitleSize(),
-                weight: isActive ? (rowStyle == .bar || rowStyle == .type ? .semibold : SidebarDialTuning.selectedTitleWeight().fontWeight) : .regular
+                weight: isActive ? SidebarDialTuning.selectedTitleWeight().fontWeight : .regular
             ))
-            .foregroundStyle(isActive && rowStyle == .accent ? WorkspaceLayout.composerSelectionAccent : Color.primary)
+            .foregroundStyle(Color.primary)
             .lineLimit(1)
     }
 }
@@ -219,9 +218,6 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
     /// stagger (`WorkspaceLayout.expandLabelDelay`).
     var staggerIndex: Int = 0
     let redlineID: String
-    /// "Type" selected-row style dims unselected session rows; the History
-    /// row opts out.
-    var dimsUnselected = true
     @ViewBuilder let title: () -> Title
     @ViewBuilder let trailing: () -> Trailing
 
@@ -229,13 +225,6 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @State private var isHovered = false
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-
-    /// "Type" selected-row style: unselected rows recede to 50%, hover lifts
-    /// them to 78%. Every other style leaves rows at full opacity.
-    private var rowOpacity: Double {
-        guard dimsUnselected, SidebarDialTuning.selectedRowStyle() == .type, !isActive else { return 1 }
-        return isHovered ? 0.78 : 0.5
-    }
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
@@ -255,7 +244,6 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
 
             trailing()
         }
-        .opacity(rowOpacity)
         .redlineFrame(redlineID + ".content")
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
@@ -328,10 +316,9 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
     // MARK: - Row Background
 
     /// Hover and selected share one footprint (`SidebarRowCardBackground`):
-    /// the row frame, at `rowCornerRadius`. Selected is the selected style's
-    /// surface in that shape.
+    /// the row frame, at `rowCornerRadius`.
     private var rowBackground: some View {
-        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: rowCornerRadius, hoverOpacity: 0.05)
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: rowCornerRadius)
             .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
     }
 

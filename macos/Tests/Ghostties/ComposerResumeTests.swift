@@ -244,13 +244,11 @@ final class SidebarHistoryDialTests: XCTestCase {
         let pinned = AgentSession(name: "p", templateId: UUID(), projectId: UUID(), isPinned: true)
         let active = AgentSession(name: "a", templateId: UUID(), projectId: UUID())
         let sections = SidebarSessionSections(pinned: [pinned], active: [active], inactive: [], archived: [])
-        for placement in SidebarSessionSections.HistoryPlacement.allCases {
-            let hidden = sections.layout(historyPlacement: placement, showsHistory: false)
-            XCTAssertEqual(hidden.list, [.pinnedRows, .pinnedEnd, .pinnedHairline, .activeRows, .activeEnd])
-            XCTAssertEqual(hidden.footer, [])
-            let shown = sections.layout(historyPlacement: placement, showsHistory: true)
-            XCTAssertEqual(shown.list + shown.footer, hidden.list + [.historyHairline, .history])
-        }
+        let hidden = sections.layout(showsHistory: false)
+        XCTAssertEqual(hidden.list, [.pinnedRows, .pinnedEnd, .pinnedHairline, .activeRows, .activeEnd])
+        XCTAssertEqual(hidden.footer, [])
+        let shown = sections.layout(showsHistory: true)
+        XCTAssertEqual(shown.list + shown.footer, hidden.list + [.historyHairline, .history])
     }
 
     /// The expanded list and the rail, with past sessions present: the

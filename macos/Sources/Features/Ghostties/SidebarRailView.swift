@@ -51,10 +51,7 @@ struct SidebarRailView: View {
                 statuses: store.globalStatuses,
                 sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
             )
-            let layout = sections.layout(
-                historyPlacement: SidebarDialTuning.historyPlacement(),
-                showsHistory: SidebarDialTuning.historyInSidebar()
-            )
+            let layout = sections.layout(showsHistory: SidebarDialTuning.historyInSidebar())
             VStack(spacing: SidebarDialTuning.rowGap()) {
                 ForEach(layout.list, id: \.self) { slot in
                     railSlot(slot, sections)
@@ -66,7 +63,7 @@ struct SidebarRailView: View {
 
             Spacer(minLength: 0)
 
-            // `bottom`: the History clock and its hairline, just above the
+            // The History clock and its hairline, just above the
             // tray, the same gap from it as in the expanded list (the
             // rail's reserved space holds no list-to-tray gap, so all of it
             // is added here).
@@ -215,9 +212,8 @@ struct RailSessionRow: View {
         Button(action: onTap) {
             // No side padding: the card spans the rail's content margins
             // (symmetric), so centering in the card centers on the rail.
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize, isSelected: isActive)
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize)
                 .frame(width: glyphSize, height: glyphSize)
-                .opacity(typeOpacity)
                 .frame(maxWidth: .infinity)
             .frame(height: SidebarDialTuning.rowHeight())
             .background(rowBackground)
@@ -230,12 +226,6 @@ struct RailSessionRow: View {
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
-    /// "Type" selected-row style, as in `SidebarListRowChrome.rowOpacity`.
-    private var typeOpacity: Double {
-        guard SidebarDialTuning.selectedRowStyle() == .type, !isActive else { return 1 }
-        return isHovered ? 0.78 : 0.5
-    }
-
     /// Sidebar vnext (pen.dev `CnDfN`): the selected glyph grows to the
     /// canvas's 35px (17.5pt).
     private var glyphSize: CGFloat {
@@ -243,8 +233,8 @@ struct RailSessionRow: View {
     }
 
     /// The selected card fills the hover card's footprint
-    /// (`SidebarRowCardBackground`), in the selected style's surface.
+    /// (`SidebarRowCardBackground`).
     private var rowBackground: some View {
-        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, hoverOpacity: 0.06)
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered)
     }
 }

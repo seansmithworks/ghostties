@@ -13,8 +13,8 @@ import GhosttiesCore
 /// footprint" is asserted on pixels: the selected surface spans that whole
 /// card, top to bottom and edge to edge, and its corner is the hover's radius
 /// (a pixel 2.5pt in from the card corner is filled, one 0.5pt in is not).
-/// Rendered with the flat selected style, since `cacheDisplay` can't capture
-/// glass; the footprint is the same either way.
+/// Rendered with the selected row's rim off (its blur softens the edges), so
+/// the Tint + shimmer fill alone marks the footprint.
 @MainActor
 final class SelectedRowFootprintTests: XCTestCase {
     private let height: CGFloat = 100
@@ -31,10 +31,10 @@ final class SelectedRowFootprintTests: XCTestCase {
         )
     }
 
-    /// Rendered with the flat selected style set in a private dial suite
-    /// bound around the render (`withDials`).
+    /// Rendered with the rim off, set in a private dial suite bound around
+    /// the render (`withDials`).
     private func render<V: View>(_ view: V, width: CGFloat) throws -> (NSBitmapImageRep, CGFloat) {
-        try withDials({ $0.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey) }) {
+        try withDials({ $0.set(0.0, forKey: SidebarDialTuning.lightGlassKeys.chromaticIntensity) }) {
             try renderInScope(view, width: width)
         }
     }
@@ -56,14 +56,14 @@ final class SelectedRowFootprintTests: XCTestCase {
         return (rep, CGFloat(rep.pixelsWide) / width)
     }
 
-    /// True where the selected surface's light fill lifts the pixel above the
-    /// chrome; the shadow only darkens, so it never counts.
+    /// True where the selected surface's tint darkens the pixel below the
+    /// chrome.
     private func isSurface(_ rep: NSBitmapImageRep, scale: CGFloat, x: CGFloat, y: CGFloat) throws -> Bool {
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
         guard let c = rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB) else { return false }
-        let lift = (c.redComponent + c.greenComponent + c.blueComponent)
-            - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent)
-        return lift > 0.06
+        let tint = (chrome.redComponent + chrome.greenComponent + chrome.blueComponent)
+            - (c.redComponent + c.greenComponent + c.blueComponent)
+        return tint > 0.06
     }
 
     /// The single run of surface pixels along one line, in points.

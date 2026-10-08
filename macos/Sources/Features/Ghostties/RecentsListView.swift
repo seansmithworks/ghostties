@@ -8,8 +8,8 @@ import UniformTypeIdentifiers
 ///   Pinned 2  (isPinned — hidden when empty; stays pinned whether open or closed)
 ///   Active 5  (the session's terminal is open — see `SessionBucket.membership`)
 ///   History   (one row standing in for every inactive + archived session;
-///              selecting it opens the history browser in the canvas). After
-///              Active, or pinned above the tray (`SidebarDialTuning.historyPlacement`)
+///              selecting it opens the history browser in the canvas),
+///              pinned above the tray; hidden unless "History in sidebar" is on
 /// Section labels are quiet, non-collapsible headers — no chevrons.
 struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
@@ -123,13 +123,9 @@ struct RecentsListView: View {
         // or persistence.
         let orderedRowIds = displaySections.rowSessions.map { $0.id.uuidString }
 
-        // Where History sits (the "History placement" dial): in the list
-        // after Active, or pinned below it as `layout.footer`. The rail
-        // renders the same layout (`SidebarRailView`).
-        let layout = displaySections.layout(
-            historyPlacement: SidebarDialTuning.historyPlacement(),
-            showsHistory: SidebarDialTuning.historyInSidebar()
-        )
+        // History (when shown) is pinned below the list as `layout.footer`.
+        // The rail renders the same layout (`SidebarRailView`).
+        let layout = displaySections.layout(showsHistory: SidebarDialTuning.historyInSidebar())
 
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
@@ -150,7 +146,7 @@ struct RecentsListView: View {
 
             Spacer(minLength: 0)
 
-            // `bottom`: History and its hairline, outside the scrolling
+            // History and its hairline, outside the scrolling
             // area, so a long list never scrolls it away. The tray's
             // reserved space (`WorkspaceSidebarView`) already holds the
             // list-to-tray gap; this adds the row gap above it.

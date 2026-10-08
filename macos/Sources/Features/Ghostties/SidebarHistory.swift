@@ -75,18 +75,6 @@ struct SidebarSessionSections: Equatable {
 // MARK: - History Placement
 
 extension SidebarSessionSections {
-    /// Where the History row sits (`SidebarDialTuning.historyPlacement`).
-    enum HistoryPlacement: String, CaseIterable {
-        /// Directly after the Active rows, inside the scrolling list.
-        case afterActive
-        /// Anchored at the bottom of the session list, just above the tray,
-        /// outside the scrolling area.
-        case bottom
-    }
-
-    /// The shipped placement.
-    static let historyPlacement: HistoryPlacement = .bottom
-
     /// One element of the sidebar's section list. The expanded list and the
     /// rail both render exactly these, in this order, so every row keeps
     /// the same y through the pinned⇄rail morph.
@@ -94,7 +82,9 @@ extension SidebarSessionSections {
         case pinnedRows, pinnedEnd, pinnedHairline, activeRows, activeEnd, historyHairline, history
     }
 
-    /// `list` scrolls; `footer` is pinned below it, just above the tray.
+    /// `list` scrolls; `footer` is pinned below it, just above the tray. The
+    /// History row (when shown) is always the footer: anchored at the bottom
+    /// of the session list, outside the scrolling area.
     struct Layout: Equatable {
         let list: [Slot]
         let footer: [Slot]
@@ -103,20 +93,17 @@ extension SidebarSessionSections {
     /// `showsHistory` is the "History in sidebar" dial
     /// (`SidebarDialTuning.historyInSidebar`): off, History and its hairline
     /// leave both views and Pinned/Active lay out exactly as before.
-    func layout(historyPlacement: HistoryPlacement, showsHistory: Bool) -> Layout {
+    func layout(showsHistory: Bool) -> Layout {
         var list: [Slot] = []
         if !pinned.isEmpty { list += [.pinnedRows, .pinnedEnd] }
         if !pinned.isEmpty && !active.isEmpty { list.append(.pinnedHairline) }
         list += [.activeRows, .activeEnd]
         guard showsHistory else { return Layout(list: list, footer: []) }
         let history: [Slot] = rowSessions.isEmpty ? [.history] : [.historyHairline, .history]
-        switch historyPlacement {
-        case .afterActive: return Layout(list: list + history, footer: [])
-        case .bottom: return Layout(list: list, footer: history)
-        }
+        return Layout(list: list, footer: history)
     }
 
-    /// In `bottom`, the gap from the History row to the tray's top edge, in
+    /// The gap from the History row to the tray's top edge, in
     /// the expanded list and the rail alike: one row gap, as between rows,
     /// plus the list-to-tray gap.
     static func historyToTrayGap() -> CGFloat {
@@ -209,8 +196,7 @@ struct HistoryRowView: View {
             subtitle: subtitle,
             isActive: isActive,
             staggerIndex: staggerIndex,
-            redlineID: Self.redlineID,
-            dimsUnselected: false
+            redlineID: Self.redlineID
         ) {
             SidebarListRowTitle(text: "History", isActive: isActive)
         } trailing: {
@@ -259,7 +245,7 @@ struct RailHistoryRow: View {
     }
 
     private var rowBackground: some View {
-        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, hoverOpacity: 0.06)
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered)
     }
 }
 
