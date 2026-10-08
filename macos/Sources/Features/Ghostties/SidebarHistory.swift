@@ -72,6 +72,45 @@ struct SidebarSessionSections: Equatable {
     }
 }
 
+// MARK: - History Placement
+
+extension SidebarSessionSections {
+    /// One element of the sidebar's section list. The expanded list and the
+    /// rail both render exactly these, in this order, so every row keeps
+    /// the same y through the pinned⇄rail morph.
+    enum Slot: Hashable {
+        case pinnedRows, pinnedEnd, pinnedHairline, activeRows, activeEnd, historyHairline, history
+    }
+
+    /// `list` scrolls; `footer` is pinned below it, just above the tray. The
+    /// History row (when shown) is always the footer: anchored at the bottom
+    /// of the session list, outside the scrolling area.
+    struct Layout: Equatable {
+        let list: [Slot]
+        let footer: [Slot]
+    }
+
+    /// `showsHistory` is the "History in sidebar" dial
+    /// (`SidebarDialTuning.historyInSidebar`): off, History and its hairline
+    /// leave both views and Pinned/Active lay out exactly as before.
+    func layout(showsHistory: Bool) -> Layout {
+        var list: [Slot] = []
+        if !pinned.isEmpty { list += [.pinnedRows, .pinnedEnd] }
+        if !pinned.isEmpty && !active.isEmpty { list.append(.pinnedHairline) }
+        list += [.activeRows, .activeEnd]
+        guard showsHistory else { return Layout(list: list, footer: []) }
+        let history: [Slot] = rowSessions.isEmpty ? [.history] : [.historyHairline, .history]
+        return Layout(list: list, footer: history)
+    }
+
+    /// The gap from the History row to the tray's top edge, in
+    /// the expanded list and the rail alike: one row gap, as between rows,
+    /// plus the list-to-tray gap.
+    static func historyToTrayGap() -> CGFloat {
+        SidebarDialTuning.rowGap() + SidebarDialTuning.listToTrayGap()
+    }
+}
+
 // MARK: - History Row Subtitle
 
 enum HistorySummary {
@@ -205,15 +244,8 @@ struct RailHistoryRow: View {
         isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
     }
 
-    @ViewBuilder
     private var rowBackground: some View {
-        if isActive {
-            SidebarSelectedSurface()
-                .frame(width: SidebarDialTuning.traySelectedPillWidth(), height: SidebarDialTuning.traySelectedPillHeight())
-        } else {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.06) : .clear)
-        }
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered)
     }
 }
 

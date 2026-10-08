@@ -201,6 +201,12 @@ enum WorkspaceLayout {
     /// Background for active session row (light mode): 4% black.
     static let activeRowLight = Color.black.opacity(0.04)
 
+    /// The highlighted row in the Cmd+T composer's lists (Resume, A4's start
+    /// column), and its key caps. Heavier than `activeRowLight/Dark`: the
+    /// composer floats over live terminal output, not the quiet sidebar.
+    static let composerRowSelectedLight = Color.black.opacity(0.06)
+    static let composerRowSelectedDark = Color.white.opacity(0.10)
+
     /// Chrome background (light mode). Covers the left sidebar column and the
     /// gutter padding around the terminal card. The outer of the two Ghostties
     /// design-system layers — warm pink-cream, independent of terminal theme.
@@ -304,6 +310,12 @@ enum WorkspaceLayout {
         colorScheme == .dark ? textSecondaryDark : textSecondaryLight
     }
 
+    /// An empty project's header and rail monogram in the one-view sidebar
+    /// (Sean, 2026-10-08: shown dimmed, count 0). One tier below
+    /// `sectionHeaderForeground` on purpose, so it sits under the 4.5:1 that
+    /// token clears: the dimming is the signal that nothing is running there.
+    static let emptyProjectForeground = Color(nsColor: .tertiaryLabelColor)
+
     /// The rail's hairline between Pinned, Active and History (mock H).
     static let railSectionHairline = Color.primary.opacity(0.1)
 
@@ -337,7 +349,7 @@ enum WorkspaceLayout {
     /// Render size of the per-session ghost glyph in `RecentsRowView` (Sessions
     /// tab). Smaller than `sidebarIconColumnWidth` — the ghost sits centered
     /// inside that column, not filling it.
-    static let sessionGhostSize: CGFloat = 14
+    static let sessionGhostSize: CGFloat = 20
 
     /// Padding between the session popover card's edge and its content. The
     /// card used to nest a grey block (14pt inner padding) inside a 10pt
@@ -355,24 +367,27 @@ enum WorkspaceLayout {
     // never re-derive a literal at a second call site. Grouped by the same
     // sections the DialKit panel presents them in.
 
-    /// `RecentsRowView` row height — 46pt + the 2pt inter-row gap
-    /// (`recentsRowGap`) below gives the 48pt row-to-row pitch measured off
-    /// Flow 07's export. See `RecentsRowView.body`'s `.frame(height:)` comment.
-    static let recentsRowHeight: CGFloat = 46
+    /// `RecentsRowView` row height. With the 4pt inter-row gap
+    /// (`recentsRowGap`) below, the row-to-row pitch is 52pt. See `RecentsRowView.body`'s `.frame(height:)` comment.
+    static let recentsRowHeight: CGFloat = 48
 
     /// Inter-row gap in the Sessions tab's section `VStack`
     /// (`RecentsListView.sectionsContent`).
-    static let recentsRowGap: CGFloat = 2
+    static let recentsRowGap: CGFloat = 4
 
     /// Session name / inline-rename field text size in `RecentsRowView`.
-    static let recentsRowTitleSize: CGFloat = 12
+    static let recentsRowTitleSize: CGFloat = 14
 
     /// Project-name subtitle text size in `RecentsRowView`.
-    static let recentsRowSubtitleSize: CGFloat = 10
+    static let recentsRowSubtitleSize: CGFloat = 11
 
     /// `RecentsRowView`'s trailing edge padding (leading uses
     /// `sidebarRowLeadingPadding`, shared with every other sidebar row/header).
-    static let recentsRowTrailingPadding: CGFloat = 10
+    static let recentsRowTrailingPadding: CGFloat = 16
+
+    /// `RecentsRowView`'s leading edge padding. Its own value: the shared
+    /// `sidebarRowLeadingPadding` (8) still sets project rows and headers.
+    static let recentsRowLeadingPadding: CGFloat = 16
 
     /// Height of the slot that carries a hairline between sidebar groups
     /// (Pinned / Active / History). Shared by the expanded list and the rail
@@ -384,7 +399,7 @@ enum WorkspaceLayout {
     /// Sessions `sectionsContent` — both currently `.padding(.vertical, 4)`,
     /// split here into a dialable top value; bottom stays the fixed 4pt this
     /// replaces).
-    static let sidebarContentPaddingTop: CGFloat = 4
+    static let sidebarContentPaddingTop: CGFloat = 0
 
     /// INNER leading padding of the scrollable list content (both tabs and
     /// the rail), inside the window margin (`SidebarDialTuning.windowMargin`)
@@ -841,23 +856,28 @@ extension EnvironmentValues {
 /// the rail column, and no inner horizontal dials. The rail's row cards and
 /// its tray pill (`SidebarTray`, centred on the full rail) then share one
 /// centre by construction, whatever the leading/trailing dials hold.
+///
+/// `horizontalOnly`: the pinned History footer below the list
+/// (`SidebarSessionSections.Layout.footer`) takes the column's horizontal
+/// insets but none of the list's vertical padding or redline frames.
 struct SidebarColumnPadding: ViewModifier {
     /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     /// See `EnvironmentValues.sidebarTrailingGutter`.
     @Environment(\.sidebarTrailingGutter) private var trailingGutter
     var symmetric = false
+    var horizontalOnly = false
 
     func body(content: Content) -> some View {
         let margin = SidebarDialTuning.windowMargin()
         content
-            .redlineFrame(RedlineID.listContent)
+            .redlineFrame(horizontalOnly ? nil : RedlineID.listContent)
             .padding(.leading, symmetric ? 0 : SidebarDialTuning.contentPaddingLeading())
             .padding(.trailing, symmetric ? 0 : SidebarDialTuning.contentPaddingTrailing())
-            .padding(.top, SidebarDialTuning.contentPaddingTop())
-            .redlineFrame(RedlineID.listInner)
+            .padding(.top, horizontalOnly ? 0 : SidebarDialTuning.contentPaddingTop())
+            .redlineFrame(horizontalOnly ? nil : RedlineID.listInner)
             .padding(.leading, margin)
             .padding(.trailing, symmetric ? margin : SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
-            .padding(.bottom, 4)
+            .padding(.bottom, horizontalOnly ? 0 : 4)
     }
 }

@@ -8,7 +8,8 @@ import UniformTypeIdentifiers
 ///   Pinned 2  (isPinned — hidden when empty; stays pinned whether open or closed)
 ///   Active 5  (the session's terminal is open — see `SessionBucket.membership`)
 ///   History   (one row standing in for every inactive + archived session;
-///              selecting it opens the history browser in the canvas)
+///              selecting it opens the history browser in the canvas),
+///              pinned above the tray; hidden unless "History in sidebar" is on
 /// Section labels are quiet, non-collapsible headers — no chevrons.
 struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
@@ -29,6 +30,9 @@ struct RecentsListView: View {
     @State private var mouseUpMonitor: Any?
     @State private var autoScrollTimer: Timer?
     @State private var autoScrollAnchorId: String?
+
+    /// Folded projects in the one-view list (`ProjectAccordionState`).
+    @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
 
     init() {
         #if DEBUG
@@ -119,6 +123,10 @@ struct RecentsListView: View {
         // or persistence.
         let orderedRowIds = displaySections.rowSessions.map { $0.id.uuidString }
 
+        // History (when shown) is pinned below the list as `layout.footer`.
+        // The rail renders the same layout (`SidebarRailView`).
+        let layout = displaySections.layout(showsHistory: SidebarDialTuning.historyInSidebar())
+
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
                 emptyState
@@ -126,17 +134,31 @@ struct RecentsListView: View {
                 #if DEBUG
                 if skipScrollViewForTesting {
                     // See the doc comment on the `previewDragState` init.
-                    sectionsContent(displaySections)
+                    sectionsContent(displaySections, slots: layout.list)
                         .modifier(SidebarColumnPadding())
                 } else {
-                    sessionsScrollView(displaySections, orderedRowIds: orderedRowIds)
+                    sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds)
                 }
                 #else
-                sessionsScrollView(displaySections, orderedRowIds: orderedRowIds)
+                sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds)
                 #endif
             }
 
             Spacer(minLength: 0)
+
+            // History and its hairline, outside the scrolling
+            // area, so a long list never scrolls it away. The tray's
+            // reserved space (`WorkspaceSidebarView`) already holds the
+            // list-to-tray gap; this adds the row gap above it.
+            if !store.sessions.isEmpty && !layout.footer.isEmpty {
+                VStack(spacing: SidebarDialTuning.rowGap()) {
+                    ForEach(layout.footer, id: \.self) { slot in
+                        slotContent(slot, displaySections)
+                    }
+                }
+                .modifier(SidebarColumnPadding(horizontalOnly: true))
+                .padding(.bottom, SidebarSessionSections.historyToTrayGap() - SidebarDialTuning.listToTrayGap())
+            }
         }
         .background(.clear)
         .onChange(of: dragState.isDragging) { isDragging in
@@ -162,7 +184,7 @@ struct RecentsListView: View {
     /// that flag's doc comment. Nothing here is test-only: production's
     /// `ScrollView` wraps this exact same content.
     @ViewBuilder
-    private func sectionsContent(_ sections: SidebarSessionSections) -> some View {
+    private func sectionsContent(_ sections: SidebarSessionSections, slots: [SidebarSessionSections.Slot]) -> some View {
         // Deliberately a plain VStack, NOT `LazyVStack`. A lazy
         // container realizes each row once and retains it — when
         // a session's fields (e.g. name) change but its `\.id`
@@ -180,18 +202,29 @@ struct RecentsListView: View {
             // drag renders an explicit "Drop to pin" zone here
             // instead (item 2) so pinning a first session no
             // longer requires the context menu.
-            if !sections.pinned.isEmpty {
-                sectionRows(sections.pinned, section: .pinned)
-                endDropZone(section: .pinned, sectionList: sections.pinned)
-            } else if dragState.isDragging {
+            if sections.pinned.isEmpty && dragState.isDragging {
                 emptyPinnedDropZone
             }
-
-            // Active always renders (when there's at least one session
-            // anywhere). A hairline separates it from Pinned, same as the rail.
-            if !sections.pinned.isEmpty && !sections.active.isEmpty {
-                SidebarSectionHairlineSlot(width: nil)
+            ForEach(slots, id: \.self) { slot in
+                slotContent(slot, sections)
             }
+        }
+    }
+
+    /// One slot of the section layout (`SidebarSessionSections.Slot`), the
+    /// same sequence `SidebarRailView` renders.
+    @ViewBuilder
+    private func slotContent(_ slot: SidebarSessionSections.Slot, _ sections: SidebarSessionSections) -> some View {
+        switch slot {
+        case .pinnedRows:
+            sectionRows(sections.pinned, section: .pinned)
+        case .pinnedEnd:
+            endDropZone(section: .pinned, sectionList: sections.pinned)
+        case .pinnedHairline, .historyHairline:
+            // A hairline separates Active from Pinned, and History from
+            // the rows, same as the rail.
+            SidebarSectionHairlineSlot(width: nil)
+        case .activeRows:
             // Keyed on the stable `\.id` (default Identifiable) —
             // NOT `\.self`. `\.self` was tried and reverted: it makes
             // row identity churn on every `lastActiveAt` write (see
@@ -204,13 +237,14 @@ struct RecentsListView: View {
             // comment above it) — `.equatable()` on `RecentsRowView`
             // in `sessionRow(for:)` is a body-re-execution perf gate
             // layered on top, not what makes rows fresh.
-            sectionRows(sections.active, section: .active)
-            endDropZone(section: .active, sectionList: sections.active)
-
-            if !sections.rowSessions.isEmpty {
-                SidebarSectionHairlineSlot(width: nil)
+            if SidebarDialTuning.projectsLayout() == .oneView {
+                groupedActiveRows(sections.active)
+            } else {
+                sectionRows(sections.active, section: .active)
             }
-
+        case .activeEnd:
+            endDropZone(section: .active, sectionList: sections.active)
+        case .history:
             // Inactive and archived sessions never render as rows — one
             // History row stands in for them (mock I3) and opens the
             // history browser in the canvas.
@@ -228,10 +262,10 @@ struct RecentsListView: View {
     /// animation, accessibility label, and the auto-scroll edge zones (item
     /// 4), which need `scrollProxy` and so make no sense outside a
     /// `ScrollViewReader`.
-    private func sessionsScrollView(_ sections: SidebarSessionSections, orderedRowIds: [String]) -> some View {
+    private func sessionsScrollView(_ sections: SidebarSessionSections, slots: [SidebarSessionSections.Slot], orderedRowIds: [String]) -> some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
-                sectionsContent(sections)
+                sectionsContent(sections, slots: slots)
                     .modifier(SidebarColumnPadding())
                     .animation(reflowAnimation, value: dragState)
             }
@@ -258,6 +292,55 @@ struct RecentsListView: View {
                 SessionDragGapView()
             }
         }
+    }
+
+    /// One view (`SidebarProjectsLayout.oneView`, mock B5): Active's rows
+    /// under one accordion header per project. Drag and drop still act on
+    /// the whole Active list (`sectionList`), so a reorder lands at the
+    /// same place in every layout; the live gap shows before the row it
+    /// targets, or after the last row for a drop at the end.
+    @ViewBuilder
+    private func groupedActiveRows(_ active: [AgentSession]) -> some View {
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        let gapBeforeId = groupedGapTarget(active)
+        ForEach(items) { item in
+            switch item {
+            case .spacer:
+                Color.clear
+                    .frame(height: SidebarProjectGroupItem.spacerHeight)
+                    .accessibilityHidden(true)
+            case .header(let group, let isCollapsed):
+                ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed, isEmpty: group.isEmpty) {
+                    ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
+                        ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
+                    }
+                }
+            case .row(let session, _):
+                if session.id != dragState.draggingSessionId {
+                    if gapBeforeId == .some(session.id) {
+                        SessionDragGapView()
+                    }
+                    sessionRow(
+                        for: session, section: .active, sectionList: active,
+                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle
+                    )
+                }
+            }
+        }
+        if gapBeforeId == .some(nil) {
+            SessionDragGapView()
+        }
+    }
+
+    /// Where the live drag gap sits among Active's rows: before the session
+    /// returned, or at the end for `.some(nil)`. Nil when no gap targets
+    /// Active. Same index rule as `rowSlots`.
+    private func groupedGapTarget(_ active: [AgentSession]) -> UUID?? {
+        guard let gap = dragState.gap, gap.section == .active else { return nil }
+        let working = active.filter { $0.id != dragState.draggingSessionId }
+        let index = min(gap.index ?? working.count, working.count)
+        return .some(index < working.count ? working[index].id : nil)
     }
 
     private struct SessionRowSlot: Identifiable {
@@ -526,7 +609,7 @@ struct RecentsListView: View {
 
     // MARK: - Session Row
 
-    private func sessionRow(for session: AgentSession, section: SessionSection, sectionList: [AgentSession]) -> some View {
+    private func sessionRow(for session: AgentSession, section: SessionSection, sectionList: [AgentSession], subtitle: String? = nil) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
@@ -543,6 +626,7 @@ struct RecentsListView: View {
             projectName: projectName,
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
+            subtitle: subtitle,
             isActive: coordinator.sidebarSelectedSessionId == session.id,
             isEditing: editingSessionId == session.id,
             editingName: editingSessionId == session.id ? $editingName : .constant(""),

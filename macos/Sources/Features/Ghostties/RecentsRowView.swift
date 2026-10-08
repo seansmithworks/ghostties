@@ -29,6 +29,10 @@ struct RecentsRowView: View, Equatable {
     /// Replaces the project-name subtitle with an explanatory hint; false is
     /// the default so every other call site is unaffected.
     var hookUnconfirmed: Bool = false
+    /// Replaces the project-name subtitle — the one-view list, where the
+    /// project is the header above the row (`SidebarProjectsLayout.oneView`).
+    /// Nil keeps the project name.
+    var subtitle: String? = nil
     let isActive: Bool
     var isEditing: Bool = false
     @Binding var editingName: String
@@ -65,6 +69,7 @@ struct RecentsRowView: View, Equatable {
             && lhs.projectName == rhs.projectName
             && lhs.indicatorState == rhs.indicatorState
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
+            && lhs.subtitle == rhs.subtitle
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
@@ -76,7 +81,7 @@ struct RecentsRowView: View, Equatable {
         // hover, Flow 05 label choreography) live in `SidebarListRowChrome`,
         // shared with the History row so the two can never drift.
         SidebarListRowChrome(
-            subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName,
+            subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
             isActive: isActive,
             staggerIndex: staggerIndex,
             redlineID: RedlineID.row(session.id)
@@ -187,6 +192,8 @@ struct SidebarListRowTitle: View {
     let text: String
     let isActive: Bool
 
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
     var body: some View {
         Text(text)
             .font(.system(
@@ -217,6 +224,7 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @State private var isHovered = false
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
@@ -307,33 +315,18 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
 
     // MARK: - Row Background
 
-    /// The selected row is the rail's selected pill adapted to the row
-    /// (`SidebarSelectedSurface`): the tray's white glass, filling the row
-    /// frame, its corners from the tray's corner style dial. Unselected rows
-    /// are unchanged — same `rowCornerRadius`/hover fill as before.
-    @ViewBuilder
+    /// Hover and selected share one footprint (`SidebarRowCardBackground`):
+    /// the row frame, at `rowCornerRadius`.
     private var rowBackground: some View {
-        if isActive {
-            SidebarSelectedSurface()
-        } else {
-            RoundedRectangle(cornerRadius: rowCornerRadius)
-                .fill(rowFill)
-                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
-        }
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: rowCornerRadius)
+            .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
     }
 
     /// Row corner radius — the canvas's "8 → 16px" row, same window as the
-    /// glyph travel above. Unselected rows only — see `rowBackground`.
+    /// glyph travel above.
     private var rowCornerRadius: CGFloat {
         widthModel.isCollapsedPresentation
             ? WorkspaceLayout.sidebarRowCornerRadiusTraveled
             : WorkspaceLayout.sidebarRowCornerRadiusResting
-    }
-
-    private var rowFill: Color {
-        if isHovered {
-            return Color.primary.opacity(0.05)
-        }
-        return Color.clear
     }
 }

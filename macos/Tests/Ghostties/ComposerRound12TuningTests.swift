@@ -99,15 +99,15 @@ struct ComposerRound12TuningTests {
         #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == expected.opacity)
     }
 
-    /// Round 14 (session-7): with nothing written yet, the dials read
-    /// Sean's Dev-tuned defaults (48pt radius, 32pt y, 0.10 opacity) —
-    /// replacing round 13b's 64/48/0.24 fallback — rather than `.soft`'s;
-    /// red if the fallback defaulted to `.none`, a bare `0`, or `.soft`.
+    /// With nothing written yet, the dials read Sean's Dev-tuned defaults
+    /// (vnext lock, 2026-10-08: 48pt radius, 43pt y, 0.34 opacity; round 14
+    /// was 48/32/0.10, round 13b 64/48/0.24) rather than `.soft`'s; red if
+    /// the fallback defaulted to `.none`, a bare `0`, or `.soft`.
     @Test func shadowDialsFallBackToTheTunedCustomDefaultWhenUnset() {
         let suite = isolatedSuite("shadow-unset")
         #expect(ComposerSingleLineShadowDials.radius(defaults: suite) == 48)
-        #expect(ComposerSingleLineShadowDials.yOffset(defaults: suite) == 32)
-        #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == 0.10)
+        #expect(ComposerSingleLineShadowDials.yOffset(defaults: suite) == 43)
+        #expect(ComposerSingleLineShadowDials.opacity(defaults: suite) == 0.34)
         #expect(ComposerSingleLineShadowPreset.current(defaults: suite) == .custom)
     }
 

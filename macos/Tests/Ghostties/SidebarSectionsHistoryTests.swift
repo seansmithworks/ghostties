@@ -100,15 +100,17 @@ final class SidebarSectionsHistoryTests: XCTestCase {
         XCTAssertEqual(f.sections.history.map(\.name), ["tray glass pass", "migrate auth", "job board scraper"])
     }
 
-    /// The rail lists exactly the sidebar's rows (Pinned then Active), so
-    /// the rail shortcuts and the expanded list agree.
+    /// In the Tabs layout the rail lists exactly the Sessions tab's rows
+    /// (Pinned then Active), so the rail shortcuts and the expanded list
+    /// agree. (One view, the default, groups by project; its rail order is
+    /// covered in `SidebarProjectsLayoutTests`.)
     func testRailSessionsMatchTheSidebarRows() {
         let f = fixture()
         let store = WorkspaceStore(testingProjects: [projectA, projectB], testingSessions: f.sessions)
         for (id, status) in f.statuses {
             store.updateSessionStatus(id: id, status: status)
         }
-        XCTAssertEqual(store.railSessions().map(\.id), f.sections.rowSessions.map(\.id))
+        XCTAssertEqual(store.railSessions(layout: .tabs).map(\.id), f.sections.rowSessions.map(\.id))
     }
 
     // MARK: - History row subtitle

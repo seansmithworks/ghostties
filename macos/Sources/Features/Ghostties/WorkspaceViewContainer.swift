@@ -2428,13 +2428,7 @@ class WorkspaceViewContainer: NSView {
         } else {
             target = order[0].id
         }
-        store.lastSelectedProjectId = target
-        coordinator.focusLastSession(forProject: target)
-        NotificationCenter.default.post(
-            name: .workspaceDidSelectProjectFromShortcut,
-            object: window,
-            userInfo: ["projectId": target]
-        )
+        ProjectSelection.select(target, store: store, coordinator: coordinator, window: window)
     }
 
     /// Lets the Projects tab expand and select the focused session's
@@ -2456,6 +2450,7 @@ class WorkspaceViewContainer: NSView {
             sidebarMode: sidebarMode,
             sidebarViewMode: currentSidebarViewMode,
             sidebarTab: tab,
+            projectsLayout: SidebarDialTuning.projectsLayout(),
             store: store,
             coordinator: coordinator
         )
@@ -2472,11 +2467,17 @@ class WorkspaceViewContainer: NSView {
         sidebarMode: SidebarMode,
         sidebarViewMode: String,
         sidebarTab: SidebarTab,
+        projectsLayout: SidebarProjectsLayout = .tabs,
         store: WorkspaceStore,
         coordinator: SessionCoordinator
     ) -> [AgentSession] {
         if sidebarMode == .collapsed {
-            return store.railSessions().filter { coordinator.hasLiveSurface(id: $0.id) }
+            return store.railSessions(layout: projectsLayout).filter { coordinator.hasLiveSurface(id: $0.id) }
+        }
+        // One view lists exactly the rail's sessions: Pinned, then Active
+        // project by project.
+        if sidebarViewMode != "taskFirst" && projectsLayout == .oneView {
+            return store.railSessions(layout: .oneView).filter { coordinator.hasLiveSurface(id: $0.id) }
         }
         if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
             return store.sessionsInVisualOrder(coordinator: coordinator)

@@ -47,9 +47,9 @@ enum TrayIconTapEffect {
     case bounce
 }
 
-/// "Sidebar vnext" (pen.dev `CnDfN`): the sidebar tray, on both axes, and the
-/// selected session row (rail and expanded, `SidebarSelectedSurface`) share
-/// one white Liquid Glass surface. Canvas values are
+/// "Sidebar vnext" (pen.dev `CnDfN`): the sidebar tray, on both axes, is one
+/// white Liquid Glass surface, and the selected session row's rim
+/// (`SidebarRowCardBackground`) is its chromatic rim. Canvas values are
 /// retina px (its traffic lights measure 28px, the built app's 14pt), so each
 /// value here is the canvas value / 2. These are the compiled defaults; every
 /// one is read through `SidebarDialTuning` so the DialKit inspector can tune
@@ -71,16 +71,6 @@ enum TrayGlassStyle {
     /// Colour stops for the chromatic rim.
     enum ChromaticPalette: String, CaseIterable {
         case pastel, rainbow
-    }
-
-    /// Blend mode the chromatic rim composites with.
-    /// How the selected session row (rail pill and expanded row) is drawn.
-    /// `glass`: the tray's full glass treatment (`TrayGlassSurface`).
-    /// `flat`: the tray's fill colour and corner shape only, with no glass,
-    /// rims or specular, and a softer, closer shadow (`Look.selectedShadow…`),
-    /// so the row reads as the tray's sibling rather than a second tray.
-    enum SelectedStyle: String, CaseIterable {
-        case glass, flat
     }
 
     /// The expanded tray's width. `fill`: the Create capsule stretches across
@@ -155,74 +145,60 @@ enum TrayGlassStyle {
         /// Direction the light comes from, in degrees (0 = from the right,
         /// 90 = from the top).
         var specularAngle: Double
-        /// The selected row's shadow in the `flat` selected style. The glass
-        /// style uses the tray's shadow above.
-        var selectedShadowOpacity: Double
-        var selectedShadowRadius: CGFloat
-        var selectedShadowYOffset: CGFloat
     }
 
     /// Light: the canvas (pen.dev `CnDfN`) values, unchanged from before the
     /// light/dark split.
     static let light = Look(
-        variant: .regular,
+        variant: .identity,
         // 0 = untinted: the white comes from `surfaceOpacity`, since a native
         // `.tint(white 0.8)` blends far weaker than the canvas's 80% white
         // and reads grey.
-        tintOpacity: 0,
+        tintOpacity: 0.15,
         // Canvas base fill `#ffffffcc`.
-        surfaceOpacity: 0.8,
+        surfaceOpacity: 0.7,
         // Canvas `u_edgeWidth` 3px.
-        rimWidth: 1.5,
-        rimOpacity: 1,
+        rimWidth: 1.25,
+        rimOpacity: 0.25,
         // Canvas outer shadow `#00000014`, y4px, blur 20px.
-        shadowOpacity: 0.078,
-        shadowRadius: 10,
-        shadowYOffset: 2,
-        // Off by default. Canvas `chromatic` 0.116, `splitAngle` 136.8°.
-        chromaticIntensity: 0,
-        chromaticWidth: 1.5,
-        chromaticRotation: 136.8,
-        chromaticBlur: 0,
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        shadowYOffset: 3,
+        // Tuned in the Dev DialKit (locked for beta.26).
+        chromaticIntensity: 0.3,
+        chromaticWidth: 2.25,
+        chromaticRotation: 202.7,
+        chromaticBlur: 1.7,
         chromaticPalette: .pastel,
         chromaticBlend: .normal,
-        // Off by default.
-        specularStrength: 0,
-        specularAngle: 135,
-        // Flat selected row: a soft contact shadow, well under the tray's.
-        selectedShadowOpacity: 0.06,
-        selectedShadowRadius: 4,
-        selectedShadowYOffset: 1
+        specularStrength: 0.5,
+        specularAngle: 189
     )
 
-    /// Dark: a raised canvas-grey pill (`canvasBackgroundDark` #2D2D2D over
-    /// the #242424 chrome) on the warm-tinted glass, with a faint white rim
-    /// and a deeper shadow, since an 8% black shadow vanishes on dark chrome.
-    /// No specular and no chromatic: a white highlight on dark glass lifts
+    /// Dark: a half-opaque canvas-grey layer (`canvasBackgroundDark`
+    /// #2D2D2D over the #242424 chrome) on lightly warm-tinted identity
+    /// glass, a hairline white rim, a faint chromatic rim, and a deeper
+    /// shadow than light's, since an 8% black shadow vanishes on dark chrome.
+    /// Specular is kept faint: a strong white highlight on dark glass lifts
     /// the background toward the grey text and icons and collapses their
-    /// contrast.
+    /// contrast. Tuned in the Dev DialKit (locked for beta.26, 2026-10-08).
     static let dark = Look(
-        variant: .regular,
-        tintOpacity: 0.55,
-        surfaceOpacity: 0.9,
-        rimWidth: 1,
-        rimOpacity: 0.14,
-        shadowOpacity: 0.3,
+        variant: .identity,
+        tintOpacity: 0.15,
+        surfaceOpacity: 0.45,
+        rimWidth: 0.25,
+        rimOpacity: 0.12,
+        shadowOpacity: 0.298,
         shadowRadius: 8,
-        shadowYOffset: 2,
-        chromaticIntensity: 0,
-        chromaticWidth: 1.5,
-        chromaticRotation: 136.8,
-        chromaticBlur: 0,
+        shadowYOffset: 2.5,
+        chromaticIntensity: 0.15,
+        chromaticWidth: 0.5,
+        chromaticRotation: 72.9,
+        chromaticBlur: 1.4,
         chromaticPalette: .pastel,
         chromaticBlend: .plusLighter,
-        specularStrength: 0,
-        specularAngle: 135,
-        // Flat selected row: the canvas-grey fill already sits lighter than
-        // the chrome; a faint, tight shadow edges it without a halo.
-        selectedShadowOpacity: 0.22,
-        selectedShadowRadius: 3,
-        selectedShadowYOffset: 1
+        specularStrength: 0.1,
+        specularAngle: 270
     )
 
     static func defaultLook(for colorScheme: ColorScheme) -> Look {
@@ -234,34 +210,37 @@ enum TrayGlassStyle {
     /// Vertical (rail) tray button: canvas 88px (24px padding around a 40px
     /// icon frame). Icon: canvas 35px.
     static let verticalButtonSize: CGFloat = 44
-    static let verticalIconSize: CGFloat = 17.5
+    static let verticalIconSize: CGFloat = 18
     /// Horizontal (expanded) tray button, square like the rail's: Flow 07's
     /// 20×20 icon frame plus 8pt padding, so a capsule is 44pt tall with
     /// `innerPadding`.
-    static let horizontalButtonSize: CGFloat = 36
-    static let horizontalIconSize: CGFloat = 16
+    static let horizontalButtonSize: CGFloat = 44
+    static let horizontalIconSize: CGFloat = 18
     /// Pill padding around its buttons: canvas 8px.
-    static let innerPadding: CGFloat = 4
+    static let innerPadding: CGFloat = 8
     /// Canvas buttons are stacked with no gap; the horizontal bar keeps 2pt.
     static let verticalItemGap: CGFloat = 0
     static let horizontalItemGap: CGFloat = 2
-    /// Gap between the Create and Toggle capsules, on both axes: canvas 10px
-    /// (`bA1y9` layout B).
-    static let groupGap: CGFloat = 5
+    /// Gap between the Create and Toggle capsules, on both axes (`bA1y9`
+    /// layout B; tuned in the Dev DialKit to the 8pt grid).
+    static let groupGap: CGFloat = 8
     /// Canvas r64px on a 104px-wide pill: clamps to a capsule.
-    static let cornerStyle: CornerStyle = .capsule
+    static let cornerStyle: CornerStyle = .radius
     static let capsuleCornerRadius: CGFloat = 32
-    static let cornerRadius: CGFloat = 12
+    /// Tuned in the Dev DialKit (locked for beta.26, 2026-10-08).
+    static let cornerRadius: CGFloat = 20
     /// Default expanded tray width (see `TrayWidth`).
     static let trayWidth: TrayWidth = .fill
-    /// Default selected-row style (see `SelectedStyle`).
-    static let selectedStyle: SelectedStyle = .flat
     /// Default selected-row title weight (see `SelectedTitleWeight`).
-    static let selectedTitleWeight: SelectedTitleWeight = .semibold
-    /// Selected rail row: the vertical tray's width (canvas 104px), canvas
-    /// 72px tall; glyph 35px (vs the 28px it replaces).
-    static let selectedPillWidth: CGFloat = verticalButtonSize + 2 * innerPadding
-    static let selectedPillHeight: CGFloat = 36
+    static let selectedTitleWeight: SelectedTitleWeight = .regular
+    /// Default rim intensity of the Tint + shimmer selected row in dark: the
+    /// light look's, so the row reads the same across themes.
+    static let tintShimmerDarkIntensity: Double = light.chromaticIntensity
+    /// Rail hairline width (`SidebarSectionHairlineSlot`), the vertical
+    /// tray's width (canvas 104px). Selected rows no longer read it: they
+    /// fill the hover card (`SidebarRowCardBackground`).
+    static let selectedPillWidth: CGFloat = 44
+    /// Selected rail glyph: canvas 35px (vs the 28px it replaces).
     static let selectedGlyphSize: CGFloat = 17.5
     /// Tray icon weight: the canvas's lucide icons are 2px strokes on a 24px
     /// grid (~1.5pt at 17.5pt), which `.regular` matches.
@@ -320,11 +299,26 @@ enum TrayGlassStyle {
         }
     }
 
-    /// Tray button hover/press highlight, concentric with the pill it sits
-    /// in: inner radius = outer radius − `innerPadding`. Capsule style: the
-    /// pill is a full capsule, so its buttons' highlight is one too (a circle
-    /// on the rail's square buttons). Radius style: `cornerRadius − innerPadding`.
+    /// Tray button hover/press highlight, Finder's toolbar rule (Sean,
+    /// 2026-10-08). A capsule holding one button: the highlight is the
+    /// capsule itself (`pillShape()`, drawn by the button, which owns the
+    /// capsule's padding). A capsule holding several: concentric with it,
+    /// inset by `innerPadding` on every outer edge, inner radius = outer
+    /// radius − `innerPadding` on all four corners, the shared edges
+    /// included, like Finder's segmented groups. Capsule style: the pill is a
+    /// full capsule, so its buttons' highlight is one too. Radius style:
+    /// `cornerRadius − innerPadding`.
     static func buttonHighlightShape(
+        soleInCapsule: Bool,
+        cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
+        cornerRadius: CGFloat = SidebarDialTuning.trayGlassCornerRadius(),
+        innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
+    ) -> AnyShape {
+        if soleInCapsule { return AnyShape(pillShape()) }
+        return concentricHighlightShape(cornerStyle: cornerStyle, cornerRadius: cornerRadius, innerPadding: innerPadding)
+    }
+
+    private static func concentricHighlightShape(
         cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
         cornerRadius: CGFloat = SidebarDialTuning.trayGlassCornerRadius(),
         innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
@@ -344,8 +338,34 @@ enum TrayGlassStyle {
     }
 }
 
-/// Puts a view on the tray's white Liquid Glass (`TrayGlassStyle`) — the
-/// tray's (both axes) and the selected rail row's shared surface. The white
+/// The iridescent edge, in either appearance: the tray glass's and the
+/// "Tint + shimmer" selected row's shared rim. Not in the tree at all at
+/// intensity 0, so the default look is untouched.
+struct TrayChromaticRim: View {
+    let look: TrayGlassStyle.Look
+    let shape: RoundedRectangle
+
+    var body: some View {
+        if look.chromaticIntensity > 0 {
+            shape
+                .strokeBorder(
+                    AngularGradient(
+                        colors: TrayGlassStyle.chromaticColors(look.chromaticPalette),
+                        center: .center,
+                        angle: .degrees(look.chromaticRotation)
+                    ),
+                    lineWidth: look.chromaticWidth
+                )
+                .blur(radius: look.chromaticBlur)
+                .opacity(look.chromaticIntensity)
+                .blendMode(look.chromaticBlend.blendMode)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+/// Puts a view on the tray's white Liquid Glass (`TrayGlassStyle`), on both
+/// axes. The white
 /// layer, highlight and rims sit in the view's own background/overlay, so
 /// `.glassEffect` draws the glass under them and the content stays on top.
 /// Opaque white below macOS 26, under Reduce Transparency, or with
@@ -401,25 +421,8 @@ struct TrayGlassSurface: ViewModifier {
         return interactive ? tinted.interactive() : tinted
     }
 
-    /// Iridescent edge, in either appearance. Not in the tree at all at
-    /// intensity 0, so the default look is untouched.
-    @ViewBuilder
     private func chromaticRim(_ look: TrayGlassStyle.Look) -> some View {
-        if look.chromaticIntensity > 0 {
-            shape
-                .strokeBorder(
-                    AngularGradient(
-                        colors: TrayGlassStyle.chromaticColors(look.chromaticPalette),
-                        center: .center,
-                        angle: .degrees(look.chromaticRotation)
-                    ),
-                    lineWidth: look.chromaticWidth
-                )
-                .blur(radius: look.chromaticBlur)
-                .opacity(look.chromaticIntensity)
-                .blendMode(look.chromaticBlend.blendMode)
-                .allowsHitTesting(false)
-        }
+        TrayChromaticRim(look: look, shape: shape)
     }
 
     /// White highlight clipped to the pill. Not in the tree at strength 0.
@@ -438,34 +441,48 @@ struct TrayGlassSurface: ViewModifier {
     }
 }
 
-/// The selected session row's surface, in the rail and the expanded list
-/// alike, in the "Selected style" dial's style (`TrayGlassStyle.SelectedStyle`):
-/// `glass` is the tray's glass (`TrayGlassSurface`, never interactive);
-/// `flat` is the tray's fill colour and corner shape with the look's softer
-/// selected shadow and nothing else. Either way the same per-appearance
-/// dials drive the tray and this surface. Only the size adapts: the caller
-/// frames it (the rail's fixed pill, the expanded row's full row frame).
-struct SidebarSelectedSurface: View {
-    /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
-    /// SwiftUI skips a body whose inputs are unchanged, and these views read
-    /// `UserDefaults` inside it, so without this a live dial change never lands.
+/// A sidebar row card's background, hover and selected alike, in the rail
+/// and the expanded list. Both states draw the same shape filling the row
+/// frame, so the selected card's footprint is the hover's by construction
+/// (Sean, 2026-10-07: "the size of the hover feels good to me, filling the
+/// space"). Selected is "Tint + shimmer" (Sean, 2026-10-08): a faint primary
+/// tint with the tray glass's chromatic rim; hover is a fainter tint, and
+/// the selected row ignores it.
+struct SidebarRowCardBackground: View {
+    let isActive: Bool
+    let isHovered: Bool
+    var cornerRadius: CGFloat = WorkspaceLayout.sidebarRowCornerRadiusResting
+
+    /// Tint behind the selected row.
+    static let selectedTintOpacity: Double = 0.075
+    /// Tint behind a hovered, unselected row: subordinate to the selected tint.
+    static let hoverTintOpacity: Double = 0.04
+
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        switch SidebarDialTuning.selectedStyle() {
-        case .glass:
-            Color.clear.modifier(TrayGlassSurface())
-        case .flat:
-            let look = SidebarDialTuning.trayGlass(for: colorScheme)
-            TrayGlassStyle.pillShape()
-                .fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
-                .shadow(
-                    color: Color.black.opacity(look.selectedShadowOpacity),
-                    radius: look.selectedShadowRadius,
-                    y: look.selectedShadowYOffset
-                )
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        if isActive {
+            shape
+                .fill(Color.primary.opacity(Self.selectedTintOpacity))
+                .overlay {
+                    TrayChromaticRim(look: tintShimmerLook, shape: shape)
+                }
+        } else {
+            shape.fill(isHovered ? Color.primary.opacity(Self.hoverTintOpacity) : .clear)
         }
+    }
+
+    /// The rim look. In dark the row takes its intensity from its own dial
+    /// ("Shimmer (dark)"), not the tray's fainter dark rim, so the row
+    /// shimmers the same in both themes.
+    private var tintShimmerLook: TrayGlassStyle.Look {
+        var look = SidebarDialTuning.trayGlass(for: colorScheme)
+        if colorScheme == .dark {
+            look.chromaticIntensity = SidebarDialTuning.tintShimmerDarkIntensity()
+        }
+        return look
     }
 }
 
@@ -490,18 +507,22 @@ struct SidebarTrayPill<Content: View>: View {
     /// Rail A2: the capsule fills the width it is offered instead of hugging,
     /// its buttons (still their dial size) centred inside.
     var stretchesAcross = false
+    /// The capsule holds one button, which takes the capsule's padding
+    /// itself (`TrayIconButton.fillsCapsule`) so its hover fills the whole
+    /// capsule. Same capsule size either way.
+    var soleButton = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         let layout = axis == .vertical
             ? AnyLayout(VStackLayout(spacing: TrayGlassStyle.verticalItemGap))
             : AnyLayout(HStackLayout(spacing: TrayGlassStyle.horizontalItemGap))
-        layout(content)
+        let framed = layout(content)
             .frame(maxWidth: stretchesAcross ? .infinity : nil)
             .redlineFrame(redlineID.map { $0 + ".content" })
-            .padding(SidebarDialTuning.trayInnerPadding())
+            .padding(soleButton ? 0 : SidebarDialTuning.trayInnerPadding())
             .redlineFrame(redlineID)
-            .modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive()))
+        framed.modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive()))
     }
 }
 
@@ -585,14 +606,20 @@ struct SidebarTray: View {
         let fillsCreate = !isVertical && SidebarDialTuning.trayWidth() == .fill
         groupLayout {
             ForEach(groups, id: \.self) { group in
-                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue), stretchesAcross: isVertical) {
-                    ForEach(items.filter { $0.group == group }) { item in
+                let groupItems = items.filter { $0.group == group }
+                let sole = groupItems.count == 1
+                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue), stretchesAcross: isVertical, soleButton: sole) {
+                    ForEach(groupItems) { item in
                         TrayIconButton(
                             itemId: item.id,
                             systemName: item.systemName,
                             label: item.label,
                             isVertical: isVertical,
-                            fillsWidth: fillsCreate && group == .create,
+                            // Rail: the stretched capsule is wider than its
+                            // buttons, so they fill it to keep the highlight's
+                            // side inset equal to its top and bottom inset.
+                            fillsWidth: isVertical || (fillsCreate && group == .create),
+                            fillsCapsule: sole,
                             tapEffect: item.tapEffect,
                             action: item.action
                         )
@@ -651,10 +678,15 @@ struct TrayIconButton: View {
     /// Picks the size dials: the rail's (true) or the expanded bar's (false).
     var isVertical = false
     /// Takes an equal share of its capsule's spare width instead of staying
-    /// square (the expanded Create capsule under "Tray width: fill"). Height
+    /// square (the expanded Create capsule under "Tray width: fill", and every
+    /// rail capsule, which is stretched wider than its buttons). Height
     /// is fixed either way, and the hover highlight fills the cell, so it
     /// keeps the capsule's concentric inset.
     var fillsWidth = false
+    /// The only button in its capsule (`SidebarTrayPill.soleButton`): it
+    /// carries the capsule's padding, so its hover fill and hit area are the
+    /// capsule's own shape (`TrayGlassStyle.buttonHighlightShape`).
+    var fillsCapsule = false
     /// Symbol animation to play on click — see `TrayIconTapEffect`.
     var tapEffect: TrayIconTapEffect? = nil
     let action: () -> Void
@@ -687,16 +719,24 @@ struct TrayIconButton: View {
                     minHeight: size,
                     maxHeight: size
                 )
-                .background(
-                    TrayGlassStyle.buttonHighlightShape()
+                .padding(fillsCapsule ? SidebarDialTuning.trayInnerPadding() : 0)
+                .background {
+                    highlightShape
                         .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
-                )
+                }
+                // Hover and click land anywhere in the highlight's shape,
+                // not just on the glyph.
+                .contentShape(highlightShape)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: showsHover)
         .help(label)
         .accessibilityLabel(label)
+    }
+
+    private var highlightShape: AnyShape {
+        TrayGlassStyle.buttonHighlightShape(soleInCapsule: fillsCapsule)
     }
 
     private var showsHover: Bool {

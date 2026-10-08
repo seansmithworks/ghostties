@@ -57,24 +57,26 @@ struct WindowMarginLiveTests {
         }
     }
 
-    /// The real path: the dial written to the (isolated) dial store and the
-    /// panel's change notification posted. Synchronous on the main actor
-    /// from write to removal, so no other main-actor test reads the
-    /// temporary value.
+    /// The real path: the dial written to a dial store and the panel's
+    /// change notification posted. The store is a private suite bound for
+    /// this test only (`withDials`), so no other test reads the temporary
+    /// value.
     @Test func dialWriteAndNotificationMoveTheCard() {
         let (container, window) = makeContainer(mode: .pinned)
         defer { window.contentView = nil }
-        let store = SidebarDialTuning.store
-        #expect(store !== UserDefaults.standard, "dial store must be the isolated suite")
         let defaultMargin = SidebarDialTuning.windowMargin()
+        withDials {
+            let store = SidebarDialTuning.store
+            #expect(store !== SidebarDialTuning.sharedStore, "dial store must be the test's private suite")
 
-        store.set(20.0, forKey: SidebarDialTuning.windowMarginKey)
-        NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
-        expectInsets(container, 20, .pinned)
+            store.set(20.0, forKey: SidebarDialTuning.windowMarginKey)
+            NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
+            expectInsets(container, 20, .pinned)
 
-        store.removeObject(forKey: SidebarDialTuning.windowMarginKey)
-        NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
-        expectInsets(container, defaultMargin, .pinned)
+            store.removeObject(forKey: SidebarDialTuning.windowMarginKey)
+            NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
+            expectInsets(container, defaultMargin, .pinned)
+        }
     }
 
     // MARK: - Rail A2 spacing (collapsed rail only)
