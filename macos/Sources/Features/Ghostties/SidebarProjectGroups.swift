@@ -24,9 +24,14 @@ struct SidebarProjectGroup: Equatable, Identifiable {
 
     var id: String { projectId?.uuidString ?? "unknown-project" }
 
+    /// A project with no live, unpinned session: shown dimmed with a count
+    /// of 0 and no rows. It never folds; a click selects it instead.
+    var isEmpty: Bool { sessions.isEmpty }
+
     /// Groups `active` (already in render order) by project, in `projects`
-    /// order. Projects without a session are left out (mock B5: empty
-    /// projects hidden). Sessions whose project is gone trail in one
+    /// order. Every project gets a group, empty ones included (Sean,
+    /// 2026-10-08: show empty projects dimmed with count 0, rather than
+    /// mock B5's hidden). Sessions whose project is gone trail in one
     /// "Unknown" group, the name rows already use for them, so no live
     /// session ever drops off the list.
     static func make(active: [AgentSession], projects: [Project]) -> [SidebarProjectGroup] {
@@ -34,9 +39,8 @@ struct SidebarProjectGroup: Equatable, Identifiable {
         for session in active {
             byProject[session.projectId, default: []].append(session)
         }
-        var groups: [SidebarProjectGroup] = projects.compactMap { project in
-            guard let sessions = byProject.removeValue(forKey: project.id) else { return nil }
-            return SidebarProjectGroup(projectId: project.id, name: project.name, sessions: sessions)
+        var groups: [SidebarProjectGroup] = projects.map { project in
+            SidebarProjectGroup(projectId: project.id, name: project.name, sessions: byProject.removeValue(forKey: project.id) ?? [])
         }
         let orphans = active.filter { byProject[$0.projectId] != nil }
         if !orphans.isEmpty {
@@ -73,7 +77,7 @@ enum SidebarProjectGroupItem: Identifiable {
         var items: [SidebarProjectGroupItem] = []
         for (index, group) in groups.enumerated() {
             if index > 0 { items.append(.spacer(groupId: group.id)) }
-            let isCollapsed = group.projectId.map(collapsed.contains) ?? false
+            let isCollapsed = !group.isEmpty && (group.projectId.map(collapsed.contains) ?? false)
             items.append(.header(group, isCollapsed: isCollapsed))
             if !isCollapsed {
                 items += group.sessions.map { .row($0, group: group) }
@@ -114,6 +118,40 @@ enum ProjectAccordionState {
 
     static var toggleAnimation: Animation? {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeInOut(duration: 0.2)
+    }
+
+    /// What a click on a project's header (list) or monogram tile (rail)
+    /// does: an empty project is selected (`select`); any other project
+    /// folds or unfolds, written through `collapsedRaw` — the views'
+    /// `@AppStorage` binding, so the fold persists.
+    static func headerClicked(_ group: SidebarProjectGroup, collapsedRaw: Binding<String>, select: (UUID) -> Void) {
+        guard let projectId = group.projectId else { return }
+        if group.isEmpty {
+            select(projectId)
+            return
+        }
+        withAnimation(toggleAnimation) {
+            collapsedRaw.wrappedValue = toggled(collapsedRaw.wrappedValue, projectId)
+        }
+    }
+}
+
+// MARK: - Project selection
+
+enum ProjectSelection {
+    /// Selects a project the way the Projects tab's header click and
+    /// Next/Previous Project do: record it as the selection, focus its last
+    /// session if it has one, and tell this window's Projects tab to mirror
+    /// it (`WorkspaceSidebarView` expands and selects it).
+    @MainActor
+    static func select(_ projectId: UUID, store: WorkspaceStore, coordinator: SessionCoordinator, window: NSWindow?) {
+        store.lastSelectedProjectId = projectId
+        coordinator.focusLastSession(forProject: projectId)
+        NotificationCenter.default.post(
+            name: .workspaceDidSelectProjectFromShortcut,
+            object: window,
+            userInfo: ["projectId": projectId]
+        )
     }
 }
 
@@ -170,19 +208,22 @@ enum ProjectMonogram {
 
 /// A project's accordion header in the one-view list:
 /// `NAME ⌄ ———— count`. Clicking it folds or unfolds the project's rows.
+/// An empty project's header is dimmed, has no chevron (nothing to fold),
+/// and selects the project instead.
 struct ProjectAccordionHeader: View {
     static let height: CGFloat = 30
 
     let name: String
     let count: Int
     let isCollapsed: Bool
+    var isEmpty: Bool = false
     let onToggle: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
     var body: some View {
-        let ink = WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
+        let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
         Button(action: onToggle) {
             HStack(spacing: 0) {
                 Text(name.uppercased())
@@ -196,6 +237,7 @@ struct ProjectAccordionHeader: View {
                     .rotationEffect(.degrees(isCollapsed ? -90 : 0))
                     .frame(width: 14)
                     .padding(.leading, 4)
+                    .opacity(isEmpty ? 0 : 1)
                 Rectangle()
                     .fill(WorkspaceLayout.railSectionHairline)
                     .frame(height: 1)
@@ -214,17 +256,18 @@ struct ProjectAccordionHeader: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
-        .accessibilityValue(isCollapsed ? "collapsed" : "expanded")
+        .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
-        .accessibilityHint(isCollapsed ? "Shows this project's sessions" : "Hides this project's sessions")
+        .accessibilityHint(isEmpty ? "Selects this project" : (isCollapsed ? "Shows this project's sessions" : "Hides this project's sessions"))
     }
 }
 
 // MARK: - Rail tile
 
 /// A project's monogram tile in the one-view rail, at its header's y.
-/// Clicking it folds or unfolds the project, as the header does; a folded
-/// tile carries its session count.
+/// Clicking it does what the header does (fold, or select an empty
+/// project); a folded tile carries its session count, and an empty
+/// project's tile is dimmed like its header.
 struct RailProjectTile: View {
     static let size: CGFloat = 30
 
@@ -232,6 +275,7 @@ struct RailProjectTile: View {
     let monogram: String
     let count: Int
     let isCollapsed: Bool
+    var isEmpty: Bool = false
     let onToggle: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -253,7 +297,7 @@ struct RailProjectTile: View {
         Button(action: onToggle) {
             Text(monogram)
                 .font(.system(size: monogram.count > 1 ? 11 : 13, weight: .bold))
-                .foregroundStyle(ink)
+                .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : ink)
                 .frame(width: Self.size, height: Self.size)
                 .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint))
                 .overlay(alignment: .topTrailing) {
@@ -276,7 +320,7 @@ struct RailProjectTile: View {
         .help(name)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
-        .accessibilityValue(isCollapsed ? "collapsed" : "expanded")
+        .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
     }
 }

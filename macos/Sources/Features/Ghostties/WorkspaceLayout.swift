@@ -310,6 +310,12 @@ enum WorkspaceLayout {
         colorScheme == .dark ? textSecondaryDark : textSecondaryLight
     }
 
+    /// An empty project's header and rail monogram in the one-view sidebar
+    /// (Sean, 2026-10-08: shown dimmed, count 0). One tier below
+    /// `sectionHeaderForeground` on purpose, so it sits under the 4.5:1 that
+    /// token clears: the dimming is the signal that nothing is running there.
+    static let emptyProjectForeground = Color(nsColor: .tertiaryLabelColor)
+
     /// The rail's hairline between Pinned, Active and History (mock H).
     static let railSectionHairline = Color.primary.opacity(0.1)
 

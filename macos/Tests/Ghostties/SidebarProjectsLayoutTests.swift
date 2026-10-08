@@ -46,7 +46,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
 
     // MARK: - Grouping
 
-    func testGroupsFollowProjectOrderHideEmptyProjectsAndKeepRowOrder() {
+    func testGroupsFollowProjectOrderKeepEmptyProjectsAndKeepRowOrder() {
         let a1 = session("Claude Code 4", atlas)
         let f1 = session("docs pass", fieldwork)
         let a2 = session("auth refactor", atlas)
@@ -54,12 +54,61 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let f2 = session("build fix", fieldwork)
         let groups = SidebarProjectGroup.make(active: [a1, f1, a2, o1, f2], projects: [atlas, empty, fieldwork, orbit])
 
-        XCTAssertEqual(groups.map(\.name), ["atlas-api", "fieldwork", "orbit-web"])
+        XCTAssertEqual(groups.map(\.name), ["atlas-api", "quiet", "fieldwork", "orbit-web"])
         XCTAssertEqual(groups.map { $0.sessions.map(\.name) }, [
             ["Claude Code 4", "auth refactor"],
+            [],
             ["docs pass", "build fix"],
             ["landing hero"],
         ])
+        XCTAssertEqual(groups.map(\.isEmpty), [false, true, false, false])
+    }
+
+    /// An empty project is a header with no rows, and never folds — even
+    /// when a stale fold for it is stored — so its rail tile never wears a
+    /// count badge.
+    func testEmptyProjectIsAHeaderThatNeverFolds() {
+        let groups = SidebarProjectGroup.make(active: [session("a", atlas)], projects: [empty, atlas])
+        let items = SidebarProjectGroupItem.items(groups, collapsed: [empty.id])
+        let shape: [String] = items.map {
+            switch $0 {
+            case .spacer: return "-"
+            case .header(let g, let folded): return "\(g.name)\(folded ? "+" : "")"
+            case .row(let s, _): return s.name
+            }
+        }
+        XCTAssertEqual(shape, ["quiet", "-", "atlas-api", "a"])
+    }
+
+    // MARK: - Header click
+
+    /// Clicking an empty project's header (or rail tile) selects it, as the
+    /// Projects tab's header does, and leaves the folds alone.
+    func testClickingAnEmptyProjectSelectsIt() {
+        let d = suite("select")
+        let folds = AppStorage(wrappedValue: "", ProjectAccordionState.collapsedKey, store: d)
+        let store = WorkspaceStore(testingProjects: [atlas, empty], testingSessions: [session("a", atlas)])
+        let coordinator = SessionCoordinator()
+        let group = SidebarProjectGroup.make(active: [], projects: [empty])[0]
+        XCTAssertNil(store.lastSelectedProjectId)
+
+        ProjectAccordionState.headerClicked(group, collapsedRaw: folds.projectedValue) { id in
+            ProjectSelection.select(id, store: store, coordinator: coordinator, window: nil)
+        }
+
+        XCTAssertEqual(store.lastSelectedProjectId, empty.id)
+        XCTAssertNil(d.string(forKey: ProjectAccordionState.collapsedKey))
+    }
+
+    /// Clicking a non-empty project's header folds it and does not select.
+    func testClickingAProjectWithSessionsFoldsItWithoutSelecting() {
+        let d = suite("fold-no-select")
+        let folds = AppStorage(wrappedValue: "", ProjectAccordionState.collapsedKey, store: d)
+        let group = SidebarProjectGroup.make(active: [session("a", atlas)], projects: [atlas])[0]
+        var selected: UUID?
+        ProjectAccordionState.headerClicked(group, collapsedRaw: folds.projectedValue) { selected = $0 }
+        XCTAssertNil(selected)
+        XCTAssertEqual(ProjectAccordionState.decode(d.string(forKey: ProjectAccordionState.collapsedKey) ?? ""), [atlas.id])
     }
 
     func testSessionsOfAMissingProjectTrailInOneUnknownGroup() {
@@ -120,13 +169,20 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         XCTAssertEqual(ProjectAccordionState.decode("not-a-uuid,\(atlas.id.uuidString)"), [atlas.id])
     }
 
-    /// The fold persists: it lives in the defaults store under one key, so
-    /// a relaunch (a fresh read) sees the same folded projects.
+    /// The fold persists: a header click writes through the views'
+    /// `@AppStorage` declaration (same key, injected store) into the
+    /// defaults store, so a relaunch (a fresh read) sees the same folds.
     func testCollapseStatePersistsInDefaults() {
         let d = suite("collapse")
-        d.set(ProjectAccordionState.toggled("", fieldwork.id), forKey: ProjectAccordionState.collapsedKey)
-        let reread = ProjectAccordionState.decode(d.string(forKey: ProjectAccordionState.collapsedKey) ?? "")
-        XCTAssertEqual(reread, [fieldwork.id])
+        let folds = AppStorage(wrappedValue: "", ProjectAccordionState.collapsedKey, store: d)
+        let group = SidebarProjectGroup.make(active: [session("f", fieldwork)], projects: [fieldwork])[0]
+        XCTAssertNil(d.string(forKey: ProjectAccordionState.collapsedKey))
+
+        ProjectAccordionState.headerClicked(group, collapsedRaw: folds.projectedValue) { _ in XCTFail("a project with sessions folds, never selects") }
+        XCTAssertEqual(ProjectAccordionState.decode(d.string(forKey: ProjectAccordionState.collapsedKey) ?? ""), [fieldwork.id])
+
+        let fresh = AppStorage(wrappedValue: "", ProjectAccordionState.collapsedKey, store: d)
+        XCTAssertEqual(ProjectAccordionState.decode(fresh.wrappedValue), [fieldwork.id])
         // Not a dial: Reset sidebar leaves folds alone.
         SidebarDialTuning.reset(defaults: d)
         XCTAssertNotNil(d.string(forKey: ProjectAccordionState.collapsedKey))

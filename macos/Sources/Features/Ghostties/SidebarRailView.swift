@@ -150,11 +150,11 @@ struct SidebarRailView: View {
                     name: group.name,
                     monogram: monograms[group.id] ?? "?",
                     count: group.sessions.count,
-                    isCollapsed: isCollapsed
+                    isCollapsed: isCollapsed,
+                    isEmpty: group.isEmpty
                 ) {
-                    guard let projectId = group.projectId else { return }
-                    withAnimation(ProjectAccordionState.toggleAnimation) {
-                        collapsedProjectsRaw = ProjectAccordionState.toggled(collapsedProjectsRaw, projectId)
+                    ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
+                        ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
                     }
                 }
             case .row(let session, _):
