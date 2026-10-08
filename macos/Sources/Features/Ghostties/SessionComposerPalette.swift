@@ -1331,7 +1331,8 @@ struct SessionComposerPalette: View {
         let rows = resumeRows
         return ComposerResumeListView(
             rows: rows,
-            selectedID: resumeState.selection(in: rows.map(\.id)),
+            templates: downListTemplateOptions.map(templateRow),
+            selectedID: resumeState.selection(in: resumeKeyboardRowIDs),
             isFocused: isFocused,
             hasHistory: !historyEntries.isEmpty,
             cap: Self.resumeRowCap,
@@ -1358,7 +1359,7 @@ struct SessionComposerPalette: View {
                 ComposerListRow(
                     systemImage: option.leadingIcon ?? "sparkle",
                     title: option.title,
-                    meta: option.template?.command.flatMap { $0.split(separator: " ").first.map(String.init) },
+                    meta: Self.startRowMeta(option),
                     isSelected: !resumeState.isResumeColumnFocused && selected == index,
                     showsReturnGlyph: true,
                     titleSize: rowTitleSize,
@@ -1366,6 +1367,30 @@ struct SessionComposerPalette: View {
                 )
             }
         }
+    }
+
+    /// A start row's trailing meta: the template command's first word.
+    private static func startRowMeta(_ option: ComposerOption) -> String? {
+        option.template?.command.flatMap { $0.split(separator: " ").first.map(String.init) }
+    }
+
+    /// A5's TEMPLATES section: the template rows the composer already
+    /// offers for the current project (pinned, recent, then the rest),
+    /// filtered by the typed text. Each row's action is the option's own
+    /// `commit(template:)`. A4 keeps its start column instead.
+    private var downListTemplateOptions: [ComposerOption] {
+        guard resumeLayout == .list else { return [] }
+        return (lane1Options + lane2Options).filter { $0.template != nil }
+    }
+
+    private func templateRow(_ option: ComposerOption) -> ComposerTemplateRow {
+        ComposerTemplateRow(
+            id: option.id,
+            systemImage: option.leadingIcon ?? "sparkle",
+            title: option.title,
+            meta: Self.startRowMeta(option),
+            action: option.action
+        )
     }
 
     // MARK: - Single-line field
@@ -1854,15 +1879,26 @@ struct SessionComposerPalette: View {
         ComposerResumeRows.rows(entries: historyEntries, query: composerStore.searchText)
     }
 
+    /// The rows ↓/↑ walk: A5's resume rows then its template rows; A4's
+    /// resume column alone.
+    private var resumeKeyboardRowIDs: [UUID] {
+        ComposerDownList.rowIDs(resume: resumeRows.map(\.id), templates: downListTemplateOptions.map(\.id))
+    }
+
     /// Feeds one key to the resume state. `true` when it took the key.
+    /// Return on a template row runs that option's own start action.
     private func routeToResume(_ key: ComposerResumeState.Key) -> Bool {
-        switch resumeState.handle(key, layout: resumeLayout, rowIDs: resumeRows.map(\.id)) {
+        switch resumeState.handle(key, layout: resumeLayout, rowIDs: resumeKeyboardRowIDs) {
         case .passThrough:
             return false
         case .handled:
             return true
         case .resume(let id):
-            resumeSession(id)
+            if let template = downListTemplateOptions.first(where: { $0.id == id }) {
+                template.action()
+            } else {
+                resumeSession(id)
+            }
             return true
         }
     }
@@ -1881,7 +1917,7 @@ struct SessionComposerPalette: View {
     /// Return is live whenever whichever list owns the keyboard has a row.
     private var fieldHasSelection: Bool {
         if resumeState.ownsKeyboard {
-            return resumeState.selection(in: resumeRows.map(\.id)) != nil
+            return resumeState.selection(in: resumeKeyboardRowIDs) != nil
         }
         return selectedOption != nil
     }
