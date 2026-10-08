@@ -155,6 +155,22 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         XCTAssertEqual(store.railSessions(layout: .oneView).map(\.name), ["orchestrator", "a1", "a2", "f1"])
     }
 
+    /// The rail's project column (`RailProjectColumn`) marks the selected
+    /// session's project, and only it; a pinned or absent selection marks
+    /// no project.
+    func testRailColumnMarksTheSelectedSessionsProject() {
+        let pinned = session("orchestrator", orbit, pinned: true)
+        let a1 = session("a1", atlas)
+        let f1 = session("f1", fieldwork)
+        let f2 = session("f2", fieldwork)
+        let groups = SidebarProjectGroup.make(active: [a1, f1, f2], projects: [atlas, fieldwork, orbit])
+
+        XCTAssertEqual(RailProjectColumn.selectedGroupId(groups, selectedSessionId: f2.id), fieldwork.id.uuidString)
+        XCTAssertEqual(RailProjectColumn.selectedGroupId(groups, selectedSessionId: a1.id), atlas.id.uuidString)
+        XCTAssertNil(RailProjectColumn.selectedGroupId(groups, selectedSessionId: pinned.id))
+        XCTAssertNil(RailProjectColumn.selectedGroupId(groups, selectedSessionId: nil))
+    }
+
     // MARK: - One view is the Projects tab's layout only
 
     /// With the dial on One view, the Sessions tab still mounts the Sessions

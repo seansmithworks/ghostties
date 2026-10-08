@@ -22,6 +22,9 @@ State: PR #205 open (feat/sidebar-vnext); L1–L5 + bake + cwd-project fix + com
 - [ ] VoiceOver: "Show N more" expansion doesn't announce/move focus to new rows. | parked
 - [ ] Rail in One view: the selected session (wide glass card with status glyph) outweighs the project monogram tiles — selected-vs-project hierarchy "not ideal" (Sean). Design pass before beta.26. | carried
 - [ ] CRASH closing the embedded browser in Dev @ 5758e6e13 (2026-10-08 11:42:17): uncaught NSInvalidArgumentException raised inside Chromium Embedded Framework. Log: ~/.ghostties-evidence/vnext/browser-close-crash-2026-10-08-1142.log. Unknown whether new to this branch — repro on main first. | carried
+- [ ] Project tiles: a custom character or icon per project instead of the monogram (Sean, later). | parked
+- [ ] Persistent agents: find a place for them in the sidebar/rail (Sean, later). | parked
+- [ ] Browser panel Auto Layout conflict (unrelated to the crash, same log `browser-close-crash-2026-10-08-1142.log`): two NSViews both pinned to `WorkspaceViewContainer.trailing - 8` around `PanelDragHandleView`, conflicting with `width == 695`. | parked
 
 ## 2026-10-06 — beta.26 contract run 1 (session 71606cce): tag still gated
 

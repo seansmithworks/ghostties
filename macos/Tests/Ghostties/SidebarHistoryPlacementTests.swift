@@ -213,12 +213,33 @@ final class SidebarHistoryPlacementTests: XCTestCase {
 
     // MARK: - Morph alignment
 
-    /// The first session's card sits at the same y in the expanded list and
-    /// the rail.
+    /// The first session's row sits at the same y in the expanded list and
+    /// the rail. In one view the rail marks it with a tile-sized chip inside
+    /// its project column (`RailProjectColumn`), centred in the row, so the
+    /// chip's centre must sit on the expanded card's centre.
     func testFirstRowSitsAtTheSameYInExpandedAndRail() throws {
         let e = try selectedCard(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
-        let r = try selectedCard(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false), rail: true)
-        XCTAssertEqual(e.lowerBound, r.lowerBound, accuracy: 0.6, "first row top")
-        XCTAssertEqual(e.upperBound, r.upperBound, accuracy: 0.6, "first row bottom")
+        let r = try selectedChip(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false))
+        XCTAssertEqual((e.lowerBound + e.upperBound) / 2, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
+    }
+
+    /// The rail's selected chip: the run, down a line 4pt inside the chip's
+    /// leading edge (clear of the glyph), darker than the column's faint
+    /// tint (~0.08 below the chrome) but lighter than ink. The chip's corner
+    /// trims the run's ends equally, so its centre is the chip's.
+    private func selectedChip(_ r: Render) throws -> ClosedRange<CGFloat> {
+        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
+        let px = Int((r.width / 2 - RailProjectColumn.chipSize / 2 + 4) * r.scale)
+        var runs: [(Int, Int)] = []
+        for y in 0..<r.rep.pixelsHigh {
+            guard let c = r.rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { continue }
+            let delta = base - (c.redComponent + c.greenComponent + c.blueComponent)
+            guard delta > 0.12 && delta < 0.5 else { continue }
+            if let last = runs.last, y - last.1 <= 1 { runs[runs.count - 1].1 = y } else { runs.append((y, y)) }
+        }
+        let chips = runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
+            .filter { $0.upperBound - $0.lowerBound >= RailProjectColumn.chipSize - 10 }
+        return try XCTUnwrap(chips.first, "no selected chip found in the rail")
     }
 }

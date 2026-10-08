@@ -515,9 +515,6 @@ enum CaptureFixture {
     /// `SidebarAppearancePreview`, so a capture can show either glass set
     /// regardless of the terminal theme.
     static var appearancePreview: String? { env("GHOSTTIES_CAPTURE_APPEARANCE") }
-    /// `GHOSTTIES_CAPTURE_RAIL_SELECTION=<RailSelectionStyle raw value>`: the
-    /// rail's selection treatment for this launch, overriding the dial.
-    static var railSelectionOverride: String? { env("GHOSTTIES_CAPTURE_RAIL_SELECTION") }
 
     /// Each hook fires once per process. The views that host them re-appear
     /// (a rail/pinned toggle remounts the sidebar), and a second firing would
