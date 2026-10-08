@@ -164,6 +164,7 @@ enum SidebarDialTuning {
     static let historyInSidebarKey = "ghostties.sidebarDial.historyInSidebar"
     static let trayStyleKey = "ghostties.sidebarDial.trayStyle"
     static let selectedRowStyleKey = "ghostties.sidebarDial.selectedRowStyle"
+    static let projectsLayoutKey = "ghostties.sidebarDial.projectsLayout"
 
     // MARK: Rail
     static let railExtraWidthKey = "ghostties.sidebarDial.railExtraWidth"
@@ -375,6 +376,12 @@ enum SidebarDialTuning {
         return TrayGlassStyle.selectedRowStyle
     }
 
+    /// Projects tab + Sessions tab (today), or one list with each project
+    /// as an accordion header (`SidebarProjectsLayout`).
+    static func projectsLayout(defaults: UserDefaults = SidebarDialTuning.store) -> SidebarProjectsLayout {
+        choice(projectsLayoutKey, default: .tabs, defaults: defaults)
+    }
+
     /// Added on top of `WorkspaceLayout.collapsedRailWidth`'s computed hug
     /// width — see that function's own doc comment. Not folded into
     /// `WorkspaceLayout.railExtraWidth` (the compiled default both this and
@@ -396,7 +403,8 @@ enum SidebarDialTuning {
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
-        historyPlacementKey, historyInSidebarKey, trayStyleKey, selectedRowStyleKey, railExtraWidthKey
+        historyPlacementKey, historyInSidebarKey, trayStyleKey, selectedRowStyleKey, railExtraWidthKey,
+        projectsLayoutKey
     ]
 
     static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
@@ -543,6 +551,7 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var historyInSidebar: Bool
     var trayStyle: String
     var selectedRowStyle: String
+    var projectsLayout: String
 
     var railExtraWidth: Double
 }
@@ -635,6 +644,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
             historyInSidebar: SidebarDialTuning.historyInSidebar(defaults: defaults),
             trayStyle: SidebarDialTuning.trayStyle(defaults: defaults).rawValue,
             selectedRowStyle: SidebarDialTuning.selectedRowStyle(defaults: defaults).rawValue,
+            projectsLayout: SidebarDialTuning.projectsLayout(defaults: defaults).rawValue,
             railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults))
         )
     }
@@ -720,6 +730,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setBoolIfChanged(SidebarDialTuning.historyInSidebarKey, previous.historyInSidebar, model.historyInSidebar)
         setStringIfChanged(SidebarDialTuning.trayStyleKey, previous.trayStyle, model.trayStyle)
         setStringIfChanged(SidebarDialTuning.selectedRowStyleKey, previous.selectedRowStyle, model.selectedRowStyle)
+        setStringIfChanged(SidebarDialTuning.projectsLayoutKey, previous.projectsLayout, model.projectsLayout)
         setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
         // Any write at all is a tuning change a row's `.equatable()` gate
         // can't see on its own — see `SidebarDialTuning.epochKey`'s doc
@@ -817,6 +828,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
                 options: TrayGlassStyle.TrayStyle.allCases.map(\.rawValue)),
         .select("selectedRowStyle", keyPath: \.selectedRowStyle, label: "Selected row",
                 options: TrayGlassStyle.SelectedRowStyle.allCases.map(\.rawValue)),
+        .select("projectsLayout", keyPath: \.projectsLayout, label: "Projects layout",
+                options: SidebarProjectsLayout.allCases.map(\.rawValue)),
         // Rail
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
         .action(resetActionPath, label: "Reset sidebar")

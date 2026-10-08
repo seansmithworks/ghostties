@@ -29,6 +29,10 @@ struct RecentsRowView: View, Equatable {
     /// Replaces the project-name subtitle with an explanatory hint; false is
     /// the default so every other call site is unaffected.
     var hookUnconfirmed: Bool = false
+    /// Replaces the project-name subtitle — the one-view list, where the
+    /// project is the header above the row (`SidebarProjectsLayout.oneView`).
+    /// Nil keeps the project name.
+    var subtitle: String? = nil
     let isActive: Bool
     var isEditing: Bool = false
     @Binding var editingName: String
@@ -65,6 +69,7 @@ struct RecentsRowView: View, Equatable {
             && lhs.projectName == rhs.projectName
             && lhs.indicatorState == rhs.indicatorState
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
+            && lhs.subtitle == rhs.subtitle
             && lhs.isActive == rhs.isActive
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
@@ -76,7 +81,7 @@ struct RecentsRowView: View, Equatable {
         // hover, Flow 05 label choreography) live in `SidebarListRowChrome`,
         // shared with the History row so the two can never drift.
         SidebarListRowChrome(
-            subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName,
+            subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
             isActive: isActive,
             staggerIndex: staggerIndex,
             redlineID: RedlineID.row(session.id)

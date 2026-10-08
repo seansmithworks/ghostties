@@ -27,6 +27,9 @@ struct SidebarRailView: View {
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
+    /// Folded projects in one view (`ProjectAccordionState`), shared with
+    /// the expanded list.
+    @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -93,6 +96,7 @@ struct SidebarRailView: View {
             coordinator.applyCaptureFixtureFocusIfNeeded()
             #endif
         }
+        .modifier(ProjectAccordionAutoExpand(window: { [coordinator] in coordinator.containerView?.window }))
     }
 
     /// One slot of the section layout, as `RecentsListView.slotContent`
@@ -105,8 +109,12 @@ struct SidebarRailView: View {
                 railRow(for: session)
             }
         case .activeRows:
-            ForEach(sections.active) { session in
-                railRow(for: session)
+            if SidebarDialTuning.projectsLayout() == .oneView {
+                groupedRailRows(sections.active)
+            } else {
+                ForEach(sections.active) { session in
+                    railRow(for: session)
+                }
             }
         case .pinnedEnd, .activeEnd:
             RailSectionEndMarker()
@@ -118,6 +126,40 @@ struct SidebarRailView: View {
                 isActive: coordinator.isHistoryPresented,
                 onTap: { coordinator.presentHistory() }
             )
+        }
+    }
+
+    /// One view (mock B5): each project's monogram tile at its header's y,
+    /// its sessions' glyphs beneath, slot for slot with
+    /// `RecentsListView.groupedActiveRows`.
+    @ViewBuilder
+    private func groupedRailRows(_ active: [AgentSession]) -> some View {
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let monograms = Dictionary(
+            zip(groups.map(\.id), ProjectMonogram.monograms(for: groups.map(\.name))),
+            uniquingKeysWith: { first, _ in first }
+        )
+        ForEach(SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))) { item in
+            switch item {
+            case .spacer:
+                Color.clear
+                    .frame(height: SidebarProjectGroupItem.spacerHeight)
+                    .accessibilityHidden(true)
+            case .header(let group, let isCollapsed):
+                RailProjectTile(
+                    name: group.name,
+                    monogram: monograms[group.id] ?? "?",
+                    count: group.sessions.count,
+                    isCollapsed: isCollapsed
+                ) {
+                    guard let projectId = group.projectId else { return }
+                    withAnimation(ProjectAccordionState.toggleAnimation) {
+                        collapsedProjectsRaw = ProjectAccordionState.toggled(collapsedProjectsRaw, projectId)
+                    }
+                }
+            case .row(let session, _):
+                railRow(for: session)
+            }
         }
     }
 

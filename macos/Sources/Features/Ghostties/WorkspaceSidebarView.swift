@@ -44,7 +44,11 @@ struct WorkspaceSidebarView: View {
             // Titlebar toolbar: action buttons right of traffic lights
             titlebarToolbar
 
-            if sidebarTab == .sessions {
+            if SidebarDialTuning.projectsLayout() == .oneView {
+                // One view (mock B5): no tabs — Pinned, then each project's
+                // sessions under its accordion header.
+                RecentsListView()
+            } else if sidebarTab == .sessions {
                 // Sessions tab: flat recents list across all projects.
                 RecentsListView()
             } else {
@@ -161,6 +165,7 @@ struct WorkspaceSidebarView: View {
             guard let projectId = notification.userInfo?["projectId"] as? UUID else { return }
             expandedProjectIds.insert(projectId)
         }
+        .modifier(ProjectAccordionAutoExpand(window: { [coordinator] in coordinator.containerView?.window }))
         .sheet(isPresented: Binding(
             get: { !hasSeenOnboarding },
             set: { _ in }
@@ -181,7 +186,9 @@ struct WorkspaceSidebarView: View {
             // bottom tray (`SidebarTray`) owns "New Session" now, and
             // this header button duplicated it (spec §01: top group is
             // traffic lights → section header → rows, no header strip).
-            if sidebarTab == .projects {
+            // One view has no Projects tab; the tray's New Project button
+            // covers it.
+            if sidebarTab == .projects && SidebarDialTuning.projectsLayout() == .tabs {
                 ToolbarLabelButton(systemName: "plus", label: "New Project", action: presentFolderPicker)
             }
         }
