@@ -15,6 +15,31 @@ enum SidebarProjectsLayout: String, CaseIterable {
 
     /// The default (Sean, 2026-10-08): one view.
     static let shipped: SidebarProjectsLayout = .oneView
+
+    /// The layout actually on screen. One view is the Projects tab's
+    /// layout only; the Sessions tab is always its flat list.
+    static func effective(dial: SidebarProjectsLayout, tab: SidebarTab) -> SidebarProjectsLayout {
+        tab == .projects ? dial : .tabs
+    }
+
+    /// `effective` for the live dial.
+    static func effective(tab: SidebarTab) -> SidebarProjectsLayout {
+        effective(dial: SidebarDialTuning.projectsLayout(), tab: tab)
+    }
+}
+
+/// Which body the sidebar mounts below the titlebar.
+enum SidebarBodyKind: Equatable {
+    case oneViewAccordion
+    case sessionsList
+    case projectsList
+
+    static func resolve(tab: SidebarTab, dial: SidebarProjectsLayout) -> SidebarBodyKind {
+        switch tab {
+        case .sessions: return .sessionsList
+        case .projects: return dial == .oneView ? .oneViewAccordion : .projectsList
+        }
+    }
 }
 
 /// One project's live, unpinned sessions in the one-view list.

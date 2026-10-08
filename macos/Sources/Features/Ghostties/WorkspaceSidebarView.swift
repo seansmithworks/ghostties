@@ -44,14 +44,15 @@ struct WorkspaceSidebarView: View {
             // Titlebar toolbar: action buttons right of traffic lights
             titlebarToolbar
 
-            if SidebarDialTuning.projectsLayout() == .oneView {
-                // One view (mock B5): no tabs — Pinned, then each project's
-                // sessions under its accordion header.
+            switch SidebarBodyKind.resolve(tab: sidebarTab, dial: SidebarDialTuning.projectsLayout()) {
+            case .oneViewAccordion:
+                // One view (mock B5), the Projects tab's layout: Pinned, then
+                // each project's sessions under its accordion header.
                 RecentsListView()
-            } else if sidebarTab == .sessions {
+            case .sessionsList:
                 // Sessions tab: flat recents list across all projects.
                 RecentsListView()
-            } else {
+            case .projectsList:
                 // Projects tab: existing disclosure list.
 
                 // One-time pin-semantics migration banner.
