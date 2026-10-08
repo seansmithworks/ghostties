@@ -243,4 +243,16 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         // Folding atlas-api removes its two rows.
         XCTAssertEqual(open - folded, 2 * (row + gap), accuracy: 0.5)
     }
+
+    // MARK: - Accessibility
+
+    /// The header and its rail tile share one hint (`RailProjectTile` reads
+    /// `ProjectAccordionHeader.accessibilityHint`), so an empty project's
+    /// tile says what a click does: it selects the project.
+    func testEmptyProjectHintSelectsAndOthersFold() {
+        XCTAssertEqual(ProjectAccordionHeader.accessibilityHint(isEmpty: true, isCollapsed: false), "Selects this project")
+        XCTAssertEqual(ProjectAccordionHeader.accessibilityHint(isEmpty: true, isCollapsed: true), "Selects this project")
+        XCTAssertEqual(ProjectAccordionHeader.accessibilityHint(isEmpty: false, isCollapsed: true), "Shows this project's sessions")
+        XCTAssertEqual(ProjectAccordionHeader.accessibilityHint(isEmpty: false, isCollapsed: false), "Hides this project's sessions")
+    }
 }

@@ -260,7 +260,13 @@ struct ProjectAccordionHeader: View {
         .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
-        .accessibilityHint(isEmpty ? "Selects this project" : (isCollapsed ? "Shows this project's sessions" : "Hides this project's sessions"))
+        .accessibilityHint(Self.accessibilityHint(isEmpty: isEmpty, isCollapsed: isCollapsed))
+    }
+
+    /// What a click does, for the header and its rail tile alike: an empty
+    /// project selects, any other folds or unfolds.
+    static func accessibilityHint(isEmpty: Bool, isCollapsed: Bool) -> String {
+        isEmpty ? "Selects this project" : (isCollapsed ? "Shows this project's sessions" : "Hides this project's sessions")
     }
 }
 
@@ -324,6 +330,7 @@ struct RailProjectTile: View {
         .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
+        .accessibilityHint(ProjectAccordionHeader.accessibilityHint(isEmpty: isEmpty, isCollapsed: isCollapsed))
     }
 }
 

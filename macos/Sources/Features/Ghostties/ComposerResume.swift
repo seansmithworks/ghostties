@@ -324,7 +324,10 @@ struct ComposerResumeListView: View {
     let onResume: (UUID) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
-    static let accessibilityLabel = "Resume a past session"
+    /// The list's VoiceOver name: it holds TEMPLATES too whenever any show.
+    static func accessibilityLabel(hasTemplates: Bool) -> String {
+        hasTemplates ? "Resume or start a session" : "Resume a past session"
+    }
 
     var body: some View {
         let sections = ComposerDownList.sections(resumeCount: rows.count, templateCount: templates.count)
@@ -370,7 +373,7 @@ struct ComposerResumeListView: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Self.accessibilityLabel)
+        .accessibilityLabel(Self.accessibilityLabel(hasTemplates: sections.contains(.templates)))
     }
 }
 

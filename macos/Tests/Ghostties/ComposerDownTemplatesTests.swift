@@ -29,6 +29,17 @@ struct ComposerDownListSectionTests {
         #expect(ComposerDownList.cap(sectionCount: 2) == 3)
     }
 
+    /// VoiceOver's name for the ↓ list covers both halves whenever
+    /// TEMPLATES shows (the view passes `sections.contains(.templates)`).
+    @Test func listIsNamedForWhatItHolds() {
+        let resumeOnly = ComposerDownList.sections(resumeCount: 2, templateCount: 0)
+        let both = ComposerDownList.sections(resumeCount: 2, templateCount: 3)
+        let templatesOnly = ComposerDownList.sections(resumeCount: 0, templateCount: 3)
+        #expect(ComposerResumeListView.accessibilityLabel(hasTemplates: resumeOnly.contains(.templates)) == "Resume a past session")
+        #expect(ComposerResumeListView.accessibilityLabel(hasTemplates: both.contains(.templates)) == "Resume or start a session")
+        #expect(ComposerResumeListView.accessibilityLabel(hasTemplates: templatesOnly.contains(.templates)) == "Resume or start a session")
+    }
+
     @Test func downWalksIntoTemplatesAndUpWalksBack() {
         let r = UUID(), t1 = UUID(), t2 = UUID()
         let rows = ComposerDownList.rowIDs(resume: [r], templates: [t1, t2])
@@ -121,19 +132,27 @@ struct ComposerDownTemplatesHostedTests {
     private static let up = #selector(NSResponder.moveUp(_:))
     private static let enter = #selector(NSResponder.insertNewline(_:))
 
+    /// TEMPLATES lists the composer's own template order, pinned first, so
+    /// the first template row is the pinned template, not the resolver's
+    /// first (which a pin outranks).
     @Test func returnOnTheFirstTemplateRowStartsItThroughTheComposersStartPath() throws {
         var relaunched = 0
         var started: [AgentTemplate] = []
         let m = try mount { _, _ in relaunched += 1 }
         defer { m.window.orderOut(nil) }
         m.composerStore.dispatchOverrideForTesting = { _, template in started.append(template) }
-        let firstTemplate = try #require(SessionTemplateResolver.templates(for: m.project, store: m.store).first)
+        let resolverFirst = try #require(SessionTemplateResolver.templates(for: m.project, store: m.store).first)
+        let pinned = try #require(SessionTemplateResolver.templates(for: m.project, store: m.store).last)
+        try #require(pinned.id != resolverFirst.id, "the pin must be a template the resolver doesn't put first")
+        m.composerStore.togglePin(templateId: pinned.id)
+        settle(m.window.contentView!)
+        let firstInTemplatesOrder = try #require(m.composerStore.pinnedTemplateIds.first)
 
         // Two resume rows, then the first template row.
         press(Self.down, times: 3, in: m)
         press(Self.enter, in: m)
 
-        #expect(started.map(\.id) == [firstTemplate.id], "TEMPLATES follows the two RESUME rows")
+        #expect(started.map(\.id) == [firstInTemplatesOrder], "TEMPLATES follows the two RESUME rows, pinned first")
         #expect(relaunched == 0)
     }
 

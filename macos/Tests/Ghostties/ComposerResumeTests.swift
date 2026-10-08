@@ -209,6 +209,51 @@ struct ComposerResumeHostedTests {
         #expect(relaunched == 0)
     }
 
+    /// Types into the field the way a keystroke does (the field's own
+    /// `insertText`), so the composer sees an edit, not a store write.
+    private func type(_ text: String, in m: Mounted) {
+        m.field.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        settle(m.window.contentView!)
+    }
+
+    /// Return with the ↓ list closed starts the typed line as a command,
+    /// exactly as typed, even when it names a past session, and resumes
+    /// nothing.
+    @Test func returnWithTheListClosedStartsTheTypedCommandUnchanged() throws {
+        var relaunched = 0
+        var started: [AgentTemplate] = []
+        let m = try mount(layout: .list) { _, _ in relaunched += 1 }
+        defer { m.window.orderOut(nil) }
+        m.composerStore.dispatchOverrideForTesting = { _, template in started.append(template) }
+
+        type("rate limits", in: m)
+        #expect(m.composerStore.searchText == "rate limits")
+        press(#selector(NSResponder.insertNewline(_:)), in: m)
+
+        #expect(started.map { $0.buildCommand() } == ["'rate' 'limits'"], "the typed line runs unchanged")
+        #expect(relaunched == 0, "Return with the list closed never resumes")
+    }
+
+    /// Tab accepts the ghost as text ending in a space, never a chevron, and
+    /// never opens or routes into the Resume list.
+    @Test func tabInsertsASpaceAndNeverRoutesToResume() throws {
+        var relaunched = 0
+        var started = 0
+        let m = try mount(layout: .list) { _, _ in relaunched += 1 }
+        defer { m.window.orderOut(nil) }
+        m.composerStore.dispatchOverrideForTesting = { _, _ in started += 1 }
+
+        type("atl", in: m)
+        press(#selector(NSResponder.insertTab(_:)), in: m)
+
+        #expect(m.field.string.hasPrefix("atl") && m.field.string.count > 3, "Tab accepted the ghost: \(m.field.string)")
+        #expect(m.field.string.hasSuffix(" "), "Tab ends on a space: \(m.field.string)")
+        #expect(!m.field.string.contains(">"), "Tab never types the chevron: \(m.field.string)")
+        #expect(m.composerStore.searchText == m.field.string)
+        #expect(relaunched == 0)
+        #expect(started == 0)
+    }
+
     @Test func columnsCrossRightIntoResumeAndReturnResumes() throws {
         var relaunched: [UUID] = []
         let m = try mount(layout: .columns) { session, _ in relaunched.append(session.id) }
