@@ -341,11 +341,26 @@ enum TrayGlassStyle {
         }
     }
 
-    /// Tray button hover/press highlight, concentric with the pill it sits
-    /// in: inner radius = outer radius − `innerPadding`. Capsule style: the
-    /// pill is a full capsule, so its buttons' highlight is one too (a circle
-    /// on the rail's square buttons). Radius style: `cornerRadius − innerPadding`.
+    /// Tray button hover/press highlight, Finder's toolbar rule (Sean,
+    /// 2026-10-08). A capsule holding one button: the highlight is the
+    /// capsule itself (`pillShape()`, drawn by the button, which owns the
+    /// capsule's padding). A capsule holding several: concentric with it,
+    /// inset by `innerPadding` on every outer edge, inner radius = outer
+    /// radius − `innerPadding` on all four corners, the shared edges
+    /// included, like Finder's segmented groups. Capsule style: the pill is a
+    /// full capsule, so its buttons' highlight is one too. Radius style:
+    /// `cornerRadius − innerPadding`.
     static func buttonHighlightShape(
+        soleInCapsule: Bool,
+        cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
+        cornerRadius: CGFloat = SidebarDialTuning.trayGlassCornerRadius(),
+        innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
+    ) -> AnyShape {
+        if soleInCapsule { return AnyShape(pillShape()) }
+        return concentricHighlightShape(cornerStyle: cornerStyle, cornerRadius: cornerRadius, innerPadding: innerPadding)
+    }
+
+    private static func concentricHighlightShape(
         cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
         cornerRadius: CGFloat = SidebarDialTuning.trayGlassCornerRadius(),
         innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
@@ -599,6 +614,10 @@ struct SidebarTrayPill<Content: View>: View {
     var stretchesAcross = false
     /// "Tray style: Bare": same frame and padding, no glass surface.
     var bare = false
+    /// The capsule holds one button, which takes the capsule's padding
+    /// itself (`TrayIconButton.fillsCapsule`) so its hover fills the whole
+    /// capsule. Same capsule size either way.
+    var soleButton = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -608,7 +627,7 @@ struct SidebarTrayPill<Content: View>: View {
         let framed = layout(content)
             .frame(maxWidth: stretchesAcross ? .infinity : nil)
             .redlineFrame(redlineID.map { $0 + ".content" })
-            .padding(SidebarDialTuning.trayInnerPadding())
+            .padding(soleButton ? 0 : SidebarDialTuning.trayInnerPadding())
             .redlineFrame(redlineID)
         if bare {
             framed
@@ -719,14 +738,20 @@ struct SidebarTray: View {
                 .redlineFrame(RedlineID.trayPill("bare"))
             } else {
             ForEach(groups, id: \.self) { group in
-                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue), stretchesAcross: isVertical, bare: bare) {
-                    ForEach(items.filter { $0.group == group }) { item in
+                let groupItems = items.filter { $0.group == group }
+                let sole = !bare && groupItems.count == 1
+                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue), stretchesAcross: isVertical, bare: bare, soleButton: sole) {
+                    ForEach(groupItems) { item in
                         TrayIconButton(
                             itemId: item.id,
                             systemName: item.systemName,
                             label: item.label,
                             isVertical: isVertical,
-                            fillsWidth: fillsCreate && group == .create,
+                            // Rail: the stretched capsule is wider than its
+                            // buttons, so they fill it to keep the highlight's
+                            // side inset equal to its top and bottom inset.
+                            fillsWidth: isVertical || (fillsCreate && group == .create),
+                            fillsCapsule: sole,
                             bare: bare,
                             tapEffect: item.tapEffect,
                             action: item.action
@@ -787,10 +812,15 @@ struct TrayIconButton: View {
     /// Picks the size dials: the rail's (true) or the expanded bar's (false).
     var isVertical = false
     /// Takes an equal share of its capsule's spare width instead of staying
-    /// square (the expanded Create capsule under "Tray width: fill"). Height
+    /// square (the expanded Create capsule under "Tray width: fill", and every
+    /// rail capsule, which is stretched wider than its buttons). Height
     /// is fixed either way, and the hover highlight fills the cell, so it
     /// keeps the capsule's concentric inset.
     var fillsWidth = false
+    /// The only button in its capsule (`SidebarTrayPill.soleButton`): it
+    /// carries the capsule's padding, so its hover fill and hit area are the
+    /// capsule's own shape (`TrayGlassStyle.buttonHighlightShape`).
+    var fillsCapsule = false
     /// "Tray style: Bare": the hover fill is a circle of the button size
     /// behind the icon, not the capsule-concentric highlight.
     var bare = false
@@ -826,22 +856,30 @@ struct TrayIconButton: View {
                     minHeight: size,
                     maxHeight: size
                 )
+                .padding(fillsCapsule ? SidebarDialTuning.trayInnerPadding() : 0)
                 .background {
                     if bare {
                         Circle()
                             .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
                             .frame(width: size, height: size)
                     } else {
-                        TrayGlassStyle.buttonHighlightShape()
+                        highlightShape
                             .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
                     }
                 }
+                // Hover and click land anywhere in the highlight's shape,
+                // not just on the glyph.
+                .contentShape(bare ? AnyShape(Rectangle()) : highlightShape)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: showsHover)
         .help(label)
         .accessibilityLabel(label)
+    }
+
+    private var highlightShape: AnyShape {
+        TrayGlassStyle.buttonHighlightShape(soleInCapsule: fillsCapsule)
     }
 
     private var showsHover: Bool {
