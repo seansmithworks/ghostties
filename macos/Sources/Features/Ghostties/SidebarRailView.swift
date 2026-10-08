@@ -48,7 +48,10 @@ struct SidebarRailView: View {
                 statuses: store.globalStatuses,
                 sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
             )
-            let layout = sections.layout(historyPlacement: SidebarDialTuning.historyPlacement())
+            let layout = sections.layout(
+                historyPlacement: SidebarDialTuning.historyPlacement(),
+                showsHistory: SidebarDialTuning.historyInSidebar()
+            )
             VStack(spacing: SidebarDialTuning.rowGap()) {
                 ForEach(layout.list, id: \.self) { slot in
                     railSlot(slot, sections)

@@ -123,7 +123,10 @@ struct RecentsListView: View {
         // Where History sits (the "History placement" dial): in the list
         // after Active, or pinned below it as `layout.footer`. The rail
         // renders the same layout (`SidebarRailView`).
-        let layout = displaySections.layout(historyPlacement: SidebarDialTuning.historyPlacement())
+        let layout = displaySections.layout(
+            historyPlacement: SidebarDialTuning.historyPlacement(),
+            showsHistory: SidebarDialTuning.historyInSidebar()
+        )
 
         VStack(spacing: 0) {
             if store.sessions.isEmpty {

@@ -201,6 +201,12 @@ enum WorkspaceLayout {
     /// Background for active session row (light mode): 4% black.
     static let activeRowLight = Color.black.opacity(0.04)
 
+    /// The highlighted row in the Cmd+T composer's lists (Resume, A4's start
+    /// column), and its key caps. Heavier than `activeRowLight/Dark`: the
+    /// composer floats over live terminal output, not the quiet sidebar.
+    static let composerRowSelectedLight = Color.black.opacity(0.06)
+    static let composerRowSelectedDark = Color.white.opacity(0.10)
+
     /// Chrome background (light mode). Covers the left sidebar column and the
     /// gutter padding around the terminal card. The outer of the two Ghostties
     /// design-system layers — warm pink-cream, independent of terminal theme.
