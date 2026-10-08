@@ -58,6 +58,11 @@ struct SidebarRailView: View {
                     railSlot(slot, sections)
                 }
             }
+            // Strawman C: one tinted column behind the selected session's
+            // project, tile through last row (`RailGroupColumnKey`).
+            .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
+                RailGroupColumn(anchors: anchors)
+            }
             // The window margin on both sides (`columnPadding`), so the
             // row cards centre on the rail, as the tray pill does.
             .modifier(Self.columnPadding)
@@ -137,6 +142,12 @@ struct SidebarRailView: View {
             zip(groups.map(\.id), ProjectMonogram.monograms(for: groups.map(\.name))),
             uniquingKeysWith: { first, _ in first }
         )
+        let style = SidebarDialTuning.railSelectionStyle()
+        // The group holding the selected session: the one the selection
+        // treatment marks (ring, column) in strawmen A and C.
+        let selectedGroupId = groups.first { group in
+            group.sessions.contains { $0.id == coordinator.sidebarSelectedSessionId }
+        }?.id
         ForEach(SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))) { item in
             switch item {
             case .spacer:
@@ -149,19 +160,22 @@ struct SidebarRailView: View {
                     monogram: monograms[group.id] ?? "?",
                     count: group.sessions.count,
                     isCollapsed: isCollapsed,
-                    isEmpty: group.isEmpty
+                    isEmpty: group.isEmpty,
+                    selection: group.id == selectedGroupId ? style : nil
                 ) {
                     ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
                         ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
                     }
                 }
-            case .row(let session, _):
-                railRow(for: session)
+                .railGroupColumn(style == .column && group.id == selectedGroupId)
+            case .row(let session, let group):
+                railRow(for: session, style: style)
+                    .railGroupColumn(style == .column && group.id == selectedGroupId)
             }
         }
     }
 
-    private func railRow(for session: AgentSession) -> some View {
+    private func railRow(for session: AgentSession, style: RailSelectionStyle = .card) -> some View {
         RailSessionRow(
             sessionId: session.id,
             name: session.name,
@@ -171,8 +185,86 @@ struct SidebarRailView: View {
             indicatorState: store.globalIndicatorStates[session.id] ?? .inactive,
             isActive: coordinator.sidebarSelectedSessionId == session.id,
             dialEpoch: SidebarDialTuning.epoch(),
+            selectionStyle: style,
             onTap: { coordinator.focusSession(id: session.id) }
         )
+    }
+}
+
+// MARK: - Selection strawmen (explore/rail-strawmen)
+
+/// How the one-view rail marks the selected session. Exploration only:
+/// three answers to "the selected card outweighs the project tiles".
+/// Outside one view the rail always draws `.card`.
+enum RailSelectionStyle: String, CaseIterable {
+    /// Current: the wide Tint + shimmer card across the rail.
+    case card
+    /// A: selection lives on the project tile (a ring); the session row
+    /// keeps no card, only a Dock-style dot under its glyph.
+    case ring
+    /// B: a tile-sized chip (the monogram tile's footprint) under its
+    /// project tile, carrying the Tint + shimmer.
+    case chip
+    /// C: the selected project becomes a column (tile through its last
+    /// row), its tile filled with ink; the session is a chip inside it.
+    case column
+
+    static let shipped: RailSelectionStyle = .card
+
+    /// The chip's side and corner: the monogram tile's
+    /// (`RailProjectTile.size`, radius 9), so chip and tile read as one family.
+    static let chipSize: CGFloat = RailProjectTile.size
+    static let chipCornerRadius: CGFloat = 9
+    /// C's column: the tile plus this margin on every side.
+    static let columnInset: CGFloat = 4
+}
+
+/// The bounds of every item in the selected project's group, for strawman C.
+private struct RailGroupColumnKey: PreferenceKey {
+    static var defaultValue: [Anchor<CGRect>] = []
+    static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
+        value += nextValue()
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func railGroupColumn(_ isInColumn: Bool) -> some View {
+        if isInColumn {
+            anchorPreference(key: RailGroupColumnKey.self, value: .bounds) { [$0] }
+        } else {
+            self
+        }
+    }
+}
+
+/// Strawman C's column: one rounded, faintly tinted rect spanning the
+/// selected group's tile and rows, tile-width plus `columnInset`.
+private struct RailGroupColumn: View {
+    let anchors: [Anchor<CGRect>]
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let first = anchors.first {
+                let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
+                // The column hugs the tile's top (inside the header frame)
+                // and the last chip's bottom (inside the last row's frame).
+                let inset = RailSelectionStyle.columnInset
+                let topTrim = (ProjectAccordionHeader.height - RailProjectTile.size) / 2
+                let bottomTrim = anchors.count > 1
+                    ? (SidebarDialTuning.rowHeight() - RailSelectionStyle.chipSize) / 2
+                    : topTrim
+                let top = union.minY + topTrim - inset
+                let bottom = union.maxY - bottomTrim + inset
+                let width = RailProjectTile.size + inset * 2
+                RoundedRectangle(cornerRadius: RailSelectionStyle.chipCornerRadius + inset, style: .continuous)
+                    .fill(Color.primary.opacity(SidebarRowCardBackground.hoverTintOpacity))
+                    .frame(width: width, height: bottom - top)
+                    .position(x: union.midX, y: (top + bottom) / 2)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -196,6 +288,8 @@ struct RailSessionRow: View {
     /// `SidebarDialTuning.epoch()`: a live Tray glass dial change must
     /// re-render the selected pill even when nothing else about the row did.
     var dialEpoch = 0
+    /// How the selected row is marked (`RailSelectionStyle`).
+    var selectionStyle: RailSelectionStyle = .card
     let onTap: () -> Void
 
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -215,9 +309,30 @@ struct RailSessionRow: View {
             // (symmetric), so centering in the card centers on the rail.
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize)
                 .frame(width: glyphSize, height: glyphSize)
+                .background {
+                    if selectionStyle == .chip || selectionStyle == .column {
+                        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: RailSelectionStyle.chipCornerRadius)
+                            .frame(width: RailSelectionStyle.chipSize, height: RailSelectionStyle.chipSize)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if selectionStyle == .ring && isActive {
+                        // The Dock's open-app dot, under the glyph.
+                        Circle()
+                            .fill(Color.primary.opacity(0.7))
+                            .frame(width: 4, height: 4)
+                            .offset(y: 12)
+                    }
+                }
                 .frame(maxWidth: .infinity)
             .frame(height: SidebarDialTuning.rowHeight())
-            .background(rowBackground)
+            .background {
+                if selectionStyle == .card {
+                    rowBackground
+                } else if selectionStyle == .ring {
+                    SidebarRowCardBackground(isActive: false, isHovered: isHovered)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -230,7 +345,10 @@ struct RailSessionRow: View {
     /// Sidebar vnext (pen.dev `CnDfN`): the selected glyph grows to the
     /// canvas's 35px (17.5pt).
     private var glyphSize: CGFloat {
-        isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
+        // The strawmen mark selection with a chip or dot, not a glyph size
+        // change, so every row keeps the resting size.
+        guard selectionStyle == .card else { return SidebarDialTuning.rowGhostSize() }
+        return isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
     }
 
     /// The selected card fills the hover card's footprint

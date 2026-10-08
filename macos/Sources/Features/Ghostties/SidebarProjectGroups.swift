@@ -309,9 +309,14 @@ struct RailProjectTile: View {
     let count: Int
     let isCollapsed: Bool
     var isEmpty: Bool = false
+    /// Set when this project holds the selected session: the rail's
+    /// selection style, which `.ring` and `.column` draw on the tile.
+    var selection: RailSelectionStyle? = nil
     let onToggle: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+
+    private var isFilled: Bool { selection == .column }
 
     // Mock B5 (`.mono` / `.mono .bd`), per appearance.
     private var tint: Color {
@@ -330,9 +335,18 @@ struct RailProjectTile: View {
         Button(action: onToggle) {
             Text(monogram)
                 .font(.system(size: monogram.count > 1 ? 11 : 13, weight: .bold))
-                .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : ink)
+                .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : (isFilled ? badgeText : ink))
                 .frame(width: Self.size, height: Self.size)
-                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint))
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(isFilled ? ink : tint))
+                .overlay {
+                    if selection == .ring {
+                        // Strawman A: the selected session's project, ringed
+                        // just outside the tile.
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(ink.opacity(0.6), lineWidth: 1.5)
+                            .padding(-3)
+                    }
+                }
                 .overlay(alignment: .topTrailing) {
                     if isCollapsed {
                         Text("\(count)")

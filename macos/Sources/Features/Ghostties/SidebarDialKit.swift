@@ -183,6 +183,9 @@ enum SidebarDialTuning {
 
     // MARK: Rail
     static let railExtraWidthKey = "ghostties.sidebarDial.railExtraWidth"
+    /// Exploration (`explore/rail-strawmen`): how the one-view rail marks
+    /// the selected session (`RailSelectionStyle`).
+    static let railSelectionStyleKey = "ghostties.sidebarDial.railSelectionStyle"
 
     /// Bumped every time the panel writes any key (`SidebarDialKitCoordinator
     /// .write`) — read by `RecentsRowView`'s `Equatable` conformance so a live
@@ -375,6 +378,17 @@ enum SidebarDialTuning {
         cgFloat(railExtraWidthKey, default: WorkspaceLayout.railExtraWidth, defaults: defaults)
     }
 
+    /// See `railSelectionStyleKey`. A fixture capture can pick one at launch
+    /// (`GHOSTTIES_CAPTURE_RAIL_SELECTION`) without writing any defaults.
+    static func railSelectionStyle(defaults: UserDefaults = SidebarDialTuning.store) -> RailSelectionStyle {
+        #if DEBUG
+        if let raw = CaptureFixture.railSelectionOverride, let style = RailSelectionStyle(rawValue: raw) {
+            return style
+        }
+        #endif
+        return choice(railSelectionStyleKey, default: RailSelectionStyle.shipped, defaults: defaults)
+    }
+
     /// Every storage key this panel owns — used by `resetSidebar()` to clear
     /// back to code defaults in one pass, same shape as
     /// `ComposerSingleLineReset.resetKeys`.
@@ -387,7 +401,7 @@ enum SidebarDialTuning {
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
-        historyInSidebarKey, railExtraWidthKey, projectsLayoutKey
+        historyInSidebarKey, railExtraWidthKey, projectsLayoutKey, railSelectionStyleKey
     ]
 
     static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
@@ -528,6 +542,7 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var projectsLayout: String
 
     var railExtraWidth: Double
+    var railSelectionStyle: String
 }
 
 @available(macOS 14, *)
@@ -616,7 +631,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
             listToTrayGap: Double(SidebarDialTuning.listToTrayGap(defaults: defaults)),
             historyInSidebar: SidebarDialTuning.historyInSidebar(defaults: defaults),
             projectsLayout: SidebarDialTuning.projectsLayout(defaults: defaults).rawValue,
-            railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults))
+            railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults)),
+            railSelectionStyle: SidebarDialTuning.railSelectionStyle(defaults: defaults).rawValue
         )
     }
 
@@ -697,6 +713,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setBoolIfChanged(SidebarDialTuning.historyInSidebarKey, previous.historyInSidebar, model.historyInSidebar)
         setStringIfChanged(SidebarDialTuning.projectsLayoutKey, previous.projectsLayout, model.projectsLayout)
         setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
+        setStringIfChanged(SidebarDialTuning.railSelectionStyleKey, previous.railSelectionStyle, model.railSelectionStyle)
         // Any write at all is a tuning change a row's `.equatable()` gate
         // can't see on its own — see `SidebarDialTuning.epochKey`'s doc
         // comment.
@@ -788,6 +805,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
                 options: SidebarProjectsLayout.allCases.map(\.rawValue)),
         // Rail
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
+        .select("railSelectionStyle", keyPath: \.railSelectionStyle, label: "Rail selection",
+                options: RailSelectionStyle.allCases.map(\.rawValue)),
         .action(resetActionPath, label: "Reset sidebar")
     ]
 }
