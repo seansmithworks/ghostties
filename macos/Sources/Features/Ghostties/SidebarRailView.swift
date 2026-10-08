@@ -193,13 +193,30 @@ struct SidebarRailView: View {
 /// session's project becomes a column, tile through its last row, its tile
 /// filled with ink; each grouped session is a tile-sized chip inside it.
 /// Pinned rows, and the rail outside one view, keep the wide row card.
+///
+/// Every value below is a "Rail column" dial (`SidebarDialTuning`); the
+/// `default…` constants are what ships, and what each dial reads unset.
 enum RailProjectColumn {
-    /// The chip's side and corner: the monogram tile's
+    /// The chip's side and corner default to the monogram tile's
     /// (`RailProjectTile.size`, radius 9), so chip and tile read as one family.
-    static let chipSize: CGFloat = RailProjectTile.size
-    static let chipCornerRadius: CGFloat = 9
+    static let defaultChipSizeOffset: CGFloat = 0
+    static let defaultChipCornerRadius: CGFloat = 9
     /// The column: the tile plus this margin on every side.
-    static let columnInset: CGFloat = 4
+    static let defaultColumnInset: CGFloat = 4
+    /// The column's faint fill: a hovered row's tint.
+    static let defaultColumnTintOpacity: Double = SidebarRowCardBackground.hoverTintOpacity
+    /// The selected project's tile: 1 is full ink, 0 the plain tile tint.
+    static let defaultSelectedTileFill: Double = 1
+
+    /// `RailProjectTile.size` plus the chip-size dial, clamped to the row
+    /// height so the chip never spills out of its row.
+    static var chipSize: CGFloat {
+        min(max(RailProjectTile.size + SidebarDialTuning.railChipSizeOffset(), 0), SidebarDialTuning.rowHeight())
+    }
+    static var chipCornerRadius: CGFloat { max(SidebarDialTuning.railChipCornerRadius(), 0) }
+    static var columnInset: CGFloat { max(SidebarDialTuning.railColumnInset(), 0) }
+    static var columnTintOpacity: Double { min(max(SidebarDialTuning.railColumnTintOpacity(), 0), 1) }
+    static var selectedTileFill: Double { min(max(SidebarDialTuning.railSelectedTileFill(), 0), 1) }
 
     /// The group the column marks: the one holding the selected session,
     /// or none (nothing selected, or the selection is pinned).
@@ -231,6 +248,8 @@ private extension View {
 /// The project column: one rounded, faintly tinted rect spanning the
 /// selected group's tile and rows, tile-width plus `columnInset`.
 private struct RailGroupColumn: View {
+    /// Re-renders on every dial write; the body reads the Rail column dials.
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     let anchors: [Anchor<CGRect>]
 
     var body: some View {
@@ -248,7 +267,7 @@ private struct RailGroupColumn: View {
                 let bottom = union.maxY - bottomTrim + inset
                 let width = RailProjectTile.size + inset * 2
                 RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius + inset, style: .continuous)
-                    .fill(Color.primary.opacity(SidebarRowCardBackground.hoverTintOpacity))
+                    .fill(Color.primary.opacity(RailProjectColumn.columnTintOpacity))
                     .frame(width: width, height: bottom - top)
                     .position(x: union.midX, y: (top + bottom) / 2)
             }

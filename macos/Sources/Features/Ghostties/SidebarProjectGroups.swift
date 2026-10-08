@@ -314,9 +314,15 @@ struct RailProjectTile: View {
     var isSelectedProject: Bool = false
     let onToggle: () -> Void
 
+    /// Re-renders on every dial write; the fill reads "Selected tile fill".
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @Environment(\.colorScheme) private var colorScheme
 
-    private var isFilled: Bool { isSelectedProject }
+    /// Ink laid over the tile tint: 0 unselected, the dial when selected.
+    private var inkFill: Double { isSelectedProject ? RailProjectColumn.selectedTileFill : 0 }
+    /// Past the midpoint the tile reads as ink, so its text flips to the
+    /// chrome colour to stay legible.
+    private var isFilled: Bool { inkFill > 0.5 }
 
     // Mock B5 (`.mono` / `.mono .bd`), per appearance.
     private var tint: Color {
@@ -337,7 +343,12 @@ struct RailProjectTile: View {
                 .font(.system(size: monogram.count > 1 ? 11 : 13, weight: .bold))
                 .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : (isFilled ? badgeText : ink))
                 .frame(width: Self.size, height: Self.size)
-                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(isFilled ? ink : tint))
+                .background {
+                    let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    // Tint fades out as ink fades in, so each end draws
+                    // exactly one fill: the plain tile at 0, solid ink at 1.
+                    shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(ink.opacity(inkFill)))
+                }
                 .overlay(alignment: .topTrailing) {
                     if isCollapsed {
                         Text("\(count)")

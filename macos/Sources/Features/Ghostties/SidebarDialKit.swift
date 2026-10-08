@@ -184,6 +184,13 @@ enum SidebarDialTuning {
     // MARK: Rail
     static let railExtraWidthKey = "ghostties.sidebarDial.railExtraWidth"
 
+    // MARK: Rail column (one view's selected project, `RailProjectColumn`)
+    static let railColumnTintOpacityKey = "ghostties.sidebarDial.railColumn.tintOpacity"
+    static let railColumnInsetKey = "ghostties.sidebarDial.railColumn.inset"
+    static let railChipCornerRadiusKey = "ghostties.sidebarDial.railColumn.chipCornerRadius"
+    static let railChipSizeOffsetKey = "ghostties.sidebarDial.railColumn.chipSizeOffset"
+    static let railSelectedTileFillKey = "ghostties.sidebarDial.railColumn.selectedTileFill"
+
     /// Bumped every time the panel writes any key (`SidebarDialKitCoordinator
     /// .write`) — read by `RecentsRowView`'s `Equatable` conformance so a live
     /// dial change actually invalidates rows whose OWN stored properties
@@ -375,6 +382,28 @@ enum SidebarDialTuning {
         cgFloat(railExtraWidthKey, default: WorkspaceLayout.railExtraWidth, defaults: defaults)
     }
 
+    /// The project column's faint fill (`RailProjectColumn.columnTintOpacity`).
+    static func railColumnTintOpacity(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(railColumnTintOpacityKey, default: RailProjectColumn.defaultColumnTintOpacity, defaults: defaults)
+    }
+    /// The column's margin around its tile and chips (`RailProjectColumn.columnInset`).
+    static func railColumnInset(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railColumnInsetKey, default: RailProjectColumn.defaultColumnInset, defaults: defaults)
+    }
+    /// The chip's corner (`RailProjectColumn.chipCornerRadius`).
+    static func railChipCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railChipCornerRadiusKey, default: RailProjectColumn.defaultChipCornerRadius, defaults: defaults)
+    }
+    /// Added to `RailProjectTile.size` for the chip's side; unclamped here,
+    /// `RailProjectColumn.chipSize` clamps it.
+    static func railChipSizeOffset(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railChipSizeOffsetKey, default: RailProjectColumn.defaultChipSizeOffset, defaults: defaults)
+    }
+    /// The selected project's tile fill, 0 (plain tile tint) to 1 (full ink).
+    static func railSelectedTileFill(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(railSelectedTileFillKey, default: RailProjectColumn.defaultSelectedTileFill, defaults: defaults)
+    }
+
     /// Every storage key this panel owns — used by `resetSidebar()` to clear
     /// back to code defaults in one pass, same shape as
     /// `ComposerSingleLineReset.resetKeys`.
@@ -387,7 +416,9 @@ enum SidebarDialTuning {
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
-        historyInSidebarKey, railExtraWidthKey, projectsLayoutKey
+        historyInSidebarKey, railExtraWidthKey, projectsLayoutKey,
+        railColumnTintOpacityKey, railColumnInsetKey, railChipCornerRadiusKey,
+        railChipSizeOffsetKey, railSelectedTileFillKey
     ]
 
     static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
@@ -528,6 +559,12 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var projectsLayout: String
 
     var railExtraWidth: Double
+
+    var railColumnTintOpacity: Double
+    var railColumnInset: Double
+    var railChipCornerRadius: Double
+    var railChipSizeOffset: Double
+    var railSelectedTileFill: Double
 }
 
 @available(macOS 14, *)
@@ -616,7 +653,12 @@ final class SidebarDialKitCoordinator: ObservableObject {
             listToTrayGap: Double(SidebarDialTuning.listToTrayGap(defaults: defaults)),
             historyInSidebar: SidebarDialTuning.historyInSidebar(defaults: defaults),
             projectsLayout: SidebarDialTuning.projectsLayout(defaults: defaults).rawValue,
-            railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults))
+            railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults)),
+            railColumnTintOpacity: SidebarDialTuning.railColumnTintOpacity(defaults: defaults),
+            railColumnInset: Double(SidebarDialTuning.railColumnInset(defaults: defaults)),
+            railChipCornerRadius: Double(SidebarDialTuning.railChipCornerRadius(defaults: defaults)),
+            railChipSizeOffset: Double(SidebarDialTuning.railChipSizeOffset(defaults: defaults)),
+            railSelectedTileFill: SidebarDialTuning.railSelectedTileFill(defaults: defaults)
         )
     }
 
@@ -697,6 +739,11 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setBoolIfChanged(SidebarDialTuning.historyInSidebarKey, previous.historyInSidebar, model.historyInSidebar)
         setStringIfChanged(SidebarDialTuning.projectsLayoutKey, previous.projectsLayout, model.projectsLayout)
         setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
+        setIfChanged(SidebarDialTuning.railColumnTintOpacityKey, previous.railColumnTintOpacity, model.railColumnTintOpacity)
+        setIfChanged(SidebarDialTuning.railColumnInsetKey, previous.railColumnInset, model.railColumnInset)
+        setIfChanged(SidebarDialTuning.railChipCornerRadiusKey, previous.railChipCornerRadius, model.railChipCornerRadius)
+        setIfChanged(SidebarDialTuning.railChipSizeOffsetKey, previous.railChipSizeOffset, model.railChipSizeOffset)
+        setIfChanged(SidebarDialTuning.railSelectedTileFillKey, previous.railSelectedTileFill, model.railSelectedTileFill)
         // Any write at all is a tuning change a row's `.equatable()` gate
         // can't see on its own — see `SidebarDialTuning.epochKey`'s doc
         // comment.
@@ -788,6 +835,14 @@ final class SidebarDialKitCoordinator: ObservableObject {
                 options: SidebarProjectsLayout.allCases.map(\.rawValue)),
         // Rail
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
+        // One view's selected project column (`RailProjectColumn`).
+        .group("railColumn", label: "Rail column", children: [
+            .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint", range: 0...0.3, step: 0.005),
+            .slider("railColumnInset", keyPath: \.railColumnInset, label: "Column inset", range: 0...12, step: 0.5, unit: "pt"),
+            .slider("railChipCornerRadius", keyPath: \.railChipCornerRadius, label: "Chip corner radius", range: 0...20, step: 0.5, unit: "pt"),
+            .slider("railChipSizeOffset", keyPath: \.railChipSizeOffset, label: "Chip size (vs tile)", range: -12...12, step: 0.5, unit: "pt"),
+            .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.05),
+        ]),
         .action(resetActionPath, label: "Reset sidebar")
     ]
 }

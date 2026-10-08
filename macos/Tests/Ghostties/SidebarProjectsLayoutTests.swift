@@ -171,6 +171,53 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         XCTAssertNil(RailProjectColumn.selectedGroupId(groups, selectedSessionId: nil))
     }
 
+    // MARK: - Rail column dials
+
+    /// Unset, every "Rail column" dial reads the value the column shipped
+    /// hard-coded (tint 0.04, inset 4, chip radius 9, chip = the 30pt tile,
+    /// full ink), so adding the dials changes nothing on screen.
+    func testRailColumnDialDefaultsAreTheShippedConstants() {
+        withDials {
+            XCTAssertEqual(RailProjectColumn.columnTintOpacity, 0.04)
+            XCTAssertEqual(RailProjectColumn.columnInset, 4)
+            XCTAssertEqual(RailProjectColumn.chipCornerRadius, 9)
+            XCTAssertEqual(RailProjectTile.size, 30)
+            XCTAssertEqual(RailProjectColumn.chipSize, 30)
+            XCTAssertEqual(RailProjectColumn.selectedTileFill, 1)
+        }
+        for key in [
+            SidebarDialTuning.railColumnTintOpacityKey, SidebarDialTuning.railColumnInsetKey,
+            SidebarDialTuning.railChipCornerRadiusKey, SidebarDialTuning.railChipSizeOffsetKey,
+            SidebarDialTuning.railSelectedTileFillKey,
+        ] {
+            XCTAssertTrue(SidebarDialTuning.allKeys.contains(key), "Reset sidebar must clear \(key)")
+        }
+    }
+
+    /// Each stored dial moves the value `RailProjectColumn` reports, and the
+    /// chip never outgrows its row.
+    func testRailColumnDialsDriveTheColumn() {
+        withDials({ d in
+            d.set(0.12, forKey: SidebarDialTuning.railColumnTintOpacityKey)
+            d.set(7.0, forKey: SidebarDialTuning.railColumnInsetKey)
+            d.set(5.5, forKey: SidebarDialTuning.railChipCornerRadiusKey)
+            d.set(-6.0, forKey: SidebarDialTuning.railChipSizeOffsetKey)
+            d.set(0.3, forKey: SidebarDialTuning.railSelectedTileFillKey)
+        }) {
+            XCTAssertEqual(RailProjectColumn.columnTintOpacity, 0.12)
+            XCTAssertEqual(RailProjectColumn.columnInset, 7)
+            XCTAssertEqual(RailProjectColumn.chipCornerRadius, 5.5)
+            XCTAssertEqual(RailProjectColumn.chipSize, 24)
+            XCTAssertEqual(RailProjectColumn.selectedTileFill, 0.3)
+        }
+        withDials({ d in
+            d.set(40.0, forKey: SidebarDialTuning.railChipSizeOffsetKey)
+            d.set(36.0, forKey: SidebarDialTuning.rowHeightKey)
+        }) {
+            XCTAssertEqual(RailProjectColumn.chipSize, 36, "the chip is clamped to the row height")
+        }
+    }
+
     // MARK: - One view is the Projects tab's layout only
 
     /// With the dial on One view, the Sessions tab still mounts the Sessions
