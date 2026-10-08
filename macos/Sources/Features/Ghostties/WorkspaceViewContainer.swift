@@ -2422,13 +2422,7 @@ class WorkspaceViewContainer: NSView {
         } else {
             target = order[0].id
         }
-        store.lastSelectedProjectId = target
-        coordinator.focusLastSession(forProject: target)
-        NotificationCenter.default.post(
-            name: .workspaceDidSelectProjectFromShortcut,
-            object: window,
-            userInfo: ["projectId": target]
-        )
+        ProjectSelection.select(target, store: store, coordinator: coordinator, window: window)
     }
 
     /// Lets the Projects tab expand and select the focused session's

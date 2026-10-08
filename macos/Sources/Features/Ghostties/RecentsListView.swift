@@ -315,10 +315,9 @@ struct RecentsListView: View {
                     .frame(height: SidebarProjectGroupItem.spacerHeight)
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
-                ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed) {
-                    guard let projectId = group.projectId else { return }
-                    withAnimation(ProjectAccordionState.toggleAnimation) {
-                        collapsedProjectsRaw = ProjectAccordionState.toggled(collapsedProjectsRaw, projectId)
+                ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed, isEmpty: group.isEmpty) {
+                    ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
+                        ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
                     }
                 }
             case .row(let session, _):
