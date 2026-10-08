@@ -58,6 +58,47 @@ enum ComposerResumeRows {
     }
 }
 
+// MARK: - Down list (A5)
+
+/// A5's ↓ list holds two sections, RESUME (past sessions) then TEMPLATES
+/// (the current project's start options), and ↓/↑ walk them as one list.
+/// An empty section is omitted; with both empty, RESUME stays as the
+/// empty-state holder ("No past sessions" / "No matches").
+enum ComposerDownList {
+    enum Section: Equatable { case resume, templates }
+
+    static let templatesSymbol = "rectangle.stack"
+
+    static func sections(resumeCount: Int, templateCount: Int) -> [Section] {
+        var sections: [Section] = []
+        if resumeCount > 0 { sections.append(.resume) }
+        if templateCount > 0 { sections.append(.templates) }
+        return sections.isEmpty ? [.resume] : sections
+    }
+
+    /// Visible rows per section: a lone section shows `soloCap`; with both
+    /// showing, each scrolls within `sharedCap` so the list stays short
+    /// enough to hang under a centred field.
+    static func cap(sectionCount: Int, soloCap: Int = 5, sharedCap: Int = 3) -> Int {
+        sectionCount > 1 ? sharedCap : soloCap
+    }
+
+    /// The keyboard order: every resume row, then every template row.
+    static func rowIDs(resume: [UUID], templates: [UUID]) -> [UUID] {
+        resume + templates
+    }
+}
+
+/// One TEMPLATES row in the ↓ list: what it shows and what Return/click
+/// runs (the composer's own start action for that template).
+struct ComposerTemplateRow: Identifiable {
+    let id: UUID
+    let systemImage: String
+    let title: String
+    let meta: String?
+    let action: () -> Void
+}
+
 // MARK: - Keyboard state
 
 /// The resume half of the composer's keyboard model, free of SwiftUI so
@@ -269,9 +310,11 @@ struct ComposerListRow: View {
     }
 }
 
-/// The Resume rows under the field (A5) or in the right column (A4).
+/// The Resume rows under the field (A5) or in the right column (A4). A5
+/// also passes `templates`, which follow as a TEMPLATES section.
 struct ComposerResumeListView: View {
     let rows: [HistoryEntry]
+    var templates: [ComposerTemplateRow] = []
     let selectedID: UUID?
     let isFocused: Bool
     let hasHistory: Bool
@@ -284,17 +327,21 @@ struct ComposerResumeListView: View {
     static let accessibilityLabel = "Resume a past session"
 
     var body: some View {
+        let sections = ComposerDownList.sections(resumeCount: rows.count, templateCount: templates.count)
+        let sectionCap = ComposerDownList.cap(sectionCount: sections.count, soloCap: cap)
         VStack(alignment: .leading, spacing: 0) {
-            ComposerResumeSectionHeader(systemImage: "clock.arrow.circlepath", title: "Resume", size: titleSize * 0.62)
-            if rows.isEmpty {
+            if sections.contains(.resume) {
+                ComposerResumeSectionHeader(systemImage: "clock.arrow.circlepath", title: "Resume", size: titleSize * 0.62)
+            }
+            if rows.isEmpty, sections.contains(.resume) {
                 Text(hasHistory ? "No matches" : "No past sessions")
                     .font(.system(size: titleSize * 0.8))
                     .foregroundStyle(ComposerResumeInk.secondary(colorScheme))
                     .padding(.horizontal, 12)
                     .frame(height: titleSize + 24, alignment: .leading)
-            } else {
+            } else if !rows.isEmpty {
                 let selectedIndex = selectedID.flatMap { id in rows.firstIndex { $0.id == id } }
-                ForEach(rows[ComposerResumeRows.window(count: rows.count, selected: selectedIndex, cap: cap)]) { entry in
+                ForEach(rows[ComposerResumeRows.window(count: rows.count, selected: selectedIndex, cap: sectionCap)]) { entry in
                     ComposerListRow(
                         systemImage: "clock.arrow.circlepath",
                         title: entry.title,
@@ -303,6 +350,21 @@ struct ComposerResumeListView: View {
                         showsReturnGlyph: true,
                         titleSize: titleSize,
                         action: { onResume(entry.id) }
+                    )
+                }
+            }
+            if sections.contains(.templates) {
+                ComposerResumeSectionHeader(systemImage: ComposerDownList.templatesSymbol, title: "Templates", size: titleSize * 0.62)
+                let selectedIndex = selectedID.flatMap { id in templates.firstIndex { $0.id == id } }
+                ForEach(templates[ComposerResumeRows.window(count: templates.count, selected: selectedIndex, cap: sectionCap)]) { row in
+                    ComposerListRow(
+                        systemImage: row.systemImage,
+                        title: row.title,
+                        meta: row.meta,
+                        isSelected: isFocused && row.id == selectedID,
+                        showsReturnGlyph: true,
+                        titleSize: titleSize,
+                        action: row.action
                     )
                 }
             }
