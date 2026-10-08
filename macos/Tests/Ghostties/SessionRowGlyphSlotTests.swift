@@ -454,27 +454,23 @@ final class SessionRowGlyphSlotTests: XCTestCase {
 
         // Asymmetric content-padding dials (Sean's Dev holds leading 8,
         // trailing unset) must not move the rail's centre.
-        let store = SidebarDialTuning.store
-        store.set(8.0, forKey: SidebarDialTuning.contentPaddingLeadingKey)
-        defer { store.removeObject(forKey: SidebarDialTuning.contentPaddingLeadingKey) }
-        XCTAssertEqual(try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter), clusterCentre, accuracy: 0.5, "rail glyph centre x with leading padding 8")
+        try withDials({ $0.set(8.0, forKey: SidebarDialTuning.contentPaddingLeadingKey) }) {
+            XCTAssertEqual(try railRowGlyphCenterX(railWidth: railWidth, gutter: gutter), clusterCentre, accuracy: 0.5, "rail glyph centre x with leading padding 8")
+        }
     }
 
     /// Renders the expanded tray under one "Tray width" mode and returns the
-    /// capsule spans on the shared baseline. The dial is set only through the
-    /// isolated `SidebarDialTuning.store`, and cleared afterward.
+    /// capsule spans on the shared baseline. The dial is set only in a
+    /// private suite bound around the render (`withDials`).
     private func expandedTraySpans(mode: TrayGlassStyle.TrayWidth, columnWidth: CGFloat, height: CGFloat, gutter: CGFloat = 0) throws -> (rep: NSBitmapImageRep, scale: CGFloat, spans: [ClosedRange<CGFloat>], bottom: CGFloat) {
-        XCTAssertTrue(SidebarDialTuning.store !== UserDefaults.standard, "dial store must be the isolated suite")
-        let store = SidebarDialTuning.store
-        store.set(mode.rawValue, forKey: SidebarDialTuning.trayWidthKey)
-        defer { store.removeObject(forKey: SidebarDialTuning.trayWidthKey) }
-        XCTAssertEqual(SidebarDialTuning.trayWidth(), mode)
-
-        let size = CGSize(width: columnWidth, height: 120)
-        let (rep, scale) = try renderTray(vertical: false, size: size, gutter: gutter)
-        let bottom = size.height - SidebarTray.bottomPadding(isVertical: false)
-        let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: bottom - height / 2)
-        return (rep, scale, spans, bottom)
+        try withDials({ $0.set(mode.rawValue, forKey: SidebarDialTuning.trayWidthKey) }) {
+            XCTAssertEqual(SidebarDialTuning.trayWidth(), mode)
+            let size = CGSize(width: columnWidth, height: 120)
+            let (rep, scale) = try renderTray(vertical: false, size: size, gutter: gutter)
+            let bottom = size.height - SidebarTray.bottomPadding(isVertical: false)
+            let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: bottom - height / 2)
+            return (rep, scale, spans, bottom)
+        }
     }
 
     private func assertSharedBaseline(_ spans: [ClosedRange<CGFloat>], rep: NSBitmapImageRep, scale: CGFloat, height: CGFloat, bottom: CGFloat) throws {

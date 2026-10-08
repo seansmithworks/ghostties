@@ -11,24 +11,11 @@ import GhosttiesCore
 /// Geometry is read off pixels: History is selected (flat style, since
 /// `cacheDisplay` can't capture glass), so its card is the one lifted run
 /// down the card's leading edge, and the opaque tray is the first lifted
-/// pixel row below it. Dials are set only in the isolated
-/// `SidebarDialTuning.store` and cleared in `tearDown`.
+/// pixel row below it. Dials are set only in a private suite bound around
+/// each render (`withDials`).
 @MainActor
 final class SidebarHistoryPlacementTests: XCTestCase {
     private typealias Placement = SidebarSessionSections.HistoryPlacement
-
-    override func setUp() {
-        super.setUp()
-        XCTAssertTrue(SidebarDialTuning.store !== UserDefaults.standard, "dial store must be the isolated suite")
-        SidebarDialTuning.store.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
-    }
-
-    override func tearDown() {
-        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.selectedRowStyleKey)
-        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.historyPlacementKey)
-        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.historyInSidebarKey)
-        super.tearDown()
-    }
 
     // MARK: - Dial
 
@@ -44,13 +31,15 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     /// A launch argument (`-ghostties.sidebarDial.historyPlacement afterActive`)
     /// arrives as a string, the same shape a stored string has.
     func testPlacementDialParsesStringsAndFallsBackToTheDefault() {
-        let store = SidebarDialTuning.store
-        store.set("afterActive", forKey: SidebarDialTuning.historyPlacementKey)
-        XCTAssertEqual(SidebarDialTuning.historyPlacement(), .afterActive)
-        store.set("bottom", forKey: SidebarDialTuning.historyPlacementKey)
-        XCTAssertEqual(SidebarDialTuning.historyPlacement(), .bottom)
-        store.set("nonsense", forKey: SidebarDialTuning.historyPlacementKey)
-        XCTAssertEqual(SidebarDialTuning.historyPlacement(), .bottom)
+        withDials {
+            let store = SidebarDialTuning.store
+            store.set("afterActive", forKey: SidebarDialTuning.historyPlacementKey)
+            XCTAssertEqual(SidebarDialTuning.historyPlacement(), .afterActive)
+            store.set("bottom", forKey: SidebarDialTuning.historyPlacementKey)
+            XCTAssertEqual(SidebarDialTuning.historyPlacement(), .bottom)
+            store.set("nonsense", forKey: SidebarDialTuning.historyPlacementKey)
+            XCTAssertEqual(SidebarDialTuning.historyPlacement(), .bottom)
+        }
         XCTAssertEqual(Placement.allCases.map(\.rawValue), ["afterActive", "bottom"])
     }
 
@@ -107,24 +96,18 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     /// tray's reserved space) or the rail, with the opaque tray overlaid at
     /// the bottom the way the sidebar root hosts it.
     ///
-    /// The dial suite is one on-disk domain shared by every parallel test
-    /// process, and a process starting up clears it
-    /// (`GhosttiesTestIsolation`), so a dial can vanish mid-render. The
-    /// render is retried until the dials it set held from start to finish.
+    /// The dials are set in a private suite bound around the render
+    /// (`withDials`), so no other test reads or clears them.
     private func render(rail: Bool, placement: Placement, sessionCount: Int, height: CGFloat, selectHistory: Bool = true) throws -> Render {
-        for _ in 0..<5 {
-            let store = SidebarDialTuning.store
-            store.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
-            store.set(placement.rawValue, forKey: SidebarDialTuning.historyPlacementKey)
+        try withDials({
+            $0.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
+            $0.set(placement.rawValue, forKey: SidebarDialTuning.historyPlacementKey)
             // History is off by default since sidebar vnext; these tests
             // measure where it sits when it's on.
-            store.set(true, forKey: SidebarDialTuning.historyInSidebarKey)
-            let r = try renderOnce(rail: rail, sessionCount: sessionCount, height: height, selectHistory: selectHistory)
-            if SidebarDialTuning.historyPlacement() == placement && SidebarDialTuning.selectedRowStyle() == .flat
-                && SidebarDialTuning.historyInSidebar() { return r }
+            $0.set(true, forKey: SidebarDialTuning.historyInSidebarKey)
+        }) {
+            try renderOnce(rail: rail, sessionCount: sessionCount, height: height, selectHistory: selectHistory)
         }
-        struct DialsKeptChanging: Error {}
-        throw DialsKeptChanging()
     }
 
     private func renderOnce(rail: Bool, sessionCount: Int, height: CGFloat, selectHistory: Bool) throws -> Render {

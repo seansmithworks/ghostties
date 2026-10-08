@@ -19,17 +19,6 @@ import GhosttiesCore
 final class SelectedRowFootprintTests: XCTestCase {
     private let height: CGFloat = 100
 
-    override func setUp() {
-        super.setUp()
-        XCTAssertTrue(SidebarDialTuning.store !== UserDefaults.standard, "dial store must be the isolated suite")
-        SidebarDialTuning.store.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
-    }
-
-    override func tearDown() {
-        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.selectedRowStyleKey)
-        super.tearDown()
-    }
-
     // MARK: - Harness
 
     private func railWidth() throws -> CGFloat {
@@ -42,7 +31,15 @@ final class SelectedRowFootprintTests: XCTestCase {
         )
     }
 
+    /// Rendered with the flat selected style set in a private dial suite
+    /// bound around the render (`withDials`).
     private func render<V: View>(_ view: V, width: CGFloat) throws -> (NSBitmapImageRep, CGFloat) {
+        try withDials({ $0.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey) }) {
+            try renderInScope(view, width: width)
+        }
+    }
+
+    private func renderInScope<V: View>(_ view: V, width: CGFloat) throws -> (NSBitmapImageRep, CGFloat) {
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
         let hosting = NSHostingView(rootView: view
             .frame(width: width, height: height, alignment: .top)

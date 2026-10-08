@@ -225,11 +225,6 @@ struct ComposerResumeHostedTests {
 /// the sidebar; Pinned and Active lay out exactly as before.
 @MainActor
 final class SidebarHistoryDialTests: XCTestCase {
-    override func tearDown() {
-        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.historyInSidebarKey)
-        super.tearDown()
-    }
-
     func testDialDefaultsToHiddenAndResetClearsIt() {
         let name = "com.seansmithdesign.ghostties.tests.history-in-sidebar"
         let d = UserDefaults(suiteName: name)!
@@ -270,17 +265,12 @@ final class SidebarHistoryDialTests: XCTestCase {
         }
     }
 
-    /// Ink pixels in the bottom 120pt of the session column. The dial suite
-    /// is shared across parallel test processes and cleared at each one's
-    /// launch, so the render is retried until the dial held throughout.
+    /// Ink pixels in the bottom 120pt of the session column, with the dial
+    /// set in a private suite bound around the render (`withDials`).
     private func renderBottomInk(rail: Bool, historyInSidebar: Bool) throws -> Int {
-        for _ in 0..<5 {
-            SidebarDialTuning.store.set(historyInSidebar, forKey: SidebarDialTuning.historyInSidebarKey)
-            let ink = try renderBottomInkOnce(rail: rail)
-            if SidebarDialTuning.historyInSidebar() == historyInSidebar { return ink }
+        try withDials({ $0.set(historyInSidebar, forKey: SidebarDialTuning.historyInSidebarKey) }) {
+            try renderBottomInkOnce(rail: rail)
         }
-        struct DialKeptChanging: Error {}
-        throw DialKeptChanging()
     }
 
     private func renderBottomInkOnce(rail: Bool) throws -> Int {

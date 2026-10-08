@@ -19,12 +19,22 @@ import DialkitmacOSAgent
 // dial in this app already uses, so a Release binary staying dial-free is
 // really "nobody ever wrote these keys," not a compiled-out code path.
 enum SidebarDialTuning {
-    /// The defaults domain every dial is read from and written to. Production
-    /// never touches it (`.standard`). The test bundle swaps in a throwaway
-    /// suite at load (`GhosttiesTestIsolation`) so a hosted test never reads
-    /// the dial values tuned in the live Dev app's domain. Every reader's
+    /// The defaults domain every dial is read from and written to: the
+    /// scoped store when one is bound, else the shared one. Every reader's
     /// default argument and every dial `@AppStorage` goes through it.
-    nonisolated(unsafe) static var store: UserDefaults = .standard
+    static var store: UserDefaults { scopedStore ?? sharedStore }
+
+    /// Production never touches it (`.standard`). The test bundle swaps in a
+    /// throwaway suite private to its process at load (`GhosttiesTestIsolation`)
+    /// so a hosted test never reads the dial values tuned in the live Dev
+    /// app's domain.
+    nonisolated(unsafe) static var sharedStore: UserDefaults = .standard
+
+    /// A store bound for one scope only (`$scopedStore.withValue(suite) { … }`):
+    /// a test that needs its own dial values binds a private suite around
+    /// the render instead of writing a store other tests read concurrently.
+    /// Nil in production.
+    @TaskLocal static var scopedStore: UserDefaults?
 
     // MARK: Window
     /// Every outer gutter in the window: the terminal (and browser) card's

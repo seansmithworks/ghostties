@@ -214,20 +214,13 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let store = WorkspaceStore(testingProjects: [atlas, fieldwork], testingSessions: sessions)
         for s in sessions { store.updateSessionStatus(id: s.id, status: .running) }
 
-        let dials = SidebarDialTuning.store
-        let saved = dials.string(forKey: ProjectAccordionState.collapsedKey)
-        defer {
-            dials.removeObject(forKey: SidebarDialTuning.projectsLayoutKey)
-            if let saved { dials.set(saved, forKey: ProjectAccordionState.collapsedKey) } else { dials.removeObject(forKey: ProjectAccordionState.collapsedKey) }
-        }
-
-        // The dial suite is shared by every parallel test process, and one
-        // starting up clears it (`GhosttiesTestIsolation`), so a measurement
-        // is retried until the values it set held from start to finish.
+        // Each measurement binds its own private dial suite (`withDials`),
+        // so no other test reads or clears the layout it sets.
         func height(_ layout: SidebarProjectsLayout, collapsed: Set<UUID>) -> CGFloat {
-            for _ in 0..<5 {
-                dials.set(layout.rawValue, forKey: SidebarDialTuning.projectsLayoutKey)
-                dials.set(ProjectAccordionState.encode(collapsed), forKey: ProjectAccordionState.collapsedKey)
+            withDials({
+                $0.set(layout.rawValue, forKey: SidebarDialTuning.projectsLayoutKey)
+                $0.set(ProjectAccordionState.encode(collapsed), forKey: ProjectAccordionState.collapsedKey)
+            }) {
                 let view = RecentsListView(previewDragState: SessionDragState())
                     .environmentObject(store)
                     .environmentObject(SessionCoordinator())
@@ -235,14 +228,8 @@ final class SidebarProjectsLayoutTests: XCTestCase {
                     .frame(width: 260)
                 let hosting = NSHostingView(rootView: view)
                 hosting.layoutSubtreeIfNeeded()
-                let measured = hosting.fittingSize.height
-                if SidebarDialTuning.projectsLayout() == layout,
-                   ProjectAccordionState.decode(dials.string(forKey: ProjectAccordionState.collapsedKey) ?? "") == collapsed {
-                    return measured
-                }
+                return hosting.fittingSize.height
             }
-            XCTFail("dials kept changing")
-            return .nan
         }
 
         let row = SidebarDialTuning.rowHeight()

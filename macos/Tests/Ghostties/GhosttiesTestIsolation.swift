@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Testing
+import XCTest
 @testable import Ghostty
 
 /// The test bundle's principal class (`NSPrincipalClass` in the GhosttyTests
@@ -9,15 +10,39 @@ import Testing
 /// dials from a throwaway suite instead of the Dev app's real defaults domain
 /// (`com.seansmithdesign.ghostties.dev`), where live-tuned values would
 /// otherwise leak into layout and pixel tests. A new test cannot forget it.
+///
+/// The suite is private to this process (its name carries the pid), so a
+/// parallel test process starting up can't clear it mid-render. A test that
+/// needs its own dial values never writes this shared suite: it binds a
+/// private one around its render with `withDials(_:_:)`.
 @objc(GhosttiesTestIsolation)
-final class GhosttiesTestIsolation: NSObject {
-    static let suiteName = "com.seansmithdesign.ghostties.tests.sidebar-dials"
+final class GhosttiesTestIsolation: NSObject, XCTestObservation {
+    static let suiteName = "com.seansmithdesign.ghostties.tests.sidebar-dials.\(getpid())"
 
     override init() {
         super.init()
         UserDefaults().removePersistentDomain(forName: Self.suiteName)
-        SidebarDialTuning.store = UserDefaults(suiteName: Self.suiteName)!
+        SidebarDialTuning.sharedStore = UserDefaults(suiteName: Self.suiteName)!
+        XCTestObservationCenter.shared.addTestObserver(self)
     }
+
+    func testBundleDidFinish(_ testBundle: Bundle) {
+        UserDefaults().removePersistentDomain(forName: Self.suiteName)
+    }
+}
+
+/// Runs `body` with every dial reader (and every dial `@AppStorage` built
+/// inside it) reading a fresh private suite, seeded by `configure`. Nothing
+/// is written to the suite other tests read, so concurrent tests can't see
+/// these values or clear them. Render inside `body`: views constructed and
+/// laid out there read this suite.
+@discardableResult
+func withDials<R>(_ configure: (UserDefaults) -> Void = { _ in }, _ body: () throws -> R) rethrows -> R {
+    let name = "com.seansmithdesign.ghostties.tests.dials.\(UUID().uuidString)"
+    let suite = UserDefaults(suiteName: name)!
+    defer { suite.removePersistentDomain(forName: name) }
+    configure(suite)
+    return try SidebarDialTuning.$scopedStore.withValue(suite) { try body() }
 }
 
 @Suite("Test isolation: sidebar dial defaults")
@@ -33,13 +58,30 @@ struct SidebarDialIsolationTests {
         // Whatever Dev's domain holds must not reach the production reader.
         #expect(SidebarDialTuning.trayInnerPadding() == TrayGlassStyle.innerPadding)
 
-        let store = SidebarDialTuning.store
-        store.set(sentinel, forKey: key)
-        defer { store.removeObject(forKey: key) }
-
-        #expect(SidebarDialTuning.trayInnerPadding() == CGFloat(sentinel))
-        // The write went to the suite and never to standard.
+        withDials({ $0.set(sentinel, forKey: key) }) {
+            #expect(SidebarDialTuning.trayInnerPadding() == CGFloat(sentinel))
+        }
+        // The value never reached the shared suite or standard.
+        #expect(SidebarDialTuning.sharedStore.object(forKey: key) == nil)
         #expect(standard.object(forKey: key) as? Double == standardBefore)
+    }
+
+    @Test("The shared suite is private to this test process")
+    func sharedSuiteIsPerProcess() {
+        #expect(GhosttiesTestIsolation.suiteName.hasSuffix(".\(getpid())"))
+    }
+
+    /// A dial `@AppStorage` built inside the scope reads the scoped suite.
+    @Test("Views built inside withDials read the scoped suite")
+    @MainActor
+    func appStorageInsideScopeReadsScopedSuite() {
+        struct Probe: View {
+            @AppStorage(SidebarDialTuning.windowMarginKey, store: SidebarDialTuning.store) var margin = 0.0
+            var body: some View { Color.clear }
+        }
+        let read = withDials({ $0.set(31.0, forKey: SidebarDialTuning.windowMarginKey) }) { Probe().margin }
+        #expect(read == 31)
+        #expect(Probe().margin == 0)
     }
 }
 
