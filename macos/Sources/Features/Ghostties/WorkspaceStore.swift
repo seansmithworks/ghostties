@@ -532,9 +532,14 @@ final class WorkspaceStore: ObservableObject {
     /// capture-fixture mode, any canned session that was never actually
     /// opened) still has a row in the full sidebar and must still have one
     /// in the rail.
-    func railSessions() -> [AgentSession] {
-        RecentsListView.pinnedSessions(from: sessions)
-            + RecentsListView.activeSessions(from: sessions, statuses: globalStatuses)
+    /// In one view (`SidebarProjectsLayout.oneView`) Active is listed
+    /// project by project, as the list and rail group it.
+    func railSessions(layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()) -> [AgentSession] {
+        let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses)
+        let ordered = layout == .oneView
+            ? SidebarProjectGroup.make(active: active, projects: projects).flatMap(\.sessions)
+            : active
+        return RecentsListView.pinnedSessions(from: sessions) + ordered
     }
 
     #if DEBUG

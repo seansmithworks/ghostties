@@ -31,6 +31,9 @@ struct RecentsListView: View {
     @State private var autoScrollTimer: Timer?
     @State private var autoScrollAnchorId: String?
 
+    /// Folded projects in the one-view list (`ProjectAccordionState`).
+    @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
+
     init() {
         #if DEBUG
         self.skipScrollViewForTesting = false
@@ -238,7 +241,11 @@ struct RecentsListView: View {
             // comment above it) — `.equatable()` on `RecentsRowView`
             // in `sessionRow(for:)` is a body-re-execution perf gate
             // layered on top, not what makes rows fresh.
-            sectionRows(sections.active, section: .active)
+            if SidebarDialTuning.projectsLayout() == .oneView {
+                groupedActiveRows(sections.active)
+            } else {
+                sectionRows(sections.active, section: .active)
+            }
         case .activeEnd:
             endDropZone(section: .active, sectionList: sections.active)
         case .history:
@@ -289,6 +296,56 @@ struct RecentsListView: View {
                 SessionDragGapView()
             }
         }
+    }
+
+    /// One view (`SidebarProjectsLayout.oneView`, mock B5): Active's rows
+    /// under one accordion header per project. Drag and drop still act on
+    /// the whole Active list (`sectionList`), so a reorder lands at the
+    /// same place in every layout; the live gap shows before the row it
+    /// targets, or after the last row for a drop at the end.
+    @ViewBuilder
+    private func groupedActiveRows(_ active: [AgentSession]) -> some View {
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+        let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        let gapBeforeId = groupedGapTarget(active)
+        ForEach(items) { item in
+            switch item {
+            case .spacer:
+                Color.clear
+                    .frame(height: SidebarProjectGroupItem.spacerHeight)
+                    .accessibilityHidden(true)
+            case .header(let group, let isCollapsed):
+                ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed) {
+                    guard let projectId = group.projectId else { return }
+                    withAnimation(ProjectAccordionState.toggleAnimation) {
+                        collapsedProjectsRaw = ProjectAccordionState.toggled(collapsedProjectsRaw, projectId)
+                    }
+                }
+            case .row(let session, _):
+                if session.id != dragState.draggingSessionId {
+                    if gapBeforeId == .some(session.id) {
+                        SessionDragGapView()
+                    }
+                    sessionRow(
+                        for: session, section: .active, sectionList: active,
+                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle
+                    )
+                }
+            }
+        }
+        if gapBeforeId == .some(nil) {
+            SessionDragGapView()
+        }
+    }
+
+    /// Where the live drag gap sits among Active's rows: before the session
+    /// returned, or at the end for `.some(nil)`. Nil when no gap targets
+    /// Active. Same index rule as `rowSlots`.
+    private func groupedGapTarget(_ active: [AgentSession]) -> UUID?? {
+        guard let gap = dragState.gap, gap.section == .active else { return nil }
+        let working = active.filter { $0.id != dragState.draggingSessionId }
+        let index = min(gap.index ?? working.count, working.count)
+        return .some(index < working.count ? working[index].id : nil)
     }
 
     private struct SessionRowSlot: Identifiable {
@@ -557,7 +614,7 @@ struct RecentsListView: View {
 
     // MARK: - Session Row
 
-    private func sessionRow(for session: AgentSession, section: SessionSection, sectionList: [AgentSession]) -> some View {
+    private func sessionRow(for session: AgentSession, section: SessionSection, sectionList: [AgentSession], subtitle: String? = nil) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
@@ -574,6 +631,7 @@ struct RecentsListView: View {
             projectName: projectName,
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
+            subtitle: subtitle,
             isActive: coordinator.sidebarSelectedSessionId == session.id,
             isEditing: editingSessionId == session.id,
             editingName: editingSessionId == session.id ? $editingName : .constant(""),
