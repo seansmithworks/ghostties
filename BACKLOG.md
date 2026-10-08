@@ -2,16 +2,24 @@
 
 ## 2026-10-08 — sidebar vnext decisions + overnight wave (session dd3c3085, "SideBar Tweaks")
 
-State: `feat/vnext-lock-it` @ `1d786120c` (Tray style, Selected row, Shimmer (dark) dials; reviewed). Options page https://claude.ai/artifact/DpXMtZJsPLdXH2JcrJKWNw; canvas `~/Documents/Pencil.Dev/Sidebar vnext – options 2026-10-08.pen`.
+State: PR #205 open (feat/sidebar-vnext); L1–L5 + bake + cwd-project fix + composer projects/show-more merged. Earlier: `feat/vnext-lock-it` @ `1d786120c` (Tray style, Selected row, Shimmer (dark) dials; reviewed). Options page https://claude.ai/artifact/DpXMtZJsPLdXH2JcrJKWNw; canvas `~/Documents/Pencil.Dev/Sidebar vnext – options 2026-10-08.pen`.
 
-- [ ] L1 tray hover, Finder rule at radius 20 (single-button capsule fills; multi = shape concentric to 20). | carried, overnight
-- [ ] L2 Cmd+T composer start-or-resume: A5 (one line, ↓ reveals Resume) + A4 two-column switch; History hidden from sidebar behind a dial (default hidden). Resume suggestions need mapping + iteration. | carried, overnight
-- [ ] L3 B5 Projects: one view, no tabs, accordion `Project ⌄ ——— count`, behind a dial; rail as monogram tiles. After L2. | carried, overnight
-- [ ] Bake Tint + shimmer as the selected-row default at lock-it. | carried
-- [ ] Remove losing dial options before the PR (row styles, Bare tray, History placement). | carried
+- [x] L1 tray hover, Finder rule at radius 20 (single-button capsule fills; multi = shape concentric to 20). | carried, overnight
+- [x] L2 Cmd+T composer start-or-resume: A5 (one line, ↓ reveals Resume) + A4 two-column switch; History hidden from sidebar behind a dial (default hidden). Resume suggestions need mapping + iteration. | carried, overnight
+- [x] L3 B5 Projects: one view, no tabs, accordion `Project ⌄ ——— count`, behind a dial; rail as monogram tiles. After L2. | carried, overnight
+- [x] Bake Tint + shimmer as the selected-row default at lock-it. | carried
+- [x] Remove losing dial options before the PR (row styles, Bare tray, History placement). | carried
 - [ ] Delete `lock-it/.build-capture` + `.build-dev`…`.build-dev4` — Sean: "yes, once we pick". | parked
 - [ ] B1 collapsible headers as an alternative if B5 doesn't land. | parked
 - [ ] Bar/Type row styles force semibold; `selectedCardCornerRadius` dial only drives the rail hairline. | parked
+- [ ] Composer path completion: `/` or `~` completes folders on disk; Enter starts a session there (adds project). After beta.26. | parked
+- [ ] Rail overflows at short window heights (One view + expanded rail, ~520–620pt): rail needs a scroll view. | carried
+- [ ] Composer doesn't open locked to a clicked empty project (tray + / Cmd+T pick the project themselves). | parked
+- [ ] Older suites write+restore Dev's defaults domain (CaptureFixtureDefaultsTests, WorkspaceWindowPredicateTests, ComposerFlowTests, WorkspaceStoreProjectPickerTests) — inject a suite instead. | carried
+- [ ] Session project only follows a shell `cd`; while Claude Code runs, Claude's reported cwd isn't wired. | parked
+- [ ] Empty-project header uses tertiaryLabelColor (<4.5:1 in light) — check legibility. | carried
+- [ ] Highlight-steal: a project whose name starts like a template alias (e.g. "cc-site") takes `cc` + Return with the list closed. | parked
+- [ ] VoiceOver: "Show N more" expansion doesn't announce/move focus to new rows. | parked
 
 ## 2026-10-06 — beta.26 contract run 1 (session 71606cce): tag still gated
 
