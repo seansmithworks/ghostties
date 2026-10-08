@@ -839,6 +839,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
     var witnessFloatPeriod: Double
     var witnessOpacity: Double
     var witnessBeatSpeed: Double
+    var resumeLayoutRaw: String
 
     /// The `shadowPreset` `.select` control (in `ComposerDialKitCoordinator
     /// .controls`) writes through this keyPath via DialKit's generic
@@ -889,7 +890,8 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         witnessFloatHorizontalAmplitude: Double,
         witnessFloatPeriod: Double,
         witnessOpacity: Double,
-        witnessBeatSpeed: Double
+        witnessBeatSpeed: Double,
+        resumeLayoutRaw: String
     ) {
         self.singleLineFieldSize = singleLineFieldSize
         self.singleLineRowSize = singleLineRowSize
@@ -915,6 +917,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         self.witnessFloatPeriod = witnessFloatPeriod
         self.witnessOpacity = witnessOpacity
         self.witnessBeatSpeed = witnessBeatSpeed
+        self.resumeLayoutRaw = resumeLayoutRaw
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -923,6 +926,7 @@ struct ComposerDialKitTuningModel: Codable, Equatable {
         case shadowRadius, shadowYOffset, shadowOpacity, treatmentRaw, glassTintRaw
         case witnessEnabled, witnessGap
         case witnessSize, witnessFloatAmplitude, witnessFloatHorizontalAmplitude, witnessFloatPeriod, witnessOpacity, witnessBeatSpeed
+        case resumeLayoutRaw
     }
 }
 
@@ -1075,7 +1079,8 @@ final class ComposerDialKitCoordinator: ObservableObject {
             witnessFloatHorizontalAmplitude: ComposerWitnessFloatHorizontal.amplitude(defaults: defaults),
             witnessFloatPeriod: ComposerWitnessFloatPeriod.period(defaults: defaults),
             witnessOpacity: ComposerWitnessOpacity.opacity(defaults: defaults),
-            witnessBeatSpeed: ComposerWitnessBeatSpeed.speed(defaults: defaults)
+            witnessBeatSpeed: ComposerWitnessBeatSpeed.speed(defaults: defaults),
+            resumeLayoutRaw: ComposerResumeLayout.current(defaults: defaults).rawValue
         )
     }
 
@@ -1137,6 +1142,9 @@ final class ComposerDialKitCoordinator: ObservableObject {
         if model.witnessBeatSpeed != previous.witnessBeatSpeed {
             defaults.set(model.witnessBeatSpeed, forKey: ComposerWitnessBeatSpeed.storageKey)
         }
+        if model.resumeLayoutRaw != previous.resumeLayoutRaw {
+            defaults.set(model.resumeLayoutRaw, forKey: ComposerResumeLayout.storageKey)
+        }
         onChange()
     }
 
@@ -1151,6 +1159,15 @@ final class ComposerDialKitCoordinator: ObservableObject {
     /// vertical, Float horizontal, Float period, Ghost opacity, Beat speed,
     /// Reset.
     static let controls: [DialControl<ComposerDialKitTuningModel>] = [
+        // Sidebar vnext: how past sessions show — A5 (↓ reveals a list
+        // under the one-line field, the default) or A4 (two columns).
+        .select(
+            "resumeLayout", keyPath: \.resumeLayoutRaw, label: "Resume",
+            options: [
+                DialOption(ComposerResumeLayout.list.rawValue, label: "List on ↓ (A5)"),
+                DialOption(ComposerResumeLayout.columns.rawValue, label: "Two columns (A4)")
+            ]
+        ),
         .select(
             "treatment", keyPath: \.treatmentRaw, label: "Treatment",
             options: [

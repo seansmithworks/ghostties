@@ -100,11 +100,15 @@ extension SidebarSessionSections {
         let footer: [Slot]
     }
 
-    func layout(historyPlacement: HistoryPlacement) -> Layout {
+    /// `showsHistory` is the "History in sidebar" dial
+    /// (`SidebarDialTuning.historyInSidebar`): off, History and its hairline
+    /// leave both views and Pinned/Active lay out exactly as before.
+    func layout(historyPlacement: HistoryPlacement, showsHistory: Bool) -> Layout {
         var list: [Slot] = []
         if !pinned.isEmpty { list += [.pinnedRows, .pinnedEnd] }
         if !pinned.isEmpty && !active.isEmpty { list.append(.pinnedHairline) }
         list += [.activeRows, .activeEnd]
+        guard showsHistory else { return Layout(list: list, footer: []) }
         let history: [Slot] = rowSessions.isEmpty ? [.history] : [.historyHairline, .history]
         switch historyPlacement {
         case .afterActive: return Layout(list: list + history, footer: [])

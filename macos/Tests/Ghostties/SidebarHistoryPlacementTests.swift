@@ -26,6 +26,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     override func tearDown() {
         SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.selectedRowStyleKey)
         SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.historyPlacementKey)
+        SidebarDialTuning.store.removeObject(forKey: SidebarDialTuning.historyInSidebarKey)
         super.tearDown()
     }
 
@@ -73,10 +74,10 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let a = AgentSession(name: "a", templateId: UUID(), projectId: UUID(), isPinned: true)
         let b = AgentSession(name: "b", templateId: UUID(), projectId: UUID())
         let sections = SidebarSessionSections(pinned: [a], active: [b], inactive: [], archived: [])
-        let after = sections.layout(historyPlacement: .afterActive)
+        let after = sections.layout(historyPlacement: .afterActive, showsHistory: true)
         XCTAssertEqual(after.list, [.pinnedRows, .pinnedEnd, .pinnedHairline, .activeRows, .activeEnd, .historyHairline, .history])
         XCTAssertEqual(after.footer, [])
-        let bottom = sections.layout(historyPlacement: .bottom)
+        let bottom = sections.layout(historyPlacement: .bottom, showsHistory: true)
         XCTAssertEqual(bottom.list, [.pinnedRows, .pinnedEnd, .pinnedHairline, .activeRows, .activeEnd])
         XCTAssertEqual(bottom.footer, [.historyHairline, .history])
     }
@@ -115,8 +116,12 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             let store = SidebarDialTuning.store
             store.set(TrayGlassStyle.SelectedRowStyle.flat.rawValue, forKey: SidebarDialTuning.selectedRowStyleKey)
             store.set(placement.rawValue, forKey: SidebarDialTuning.historyPlacementKey)
+            // History is off by default since sidebar vnext; these tests
+            // measure where it sits when it's on.
+            store.set(true, forKey: SidebarDialTuning.historyInSidebarKey)
             let r = try renderOnce(rail: rail, sessionCount: sessionCount, height: height, selectHistory: selectHistory)
-            if SidebarDialTuning.historyPlacement() == placement && SidebarDialTuning.selectedRowStyle() == .flat { return r }
+            if SidebarDialTuning.historyPlacement() == placement && SidebarDialTuning.selectedRowStyle() == .flat
+                && SidebarDialTuning.historyInSidebar() { return r }
         }
         struct DialsKeptChanging: Error {}
         throw DialsKeptChanging()

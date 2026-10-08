@@ -161,6 +161,7 @@ enum SidebarDialTuning {
     static let contentPaddingTrailingKey = "ghostties.sidebarDial.contentPaddingTrailing"
     static let listToTrayGapKey = "ghostties.sidebarDial.listToTrayGap"
     static let historyPlacementKey = "ghostties.sidebarDial.historyPlacement"
+    static let historyInSidebarKey = "ghostties.sidebarDial.historyInSidebar"
     static let trayStyleKey = "ghostties.sidebarDial.trayStyle"
     static let selectedRowStyleKey = "ghostties.sidebarDial.selectedRowStyle"
 
@@ -338,6 +339,20 @@ enum SidebarDialTuning {
         choice(historyPlacementKey, default: SidebarSessionSections.historyPlacement, defaults: defaults)
     }
 
+    /// Whether the History row (and its rail clock) renders at all. Off by
+    /// default since sidebar vnext: past sessions resume from the Cmd+T
+    /// composer instead (`ComposerResumeLayout`). Pinned and Active are
+    /// unaffected either way.
+    static func historyInSidebar(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
+        switch defaults.object(forKey: historyInSidebarKey) {
+        case let stored as Bool: return stored
+        // A launch argument (`-ghostties.sidebarDial.historyInSidebar YES`)
+        // arrives as a string.
+        case let argument as String: return (argument as NSString).boolValue
+        default: return false
+        }
+    }
+
     /// Whether the tray is drawn as glass capsules or as bare icons on the
     /// sidebar background (`TrayGlassStyle.TrayStyle`).
     static func trayStyle(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.TrayStyle {
@@ -381,7 +396,7 @@ enum SidebarDialTuning {
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
-        historyPlacementKey, trayStyleKey, selectedRowStyleKey, railExtraWidthKey
+        historyPlacementKey, historyInSidebarKey, trayStyleKey, selectedRowStyleKey, railExtraWidthKey
     ]
 
     static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
@@ -525,6 +540,7 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var contentPaddingTrailing: Double
     var listToTrayGap: Double
     var historyPlacement: String
+    var historyInSidebar: Bool
     var trayStyle: String
     var selectedRowStyle: String
 
@@ -616,6 +632,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
             contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
             listToTrayGap: Double(SidebarDialTuning.listToTrayGap(defaults: defaults)),
             historyPlacement: SidebarDialTuning.historyPlacement(defaults: defaults).rawValue,
+            historyInSidebar: SidebarDialTuning.historyInSidebar(defaults: defaults),
             trayStyle: SidebarDialTuning.trayStyle(defaults: defaults).rawValue,
             selectedRowStyle: SidebarDialTuning.selectedRowStyle(defaults: defaults).rawValue,
             railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults))
@@ -700,6 +717,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.contentPaddingTrailingKey, previous.contentPaddingTrailing, model.contentPaddingTrailing)
         setIfChanged(SidebarDialTuning.listToTrayGapKey, previous.listToTrayGap, model.listToTrayGap)
         setStringIfChanged(SidebarDialTuning.historyPlacementKey, previous.historyPlacement, model.historyPlacement)
+        setBoolIfChanged(SidebarDialTuning.historyInSidebarKey, previous.historyInSidebar, model.historyInSidebar)
         setStringIfChanged(SidebarDialTuning.trayStyleKey, previous.trayStyle, model.trayStyle)
         setStringIfChanged(SidebarDialTuning.selectedRowStyleKey, previous.selectedRowStyle, model.selectedRowStyle)
         setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
@@ -792,6 +810,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .slider("contentPaddingLeading", keyPath: \.contentPaddingLeading, label: "Content padding leading (inner)", range: 0...24, unit: "pt"),
         .slider("contentPaddingTrailing", keyPath: \.contentPaddingTrailing, label: "Content padding trailing (inner)", range: 0...24, unit: "pt"),
         .slider("listToTrayGap", keyPath: \.listToTrayGap, label: "List-to-tray gap", range: 0...24, unit: "pt"),
+        .toggle("historyInSidebar", keyPath: \.historyInSidebar, label: "History in sidebar"),
         .select("historyPlacement", keyPath: \.historyPlacement, label: "History placement",
                 options: SidebarSessionSections.HistoryPlacement.allCases.map(\.rawValue)),
         .select("trayStyle", keyPath: \.trayStyle, label: "Tray style",
