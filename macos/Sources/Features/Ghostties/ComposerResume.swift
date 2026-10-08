@@ -60,19 +60,22 @@ enum ComposerResumeRows {
 
 // MARK: - Down list (A5)
 
-/// A5's ↓ list holds two sections, RESUME (past sessions) then TEMPLATES
-/// (the current project's start options), and ↓/↑ walk them as one list.
-/// An empty section is omitted; with both empty, RESUME stays as the
+/// A5's ↓ list holds three sections, RESUME (past sessions), TEMPLATES
+/// (the current project's start options), then PROJECTS (every project,
+/// so a project is reachable by typing its name), and ↓/↑ walk them as one
+/// list. An empty section is omitted; with all empty, RESUME stays as the
 /// empty-state holder ("No past sessions" / "No matches").
 enum ComposerDownList {
-    enum Section: Equatable { case resume, templates }
+    enum Section: Equatable { case resume, templates, projects }
 
     static let templatesSymbol = "rectangle.stack"
+    static let projectsSymbol = "folder"
 
-    static func sections(resumeCount: Int, templateCount: Int) -> [Section] {
+    static func sections(resumeCount: Int, templateCount: Int, projectCount: Int = 0) -> [Section] {
         var sections: [Section] = []
         if resumeCount > 0 { sections.append(.resume) }
         if templateCount > 0 { sections.append(.templates) }
+        if projectCount > 0 { sections.append(.projects) }
         return sections.isEmpty ? [.resume] : sections
     }
 
@@ -83,14 +86,16 @@ enum ComposerDownList {
         sectionCount > 1 ? sharedCap : soloCap
     }
 
-    /// The keyboard order: every resume row, then every template row.
-    static func rowIDs(resume: [UUID], templates: [UUID]) -> [UUID] {
-        resume + templates
+    /// The keyboard order: every resume row, then every template row, then
+    /// every project row.
+    static func rowIDs(resume: [UUID], templates: [UUID], projects: [UUID] = []) -> [UUID] {
+        resume + templates + projects
     }
 }
 
-/// One TEMPLATES row in the ↓ list: what it shows and what Return/click
-/// runs (the composer's own start action for that template).
+/// One TEMPLATES or PROJECTS row in the ↓ list: what it shows and what
+/// Return/click runs (the composer option's own action — start that
+/// template, or select that project).
 struct ComposerTemplateRow: Identifiable {
     let id: UUID
     let systemImage: String
@@ -311,10 +316,12 @@ struct ComposerListRow: View {
 }
 
 /// The Resume rows under the field (A5) or in the right column (A4). A5
-/// also passes `templates`, which follow as a TEMPLATES section.
+/// also passes `templates` and `projects`, which follow as TEMPLATES and
+/// PROJECTS sections.
 struct ComposerResumeListView: View {
     let rows: [HistoryEntry]
     var templates: [ComposerTemplateRow] = []
+    var projects: [ComposerTemplateRow] = []
     let selectedID: UUID?
     let isFocused: Bool
     let hasHistory: Bool
@@ -330,7 +337,7 @@ struct ComposerResumeListView: View {
     }
 
     var body: some View {
-        let sections = ComposerDownList.sections(resumeCount: rows.count, templateCount: templates.count)
+        let sections = ComposerDownList.sections(resumeCount: rows.count, templateCount: templates.count, projectCount: projects.count)
         let sectionCap = ComposerDownList.cap(sectionCount: sections.count, soloCap: cap)
         VStack(alignment: .leading, spacing: 0) {
             if sections.contains(.resume) {
@@ -357,23 +364,33 @@ struct ComposerResumeListView: View {
                 }
             }
             if sections.contains(.templates) {
-                ComposerResumeSectionHeader(systemImage: ComposerDownList.templatesSymbol, title: "Templates", size: titleSize * 0.62)
-                let selectedIndex = selectedID.flatMap { id in templates.firstIndex { $0.id == id } }
-                ForEach(templates[ComposerResumeRows.window(count: templates.count, selected: selectedIndex, cap: sectionCap)]) { row in
-                    ComposerListRow(
-                        systemImage: row.systemImage,
-                        title: row.title,
-                        meta: row.meta,
-                        isSelected: isFocused && row.id == selectedID,
-                        showsReturnGlyph: true,
-                        titleSize: titleSize,
-                        action: row.action
-                    )
-                }
+                optionSection(symbol: ComposerDownList.templatesSymbol, title: "Templates", rows: templates, cap: sectionCap)
+            }
+            if sections.contains(.projects) {
+                optionSection(symbol: ComposerDownList.projectsSymbol, title: "Projects", rows: projects, cap: sectionCap)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Self.accessibilityLabel(hasTemplates: sections.contains(.templates)))
+    }
+
+    /// A TEMPLATES or PROJECTS section: header, then its rows scrolled so
+    /// the highlighted one stays in view.
+    @ViewBuilder
+    private func optionSection(symbol: String, title: String, rows: [ComposerTemplateRow], cap: Int) -> some View {
+        ComposerResumeSectionHeader(systemImage: symbol, title: title, size: titleSize * 0.62)
+        let selectedIndex = selectedID.flatMap { id in rows.firstIndex { $0.id == id } }
+        ForEach(rows[ComposerResumeRows.window(count: rows.count, selected: selectedIndex, cap: cap)]) { row in
+            ComposerListRow(
+                systemImage: row.systemImage,
+                title: row.title,
+                meta: row.meta,
+                isSelected: isFocused && row.id == selectedID,
+                showsReturnGlyph: true,
+                titleSize: titleSize,
+                action: row.action
+            )
+        }
     }
 }
 
