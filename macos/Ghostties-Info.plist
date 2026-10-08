@@ -8,6 +8,8 @@
 	<string>1</string>
 	<key>NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac</key>
 	<true/>
+	<key>NSPrincipalClass</key>
+	<string>GhosttiesApplication</string>
 	<key>NSDockTilePlugIn</key>
 	<string>DockTilePlugin.plugin</string>
 	<key>CFBundleDocumentTypes</key>
