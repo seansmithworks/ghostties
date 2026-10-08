@@ -20,6 +20,8 @@ State: PR #205 open (feat/sidebar-vnext); L1–L5 + bake + cwd-project fix + com
 - [ ] Empty-project header uses tertiaryLabelColor (<4.5:1 in light) — check legibility. | carried
 - [ ] Highlight-steal: a project whose name starts like a template alias (e.g. "cc-site") takes `cc` + Return with the list closed. | parked
 - [ ] VoiceOver: "Show N more" expansion doesn't announce/move focus to new rows. | parked
+- [ ] Rail in One view: the selected session (wide glass card with status glyph) outweighs the project monogram tiles — selected-vs-project hierarchy "not ideal" (Sean). Design pass before beta.26. | carried
+- [ ] CRASH closing the embedded browser in Dev @ 5758e6e13 (2026-10-08 11:42:17): uncaught NSInvalidArgumentException raised inside Chromium Embedded Framework. Log: ~/.ghostties-evidence/vnext/browser-close-crash-2026-10-08-1142.log. Unknown whether new to this branch — repro on main first. | carried
 
 ## 2026-10-06 — beta.26 contract run 1 (session 71606cce): tag still gated
 
