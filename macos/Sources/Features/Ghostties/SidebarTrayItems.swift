@@ -236,10 +236,6 @@ enum TrayGlassStyle {
     /// Default rim intensity of the Tint + shimmer selected row in dark: the
     /// light look's, so the row reads the same across themes.
     static let tintShimmerDarkIntensity: Double = light.chromaticIntensity
-    /// Rail hairline width (`SidebarSectionHairlineSlot`), the vertical
-    /// tray's width (canvas 104px). Selected rows no longer read it: they
-    /// fill the hover card (`SidebarRowCardBackground`).
-    static let selectedPillWidth: CGFloat = 44
     /// Selected rail glyph: canvas 35px (vs the 28px it replaces).
     static let selectedGlyphSize: CGFloat = 17.5
     /// Tray icon weight: the canvas's lucide icons are 2px strokes on a 24px

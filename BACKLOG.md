@@ -25,6 +25,7 @@ State: PR #205 open (feat/sidebar-vnext); L1–L5 + bake + cwd-project fix + com
 - [ ] Project tiles: a custom character or icon per project instead of the monogram (Sean, later). | parked
 - [ ] Persistent agents: find a place for them in the sidebar/rail (Sean, later). | parked
 - [ ] Browser panel Auto Layout conflict (unrelated to the crash, same log `browser-close-crash-2026-10-08-1142.log`): two NSViews both pinned to `WorkspaceViewContainer.trailing - 8` around `PanelDragHandleView`, conflicting with `width == 695`. | parked
+- [ ] idle/sleeping status: exited sessions (e.g. formerly-pinned Chief of Staff) draw no status glyph; design an idle/sleeping state, likely alongside persistent agents. | parked
 
 ## 2026-10-06 — beta.26 contract run 1 (session 71606cce): tag still gated
 

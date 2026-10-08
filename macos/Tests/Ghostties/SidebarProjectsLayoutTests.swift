@@ -151,8 +151,8 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let store = WorkspaceStore(testingProjects: [atlas, fieldwork, orbit], testingSessions: all)
         for s in all { store.updateSessionStatus(id: s.id, status: .running) }
 
-        XCTAssertEqual(store.railSessions(layout: .tabs).map(\.name), ["orchestrator", "a1", "f1", "a2"])
-        XCTAssertEqual(store.railSessions(layout: .oneView).map(\.name), ["orchestrator", "a1", "a2", "f1"])
+        XCTAssertEqual(store.railSessions(layout: .tabs, pinningAvailable: true).map(\.name), ["orchestrator", "a1", "f1", "a2"])
+        XCTAssertEqual(store.railSessions(layout: .oneView, pinningAvailable: true).map(\.name), ["orchestrator", "a1", "a2", "f1"])
     }
 
     /// The rail's project column (`RailProjectColumn`) marks the selected
@@ -241,8 +241,8 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let projectsTab = SidebarProjectsLayout.effective(dial: .oneView, tab: .projects)
         XCTAssertEqual(sessionsTab, .tabs)
         XCTAssertEqual(projectsTab, .oneView)
-        XCTAssertEqual(store.railSessions(layout: sessionsTab).map(\.name), ["orchestrator", "a1", "f1", "a2"])
-        XCTAssertEqual(store.railSessions(layout: projectsTab).map(\.name), ["orchestrator", "a1", "a2", "f1"])
+        XCTAssertEqual(store.railSessions(layout: sessionsTab, pinningAvailable: true).map(\.name), ["orchestrator", "a1", "f1", "a2"])
+        XCTAssertEqual(store.railSessions(layout: projectsTab, pinningAvailable: true).map(\.name), ["orchestrator", "a1", "a2", "f1"])
     }
 
     // MARK: - Collapse state

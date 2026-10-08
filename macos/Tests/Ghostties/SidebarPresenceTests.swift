@@ -163,7 +163,7 @@ struct SidebarPresenceTests {
         // `SessionCoordinator`/`seedEmptySessionTreeForTesting` involved) —
         // this is exactly the capture-fixture / closed-pinned-terminal case.
 
-        let rail = store.railSessions()
+        let rail = store.railSessions(pinningAvailable: true)
 
         #expect(rail.map(\.name) == ["pinned", "active"])
     }

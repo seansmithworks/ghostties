@@ -316,9 +316,6 @@ enum WorkspaceLayout {
     /// token clears: the dimming is the signal that nothing is running there.
     static let emptyProjectForeground = Color(nsColor: .tertiaryLabelColor)
 
-    /// The rail's hairline between Pinned, Active and History (mock H).
-    static let railSectionHairline = Color.primary.opacity(0.1)
-
     /// Foreground for the smaller in-row session group headers ("Active",
     /// "Recent", "Idle") inside an expanded project. One tier quieter than the
     /// top-level section headers since they're nested. Same `textSecondary`
@@ -388,11 +385,6 @@ enum WorkspaceLayout {
     /// `RecentsRowView`'s leading edge padding. Its own value: the shared
     /// `sidebarRowLeadingPadding` (8) still sets project rows and headers.
     static let recentsRowLeadingPadding: CGFloat = 16
-
-    /// Height of the slot that carries a hairline between sidebar groups
-    /// (Pinned / Active / History). Shared by the expanded list and the rail
-    /// so every row sits at the same y in both.
-    static let sessionSectionHairlineSlotHeight: CGFloat = 9
 
     /// Top padding of the scrollable list content in both sidebar tabs
     /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s

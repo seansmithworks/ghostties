@@ -51,7 +51,9 @@ final class SidebarSectionsHistoryTests: XCTestCase {
         let archivedNew: AgentSession
 
         var sections: SidebarSessionSections {
-            SidebarSessionSections.make(sessions: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch)
+            // The "available" path: these tests pin the Pinned partition itself,
+            // which `SessionPinning.isAvailable` currently hides.
+            SidebarSessionSections.make(sessions: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch, pinningAvailable: true)
         }
     }
 
@@ -110,7 +112,7 @@ final class SidebarSectionsHistoryTests: XCTestCase {
         for (id, status) in f.statuses {
             store.updateSessionStatus(id: id, status: status)
         }
-        XCTAssertEqual(store.railSessions(layout: .tabs).map(\.id), f.sections.rowSessions.map(\.id))
+        XCTAssertEqual(store.railSessions(layout: .tabs, pinningAvailable: true).map(\.id), f.sections.rowSessions.map(\.id))
     }
 
     // MARK: - History row subtitle

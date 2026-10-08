@@ -63,7 +63,6 @@ enum SidebarDialTuning {
     static let trayHorizontalIconSizeKey = "ghostties.sidebarDial.trayGlass.horizontalIconSize"
     static let trayGlassCornerStyleKey = "ghostties.sidebarDial.trayGlass.cornerStyle"
     static let trayGlassCornerRadiusKey = "ghostties.sidebarDial.trayGlass.cornerRadius"
-    static let traySelectedPillWidthKey = "ghostties.sidebarDial.trayGlass.selectedPillWidth"
     static let selectedTitleWeightKey = "ghostties.sidebarDial.selectedTitleWeight"
     static let tintShimmerDarkIntensityKey = "ghostties.sidebarDial.tintShimmerDarkIntensity"
 
@@ -170,8 +169,11 @@ enum SidebarDialTuning {
     static let retiredLegacySelectedStyleKey = "ghostties.sidebarDial.trayGlass.selectedStyle"
     static let retiredTrayStyleKey = "ghostties.sidebarDial.trayStyle"
     static let retiredHistoryPlacementKey = "ghostties.sidebarDial.historyPlacement"
+    /// The rail hairline's width: the section dividers were removed (beta.26).
+    static let retiredHairlineWidthKey = "ghostties.sidebarDial.trayGlass.selectedPillWidth"
     static let retiredKeys: [String] = [
         retiredSelectedRowStyleKey, retiredLegacySelectedStyleKey, retiredTrayStyleKey, retiredHistoryPlacementKey,
+        retiredHairlineWidthKey,
         // The flat selected row's shadow, per appearance.
         "ghostties.sidebarDial.trayGlass.selectedShadowOpacity",
         "ghostties.sidebarDial.trayGlass.selectedShadowRadius",
@@ -306,9 +308,6 @@ enum SidebarDialTuning {
     static func trayGlassCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayGlassCornerRadiusKey, default: TrayGlassStyle.cornerRadius, defaults: defaults)
     }
-    static func traySelectedPillWidth(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(traySelectedPillWidthKey, default: TrayGlassStyle.selectedPillWidth, defaults: defaults)
-    }
 
     static func rowHeight(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowHeightKey, default: WorkspaceLayout.recentsRowHeight, defaults: defaults)
@@ -412,7 +411,7 @@ enum SidebarDialTuning {
         trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
         trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
-        traySelectedPillWidthKey, selectedTitleWeightKey, tintShimmerDarkIntensityKey,
+        selectedTitleWeightKey, tintShimmerDarkIntensityKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
@@ -538,7 +537,6 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayWidth: String
     var trayGlassCornerStyle: String
     var trayGlassCornerRadius: Double
-    var traySelectedPillWidth: Double
     var selectedTitleWeight: String
     var tintShimmerDarkIntensity: Double
 
@@ -637,7 +635,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             trayWidth: SidebarDialTuning.trayWidth(defaults: defaults).rawValue,
             trayGlassCornerStyle: SidebarDialTuning.trayGlassCornerStyle(defaults: defaults).rawValue,
             trayGlassCornerRadius: Double(SidebarDialTuning.trayGlassCornerRadius(defaults: defaults)),
-            traySelectedPillWidth: Double(SidebarDialTuning.traySelectedPillWidth(defaults: defaults)),
             selectedTitleWeight: SidebarDialTuning.selectedTitleWeight(defaults: defaults).rawValue,
             tintShimmerDarkIntensity: SidebarDialTuning.tintShimmerDarkIntensity(defaults: defaults),
             rowHeight: Double(SidebarDialTuning.rowHeight(defaults: defaults)),
@@ -722,7 +719,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setStringIfChanged(SidebarDialTuning.trayWidthKey, previous.trayWidth, model.trayWidth)
         setStringIfChanged(SidebarDialTuning.trayGlassCornerStyleKey, previous.trayGlassCornerStyle, model.trayGlassCornerStyle)
         setIfChanged(SidebarDialTuning.trayGlassCornerRadiusKey, previous.trayGlassCornerRadius, model.trayGlassCornerRadius)
-        setIfChanged(SidebarDialTuning.traySelectedPillWidthKey, previous.traySelectedPillWidth, model.traySelectedPillWidth)
         setStringIfChanged(SidebarDialTuning.selectedTitleWeightKey, previous.selectedTitleWeight, model.selectedTitleWeight)
         setIfChanged(SidebarDialTuning.tintShimmerDarkIntensityKey, previous.tintShimmerDarkIntensity, model.tintShimmerDarkIntensity)
         setIfChanged(SidebarDialTuning.rowHeightKey, previous.rowHeight, model.rowHeight)
@@ -813,7 +809,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .select("trayGlassCornerStyle", keyPath: \.trayGlassCornerStyle, label: "Corner style",
                     options: TrayGlassStyle.CornerStyle.allCases.map(\.rawValue)),
             .slider("trayGlassCornerRadius", keyPath: \.trayGlassCornerRadius, label: "Corner radius (radius style)", range: 0...32, step: 0.5, unit: "pt"),
-            .slider("traySelectedPillWidth", keyPath: \.traySelectedPillWidth, label: "Hairline width (rail)", range: 24...96, step: 0.5, unit: "pt"),
         ]),
         // Rows
         .slider("rowHeight", keyPath: \.rowHeight, label: "Row height", range: 32...64, unit: "pt"),

@@ -4,7 +4,7 @@ import GhosttiesCore
 @testable import Ghostty
 
 /// Where the History row sits when "History in sidebar" is on: anchored
-/// (with its hairline) just above the tray, in the expanded list and the
+/// just above the tray, in the expanded list and the
 /// rail alike, outside the scrolling area. (The "History placement" dial
 /// and its `afterActive` option were removed at the vnext lock.)
 ///
@@ -22,8 +22,8 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let b = AgentSession(name: "b", templateId: UUID(), projectId: UUID())
         let sections = SidebarSessionSections(pinned: [a], active: [b], inactive: [], archived: [])
         let bottom = sections.layout(showsHistory: true)
-        XCTAssertEqual(bottom.list, [.pinnedRows, .pinnedEnd, .pinnedHairline, .activeRows, .activeEnd])
-        XCTAssertEqual(bottom.footer, [.historyHairline, .history])
+        XCTAssertEqual(bottom.list, [.pinnedRows, .pinnedEnd, .activeRows, .activeEnd])
+        XCTAssertEqual(bottom.footer, [.history])
     }
 
     // MARK: - Harness
@@ -179,13 +179,12 @@ final class SidebarHistoryPlacementTests: XCTestCase {
 
     /// Where History's card top would be directly after the active rows:
     /// the titlebar band, the column's top padding, `n` rows, the
-    /// zero-height end marker, the hairline slot, with one row gap between
+    /// zero-height end marker, with one row gap between
     /// each.
     private func directlyAfterActiveTop(store: WorkspaceStore, rows n: Int) -> CGFloat {
         store.toolbarRowTopAnchorConstant * 2 + SidebarDialTuning.contentPaddingTop()
             + CGFloat(n) * SidebarDialTuning.rowHeight()
-            + CGFloat(n + 2) * SidebarDialTuning.rowGap()
-            + WorkspaceLayout.sessionSectionHairlineSlotHeight
+            + CGFloat(n + 1) * SidebarDialTuning.rowGap()
     }
 
     // MARK: - Bottom

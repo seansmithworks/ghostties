@@ -337,6 +337,27 @@ extension AgentSession {
     }
 }
 
+// MARK: - Session Pinning Availability
+
+/// The one switch for session pinning (not project pinning). While `false`,
+/// no surface offers pin/unpin and every partition and render path treats a
+/// session as unpinned, so it shows in its normal project group or bucket.
+/// The persisted `AgentSession.isPinned` field, its Codable, and the
+/// `WorkspaceStore` mutators are untouched, so existing pins reappear if
+/// this flips back (persistent agents will bring pinning back).
+enum SessionPinning {
+    static let isAvailable = false
+}
+
+extension AgentSession {
+    /// The effective pin state every partition and render site reads instead
+    /// of `isPinned`. `pinningAvailable` is injectable so tests can exercise
+    /// the available path without mutating a global.
+    func isPinnedForDisplay(pinningAvailable: Bool = SessionPinning.isAvailable) -> Bool {
+        pinningAvailable && isPinned
+    }
+}
+
 // MARK: - Sessions-Tab Section (Pinned / Active / Inactive / Archive)
 
 /// The four groups the Sessions tab (`RecentsListView`) can display a session

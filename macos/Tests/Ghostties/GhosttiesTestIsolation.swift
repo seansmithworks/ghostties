@@ -107,7 +107,6 @@ struct SidebarLockedDefaultsTests {
         #expect(SidebarDialTuning.trayGroupGap(defaults: d) == 8)
         #expect(SidebarDialTuning.trayWidth(defaults: d) == .fill)
         #expect(SidebarDialTuning.trayGlassInteractive(defaults: d))
-        #expect(SidebarDialTuning.traySelectedPillWidth(defaults: d) == 44)
         #expect(SidebarDialTuning.trayGlassCornerStyle(defaults: d) == .radius)
         #expect(SidebarDialTuning.trayGlassCornerRadius(defaults: d) == 20)
         #expect(SidebarDialTuning.selectedTitleWeight(defaults: d) == .regular)

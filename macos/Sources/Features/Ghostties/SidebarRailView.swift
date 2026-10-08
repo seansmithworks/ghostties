@@ -121,8 +121,6 @@ struct SidebarRailView: View {
             }
         case .pinnedEnd, .activeEnd:
             RailSectionEndMarker()
-        case .pinnedHairline, .historyHairline:
-            SidebarSectionHairlineSlot(width: SidebarDialTuning.traySelectedPillWidth())
         case .history:
             RailHistoryRow(
                 subtitle: HistorySummary.subtitle(count: sections.historyCount, lastActiveAt: sections.historyLastActiveAt),

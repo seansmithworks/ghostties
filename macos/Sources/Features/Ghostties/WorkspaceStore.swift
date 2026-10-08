@@ -534,12 +534,15 @@ final class WorkspaceStore: ObservableObject {
     /// in the rail.
     /// In one view (`SidebarProjectsLayout.oneView`) Active is listed
     /// project by project, as the list and rail group it.
-    func railSessions(layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()) -> [AgentSession] {
-        let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses)
+    func railSessions(
+        layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout(),
+        pinningAvailable: Bool = SessionPinning.isAvailable
+    ) -> [AgentSession] {
+        let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses, pinningAvailable: pinningAvailable)
         let ordered = layout == .oneView
             ? SidebarProjectGroup.make(active: active, projects: projects).flatMap(\.sessions)
             : active
-        return RecentsListView.pinnedSessions(from: sessions) + ordered
+        return RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable) + ordered
     }
 
     #if DEBUG

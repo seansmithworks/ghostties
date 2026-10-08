@@ -203,7 +203,7 @@ struct RecentsListView: View {
             // drag renders an explicit "Drop to pin" zone here
             // instead (item 2) so pinning a first session no
             // longer requires the context menu.
-            if sections.pinned.isEmpty && dragState.isDragging {
+            if SessionPinning.isAvailable && sections.pinned.isEmpty && dragState.isDragging {
                 emptyPinnedDropZone
             }
             ForEach(slots, id: \.self) { slot in
@@ -221,10 +221,6 @@ struct RecentsListView: View {
             sectionRows(sections.pinned, section: .pinned)
         case .pinnedEnd:
             endDropZone(section: .pinned, sectionList: sections.pinned)
-        case .pinnedHairline, .historyHairline:
-            // A hairline separates Active from Pinned, and History from
-            // the rows, same as the rail.
-            SidebarSectionHairlineSlot(width: nil)
         case .activeRows:
             // Keyed on the stable `\.id` (default Identifiable) —
             // NOT `\.self`. `\.self` was tried and reverted: it makes
@@ -434,7 +430,7 @@ struct RecentsListView: View {
             status: store.globalStatuses[id],
             startedThisLaunch: coordinator.sessionIdsStartedThisLaunch.contains(id)
         )
-        let section = SessionSection.section(isPinned: session.isPinned, bucket: bucket)
+        let section = SessionSection.section(isPinned: session.isPinnedForDisplay(), bucket: bucket)
         let isOpen = store.globalStatuses[id]?.isAlive == true
         return (section, isOpen)
     }
@@ -644,10 +640,12 @@ struct RecentsListView: View {
                 beginRename(session: session)
             }
             Divider()
-            Button(session.isPinned ? "Unpin" : "Pin") {
-                store.toggleSessionPin(id: session.id)
+            if SessionPinning.isAvailable {
+                Button(session.isPinned ? "Unpin" : "Pin") {
+                    store.toggleSessionPin(id: session.id)
+                }
+                Divider()
             }
-            Divider()
             if coordinator.isRunning(id: session.id) {
                 Button("Stop") {
                     // A stopped session must never keep rendering as Active
@@ -832,17 +830,23 @@ struct RecentsListView: View {
     /// `SessionSection.section(isPinned:bucket:)`) — a pinned session is
     /// excluded from `activeSessions`/`inactiveSessions`/`archiveSessions`
     /// below regardless of its bucket.
-    static func pinnedSessions(from sessions: [AgentSession]) -> [AgentSession] {
-        orderedBySessionViewOrder(sorted(sessions: sessions.filter(\.isPinned)))
+    static func pinnedSessions(
+        from sessions: [AgentSession],
+        pinningAvailable: Bool = SessionPinning.isAvailable
+    ) -> [AgentSession] {
+        orderedBySessionViewOrder(sorted(sessions: sessions.filter {
+            $0.isPinnedForDisplay(pinningAvailable: pinningAvailable)
+        }))
     }
 
     /// Pure, testable variant of the `activeSessions` instance property.
     static func activeSessions(
         from sessions: [AgentSession],
-        statuses: [UUID: SessionStatus]
+        statuses: [UUID: SessionStatus],
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> [AgentSession] {
         orderedBySessionViewOrder(sorted(sessions: sessions.filter {
-            !$0.isPinned && SessionBucket.membership(status: statuses[$0.id], startedThisLaunch: false) == .active
+            !$0.isPinnedForDisplay(pinningAvailable: pinningAvailable) && SessionBucket.membership(status: statuses[$0.id], startedThisLaunch: false) == .active
         }))
     }
 
@@ -854,10 +858,11 @@ struct RecentsListView: View {
     static func inactiveSessions(
         from sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
-        sessionIdsStartedThisLaunch: Set<UUID>
+        sessionIdsStartedThisLaunch: Set<UUID>,
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> [AgentSession] {
         orderedBySessionViewOrder(sorted(sessions: sessions.filter {
-            !$0.isPinned && SessionBucket.membership(
+            !$0.isPinnedForDisplay(pinningAvailable: pinningAvailable) && SessionBucket.membership(
                 status: statuses[$0.id],
                 startedThisLaunch: sessionIdsStartedThisLaunch.contains($0.id)
             ) == .inactive
@@ -875,10 +880,11 @@ struct RecentsListView: View {
     static func archiveSessions(
         from sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
-        sessionIdsStartedThisLaunch: Set<UUID>
+        sessionIdsStartedThisLaunch: Set<UUID>,
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> [AgentSession] {
         let archived = sorted(sessions: sessions.filter {
-            !$0.isPinned && SessionBucket.membership(
+            !$0.isPinnedForDisplay(pinningAvailable: pinningAvailable) && SessionBucket.membership(
                 status: statuses[$0.id],
                 startedThisLaunch: sessionIdsStartedThisLaunch.contains($0.id)
             ) == .archive
