@@ -30,6 +30,7 @@ struct SidebarRailView: View {
     /// Folded projects in one view (`ProjectAccordionState`), shared with
     /// the expanded list.
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
+    @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
 
     var body: some View {
         VStack(spacing: 0) {
@@ -106,7 +107,7 @@ struct SidebarRailView: View {
                 railRow(for: session)
             }
         case .activeRows:
-            if SidebarDialTuning.projectsLayout() == .oneView {
+            if SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView {
                 groupedRailRows(sections.active)
             } else {
                 ForEach(sections.active) { session in

@@ -155,6 +155,33 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         XCTAssertEqual(store.railSessions(layout: .oneView).map(\.name), ["orchestrator", "a1", "a2", "f1"])
     }
 
+    // MARK: - One view is the Projects tab's layout only
+
+    /// With the dial on One view, the Sessions tab still mounts the Sessions
+    /// list; only the Projects tab gets the accordion.
+    func testSessionsTabKeepsItsViewWhenDialIsOneView() {
+        XCTAssertEqual(SidebarBodyKind.resolve(tab: .sessions, dial: .oneView), .sessionsList)
+        XCTAssertEqual(SidebarBodyKind.resolve(tab: .projects, dial: .oneView), .oneViewAccordion)
+        XCTAssertEqual(SidebarBodyKind.resolve(tab: .sessions, dial: .tabs), .sessionsList)
+        XCTAssertEqual(SidebarBodyKind.resolve(tab: .projects, dial: .tabs), .projectsList)
+    }
+
+    /// Rail order and the Cmd+1-9 order follow the Sessions list in the
+    /// Sessions tab and One view in the Projects tab.
+    func testRailAndShortcutOrderFollowTheTab() {
+        let pinned = session("orchestrator", orbit, pinned: true)
+        let all = [pinned, session("a1", atlas), session("f1", fieldwork), session("a2", atlas)]
+        let store = WorkspaceStore(testingProjects: [atlas, fieldwork, orbit], testingSessions: all)
+        for s in all { store.updateSessionStatus(id: s.id, status: .running) }
+
+        let sessionsTab = SidebarProjectsLayout.effective(dial: .oneView, tab: .sessions)
+        let projectsTab = SidebarProjectsLayout.effective(dial: .oneView, tab: .projects)
+        XCTAssertEqual(sessionsTab, .tabs)
+        XCTAssertEqual(projectsTab, .oneView)
+        XCTAssertEqual(store.railSessions(layout: sessionsTab).map(\.name), ["orchestrator", "a1", "f1", "a2"])
+        XCTAssertEqual(store.railSessions(layout: projectsTab).map(\.name), ["orchestrator", "a1", "a2", "f1"])
+    }
+
     // MARK: - Collapse state
 
     func testCollapseStateRoundTripsAndToggles() {

@@ -2450,7 +2450,7 @@ class WorkspaceViewContainer: NSView {
             sidebarMode: sidebarMode,
             sidebarViewMode: currentSidebarViewMode,
             sidebarTab: tab,
-            projectsLayout: SidebarDialTuning.projectsLayout(),
+            projectsLayout: SidebarProjectsLayout.effective(tab: tab),
             store: store,
             coordinator: coordinator
         )

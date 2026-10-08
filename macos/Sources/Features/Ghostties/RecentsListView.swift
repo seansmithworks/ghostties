@@ -33,6 +33,7 @@ struct RecentsListView: View {
 
     /// Folded projects in the one-view list (`ProjectAccordionState`).
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
+    @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
 
     init() {
         #if DEBUG
@@ -237,7 +238,7 @@ struct RecentsListView: View {
             // comment above it) — `.equatable()` on `RecentsRowView`
             // in `sessionRow(for:)` is a body-re-execution perf gate
             // layered on top, not what makes rows fresh.
-            if SidebarDialTuning.projectsLayout() == .oneView {
+            if SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView {
                 groupedActiveRows(sections.active)
             } else {
                 sectionRows(sections.active, section: .active)
