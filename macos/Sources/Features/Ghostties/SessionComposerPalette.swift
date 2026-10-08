@@ -1188,7 +1188,10 @@ struct SessionComposerPalette: View {
             // branch, not a project name) fires either — this is the only
             // trigger that subsumes every case, since `searchText` changes
             // on every keystroke `query` does plus every one it drops.
-            .onChange(of: composerStore.searchText) { _ in reselectBestMatch() }
+            .onChange(of: composerStore.searchText) { _ in
+                reselectBestMatch()
+                resumeState.collapseSections()
+            }
             .onChange(of: composerStore.selectedProjectId) { _ in
                 // N5: changing the project via the dropdown or a project row
                 // changes `flattenedOptions.count` with `query` unchanged, so
@@ -1337,7 +1340,7 @@ struct SessionComposerPalette: View {
             if resumeState.isRevealed {
                 ComposerCardHairline()
                     .padding(.horizontal, Self.resumeListInset + 4)
-                resumeListView(isFocused: true)
+                downListView
                     .padding(Self.resumeListInset)
             }
         case .columns:
@@ -1364,11 +1367,8 @@ struct SessionComposerPalette: View {
     }
 
     private func resumeListView(isFocused: Bool) -> some View {
-        let rows = resumeRows
-        return ComposerResumeListView(
-            rows: rows,
-            templates: downListTemplateOptions.map(templateRow),
-            projects: downListProjectOptions.map(templateRow),
+        ComposerResumeListView(
+            rows: resumeRows,
             selectedID: resumeState.selection(in: resumeKeyboardRowIDs),
             isFocused: isFocused,
             hasHistory: !historyEntries.isEmpty,
@@ -1376,6 +1376,23 @@ struct SessionComposerPalette: View {
             titleSize: rowTitleSize,
             now: resumeNow,
             onResume: { resumeSession($0) }
+        )
+    }
+
+    /// A5's ↓ list: RESUME, TEMPLATES, PROJECTS, scrolling as one.
+    private var downListView: some View {
+        ComposerDownListView(
+            rows: resumeRows,
+            templates: downListTemplateOptions.map(templateRow),
+            projects: downListProjectOptions.map(templateRow),
+            expanded: resumeState.expandedSections,
+            selectedID: resumeState.selection(in: resumeKeyboardRowIDs),
+            hasHistory: !historyEntries.isEmpty,
+            titleSize: rowTitleSize,
+            maxHeight: ComposerDownListView.maxHeight(titleSize: rowTitleSize),
+            now: resumeNow,
+            onResume: { resumeSession($0) },
+            onShowMore: { showMore($0) }
         )
     }
 
@@ -1927,11 +1944,25 @@ struct SessionComposerPalette: View {
     /// The rows ↓/↑ walk: A5's resume rows, template rows, then project
     /// rows; A4's resume column alone.
     private var resumeKeyboardRowIDs: [UUID] {
-        ComposerDownList.rowIDs(
+        guard resumeLayout == .list else { return resumeRows.map(\.id) }
+        return ComposerDownList.keyboardIDs(ComposerDownList.items(
             resume: resumeRows.map(\.id),
             templates: downListTemplateOptions.map(\.id),
-            projects: downListProjectOptions.map(\.id)
-        )
+            projects: downListProjectOptions.map(\.id),
+            expanded: resumeState.expandedSections
+        ))
+    }
+
+    /// "Show N more" (Return or click): expands the section in place and
+    /// highlights the first row it revealed.
+    private func showMore(_ section: ComposerDownList.Section) {
+        let ids: [UUID]
+        switch section {
+        case .resume: ids = resumeRows.map(\.id)
+        case .templates: ids = downListTemplateOptions.map(\.id)
+        case .projects: ids = downListProjectOptions.map(\.id)
+        }
+        resumeState.expand(section, selecting: ComposerDownList.firstRevealed(in: ids))
     }
 
     /// Feeds one key to the resume state. `true` when it took the key.
@@ -1945,7 +1976,9 @@ struct SessionComposerPalette: View {
         case .handled:
             return true
         case .resume(let id):
-            if let template = downListTemplateOptions.first(where: { $0.id == id }) {
+            if let section = ComposerDownList.showMoreSection(for: id) {
+                showMore(section)
+            } else if let template = downListTemplateOptions.first(where: { $0.id == id }) {
                 template.action()
             } else if let project = downListProjectOptions.first(where: { $0.id == id }) {
                 resumeState.reset()

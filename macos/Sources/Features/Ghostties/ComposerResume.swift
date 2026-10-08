@@ -65,8 +65,29 @@ enum ComposerResumeRows {
 /// so a project is reachable by typing its name), and ↓/↑ walk them as one
 /// list. An empty section is omitted; with all empty, RESUME stays as the
 /// empty-state holder ("No past sessions" / "No matches").
+///
+/// Sections never scroll on their own (Sean, 2026-10-08): each shows its
+/// first `collapsedRowCap` rows, then a "Show N more" row that expands it
+/// in place. The whole list scrolls as one.
 enum ComposerDownList {
-    enum Section: Equatable { case resume, templates, projects }
+    enum Section: Hashable, CaseIterable { case resume, templates, projects }
+
+    /// One line of the ↓ list, in on-screen order.
+    enum Item: Equatable {
+        case header(Section)
+        case row(Section, UUID)
+        /// "Show N more": a real list row with its own id.
+        case showMore(Section, hidden: Int)
+
+        /// The id ↓/↑ land on; headers have none.
+        var keyboardID: UUID? {
+            switch self {
+            case .header: return nil
+            case .row(_, let id): return id
+            case .showMore(let section, _): return ComposerDownList.showMoreID(for: section)
+            }
+        }
+    }
 
     static let templatesSymbol = "rectangle.stack"
     static let projectsSymbol = "folder"
@@ -79,17 +100,61 @@ enum ComposerDownList {
         return sections.isEmpty ? [.resume] : sections
     }
 
-    /// Visible rows per section: a lone section shows `soloCap`; with both
-    /// showing, each scrolls within `sharedCap` so the list stays short
-    /// enough to hang under a centred field.
-    static func cap(sectionCount: Int, soloCap: Int = 5, sharedCap: Int = 3) -> Int {
-        sectionCount > 1 ? sharedCap : soloCap
+    /// Rows a collapsed section shows before its "Show N more" row.
+    static let collapsedRowCap = 3
+
+    /// Fixed per section, so a "Show N more" row keeps its identity (and
+    /// its highlight) across keystrokes. Never collides with a session,
+    /// template or project id, which are random.
+    static func showMoreID(for section: Section) -> UUID {
+        switch section {
+        case .resume: return UUID(uuidString: "5D0E0000-0000-4000-8000-000000000001")!
+        case .templates: return UUID(uuidString: "5D0E0000-0000-4000-8000-000000000002")!
+        case .projects: return UUID(uuidString: "5D0E0000-0000-4000-8000-000000000003")!
+        }
     }
 
-    /// The keyboard order: every resume row, then every template row, then
-    /// every project row.
-    static func rowIDs(resume: [UUID], templates: [UUID], projects: [UUID] = []) -> [UUID] {
-        resume + templates + projects
+    static func showMoreSection(for id: UUID) -> Section? {
+        Section.allCases.first { showMoreID(for: $0) == id }
+    }
+
+    /// The list's lines: each non-empty section's header, its first
+    /// `collapsedRowCap` rows (all of them once expanded), then "Show N
+    /// more" when rows are still hidden. With every section empty, the
+    /// RESUME header alone (the view adds the empty-state text).
+    static func items(resume: [UUID], templates: [UUID], projects: [UUID], expanded: Set<Section>) -> [Item] {
+        let all: [(Section, [UUID])] = [(.resume, resume), (.templates, templates), (.projects, projects)]
+        var items: [Item] = []
+        for (section, ids) in all where !ids.isEmpty {
+            items.append(.header(section))
+            let shown = expanded.contains(section) ? ids : Array(ids.prefix(collapsedRowCap))
+            items += shown.map { .row(section, $0) }
+            if shown.count < ids.count {
+                items.append(.showMore(section, hidden: ids.count - shown.count))
+            }
+        }
+        return items.isEmpty ? [.header(.resume)] : items
+    }
+
+    /// The order ↓/↑ walk: every row and "Show N more" row, top to bottom.
+    static func keyboardIDs(_ items: [Item]) -> [UUID] {
+        items.compactMap(\.keyboardID)
+    }
+
+    /// The row "Show N more" reveals first — where the highlight lands.
+    static func firstRevealed(in ids: [UUID]) -> UUID? {
+        ids.count > collapsedRowCap ? ids[collapsedRowCap] : nil
+    }
+
+    /// VoiceOver's name for a "Show N more" row.
+    static func showMoreAccessibilityLabel(section: Section, hidden: Int) -> String {
+        let noun: String
+        switch section {
+        case .resume: noun = "past sessions"
+        case .templates: noun = "templates"
+        case .projects: noun = "projects"
+        }
+        return "Show \(hidden) more \(noun)"
     }
 }
 
@@ -127,6 +192,9 @@ struct ComposerResumeState: Equatable {
     /// The highlighted resume row. Re-anchors to the first row when it no
     /// longer matches the typed text.
     private(set) var selectedID: UUID?
+    /// A5 sections expanded past their first rows by "Show N more".
+    /// Cleared on open (`reset`) and whenever the typed text changes.
+    private(set) var expandedSections: Set<ComposerDownList.Section> = []
 
     /// Whether resume rows (rather than the start options) own Return.
     var ownsKeyboard: Bool { isRevealed || isResumeColumnFocused }
@@ -142,6 +210,17 @@ struct ComposerResumeState: Equatable {
 
     mutating func select(_ id: UUID) {
         selectedID = id
+    }
+
+    /// "Show N more": expands `section` in place and highlights the first
+    /// row it revealed.
+    mutating func expand(_ section: ComposerDownList.Section, selecting firstRevealed: UUID?) {
+        expandedSections.insert(section)
+        if let firstRevealed { selectedID = firstRevealed }
+    }
+
+    mutating func collapseSections() {
+        expandedSections = []
     }
 
     mutating func handle(_ key: Key, layout: ComposerResumeLayout, rowIDs: [UUID]) -> Outcome {
@@ -315,13 +394,10 @@ struct ComposerListRow: View {
     }
 }
 
-/// The Resume rows under the field (A5) or in the right column (A4). A5
-/// also passes `templates` and `projects`, which follow as TEMPLATES and
-/// PROJECTS sections.
+/// A4's resume column: the Resume rows, scrolled within `cap` so the
+/// highlighted one stays in view.
 struct ComposerResumeListView: View {
     let rows: [HistoryEntry]
-    var templates: [ComposerTemplateRow] = []
-    var projects: [ComposerTemplateRow] = []
     let selectedID: UUID?
     let isFocused: Bool
     let hasHistory: Bool
@@ -331,66 +407,207 @@ struct ComposerResumeListView: View {
     let onResume: (UUID) -> Void
     @Environment(\.colorScheme) private var colorScheme
 
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ComposerResumeSectionHeader(systemImage: "clock.arrow.circlepath", title: "Resume", size: titleSize * 0.62)
+            if rows.isEmpty {
+                ComposerResumeEmptyText(hasHistory: hasHistory, titleSize: titleSize)
+            } else {
+                let selectedIndex = selectedID.flatMap { id in rows.firstIndex { $0.id == id } }
+                ForEach(rows[ComposerResumeRows.window(count: rows.count, selected: selectedIndex, cap: cap)]) { entry in
+                    ComposerResumeEntryRow(entry: entry, isSelected: isFocused && entry.id == selectedID,
+                                           titleSize: titleSize, now: now, onResume: onResume)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(ComposerDownListView.accessibilityLabel(hasTemplates: false))
+    }
+}
+
+/// A5's ↓ list: RESUME, TEMPLATES, PROJECTS as one list
+/// (`ComposerDownList.items`). Sections never scroll on their own; past
+/// `maxHeight` the whole list scrolls, keeping the highlighted row in view.
+struct ComposerDownListView: View {
+    let rows: [HistoryEntry]
+    let templates: [ComposerTemplateRow]
+    let projects: [ComposerTemplateRow]
+    let expanded: Set<ComposerDownList.Section>
+    let selectedID: UUID?
+    let hasHistory: Bool
+    let titleSize: CGFloat
+    let maxHeight: CGFloat
+    let now: Date
+    let onResume: (UUID) -> Void
+    let onShowMore: (ComposerDownList.Section) -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var contentHeight: CGFloat = 0
+
     /// The list's VoiceOver name: it holds TEMPLATES too whenever any show.
     static func accessibilityLabel(hasTemplates: Bool) -> String {
         hasTemplates ? "Resume or start a session" : "Resume a past session"
     }
 
+    /// The tallest the list grows before it scrolls: the old two-section
+    /// list's full height (two headers, three rows each).
+    static func maxHeight(titleSize: CGFloat) -> CGFloat {
+        let row = titleSize + 24
+        let header = (titleSize * 0.62 * 1.25).rounded(.up) + 12
+        return 6 * row + 2 * header
+    }
+
     var body: some View {
-        let sections = ComposerDownList.sections(resumeCount: rows.count, templateCount: templates.count, projectCount: projects.count)
-        let sectionCap = ComposerDownList.cap(sectionCount: sections.count, soloCap: cap)
-        VStack(alignment: .leading, spacing: 0) {
-            if sections.contains(.resume) {
-                ComposerResumeSectionHeader(systemImage: "clock.arrow.circlepath", title: "Resume", size: titleSize * 0.62)
-            }
-            if rows.isEmpty, sections.contains(.resume) {
-                Text(hasHistory ? "No matches" : "No past sessions")
-                    .font(.system(size: titleSize * 0.8))
-                    .foregroundStyle(ComposerResumeInk.secondary(colorScheme))
-                    .padding(.horizontal, 12)
-                    .frame(height: titleSize + 24, alignment: .leading)
-            } else if !rows.isEmpty {
-                let selectedIndex = selectedID.flatMap { id in rows.firstIndex { $0.id == id } }
-                ForEach(rows[ComposerResumeRows.window(count: rows.count, selected: selectedIndex, cap: sectionCap)]) { entry in
-                    ComposerListRow(
-                        systemImage: "clock.arrow.circlepath",
-                        title: entry.title,
-                        meta: ComposerResumeRows.meta(projectName: entry.projectName, lastActiveAt: entry.lastActiveAt, now: now),
-                        isSelected: isFocused && entry.id == selectedID,
-                        showsReturnGlyph: true,
-                        titleSize: titleSize,
-                        action: { onResume(entry.id) }
-                    )
+        let items = ComposerDownList.items(
+            resume: rows.map(\.id), templates: templates.map(\.id), projects: projects.map(\.id), expanded: expanded
+        )
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: contentHeight > maxHeight) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                        line(item)
+                    }
+                    if rows.isEmpty, templates.isEmpty, projects.isEmpty {
+                        ComposerResumeEmptyText(hasHistory: hasHistory, titleSize: titleSize)
+                    }
                 }
+                .background(GeometryReader { geo in
+                    // Preferences don't leave an AppKit-backed ScrollView,
+                    // so the content height is written straight to state.
+                    Color.clear
+                        .onAppear { contentHeight = geo.size.height }
+                        .onChange(of: geo.size.height) { contentHeight = $0 }
+                })
             }
-            if sections.contains(.templates) {
-                optionSection(symbol: ComposerDownList.templatesSymbol, title: "Templates", rows: templates, cap: sectionCap)
-            }
-            if sections.contains(.projects) {
-                optionSection(symbol: ComposerDownList.projectsSymbol, title: "Projects", rows: projects, cap: sectionCap)
+            .frame(height: min(contentHeight, maxHeight))
+            .onChange(of: selectedID) { id in
+                guard let id, let index = items.firstIndex(where: { $0.keyboardID == id }) else { return }
+                // A section's first row brings its header into view with it.
+                if index > 0, case .header(let section) = items[index - 1] {
+                    proxy.scrollTo(Self.headerID(section))
+                } else {
+                    proxy.scrollTo(id)
+                }
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Self.accessibilityLabel(hasTemplates: sections.contains(.templates)))
+        .accessibilityLabel(Self.accessibilityLabel(hasTemplates: !templates.isEmpty))
     }
 
-    /// A TEMPLATES or PROJECTS section: header, then its rows scrolled so
-    /// the highlighted one stays in view.
+    private static func headerID(_ section: ComposerDownList.Section) -> String {
+        "header-\(section)"
+    }
+
     @ViewBuilder
-    private func optionSection(symbol: String, title: String, rows: [ComposerTemplateRow], cap: Int) -> some View {
-        ComposerResumeSectionHeader(systemImage: symbol, title: title, size: titleSize * 0.62)
-        let selectedIndex = selectedID.flatMap { id in rows.firstIndex { $0.id == id } }
-        ForEach(rows[ComposerResumeRows.window(count: rows.count, selected: selectedIndex, cap: cap)]) { row in
-            ComposerListRow(
-                systemImage: row.systemImage,
-                title: row.title,
-                meta: row.meta,
-                isSelected: isFocused && row.id == selectedID,
-                showsReturnGlyph: true,
+    private func line(_ item: ComposerDownList.Item) -> some View {
+        switch item {
+        case .header(.resume):
+            ComposerResumeSectionHeader(systemImage: "clock.arrow.circlepath", title: "Resume", size: titleSize * 0.62)
+                .id(Self.headerID(.resume))
+        case .header(.templates):
+            ComposerResumeSectionHeader(systemImage: ComposerDownList.templatesSymbol, title: "Templates", size: titleSize * 0.62)
+                .id(Self.headerID(.templates))
+        case .header(.projects):
+            ComposerResumeSectionHeader(systemImage: ComposerDownList.projectsSymbol, title: "Projects", size: titleSize * 0.62)
+                .id(Self.headerID(.projects))
+        case .row(.resume, let id):
+            if let entry = rows.first(where: { $0.id == id }) {
+                ComposerResumeEntryRow(entry: entry, isSelected: id == selectedID, titleSize: titleSize, now: now, onResume: onResume)
+                    .id(id)
+            }
+        case .row(let section, let id):
+            if let row = (section == .templates ? templates : projects).first(where: { $0.id == id }) {
+                ComposerListRow(
+                    systemImage: row.systemImage, title: row.title, meta: row.meta,
+                    isSelected: id == selectedID, showsReturnGlyph: true, titleSize: titleSize, action: row.action
+                )
+                .id(id)
+            }
+        case .showMore(let section, let hidden):
+            ComposerShowMoreRow(
+                hidden: hidden,
+                accessibilityLabel: ComposerDownList.showMoreAccessibilityLabel(section: section, hidden: hidden),
+                isSelected: ComposerDownList.showMoreID(for: section) == selectedID,
                 titleSize: titleSize,
-                action: row.action
+                action: { onShowMore(section) }
             )
+            .id(ComposerDownList.showMoreID(for: section))
         }
+    }
+}
+
+/// "Show N more": a secondary-ink row at the end of a collapsed section.
+/// Return or a click expands the section in place.
+struct ComposerShowMoreRow: View {
+    let hidden: Int
+    let accessibilityLabel: String
+    let isSelected: Bool
+    let titleSize: CGFloat
+    let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "chevron.down")
+                .font(.system(size: titleSize * 0.7, weight: .medium))
+                .frame(width: titleSize, alignment: .center)
+            Text("Show \(hidden) more")
+                .font(.system(size: titleSize * 0.8, weight: .regular))
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if isSelected {
+                Image(systemName: "return")
+                    .font(.system(size: titleSize * 0.7, weight: .medium))
+            }
+        }
+        .foregroundStyle(ComposerResumeInk.secondary(colorScheme))
+        .padding(.horizontal, 12)
+        .frame(height: titleSize + 24)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isSelected ? ComposerResumeInk.selectedFill(colorScheme) : .clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityAction(.default) { action() }
+    }
+}
+
+/// One past session as a composer row.
+private struct ComposerResumeEntryRow: View {
+    let entry: HistoryEntry
+    let isSelected: Bool
+    let titleSize: CGFloat
+    let now: Date
+    let onResume: (UUID) -> Void
+
+    var body: some View {
+        ComposerListRow(
+            systemImage: "clock.arrow.circlepath",
+            title: entry.title,
+            meta: ComposerResumeRows.meta(projectName: entry.projectName, lastActiveAt: entry.lastActiveAt, now: now),
+            isSelected: isSelected,
+            showsReturnGlyph: true,
+            titleSize: titleSize,
+            action: { onResume(entry.id) }
+        )
+    }
+}
+
+/// RESUME's empty state: "No past sessions" / "No matches".
+private struct ComposerResumeEmptyText: View {
+    let hasHistory: Bool
+    let titleSize: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Text(hasHistory ? "No matches" : "No past sessions")
+            .font(.system(size: titleSize * 0.8))
+            .foregroundStyle(ComposerResumeInk.secondary(colorScheme))
+            .padding(.horizontal, 12)
+            .frame(height: titleSize + 24, alignment: .leading)
     }
 }
 

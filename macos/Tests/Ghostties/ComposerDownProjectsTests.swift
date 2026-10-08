@@ -214,7 +214,7 @@ struct ComposerDownProjectsModelTests {
         #expect(ComposerDownList.sections(resumeCount: 0, templateCount: 0, projectCount: 3) == [.projects])
         #expect(ComposerDownList.sections(resumeCount: 0, templateCount: 0, projectCount: 0) == [.resume])
         let r = UUID(), t = UUID(), p = UUID()
-        #expect(ComposerDownList.rowIDs(resume: [r], templates: [t], projects: [p]) == [r, t, p])
+        #expect(ComposerDownList.keyboardIDs(ComposerDownList.items(resume: [r], templates: [t], projects: [p], expanded: [])) == [r, t, p])
     }
 
     private func option(_ title: String, id: UUID = UUID()) -> ComposerOption {
