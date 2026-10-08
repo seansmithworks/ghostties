@@ -275,6 +275,9 @@ enum TrayGlassStyle {
     static let trayWidth: TrayWidth = .fill
     /// Default selected-row title weight (see `SelectedTitleWeight`).
     static let selectedTitleWeight: SelectedTitleWeight = .semibold
+    /// Default rim intensity of the Tint + shimmer selected row in dark: the
+    /// light look's, so the row reads the same across themes.
+    static let tintShimmerDarkIntensity: Double = light.chromaticIntensity
     /// Rail hairline width (`SidebarSectionHairlineSlot`), the vertical
     /// tray's width (canvas 104px). Selected rows no longer read it: they
     /// fill the hover card (`SidebarRowCardBackground`).
@@ -528,6 +531,16 @@ struct SidebarRowCardBackground: View {
         }
     }
 
+    /// The Tint + shimmer rim look. Dark's glass look has no rim (intensity 0),
+    /// so this row alone takes its dark intensity from its own dial.
+    private var tintShimmerLook: TrayGlassStyle.Look {
+        var look = SidebarDialTuning.trayGlass(for: colorScheme)
+        if colorScheme == .dark {
+            look.chromaticIntensity = SidebarDialTuning.tintShimmerDarkIntensity()
+        }
+        return look
+    }
+
     /// The non-glass selected-row styles. Hover stays subordinate: it is
     /// fainter than the selected fill, and the selected row ignores it.
     @ViewBuilder
@@ -543,7 +556,7 @@ struct SidebarRowCardBackground: View {
                 shape
                     .fill(Color.primary.opacity(0.075))
                     .overlay {
-                        TrayChromaticRim(look: SidebarDialTuning.trayGlass(for: colorScheme), shape: shape)
+                        TrayChromaticRim(look: tintShimmerLook, shape: shape)
                     }
             case .accent:
                 shape.fill(WorkspaceLayout.composerSelectionAccent.opacity(0.14))

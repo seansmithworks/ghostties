@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import Ghostty
 
 /// The "Tray style" dial (`SidebarDialTuning.trayStyle`): Glass by default,
@@ -17,6 +18,21 @@ final class SidebarTrayStyleTests: XCTestCase {
         d.set("nonsense", forKey: SidebarDialTuning.trayStyleKey)
         XCTAssertEqual(SidebarDialTuning.trayStyle(defaults: d), .glass)
         XCTAssertTrue(SidebarDialTuning.allKeys.contains(SidebarDialTuning.trayStyleKey))
+    }
+
+    func testTintShimmerDarkIntensityDefaultsToLightAndRoundTrips() {
+        let name = "com.seansmithdesign.ghostties.tests.tint-shimmer-dark"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        defer { d.removePersistentDomain(forName: name) }
+        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensityKey, "ghostties.sidebarDial.tintShimmerDarkIntensity")
+        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), TrayGlassStyle.light.chromaticIntensity)
+        XCTAssertGreaterThan(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), 0)
+        d.set(0.65, forKey: SidebarDialTuning.tintShimmerDarkIntensityKey)
+        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), 0.65)
+        XCTAssertTrue(SidebarDialTuning.allKeys.contains(SidebarDialTuning.tintShimmerDarkIntensityKey))
+        // The glass dark look itself stays rim-less.
+        XCTAssertEqual(SidebarDialTuning.trayGlass(for: .dark, defaults: d).chromaticIntensity, 0)
     }
 
     func testSelectedRowStyleDefaultsToFlatMigratesAndRoundTrips() {

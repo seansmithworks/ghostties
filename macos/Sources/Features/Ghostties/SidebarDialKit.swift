@@ -57,6 +57,7 @@ enum SidebarDialTuning {
     /// Retired "Selected style" dial; read only to migrate (`selectedRowStyle`).
     static let legacySelectedStyleKey = "ghostties.sidebarDial.trayGlass.selectedStyle"
     static let selectedTitleWeightKey = "ghostties.sidebarDial.selectedTitleWeight"
+    static let tintShimmerDarkIntensityKey = "ghostties.sidebarDial.tintShimmerDarkIntensity"
 
     // MARK: Glass colour and material, one key set per appearance (`TrayGlassStyle.Look`)
 
@@ -259,6 +260,10 @@ enum SidebarDialTuning {
     static func selectedTitleWeight(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.SelectedTitleWeight {
         choice(selectedTitleWeightKey, default: TrayGlassStyle.selectedTitleWeight, defaults: defaults)
     }
+    /// Rim intensity of the Tint + shimmer selected row in dark only.
+    static func tintShimmerDarkIntensity(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
+        double(tintShimmerDarkIntensityKey, default: TrayGlassStyle.tintShimmerDarkIntensity, defaults: defaults)
+    }
     static func trayGlassInteractive(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
         bool(trayGlassInteractiveKey, default: TrayGlassStyle.interactive, defaults: defaults)
     }
@@ -372,7 +377,7 @@ enum SidebarDialTuning {
         trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
         trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
-        traySelectedPillWidthKey, selectedTitleWeightKey,
+        traySelectedPillWidthKey, selectedTitleWeightKey, tintShimmerDarkIntensityKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
@@ -504,6 +509,7 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayGlassCornerRadius: Double
     var traySelectedPillWidth: Double
     var selectedTitleWeight: String
+    var tintShimmerDarkIntensity: Double
 
     var rowHeight: Double
     var rowGap: Double
@@ -597,6 +603,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
             trayGlassCornerRadius: Double(SidebarDialTuning.trayGlassCornerRadius(defaults: defaults)),
             traySelectedPillWidth: Double(SidebarDialTuning.traySelectedPillWidth(defaults: defaults)),
             selectedTitleWeight: SidebarDialTuning.selectedTitleWeight(defaults: defaults).rawValue,
+            tintShimmerDarkIntensity: SidebarDialTuning.tintShimmerDarkIntensity(defaults: defaults),
             rowHeight: Double(SidebarDialTuning.rowHeight(defaults: defaults)),
             rowGap: Double(SidebarDialTuning.rowGap(defaults: defaults)),
             rowTitleSize: Double(SidebarDialTuning.rowTitleSize(defaults: defaults)),
@@ -680,6 +687,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.trayGlassCornerRadiusKey, previous.trayGlassCornerRadius, model.trayGlassCornerRadius)
         setIfChanged(SidebarDialTuning.traySelectedPillWidthKey, previous.traySelectedPillWidth, model.traySelectedPillWidth)
         setStringIfChanged(SidebarDialTuning.selectedTitleWeightKey, previous.selectedTitleWeight, model.selectedTitleWeight)
+        setIfChanged(SidebarDialTuning.tintShimmerDarkIntensityKey, previous.tintShimmerDarkIntensity, model.tintShimmerDarkIntensity)
         setIfChanged(SidebarDialTuning.rowHeightKey, previous.rowHeight, model.rowHeight)
         setIfChanged(SidebarDialTuning.rowGapKey, previous.rowGap, model.rowGap)
         setIfChanged(SidebarDialTuning.rowTitleSizeKey, previous.rowTitleSize, model.rowTitleSize)
@@ -754,6 +762,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .group("trayGlass", label: "Tray — shared", children: [
             .select("selectedTitleWeight", keyPath: \.selectedTitleWeight, label: "Selected title weight (expanded)",
                     options: TrayGlassStyle.SelectedTitleWeight.allCases.map(\.rawValue)),
+            .slider("tintShimmerDarkIntensity", keyPath: \.tintShimmerDarkIntensity, label: "Shimmer (dark)", range: 0...1, step: 0.05),
             .toggle("trayGlassInteractive", keyPath: \.trayGlassInteractive, label: "Glass interactive (tray)"),
             .slider("trayHorizontalButtonSize", keyPath: \.trayHorizontalButtonSize, label: "Bar button size (expanded)", range: 24...56, step: 0.5, unit: "pt"),
             .slider("trayHorizontalIconSize", keyPath: \.trayHorizontalIconSize, label: "Bar icon size (expanded)", range: 10...24, step: 0.5, unit: "pt"),
