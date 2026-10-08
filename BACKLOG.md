@@ -1,5 +1,18 @@
 # Ghostties — Backlog
 
+## 2026-10-08 — sidebar vnext decisions + overnight wave (session dd3c3085, "SideBar Tweaks")
+
+State: `feat/vnext-lock-it` @ `1d786120c` (Tray style, Selected row, Shimmer (dark) dials; reviewed). Options page https://claude.ai/artifact/DpXMtZJsPLdXH2JcrJKWNw; canvas `~/Documents/Pencil.Dev/Sidebar vnext – options 2026-10-08.pen`.
+
+- [ ] L1 tray hover, Finder rule at radius 20 (single-button capsule fills; multi = shape concentric to 20). | carried, overnight
+- [ ] L2 Cmd+T composer start-or-resume: A5 (one line, ↓ reveals Resume) + A4 two-column switch; History hidden from sidebar behind a dial (default hidden). Resume suggestions need mapping + iteration. | carried, overnight
+- [ ] L3 B5 Projects: one view, no tabs, accordion `Project ⌄ ——— count`, behind a dial; rail as monogram tiles. After L2. | carried, overnight
+- [ ] Bake Tint + shimmer as the selected-row default at lock-it. | carried
+- [ ] Remove losing dial options before the PR (row styles, Bare tray, History placement). | carried
+- [ ] Delete `lock-it/.build-capture` + `.build-dev`…`.build-dev4` — Sean: "yes, once we pick". | parked
+- [ ] B1 collapsible headers as an alternative if B5 doesn't land. | parked
+- [ ] Bar/Type row styles force semibold; `selectedCardCornerRadius` dial only drives the rail hairline. | parked
+
 ## 2026-10-06 — beta.26 contract run 1 (session 71606cce): tag still gated
 
 State: main @ `5e3641da2` (#198 launch hooks, #199 harness Phase 1 merged). Contract run 1: 23 PASS / 3 FAIL / 10 PENDING / 11 SEAN (`beta26-test-harness/status.json`, verifier `verifier-run1.json`, mutation proof 13/13 `mutation-proof-run1.json`). Sean's page: https://claude.ai/artifact/PunkoB6rxhP2mtEivCkN9k
