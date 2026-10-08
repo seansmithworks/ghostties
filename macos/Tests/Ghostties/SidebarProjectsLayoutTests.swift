@@ -28,20 +28,20 @@ final class SidebarProjectsLayoutTests: XCTestCase {
 
     // MARK: - Dial
 
-    func testLayoutDefaultsToTabsAndResets() {
+    func testLayoutDefaultsToOneViewAndResets() {
         let d = suite("dial")
-        XCTAssertEqual(SidebarDialTuning.projectsLayout(defaults: d), .tabs)
-        d.set("oneView", forKey: SidebarDialTuning.projectsLayoutKey)
         XCTAssertEqual(SidebarDialTuning.projectsLayout(defaults: d), .oneView)
+        d.set("tabs", forKey: SidebarDialTuning.projectsLayoutKey)
+        XCTAssertEqual(SidebarDialTuning.projectsLayout(defaults: d), .tabs)
         XCTAssertTrue(SidebarDialTuning.allKeys.contains(SidebarDialTuning.projectsLayoutKey))
         SidebarDialTuning.reset(defaults: d)
-        XCTAssertEqual(SidebarDialTuning.projectsLayout(defaults: d), .tabs)
+        XCTAssertEqual(SidebarDialTuning.projectsLayout(defaults: d), .oneView)
     }
 
-    func testUnknownStoredLayoutFallsBackToTabs() {
+    func testUnknownStoredLayoutFallsBackToOneView() {
         let d = suite("unknown")
         d.set("accordion", forKey: SidebarDialTuning.projectsLayoutKey)
-        XCTAssertEqual(SidebarDialTuning.projectsLayout(defaults: d), .tabs)
+        XCTAssertEqual(SidebarDialTuning.projectsLayout(defaults: d), .oneView)
     }
 
     // MARK: - Grouping

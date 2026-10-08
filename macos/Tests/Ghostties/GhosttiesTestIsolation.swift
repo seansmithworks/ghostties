@@ -88,7 +88,9 @@ struct SidebarDialIsolationTests {
 @Suite("Locked sidebar dial defaults")
 struct SidebarLockedDefaultsTests {
     /// The values tuned in the Dev DialKit, locked as the code defaults for
-    /// beta.26. Read from an empty suite so nothing stored can mask them.
+    /// beta.26 (re-baked 2026-10-08 from Dev's stored dials, plus Sean's
+    /// calls: Tint + shimmer selected row, One view, History hidden, A5
+    /// Resume list). Read from an empty suite so nothing stored can mask them.
     @Test("Empty defaults read the locked, tuned values")
     func emptyDefaultsEqualTunedSnapshot() throws {
         let name = "com.seansmithdesign.ghostties.tests.locked-defaults"
@@ -96,16 +98,24 @@ struct SidebarLockedDefaultsTests {
         d.removePersistentDomain(forName: name)
         defer { d.removePersistentDomain(forName: name) }
 
+        #expect(SidebarDialTuning.windowMargin(defaults: d) == 8)
         #expect(SidebarDialTuning.trayHorizontalButtonSize(defaults: d) == 44)
         #expect(SidebarDialTuning.trayVerticalButtonSize(defaults: d) == 44)
         #expect(SidebarDialTuning.trayHorizontalIconSize(defaults: d) == 18)
         #expect(SidebarDialTuning.trayVerticalIconSize(defaults: d) == 18)
         #expect(SidebarDialTuning.trayInnerPadding(defaults: d) == 8)
+        #expect(SidebarDialTuning.trayGroupGap(defaults: d) == 8)
+        #expect(SidebarDialTuning.trayWidth(defaults: d) == .fill)
+        #expect(SidebarDialTuning.trayGlassInteractive(defaults: d))
         #expect(SidebarDialTuning.traySelectedPillWidth(defaults: d) == 44)
         #expect(SidebarDialTuning.trayGlassCornerStyle(defaults: d) == .radius)
-        #expect(SidebarDialTuning.trayGlassCornerRadius(defaults: d) == 16.5)
+        #expect(SidebarDialTuning.trayGlassCornerRadius(defaults: d) == 20)
+        #expect(SidebarDialTuning.selectedTitleWeight(defaults: d) == .regular)
+        #expect(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d) == 0.3)
         #expect(SidebarDialTuning.contentPaddingLeading(defaults: d) == 0)
         #expect(SidebarDialTuning.contentPaddingTop(defaults: d) == 0)
+        #expect(SidebarDialTuning.listToTrayGap(defaults: d) == 0)
+        #expect(SidebarDialTuning.railExtraWidth(defaults: d) == 0)
         #expect(SidebarDialTuning.rowHeight(defaults: d) == 48)
         #expect(SidebarDialTuning.rowGap(defaults: d) == 4)
         #expect(SidebarDialTuning.rowTitleSize(defaults: d) == 14)
@@ -113,20 +123,31 @@ struct SidebarLockedDefaultsTests {
         #expect(SidebarDialTuning.rowGhostSize(defaults: d) == 20)
         #expect(SidebarDialTuning.rowLeadingPadding(defaults: d) == 16)
         #expect(SidebarDialTuning.rowTrailingPadding(defaults: d) == 16)
-
-        let dark = SidebarDialTuning.trayGlass(for: .dark, defaults: d)
-        #expect(dark.rimWidth == 0.75)
-        #expect(dark.rimOpacity == 0.12)
-        #expect(dark.shadowOpacity == 0.506)
-        #expect(dark.chromaticWidth == 1)
-        #expect(dark.chromaticRotation == 72.9)
-        #expect(dark.specularStrength == 0.1)
-        #expect(dark.specularAngle == 268)
+        #expect(SidebarDialTuning.projectsLayout(defaults: d) == .oneView)
+        #expect(!SidebarDialTuning.historyInSidebar(defaults: d))
+        #expect(ComposerResumeLayout.current(defaults: d) == .list)
+        #expect(ComposerSingleLineShadowDials.radius(defaults: d) == 48)
+        #expect(ComposerSingleLineShadowDials.yOffset(defaults: d) == 43)
+        #expect(ComposerSingleLineShadowDials.opacity(defaults: d) == 0.34)
 
         let light = SidebarDialTuning.trayGlass(for: .light, defaults: d)
-        #expect(light.variant == .identity)
-        #expect(light.surfaceOpacity == 0.7)
-        #expect(light.chromaticBlur == 1.7)
-        #expect(light.specularAngle == 189)
+        #expect(light == TrayGlassStyle.Look(
+            variant: .identity, tintOpacity: 0.15, surfaceOpacity: 0.7,
+            rimWidth: 1.25, rimOpacity: 0.25,
+            shadowOpacity: 0.15, shadowRadius: 8, shadowYOffset: 3,
+            chromaticIntensity: 0.3, chromaticWidth: 2.25, chromaticRotation: 202.7, chromaticBlur: 1.7,
+            chromaticPalette: .pastel, chromaticBlend: .normal,
+            specularStrength: 0.5, specularAngle: 189
+        ))
+
+        let dark = SidebarDialTuning.trayGlass(for: .dark, defaults: d)
+        #expect(dark == TrayGlassStyle.Look(
+            variant: .identity, tintOpacity: 0.15, surfaceOpacity: 0.45,
+            rimWidth: 0.25, rimOpacity: 0.12,
+            shadowOpacity: 0.298, shadowRadius: 8, shadowYOffset: 2.5,
+            chromaticIntensity: 0.15, chromaticWidth: 0.5, chromaticRotation: 72.9, chromaticBlur: 1.4,
+            chromaticPalette: .pastel, chromaticBlend: .plusLighter,
+            specularStrength: 0.1, specularAngle: 270
+        ))
     }
 }

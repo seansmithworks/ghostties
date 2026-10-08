@@ -175,29 +175,30 @@ enum TrayGlassStyle {
         specularAngle: 189
     )
 
-    /// Dark: a raised canvas-grey pill (`canvasBackgroundDark` #2D2D2D over
-    /// the #242424 chrome) on the warm-tinted glass, with a faint white rim
-    /// and a deeper shadow, since an 8% black shadow vanishes on dark chrome.
-    /// Specular is kept faint and no chromatic: a strong white highlight on dark glass lifts
+    /// Dark: a half-opaque canvas-grey layer (`canvasBackgroundDark`
+    /// #2D2D2D over the #242424 chrome) on lightly warm-tinted identity
+    /// glass, a hairline white rim, a faint chromatic rim, and a deeper
+    /// shadow than light's, since an 8% black shadow vanishes on dark chrome.
+    /// Specular is kept faint: a strong white highlight on dark glass lifts
     /// the background toward the grey text and icons and collapses their
-    /// contrast.
+    /// contrast. Tuned in the Dev DialKit (locked for beta.26, 2026-10-08).
     static let dark = Look(
-        variant: .regular,
-        tintOpacity: 0.55,
-        surfaceOpacity: 0.9,
-        rimWidth: 0.75,
+        variant: .identity,
+        tintOpacity: 0.15,
+        surfaceOpacity: 0.45,
+        rimWidth: 0.25,
         rimOpacity: 0.12,
-        shadowOpacity: 0.506,
+        shadowOpacity: 0.298,
         shadowRadius: 8,
-        shadowYOffset: 2,
-        chromaticIntensity: 0,
-        chromaticWidth: 1,
+        shadowYOffset: 2.5,
+        chromaticIntensity: 0.15,
+        chromaticWidth: 0.5,
         chromaticRotation: 72.9,
-        chromaticBlur: 0,
+        chromaticBlur: 1.4,
         chromaticPalette: .pastel,
         chromaticBlend: .plusLighter,
         specularStrength: 0.1,
-        specularAngle: 268
+        specularAngle: 270
     )
 
     static func defaultLook(for colorScheme: ColorScheme) -> Look {
@@ -220,17 +221,18 @@ enum TrayGlassStyle {
     /// Canvas buttons are stacked with no gap; the horizontal bar keeps 2pt.
     static let verticalItemGap: CGFloat = 0
     static let horizontalItemGap: CGFloat = 2
-    /// Gap between the Create and Toggle capsules, on both axes: canvas 10px
-    /// (`bA1y9` layout B).
-    static let groupGap: CGFloat = 5
+    /// Gap between the Create and Toggle capsules, on both axes (`bA1y9`
+    /// layout B; tuned in the Dev DialKit to the 8pt grid).
+    static let groupGap: CGFloat = 8
     /// Canvas r64px on a 104px-wide pill: clamps to a capsule.
     static let cornerStyle: CornerStyle = .radius
     static let capsuleCornerRadius: CGFloat = 32
-    static let cornerRadius: CGFloat = 16.5
+    /// Tuned in the Dev DialKit (locked for beta.26, 2026-10-08).
+    static let cornerRadius: CGFloat = 20
     /// Default expanded tray width (see `TrayWidth`).
     static let trayWidth: TrayWidth = .fill
     /// Default selected-row title weight (see `SelectedTitleWeight`).
-    static let selectedTitleWeight: SelectedTitleWeight = .semibold
+    static let selectedTitleWeight: SelectedTitleWeight = .regular
     /// Default rim intensity of the Tint + shimmer selected row in dark: the
     /// light look's, so the row reads the same across themes.
     static let tintShimmerDarkIntensity: Double = light.chromaticIntensity
@@ -472,8 +474,9 @@ struct SidebarRowCardBackground: View {
         }
     }
 
-    /// The rim look. Dark's glass look has no rim (intensity 0), so this row
-    /// alone takes its dark intensity from its own dial ("Shimmer (dark)").
+    /// The rim look. In dark the row takes its intensity from its own dial
+    /// ("Shimmer (dark)"), not the tray's fainter dark rim, so the row
+    /// shimmers the same in both themes.
     private var tintShimmerLook: TrayGlassStyle.Look {
         var look = SidebarDialTuning.trayGlass(for: colorScheme)
         if colorScheme == .dark {

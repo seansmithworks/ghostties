@@ -5,14 +5,16 @@ import GhosttiesCore
 
 /// How the sidebar presents projects (the "Projects layout" dial).
 ///
-/// - `tabs`: today's sidebar — a Projects tab and a Sessions tab, switched
-///   from the View menu.
+/// - `tabs`: a Projects tab and a Sessions tab, switched from the View menu.
 /// - `oneView`: one list, no tabs (mock B5). Pinned stays on top; every
 ///   other live session sits under its project's accordion header. The rail
 ///   heads each project's sessions with a monogram tile.
 enum SidebarProjectsLayout: String, CaseIterable {
     case tabs
     case oneView
+
+    /// The default (Sean, 2026-10-08): one view.
+    static let shipped: SidebarProjectsLayout = .oneView
 }
 
 /// One project's live, unpinned sessions in the one-view list.

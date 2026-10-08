@@ -360,10 +360,10 @@ enum SidebarDialTuning {
         }
     }
 
-    /// Projects tab + Sessions tab (today), or one list with each project
-    /// as an accordion header (`SidebarProjectsLayout`).
+    /// Projects tab + Sessions tab, or one list with each project as an
+    /// accordion header (`SidebarProjectsLayout`). One view by default.
     static func projectsLayout(defaults: UserDefaults = SidebarDialTuning.store) -> SidebarProjectsLayout {
-        choice(projectsLayoutKey, default: .tabs, defaults: defaults)
+        choice(projectsLayoutKey, default: SidebarProjectsLayout.shipped, defaults: defaults)
     }
 
     /// Added on top of `WorkspaceLayout.collapsedRailWidth`'s computed hug
