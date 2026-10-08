@@ -872,6 +872,66 @@ final class WorkspaceStore: ObservableObject {
         persist()
     }
 
+    /// Move a session to the project its terminal is working in — the
+    /// project-level twin of `syncSessionNameFromTitle`. Called by
+    /// `SessionCoordinator.subscribeProjectSync` whenever the session's root
+    /// surface reports a new working directory (OSC 7, via
+    /// `Ghostty.App.pwdChanged` → `SurfaceView.pwd`).
+    ///
+    /// The target is the project whose root contains `workingDirectory`,
+    /// deepest root winning (see `projectId(containing:in:)`). There is no
+    /// manual move-to-project anywhere in the app, so there is no project
+    /// pin: every session follows its working directory.
+    ///
+    /// No-ops (no write, no `objectWillChange` fire) when:
+    ///   - the directory is outside every project
+    ///   - the session is already in the matching project
+    ///
+    /// A moved session is appended after the target project's sessions, the
+    /// same ordering `addSession` gives a new one. The freeze snapshot is
+    /// deliberately NOT released: a `cd` is terminal activity, not a sidebar
+    /// action, so project bucketing waits for the hover to end like any
+    /// other activity does. Rows re-group immediately via `sessions`' didSet.
+    func syncSessionProjectFromWorkingDirectory(id: UUID, workingDirectory: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }),
+              let target = Self.projectId(containing: workingDirectory, in: projects),
+              sessions[index].projectId != target else { return }
+        let maxOrder = sessions.filter { $0.projectId == target }
+            .compactMap(\.sortOrder).max() ?? -1
+        // One assignment, so one didSet and one objectWillChange.
+        var moved = sessions[index]
+        moved.projectId = target
+        moved.sortOrder = maxOrder + 1
+        sessions[index] = moved
+        persist()
+    }
+
+    /// The project whose root directory contains `path` (or is `path`),
+    /// deepest root winning, so a project registered for a subfolder or a
+    /// worktree beats the repo that encloses it. Matching is by whole path
+    /// components — `/code/app-old` is not inside `/code/app`. Both sides
+    /// are tilde-expanded, symlink-resolved and standardized.
+    static func projectId(containing path: String, in projects: [Project]) -> UUID? {
+        let target = canonicalPath(path)
+        var best: (id: UUID, length: Int)?
+        for project in projects {
+            let root = canonicalPath(project.rootPath)
+            let prefix = root.hasSuffix("/") ? root : root + "/"
+            guard target == root || target.hasPrefix(prefix) else { continue }
+            if root.count > (best?.length ?? -1) {
+                best = (project.id, root.count)
+            }
+        }
+        return best?.id
+    }
+
+    private static func canonicalPath(_ path: String) -> String {
+        URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+    }
+
     /// Set a session's Sessions-tab pinned state explicitly (idempotent —
     /// unlike `toggleSessionPin`, safe to call from drop handling where the
     /// desired end state, not a toggle, is known). No-ops (no write, no

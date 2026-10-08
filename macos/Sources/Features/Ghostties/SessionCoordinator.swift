@@ -206,6 +206,10 @@ final class SessionCoordinator: ObservableObject {
     /// actively changing.
     private var nameSyncSubscriptions: [UUID: AnyCancellable] = [:]
 
+    /// Per-session subscription for working directory → sidebar project
+    /// sync. See `subscribeProjectSync`.
+    private var projectSyncSubscriptions: [UUID: AnyCancellable] = [:]
+
     /// How often the sidebar name may update while titles are actively
     /// changing (throttle window). Not a "must go quiet" wait — see
     /// `nameSyncSubscriptions` above.
@@ -844,8 +848,7 @@ final class SessionCoordinator: ObservableObject {
         // Remove from our tracking first, then close surfaces via the controller.
         sessionTrees.removeValue(forKey: id)
         outputSubscriptions.removeValue(forKey: id)
-        nameSyncSubscriptions[id]?.cancel()
-        nameSyncSubscriptions.removeValue(forKey: id)
+        cancelTerminalSync(for: id)
         setStatus(.killed, for: id)
         gcDraftIfPresent(for: id)
         Self.removeLauncherScript(for: id)
@@ -918,8 +921,7 @@ final class SessionCoordinator: ObservableObject {
         isAtPrompt.removeValue(forKey: id)
         processingStartTimes.removeValue(forKey: id)
         lastSurfaceTitle.removeValue(forKey: id)
-        nameSyncSubscriptions[id]?.cancel()
-        nameSyncSubscriptions.removeValue(forKey: id)
+        cancelTerminalSync(for: id)
         WorkspaceStore.shared.removeSessionStatus(id: id)
         WorkspaceStore.shared.removeIndicatorState(id: id)
     }
@@ -1057,8 +1059,7 @@ final class SessionCoordinator: ObservableObject {
                 if liveTree.isEmpty {
                     sessionTrees.removeValue(forKey: sessionId)
                     outputSubscriptions.removeValue(forKey: sessionId)
-                    nameSyncSubscriptions[sessionId]?.cancel()
-                    nameSyncSubscriptions.removeValue(forKey: sessionId)
+                    cancelTerminalSync(for: sessionId)
                     setStatus(exitStatus, for: sessionId)
                     gcDraftIfPresent(for: sessionId)
                     switchToNextSession()
@@ -1074,8 +1075,7 @@ final class SessionCoordinator: ObservableObject {
                 if updated.isEmpty {
                     sessionTrees.removeValue(forKey: sessionId)
                     outputSubscriptions.removeValue(forKey: sessionId)
-                    nameSyncSubscriptions[sessionId]?.cancel()
-                    nameSyncSubscriptions.removeValue(forKey: sessionId)
+                    cancelTerminalSync(for: sessionId)
                     setStatus(exitStatus, for: sessionId)
                     gcDraftIfPresent(for: sessionId)
                 } else {
@@ -1317,6 +1317,44 @@ final class SessionCoordinator: ObservableObject {
             titlePublisher: surface.$title,
             isManualTitle: { [weak surface] in surface?.isManuallyTitled ?? false }
         )
+
+        // Project follows the terminal's working directory, the way the
+        // name follows its title.
+        subscribeProjectSync(sessionId: sessionId, pwdPublisher: surface.$pwd)
+    }
+
+    /// Wires a session's working-directory publisher (`SurfaceView.$pwd`,
+    /// written from OSC 7 by `Ghostty.App.pwdChanged`) into
+    /// `WorkspaceStore.syncSessionProjectFromWorkingDirectory`, so a session
+    /// moves to the project it is actually working in.
+    ///
+    /// Generic over any `String?` publisher for the same testability reason
+    /// as `subscribeNameSync`. No throttle: the shell re-reports the same
+    /// directory at every prompt, and `removeDuplicates()` drops those, so
+    /// the store only sees real `cd`s — and it no-ops when the project is
+    /// unchanged.
+    func subscribeProjectSync<P: Publisher>(
+        sessionId: UUID,
+        pwdPublisher: P,
+        store: WorkspaceStore = .shared
+    ) where P.Output == String?, P.Failure == Never {
+        projectSyncSubscriptions[sessionId] = pwdPublisher
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .removeDuplicates()
+            .sink { pwd in
+                store.syncSessionProjectFromWorkingDirectory(id: sessionId, workingDirectory: pwd)
+            }
+    }
+
+    /// Cancels the per-session terminal → sidebar sync subscriptions (name
+    /// and project). The one teardown call for every path that stops
+    /// tracking a session's surface.
+    private func cancelTerminalSync(for sessionId: UUID) {
+        nameSyncSubscriptions[sessionId]?.cancel()
+        nameSyncSubscriptions.removeValue(forKey: sessionId)
+        projectSyncSubscriptions[sessionId]?.cancel()
+        projectSyncSubscriptions.removeValue(forKey: sessionId)
     }
 
     /// Testable core of `subscribeToOutput` — generic over the output
