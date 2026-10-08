@@ -21,12 +21,14 @@ struct ComposerDownListSectionTests {
 
     @Test func keyboardOrderIsResumeThenTemplates() {
         let r1 = UUID(), r2 = UUID(), t1 = UUID()
-        #expect(ComposerDownList.rowIDs(resume: [r1, r2], templates: [t1]) == [r1, r2, t1])
+        let items = ComposerDownList.items(resume: [r1, r2], templates: [t1], projects: [], expanded: [])
+        #expect(ComposerDownList.keyboardIDs(items) == [r1, r2, t1])
     }
 
-    @Test func eachSectionScrollsWithinAShorterCapWhenBothShow() {
-        #expect(ComposerDownList.cap(sectionCount: 1) == 5)
-        #expect(ComposerDownList.cap(sectionCount: 2) == 3)
+    /// Superseded 2026-10-08: sections no longer scroll within a cap;
+    /// each shows three rows then "Show N more" (ComposerDownShowMoreTests).
+    @Test func eachSectionShowsThreeRowsBeforeShowMore() {
+        #expect(ComposerDownList.collapsedRowCap == 3)
     }
 
     /// VoiceOver's name for the ↓ list covers both halves whenever
@@ -35,14 +37,14 @@ struct ComposerDownListSectionTests {
         let resumeOnly = ComposerDownList.sections(resumeCount: 2, templateCount: 0)
         let both = ComposerDownList.sections(resumeCount: 2, templateCount: 3)
         let templatesOnly = ComposerDownList.sections(resumeCount: 0, templateCount: 3)
-        #expect(ComposerResumeListView.accessibilityLabel(hasTemplates: resumeOnly.contains(.templates)) == "Resume a past session")
-        #expect(ComposerResumeListView.accessibilityLabel(hasTemplates: both.contains(.templates)) == "Resume or start a session")
-        #expect(ComposerResumeListView.accessibilityLabel(hasTemplates: templatesOnly.contains(.templates)) == "Resume or start a session")
+        #expect(ComposerDownListView.accessibilityLabel(hasTemplates: resumeOnly.contains(.templates)) == "Resume a past session")
+        #expect(ComposerDownListView.accessibilityLabel(hasTemplates: both.contains(.templates)) == "Resume or start a session")
+        #expect(ComposerDownListView.accessibilityLabel(hasTemplates: templatesOnly.contains(.templates)) == "Resume or start a session")
     }
 
     @Test func downWalksIntoTemplatesAndUpWalksBack() {
         let r = UUID(), t1 = UUID(), t2 = UUID()
-        let rows = ComposerDownList.rowIDs(resume: [r], templates: [t1, t2])
+        let rows = ComposerDownList.keyboardIDs(ComposerDownList.items(resume: [r], templates: [t1, t2], projects: [], expanded: []))
         var state = ComposerResumeState()
         #expect(state.handle(.down, layout: .list, rowIDs: rows) == .handled)
         #expect(state.selection(in: rows) == r)

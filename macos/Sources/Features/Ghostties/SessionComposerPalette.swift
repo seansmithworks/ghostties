@@ -1088,7 +1088,43 @@ struct SessionComposerPalette: View {
            let index = options.firstIndex(where: { $0.id == resolvedTemplateId }) {
             return UInt(index)
         }
+        if let index = Self.projectWordIndex(
+            in: options,
+            projectIds: Set(filteredProjectOptions.map(\.id)),
+            rawQuery: composerStore.searchText,
+            currentProjectName: currentProject?.name
+        ) {
+            return UInt(index)
+        }
         return UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
+    }
+
+    /// The first word sits in the grammar's project slot (`repo cco -n
+    /// "x"`), so while it is the only word and prefixes a project's name,
+    /// that project's row takes the highlight — and with it the ghost,
+    /// which previews the highlighted row's path. Beta.26 bug: "Code" tied
+    /// the "Codex" template (both exact prefix), the template ranked first,
+    /// its ghost path ("atlas-api > … > Codex") didn't start with "Code",
+    /// so no ghost showed and the project was unreachable by typing.
+    ///
+    /// Skipped when the word also prefixes the current project's name:
+    /// template rows already ghost "<current project> > …" then, so the
+    /// name completes without moving the highlight off the templates.
+    static func projectWordIndex(
+        in options: [ComposerOption],
+        projectIds: Set<UUID>,
+        rawQuery: String,
+        currentProjectName: String?
+    ) -> Int? {
+        guard !rawQuery.isEmpty, rawQuery.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
+        if let currentProjectName,
+           currentProjectName.range(of: rawQuery, options: [.caseInsensitive, .anchored]) != nil {
+            return nil
+        }
+        return options.firstIndex { option in
+            projectIds.contains(option.id)
+                && option.title.range(of: rawQuery, options: [.caseInsensitive, .anchored]) != nil
+        }
     }
 
     private var reduceMotionEnabled: Bool {
@@ -1152,7 +1188,10 @@ struct SessionComposerPalette: View {
             // branch, not a project name) fires either — this is the only
             // trigger that subsumes every case, since `searchText` changes
             // on every keystroke `query` does plus every one it drops.
-            .onChange(of: composerStore.searchText) { _ in reselectBestMatch() }
+            .onChange(of: composerStore.searchText) { _ in
+                reselectBestMatch()
+                resumeState.collapseSections()
+            }
             .onChange(of: composerStore.selectedProjectId) { _ in
                 // N5: changing the project via the dropdown or a project row
                 // changes `flattenedOptions.count` with `query` unchanged, so
@@ -1301,7 +1340,7 @@ struct SessionComposerPalette: View {
             if resumeState.isRevealed {
                 ComposerCardHairline()
                     .padding(.horizontal, Self.resumeListInset + 4)
-                resumeListView(isFocused: true)
+                downListView
                     .padding(Self.resumeListInset)
             }
         case .columns:
@@ -1328,10 +1367,8 @@ struct SessionComposerPalette: View {
     }
 
     private func resumeListView(isFocused: Bool) -> some View {
-        let rows = resumeRows
-        return ComposerResumeListView(
-            rows: rows,
-            templates: downListTemplateOptions.map(templateRow),
+        ComposerResumeListView(
+            rows: resumeRows,
             selectedID: resumeState.selection(in: resumeKeyboardRowIDs),
             isFocused: isFocused,
             hasHistory: !historyEntries.isEmpty,
@@ -1339,6 +1376,23 @@ struct SessionComposerPalette: View {
             titleSize: rowTitleSize,
             now: resumeNow,
             onResume: { resumeSession($0) }
+        )
+    }
+
+    /// A5's ↓ list: RESUME, TEMPLATES, PROJECTS, scrolling as one.
+    private var downListView: some View {
+        ComposerDownListView(
+            rows: resumeRows,
+            templates: downListTemplateOptions.map(templateRow),
+            projects: downListProjectOptions.map(templateRow),
+            expanded: resumeState.expandedSections,
+            selectedID: resumeState.selection(in: resumeKeyboardRowIDs),
+            hasHistory: !historyEntries.isEmpty,
+            titleSize: rowTitleSize,
+            maxHeight: ComposerDownListView.maxHeight(titleSize: rowTitleSize),
+            now: resumeNow,
+            onResume: { resumeSession($0) },
+            onShowMore: { showMore($0) }
         )
     }
 
@@ -1381,6 +1435,14 @@ struct SessionComposerPalette: View {
     private var downListTemplateOptions: [ComposerOption] {
         guard resumeLayout == .list else { return [] }
         return (lane1Options + lane2Options).filter { $0.template != nil }
+    }
+
+    /// A5's PROJECTS section: the composer's own project rows, filtered by
+    /// the typed text. Each row's action is the option's own
+    /// `selectProject` — the same path a project row has always taken.
+    private var downListProjectOptions: [ComposerOption] {
+        guard resumeLayout == .list else { return [] }
+        return filteredProjectOptions
     }
 
     private func templateRow(_ option: ComposerOption) -> ComposerTemplateRow {
@@ -1879,14 +1941,34 @@ struct SessionComposerPalette: View {
         ComposerResumeRows.rows(entries: historyEntries, query: composerStore.searchText)
     }
 
-    /// The rows ↓/↑ walk: A5's resume rows then its template rows; A4's
-    /// resume column alone.
+    /// The rows ↓/↑ walk: A5's resume rows, template rows, then project
+    /// rows; A4's resume column alone.
     private var resumeKeyboardRowIDs: [UUID] {
-        ComposerDownList.rowIDs(resume: resumeRows.map(\.id), templates: downListTemplateOptions.map(\.id))
+        guard resumeLayout == .list else { return resumeRows.map(\.id) }
+        return ComposerDownList.keyboardIDs(ComposerDownList.items(
+            resume: resumeRows.map(\.id),
+            templates: downListTemplateOptions.map(\.id),
+            projects: downListProjectOptions.map(\.id),
+            expanded: resumeState.expandedSections
+        ))
+    }
+
+    /// "Show N more" (Return or click): expands the section in place and
+    /// highlights the first row it revealed.
+    private func showMore(_ section: ComposerDownList.Section) {
+        let ids: [UUID]
+        switch section {
+        case .resume: ids = resumeRows.map(\.id)
+        case .templates: ids = downListTemplateOptions.map(\.id)
+        case .projects: ids = downListProjectOptions.map(\.id)
+        }
+        resumeState.expand(section, selecting: ComposerDownList.firstRevealed(in: ids))
     }
 
     /// Feeds one key to the resume state. `true` when it took the key.
-    /// Return on a template row runs that option's own start action.
+    /// Return on a template row runs that option's own start action; on a
+    /// project row, the option's own project selection, after which the
+    /// list closes onto the newly scoped field.
     private func routeToResume(_ key: ComposerResumeState.Key) -> Bool {
         switch resumeState.handle(key, layout: resumeLayout, rowIDs: resumeKeyboardRowIDs) {
         case .passThrough:
@@ -1894,8 +1976,13 @@ struct SessionComposerPalette: View {
         case .handled:
             return true
         case .resume(let id):
-            if let template = downListTemplateOptions.first(where: { $0.id == id }) {
+            if let section = ComposerDownList.showMoreSection(for: id) {
+                showMore(section)
+            } else if let template = downListTemplateOptions.first(where: { $0.id == id }) {
                 template.action()
+            } else if let project = downListProjectOptions.first(where: { $0.id == id }) {
+                resumeState.reset()
+                project.action()
             } else {
                 resumeSession(id)
             }
