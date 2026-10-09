@@ -62,8 +62,8 @@ enum TrayGlassStyle {
     }
 
     /// Pill corner treatment. `capsule` is `capsuleCornerRadius`, which clamps
-    /// to a full capsule on every pill this tray draws; `radius` uses the
-    /// `cornerRadius` dial.
+    /// to a full capsule on every pill this tray draws; `radius` is
+    /// concentric with the window corner (`SidebarDialTuning.trayCornerRadius`).
     enum CornerStyle: String, CaseIterable {
         case capsule, radius
     }
@@ -160,10 +160,11 @@ enum TrayGlassStyle {
         // Canvas `u_edgeWidth` 3px.
         rimWidth: 1.25,
         rimOpacity: 0.25,
-        // Canvas outer shadow `#00000014`, y4px, blur 20px.
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        shadowYOffset: 3,
+        // Lifted off the chrome now the gaps are small (Sean, 2026-10-08):
+        // DESIGN.md's Overlay level (0.20, radius 12), dropped 4pt.
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+        shadowYOffset: 4,
         // Tuned in the Dev DialKit (locked for beta.26).
         chromaticIntensity: 0.3,
         chromaticWidth: 2.25,
@@ -188,9 +189,10 @@ enum TrayGlassStyle {
         surfaceOpacity: 0.45,
         rimWidth: 0.25,
         rimOpacity: 0.12,
-        shadowOpacity: 0.298,
-        shadowRadius: 8,
-        shadowYOffset: 2.5,
+        // Light's lift, at the opacity dark chrome needs to show it.
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        shadowYOffset: 4,
         chromaticIntensity: 0.15,
         chromaticWidth: 0.5,
         chromaticRotation: 72.9,
@@ -217,6 +219,13 @@ enum TrayGlassStyle {
     static let horizontalIconSize: CGFloat = 18
     /// Pill padding around its buttons: canvas 8px.
     static let innerPadding: CGFloat = 8
+    /// Between the two icons of the rail's stacked Create pill
+    /// (`RailTrayGeometry.iconGap`), Sean 2026-10-08: the + and folder read
+    /// as one group. 12pt puts their centres one icon plus 12pt (30pt)
+    /// apart: under half the 32pt edge inset, so the pair groups, and each
+    /// button's highlight is icon + gap = 30pt tall, above the 28pt macOS
+    /// minimum control height. On the 4pt grid.
+    static let railIconGap: CGFloat = 12
     /// Gap between the expanded bar's buttons. The rail's follows from its
     /// square cells (`RailTrayGeometry.itemGap`).
     static let horizontalItemGap: CGFloat = 2
@@ -227,8 +236,6 @@ enum TrayGlassStyle {
     /// Canvas r64px on a 104px-wide pill: clamps to a capsule.
     static let cornerStyle: CornerStyle = .radius
     static let capsuleCornerRadius: CGFloat = 32
-    /// Tuned in the Dev DialKit (locked for beta.26, 2026-10-08).
-    static let cornerRadius: CGFloat = 20
     /// Default expanded tray width (see `TrayWidth`).
     static let trayWidth: TrayWidth = .fill
     /// Default selected-row title weight (see `SelectedTitleWeight`).
@@ -249,7 +256,7 @@ enum TrayGlassStyle {
     static func pillShape() -> RoundedRectangle {
         let radius = SidebarDialTuning.trayGlassCornerStyle() == .capsule
             ? capsuleCornerRadius
-            : SidebarDialTuning.trayGlassCornerRadius()
+            : SidebarDialTuning.trayCornerRadius()
         return RoundedRectangle(cornerRadius: radius, style: .continuous)
     }
 
@@ -307,7 +314,7 @@ enum TrayGlassStyle {
     static func buttonHighlightShape(
         soleInCapsule: Bool,
         cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
-        cornerRadius: CGFloat = SidebarDialTuning.trayGlassCornerRadius(),
+        cornerRadius: CGFloat = SidebarDialTuning.trayCornerRadius(),
         innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
     ) -> AnyShape {
         if soleInCapsule { return AnyShape(pillShape()) }
@@ -316,7 +323,7 @@ enum TrayGlassStyle {
 
     private static func concentricHighlightShape(
         cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
-        cornerRadius: CGFloat = SidebarDialTuning.trayGlassCornerRadius(),
+        cornerRadius: CGFloat = SidebarDialTuning.trayCornerRadius(),
         innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
     ) -> AnyShape {
         switch cornerStyle {
@@ -334,19 +341,24 @@ enum TrayGlassStyle {
     }
 }
 
-/// The collapsed rail's tray, squared (Sean, 2026-10-08: "square these off,
-/// same horizontal & vertical padding/margin"). Everything follows from the
-/// rail's width and two dials:
+/// The collapsed rail's tray (Sean, 2026-10-08: "square these off, same
+/// horizontal & vertical padding/margin"; then "the gap between create &
+/// folder" is too big). Everything follows from the rail's width and the
+/// dials:
 ///
-/// - `cell`: the side of one square, the rail width less the window margin
-///   on each side. The Toggle pill is one cell; the Create pill is two
-///   stacked, a 1×2 grid of the Toggle's square.
-/// - `buttonSize`: each button is the square `cell - 2 * padding`, inset by
-///   the inner padding (its hover highlight's inset), with `2 * padding`
-///   between two buttons, so every icon sits at the centre of its own cell
-///   and its inset to the pill edge is the same on both axes.
+/// - `cell`: the pill width, the rail width less the window margin on each
+///   side. The Toggle pill is one square cell.
+/// - `edgeInset`: every icon's inset to its pill's edge, the same on both
+///   axes: `(cell - iconSize) / 2`, so the Toggle icon sits at its square's
+///   centre and the Create pill's top icon is as far from the pill top as
+///   from its sides.
+/// - The Create pill stacks its icons `iconGap` apart, so its height is
+///   `edgeInset + icon + iconGap + icon + edgeInset`. Each of its buttons is
+///   `buttonSize` wide (the inner padding on each side) and `icon + iconGap`
+///   tall, abutting, the icon at its centre; the pill's remaining top and
+///   bottom (`stackedPadding`) still takes clicks for the outer buttons.
 /// - Outside the pills, the gap between them and the bottom margin equal
-///   the side margin: the window margin, the rail column's own inset.
+///   the side margin: the window margin.
 ///
 /// Pure values, so tests can check the geometry without rendering.
 struct RailTrayGeometry: Equatable {
@@ -355,32 +367,46 @@ struct RailTrayGeometry: Equatable {
     let margin: CGFloat
     /// `SidebarDialTuning.trayInnerPadding()`.
     let padding: CGFloat
+    /// `SidebarDialTuning.trayVerticalIconSize()`.
+    var iconSize: CGFloat = TrayGlassStyle.verticalIconSize
+    /// `SidebarDialTuning.railTrayIconGap()`.
+    var iconGap: CGFloat = TrayGlassStyle.railIconGap
 
     /// The live geometry at the current dial values.
     static func current(railWidth: CGFloat) -> RailTrayGeometry {
         RailTrayGeometry(
             railWidth: railWidth,
             margin: SidebarDialTuning.windowMargin(),
-            padding: SidebarDialTuning.trayInnerPadding()
+            padding: SidebarDialTuning.trayInnerPadding(),
+            iconSize: SidebarDialTuning.trayVerticalIconSize(),
+            iconGap: max(0, SidebarDialTuning.railTrayIconGap())
         )
     }
 
-    /// The pill's width, and the side of each square cell.
+    /// The pill's width, and the side of the Toggle pill's square.
     var cell: CGFloat { max(0, railWidth - 2 * margin) }
-    /// One button's square frame inside its cell.
+    /// An icon's inset to its pill edge, on every side.
+    var edgeInset: CGFloat { max(0, (cell - iconSize) / 2) }
+    /// A button's width inside its pill, and the Toggle button's side.
     var buttonSize: CGFloat { max(0, cell - 2 * padding) }
-    /// Between two buttons in one pill: each cell's padding, back to back.
-    var itemGap: CGFloat { 2 * padding }
+    /// One stacked Create button's height: its icon and half the gap on
+    /// each side.
+    var stackedButtonHeight: CGFloat { iconSize + iconGap }
+    /// The stacked pill's top and bottom padding, outside its outer buttons.
+    var stackedPadding: CGFloat { max(0, edgeInset - iconGap / 2) }
+    /// Between two stacked buttons: none, the gap lives inside them.
+    var itemGap: CGFloat { 0 }
     /// Between the Create and Toggle pills.
     var groupGap: CGFloat { margin }
     /// Below the Toggle pill, to the window's bottom edge.
     var bottomMargin: CGFloat { margin }
 
-    /// A pill holding `items` buttons, built the way `SidebarTrayPill` lays
-    /// it out: `items * cell` whenever the padding fits inside the cell.
+    /// A pill holding `items` buttons, as `SidebarTray` lays it out: one
+    /// square cell for a single button, else the stacked buttons and their
+    /// top and bottom padding.
     func pillHeight(items: Int) -> CGFloat {
-        let count = CGFloat(items)
-        return count * buttonSize + max(0, count - 1) * itemGap + 2 * padding
+        guard items > 1 else { return cell }
+        return CGFloat(items) * stackedButtonHeight + 2 * stackedPadding
     }
 
     /// The whole tray, pills, gaps and bottom margin, for the rail to reserve.
@@ -436,29 +462,31 @@ struct TrayGlassSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         let look = SidebarDialTuning.trayGlass(for: colorScheme)
-        Group {
-            if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
-                GlassEffectContainer {
-                    content
-                        .background {
-                            ZStack {
-                                shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
-                                specular(look)
-                            }
+        if #available(macOS 26.0, *), !reduceTransparency, !forceOpaque {
+            GlassEffectContainer {
+                content
+                    .background {
+                        ZStack {
+                            shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme))
+                            specular(look)
                         }
-                        .overlay(shape.strokeBorder(TrayGlassStyle.rimColor(look), lineWidth: look.rimWidth))
-                        .overlay { chromaticRim(look) }
-                }
-                .glassEffect(glass(look), in: shape)
-            } else {
-                content.background(shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme)))
+                    }
+                    .overlay(shape.strokeBorder(TrayGlassStyle.rimColor(look), lineWidth: look.rimWidth))
+                    .overlay { chromaticRim(look) }
             }
+            .glassEffect(glass(look), in: shape)
+            // A glass view casts no SwiftUI `.shadow`, so the glass path
+            // draws its shadow as its own layer, outside the pill only.
+            .background { TrayPillShadow(shape: shape, look: look) }
+        } else {
+            content
+                .background(shape.fill(TrayGlassStyle.surfaceFill(look, for: colorScheme)))
+                .shadow(
+                    color: Color.black.opacity(look.shadowOpacity),
+                    radius: look.shadowRadius,
+                    y: look.shadowYOffset
+                )
         }
-        .shadow(
-            color: Color.black.opacity(look.shadowOpacity),
-            radius: look.shadowRadius,
-            y: look.shadowYOffset
-        )
     }
 
     @available(macOS 26.0, *)
@@ -490,6 +518,31 @@ struct TrayGlassSurface: ViewModifier {
                 ))
                 .allowsHitTesting(false)
         }
+    }
+}
+
+/// The tray glass's drop shadow (`TrayGlassStyle.Look`'s shadow dials):
+/// a solid copy of the pill casts it and is then masked away, so only the
+/// shadow outside the pill is drawn and the glass samples the chrome as
+/// before.
+private struct TrayPillShadow: View {
+    let shape: RoundedRectangle
+    let look: TrayGlassStyle.Look
+
+    var body: some View {
+        let reach = 2 * look.shadowRadius + abs(look.shadowYOffset)
+        shape
+            .fill(Color.black)
+            .shadow(color: Color.black.opacity(look.shadowOpacity), radius: look.shadowRadius, y: look.shadowYOffset)
+            .mask {
+                ZStack {
+                    Rectangle().padding(-reach)
+                    shape.blendMode(.destinationOut)
+                }
+                .compositingGroup()
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -562,15 +615,21 @@ struct SidebarTrayPill<Content: View>: View {
     /// itself (`TrayIconButton.fillsCapsule`) so its hover fills the whole
     /// capsule. Same capsule size either way.
     var soleButton = false
+    /// The capsule's top and bottom padding when it differs from its side
+    /// padding: the rail's stacked Create pill, whose outer buttons carry
+    /// it themselves (`RailTrayGeometry.stackedPadding`), so it is 0 here.
+    var verticalPadding: CGFloat? = nil
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         let layout = axis == .vertical
             ? AnyLayout(VStackLayout(spacing: itemSpacing))
             : AnyLayout(HStackLayout(spacing: itemSpacing))
+        let side = soleButton ? 0 : SidebarDialTuning.trayInnerPadding()
         let framed = layout(content)
             .redlineFrame(redlineID.map { $0 + ".content" })
-            .padding(soleButton ? 0 : SidebarDialTuning.trayInnerPadding())
+            .padding(.horizontal, side)
+            .padding(.vertical, verticalPadding ?? side)
             .redlineFrame(redlineID)
         framed.modifier(TrayGlassSurface(forceOpaque: forceOpaque, interactive: SidebarDialTuning.trayGlassInteractive()))
     }
@@ -654,20 +713,32 @@ struct SidebarTray: View {
             ForEach(groups, id: \.self) { group in
                 let groupItems = items.filter { $0.group == group }
                 let sole = groupItems.count == 1
+                // The rail's stacked pill (`RailTrayGeometry`): short buttons
+                // abutting, its top and bottom padding taken by the outer
+                // buttons' hit areas.
+                let stacked = isVertical && !sole
                 SidebarTrayPill(
                     axis: axis,
                     forceOpaque: forceOpaque,
                     redlineID: RedlineID.trayPill(group.rawValue),
                     itemSpacing: isVertical ? rail.itemGap : TrayGlassStyle.horizontalItemGap,
-                    soleButton: sole
+                    soleButton: sole,
+                    verticalPadding: stacked ? 0 : nil
                 ) {
                     ForEach(groupItems) { item in
+                        let isFirst = item.id == groupItems.first?.id
+                        let isLast = item.id == groupItems.last?.id
                         TrayIconButton(
                             itemId: item.id,
                             systemName: item.systemName,
                             label: item.label,
                             isVertical: isVertical,
                             cellSize: isVertical ? rail.buttonSize : SidebarDialTuning.trayHorizontalButtonSize(),
+                            cellHeight: stacked ? rail.stackedButtonHeight : nil,
+                            hitInsets: stacked
+                                ? EdgeInsets(top: isFirst ? rail.stackedPadding : 0, leading: 0,
+                                             bottom: isLast ? rail.stackedPadding : 0, trailing: 0)
+                                : EdgeInsets(),
                             fillsWidth: fillsCreate && group == .create,
                             fillsCapsule: sole,
                             tapEffect: item.tapEffect,
@@ -730,6 +801,13 @@ struct TrayIconButton: View {
     /// The square button's side: the expanded bar's dial, or the rail's
     /// `RailTrayGeometry.buttonSize`.
     let cellSize: CGFloat
+    /// The cell's height when it isn't square: the rail's stacked Create
+    /// buttons (`RailTrayGeometry.stackedButtonHeight`). Nil is `cellSize`.
+    var cellHeight: CGFloat? = nil
+    /// Hit area beyond the highlight, on the pill's padding: the rail's
+    /// stacked pill gives its outer buttons the padding above and below
+    /// them, so the whole pill takes clicks.
+    var hitInsets = EdgeInsets()
     /// Takes an equal share of its capsule's spare width instead of staying
     /// square (the expanded Create capsule under "Tray width: fill"). Height
     /// is fixed either way, and the hover highlight fills the cell, so it
@@ -750,6 +828,7 @@ struct TrayIconButton: View {
 
     var body: some View {
         let size = cellSize
+        let height = cellHeight ?? size
         Button {
             tapEffectTrigger += 1
             action()
@@ -768,8 +847,8 @@ struct TrayIconButton: View {
                     minWidth: size,
                     idealWidth: size,
                     maxWidth: fillsWidth ? .infinity : size,
-                    minHeight: size,
-                    maxHeight: size
+                    minHeight: height,
+                    maxHeight: height
                 )
                 .padding(fillsCapsule ? SidebarDialTuning.trayInnerPadding() : 0)
                 .background {
@@ -777,8 +856,8 @@ struct TrayIconButton: View {
                         .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
                 }
                 // Hover and click land anywhere in the highlight's shape,
-                // not just on the glyph.
-                .contentShape(highlightShape)
+                // not just on the glyph, and on `hitInsets` around it.
+                .modifier(TrayButtonHitArea(shape: highlightShape, insets: hitInsets))
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
@@ -822,6 +901,22 @@ struct TrayIconButton: View {
                 }
             }
         }
+    }
+}
+
+/// A tray button's hit area: its highlight's shape, or with `insets`, that
+/// frame grown by them (`TrayIconButton.hitInsets`).
+private struct TrayButtonHitArea: ViewModifier {
+    let shape: AnyShape
+    let insets: EdgeInsets
+
+    /// One branch-free chain, so the button keeps its identity across the
+    /// pinned⇄rail morph; with no insets the padding is zero and the hit
+    /// area is the highlight's shape.
+    func body(content: Content) -> some View {
+        content
+            .padding(insets)
+            .contentShape(insets == EdgeInsets() ? shape : AnyShape(Rectangle()))
     }
 }
 

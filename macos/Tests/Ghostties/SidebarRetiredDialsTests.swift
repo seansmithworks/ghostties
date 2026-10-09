@@ -36,6 +36,31 @@ final class SidebarRetiredDialsTests: XCTestCase {
         XCTAssertTrue(Set(SidebarDialTuning.retiredKeys).isDisjoint(with: SidebarDialTuning.allKeys))
     }
 
+    /// The tray pills and the canvas card sit the window margin inside the
+    /// window, so both are concentric with its corner: radius = window
+    /// radius − margin, at any margin. A value stored under the retired
+    /// tray corner-radius dial changes nothing.
+    func testTrayPillsAndCanvasAreConcentricWithTheWindowCorner() {
+        let name = "com.seansmithdesign.ghostties.tests.concentric-radius"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        defer { d.removePersistentDomain(forName: name) }
+        XCTAssertEqual(WorkspaceLayout.windowCornerRadius, 16, "measured on macOS 27, 2026-10-08")
+        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 8, "16 − the 8pt window margin")
+        d.set(20.0, forKey: SidebarDialTuning.retiredTrayCornerRadiusKey)
+        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 8, "the retired dial is ignored")
+        for margin in [0.0, 4.0, 12.0, 24.0] {
+            d.set(margin, forKey: SidebarDialTuning.windowMarginKey)
+            XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), max(0, 16 - CGFloat(margin)), "margin \(margin)")
+        }
+        withDials {
+            XCTAssertEqual(WorkspaceLayout.terminalCornerRadius, SidebarDialTuning.trayCornerRadius(), "card and pills share the rule")
+        }
+        withDials({ $0.set(4.0, forKey: SidebarDialTuning.windowMarginKey) }) {
+            XCTAssertEqual(WorkspaceLayout.terminalCornerRadius, 12, "the card follows the margin dial")
+        }
+    }
+
     /// Every removed option stored at once (the flat and glass selected
     /// rows, the bare tray, History after Active) renders pixel-identical to
     /// an empty store, in the expanded sidebar and the rail.

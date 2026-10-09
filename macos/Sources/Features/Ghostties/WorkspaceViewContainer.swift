@@ -777,6 +777,16 @@ class WorkspaceViewContainer: NSView {
             browserShadowHostBottomConstraint.constant = -inset
             browserShadowHostTrailingConstraint.constant = -inset
         }
+        // The cards stay concentric with the window corner at the new
+        // margin (`WorkspaceLayout.terminalCornerRadius`); their shadow
+        // paths follow on the next layout pass.
+        let radius = WorkspaceLayout.concentricCornerRadius(margin: inset)
+        terminalContainer.layer?.cornerRadius = radius
+        terminalShadowHost.layer?.cornerRadius = radius
+        historyHostingView.layer?.cornerRadius = radius
+        if sidebarMode != .overlay {
+            browserShadowHost.layer?.cornerRadius = radius
+        }
         needsLayout = true
         invalidateIntrinsicContentSize()
     }
@@ -975,6 +985,12 @@ class WorkspaceViewContainer: NSView {
             _Concurrency.Task { @MainActor [weak self] in
                 guard let self else { return }
                 await CaptureScript.launch(scriptAt: path, host: self, stateDir: dir)
+            }
+        }
+        if let size = CaptureFixture.windowContentSize, CaptureFixture.claimHook("windowSize") {
+            // After the window's own restore/default sizing has run.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.window?.setContentSize(size)
             }
         }
         if let seconds = CaptureFixture.sidebarToggleAfter, CaptureFixture.claimHook("sidebarToggle") {

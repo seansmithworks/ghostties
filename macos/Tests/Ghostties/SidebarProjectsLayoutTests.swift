@@ -179,11 +179,27 @@ final class SidebarProjectsLayoutTests: XCTestCase {
     func testRailColumnDialDefaultsAreTheShippedConstants() {
         withDials {
             XCTAssertEqual(RailProjectColumn.columnTintOpacity, 0.04)
-            XCTAssertEqual(RailProjectColumn.columnInset, 4)
+            XCTAssertEqual(RailProjectColumn.columnInset, 8)
             XCTAssertEqual(RailProjectColumn.chipCornerRadius, 9)
             XCTAssertEqual(RailProjectTile.size, 30)
             XCTAssertEqual(RailProjectColumn.chipSize, 30)
             XCTAssertEqual(RailProjectColumn.selectedTileFill, 1)
+            // The column fits the rail's content width (the real rail,
+            // hugging a titled window's traffic lights, less the window
+            // margin each side), so it never clips.
+            let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: true)
+            if let close = window.standardWindowButton(.closeButton), let zoom = window.standardWindowButton(.zoomButton) {
+                let railWidth = WorkspaceLayout.collapsedRailWidth(
+                    zoomButtonMaxX: zoom.convert(zoom.bounds, to: nil).maxX,
+                    leadingInset: close.convert(close.bounds, to: nil).minX
+                )
+                XCTAssertLessThanOrEqual(
+                    RailProjectTile.size + 2 * RailProjectColumn.columnInset,
+                    railWidth - 2 * SidebarDialTuning.windowMargin()
+                )
+            } else {
+                XCTFail("no traffic lights on a titled window")
+            }
         }
         for key in [
             SidebarDialTuning.railColumnTintOpacityKey, SidebarDialTuning.railColumnInsetKey,
@@ -191,6 +207,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             SidebarDialTuning.railSelectedTileFillKey,
         ] {
             XCTAssertTrue(SidebarDialTuning.allKeys.contains(key), "Reset sidebar must clear \(key)")
+            XCTAssertTrue(SidebarDialTuning.railKeys.contains(key), "Reset rail must clear \(key)")
         }
     }
 

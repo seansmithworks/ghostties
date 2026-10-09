@@ -137,6 +137,14 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         return abs(delta) > 0.06
     }
 
+    /// Lighter than the chrome: the opaque tray's white fill.
+    private func isLifted(_ r: Render, px x: Int, _ y: Int) -> Bool {
+        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB),
+              let c = r.rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
+        return (c.redComponent + c.greenComponent + c.blueComponent)
+            - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent) > 0.06
+    }
+
     /// Runs of marked pixels down one column, in points.
     private func runsDown(_ r: Render, atX x: CGFloat) -> [ClosedRange<CGFloat>] {
         let px = Int(x * r.scale)
@@ -166,10 +174,12 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         return try XCTUnwrap(cards.first, "no selected card found (rail: \(rail))")
     }
 
-    /// The tray's top edge: the first pixel row below `y` with any marked pixel.
+    /// The tray's top edge: the first pixel row below `y` lifted off the
+    /// chrome by the opaque tray. Only lighter pixels count: the tray's
+    /// shadow darkens the chrome above the pill, and it is not the tray.
     private func trayTop(_ r: Render, below y: CGFloat) throws -> CGFloat {
         for py in Int(y * r.scale) + 1..<r.rep.pixelsHigh {
-            for px in 0..<r.rep.pixelsWide where isMarked(r, px: px, py) {
+            for px in 0..<r.rep.pixelsWide where isLifted(r, px: px, py) {
                 return CGFloat(py) / r.scale
             }
         }

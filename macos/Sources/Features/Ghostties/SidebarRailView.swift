@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import GhosttiesCore
 
 /// The collapsed icon-only rail (Flow 01, sidebar-presence §02), sized to
@@ -36,11 +37,15 @@ struct SidebarRailView: View {
     @Environment(\.sidebarRailWidth) private var railWidth
 
     var body: some View {
+        let titlebarInset = store.toolbarRowTopAnchorConstant * 2
+        let bleed = Self.scrollBleed(titlebarInset: titlebarInset)
         VStack(spacing: 0) {
             // Same top inset as the expanded list's titlebar toolbar
             // (`WorkspaceSidebarView.titlebarToolbar`), so every rail row sits
-            // at the y of its expanded row.
-            Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
+            // at the y of its expanded row. The scroll region starts `bleed`
+            // above it and its content is padded by the same, so rows keep
+            // their y.
+            Color.clear.frame(height: titlebarInset - bleed)
 
             // Same structure and rhythm as the expanded Sessions list
             // (`RecentsListView`, mock I3/H): both render the one section
@@ -56,21 +61,37 @@ struct SidebarRailView: View {
                 sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
             )
             let layout = sections.layout(showsHistory: SidebarDialTuning.historyInSidebar())
-            VStack(spacing: SidebarDialTuning.rowGap()) {
-                ForEach(layout.list, id: \.self) { slot in
-                    railSlot(slot, sections)
+            // The list scrolls between the titlebar and the tray, and is
+            // clipped to that region, like a macOS source list: on a short
+            // window nothing draws under the traffic lights or the tray.
+            // No scroll indicator, so the rail's width never changes.
+            ScrollViewReader { scrollProxy in
+                ScrollView(.vertical) {
+                    VStack(spacing: SidebarDialTuning.rowGap()) {
+                        ForEach(layout.list, id: \.self) { slot in
+                            railSlot(slot, sections)
+                        }
+                    }
+                    // One view: one tinted column behind the selected session's
+                    // project, tile through last row (`RailProjectColumn`).
+                    .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
+                        RailGroupColumn(anchors: anchors)
+                    }
+                    // The window margin on both sides (`columnPadding`), so the
+                    // row cards centre on the rail, as the tray pill does.
+                    .modifier(Self.columnPadding)
+                    // Room for the column's inset above the first tile and
+                    // below the last chip, inside the clip.
+                    .padding(.vertical, bleed)
                 }
+                .scrollIndicators(.never)
+                .accessibilityLabel("Sessions")
+                .modifier(RailScrollToKeyboardSelection(
+                    selectedSessionId: coordinator.sidebarSelectedSessionId,
+                    window: { [coordinator] in coordinator.containerView?.window },
+                    scrollProxy: scrollProxy
+                ))
             }
-            // One view: one tinted column behind the selected session's
-            // project, tile through last row (`RailProjectColumn`).
-            .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
-                RailGroupColumn(anchors: anchors)
-            }
-            // The window margin on both sides (`columnPadding`), so the
-            // row cards centre on the rail, as the tray pill does.
-            .modifier(Self.columnPadding)
-
-            Spacer(minLength: 0)
 
             // The History clock and its hairline, just above the
             // tray, the same gap from it as in the expanded list (the
@@ -103,6 +124,14 @@ struct SidebarRailView: View {
             #endif
         }
         .modifier(ProjectAccordionAutoExpand(window: { [coordinator] in coordinator.containerView?.window }))
+    }
+
+    /// How far the scroll region reaches above the first row, so the
+    /// project column's inset above its tile isn't clipped: the column
+    /// inset, but never up into the traffic lights' row, which is centred
+    /// at `titlebarInset / 2` and 16pt tall.
+    static func scrollBleed(titlebarInset: CGFloat) -> CGFloat {
+        min(RailProjectColumn.columnInset, max(0, titlebarInset / 2 - 8))
     }
 
     /// One slot of the section layout, as `RecentsListView.slotContent`
@@ -185,7 +214,45 @@ struct SidebarRailView: View {
             inProjectColumn: inProjectColumn,
             onTap: { coordinator.focusSession(id: session.id) }
         )
+        // `RailScrollToKeyboardSelection` scrolls to this id.
+        .id(session.id)
     }
+}
+
+/// Scrolls the rail to the selected session when the selection moved by
+/// keyboard (Next/Previous Session, Cmd+1-9), so a selection cycled past
+/// the clip edge comes into view. A click selects a row that is already
+/// visible, so it doesn't scroll. Scrolls the least distance (`anchor: nil`).
+private struct RailScrollToKeyboardSelection: ViewModifier {
+    let selectedSessionId: UUID?
+    let window: () -> NSWindow?
+    let scrollProxy: ScrollViewProxy
+
+    @State private var keyboardMovedSelection = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(Self.keyboardSelection) { note in
+                guard let target = note.object as? NSWindow, target === window() else { return }
+                keyboardMovedSelection = true
+            }
+            .onChange(of: selectedSessionId) { id in
+                guard keyboardMovedSelection else { return }
+                keyboardMovedSelection = false
+                guard let id else { return }
+                if reduceMotion {
+                    scrollProxy.scrollTo(id)
+                } else {
+                    withAnimation(.easeInOut(duration: 0.2)) { scrollProxy.scrollTo(id) }
+                }
+            }
+    }
+
+    /// The notifications the session shortcuts post, with the window.
+    private static let keyboardSelection = NotificationCenter.default.publisher(for: .workspaceSelectNextSession)
+        .merge(with: NotificationCenter.default.publisher(for: .workspaceSelectPreviousSession))
+        .merge(with: NotificationCenter.default.publisher(for: .workspaceFocusSessionAtIndex))
 }
 
 // MARK: - Project column
@@ -202,8 +269,9 @@ enum RailProjectColumn {
     /// (`RailProjectTile.size`, radius 9), so chip and tile read as one family.
     static let defaultChipSizeOffset: CGFloat = 0
     static let defaultChipCornerRadius: CGFloat = 9
-    /// The column: the tile plus this margin on every side.
-    static let defaultColumnInset: CGFloat = 4
+    /// The column: the tile plus this margin on every side (Sean,
+    /// 2026-10-08: more room around the tile and chip than 4).
+    static let defaultColumnInset: CGFloat = 8
     /// The column's faint fill: a hovered row's tint.
     static let defaultColumnTintOpacity: Double = SidebarRowCardBackground.hoverTintOpacity
     /// The selected project's tile: 1 is full ink, 0 the plain tile tint.

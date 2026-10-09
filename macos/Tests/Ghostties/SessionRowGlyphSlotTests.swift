@@ -361,34 +361,45 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     }
 
     /// The rail tray's geometry as pure values (Sean, 2026-10-08: "square
-    /// these off"): square cells, one inset on both axes, and one margin
-    /// around and between the pills. Checked at the real rail width and at
-    /// off-default dials, so it holds for any dial value, not just 8/8.
-    func testRailTrayGeometryIsSquareCellsWithOneMargin() throws {
+    /// these off", then "the gap between create & folder" is too big): one
+    /// edge inset on both axes for every icon, the stacked Create icons
+    /// `iconGap` apart, and one margin around and between the pills.
+    /// Checked at the real rail width and at off-default dials, so it holds
+    /// for any dial value, not just the shipped ones.
+    func testRailTrayGeometryHasOneEdgeInsetAndATightIconGap() throws {
         let (railWidth, _) = try realRailGeometry()
-        let icon = TrayGlassStyle.verticalIconSize
-        for (margin, padding) in [(SidebarDialTuning.windowMargin(), SidebarDialTuning.trayInnerPadding()), (11, 5), (4, 12)] as [(CGFloat, CGFloat)] {
-            let g = RailTrayGeometry(railWidth: railWidth, margin: margin, padding: padding)
-            let tag = "margin \(margin), padding \(padding)"
+        let live = (SidebarDialTuning.windowMargin(), SidebarDialTuning.trayInnerPadding(),
+                    SidebarDialTuning.trayVerticalIconSize(), SidebarDialTuning.railTrayIconGap())
+        for (margin, padding, icon, gap) in [live, (11, 5, 18, 12), (4, 12, 20, 0), (8, 8, 16, 20)] as [(CGFloat, CGFloat, CGFloat, CGFloat)] {
+            let g = RailTrayGeometry(railWidth: railWidth, margin: margin, padding: padding, iconSize: icon, iconGap: gap)
+            let tag = "margin \(margin), padding \(padding), icon \(icon), gap \(gap)"
             // The pills fill the rail less one margin on each side.
             XCTAssertEqual(g.cell, railWidth - 2 * margin, accuracy: 0.001, tag)
-            // Toggle: one square. Create: exactly two of them stacked.
+            let edge = (g.cell - icon) / 2
+            XCTAssertEqual(g.edgeInset, edge, accuracy: 0.001, tag)
+            // Toggle: one square, its icon centred, so its inset is the
+            // edge inset on both axes.
             XCTAssertEqual(g.pillHeight(items: 1), g.cell, accuracy: 0.001, "toggle pill is square (\(tag))")
-            XCTAssertEqual(g.pillHeight(items: 2), 2 * g.cell, accuracy: 0.001, "create pill is two squares (\(tag))")
-            // Every icon's inset to its cell edge is the same on both axes:
-            // sideways (cell - icon) / 2; vertically, the top icon's inset
-            // to the pill top and the bottom icon's to the pill bottom, and
-            // half the space between the two icons.
-            let side = (g.cell - icon) / 2
-            let top = g.padding + (g.buttonSize - icon) / 2
-            let between = g.buttonSize - icon + g.itemGap
-            XCTAssertEqual(top, side, accuracy: 0.001, "icon inset, vertical vs horizontal (\(tag))")
-            XCTAssertEqual(between, 2 * side, accuracy: 0.001, "icon-to-icon space is two cell insets (\(tag))")
+            XCTAssertEqual(g.padding + (g.buttonSize - icon) / 2, edge, accuracy: 0.001, "toggle icon inset (\(tag))")
+            // Create: edge inset + icon + gap + icon + edge inset.
+            XCTAssertEqual(g.pillHeight(items: 2), edge + icon + gap + icon + edge, accuracy: 0.001, "create pill height (\(tag))")
+            // The top icon's inset to the pill top (and the bottom icon's to
+            // the pill bottom) is its side inset.
+            XCTAssertEqual(g.stackedPadding + (g.stackedButtonHeight - icon) / 2, edge, accuracy: 0.001, "create icon inset, vertical vs horizontal (\(tag))")
+            // The two icons' centres are one icon plus the gap apart.
+            XCTAssertEqual(g.stackedButtonHeight + g.itemGap, icon + gap, accuracy: 0.001, "icon centre spacing (\(tag))")
             // Outside the pills: gap between them = side margin = bottom margin.
             XCTAssertEqual(g.groupGap, margin, tag)
             XCTAssertEqual(g.bottomMargin, margin, tag)
-            XCTAssertEqual(g.trayHeight(groupItemCounts: [2, 1]), 3 * g.cell + 2 * margin, accuracy: 0.001, tag)
+            XCTAssertEqual(g.trayHeight(groupItemCounts: [2, 1]), g.pillHeight(items: 2) + g.cell + 2 * margin, accuracy: 0.001, tag)
         }
+        // Shipped: the icons sit one icon plus 12pt apart, much closer than
+        // their edge inset, so the Create pill is well under two squares.
+        let shipped = RailTrayGeometry(railWidth: railWidth, margin: WorkspaceLayout.terminalInset, padding: TrayGlassStyle.innerPadding)
+        XCTAssertEqual(TrayGlassStyle.railIconGap, 12)
+        XCTAssertEqual(shipped.stackedButtonHeight + shipped.itemGap, TrayGlassStyle.verticalIconSize + 12, accuracy: 0.001)
+        XCTAssertLessThan(TrayGlassStyle.railIconGap, shipped.edgeInset, "the inner gap is tighter than the edge inset")
+        XCTAssertLessThan(shipped.pillHeight(items: 2), 2 * shipped.cell)
         // What the rail reserves is that tray, at the live dials.
         XCTAssertEqual(
             SidebarTray.reservedHeight(isVertical: true, railWidth: railWidth),
@@ -397,20 +408,44 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         )
     }
 
-    /// The rendered rail tray: square pills, the window margin from the
-    /// window edge, the card, each other and the bottom, centred on the
-    /// traffic-light cluster.
-    func testRailTrayRendersSquarePillsWithOneMargin() throws {
+    /// Vertical runs of icon ink (darker than the chrome by more than the
+    /// shadow ever is) anywhere in the columns `xs`, in points, bridging
+    /// anti-aliasing gaps of up to 3px.
+    private func inkRows(_ rep: NSBitmapImageRep, scale: CGFloat, xs: ClosedRange<CGFloat>, ys: ClosedRange<CGFloat>) throws -> [ClosedRange<CGFloat>] {
+        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let chromeSum = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
+        var runs: [(Int, Int)] = []
+        for y in Int(ys.lowerBound * scale)..<Int(ys.upperBound * scale) {
+            let hasInk = (Int(xs.lowerBound * scale)..<Int(xs.upperBound * scale)).contains { x in
+                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
+                return c.redComponent + c.greenComponent + c.blueComponent - chromeSum < -0.3
+            }
+            guard hasInk else { continue }
+            if let last = runs.last, y - last.1 <= 4 {
+                runs[runs.count - 1].1 = y
+            } else {
+                runs.append((y, y))
+            }
+        }
+        return runs.map { CGFloat($0.0) / scale...CGFloat($0.1 + 1) / scale }
+    }
+
+    /// The rendered rail tray: the window margin from the window edge, the
+    /// card, each other and the bottom, centred on the traffic-light
+    /// cluster; a square Toggle pill; and a Create pill whose icons sit the
+    /// edge inset from its top and bottom and one icon plus the gap apart.
+    func testRailTrayRendersOneEdgeInsetAndATightIconGap() throws {
         let (railWidth, clusterCentre) = try realRailGeometry()
         XCTAssertEqual(railWidth / 2, clusterCentre, accuracy: 0.01, "rail centre is the cluster centre")
         let size = CGSize(width: railWidth, height: 400)
         let g = RailTrayGeometry.current(railWidth: railWidth)
         let margin = SidebarDialTuning.windowMargin()
+        let createHeight = g.pillHeight(items: 2)
 
         let (rep, scale) = try renderTray(vertical: true, size: size, gutter: WorkspaceLayout.sidebarTrailingGutter(for: .collapsed))
         let toggleBottom = size.height - margin
         let toggleMidY = toggleBottom - g.cell / 2
-        let createMidY = toggleBottom - g.cell - margin - g.cell
+        let createMidY = toggleBottom - g.cell - margin - createHeight / 2
 
         for (name, midY) in [("create", createMidY), ("toggle", toggleMidY)] {
             let spans = try capsuleSpans(rep, scale: scale, alongX: true, at: midY)
@@ -425,10 +460,31 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         let spans = try capsuleSpans(rep, scale: scale, alongX: false, at: railWidth / 2)
         XCTAssertEqual(spans.count, 2, "two capsules stacked, got \(spans)")
         guard spans.count == 2 else { return }
-        XCTAssertEqual(spans[0].upperBound - spans[0].lowerBound, 2 * g.cell, accuracy: 1.0, "create capsule is two squares tall")
-        XCTAssertEqual(spans[1].upperBound - spans[1].lowerBound, g.cell, accuracy: 1.0, "toggle capsule is square")
-        XCTAssertEqual(spans[1].lowerBound - spans[0].upperBound, margin, accuracy: 1.0, "gap between the capsules = the side margin")
-        XCTAssertEqual(size.height - spans[1].upperBound, margin, accuracy: 1.0, "bottom margin = the side margin")
+        let create = spans[0], toggle = spans[1]
+        XCTAssertEqual(create.upperBound - create.lowerBound, createHeight, accuracy: 1.0, "create capsule height")
+        XCTAssertLessThan(create.upperBound - create.lowerBound, 2 * g.cell - 20, "create capsule is well under two squares")
+        XCTAssertEqual(toggle.upperBound - toggle.lowerBound, g.cell, accuracy: 1.0, "toggle capsule is square")
+        XCTAssertEqual(toggle.lowerBound - create.upperBound, margin, accuracy: 1.0, "gap between the capsules = the side margin")
+        XCTAssertEqual(size.height - toggle.upperBound, margin, accuracy: 1.0, "bottom margin = the side margin")
+
+        // The icons' ink, by its centre (glyph shapes differ, centres don't):
+        // a centre half a square from the pill's top or bottom edge is an
+        // inset equal to the side inset, whose centre is half a square from
+        // the side.
+        let xs = (railWidth / 2 - g.cell / 2 + 2)...(railWidth / 2 + g.cell / 2 - 2)
+        let createIcons = try inkRows(rep, scale: scale, xs: xs, ys: (create.lowerBound + 2)...(create.upperBound - 2))
+        XCTAssertEqual(createIcons.count, 2, "two icons in the create capsule, got \(createIcons)")
+        guard createIcons.count == 2 else { return }
+        let plusMid = (createIcons[0].lowerBound + createIcons[0].upperBound) / 2
+        let folderMid = (createIcons[1].lowerBound + createIcons[1].upperBound) / 2
+        XCTAssertEqual(plusMid - create.lowerBound, g.cell / 2, accuracy: 1.5, "+ icon top inset = its side inset")
+        XCTAssertEqual(create.upperBound - folderMid, g.cell / 2, accuracy: 2.0, "folder icon bottom inset = its side inset")
+        XCTAssertEqual(folderMid - plusMid, g.iconSize + g.iconGap, accuracy: 2.0, "icon centres one icon plus the gap apart")
+        let toggleIcon = try inkRows(rep, scale: scale, xs: xs, ys: (toggle.lowerBound + 2)...(toggle.upperBound - 2))
+        XCTAssertEqual(toggleIcon.count, 1, "one icon in the toggle capsule, got \(toggleIcon)")
+        if let icon = toggleIcon.first {
+            XCTAssertEqual((icon.lowerBound + icon.upperBound) / 2 - toggle.lowerBound, g.cell / 2, accuracy: 1.5, "toggle icon centred")
+        }
     }
 
     /// The rail column (`SidebarRailView.columnPadding`) with one row, under

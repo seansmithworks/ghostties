@@ -156,8 +156,25 @@ enum WorkspaceLayout {
     /// Height of the session-name title bar inside the terminal card.
     static let terminalTitleBarHeight: CGFloat = 28
 
-    /// Corner radius on the floating terminal panel (all four corners).
-    static let terminalCornerRadius: CGFloat = 12
+    /// The window's own corner radius: a titled Ghostties window on macOS
+    /// 26+ (no toolbar), measured from an uncropped capture on macOS 27
+    /// (2026-10-08), the same value `TerminalWindow` uses for this titlebar
+    /// style.
+    static let windowCornerRadius: CGFloat = 16
+
+    /// A surface inset `margin` from the window's edges is concentric with
+    /// the window corner: its radius is the window's less the margin (Sean,
+    /// 2026-10-08). The one rule for the canvas card and the tray pills.
+    static func concentricCornerRadius(margin: CGFloat) -> CGFloat {
+        max(0, windowCornerRadius - margin)
+    }
+
+    /// Corner radius on the floating terminal panel (all four corners), and
+    /// every card that shares its inset (browser, History): concentric with
+    /// the window at the live window margin.
+    static var terminalCornerRadius: CGFloat {
+        concentricCornerRadius(margin: SidebarDialTuning.windowMargin())
+    }
 
     /// Shadow color applied to canvas shadow hosts (terminal + browser cards).
     static let canvasShadowColor: CGColor = NSColor.black.cgColor

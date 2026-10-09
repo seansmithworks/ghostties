@@ -61,7 +61,6 @@ enum SidebarDialTuning {
     static let trayHorizontalButtonSizeKey = "ghostties.sidebarDial.trayGlass.horizontalButtonSize"
     static let trayHorizontalIconSizeKey = "ghostties.sidebarDial.trayGlass.horizontalIconSize"
     static let trayGlassCornerStyleKey = "ghostties.sidebarDial.trayGlass.cornerStyle"
-    static let trayGlassCornerRadiusKey = "ghostties.sidebarDial.trayGlass.cornerRadius"
     static let selectedTitleWeightKey = "ghostties.sidebarDial.selectedTitleWeight"
     static let tintShimmerDarkIntensityKey = "ghostties.sidebarDial.tintShimmerDarkIntensity"
 
@@ -173,9 +172,12 @@ enum SidebarDialTuning {
     /// The rail tray's button size: the rail's square pills take it from
     /// the rail's width (`RailTrayGeometry`) since 2026-10-08.
     static let retiredTrayVerticalButtonSizeKey = "ghostties.sidebarDial.trayGlass.verticalButtonSize"
+    /// The tray pills' corner radius: concentric with the window corner
+    /// (`trayCornerRadius`) since 2026-10-08.
+    static let retiredTrayCornerRadiusKey = "ghostties.sidebarDial.trayGlass.cornerRadius"
     static let retiredKeys: [String] = [
         retiredSelectedRowStyleKey, retiredLegacySelectedStyleKey, retiredTrayStyleKey, retiredHistoryPlacementKey,
-        retiredHairlineWidthKey, retiredTrayVerticalButtonSizeKey,
+        retiredHairlineWidthKey, retiredTrayVerticalButtonSizeKey, retiredTrayCornerRadiusKey,
         // The flat selected row's shadow, per appearance.
         "ghostties.sidebarDial.trayGlass.selectedShadowOpacity",
         "ghostties.sidebarDial.trayGlass.selectedShadowRadius",
@@ -187,6 +189,9 @@ enum SidebarDialTuning {
 
     // MARK: Rail
     static let railExtraWidthKey = "ghostties.sidebarDial.railExtraWidth"
+    /// Between the two icons of the rail's stacked Create pill
+    /// (`RailTrayGeometry.iconGap`).
+    static let railTrayIconGapKey = "ghostties.sidebarDial.trayGlass.railIconGap"
 
     // MARK: Rail column (one view's selected project, `RailProjectColumn`)
     static let railColumnTintOpacityKey = "ghostties.sidebarDial.railColumn.tintOpacity"
@@ -305,8 +310,11 @@ enum SidebarDialTuning {
     static func trayGlassCornerStyle(defaults: UserDefaults = SidebarDialTuning.store) -> TrayGlassStyle.CornerStyle {
         choice(trayGlassCornerStyleKey, default: TrayGlassStyle.cornerStyle, defaults: defaults)
     }
-    static func trayGlassCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(trayGlassCornerRadiusKey, default: TrayGlassStyle.cornerRadius, defaults: defaults)
+    /// The tray pills' radius ("radius" corner style): concentric with the
+    /// window corner at the window margin they sit inside
+    /// (`WorkspaceLayout.concentricCornerRadius`), like the canvas card.
+    static func trayCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        WorkspaceLayout.concentricCornerRadius(margin: windowMargin(defaults: defaults))
     }
 
     static func rowHeight(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
@@ -381,6 +389,11 @@ enum SidebarDialTuning {
         cgFloat(railExtraWidthKey, default: WorkspaceLayout.railExtraWidth, defaults: defaults)
     }
 
+    /// See `railTrayIconGapKey`. Defaults to `TrayGlassStyle.railIconGap`.
+    static func railTrayIconGap(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railTrayIconGapKey, default: TrayGlassStyle.railIconGap, defaults: defaults)
+    }
+
     /// The project column's faint fill (`RailProjectColumn.columnTintOpacity`).
     static func railColumnTintOpacity(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
         double(railColumnTintOpacityKey, default: RailProjectColumn.defaultColumnTintOpacity, defaults: defaults)
@@ -409,19 +422,41 @@ enum SidebarDialTuning {
     static let allKeys: [String] = lightGlassKeys.all + darkGlassKeys.all + [
         windowMarginKey, redlinesKey,
         trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
-        trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
-        trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
+        trayHorizontalButtonSizeKey,
+        trayHorizontalIconSizeKey, trayGlassCornerStyleKey,
         selectedTitleWeightKey, tintShimmerDarkIntensityKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
-        historyInSidebarKey, railExtraWidthKey, projectsLayoutKey,
+        historyInSidebarKey, projectsLayoutKey
+    ] + railKeys
+
+    /// The keys the Rail panel owns (`RailDialKitCoordinator`): its own
+    /// "Reset rail" clears only these. Part of `allKeys`, so "Reset
+    /// sidebar" clears them too.
+    static let railKeys: [String] = [
+        trayVerticalIconSizeKey, railTrayIconGapKey, railExtraWidthKey,
+        lightGlassKeys.shadowOpacity, lightGlassKeys.shadowRadius, lightGlassKeys.shadowYOffset,
+        darkGlassKeys.shadowOpacity, darkGlassKeys.shadowRadius, darkGlassKeys.shadowYOffset,
         railColumnTintOpacityKey, railColumnInsetKey, railChipCornerRadiusKey,
         railChipSizeOffsetKey, railSelectedTileFillKey
     ]
 
+    /// Posted after either panel's Reset, so the other panel re-reads the
+    /// keys it shares with it.
+    static let didResetNotification = Notification.Name("ghostties.sidebarDial.didReset")
+
     static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
-        for key in allKeys + retiredKeys {
+        clear(allKeys + retiredKeys, defaults: defaults)
+    }
+
+    /// "Reset rail": the Rail panel's keys only.
+    static func resetRail(defaults: UserDefaults = SidebarDialTuning.store) {
+        clear(railKeys, defaults: defaults)
+    }
+
+    private static func clear(_ keys: [String], defaults: UserDefaults) {
+        for key in keys {
             defaults.removeObject(forKey: key)
         }
         defaults.set(epoch(defaults: defaults) + 1, forKey: epochKey)
@@ -485,9 +520,6 @@ struct SidebarDialKitGlassModel: Codable, Equatable {
     var surfaceOpacity: Double
     var rimWidth: Double
     var rimOpacity: Double
-    var shadowOpacity: Double
-    var shadowRadius: Double
-    var shadowYOffset: Double
     var chromaticIntensity: Double
     var chromaticWidth: Double
     var chromaticRotation: Double
@@ -503,9 +535,6 @@ struct SidebarDialKitGlassModel: Codable, Equatable {
         surfaceOpacity = look.surfaceOpacity
         rimWidth = Double(look.rimWidth)
         rimOpacity = look.rimOpacity
-        shadowOpacity = look.shadowOpacity
-        shadowRadius = Double(look.shadowRadius)
-        shadowYOffset = Double(look.shadowYOffset)
         chromaticIntensity = look.chromaticIntensity
         chromaticWidth = Double(look.chromaticWidth)
         chromaticRotation = look.chromaticRotation
@@ -530,12 +559,10 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayGlassInteractive: Bool
     var trayHorizontalButtonSize: Double
     var trayHorizontalIconSize: Double
-    var trayVerticalIconSize: Double
     var trayInnerPadding: Double
     var trayGroupGap: Double
     var trayWidth: String
     var trayGlassCornerStyle: String
-    var trayGlassCornerRadius: Double
     var selectedTitleWeight: String
     var tintShimmerDarkIntensity: Double
 
@@ -554,7 +581,22 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var listToTrayGap: Double
     var historyInSidebar: Bool
     var projectsLayout: String
+}
 
+/// The Rail panel's model: every knob that only changes the collapsed rail.
+@available(macOS 14, *)
+struct RailDialKitTuningModel: Codable, Equatable {
+    /// One appearance's tray shadow (both trays): `TrayGlassStyle.Look`'s.
+    struct Shadow: Codable, Equatable {
+        var opacity: Double
+        var radius: Double
+        var yOffset: Double
+    }
+
+    var trayVerticalIconSize: Double
+    var railTrayIconGap: Double
+    var shadowLight: Shadow
+    var shadowDark: Shadow
     var railExtraWidth: Double
 
     var railColumnTintOpacity: Double
@@ -569,6 +611,7 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
 final class SidebarDialKitCoordinator: ObservableObject {
     let state: DialPanelState<SidebarDialKitTuningModel>
     private var cancellable: AnyCancellable?
+    private var resetObserver: AnyCancellable?
     private let defaults: UserDefaults
     private let onChange: () -> Void
     private var lastKnownModel: SidebarDialKitTuningModel
@@ -595,7 +638,20 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .sink { [weak self] newValue in
                 self?.handle(newValue)
             }
+        // The Rail panel's Reset clears keys this panel also reads.
+        resetObserver = NotificationCenter.default
+            .publisher(for: SidebarDialTuning.didResetNotification)
+            .sink { [weak self] note in
+                guard let self, (note.object as AnyObject?) !== self else { return }
+                self.reloadFromDefaults()
+            }
         selfBox.coordinator = self
+    }
+
+    private func reloadFromDefaults() {
+        let freshModel = Self.readModel(defaults: defaults)
+        lastKnownModel = freshModel
+        state.values = freshModel
     }
 
     private func handle(_ model: SidebarDialKitTuningModel) {
@@ -611,9 +667,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
 
     private func resetSidebar() {
         SidebarDialTuning.reset(defaults: defaults)
-        let freshModel = Self.readModel(defaults: defaults)
-        lastKnownModel = freshModel
-        state.values = freshModel
+        reloadFromDefaults()
+        NotificationCenter.default.post(name: SidebarDialTuning.didResetNotification, object: self)
         onChange()
     }
 
@@ -627,12 +682,10 @@ final class SidebarDialKitCoordinator: ObservableObject {
             trayGlassInteractive: SidebarDialTuning.trayGlassInteractive(defaults: defaults),
             trayHorizontalButtonSize: Double(SidebarDialTuning.trayHorizontalButtonSize(defaults: defaults)),
             trayHorizontalIconSize: Double(SidebarDialTuning.trayHorizontalIconSize(defaults: defaults)),
-            trayVerticalIconSize: Double(SidebarDialTuning.trayVerticalIconSize(defaults: defaults)),
             trayInnerPadding: Double(SidebarDialTuning.trayInnerPadding(defaults: defaults)),
             trayGroupGap: Double(SidebarDialTuning.trayGroupGap(defaults: defaults)),
             trayWidth: SidebarDialTuning.trayWidth(defaults: defaults).rawValue,
             trayGlassCornerStyle: SidebarDialTuning.trayGlassCornerStyle(defaults: defaults).rawValue,
-            trayGlassCornerRadius: Double(SidebarDialTuning.trayGlassCornerRadius(defaults: defaults)),
             selectedTitleWeight: SidebarDialTuning.selectedTitleWeight(defaults: defaults).rawValue,
             tintShimmerDarkIntensity: SidebarDialTuning.tintShimmerDarkIntensity(defaults: defaults),
             rowHeight: Double(SidebarDialTuning.rowHeight(defaults: defaults)),
@@ -647,13 +700,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
             contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
             listToTrayGap: Double(SidebarDialTuning.listToTrayGap(defaults: defaults)),
             historyInSidebar: SidebarDialTuning.historyInSidebar(defaults: defaults),
-            projectsLayout: SidebarDialTuning.projectsLayout(defaults: defaults).rawValue,
-            railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults)),
-            railColumnTintOpacity: SidebarDialTuning.railColumnTintOpacity(defaults: defaults),
-            railColumnInset: Double(SidebarDialTuning.railColumnInset(defaults: defaults)),
-            railChipCornerRadius: Double(SidebarDialTuning.railChipCornerRadius(defaults: defaults)),
-            railChipSizeOffset: Double(SidebarDialTuning.railChipSizeOffset(defaults: defaults)),
-            railSelectedTileFill: SidebarDialTuning.railSelectedTileFill(defaults: defaults)
+            projectsLayout: SidebarDialTuning.projectsLayout(defaults: defaults).rawValue
         )
     }
 
@@ -691,9 +738,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             setIfChanged(keys.surfaceOpacity, old.surfaceOpacity, new.surfaceOpacity)
             setIfChanged(keys.rimWidth, old.rimWidth, new.rimWidth)
             setIfChanged(keys.rimOpacity, old.rimOpacity, new.rimOpacity)
-            setIfChanged(keys.shadowOpacity, old.shadowOpacity, new.shadowOpacity)
-            setIfChanged(keys.shadowRadius, old.shadowRadius, new.shadowRadius)
-            setIfChanged(keys.shadowYOffset, old.shadowYOffset, new.shadowYOffset)
             setIfChanged(keys.chromaticIntensity, old.chromaticIntensity, new.chromaticIntensity)
             setIfChanged(keys.chromaticWidth, old.chromaticWidth, new.chromaticWidth)
             setIfChanged(keys.chromaticRotation, old.chromaticRotation, new.chromaticRotation)
@@ -710,12 +754,10 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setBoolIfChanged(SidebarDialTuning.trayGlassInteractiveKey, previous.trayGlassInteractive, model.trayGlassInteractive)
         setIfChanged(SidebarDialTuning.trayHorizontalButtonSizeKey, previous.trayHorizontalButtonSize, model.trayHorizontalButtonSize)
         setIfChanged(SidebarDialTuning.trayHorizontalIconSizeKey, previous.trayHorizontalIconSize, model.trayHorizontalIconSize)
-        setIfChanged(SidebarDialTuning.trayVerticalIconSizeKey, previous.trayVerticalIconSize, model.trayVerticalIconSize)
         setIfChanged(SidebarDialTuning.trayInnerPaddingKey, previous.trayInnerPadding, model.trayInnerPadding)
         setIfChanged(SidebarDialTuning.trayGroupGapKey, previous.trayGroupGap, model.trayGroupGap)
         setStringIfChanged(SidebarDialTuning.trayWidthKey, previous.trayWidth, model.trayWidth)
         setStringIfChanged(SidebarDialTuning.trayGlassCornerStyleKey, previous.trayGlassCornerStyle, model.trayGlassCornerStyle)
-        setIfChanged(SidebarDialTuning.trayGlassCornerRadiusKey, previous.trayGlassCornerRadius, model.trayGlassCornerRadius)
         setStringIfChanged(SidebarDialTuning.selectedTitleWeightKey, previous.selectedTitleWeight, model.selectedTitleWeight)
         setIfChanged(SidebarDialTuning.tintShimmerDarkIntensityKey, previous.tintShimmerDarkIntensity, model.tintShimmerDarkIntensity)
         setIfChanged(SidebarDialTuning.rowHeightKey, previous.rowHeight, model.rowHeight)
@@ -731,12 +773,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.listToTrayGapKey, previous.listToTrayGap, model.listToTrayGap)
         setBoolIfChanged(SidebarDialTuning.historyInSidebarKey, previous.historyInSidebar, model.historyInSidebar)
         setStringIfChanged(SidebarDialTuning.projectsLayoutKey, previous.projectsLayout, model.projectsLayout)
-        setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
-        setIfChanged(SidebarDialTuning.railColumnTintOpacityKey, previous.railColumnTintOpacity, model.railColumnTintOpacity)
-        setIfChanged(SidebarDialTuning.railColumnInsetKey, previous.railColumnInset, model.railColumnInset)
-        setIfChanged(SidebarDialTuning.railChipCornerRadiusKey, previous.railChipCornerRadius, model.railChipCornerRadius)
-        setIfChanged(SidebarDialTuning.railChipSizeOffsetKey, previous.railChipSizeOffset, model.railChipSizeOffset)
-        setIfChanged(SidebarDialTuning.railSelectedTileFillKey, previous.railSelectedTileFill, model.railSelectedTileFill)
         // Any write at all is a tuning change a row's `.equatable()` gate
         // can't see on its own — see `SidebarDialTuning.epochKey`'s doc
         // comment.
@@ -761,9 +797,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
                     label: prefix == "dark" ? "Grey layer opacity" : "White layer opacity", range: 0...1, step: 0.05),
             .slider("\(prefix)RimWidth", keyPath: glass.appending(path: \.rimWidth), label: "Rim width", range: 0...4, step: 0.25, unit: "pt"),
             .slider("\(prefix)RimOpacity", keyPath: glass.appending(path: \.rimOpacity), label: "Rim opacity", range: 0...1, step: 0.02),
-            .slider("\(prefix)ShadowOpacity", keyPath: glass.appending(path: \.shadowOpacity), label: "Shadow opacity", range: 0...0.6, step: 0.002),
-            .slider("\(prefix)ShadowYOffset", keyPath: glass.appending(path: \.shadowYOffset), label: "Shadow Y", range: 0...16, step: 0.5, unit: "pt"),
-            .slider("\(prefix)ShadowRadius", keyPath: glass.appending(path: \.shadowRadius), label: "Shadow radius", range: 0...32, step: 0.5, unit: "pt"),
             .slider("\(prefix)ChromaticIntensity", keyPath: glass.appending(path: \.chromaticIntensity), label: "Chromatic rim intensity", range: 0...1, step: 0.05),
             .slider("\(prefix)ChromaticWidth", keyPath: glass.appending(path: \.chromaticWidth), label: "Chromatic rim width", range: 0.5...6, step: 0.25, unit: "pt"),
             .slider("\(prefix)ChromaticRotation", keyPath: glass.appending(path: \.chromaticRotation), label: "Chromatic rim rotation", range: 0...360, step: 0.1, unit: "°"),
@@ -799,12 +832,10 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .slider("trayHorizontalIconSize", keyPath: \.trayHorizontalIconSize, label: "Bar icon size (expanded)", range: 10...24, step: 0.5, unit: "pt"),
             .select("trayWidth", keyPath: \.trayWidth, label: "Tray width",
                     options: TrayGlassStyle.TrayWidth.allCases.map(\.rawValue)),
-            .slider("trayVerticalIconSize", keyPath: \.trayVerticalIconSize, label: "Pill icon size (rail)", range: 10...24, step: 0.5, unit: "pt"),
             .slider("trayInnerPadding", keyPath: \.trayInnerPadding, label: "Inner padding", range: 0...16, step: 0.5, unit: "pt"),
             .slider("trayGroupGap", keyPath: \.trayGroupGap, label: "Tray group gap (expanded)", range: 0...16, step: 0.5, unit: "pt"),
             .select("trayGlassCornerStyle", keyPath: \.trayGlassCornerStyle, label: "Corner style",
                     options: TrayGlassStyle.CornerStyle.allCases.map(\.rawValue)),
-            .slider("trayGlassCornerRadius", keyPath: \.trayGlassCornerRadius, label: "Corner radius (radius style)", range: 0...32, step: 0.5, unit: "pt"),
         ]),
         // Rows
         .slider("rowHeight", keyPath: \.rowHeight, label: "Row height", range: 32...64, unit: "pt"),
@@ -824,16 +855,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .toggle("historyInSidebar", keyPath: \.historyInSidebar, label: "History in sidebar"),
         .select("projectsLayout", keyPath: \.projectsLayout, label: "Projects layout",
                 options: SidebarProjectsLayout.allCases.map(\.rawValue)),
-        // Rail
-        .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
-        // One view's selected project column (`RailProjectColumn`).
-        .group("railColumn", label: "Rail column", children: [
-            .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint", range: 0...0.3, step: 0.005),
-            .slider("railColumnInset", keyPath: \.railColumnInset, label: "Column inset", range: 0...12, step: 0.5, unit: "pt"),
-            .slider("railChipCornerRadius", keyPath: \.railChipCornerRadius, label: "Chip corner radius", range: 0...20, step: 0.5, unit: "pt"),
-            .slider("railChipSizeOffset", keyPath: \.railChipSizeOffset, label: "Chip size (vs tile)", range: -12...12, step: 0.5, unit: "pt"),
-            .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.05),
-        ]),
+        // The rail's knobs live in their own panel (`RailDialKitCoordinator`).
         .action(resetActionPath, label: "Reset sidebar")
     ]
 }
@@ -844,26 +866,173 @@ private final class SidebarDialKitCoordinatorBox {
     weak var coordinator: SidebarDialKitCoordinator?
 }
 
-/// DEBUG-only: owns the process-wide sidebar panel and starts the inspector
-/// agent. Called once from `AppDelegate.applicationDidFinishLaunching`.
+/// The "Rail" panel: only the knobs that change the collapsed rail, so they
+/// can be tuned without digging through "Sidebar Tuning". Same keys as when
+/// they lived in that panel, so saved values carry over; same diff-based
+/// write and Reset shape as `SidebarDialKitCoordinator`. "Reset rail"
+/// clears `SidebarDialTuning.railKeys`; "Reset sidebar" clears them too.
+@available(macOS 14, *)
+@MainActor
+final class RailDialKitCoordinator: ObservableObject {
+    let state: DialPanelState<RailDialKitTuningModel>
+    private var cancellable: AnyCancellable?
+    private var resetObserver: AnyCancellable?
+    private let defaults: UserDefaults
+    private let onChange: () -> Void
+    private var lastKnownModel: RailDialKitTuningModel
+
+    init(defaults: UserDefaults, onChange: @escaping () -> Void) {
+        self.defaults = defaults
+        self.onChange = onChange
+        let initial = Self.readModel(defaults: defaults)
+        lastKnownModel = initial
+        let selfBox = RailDialKitCoordinatorBox()
+        state = DialPanelState(
+            name: "Rail",
+            initial: initial,
+            controls: Self.controls,
+            onAction: { path in selfBox.coordinator?.handleAction(path) }
+        )
+        lastKnownModel = state.values
+        cancellable = state.$values
+            .dropFirst()
+            .sink { [weak self] newValue in
+                self?.handle(newValue)
+            }
+        // "Reset sidebar" clears these keys too.
+        resetObserver = NotificationCenter.default
+            .publisher(for: SidebarDialTuning.didResetNotification)
+            .sink { [weak self] note in
+                guard let self, (note.object as AnyObject?) !== self else { return }
+                self.reloadFromDefaults()
+            }
+        selfBox.coordinator = self
+    }
+
+    func handleAction(_ path: String) {
+        guard path == Self.resetActionPath else { return }
+        SidebarDialTuning.resetRail(defaults: defaults)
+        reloadFromDefaults()
+        NotificationCenter.default.post(name: SidebarDialTuning.didResetNotification, object: self)
+        onChange()
+    }
+
+    private func reloadFromDefaults() {
+        let freshModel = Self.readModel(defaults: defaults)
+        lastKnownModel = freshModel
+        state.values = freshModel
+    }
+
+    private func handle(_ model: RailDialKitTuningModel) {
+        let previous = lastKnownModel
+        lastKnownModel = model
+        guard previous != model else { return }
+        func setIfChanged(_ key: String, _ old: Double, _ new: Double) {
+            guard old != new else { return }
+            defaults.set(new, forKey: key)
+        }
+        setIfChanged(SidebarDialTuning.trayVerticalIconSizeKey, previous.trayVerticalIconSize, model.trayVerticalIconSize)
+        setIfChanged(SidebarDialTuning.railTrayIconGapKey, previous.railTrayIconGap, model.railTrayIconGap)
+        for (keys, old, new) in [
+            (SidebarDialTuning.lightGlassKeys, previous.shadowLight, model.shadowLight),
+            (SidebarDialTuning.darkGlassKeys, previous.shadowDark, model.shadowDark),
+        ] {
+            setIfChanged(keys.shadowOpacity, old.opacity, new.opacity)
+            setIfChanged(keys.shadowRadius, old.radius, new.radius)
+            setIfChanged(keys.shadowYOffset, old.yOffset, new.yOffset)
+        }
+        setIfChanged(SidebarDialTuning.railExtraWidthKey, previous.railExtraWidth, model.railExtraWidth)
+        setIfChanged(SidebarDialTuning.railColumnTintOpacityKey, previous.railColumnTintOpacity, model.railColumnTintOpacity)
+        setIfChanged(SidebarDialTuning.railColumnInsetKey, previous.railColumnInset, model.railColumnInset)
+        setIfChanged(SidebarDialTuning.railChipCornerRadiusKey, previous.railChipCornerRadius, model.railChipCornerRadius)
+        setIfChanged(SidebarDialTuning.railChipSizeOffsetKey, previous.railChipSizeOffset, model.railChipSizeOffset)
+        setIfChanged(SidebarDialTuning.railSelectedTileFillKey, previous.railSelectedTileFill, model.railSelectedTileFill)
+        defaults.set(SidebarDialTuning.epoch(defaults: defaults) + 1, forKey: SidebarDialTuning.epochKey)
+        onChange()
+    }
+
+    private static func readModel(defaults: UserDefaults) -> RailDialKitTuningModel {
+        RailDialKitTuningModel(
+            trayVerticalIconSize: Double(SidebarDialTuning.trayVerticalIconSize(defaults: defaults)),
+            railTrayIconGap: Double(SidebarDialTuning.railTrayIconGap(defaults: defaults)),
+            shadowLight: shadow(SidebarDialTuning.trayGlass(for: .light, defaults: defaults)),
+            shadowDark: shadow(SidebarDialTuning.trayGlass(for: .dark, defaults: defaults)),
+            railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults)),
+            railColumnTintOpacity: SidebarDialTuning.railColumnTintOpacity(defaults: defaults),
+            railColumnInset: Double(SidebarDialTuning.railColumnInset(defaults: defaults)),
+            railChipCornerRadius: Double(SidebarDialTuning.railChipCornerRadius(defaults: defaults)),
+            railChipSizeOffset: Double(SidebarDialTuning.railChipSizeOffset(defaults: defaults)),
+            railSelectedTileFill: SidebarDialTuning.railSelectedTileFill(defaults: defaults)
+        )
+    }
+
+    private static func shadow(_ look: TrayGlassStyle.Look) -> RailDialKitTuningModel.Shadow {
+        .init(opacity: look.shadowOpacity, radius: Double(look.shadowRadius), yOffset: Double(look.shadowYOffset))
+    }
+
+    private static func shadowControls(
+        _ prefix: String,
+        _ shadow: WritableKeyPath<RailDialKitTuningModel, RailDialKitTuningModel.Shadow>
+    ) -> [DialControl<RailDialKitTuningModel>] {
+        [
+            .slider("\(prefix)ShadowOpacity", keyPath: shadow.appending(path: \.opacity), label: "Shadow opacity", range: 0...0.6, step: 0.01),
+            .slider("\(prefix)ShadowRadius", keyPath: shadow.appending(path: \.radius), label: "Shadow radius", range: 0...32, step: 0.5, unit: "pt"),
+            .slider("\(prefix)ShadowYOffset", keyPath: shadow.appending(path: \.yOffset), label: "Shadow Y", range: 0...16, step: 0.5, unit: "pt"),
+        ]
+    }
+
+    private static let resetActionPath = "resetRail"
+
+    private static let controls: [DialControl<RailDialKitTuningModel>] = [
+        // The square pills (`RailTrayGeometry`): the icon size sets each
+        // icon's inset to its pill edge; the gap groups the stacked pair.
+        .group("railTray", label: "Tray", children: [
+            .slider("trayVerticalIconSize", keyPath: \.trayVerticalIconSize, label: "Pill icon size (rail)", range: 10...24, step: 0.5, unit: "pt"),
+            .slider("railTrayIconGap", keyPath: \.railTrayIconGap, label: "Tray icon gap (rail)", range: 0...40, step: 1, unit: "pt"),
+        ]),
+        // The tray pills' shadow, both trays, per appearance.
+        .group("trayShadowLight", label: "Tray shadow — Light", children: shadowControls("light", \.shadowLight)),
+        .group("trayShadowDark", label: "Tray shadow — Dark", children: shadowControls("dark", \.shadowDark)),
+        .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
+        // One view's selected project column (`RailProjectColumn`).
+        .group("railColumn", label: "Rail column", children: [
+            .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint", range: 0...0.3, step: 0.005),
+            .slider("railColumnInset", keyPath: \.railColumnInset, label: "Column inset", range: 0...12, step: 0.5, unit: "pt"),
+            .slider("railChipCornerRadius", keyPath: \.railChipCornerRadius, label: "Chip corner radius", range: 0...20, step: 0.5, unit: "pt"),
+            .slider("railChipSizeOffset", keyPath: \.railChipSizeOffset, label: "Chip size (vs tile)", range: -12...12, step: 0.5, unit: "pt"),
+            .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.05),
+        ]),
+        .action(resetActionPath, label: "Reset rail")
+    ]
+}
+
+@available(macOS 14, *)
+@MainActor
+private final class RailDialKitCoordinatorBox {
+    weak var coordinator: RailDialKitCoordinator?
+}
+
+/// DEBUG-only: owns the process-wide panels, "Sidebar Tuning" then "Rail"
+/// (the inspector's header menu switches between them), and starts the
+/// inspector agent. Called once from `AppDelegate.applicationDidFinishLaunching`.
 @available(macOS 14, *)
 @MainActor
 enum SidebarDialInspector {
     private static var coordinator: SidebarDialKitCoordinator?
+    private static var railCoordinator: RailDialKitCoordinator?
 
     static func start() {
         guard coordinator == nil else { return }
-        coordinator = SidebarDialKitCoordinator(
-            defaults: SidebarDialTuning.store,
-            // A row's `.equatable()` gate can't see a tuning change on its
-            // own; poking the store re-renders the sidebar and tray.
-            // AppKit geometry (the card's inset constraints) listens for
-            // `didChangeNotification` instead.
-            onChange: {
-                WorkspaceStore.shared.objectWillChange.send()
-                NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
-            }
-        )
+        // A row's `.equatable()` gate can't see a tuning change on its
+        // own; poking the store re-renders the sidebar and tray. AppKit
+        // geometry (the card's inset constraints) listens for
+        // `didChangeNotification` instead.
+        let onChange = {
+            WorkspaceStore.shared.objectWillChange.send()
+            NotificationCenter.default.post(name: SidebarDialTuning.didChangeNotification, object: nil)
+        }
+        coordinator = SidebarDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
+        railCoordinator = RailDialKitCoordinator(defaults: SidebarDialTuning.store, onChange: onChange)
         DialKitAgent.shared.start(appName: "Ghostties")
     }
 }
