@@ -415,6 +415,69 @@ final class SessionRowGlyphSlotTests: XCTestCase {
         )
     }
 
+    /// Tray hover, Finder's toolbar rule: the chip is the button's cell
+    /// inset by the "Hover inset" dial on every side, corner = pill radius −
+    /// inset, for an expanded (square) cell and a rail stacked (short) cell.
+    /// Pixels: the band between the cell edge and the chip stays background
+    /// on all four sides (the old edge-to-edge fill tinted it), the chip's
+    /// inside is tinted, and the chip's corner is rounded. Off-default dials
+    /// (inset 5, margin 4) so the dial, not a constant, drives it.
+    func testTrayHoverChipIsTheCellInsetByTheDialWithAConcentricCorner() throws {
+        let configure: (UserDefaults) -> Void = {
+            $0.set(5.0, forKey: SidebarDialTuning.trayHoverInsetKey)
+            $0.set(4.0, forKey: SidebarDialTuning.windowMarginKey)
+        }
+        for (vertical, cell) in [(false, CGSize(width: 48, height: 48)), (true, CGSize(width: 48, height: 40))] {
+            let tag = vertical ? "stacked rail cell" : "expanded cell"
+            try withDials(configure) {
+                let inset = SidebarDialTuning.trayHoverInset()
+                XCTAssertEqual(inset, 5, tag)
+                let pillRadius = TrayGlassStyle.pillCornerRadius()
+                let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: cell))
+                XCTAssertEqual(chip.frame, CGRect(origin: .zero, size: cell).insetBy(dx: inset, dy: inset), tag)
+                XCTAssertEqual(chip.cornerRadius, max(0, pillRadius - inset), accuracy: 0.001, tag)
+                XCTAssertGreaterThan(chip.cornerRadius, 2, "corner check needs a visible radius (\(tag))")
+
+                let hosting = NSHostingView(rootView: TrayIconButton(
+                    systemName: "plus", label: "New Session", isVertical: vertical,
+                    cellSize: cell.width, cellHeight: vertical ? cell.height : nil,
+                    forceHover: true, action: {}
+                )
+                    .frame(width: cell.width, height: cell.height)
+                    .background(Color.white))
+                hosting.frame = NSRect(origin: .zero, size: cell)
+                let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                window.appearance = NSAppearance(named: .aqua)
+                window.contentView = hosting
+                window.orderFrontRegardless()
+                defer { window.orderOut(nil) }
+                hosting.layoutSubtreeIfNeeded()
+                let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+                hosting.cacheDisplay(in: hosting.bounds, to: rep)
+                let scale = CGFloat(rep.pixelsWide) / cell.width
+                func sum(_ x: CGFloat, _ y: CGFloat) throws -> CGFloat {
+                    let c = try XCTUnwrap(rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB))
+                    return c.redComponent + c.greenComponent + c.blueComponent
+                }
+                let midX = cell.width / 2, midY = cell.height / 2
+                let band = inset / 2, inside = inset + 1.5
+                // (point in the band, point just inside the chip), per side.
+                let sides: [(String, (CGFloat, CGFloat), (CGFloat, CGFloat))] = [
+                    ("top", (midX, band), (midX, inside)),
+                    ("bottom", (midX, cell.height - band), (midX, cell.height - inside)),
+                    ("leading", (band, midY), (inside, midY)),
+                    ("trailing", (cell.width - band, midY), (cell.width - inside, midY)),
+                ]
+                for (side, out, inn) in sides {
+                    XCTAssertGreaterThan(try sum(out.0, out.1), 2.95, "\(side) band outside the chip is untinted (\(tag))")
+                    XCTAssertLessThan(try sum(inn.0, inn.1), 2.85, "\(side) inside the chip is tinted (\(tag))")
+                }
+                // Just inside the chip frame's corner, outside its rounded corner.
+                XCTAssertGreaterThan(try sum(chip.frame.minX + 1, chip.frame.minY + 1), 2.95, "chip corner is rounded (\(tag))")
+            }
+        }
+    }
+
     /// Vertical runs of icon ink (darker than the chrome by more than the
     /// shadow ever is) anywhere in the columns `xs`, in points, bridging
     /// anti-aliasing gaps of up to 3px.

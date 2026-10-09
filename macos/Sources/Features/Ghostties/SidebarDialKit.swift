@@ -205,6 +205,9 @@ enum SidebarDialTuning {
     /// The rail tray's square pill side (`RailTrayGeometry.cell`), capped
     /// at the rail's width less its margins.
     static let railTrayPillSizeKey = "ghostties.sidebarDial.trayGlass.railPillSize"
+    /// The tray buttons' hover chip inset from its button cell on every
+    /// side (`TrayGlassStyle.hoverChip`), both trays.
+    static let trayHoverInsetKey = "ghostties.sidebarDial.trayGlass.hoverInset"
 
     // MARK: Rail column (one view's selected project, `RailProjectColumn`)
     static let railColumnTintOpacityKey = "ghostties.sidebarDial.railColumn.tintOpacity"
@@ -414,6 +417,10 @@ enum SidebarDialTuning {
     static func railTrayPillSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(railTrayPillSizeKey, default: TrayGlassStyle.railPillSize, defaults: defaults)
     }
+    /// See `trayHoverInsetKey`. Defaults to `TrayGlassStyle.hoverInset`.
+    static func trayHoverInset(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(trayHoverInsetKey, default: TrayGlassStyle.hoverInset, defaults: defaults)
+    }
 
     /// The project column's faint fill (`RailProjectColumn.columnTintOpacity`).
     static func railColumnTintOpacity(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
@@ -456,7 +463,7 @@ enum SidebarDialTuning {
     /// "Reset rail" clears only these. Part of `allKeys`, so "Reset all
     /// panels" clears them too.
     static let railKeys: [String] = [
-        trayVerticalIconSizeKey, railTrayIconGapKey, railTrayPillSizeKey, railExtraWidthKey,
+        trayVerticalIconSizeKey, railTrayIconGapKey, railTrayPillSizeKey, trayHoverInsetKey, railExtraWidthKey,
         lightGlassKeys.shadowOpacity, lightGlassKeys.shadowRadius, lightGlassKeys.shadowYOffset,
         darkGlassKeys.shadowOpacity, darkGlassKeys.shadowRadius, darkGlassKeys.shadowYOffset,
         railColumnTintOpacityKey, railColumnInsetKey, railChipCornerRadiusKey,
@@ -632,6 +639,7 @@ struct RailDialKitTuningModel: Codable, Equatable {
     var trayVerticalIconSize: Double
     var railTrayIconGap: Double
     var railTrayPillSize: Double
+    var trayHoverInset: Double
     var shadowLight: Shadow
     var shadowDark: Shadow
     var railExtraWidth: Double
@@ -984,6 +992,7 @@ enum RailDialPanel: FocusedDialPanel {
             trayVerticalIconSize: Double(SidebarDialTuning.trayVerticalIconSize(defaults: defaults)),
             railTrayIconGap: Double(SidebarDialTuning.railTrayIconGap(defaults: defaults)),
             railTrayPillSize: Double(SidebarDialTuning.railTrayPillSize(defaults: defaults)),
+            trayHoverInset: Double(SidebarDialTuning.trayHoverInset(defaults: defaults)),
             shadowLight: shadow(SidebarDialTuning.trayGlass(for: .light, defaults: defaults)),
             shadowDark: shadow(SidebarDialTuning.trayGlass(for: .dark, defaults: defaults)),
             railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults)),
@@ -999,6 +1008,7 @@ enum RailDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.trayVerticalIconSizeKey, previous.trayVerticalIconSize, model.trayVerticalIconSize)
         setIfChanged(defaults, SidebarDialTuning.railTrayIconGapKey, previous.railTrayIconGap, model.railTrayIconGap)
         setIfChanged(defaults, SidebarDialTuning.railTrayPillSizeKey, previous.railTrayPillSize, model.railTrayPillSize)
+        setIfChanged(defaults, SidebarDialTuning.trayHoverInsetKey, previous.trayHoverInset, model.trayHoverInset)
         for (keys, old, new) in [
             (SidebarDialTuning.lightGlassKeys, previous.shadowLight, model.shadowLight),
             (SidebarDialTuning.darkGlassKeys, previous.shadowDark, model.shadowDark),
@@ -1038,6 +1048,8 @@ enum RailDialPanel: FocusedDialPanel {
                 .slider("trayVerticalIconSize", keyPath: \.trayVerticalIconSize, label: "Pill icon size (rail)", range: 10...24, step: 0.5, unit: "pt"),
                 .slider("railTrayIconGap", keyPath: \.railTrayIconGap, label: "Tray icon gap (rail)", range: 0...40, step: 1, unit: "pt"),
                 .slider("railTrayPillSize", keyPath: \.railTrayPillSize, label: "Pill size (rail)", range: 28...82, step: 1, unit: "pt"),
+                // Both trays: the hover chip's inset from its button cell.
+                .slider("trayHoverInset", keyPath: \.trayHoverInset, label: "Hover inset", range: 0...12, step: 0.5, unit: "pt"),
             ]),
             // The tray pills' shadow, both trays (rail and expanded), per appearance.
             .group("trayShadowLight", label: "Tray shadow (both trays) — Light", children: shadowControls("light", \.shadowLight)),

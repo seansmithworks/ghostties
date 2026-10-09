@@ -124,6 +124,7 @@ struct SidebarLockedDefaultsTests {
         #expect(SidebarDialTuning.groupCardInset(defaults: d) == 6)
         #expect(SidebarDialTuning.railTrayPillSize(defaults: d) == 48)
         #expect(SidebarDialTuning.railTrayIconGap(defaults: d) == 30)
+        #expect(SidebarDialTuning.trayHoverInset(defaults: d) == 4)
         #expect(SidebarDialTuning.projectsLayout(defaults: d) == .oneView)
         #expect(!SidebarDialTuning.historyInSidebar(defaults: d))
         #expect(ComposerResumeLayout.current(defaults: d) == .list)

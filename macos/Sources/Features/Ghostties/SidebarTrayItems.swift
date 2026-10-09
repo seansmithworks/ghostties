@@ -231,6 +231,9 @@ enum TrayGlassStyle {
     /// The rail tray's square pill side (option D `emGcV`: 48, centred on
     /// the rail). Read it through `SidebarDialTuning.railTrayPillSize()`.
     static let railPillSize: CGFloat = 48
+    /// The hover chip's inset from its button cell on every side, Finder's
+    /// toolbar rule. Read it through `SidebarDialTuning.trayHoverInset()`.
+    static let hoverInset: CGFloat = 4
     /// Gap between the expanded bar's buttons (option D: none, the square
     /// cells abut). The rail's follows from its cells (`RailTrayGeometry.itemGap`).
     static let horizontalItemGap: CGFloat = 0
@@ -259,10 +262,14 @@ enum TrayGlassStyle {
     /// The pill shape the tray and the selected row share, from the corner
     /// style dial.
     static func pillShape() -> RoundedRectangle {
-        let radius = SidebarDialTuning.trayGlassCornerStyle() == .capsule
+        RoundedRectangle(cornerRadius: pillCornerRadius(), style: .continuous)
+    }
+
+    /// The pill's corner radius, from the corner style dial.
+    static func pillCornerRadius() -> CGFloat {
+        SidebarDialTuning.trayGlassCornerStyle() == .capsule
             ? capsuleCornerRadius
             : SidebarDialTuning.trayCornerRadius()
-        return RoundedRectangle(cornerRadius: radius, style: .continuous)
     }
 
     static func glassTint(_ look: Look, for colorScheme: ColorScheme) -> Color? {
@@ -307,30 +314,41 @@ enum TrayGlassStyle {
         }
     }
 
-    /// Tray button hover/press highlight, Finder's toolbar rule (Sean,
-    /// 2026-10-08). A capsule holding one button: the highlight is the
-    /// capsule itself (`pillShape()`, drawn by the button, which owns the
-    /// capsule's padding). A capsule holding several: concentric with it,
-    /// inset by `innerPadding` on every outer edge, inner radius = outer
-    /// radius − `innerPadding` on all four corners, the shared edges
-    /// included, like Finder's segmented groups. Capsule style: the pill is a
-    /// full capsule, so its buttons' highlight is one too. Radius style:
-    /// `cornerRadius − innerPadding`.
-    static func buttonHighlightShape(
+    /// Tray button hover highlight, Finder's toolbar rule (Sean,
+    /// 2026-10-09): a rounded chip, the button's cell inset by `inset` on
+    /// every side, so adjacent chips in a grouped pill sit `2 × inset`
+    /// apart and a chip never touches its pill's edge. Its corner is
+    /// concentric with the pill's: `pillCornerRadius − inset`, clamped at 0
+    /// (a capsule pill's radius clamps the chip to a capsule too). One rule
+    /// for grouped and single pills, on both axes.
+    struct HoverChip: Equatable {
+        let frame: CGRect
+        let cornerRadius: CGFloat
+    }
+
+    static func hoverChip(
+        cell: CGRect,
+        inset: CGFloat = SidebarDialTuning.trayHoverInset(),
+        pillCornerRadius: CGFloat = TrayGlassStyle.pillCornerRadius()
+    ) -> HoverChip {
+        let inset = max(0, inset)
+        return HoverChip(
+            frame: cell.insetBy(dx: inset, dy: inset),
+            cornerRadius: max(0, pillCornerRadius - inset)
+        )
+    }
+
+    /// A tray button's hit area. A capsule holding one button: the capsule
+    /// itself (`pillShape()`, the button owns the capsule's padding). A
+    /// capsule holding several: the cell, concentric with the capsule,
+    /// radius `cornerRadius − innerPadding` (capsule style: a capsule).
+    static func buttonHitShape(
         soleInCapsule: Bool,
         cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
         cornerRadius: CGFloat = SidebarDialTuning.trayCornerRadius(),
         innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
     ) -> AnyShape {
         if soleInCapsule { return AnyShape(pillShape()) }
-        return concentricHighlightShape(cornerStyle: cornerStyle, cornerRadius: cornerRadius, innerPadding: innerPadding)
-    }
-
-    private static func concentricHighlightShape(
-        cornerStyle: CornerStyle = SidebarDialTuning.trayGlassCornerStyle(),
-        cornerRadius: CGFloat = SidebarDialTuning.trayCornerRadius(),
-        innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding()
-    ) -> AnyShape {
         switch cornerStyle {
         case .capsule:
             return AnyShape(Capsule(style: .continuous))
@@ -618,7 +636,7 @@ struct SidebarTrayPill<Content: View>: View {
     /// Space between the capsule's buttons.
     var itemSpacing: CGFloat = TrayGlassStyle.horizontalItemGap
     /// The capsule holds one button, which takes the capsule's padding
-    /// itself (`TrayIconButton.fillsCapsule`) so its hover fills the whole
+    /// itself (`TrayIconButton.fillsCapsule`) so its hit area is the whole
     /// capsule. Same capsule size either way.
     var soleButton = false
     /// The capsule's top and bottom padding when it differs from the rule
@@ -817,21 +835,24 @@ struct TrayIconButton: View {
     /// The cell's height when it isn't square: the rail's stacked Create
     /// buttons (`RailTrayGeometry.stackedButtonHeight`). Nil is `cellSize`.
     var cellHeight: CGFloat? = nil
-    /// Hit area beyond the highlight, on the pill's padding: the rail's
+    /// Hit area beyond the cell, on the pill's padding: the rail's
     /// stacked pill gives its outer buttons the padding above and below
     /// them, so the whole pill takes clicks.
     var hitInsets = EdgeInsets()
     /// Takes an equal share of its capsule's spare width instead of staying
     /// square (the expanded Create capsule under "Tray width: fill"). Height
-    /// is fixed either way, and the hover highlight fills the cell, so it
-    /// keeps the capsule's concentric inset.
+    /// is fixed either way, and the hover chip is the cell inset
+    /// (`TrayGlassStyle.hoverChip`), so it keeps its inset.
     var fillsWidth = false
     /// The only button in its capsule (`SidebarTrayPill.soleButton`): it is
-    /// the capsule (option D: no padding), so its hover fill and hit area are
-    /// the capsule's own shape (`TrayGlassStyle.buttonHighlightShape`).
+    /// the capsule (option D: no padding), so its hit area is the capsule's
+    /// own shape (`TrayGlassStyle.buttonHitShape`).
     var fillsCapsule = false
     /// Symbol animation to play on click — see `TrayIconTapEffect`.
     var tapEffect: TrayIconTapEffect? = nil
+    /// Draws the hover chip without a pointer. Test seam: a render test
+    /// can't hover.
+    var forceHover = false
     let action: () -> Void
 
     @State private var isHovered = false
@@ -864,12 +885,17 @@ struct TrayIconButton: View {
                     maxHeight: height
                 )
                 .background {
-                    highlightShape
-                        .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
+                    GeometryReader { proxy in
+                        let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: proxy.size))
+                        RoundedRectangle(cornerRadius: chip.cornerRadius, style: .continuous)
+                            .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
+                            .frame(width: chip.frame.width, height: chip.frame.height)
+                            .offset(x: chip.frame.minX, y: chip.frame.minY)
+                    }
                 }
-                // Hover and click land anywhere in the highlight's shape,
-                // not just on the glyph, and on `hitInsets` around it.
-                .modifier(TrayButtonHitArea(shape: highlightShape, insets: hitInsets))
+                // Hover and click land anywhere in the cell, not just on the
+                // chip or the glyph, and on `hitInsets` around it.
+                .modifier(TrayButtonHitArea(shape: hitShape, insets: hitInsets))
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
@@ -878,15 +904,15 @@ struct TrayIconButton: View {
         .accessibilityLabel(label)
     }
 
-    private var highlightShape: AnyShape {
-        TrayGlassStyle.buttonHighlightShape(soleInCapsule: fillsCapsule)
+    private var hitShape: AnyShape {
+        TrayGlassStyle.buttonHitShape(soleInCapsule: fillsCapsule)
     }
 
     private var showsHover: Bool {
         #if DEBUG
-        isHovered || (itemId != nil && itemId == CaptureFixture.trayHoverItemId)
+        forceHover || isHovered || (itemId != nil && itemId == CaptureFixture.trayHoverItemId)
         #else
-        isHovered
+        forceHover || isHovered
         #endif
     }
 
@@ -916,7 +942,7 @@ struct TrayIconButton: View {
     }
 }
 
-/// A tray button's hit area: its highlight's shape, or with `insets`, that
+/// A tray button's hit area: its hit shape, or with `insets`, that
 /// frame grown by them (`TrayIconButton.hitInsets`).
 private struct TrayButtonHitArea: ViewModifier {
     let shape: AnyShape
@@ -924,7 +950,7 @@ private struct TrayButtonHitArea: ViewModifier {
 
     /// One branch-free chain, so the button keeps its identity across the
     /// pinned⇄rail morph; with no insets the padding is zero and the hit
-    /// area is the highlight's shape.
+    /// area is the hit shape.
     func body(content: Content) -> some View {
         content
             .padding(insets)
