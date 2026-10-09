@@ -318,9 +318,14 @@ enum TrayGlassStyle {
     /// 2026-10-09): a rounded chip, the button's cell inset by `inset` on
     /// every side, so adjacent chips in a grouped pill sit `2 × inset`
     /// apart and a chip never touches its pill's edge. Its corner is
-    /// concentric with the pill's: `pillCornerRadius − inset`, clamped at 0
-    /// (a capsule pill's radius clamps the chip to a capsule too). One rule
-    /// for grouped and single pills, on both axes.
+    /// concentric with the pill's: the pill radius less the chip's distance
+    /// from the pill edge, clamped at 0 (a capsule pill's radius clamps the
+    /// chip to a capsule too). That distance is the chip's inset plus the
+    /// cell's own inset in its pill: none for the sole button, which is its
+    /// capsule (`fillsCapsule`), and the capsule padding (`innerPadding`)
+    /// for a button in a grouped pill, the same concentric step
+    /// `buttonHitShape` takes. One rule for grouped and single pills, on
+    /// both axes.
     struct HoverChip: Equatable {
         let frame: CGRect
         let cornerRadius: CGFloat
@@ -328,13 +333,16 @@ enum TrayGlassStyle {
 
     static func hoverChip(
         cell: CGRect,
+        soleInCapsule: Bool,
         inset: CGFloat = SidebarDialTuning.trayHoverInset(),
+        innerPadding: CGFloat = SidebarDialTuning.trayInnerPadding(),
         pillCornerRadius: CGFloat = TrayGlassStyle.pillCornerRadius()
     ) -> HoverChip {
         let inset = max(0, inset)
+        let cellInset = soleInCapsule ? 0 : max(0, innerPadding)
         return HoverChip(
             frame: cell.insetBy(dx: inset, dy: inset),
-            cornerRadius: max(0, pillCornerRadius - inset)
+            cornerRadius: max(0, pillCornerRadius - cellInset - inset)
         )
     }
 
@@ -887,12 +895,18 @@ struct TrayIconButton: View {
                 .redlineFrame(itemId.map(RedlineID.trayCell))
                 .background {
                     GeometryReader { proxy in
-                        let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: proxy.size))
+                        let chip = TrayGlassStyle.hoverChip(
+                            cell: CGRect(origin: .zero, size: proxy.size),
+                            soleInCapsule: fillsCapsule
+                        )
+                        // Placed by `.position` (layout), not `.offset` (a
+                        // draw-time shift), so the published redline frame
+                        // is where the chip is drawn.
                         RoundedRectangle(cornerRadius: chip.cornerRadius, style: .continuous)
                             .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
                             .frame(width: chip.frame.width, height: chip.frame.height)
                             .redlineFrame(itemId.map { RedlineID.trayCell($0) + ".chip" })
-                            .offset(x: chip.frame.minX, y: chip.frame.minY)
+                            .position(x: chip.frame.midX, y: chip.frame.midY)
                     }
                 }
                 // Hover and click land anywhere in the cell, not just on the

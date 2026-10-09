@@ -309,14 +309,25 @@ final class RedlineOverlayView: NSView {
     }
 
     /// The selected project's group card (expanded) and the rail's project
-    /// column: the four gaps from the box's edge to the union of the tile
-    /// and the chips inside it.
+    /// column: the gaps from the box's edge to the union of the tile and the
+    /// chips inside it. The rail column's marks are centred, so it takes all
+    /// four. The expanded card's tile and chips sit at its leading edge, so
+    /// its trailing gap is measured from the rows' trailing edge (the union
+    /// of the `row.<id>` frames inside it) instead, and dropped when no row
+    /// frame is published.
     private func appendGroupBands(_ rects: [String: CGRect], into bands: inout [Band]) {
         if let card = rects[RedlineID.groupCard] {
             let marks = rects.filter { key, _ in
                 (key.hasPrefix("header.") && key.hasSuffix(".tile")) || (key.hasPrefix("row.") && key.hasSuffix(".chip"))
             }
-            appendEnclosureBands(card, marks: Array(marks.values), into: &bands)
+            let rowsMaxX = rects
+                .filter { key, rect in
+                    key.hasPrefix("row.") && !key.dropFirst("row.".count).contains(".")
+                        && card.contains(CGPoint(x: rect.midX, y: rect.midY))
+                }
+                .map(\.value.maxX)
+                .max()
+            appendEnclosureBands(card, marks: Array(marks.values), trailing: rowsMaxX.map(TrailingEdge.at) ?? .omitted, into: &bands)
         }
         if let column = rects[RedlineID.railColumn] {
             let marks = rects.filter { key, _ in key.hasPrefix("rail.tile.") || key.hasPrefix("rail.chip.") }
@@ -324,9 +335,9 @@ final class RedlineOverlayView: NSView {
         }
     }
 
-    private func appendEnclosureBands(_ box: CGRect, marks: [CGRect], into bands: inout [Band]) {
+    private func appendEnclosureBands(_ box: CGRect, marks: [CGRect], trailing: TrailingEdge = .inner, into bands: inout [Band]) {
         guard let union = marks.filter({ $0.intersects(box) }).reduce(nil as CGRect?, { $0?.union($1) ?? $1 }) else { return }
-        appendInsetBands(outer: box, inner: union, kind: .padding, labelled: true, into: &bands)
+        appendInsetBands(outer: box, inner: union, kind: .padding, labelled: true, trailing: trailing, into: &bands)
     }
 
     /// The first project header fully inside the list's viewport: its tile
@@ -347,12 +358,25 @@ final class RedlineOverlayView: NSView {
         }
     }
 
-    /// The four bands between `outer`'s edges and `inner`'s.
-    private func appendInsetBands(outer: CGRect, inner: CGRect, kind: Kind, labelled: Bool, into bands: inout [Band]) {
+    /// Where an inset's trailing band starts: `inner`'s trailing edge, a
+    /// given x, or nowhere (no band).
+    private enum TrailingEdge {
+        case inner, at(CGFloat), omitted
+    }
+
+    /// The four bands between `outer`'s edges and `inner`'s, the trailing
+    /// one per `trailing`.
+    private func appendInsetBands(outer: CGRect, inner: CGRect, kind: Kind, labelled: Bool, trailing: TrailingEdge = .inner, into bands: inout [Band]) {
         bands.append(Band(rect: CGRect(x: inner.minX, y: outer.minY, width: inner.width, height: inner.minY - outer.minY), kind: kind, horizontal: false, labelled: labelled))
         bands.append(Band(rect: CGRect(x: inner.minX, y: inner.maxY, width: inner.width, height: outer.maxY - inner.maxY), kind: kind, horizontal: false, labelled: labelled))
         bands.append(Band(rect: CGRect(x: outer.minX, y: inner.minY, width: inner.minX - outer.minX, height: inner.height), kind: kind, horizontal: true, labelled: labelled))
-        bands.append(Band(rect: CGRect(x: inner.maxX, y: inner.minY, width: outer.maxX - inner.maxX, height: inner.height), kind: kind, horizontal: true, labelled: labelled))
+        let trailingX: CGFloat
+        switch trailing {
+        case .inner: trailingX = inner.maxX
+        case .at(let x): trailingX = x
+        case .omitted: return
+        }
+        bands.append(Band(rect: CGRect(x: trailingX, y: inner.minY, width: outer.maxX - trailingX, height: inner.height), kind: kind, horizontal: true, labelled: labelled))
     }
 
     /// The gap between two boxes, along whichever axis they sit apart on.

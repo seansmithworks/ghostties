@@ -416,32 +416,50 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     }
 
     /// Tray hover, Finder's toolbar rule: the chip is the button's cell
-    /// inset by the "Hover inset" dial on every side, corner = pill radius −
-    /// inset, for an expanded (square) cell and a rail stacked (short) cell.
-    /// Pixels: the band between the cell edge and the chip stays background
-    /// on all four sides (the old edge-to-edge fill tinted it), the chip's
-    /// inside is tinted, and the chip's corner is rounded. Off-default dials
-    /// (inset 5, margin 4) so the dial, not a constant, drives it.
+    /// inset by the "Hover inset" dial on every side, its corner concentric
+    /// with the pill's: pill radius less the chip's distance from the pill
+    /// edge. A sole button is its capsule, so that distance is the inset; a
+    /// button in a grouped pill sits the capsule padding inside the pill, so
+    /// it is padding + inset. Checked for an expanded (square) cell and a
+    /// rail stacked (short) cell, each grouped and sole. Pixels: the band
+    /// between the cell edge and the chip stays background on all four
+    /// sides, the chip's inside is tinted, and a point 2.4pt in along the
+    /// chip's corner diagonal is tinted for the grouped chip's small corner
+    /// (r 3, curve within ~1pt of the corner) but background for the sole
+    /// chip's large one (r 13, ~3.8pt), so the corner rendered is the one
+    /// the rule picks. Off-default dials (margin 0 → pill radius 16, inset 3,
+    /// padding 10) so the dials, not constants, drive it and the two radii
+    /// sit far apart.
     func testTrayHoverChipIsTheCellInsetByTheDialWithAConcentricCorner() throws {
         let configure: (UserDefaults) -> Void = {
-            $0.set(5.0, forKey: SidebarDialTuning.trayHoverInsetKey)
-            $0.set(4.0, forKey: SidebarDialTuning.windowMarginKey)
+            $0.set(3.0, forKey: SidebarDialTuning.trayHoverInsetKey)
+            $0.set(0.0, forKey: SidebarDialTuning.windowMarginKey)
+            $0.set(10.0, forKey: SidebarDialTuning.trayInnerPaddingKey)
         }
-        for (vertical, cell) in [(false, CGSize(width: 48, height: 48)), (true, CGSize(width: 48, height: 40))] {
-            let tag = vertical ? "stacked rail cell" : "expanded cell"
+        let cases: [(Bool, CGSize, Bool)] = [
+            (false, CGSize(width: 48, height: 48), false),
+            (false, CGSize(width: 48, height: 48), true),
+            (true, CGSize(width: 48, height: 40), false),
+            (true, CGSize(width: 48, height: 48), true),
+        ]
+        for (vertical, cell, sole) in cases {
+            let tag = (vertical ? "rail cell" : "expanded cell") + (sole ? ", sole" : ", grouped")
             try withDials(configure) {
                 let inset = SidebarDialTuning.trayHoverInset()
-                XCTAssertEqual(inset, 5, tag)
+                let padding = SidebarDialTuning.trayInnerPadding()
                 let pillRadius = TrayGlassStyle.pillCornerRadius()
-                let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: cell))
+                XCTAssertEqual(inset, 3, tag)
+                XCTAssertEqual(padding, 10, tag)
+                XCTAssertEqual(pillRadius, 16, tag)
+                let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: cell), soleInCapsule: sole)
                 XCTAssertEqual(chip.frame, CGRect(origin: .zero, size: cell).insetBy(dx: inset, dy: inset), tag)
-                XCTAssertEqual(chip.cornerRadius, max(0, pillRadius - inset), accuracy: 0.001, tag)
-                XCTAssertGreaterThan(chip.cornerRadius, 2, "corner check needs a visible radius (\(tag))")
+                XCTAssertEqual(chip.cornerRadius, sole ? 13 : 3, accuracy: 0.001, tag)
+                XCTAssertEqual(chip.cornerRadius, pillRadius - (sole ? 0 : padding) - inset, accuracy: 0.001, tag)
 
                 let hosting = NSHostingView(rootView: TrayIconButton(
                     systemName: "plus", label: "New Session", isVertical: vertical,
                     cellSize: cell.width, cellHeight: vertical ? cell.height : nil,
-                    forceHover: true, action: {}
+                    fillsCapsule: sole, forceHover: true, action: {}
                 )
                     .frame(width: cell.width, height: cell.height)
                     .background(Color.white))
@@ -472,9 +490,29 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                     XCTAssertGreaterThan(try sum(out.0, out.1), 2.95, "\(side) band outside the chip is untinted (\(tag))")
                     XCTAssertLessThan(try sum(inn.0, inn.1), 2.85, "\(side) inside the chip is tinted (\(tag))")
                 }
-                // Just inside the chip frame's corner, outside its rounded corner.
-                XCTAssertGreaterThan(try sum(chip.frame.minX + 1, chip.frame.minY + 1), 2.95, "chip corner is rounded (\(tag))")
+                // 2.4pt in along the chip's top-leading corner diagonal:
+                // inside a r3 corner, outside a r13 one.
+                let probe = try sum(chip.frame.minX + 2.4, chip.frame.minY + 2.4)
+                if sole {
+                    XCTAssertGreaterThan(probe, 2.95, "sole chip's corner is the large concentric radius (\(tag))")
+                } else {
+                    XCTAssertLessThan(probe, 2.85, "grouped chip's corner is the small concentric radius (\(tag))")
+                }
+                // Just inside the chip frame's corner, outside either rounded corner.
+                XCTAssertGreaterThan(try sum(chip.frame.minX + 0.25, chip.frame.minY + 0.25), 2.95, "chip corner is rounded (\(tag))")
             }
+        }
+        // Capsule style: the pill is a capsule, and so is the chip, grouped
+        // or sole, at the default dials.
+        for sole in [false, true] {
+            let chip = withDials {
+                TrayGlassStyle.hoverChip(
+                    cell: CGRect(x: 0, y: 0, width: 48, height: 48),
+                    soleInCapsule: sole,
+                    pillCornerRadius: TrayGlassStyle.capsuleCornerRadius
+                )
+            }
+            XCTAssertGreaterThanOrEqual(chip.cornerRadius, min(chip.frame.width, chip.frame.height) / 2, "capsule chip (sole: \(sole))")
         }
     }
 
