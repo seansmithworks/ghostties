@@ -318,10 +318,10 @@ struct ProjectAccordionHeader: View {
         .focused($isFocused)
         .overlay(alignment: .leading) {
             if isFocused {
-                // The header's own ink, so the mark reads on the light and
-                // the dark sidebar alike.
+                // Full-strength header ink even on an empty (dimmed) project,
+                // so the mark clears 3:1 on the light and dark sidebar alike.
                 Rectangle()
-                    .fill(ink)
+                    .fill(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
                     .frame(width: 2)
                     .allowsHitTesting(false)
             }
