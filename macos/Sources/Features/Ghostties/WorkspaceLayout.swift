@@ -426,7 +426,7 @@ enum WorkspaceLayout {
     /// Hit width of the sidebar drag handle on the rail: a strip over the
     /// rail's trailing edge, ending at the card's leading edge. Rail A2 has
     /// no sidebar-to-card gap for the handle to fill, and the tray capsules'
-    /// `railTrayCapsuleInset` already leaves this strip clear.
+    /// window-margin inset (`RailTrayGeometry`) already leaves this strip clear.
     static let railDragHandleHitWidth: CGFloat = 8
 
     /// Width of the sidebar drag handle, whose trailing edge always sits on
@@ -441,11 +441,6 @@ enum WorkspaceLayout {
         case .closed, .overlay: return 0
         }
     }
-
-    /// Inset of each rail tray capsule from the window's leading edge and
-    /// from the canvas card (rail A2): the capsules stretch to
-    /// `railWidth - 2 * railTrayCapsuleInset`, buttons centred inside.
-    static let railTrayCapsuleInset: CGFloat = 8
 
     /// Extra top padding on the bottom tray, opening a gap between the list
     /// above and the tray below. 0 = today's flush layout (the list's
@@ -824,7 +819,20 @@ private struct SidebarTrailingGutterKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
 
+private struct SidebarRailWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = WorkspaceLayout.sidebarRailWidth
+}
+
 extension EnvironmentValues {
+    /// The collapsed rail's width (`SidebarWidthModel.railWidth`), injected
+    /// once at the sidebar root (`SidebarHostRoot`); the rail tray sizes its
+    /// square pills from it (`RailTrayGeometry`). The rail's floor width
+    /// (`WorkspaceLayout.sidebarRailWidth`) outside it.
+    var sidebarRailWidth: CGFloat {
+        get { self[SidebarRailWidthKey.self] }
+        set { self[SidebarRailWidthKey.self] = newValue }
+    }
+
     /// `WorkspaceLayout.sidebarTrailingGutter(for:)`, injected once at the
     /// sidebar root (`SidebarHostRoot`). 0 outside it, so a view hosted on
     /// its own (tests, previews) pads its full visible inset.

@@ -31,6 +31,9 @@ struct SidebarRailView: View {
     /// the expanded list.
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
+    /// See `EnvironmentValues.sidebarRailWidth`: the tray's square pills,
+    /// and so the space reserved for them, follow it.
+    @Environment(\.sidebarRailWidth) private var railWidth
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,7 +89,7 @@ struct SidebarRailView: View {
             // The tray itself is hosted once at the sidebar root
             // (`SidebarTray`), over both this rail and the expanded list, so
             // it can morph between them; this reserves its space.
-            Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: true))
+            Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: true, railWidth: railWidth))
         }
         .frame(maxWidth: .infinity)
         .background(.clear)

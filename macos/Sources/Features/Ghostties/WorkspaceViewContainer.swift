@@ -33,6 +33,14 @@ final class SidebarWidthModel: ObservableObject {
     /// the correct static appearance for whichever mode is settled.
     @Published var isCollapsedPresentation: Bool
 
+    /// The collapsed rail's width (`WorkspaceLayout.collapsedRailWidth(in:)`),
+    /// kept current in every mode, not only while collapsed. The rail tray
+    /// sizes its square pills from it (`RailTrayGeometry`), so it must hold
+    /// the rail's width before a collapse starts: `width` reaches the rail
+    /// only after `isCollapsedPresentation` has already flipped the tray
+    /// vertical, and animates through every width on the way.
+    @Published var railWidth: CGFloat = WorkspaceLayout.sidebarRailWidth
+
     init(width: CGFloat, isCollapsedPresentation: Bool = false) {
         self.width = width
         self.isCollapsedPresentation = isCollapsedPresentation
@@ -130,6 +138,7 @@ private struct SidebarHostRoot: View {
                 }
             }
             .environment(\.sidebarTrailingGutter, trailingGutter)
+            .environment(\.sidebarRailWidth, model.railWidth)
     }
 
     /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
@@ -1194,13 +1203,19 @@ class WorkspaceViewContainer: NSView {
         // Re-derive the collapsed rail width from the same live button
         // frames — the rail must clear the traffic-light cluster, which can
         // change width across macOS versions and titlebar layout passes
-        // (window attach, fullscreen enter/exit). Skipped mid-transition-
-        // animation for the same reason the sidebar resize reclamp above is:
-        // the animator drives `sidebarWidthConstraint` through intermediate
-        // values every frame, and reclamping against those would fight the
-        // open/collapse animation.
+        // (window attach, fullscreen enter/exit). The rail tray's copy
+        // (`SidebarWidthModel.railWidth`) tracks it in every mode, animating
+        // or not: it is the rail's settled width, never an intermediate one.
+        let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
+        if abs(widthModel.railWidth - railWidth) > 0.5 {
+            widthModel.railWidth = railWidth
+        }
+        // The constraint reclamp is skipped mid-transition-animation for the
+        // same reason the sidebar resize reclamp above is: the animator
+        // drives `sidebarWidthConstraint` through intermediate values every
+        // frame, and reclamping against those would fight the open/collapse
+        // animation.
         if sidebarMode == .collapsed && !isSidebarTransitionAnimating {
-            let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
             if abs(sidebarWidthConstraint.constant - railWidth) > 0.5 {
                 sidebarWidthConstraint.constant = railWidth
                 widthModel.width = railWidth

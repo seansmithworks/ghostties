@@ -100,7 +100,6 @@ struct SidebarLockedDefaultsTests {
 
         #expect(SidebarDialTuning.windowMargin(defaults: d) == 8)
         #expect(SidebarDialTuning.trayHorizontalButtonSize(defaults: d) == 44)
-        #expect(SidebarDialTuning.trayVerticalButtonSize(defaults: d) == 44)
         #expect(SidebarDialTuning.trayHorizontalIconSize(defaults: d) == 18)
         #expect(SidebarDialTuning.trayVerticalIconSize(defaults: d) == 18)
         #expect(SidebarDialTuning.trayInnerPadding(defaults: d) == 8)

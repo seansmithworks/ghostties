@@ -57,7 +57,6 @@ enum SidebarDialTuning {
     static let trayGroupGapKey = "ghostties.sidebarDial.trayGroupGap"
     static let trayWidthKey = "ghostties.sidebarDial.trayWidth"
     static let trayGlassInteractiveKey = "ghostties.sidebarDial.trayGlass.interactive"
-    static let trayVerticalButtonSizeKey = "ghostties.sidebarDial.trayGlass.verticalButtonSize"
     static let trayVerticalIconSizeKey = "ghostties.sidebarDial.trayGlass.verticalIconSize"
     static let trayHorizontalButtonSizeKey = "ghostties.sidebarDial.trayGlass.horizontalButtonSize"
     static let trayHorizontalIconSizeKey = "ghostties.sidebarDial.trayGlass.horizontalIconSize"
@@ -171,9 +170,12 @@ enum SidebarDialTuning {
     static let retiredHistoryPlacementKey = "ghostties.sidebarDial.historyPlacement"
     /// The rail hairline's width: the section dividers were removed (beta.26).
     static let retiredHairlineWidthKey = "ghostties.sidebarDial.trayGlass.selectedPillWidth"
+    /// The rail tray's button size: the rail's square pills take it from
+    /// the rail's width (`RailTrayGeometry`) since 2026-10-08.
+    static let retiredTrayVerticalButtonSizeKey = "ghostties.sidebarDial.trayGlass.verticalButtonSize"
     static let retiredKeys: [String] = [
         retiredSelectedRowStyleKey, retiredLegacySelectedStyleKey, retiredTrayStyleKey, retiredHistoryPlacementKey,
-        retiredHairlineWidthKey,
+        retiredHairlineWidthKey, retiredTrayVerticalButtonSizeKey,
         // The flat selected row's shadow, per appearance.
         "ghostties.sidebarDial.trayGlass.selectedShadowOpacity",
         "ghostties.sidebarDial.trayGlass.selectedShadowRadius",
@@ -246,7 +248,8 @@ enum SidebarDialTuning {
     static func trayInnerPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayInnerPaddingKey, default: TrayGlassStyle.innerPadding, defaults: defaults)
     }
-    /// Gap between the tray's Create and Toggle capsules, on both axes.
+    /// Gap between the expanded tray's Create and Toggle capsules. The
+    /// rail's is the window margin (`RailTrayGeometry.groupGap`).
     static func trayGroupGap(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayGroupGapKey, default: TrayGlassStyle.groupGap, defaults: defaults)
     }
@@ -289,9 +292,6 @@ enum SidebarDialTuning {
     }
     static func trayGlassInteractive(defaults: UserDefaults = SidebarDialTuning.store) -> Bool {
         bool(trayGlassInteractiveKey, default: TrayGlassStyle.interactive, defaults: defaults)
-    }
-    static func trayVerticalButtonSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(trayVerticalButtonSizeKey, default: TrayGlassStyle.verticalButtonSize, defaults: defaults)
     }
     static func trayVerticalIconSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(trayVerticalIconSizeKey, default: TrayGlassStyle.verticalIconSize, defaults: defaults)
@@ -409,7 +409,7 @@ enum SidebarDialTuning {
     static let allKeys: [String] = lightGlassKeys.all + darkGlassKeys.all + [
         windowMarginKey, redlinesKey,
         trayInnerPaddingKey, trayGroupGapKey, trayWidthKey, trayGlassInteractiveKey,
-        trayVerticalButtonSizeKey, trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
+        trayVerticalIconSizeKey, trayHorizontalButtonSizeKey,
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey, trayGlassCornerRadiusKey,
         selectedTitleWeightKey, tintShimmerDarkIntensityKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
@@ -530,7 +530,6 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var trayGlassInteractive: Bool
     var trayHorizontalButtonSize: Double
     var trayHorizontalIconSize: Double
-    var trayVerticalButtonSize: Double
     var trayVerticalIconSize: Double
     var trayInnerPadding: Double
     var trayGroupGap: Double
@@ -628,7 +627,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
             trayGlassInteractive: SidebarDialTuning.trayGlassInteractive(defaults: defaults),
             trayHorizontalButtonSize: Double(SidebarDialTuning.trayHorizontalButtonSize(defaults: defaults)),
             trayHorizontalIconSize: Double(SidebarDialTuning.trayHorizontalIconSize(defaults: defaults)),
-            trayVerticalButtonSize: Double(SidebarDialTuning.trayVerticalButtonSize(defaults: defaults)),
             trayVerticalIconSize: Double(SidebarDialTuning.trayVerticalIconSize(defaults: defaults)),
             trayInnerPadding: Double(SidebarDialTuning.trayInnerPadding(defaults: defaults)),
             trayGroupGap: Double(SidebarDialTuning.trayGroupGap(defaults: defaults)),
@@ -712,7 +710,6 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setBoolIfChanged(SidebarDialTuning.trayGlassInteractiveKey, previous.trayGlassInteractive, model.trayGlassInteractive)
         setIfChanged(SidebarDialTuning.trayHorizontalButtonSizeKey, previous.trayHorizontalButtonSize, model.trayHorizontalButtonSize)
         setIfChanged(SidebarDialTuning.trayHorizontalIconSizeKey, previous.trayHorizontalIconSize, model.trayHorizontalIconSize)
-        setIfChanged(SidebarDialTuning.trayVerticalButtonSizeKey, previous.trayVerticalButtonSize, model.trayVerticalButtonSize)
         setIfChanged(SidebarDialTuning.trayVerticalIconSizeKey, previous.trayVerticalIconSize, model.trayVerticalIconSize)
         setIfChanged(SidebarDialTuning.trayInnerPaddingKey, previous.trayInnerPadding, model.trayInnerPadding)
         setIfChanged(SidebarDialTuning.trayGroupGapKey, previous.trayGroupGap, model.trayGroupGap)
@@ -802,10 +799,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
             .slider("trayHorizontalIconSize", keyPath: \.trayHorizontalIconSize, label: "Bar icon size (expanded)", range: 10...24, step: 0.5, unit: "pt"),
             .select("trayWidth", keyPath: \.trayWidth, label: "Tray width",
                     options: TrayGlassStyle.TrayWidth.allCases.map(\.rawValue)),
-            .slider("trayVerticalButtonSize", keyPath: \.trayVerticalButtonSize, label: "Pill button size (rail)", range: 24...56, step: 0.5, unit: "pt"),
             .slider("trayVerticalIconSize", keyPath: \.trayVerticalIconSize, label: "Pill icon size (rail)", range: 10...24, step: 0.5, unit: "pt"),
             .slider("trayInnerPadding", keyPath: \.trayInnerPadding, label: "Inner padding", range: 0...16, step: 0.5, unit: "pt"),
-            .slider("trayGroupGap", keyPath: \.trayGroupGap, label: "Tray group gap", range: 0...16, step: 0.5, unit: "pt"),
+            .slider("trayGroupGap", keyPath: \.trayGroupGap, label: "Tray group gap (expanded)", range: 0...16, step: 0.5, unit: "pt"),
             .select("trayGlassCornerStyle", keyPath: \.trayGlassCornerStyle, label: "Corner style",
                     options: TrayGlassStyle.CornerStyle.allCases.map(\.rawValue)),
             .slider("trayGlassCornerRadius", keyPath: \.trayGlassCornerRadius, label: "Corner radius (radius style)", range: 0...32, step: 0.5, unit: "pt"),

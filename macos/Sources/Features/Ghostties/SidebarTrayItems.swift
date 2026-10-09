@@ -207,9 +207,8 @@ enum TrayGlassStyle {
 
     // MARK: Sizes
 
-    /// Vertical (rail) tray button: canvas 88px (24px padding around a 40px
-    /// icon frame). Icon: canvas 35px.
-    static let verticalButtonSize: CGFloat = 44
+    /// Vertical (rail) tray icon: canvas 35px. The rail's button size is
+    /// not a constant: it follows the rail's width (`RailTrayGeometry`).
     static let verticalIconSize: CGFloat = 18
     /// Horizontal (expanded) tray button, square like the rail's: Flow 07's
     /// 20×20 icon frame plus 8pt padding, so a capsule is 44pt tall with
@@ -218,11 +217,12 @@ enum TrayGlassStyle {
     static let horizontalIconSize: CGFloat = 18
     /// Pill padding around its buttons: canvas 8px.
     static let innerPadding: CGFloat = 8
-    /// Canvas buttons are stacked with no gap; the horizontal bar keeps 2pt.
-    static let verticalItemGap: CGFloat = 0
+    /// Gap between the expanded bar's buttons. The rail's follows from its
+    /// square cells (`RailTrayGeometry.itemGap`).
     static let horizontalItemGap: CGFloat = 2
-    /// Gap between the Create and Toggle capsules, on both axes (`bA1y9`
-    /// layout B; tuned in the Dev DialKit to the 8pt grid).
+    /// Gap between the Create and Toggle capsules in the expanded bar
+    /// (`bA1y9` layout B; tuned in the Dev DialKit to the 8pt grid). The
+    /// rail's is its window margin (`RailTrayGeometry.groupGap`).
     static let groupGap: CGFloat = 8
     /// Canvas r64px on a 104px-wide pill: clamps to a capsule.
     static let cornerStyle: CornerStyle = .radius
@@ -331,6 +331,62 @@ enum TrayGlassStyle {
     static func specularStart(angle degrees: Double) -> UnitPoint {
         let r = degrees * .pi / 180
         return UnitPoint(x: 0.5 + 0.5 * cos(r), y: 0.5 - 0.5 * sin(r))
+    }
+}
+
+/// The collapsed rail's tray, squared (Sean, 2026-10-08: "square these off,
+/// same horizontal & vertical padding/margin"). Everything follows from the
+/// rail's width and two dials:
+///
+/// - `cell`: the side of one square, the rail width less the window margin
+///   on each side. The Toggle pill is one cell; the Create pill is two
+///   stacked, a 1×2 grid of the Toggle's square.
+/// - `buttonSize`: each button is the square `cell - 2 * padding`, inset by
+///   the inner padding (its hover highlight's inset), with `2 * padding`
+///   between two buttons, so every icon sits at the centre of its own cell
+///   and its inset to the pill edge is the same on both axes.
+/// - Outside the pills, the gap between them and the bottom margin equal
+///   the side margin: the window margin, the rail column's own inset.
+///
+/// Pure values, so tests can check the geometry without rendering.
+struct RailTrayGeometry: Equatable {
+    let railWidth: CGFloat
+    /// `SidebarDialTuning.windowMargin()`.
+    let margin: CGFloat
+    /// `SidebarDialTuning.trayInnerPadding()`.
+    let padding: CGFloat
+
+    /// The live geometry at the current dial values.
+    static func current(railWidth: CGFloat) -> RailTrayGeometry {
+        RailTrayGeometry(
+            railWidth: railWidth,
+            margin: SidebarDialTuning.windowMargin(),
+            padding: SidebarDialTuning.trayInnerPadding()
+        )
+    }
+
+    /// The pill's width, and the side of each square cell.
+    var cell: CGFloat { max(0, railWidth - 2 * margin) }
+    /// One button's square frame inside its cell.
+    var buttonSize: CGFloat { max(0, cell - 2 * padding) }
+    /// Between two buttons in one pill: each cell's padding, back to back.
+    var itemGap: CGFloat { 2 * padding }
+    /// Between the Create and Toggle pills.
+    var groupGap: CGFloat { margin }
+    /// Below the Toggle pill, to the window's bottom edge.
+    var bottomMargin: CGFloat { margin }
+
+    /// A pill holding `items` buttons, built the way `SidebarTrayPill` lays
+    /// it out: `items * cell` whenever the padding fits inside the cell.
+    func pillHeight(items: Int) -> CGFloat {
+        let count = CGFloat(items)
+        return count * buttonSize + max(0, count - 1) * itemGap + 2 * padding
+    }
+
+    /// The whole tray, pills, gaps and bottom margin, for the rail to reserve.
+    func trayHeight(groupItemCounts: [Int]) -> CGFloat {
+        let pills = groupItemCounts.map(pillHeight(items:)).reduce(0, +)
+        return pills + CGFloat(max(0, groupItemCounts.count - 1)) * groupGap + bottomMargin
     }
 }
 
@@ -500,9 +556,8 @@ struct SidebarTrayPill<Content: View>: View {
     var forceOpaque = false
     /// DEBUG Redlines tag for this capsule (its content is `<id>.content`).
     var redlineID: String? = nil
-    /// Rail A2: the capsule fills the width it is offered instead of hugging,
-    /// its buttons (still their dial size) centred inside.
-    var stretchesAcross = false
+    /// Space between the capsule's buttons.
+    var itemSpacing: CGFloat = TrayGlassStyle.horizontalItemGap
     /// The capsule holds one button, which takes the capsule's padding
     /// itself (`TrayIconButton.fillsCapsule`) so its hover fills the whole
     /// capsule. Same capsule size either way.
@@ -511,10 +566,9 @@ struct SidebarTrayPill<Content: View>: View {
 
     var body: some View {
         let layout = axis == .vertical
-            ? AnyLayout(VStackLayout(spacing: TrayGlassStyle.verticalItemGap))
-            : AnyLayout(HStackLayout(spacing: TrayGlassStyle.horizontalItemGap))
+            ? AnyLayout(VStackLayout(spacing: itemSpacing))
+            : AnyLayout(HStackLayout(spacing: itemSpacing))
         let framed = layout(content)
-            .frame(maxWidth: stretchesAcross ? .infinity : nil)
             .redlineFrame(redlineID.map { $0 + ".content" })
             .padding(soleButton ? 0 : SidebarDialTuning.trayInnerPadding())
             .redlineFrame(redlineID)
@@ -541,6 +595,8 @@ struct SidebarTray: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// See `EnvironmentValues.sidebarTrailingGutter`.
     @Environment(\.sidebarTrailingGutter) private var trailingGutter
+    /// See `EnvironmentValues.sidebarRailWidth`.
+    @Environment(\.sidebarRailWidth) private var railWidth
 
     let isVertical: Bool
     /// "Collapse Sidebar" / "Expand Sidebar" / "Open Sidebar" — see
@@ -552,27 +608,20 @@ struct SidebarTray: View {
 
     /// Space the tray occupies at the bottom of the sidebar, for the content
     /// underneath to reserve. Horizontal: one capsule row + `bottomPadding`,
-    /// plus the list-to-tray gap. Vertical: the stacked capsules, the gaps
-    /// between them, and `bottomPadding`.
-    static func reservedHeight(isVertical: Bool) -> CGFloat {
-        let padding = SidebarDialTuning.trayInnerPadding()
+    /// plus the list-to-tray gap. Vertical: the stacked square pills at
+    /// `railWidth` (`RailTrayGeometry.trayHeight`), the gap between them,
+    /// and the bottom margin.
+    static func reservedHeight(isVertical: Bool, railWidth: CGFloat = WorkspaceLayout.sidebarRailWidth) -> CGFloat {
         if isVertical {
-            let counts = groupItemCounts()
-            let capsules = counts.map { n -> CGFloat in
-                let count = CGFloat(n)
-                return count * SidebarDialTuning.trayVerticalButtonSize()
-                    + max(0, count - 1) * TrayGlassStyle.verticalItemGap
-                    + 2 * padding
-            }
-            let gaps = CGFloat(max(0, counts.count - 1)) * SidebarDialTuning.trayGroupGap()
-            return capsules.reduce(0, +) + gaps + bottomPadding(isVertical: true)
+            return RailTrayGeometry.current(railWidth: railWidth).trayHeight(groupItemCounts: groupItemCounts())
         }
         return SidebarDialTuning.listToTrayGap() + SidebarDialTuning.trayHorizontalButtonSize()
-            + 2 * padding + bottomPadding(isVertical: false)
+            + 2 * SidebarDialTuning.trayInnerPadding() + bottomPadding(isVertical: false)
     }
 
     /// The tray's gap to the window's bottom edge: the window margin, on
-    /// both axes, so it matches the terminal card's bottom inset.
+    /// both axes, so it matches the terminal card's bottom inset (and, on
+    /// the rail, `RailTrayGeometry.bottomMargin`).
     static func bottomPadding(isVertical: Bool) -> CGFloat {
         SidebarDialTuning.windowMargin()
     }
@@ -593,7 +642,8 @@ struct SidebarTray: View {
         )
         let groups = SidebarTrayGroup.allCases.filter { group in items.contains { $0.group == group } }
         let axis: Axis = isVertical ? .vertical : .horizontal
-        let gap = SidebarDialTuning.trayGroupGap()
+        let rail = RailTrayGeometry.current(railWidth: railWidth)
+        let gap = isVertical ? rail.groupGap : SidebarDialTuning.trayGroupGap()
         let groupLayout = isVertical
             ? AnyLayout(VStackLayout(alignment: .center, spacing: gap))
             : AnyLayout(HStackLayout(alignment: .bottom, spacing: gap))
@@ -604,17 +654,21 @@ struct SidebarTray: View {
             ForEach(groups, id: \.self) { group in
                 let groupItems = items.filter { $0.group == group }
                 let sole = groupItems.count == 1
-                SidebarTrayPill(axis: axis, forceOpaque: forceOpaque, redlineID: RedlineID.trayPill(group.rawValue), stretchesAcross: isVertical, soleButton: sole) {
+                SidebarTrayPill(
+                    axis: axis,
+                    forceOpaque: forceOpaque,
+                    redlineID: RedlineID.trayPill(group.rawValue),
+                    itemSpacing: isVertical ? rail.itemGap : TrayGlassStyle.horizontalItemGap,
+                    soleButton: sole
+                ) {
                     ForEach(groupItems) { item in
                         TrayIconButton(
                             itemId: item.id,
                             systemName: item.systemName,
                             label: item.label,
                             isVertical: isVertical,
-                            // Rail: the stretched capsule is wider than its
-                            // buttons, so they fill it to keep the highlight's
-                            // side inset equal to its top and bottom inset.
-                            fillsWidth: isVertical || (fillsCreate && group == .create),
+                            cellSize: isVertical ? rail.buttonSize : SidebarDialTuning.trayHorizontalButtonSize(),
+                            fillsWidth: fillsCreate && group == .create,
                             fillsCapsule: sole,
                             tapEffect: item.tapEffect,
                             action: item.action
@@ -628,11 +682,11 @@ struct SidebarTray: View {
         .redlineFrame(RedlineID.trayGroup)
         // Expanded: the window margin is the visible gap on each side; on
         // the trailing side the gutter outside the column already provides
-        // part of it. Rail (A2): the stretched capsules sit
-        // `railTrayCapsuleInset` from the window edge and from the card,
-        // centred on the full rail, the same centre as its row column.
-        .padding(.leading, isVertical ? WorkspaceLayout.railTrayCapsuleInset : SidebarDialTuning.windowMargin())
-        .padding(.trailing, isVertical ? WorkspaceLayout.railTrayCapsuleInset : max(0, SidebarDialTuning.windowMargin() - trailingGutter))
+        // part of it. Rail: the square pills sit the window margin from the
+        // window edge and from the card (`RailTrayGeometry`), centred on the
+        // full rail, the same centre as its row column.
+        .padding(.leading, isVertical ? rail.margin : SidebarDialTuning.windowMargin())
+        .padding(.trailing, isVertical ? rail.margin : max(0, SidebarDialTuning.windowMargin() - trailingGutter))
         .padding(.bottom, Self.bottomPadding(isVertical: isVertical))
         // Leading in the expanded sidebar (layout B); centred on the rail.
         .frame(maxWidth: .infinity, alignment: isVertical ? .center : .leading)
@@ -671,11 +725,13 @@ struct TrayIconButton: View {
     var itemId: String? = nil
     let systemName: String
     let label: String
-    /// Picks the size dials: the rail's (true) or the expanded bar's (false).
+    /// Picks the icon size dial: the rail's (true) or the expanded bar's (false).
     var isVertical = false
+    /// The square button's side: the expanded bar's dial, or the rail's
+    /// `RailTrayGeometry.buttonSize`.
+    let cellSize: CGFloat
     /// Takes an equal share of its capsule's spare width instead of staying
-    /// square (the expanded Create capsule under "Tray width: fill", and every
-    /// rail capsule, which is stretched wider than its buttons). Height
+    /// square (the expanded Create capsule under "Tray width: fill"). Height
     /// is fixed either way, and the hover highlight fills the cell, so it
     /// keeps the capsule's concentric inset.
     var fillsWidth = false
@@ -693,7 +749,7 @@ struct TrayIconButton: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let size = isVertical ? SidebarDialTuning.trayVerticalButtonSize() : SidebarDialTuning.trayHorizontalButtonSize()
+        let size = cellSize
         Button {
             tapEffectTrigger += 1
             action()
