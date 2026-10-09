@@ -195,6 +195,11 @@ enum SidebarDialTuning {
     static let railChipSizeOffsetKey = "ghostties.sidebarDial.railColumn.chipSizeOffset"
     static let railSelectedTileFillKey = "ghostties.sidebarDial.railColumn.selectedTileFill"
 
+    // MARK: Exploration (`explore/expanded-tiles`)
+    /// How the expanded one-view list carries the rail's monogram tiles
+    /// (`ExpandedTileStyle`).
+    static let expandedTileStyleKey = "ghostties.sidebarDial.expandedTileStyle"
+
     /// Bumped every time the panel writes any key (`SidebarDialKitCoordinator
     /// .write`) — read by `RecentsRowView`'s `Equatable` conformance so a live
     /// dial change actually invalidates rows whose OWN stored properties
@@ -403,6 +408,19 @@ enum SidebarDialTuning {
         double(railSelectedTileFillKey, default: RailProjectColumn.defaultSelectedTileFill, defaults: defaults)
     }
 
+    /// See `expandedTileStyleKey`. A fixture capture can pick one at launch
+    /// (`GHOSTTIES_CAPTURE_EXPANDED_TILES`) without writing any defaults; a
+    /// `-ghostties.sidebarDial.expandedTileStyle gutter` launch argument
+    /// works too.
+    static func expandedTileStyle(defaults: UserDefaults = SidebarDialTuning.store) -> ExpandedTileStyle {
+        #if DEBUG
+        if let raw = CaptureFixture.expandedTilesOverride, let style = ExpandedTileStyle(rawValue: raw) {
+            return style
+        }
+        #endif
+        return choice(expandedTileStyleKey, default: ExpandedTileStyle.shipped, defaults: defaults)
+    }
+
     /// Every storage key this panel owns — used by `resetSidebar()` to clear
     /// back to code defaults in one pass, same shape as
     /// `ComposerSingleLineReset.resetKeys`.
@@ -417,7 +435,7 @@ enum SidebarDialTuning {
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         historyInSidebarKey, railExtraWidthKey, projectsLayoutKey,
         railColumnTintOpacityKey, railColumnInsetKey, railChipCornerRadiusKey,
-        railChipSizeOffsetKey, railSelectedTileFillKey
+        railChipSizeOffsetKey, railSelectedTileFillKey, expandedTileStyleKey
     ]
 
     static func reset(defaults: UserDefaults = SidebarDialTuning.store) {
@@ -562,6 +580,8 @@ struct SidebarDialKitTuningModel: Codable, Equatable {
     var railChipCornerRadius: Double
     var railChipSizeOffset: Double
     var railSelectedTileFill: Double
+
+    var expandedTileStyle: String
 }
 
 @available(macOS 14, *)
@@ -653,7 +673,8 @@ final class SidebarDialKitCoordinator: ObservableObject {
             railColumnInset: Double(SidebarDialTuning.railColumnInset(defaults: defaults)),
             railChipCornerRadius: Double(SidebarDialTuning.railChipCornerRadius(defaults: defaults)),
             railChipSizeOffset: Double(SidebarDialTuning.railChipSizeOffset(defaults: defaults)),
-            railSelectedTileFill: SidebarDialTuning.railSelectedTileFill(defaults: defaults)
+            railSelectedTileFill: SidebarDialTuning.railSelectedTileFill(defaults: defaults),
+            expandedTileStyle: SidebarDialTuning.expandedTileStyle(defaults: defaults).rawValue
         )
     }
 
@@ -737,6 +758,7 @@ final class SidebarDialKitCoordinator: ObservableObject {
         setIfChanged(SidebarDialTuning.railChipCornerRadiusKey, previous.railChipCornerRadius, model.railChipCornerRadius)
         setIfChanged(SidebarDialTuning.railChipSizeOffsetKey, previous.railChipSizeOffset, model.railChipSizeOffset)
         setIfChanged(SidebarDialTuning.railSelectedTileFillKey, previous.railSelectedTileFill, model.railSelectedTileFill)
+        setStringIfChanged(SidebarDialTuning.expandedTileStyleKey, previous.expandedTileStyle, model.expandedTileStyle)
         // Any write at all is a tuning change a row's `.equatable()` gate
         // can't see on its own — see `SidebarDialTuning.epochKey`'s doc
         // comment.
@@ -824,6 +846,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
         .toggle("historyInSidebar", keyPath: \.historyInSidebar, label: "History in sidebar"),
         .select("projectsLayout", keyPath: \.projectsLayout, label: "Projects layout",
                 options: SidebarProjectsLayout.allCases.map(\.rawValue)),
+        // Exploration: the rail's tiles in the expanded one-view list.
+        .select("expandedTileStyle", keyPath: \.expandedTileStyle, label: "Expanded tiles",
+                options: ExpandedTileStyle.allCases.map(\.rawValue)),
         // Rail
         .slider("railExtraWidth", keyPath: \.railExtraWidth, label: "Rail extra width", range: 0...60, unit: "pt"),
         // One view's selected project column (`RailProjectColumn`).

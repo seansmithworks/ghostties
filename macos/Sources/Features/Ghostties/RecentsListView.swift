@@ -210,6 +210,15 @@ struct RecentsListView: View {
                 slotContent(slot, sections)
             }
         }
+        // Exploration (`ExpandedTileStyle`): A draws the rail's project
+        // column in its gutter; C widens it to the group card. Both are
+        // empty (no anchors) in every other style.
+        .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
+            RailGroupColumn(anchors: anchors)
+        }
+        .backgroundPreferenceValue(ExpandedGroupCardKey.self) { anchors in
+            ExpandedGroupCard(anchors: anchors)
+        }
     }
 
     /// One slot of the section layout (`SidebarSessionSections.Slot`), the
@@ -301,6 +310,12 @@ struct RecentsListView: View {
         let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
         let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
         let gapBeforeId = groupedGapTarget(active)
+        let tileStyle = SidebarDialTuning.expandedTileStyle()
+        let monograms = Dictionary(
+            zip(groups.map(\.id), ProjectMonogram.monograms(for: groups.map(\.name))),
+            uniquingKeysWith: { first, _ in first }
+        )
+        let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
         ForEach(items) { item in
             switch item {
             case .spacer:
@@ -308,19 +323,35 @@ struct RecentsListView: View {
                     .frame(height: SidebarProjectGroupItem.spacerHeight)
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
-                ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed, isEmpty: group.isEmpty) {
+                let onToggle = {
                     ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
                         ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
                     }
                 }
-            case .row(let session, _):
+                if tileStyle == .current {
+                    ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed, isEmpty: group.isEmpty, onToggle: onToggle)
+                } else {
+                    ExpandedTileHeader(
+                        style: tileStyle,
+                        name: group.name,
+                        monogram: monograms[group.id] ?? "?",
+                        count: group.sessions.count,
+                        isCollapsed: isCollapsed,
+                        isEmpty: group.isEmpty,
+                        isSelectedProject: group.id == selectedGroupId,
+                        onToggle: onToggle
+                    )
+                }
+            case .row(let session, let group):
                 if session.id != dragState.draggingSessionId {
                     if gapBeforeId == .some(session.id) {
                         SessionDragGapView()
                     }
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle
+                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
+                        tileStyle: tileStyle,
+                        isInSelectedGroup: group.id == selectedGroupId
                     )
                 }
             }
@@ -606,7 +637,10 @@ struct RecentsListView: View {
 
     // MARK: - Session Row
 
-    private func sessionRow(for session: AgentSession, section: SessionSection, sectionList: [AgentSession], subtitle: String? = nil) -> some View {
+    private func sessionRow(
+        for session: AgentSession, section: SessionSection, sectionList: [AgentSession], subtitle: String? = nil,
+        tileStyle: ExpandedTileStyle = .current, isInSelectedGroup: Bool = false
+    ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
@@ -632,7 +666,9 @@ struct RecentsListView: View {
             onCommitRename: { commitRename(session: session) },
             onCancelRename: { cancelRename() },
             staggerIndex: indexInSection ?? 0,
-            dialEpoch: SidebarDialTuning.epoch()
+            dialEpoch: SidebarDialTuning.epoch(),
+            tileStyle: tileStyle,
+            isInSelectedGroup: isInSelectedGroup
         )
         .equatable()
         .contextMenu {

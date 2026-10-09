@@ -228,14 +228,14 @@ enum RailProjectColumn {
 }
 
 /// The bounds of every item in the selected project's group.
-private struct RailGroupColumnKey: PreferenceKey {
+struct RailGroupColumnKey: PreferenceKey {
     static var defaultValue: [Anchor<CGRect>] = []
     static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
         value += nextValue()
     }
 }
 
-private extension View {
+extension View {
     @ViewBuilder
     func railGroupColumn(_ isInColumn: Bool) -> some View {
         if isInColumn {
@@ -248,7 +248,7 @@ private extension View {
 
 /// The project column: one rounded, faintly tinted rect spanning the
 /// selected group's tile and rows, tile-width plus `columnInset`.
-private struct RailGroupColumn: View {
+struct RailGroupColumn: View {
     /// Re-renders on every dial write; the body reads the Rail column dials.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     let anchors: [Anchor<CGRect>]

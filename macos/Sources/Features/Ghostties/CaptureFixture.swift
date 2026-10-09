@@ -515,6 +515,9 @@ enum CaptureFixture {
     /// `SidebarAppearancePreview`, so a capture can show either glass set
     /// regardless of the terminal theme.
     static var appearancePreview: String? { env("GHOSTTIES_CAPTURE_APPEARANCE") }
+    /// `GHOSTTIES_CAPTURE_EXPANDED_TILES=<ExpandedTileStyle raw value>`: the
+    /// expanded list's tile treatment for this launch, overriding the dial.
+    static var expandedTilesOverride: String? { env("GHOSTTIES_CAPTURE_EXPANDED_TILES") }
 
     /// Each hook fires once per process. The views that host them re-appear
     /// (a rail/pinned toggle remounts the sidebar), and a second firing would

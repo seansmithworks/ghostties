@@ -58,6 +58,12 @@ struct RecentsRowView: View, Equatable {
     /// every Release build, where the key is never written) is unaffected.
     var dialEpoch: Int = 0
 
+    /// Exploration (`ExpandedTileStyle`): A and C draw the glyph in a
+    /// leading slot under the project's tile instead of trailing.
+    var tileStyle: ExpandedTileStyle = .current
+    /// This row's project holds the selected session (the rail's column).
+    var isInSelectedGroup: Bool = false
+
     @EnvironmentObject private var coordinator: SessionCoordinator
 
     /// Every field that affects rendered output. Deliberately excludes
@@ -74,9 +80,51 @@ struct RecentsRowView: View, Equatable {
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
             && lhs.dialEpoch == rhs.dialEpoch
+            && lhs.tileStyle == rhs.tileStyle
+            && lhs.isInSelectedGroup == rhs.isInSelectedGroup
     }
 
     var body: some View {
+        Group {
+            if tileStyle.hasLeadingGlyph {
+                ExpandedTileRow(
+                    style: tileStyle,
+                    kind: indicatorState.statusGlyphKind,
+                    subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
+                    isActive: isActive,
+                    isInSelectedGroup: isInSelectedGroup
+                ) {
+                    titleView
+                }
+            } else {
+                chromeRow
+            }
+        }
+        .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
+        .onTapGesture {
+            guard !isEditing else { return }
+            onTap()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
+    @ViewBuilder
+    private var titleView: some View {
+        if isEditing {
+            TextField("Session name", text: $editingName)
+                .font(.system(size: SidebarDialTuning.rowTitleSize()))
+                .textFieldStyle(.plain)
+                .focused(isRenameFocused)
+                .onSubmit { onCommitRename() }
+                .onExitCommand { onCancelRename() }
+        } else {
+            SidebarListRowTitle(text: session.name, isActive: isActive)
+        }
+    }
+
+    private var chromeRow: some View {
         // The row's visuals (layout, padding, height, selected surface,
         // hover, Flow 05 label choreography) live in `SidebarListRowChrome`,
         // shared with the History row so the two can never drift.
@@ -120,14 +168,6 @@ struct RecentsRowView: View, Equatable {
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
-        .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
-        .onTapGesture {
-            guard !isEditing else { return }
-            onTap()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 
     // MARK: - Accessibility
