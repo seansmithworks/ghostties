@@ -251,33 +251,37 @@ struct ProjectAccordionHeader: View {
 
     var body: some View {
         let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
-        Button(action: onToggle) {
-            HStack(spacing: 0) {
-                Text(name.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.5)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                    .frame(width: 14)
-                    .padding(.leading, 4)
-                    .opacity(isEmpty ? 0 : 1)
-                Spacer(minLength: 8)
-                Text("\(count)")
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
-            }
-            .foregroundStyle(ink)
-            .padding(.leading, SidebarDialTuning.rowLeadingPadding())
-            .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-            .frame(height: Self.height)
-            .contentShape(Rectangle())
+        // A tap gesture, not a `Button`: the header is also the project's
+        // drag handle (`RecentsListView.groupedActiveRows`), and a macOS
+        // `Button` takes the mouse-down that `.onDrag` needs — the session
+        // rows tap the same way. VoiceOver keeps the button trait and gets
+        // the click as the default action.
+        HStack(spacing: 0) {
+            Text(name.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .bold))
+                .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                .frame(width: 14)
+                .padding(.leading, 4)
+                .opacity(isEmpty ? 0 : 1)
+            Spacer(minLength: 8)
+            Text("\(count)")
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(ink)
+        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+        .frame(height: Self.height)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
         .accessibilityElement(children: .ignore)
+        .accessibilityAction(.default, onToggle)
         .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])

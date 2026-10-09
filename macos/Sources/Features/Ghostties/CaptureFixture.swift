@@ -276,7 +276,18 @@ enum CaptureFixture {
         if let mode = initialSidebarMode {
             store.updateSidebarMode(mode)
         }
+        // Listed projects first, in the given order, through the same
+        // `moveProject` a header drop calls; the rest keep their order.
+        for name in projectOrder(ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_PROJECT_ORDER"]).reversed() {
+            guard let id = store.projects.first(where: { $0.name == name })?.id else { continue }
+            store.moveProject(id: id, before: store.projects.first?.id)
+        }
         return store
+    }
+
+    /// `GHOSTTIES_CAPTURE_PROJECT_ORDER`: comma-separated project names.
+    static func projectOrder(_ raw: String?) -> [String] {
+        (raw ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     // MARK: - Coordinator seeding (D2)

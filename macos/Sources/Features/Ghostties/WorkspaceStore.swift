@@ -785,6 +785,25 @@ final class WorkspaceStore: ObservableObject {
         persist()
     }
 
+    /// Reposition a project so it sits immediately BEFORE `beforeId` — or
+    /// last, if `beforeId` is nil or not found. `projects` order is the
+    /// one-view list's group order and the rail's tile order
+    /// (`SidebarProjectGroup.make`), and it is persisted as-is, so this is
+    /// the whole reorder. `beforeId` is resolved after the moved project is
+    /// removed, the same rule as `moveSessionInSessionsView`. The tabs
+    /// layout's Projects list sorts alphabetically within its sections and
+    /// is unaffected.
+    func moveProject(id: UUID, before beforeId: UUID?) {
+        guard id != beforeId, let from = projects.firstIndex(where: { $0.id == id }) else { return }
+        var reordered = projects
+        let moved = reordered.remove(at: from)
+        let to = beforeId.flatMap { target in reordered.firstIndex(where: { $0.id == target }) } ?? reordered.count
+        reordered.insert(moved, at: to)
+        guard reordered.map(\.id) != projects.map(\.id) else { return }
+        projects = reordered
+        persist()
+    }
+
     func togglePin(id: UUID) {
         guard let index = projects.firstIndex(where: { $0.id == id }) else { return }
         projects[index].isPinned.toggle()
