@@ -211,6 +211,24 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         }
     }
 
+    /// The focused panels own disjoint keys, all inside `allKeys` ("Reset
+    /// all panels"), and each panel's Reset clears its own keys only.
+    func testFocusedPanelsOwnDisjointKeysAndResetOnlyTheirOwn() {
+        let rail = Set(SidebarDialTuning.railKeys), list = Set(SidebarDialTuning.sidebarListKeys)
+        XCTAssertTrue(rail.isDisjoint(with: list))
+        XCTAssertTrue(rail.isSubset(of: SidebarDialTuning.allKeys))
+        XCTAssertTrue(list.isSubset(of: SidebarDialTuning.allKeys))
+        XCTAssertTrue(list.isSuperset(of: [SidebarDialTuning.rowHeightKey, SidebarDialTuning.trayWidthKey, SidebarDialTuning.contentPaddingLeadingKey]))
+        let name = "com.seansmithdesign.ghostties.tests.focused-panel-reset"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        defer { d.removePersistentDomain(forName: name) }
+        for key in rail.union(list) { d.set(3.0, forKey: key) }
+        SidebarDialTuning.reset(keys: SidebarDialTuning.sidebarListKeys, defaults: d)
+        for key in list { XCTAssertNil(d.object(forKey: key), key) }
+        for key in rail { XCTAssertNotNil(d.object(forKey: key), key) }
+    }
+
     /// Each stored dial moves the value `RailProjectColumn` reports, and the
     /// chip never outgrows its row.
     func testRailColumnDialsDriveTheColumn() {
