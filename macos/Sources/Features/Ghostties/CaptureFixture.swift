@@ -553,6 +553,19 @@ enum CaptureFixture {
     /// `SidebarAppearancePreview`, so a capture can show either glass set
     /// regardless of the terminal theme.
     static var appearancePreview: String? { env("GHOSTTIES_CAPTURE_APPEARANCE") }
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_TAB=projects|sessions`: the sidebar tab
+    /// for this launch. Set in the process's volatile argument domain, which
+    /// outranks the persistent one and is never written to disk, so the
+    /// capture shows the tab without touching the Dev app's saved tab.
+    static func applySidebarTabOverride() {
+        guard isActive, let raw = env("GHOSTTIES_CAPTURE_SIDEBAR_TAB"),
+              let tab = SidebarTab(rawValue: raw) else { return }
+        var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        arguments["ghostties.sidebarTab"] = tab.rawValue
+        // Setting a volatile domain that already exists raises; replace it.
+        UserDefaults.standard.removeVolatileDomain(forName: UserDefaults.argumentDomain)
+        UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+    }
 
     /// Each hook fires once per process. The views that host them re-appear
     /// (a rail/pinned toggle remounts the sidebar), and a second firing would

@@ -286,6 +286,7 @@ class AppDelegate: NSObject,
         applicationLaunchTime = ProcessInfo.processInfo.systemUptime
 
         #if DEBUG
+        CaptureFixture.applySidebarTabOverride()
         // A background capture never activates, so the first window can't
         // wait for `applicationDidBecomeActive` (`CaptureFixture.staysInBackground`).
         if CaptureFixture.staysInBackground {
