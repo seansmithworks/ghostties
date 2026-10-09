@@ -182,6 +182,7 @@ struct SidebarRailView: View {
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
                 RailProjectTile(
+                    redlineID: RedlineID.railTile(group.id),
                     name: group.name,
                     monogram: monograms[group.id] ?? "?",
                     count: group.sessions.count,
@@ -382,6 +383,7 @@ private struct RailGroupColumn: View {
                 RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
                     .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
                     .frame(width: width, height: extent.upperBound - extent.lowerBound)
+                    .redlineFrame(RedlineID.railColumn)
                     .position(x: union.midX, y: (extent.lowerBound + extent.upperBound) / 2)
             }
         }
@@ -422,6 +424,7 @@ struct ExpandedGroupCard: View {
                 RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
                     .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
                     .frame(width: max(0, union.width + outset * 2), height: extent.upperBound - extent.lowerBound)
+                    .redlineFrame(RedlineID.groupCard)
                     .position(x: union.midX, y: (extent.lowerBound + extent.upperBound) / 2)
             }
         }
@@ -436,6 +439,8 @@ struct ExpandedGroupCard: View {
 struct SidebarRowChipBackground: View {
     let isActive: Bool
     let isHovered: Bool
+    /// DEBUG Redlines tag for the chip's frame.
+    var redlineID: String? = nil
 
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
     @Environment(\.colorScheme) private var colorScheme
@@ -449,6 +454,7 @@ struct SidebarRowChipBackground: View {
         RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
             .fill(fill)
             .frame(width: RailProjectColumn.chipSize, height: RailProjectColumn.chipSize)
+            .redlineFrame(redlineID)
     }
 }
 
@@ -496,7 +502,7 @@ struct RailSessionRow: View {
                 .frame(width: glyphSize, height: glyphSize)
                 .background {
                     if inProjectColumn {
-                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered)
+                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered, redlineID: RedlineID.railChip(sessionId))
                     }
                 }
                 .frame(maxWidth: .infinity)

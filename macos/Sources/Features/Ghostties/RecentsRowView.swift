@@ -253,7 +253,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                 .frame(width: Self.glyphSlotWidth)
                 .background {
                     if selection == .chip {
-                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered)
+                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
                     }
                 }
                 .redlineFrame(redlineID + ".glyph")
@@ -267,6 +267,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
             }
+            .redlineFrame(redlineID + ".label")
             .opacity(labelOpacity)
             .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
 

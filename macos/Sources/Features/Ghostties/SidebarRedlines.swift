@@ -25,8 +25,23 @@ enum RedlineID {
     static let trayGroup = "tray.group"
     /// One tray capsule (its glass); its content is `<id>.content`.
     static func trayPill(_ group: String) -> String { "tray.pill.\(group)" }
-    /// One session row, after its own padding; its content is `<id>.content`.
+    /// One session row, after its own padding; its content is `<id>.content`,
+    /// its glyph slot `<id>.glyph`, its title and subtitle `<id>.label`, and a
+    /// grouped row's chip `<id>.chip`.
     static func row(_ id: UUID) -> String { "row.\(id.uuidString)" }
+    /// The expanded list's selected group card (`ExpandedGroupCard`).
+    static let groupCard = "group.card"
+    /// The rail's project column (`RailGroupColumn`).
+    static let railColumn = "rail.column"
+    /// A one-view project header; its tile is `<id>.tile`, its name
+    /// `<id>.label`, its chevron frame `<id>.chevron`.
+    static func header(_ groupId: String) -> String { "header.\(groupId)" }
+    /// A project's monogram tile on the rail.
+    static func railTile(_ groupId: String) -> String { "rail.tile.\(groupId)" }
+    /// A grouped rail row's chip.
+    static func railChip(_ id: UUID) -> String { "rail.chip.\(id.uuidString)" }
+    /// One tray button's cell; its hover chip is `<id>.chip`.
+    static func trayCell(_ itemId: String) -> String { "tray.cell.\(itemId)" }
 }
 
 extension View {
@@ -214,6 +229,8 @@ final class RedlineOverlayView: NSView {
             appendColumnBands(rects, sidebar: sidebar, nextSurfaceX: nextSurfaceX, into: &bands)
             appendTrayBands(rects, sidebar: sidebar, nextSurfaceX: nextSurfaceX, into: &bands)
             appendRowBands(rects, into: &bands)
+            appendGroupBands(rects, into: &bands)
+            appendHeaderBands(rects, into: &bands)
         }
 
         for band in bands where band.kind == .margin { fill(band) }
@@ -266,28 +283,104 @@ final class RedlineOverlayView: NSView {
         }
         // Group gap between consecutive capsules, along whichever axis they stack.
         for (a, b) in zip(pills, pills.dropFirst()) {
-            let first = a.0, second = b.0
-            if abs(first.midY - second.midY) < abs(first.midX - second.midX) {
-                let y = max(first.minY, second.minY), h = min(first.maxY, second.maxY) - y
-                bands.append(Band(rect: CGRect(x: first.maxX, y: y, width: second.minX - first.maxX, height: h), kind: .margin, horizontal: true))
-            } else {
-                let x = max(first.minX, second.minX), w = min(first.maxX, second.maxX) - x
-                bands.append(Band(rect: CGRect(x: x, y: first.maxY, width: w, height: second.minY - first.maxY), kind: .margin, horizontal: false))
+            bands.append(gapBand(a.0, b.0, kind: .margin))
+        }
+
+        // Each capsule's button cells: the gap between neighbours, and every
+        // cell's hover chip inset (cell edge to chip edge), drawn whether or
+        // not the cell is hovered. The chip's four insets are labelled on
+        // the first cell of each capsule only, so labels never pile up on
+        // the narrow gap between cells.
+        let cells = rects.compactMap { key, cell -> (CGRect, CGRect)? in
+            guard key.hasPrefix("tray.cell."), !key.hasSuffix(".chip"), let chip = rects[key + ".chip"] else { return nil }
+            return (cell, chip)
+        }
+        for (pill, _) in pills {
+            let inPill = cells
+                .filter { pill.insetBy(dx: -0.5, dy: -0.5).contains(CGPoint(x: $0.0.midX, y: $0.0.midY)) }
+                .sorted { ($0.0.minX, $0.0.minY) < ($1.0.minX, $1.0.minY) }
+            for (a, b) in zip(inPill, inPill.dropFirst()) {
+                bands.append(gapBand(a.0, b.0, kind: .margin, showsZero: true))
+            }
+            for (index, (cell, chip)) in inPill.enumerated() {
+                appendInsetBands(outer: cell, inner: chip, kind: .padding, labelled: index == 0, into: &bands)
             }
         }
     }
 
-    /// Row leading/trailing padding for the first row fully inside the list's viewport.
+    /// The selected project's group card (expanded) and the rail's project
+    /// column: the four gaps from the box's edge to the union of the tile
+    /// and the chips inside it.
+    private func appendGroupBands(_ rects: [String: CGRect], into bands: inout [Band]) {
+        if let card = rects[RedlineID.groupCard] {
+            let marks = rects.filter { key, _ in
+                (key.hasPrefix("header.") && key.hasSuffix(".tile")) || (key.hasPrefix("row.") && key.hasSuffix(".chip"))
+            }
+            appendEnclosureBands(card, marks: Array(marks.values), into: &bands)
+        }
+        if let column = rects[RedlineID.railColumn] {
+            let marks = rects.filter { key, _ in key.hasPrefix("rail.tile.") || key.hasPrefix("rail.chip.") }
+            appendEnclosureBands(column, marks: Array(marks.values), into: &bands)
+        }
+    }
+
+    private func appendEnclosureBands(_ box: CGRect, marks: [CGRect], into bands: inout [Band]) {
+        guard let union = marks.filter({ $0.intersects(box) }).reduce(nil as CGRect?, { $0?.union($1) ?? $1 }) else { return }
+        appendInsetBands(outer: box, inner: union, kind: .padding, labelled: true, into: &bands)
+    }
+
+    /// The first project header fully inside the list's viewport: its tile
+    /// to name gap, and its chevron's frame width.
+    private func appendHeaderBands(_ rects: [String: CGRect], into bands: inout [Band]) {
+        let viewport = rects[RedlineID.listViewport]
+        let headers = rects.compactMap { key, tile -> (String, CGRect)? in
+            guard key.hasPrefix("header."), key.hasSuffix(".tile") else { return nil }
+            if let viewport, tile.minY < viewport.minY - 0.5 || tile.maxY > viewport.maxY + 0.5 { return nil }
+            return (String(key.dropLast(".tile".count)), tile)
+        }
+        guard let (header, tile) = headers.min(by: { $0.1.minY < $1.1.minY }) else { return }
+        if let label = rects[header + ".label"] {
+            bands.append(Band(rect: CGRect(x: tile.maxX, y: tile.minY, width: label.minX - tile.maxX, height: tile.height), kind: .margin, horizontal: true))
+        }
+        if let chevron = rects[header + ".chevron"] {
+            bands.append(Band(rect: CGRect(x: chevron.minX, y: tile.minY, width: chevron.width, height: tile.height), kind: .padding, horizontal: true))
+        }
+    }
+
+    /// The four bands between `outer`'s edges and `inner`'s.
+    private func appendInsetBands(outer: CGRect, inner: CGRect, kind: Kind, labelled: Bool, into bands: inout [Band]) {
+        bands.append(Band(rect: CGRect(x: inner.minX, y: outer.minY, width: inner.width, height: inner.minY - outer.minY), kind: kind, horizontal: false, labelled: labelled))
+        bands.append(Band(rect: CGRect(x: inner.minX, y: inner.maxY, width: inner.width, height: outer.maxY - inner.maxY), kind: kind, horizontal: false, labelled: labelled))
+        bands.append(Band(rect: CGRect(x: outer.minX, y: inner.minY, width: inner.minX - outer.minX, height: inner.height), kind: kind, horizontal: true, labelled: labelled))
+        bands.append(Band(rect: CGRect(x: inner.maxX, y: inner.minY, width: outer.maxX - inner.maxX, height: inner.height), kind: kind, horizontal: true, labelled: labelled))
+    }
+
+    /// The gap between two boxes, along whichever axis they sit apart on.
+    private func gapBand(_ first: CGRect, _ second: CGRect, kind: Kind, showsZero: Bool = false) -> Band {
+        if abs(first.midY - second.midY) < abs(first.midX - second.midX) {
+            let y = max(first.minY, second.minY), h = min(first.maxY, second.maxY) - y
+            return Band(rect: CGRect(x: first.maxX, y: y, width: second.minX - first.maxX, height: h), kind: kind, horizontal: true, showsZero: showsZero)
+        } else {
+            let x = max(first.minX, second.minX), w = min(first.maxX, second.maxX) - x
+            return Band(rect: CGRect(x: x, y: first.maxY, width: w, height: second.minY - first.maxY), kind: kind, horizontal: false, showsZero: showsZero)
+        }
+    }
+
+    /// Row leading/trailing padding, and the glyph slot to title gap, for
+    /// the first row fully inside the list's viewport.
     private func appendRowBands(_ rects: [String: CGRect], into bands: inout [Band]) {
         let viewport = rects[RedlineID.listViewport]
-        let rows = rects.compactMap { key, outer -> (CGRect, CGRect)? in
+        let rows = rects.compactMap { key, outer -> (String, CGRect, CGRect)? in
             guard key.hasPrefix("row."), !key.hasSuffix(".content"), let content = rects[key + ".content"] else { return nil }
             if let viewport, outer.minY < viewport.minY - 0.5 || outer.maxY > viewport.maxY + 0.5 { return nil }
-            return (outer, content)
+            return (key, outer, content)
         }
-        guard let (outer, content) = rows.min(by: { $0.0.minY < $1.0.minY }) else { return }
+        guard let (row, outer, content) = rows.min(by: { $0.1.minY < $1.1.minY }) else { return }
         bands.append(Band(rect: CGRect(x: outer.minX, y: outer.minY, width: content.minX - outer.minX, height: outer.height), kind: .padding, horizontal: true))
         bands.append(Band(rect: CGRect(x: content.maxX, y: outer.minY, width: outer.maxX - content.maxX, height: outer.height), kind: .padding, horizontal: true))
+        if let glyph = rects[row + ".glyph"], let label = rects[row + ".label"] {
+            bands.append(Band(rect: CGRect(x: glyph.maxX, y: label.minY, width: label.minX - glyph.maxX, height: label.height), kind: .margin, horizontal: true))
+        }
     }
 
     private static let marginColor = NSColor(srgbRed: 1.0, green: 0.18, blue: 0.55, alpha: 0.38)

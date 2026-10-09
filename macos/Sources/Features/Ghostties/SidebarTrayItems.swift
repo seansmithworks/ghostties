@@ -884,12 +884,14 @@ struct TrayIconButton: View {
                     minHeight: height,
                     maxHeight: height
                 )
+                .redlineFrame(itemId.map(RedlineID.trayCell))
                 .background {
                     GeometryReader { proxy in
                         let chip = TrayGlassStyle.hoverChip(cell: CGRect(origin: .zero, size: proxy.size))
                         RoundedRectangle(cornerRadius: chip.cornerRadius, style: .continuous)
                             .fill(showsHover ? Color.primary.opacity(0.10) : .clear)
                             .frame(width: chip.frame.width, height: chip.frame.height)
+                            .redlineFrame(itemId.map { RedlineID.trayCell($0) + ".chip" })
                             .offset(x: chip.frame.minX, y: chip.frame.minY)
                     }
                 }

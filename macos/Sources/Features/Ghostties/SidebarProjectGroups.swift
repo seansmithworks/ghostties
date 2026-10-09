@@ -281,6 +281,8 @@ struct ProjectAccordionHeader: View {
     /// The project holds the selected session: its tile fills with ink,
     /// as on the rail.
     var isSelectedProject: Bool = false
+    /// DEBUG Redlines tag (`RedlineID.header`).
+    var redlineID: String? = nil
     let onToggle: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -302,17 +304,20 @@ struct ProjectAccordionHeader: View {
                 isEmpty: isEmpty,
                 isSelectedProject: isSelectedProject
             )
+            .redlineFrame(redlineID.map { $0 + ".tile" })
             .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
             Text(name.uppercased())
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.5)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .redlineFrame(redlineID.map { $0 + ".label" })
                 .layoutPriority(1)
             Image(systemName: "chevron.down")
                 .font(.system(size: 9, weight: .bold))
                 .rotationEffect(.degrees(isCollapsed ? -90 : 0))
                 .frame(width: 18)
+                .redlineFrame(redlineID.map { $0 + ".chevron" })
                 .padding(.leading, 4)
                 .opacity(isEmpty ? 0 : 1)
             Spacer(minLength: 8)
@@ -406,6 +411,9 @@ struct RailProjectTile: View {
     /// The tile's tint in light (option D `#28221E1A`; was 7.5%).
     static let tintOpacity: Double = 0.10
 
+    /// DEBUG Redlines tag for the tile face (`RedlineID.railTile`).
+    var redlineID: String? = nil
+
     let name: String
     let monogram: String
     let count: Int
@@ -430,6 +438,7 @@ struct RailProjectTile: View {
     var body: some View {
         Button(action: onToggle) {
             ProjectMonogramTileFace(monogram: monogram, isEmpty: isEmpty, isSelectedProject: isSelectedProject)
+                .redlineFrame(redlineID)
                 .overlay(alignment: .topTrailing) {
                     if isCollapsed {
                         Text("\(count)")

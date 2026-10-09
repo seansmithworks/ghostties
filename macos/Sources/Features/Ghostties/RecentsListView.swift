@@ -402,7 +402,8 @@ struct RecentsListView: View {
     ) -> some View {
         let header = ProjectAccordionHeader(
             name: group.name, monogram: monogram, count: group.sessions.count,
-            isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject
+            isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
+            redlineID: RedlineID.header(group.id)
         ) {
             ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
                 ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
