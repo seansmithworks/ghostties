@@ -233,6 +233,23 @@ enum ProjectMonogram {
 
 // MARK: - Expanded header
 
+/// Space and Return fold the focused header. `onKeyPress` is macOS 14+; on 13
+/// the header is still a focus stop but the keys do nothing.
+private struct ToggleKeyActivation: ViewModifier {
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(macOS 14, *) {
+            content.onKeyPress(keys: [.space, .return]) { _ in
+                action()
+                return .handled
+            }
+        } else {
+            content
+        }
+    }
+}
+
 /// A project's accordion header in the one-view list:
 /// `NAME ⌄ ———— count`. Clicking it folds or unfolds the project's rows.
 /// An empty project's header is dimmed, has no chevron (nothing to fold),
@@ -248,6 +265,7 @@ struct ProjectAccordionHeader: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
@@ -280,6 +298,20 @@ struct ProjectAccordionHeader: View {
         .frame(height: Self.height)
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
+        // Keyboard: a tap gesture isn't a focus stop the way a `Button` is,
+        // so the header opts in and folds on Space / Return (macOS 14+, as
+        // the task rows do). The leading rule matches their focus mark.
+        .focusable()
+        .focused($isFocused)
+        .overlay(alignment: .leading) {
+            if isFocused {
+                Rectangle()
+                    .fill(Color.white.opacity(0.55))
+                    .frame(width: 1)
+                    .allowsHitTesting(false)
+            }
+        }
+        .modifier(ToggleKeyActivation(action: onToggle))
         .accessibilityElement(children: .ignore)
         .accessibilityAction(.default, onToggle)
         .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
