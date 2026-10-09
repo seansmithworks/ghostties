@@ -293,7 +293,9 @@ struct RecentsListView: View {
         ForEach(rowSlots(for: list, section: section)) { slot in
             switch slot.kind {
             case .session(let session):
-                sessionRow(for: session, section: section, sectionList: list)
+                // Exploration: the Sessions tab's flat list takes A/C's
+                // leading glyph too; the project stays the subtitle.
+                sessionRow(for: session, section: section, sectionList: list, tileStyle: SidebarDialTuning.expandedTileStyle(), isGrouped: false)
             case .gap:
                 SessionDragGapView()
             }
@@ -639,7 +641,7 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession], subtitle: String? = nil,
-        tileStyle: ExpandedTileStyle = .current, isInSelectedGroup: Bool = false
+        tileStyle: ExpandedTileStyle = .current, isInSelectedGroup: Bool = false, isGrouped: Bool = true
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
@@ -668,7 +670,8 @@ struct RecentsListView: View {
             staggerIndex: indexInSection ?? 0,
             dialEpoch: SidebarDialTuning.epoch(),
             tileStyle: tileStyle,
-            isInSelectedGroup: isInSelectedGroup
+            isInSelectedGroup: isInSelectedGroup,
+            isGrouped: isGrouped
         )
         .equatable()
         .contextMenu {

@@ -63,6 +63,8 @@ struct RecentsRowView: View, Equatable {
     var tileStyle: ExpandedTileStyle = .current
     /// This row's project holds the selected session (the rail's column).
     var isInSelectedGroup: Bool = false
+    /// False for the Sessions tab's flat list (`ExpandedTileRow.isGrouped`).
+    var isGrouped: Bool = true
 
     @EnvironmentObject private var coordinator: SessionCoordinator
 
@@ -82,6 +84,7 @@ struct RecentsRowView: View, Equatable {
             && lhs.dialEpoch == rhs.dialEpoch
             && lhs.tileStyle == rhs.tileStyle
             && lhs.isInSelectedGroup == rhs.isInSelectedGroup
+            && lhs.isGrouped == rhs.isGrouped
     }
 
     var body: some View {
@@ -92,7 +95,8 @@ struct RecentsRowView: View, Equatable {
                     kind: indicatorState.statusGlyphKind,
                     subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
                     isActive: isActive,
-                    isInSelectedGroup: isInSelectedGroup
+                    isInSelectedGroup: isInSelectedGroup,
+                    isGrouped: isGrouped
                 ) {
                     titleView
                 }

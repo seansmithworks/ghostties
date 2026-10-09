@@ -175,6 +175,10 @@ struct ExpandedTileRow<Title: View>: View {
     let subtitle: String
     let isActive: Bool
     let isInSelectedGroup: Bool
+    /// False in the Sessions tab's flat list: no tiles there and no project
+    /// column in its rail, so the selected row keeps the wide row card the
+    /// Sessions rail draws (cropped by collapsing) instead of the chip.
+    var isGrouped: Bool = true
     @ViewBuilder let title: () -> Title
 
     @Environment(\.colorScheme) private var colorScheme
@@ -184,11 +188,11 @@ struct ExpandedTileRow<Title: View>: View {
     var body: some View {
         let glyph = SidebarDialTuning.rowGhostSize()
         HStack(spacing: 0) {
-            ExpandedTileSlot(style: style, height: SidebarDialTuning.rowHeight(), isInSelectedColumn: isInSelectedGroup) {
+            ExpandedTileSlot(style: style, height: SidebarDialTuning.rowHeight(), isInSelectedColumn: isGrouped && isInSelectedGroup) {
                 SessionStatusGlyph(kind: kind, size: glyph)
                     .frame(width: glyph, height: glyph)
                     .background {
-                        if isActive || isHovered {
+                        if isGrouped && (isActive || isHovered) {
                             SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: RailProjectColumn.chipCornerRadius)
                                 .frame(width: RailProjectColumn.chipSize, height: RailProjectColumn.chipSize)
                         }
@@ -211,7 +215,7 @@ struct ExpandedTileRow<Title: View>: View {
                 // A: the selected row's card, softer than the chip, runs
                 // from the column's edge to the row's end. Collapsing crops
                 // it away with the labels; the chip stays.
-                if style == .gutter && isActive {
+                if isGrouped && style == .gutter && isActive {
                     RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
                         .fill(Color.primary.opacity(RailProjectColumn.columnTintOpacity))
                         .frame(height: RailProjectColumn.chipSize)
@@ -220,7 +224,12 @@ struct ExpandedTileRow<Title: View>: View {
             }
         }
         .frame(height: SidebarDialTuning.rowHeight())
-        .modifier(ExpandedGroupCardAnchor(isOn: style == .card && isInSelectedGroup))
+        .background {
+            if !isGrouped {
+                SidebarRowCardBackground(isActive: isActive, isHovered: isHovered)
+            }
+        }
+        .modifier(ExpandedGroupCardAnchor(isOn: isGrouped && style == .card && isInSelectedGroup))
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
