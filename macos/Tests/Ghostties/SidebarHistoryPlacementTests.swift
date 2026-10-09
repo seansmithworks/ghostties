@@ -102,6 +102,14 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             })
         }
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        // The list and rail read the sidebar tab from store-less
+        // `@AppStorage` (`.standard`, the Dev app's domain); pin it to the
+        // Projects tab in a private suite so the saved tab can't swap in the
+        // flat Sessions list.
+        let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
+        let tabSuite = try XCTUnwrap(UserDefaults(suiteName: tabSuiteName))
+        defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
+        tabSuite.set(SidebarTab.projects.rawValue, forKey: "ghostties.sidebarTab")
         let root = column
             .frame(width: width, height: height)
             .overlay(alignment: .bottom) {
@@ -111,6 +119,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             .environmentObject(store)
             .environmentObject(coordinator)
             .environmentObject(SidebarWidthModel(width: width))
+            .defaultAppStorage(tabSuite)
             .background(Color(nsColor: chrome))
         let hosting = NSHostingView(rootView: root)
         hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)

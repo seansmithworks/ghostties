@@ -263,7 +263,16 @@ final class SessionRowGlyphSlotTests: XCTestCase {
                     .environmentObject(SidebarWidthModel(width: width))
             )
         }
+        // The list and rail read the sidebar tab from store-less
+        // `@AppStorage` (`.standard`, the Dev app's domain); pin it to the
+        // Projects tab in a private suite so the saved tab can't swap in the
+        // flat Sessions list.
+        let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
+        guard let tabSuite = UserDefaults(suiteName: tabSuiteName) else { return nil }
+        defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
+        tabSuite.set(SidebarTab.projects.rawValue, forKey: "ghostties.sidebarTab")
         let hosting = NSHostingView(rootView: content.frame(width: size.width, height: size.height, alignment: .top)
+            .defaultAppStorage(tabSuite)
             .background(Color(nsColor: appearance == .darkAqua ? .black : .white)))
         hosting.frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
