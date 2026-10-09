@@ -1,5 +1,18 @@
 # Ghostties — Backlog
 
+## 2026-10-09 — Sean's Dev pass round 2 (session b9bd1ac3, "SideBar Tweaks")
+
+State: all pushed to origin. Stack: `feat/sidebar-vnext` (PR #205 head 83780124d) ← `feat/rail-column` @ 95f8d9ce9 (C rail column + Rail column dials, session pinning hidden, dividers removed, rail tray 12pt icon gap, column inset 8, rail scrolls, concentric radius 16−8=8, tray shadow, DialKit panels Sidebar/Rail/Glass & Layout, + merged `feat/project-reorder` drag-reorder project groups w/ header keyboard focus) — each reviewer APPROVE, 342/342 targeted. ← `feat/sidebar-d` @ 4d8234b0a (Sean's pen.dev Option D: leading tiles/glyphs, group card, chips, 48pt rail pills, sidebar 256; NOT reviewed, hosted tests NOT run).
+
+- [ ] Option D: hosted suite + independent review + Sean's Dev look (needs "Reset all panels" in DialKit first). | carried
+- [ ] Corner radius: build uses concentric 8 (window measured 16pt); Sean's spec/D shows 12. DECIDE OR KILL — default stays 8. | carried
+- [ ] Merge stack into PR #205 after Sean OKs D → full `-only-testing:GhosttyTests` on final head → refresh PR body/stills. | carried
+- [ ] Known pre-existing test failure: `GhosttiesTestIsolation` dark glass shadow expects 0.298/8/2.5, code 0.4/12/4 (since 95f8d9ce9). | carried
+- [ ] Rail tiles drag-reorder (expanded headers only today). | parked
+- [ ] Custom character/icon on project tiles; persistent agents (pinning returns with them); idle/sleeping status. | parked
+- [ ] Ghostty "Configuration Errors" dialog appears when a capture passes `-ghostties.sidebarDial.*` launch args. | parked
+- [ ] DialKit inspector lives only in a /private/tmp scratchpad (fd55d575…/dkm-verify/tar/dialkit-macos-cc305b46…); move to ~/Code/_tools. | parked
+
 ## 2026-10-08 — sidebar vnext decisions + overnight wave (session dd3c3085, "SideBar Tweaks")
 
 State: PR #205 open (feat/sidebar-vnext); L1–L5 + bake + cwd-project fix + composer projects/show-more merged. Earlier: `feat/vnext-lock-it` @ `1d786120c` (Tray style, Selected row, Shimmer (dark) dials; reviewed). Options page https://claude.ai/artifact/DpXMtZJsPLdXH2JcrJKWNw; canvas `~/Documents/Pencil.Dev/Sidebar vnext – options 2026-10-08.pen`.
@@ -13,15 +26,15 @@ State: PR #205 open (feat/sidebar-vnext); L1–L5 + bake + cwd-project fix + com
 - [ ] B1 collapsible headers as an alternative if B5 doesn't land. | parked
 - [ ] Bar/Type row styles force semibold; `selectedCardCornerRadius` dial only drives the rail hairline. | parked
 - [ ] Composer path completion: `/` or `~` completes folders on disk; Enter starts a session there (adds project). After beta.26. | parked
-- [ ] Rail overflows at short window heights (One view + expanded rail, ~520–620pt): rail needs a scroll view. | carried
+- [x] Rail overflows at short window heights — rail scrolls between titlebar and tray (`feat/rail-column` bebb3ef6e). | carried
 - [ ] Composer doesn't open locked to a clicked empty project (tray + / Cmd+T pick the project themselves). | parked
 - [ ] Older suites write+restore Dev's defaults domain (CaptureFixtureDefaultsTests, WorkspaceWindowPredicateTests, ComposerFlowTests, WorkspaceStoreProjectPickerTests) — inject a suite instead. | carried
 - [ ] Session project only follows a shell `cd`; while Claude Code runs, Claude's reported cwd isn't wired. | parked
 - [ ] Empty-project header uses tertiaryLabelColor (<4.5:1 in light) — check legibility. | carried
 - [ ] Highlight-steal: a project whose name starts like a template alias (e.g. "cc-site") takes `cc` + Return with the list closed. | parked
 - [ ] VoiceOver: "Show N more" expansion doesn't announce/move focus to new rows. | parked
-- [ ] Rail in One view: the selected session (wide glass card with status glyph) outweighs the project monogram tiles — selected-vs-project hierarchy "not ideal" (Sean). Design pass before beta.26. | carried
-- [ ] CRASH closing the embedded browser in Dev @ 5758e6e13 (2026-10-08 11:42:17): uncaught NSInvalidArgumentException raised inside Chromium Embedded Framework. Log: ~/.ghostties-evidence/vnext/browser-close-crash-2026-10-08-1142.log. Unknown whether new to this branch — repro on main first. | carried
+- [x] Rail selected-vs-project hierarchy — Sean picked C (project column), built on `feat/rail-column`. | carried
+- [ ] CRASH closing the embedded browser in Dev @ 5758e6e13 (2026-10-08 11:42:17): uncaught NSInvalidArgumentException raised inside Chromium Embedded Framework. Log: ~/.ghostties-evidence/vnext/browser-close-crash-2026-10-08-1142.log. Pre-existing on main. FIXED on `fix/cef-app-protocol` @ b552deadb (principal NSApplication conforms to CefAppProtocol; reviewer APPROVE) — awaits Sean's open/close check, then its own PR. | carried
 
 ## 2026-10-06 — beta.26 contract run 1 (session 71606cce): tag still gated
 
