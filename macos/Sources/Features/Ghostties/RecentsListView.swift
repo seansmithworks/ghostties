@@ -26,6 +26,9 @@ struct RecentsListView: View {
     /// on Escape — see `SessionDragState.cancel()` and
     /// `installDragEndMonitors()`.
     @State private var dragState = SessionDragState()
+    /// The one-view project drag (`ProjectDragState`) — same lifecycle as
+    /// `dragState`, and never set at the same time as it.
+    @State private var projectDragState = ProjectDragState()
     @State private var escapeMonitor: Any?
     @State private var mouseUpMonitor: Any?
     @State private var autoScrollTimer: Timer?
@@ -162,7 +165,7 @@ struct RecentsListView: View {
             }
         }
         .background(.clear)
-        .onChange(of: dragState.isDragging) { isDragging in
+        .onChange(of: dragState.isDragging || projectDragState.isDragging) { isDragging in
             if isDragging {
                 installDragEndMonitors()
             } else {
@@ -265,6 +268,7 @@ struct RecentsListView: View {
                 sectionsContent(sections, slots: slots)
                     .modifier(SidebarColumnPadding())
                     .animation(reflowAnimation, value: dragState)
+                    .animation(reflowAnimation, value: projectDragState)
             }
             .accessibilityLabel("Sessions")
             .redlineFrame(RedlineID.listViewport)
@@ -296,11 +300,19 @@ struct RecentsListView: View {
     /// the whole Active list (`sectionList`), so a reorder lands at the
     /// same place in every layout; the live gap shows before the row it
     /// targets, or after the last row for a drop at the end.
+    ///
+    /// A header is also its project's drag handle: the whole group (header
+    /// and rows) leaves the list while in flight, and a group-sized gap
+    /// opens where it would land (`ProjectDragReflow`). Every header and row
+    /// is a project drop target; which drag is live decides what a drop does.
     @ViewBuilder
     private func groupedActiveRows(_ active: [AgentSession]) -> some View {
         let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+            .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
         let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
         let gapBeforeId = groupedGapTarget(active)
+        let projectGapBefore = projectGapTarget(groups)
+        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
         ForEach(items) { item in
             switch item {
             case .spacer:
@@ -308,11 +320,10 @@ struct RecentsListView: View {
                     .frame(height: SidebarProjectGroupItem.spacerHeight)
                     .accessibilityHidden(true)
             case .header(let group, let isCollapsed):
-                ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed, isEmpty: group.isEmpty) {
-                    ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
-                        ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
-                    }
+                if projectGapBefore == .some(group.id) {
+                    ProjectDragGapView()
                 }
+                projectHeader(group, isCollapsed: isCollapsed, dropSlot: dropSlots[item.id])
             case .row(let session, _):
                 if session.id != dragState.draggingSessionId {
                     if gapBeforeId == .some(session.id) {
@@ -320,7 +331,8 @@ struct RecentsListView: View {
                     }
                     sessionRow(
                         for: session, section: .active, sectionList: active,
-                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle
+                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
+                        projectDrop: dropSlots[item.id].map(projectDropTarget)
                     )
                 }
             }
@@ -328,6 +340,76 @@ struct RecentsListView: View {
         if gapBeforeId == .some(nil) {
             SessionDragGapView()
         }
+        if projectGapBefore == .some(nil) {
+            ProjectDragGapView()
+        }
+    }
+
+    /// One project's accordion header. A real project's header is a drag
+    /// source and a project drop target, with Move Up/Down for VoiceOver;
+    /// the "Unknown" group (no project) is neither.
+    @ViewBuilder
+    private func projectHeader(_ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?) -> some View {
+        let header = ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed, isEmpty: group.isEmpty) {
+            ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
+                ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
+            }
+        }
+        if let projectId = group.projectId, let dropSlot {
+            let movable = header
+                .accessibilityAction(named: Text("Move Up")) { moveProject(projectId, by: -1) }
+                .accessibilityAction(named: Text("Move Down")) { moveProject(projectId, by: 1) }
+            if dragInteractionsEnabledForRendering {
+                movable
+                    .onDrag {
+                        // Set synchronously at drag start, like a session
+                        // row's `.onDrag`, so every delegate can tell a
+                        // project drag from a session drag on its first
+                        // callback.
+                        projectDragState.draggingProjectId = projectId
+                        return NSItemProvider(object: projectId.uuidString as NSString)
+                    } preview: {
+                        Text(group.name.uppercased())
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(0.5)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .onDrop(of: [.text], delegate: ProjectSlotDropDelegate(target: projectDropTarget(dropSlot), session: nil))
+            } else {
+                movable
+            }
+        } else {
+            header
+        }
+    }
+
+    private func projectDropTarget(_ slot: ProjectDropSlot) -> ProjectDropTarget {
+        ProjectDropTarget(slot: slot, state: $projectDragState) { [self] draggedId, gapIndex in
+            let beforeId = ProjectDragReflow.beforeId(gapIndex: gapIndex, order: store.projects.map(\.id), dragged: draggedId)
+            store.moveProject(id: draggedId, before: beforeId)
+            return true
+        }
+    }
+
+    /// Where the project gap sits: before the group returned, or at the end
+    /// for `.some(nil)`. Nil when no project drag has a gap. `groups` is
+    /// the rendered list, dragged group already removed — the same indices
+    /// `ProjectDragReflow` counts in.
+    private func projectGapTarget(_ groups: [SidebarProjectGroup]) -> String?? {
+        guard projectDragState.isDragging, let gap = projectDragState.gapIndex else { return nil }
+        return .some(groups.indices.contains(gap) ? groups[gap].id : nil)
+    }
+
+    /// VoiceOver/keyboard counterpart to dragging a project: swap with the
+    /// neighbour above (-1) or below (+1); a no-op past either end.
+    private func moveProject(_ id: UUID, by direction: Int) {
+        let order = store.projects.map(\.id)
+        guard let index = order.firstIndex(of: id), order.indices.contains(index + direction) else { return }
+        let beforeId = direction < 0 ? order[index - 1] : (order.indices.contains(index + 2) ? order[index + 2] : nil)
+        store.moveProject(id: id, before: beforeId)
     }
 
     /// Where the live drag gap sits among Active's rows: before the session
@@ -473,6 +555,7 @@ struct RecentsListView: View {
             escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard event.keyCode == 53 /* Escape */ else { return event }
                 dragState.cancel()
+                projectDragState.cancel()
                 return nil
             }
         }
@@ -480,6 +563,7 @@ struct RecentsListView: View {
             mouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
                 DispatchQueue.main.async {
                     if dragState.isDragging { dragState.cancel() }
+                    if projectDragState.isDragging { projectDragState.cancel() }
                 }
                 return event
             }
@@ -606,7 +690,10 @@ struct RecentsListView: View {
 
     // MARK: - Session Row
 
-    private func sessionRow(for session: AgentSession, section: SessionSection, sectionList: [AgentSession], subtitle: String? = nil) -> some View {
+    private func sessionRow(
+        for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
+        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil
+    ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
@@ -681,7 +768,8 @@ struct RecentsListView: View {
             hoveredSession: session,
             dragState: $dragState,
             draggedContext: { [self] id in draggedContext(for: id) },
-            performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) }
+            performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) },
+            projectDrop: projectDrop
         ))
         .accessibilityAction(named: Text("Move Up")) {
             guard supportsReorder else { return }

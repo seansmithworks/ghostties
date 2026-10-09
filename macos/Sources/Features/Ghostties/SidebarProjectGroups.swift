@@ -233,6 +233,36 @@ enum ProjectMonogram {
 
 // MARK: - Expanded header
 
+/// Keyboard-only focus stop: on macOS 14+ a mouse click doesn't take focus
+/// (so it can't pull it from the terminal or leave the mark lit) and the
+/// system ring is off so it doesn't stack on the custom mark.
+private struct HeaderFocusStop: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14, *) {
+            content.focusable(interactions: .activate).focusEffectDisabled()
+        } else {
+            content.focusable()
+        }
+    }
+}
+
+/// Space and Return fold the focused header. `onKeyPress` is macOS 14+; on 13
+/// the header is still a focus stop but the keys do nothing.
+private struct ToggleKeyActivation: ViewModifier {
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(macOS 14, *) {
+            content.onKeyPress(keys: [.space, .return]) { _ in
+                action()
+                return .handled
+            }
+        } else {
+            content
+        }
+    }
+}
+
 /// A project's accordion header in the one-view list:
 /// `NAME ⌄ ———— count`. Clicking it folds or unfolds the project's rows.
 /// An empty project's header is dimmed, has no chevron (nothing to fold),
@@ -248,36 +278,57 @@ struct ProjectAccordionHeader: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
-        Button(action: onToggle) {
-            HStack(spacing: 0) {
-                Text(name.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.5)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                    .frame(width: 14)
-                    .padding(.leading, 4)
-                    .opacity(isEmpty ? 0 : 1)
-                Spacer(minLength: 8)
-                Text("\(count)")
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
-            }
-            .foregroundStyle(ink)
-            .padding(.leading, SidebarDialTuning.rowLeadingPadding())
-            .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-            .frame(height: Self.height)
-            .contentShape(Rectangle())
+        // A tap gesture, not a `Button`: the header is also the project's
+        // drag handle (`RecentsListView.groupedActiveRows`), and a macOS
+        // `Button` takes the mouse-down that `.onDrag` needs — the session
+        // rows tap the same way. VoiceOver keeps the button trait and gets
+        // the click as the default action.
+        HStack(spacing: 0) {
+            Text(name.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .bold))
+                .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                .frame(width: 14)
+                .padding(.leading, 4)
+                .opacity(isEmpty ? 0 : 1)
+            Spacer(minLength: 8)
+            Text("\(count)")
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(ink)
+        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+        .frame(height: Self.height)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+        // Keyboard: a tap gesture isn't a focus stop the way a `Button` is,
+        // so the header opts in and folds on Space / Return (macOS 14+, as
+        // the task rows do). The leading rule matches their focus mark.
+        .modifier(HeaderFocusStop())
+        .focused($isFocused)
+        .overlay(alignment: .leading) {
+            if isFocused {
+                // Full-strength header ink even on an empty (dimmed) project,
+                // so the mark clears 3:1 on the light and dark sidebar alike.
+                Rectangle()
+                    .fill(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
+                    .frame(width: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .modifier(ToggleKeyActivation(action: onToggle))
         .accessibilityElement(children: .ignore)
+        .accessibilityAction(.default, onToggle)
         .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
