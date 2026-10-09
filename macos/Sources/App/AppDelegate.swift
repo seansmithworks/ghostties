@@ -850,8 +850,18 @@ class AppDelegate: NSObject,
         viewMenu.insertItem(sidebarViewParent, at: 9)
         viewMenu.insertItem(NSMenuItem.separator(), at: 10)
 
+        // MARK: - Ghostties fork fence (color scheme reaches every surface)
+        let refreshAppearanceItem = NSMenuItem(
+            title: "Refresh Appearance",
+            action: #selector(refreshAppearance(_:)),
+            keyEquivalent: ""
+        )
+        refreshAppearanceItem.target = self
+        viewMenu.insertItem(refreshAppearanceItem, at: 11)
+        // MARK: - End Ghostties fork fence (color scheme reaches every surface)
+
         #if DEBUG
-        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 11)
+        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 12)
         #endif
     }
 
@@ -1642,6 +1652,12 @@ class AppDelegate: NSObject,
     }
 
     // MARK: - Ghostties fork fence (color scheme reaches every surface)
+    /// View > Refresh Appearance: re-push the system light/dark scheme to every
+    /// surface, ignoring each controller's cached "already applied" scheme.
+    @IBAction func refreshAppearance(_ sender: Any?) {
+        applyAppearanceToAllSurfaces(force: true)
+    }
+
     /// Every terminal controller that can own surfaces: all windows (visible
     /// or not) plus the quick terminal if it has been created.
     var allSurfaceControllers: [BaseTerminalController] {
@@ -1653,7 +1669,7 @@ class AppDelegate: NSObject,
     }
 
     /// Single entry point for "the system appearance changed" (the
-    /// `effectiveAppearance` observer) and the manual refresh.
+    /// `effectiveAppearance` observer) and View > Refresh Appearance.
     /// The app-level call only re-themes the config and future surfaces, and
     /// upstream pushes the scheme to a surface only when its window syncs, so
     /// this also reaches every controller's tree directly and broadcasts for
