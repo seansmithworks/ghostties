@@ -239,7 +239,11 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     private func renderWholeSidebar(expanded: Bool, state: SessionIndicatorState, appearance: NSAppearance.Name) -> NSBitmapImageRep? {
         let s = store(state: state)
         let coordinator = SessionCoordinator()
-        let size = CGSize(width: width, height: 260)
+        // Tall enough that the rail's list, which scrolls and clips above
+        // the space it reserves for the vertical tray, shows its first row
+        // whole: 260pt of list plus that reservation. A fixed height let
+        // option D's taller rail tray (164pt) clip the first glyph.
+        let size = CGSize(width: width, height: 260 + SidebarTray.reservedHeight(isVertical: true))
         let content: AnyView
         if expanded {
             // Mirrors `WorkspaceSidebarView`'s Sessions tab: the titlebar

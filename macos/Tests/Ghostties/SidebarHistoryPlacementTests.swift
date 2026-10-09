@@ -223,23 +223,33 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     // MARK: - Morph alignment
 
     /// The first session's row sits at the same y in the expanded list and
-    /// the rail. In one view the rail marks it with a tile-sized chip inside
-    /// its project column (`RailProjectColumn`), centred in the row, so the
-    /// chip's centre must sit on the expanded card's centre.
+    /// the rail. In one view both mark it with a tile-sized chip centred in
+    /// the row (option D): in the expanded list behind the leading glyph
+    /// slot, inside the group card; in the rail inside its project column
+    /// (`RailProjectColumn`). The two chips' centres must match.
     func testFirstRowSitsAtTheSameYInExpandedAndRail() throws {
-        let e = try selectedCard(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
-        let r = try selectedChip(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false))
+        let e = try selectedChip(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
+        let r = try selectedChip(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false), rail: true)
         XCTAssertEqual((e.lowerBound + e.upperBound) / 2, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
     }
 
-    /// The rail's selected chip: the run, down a line 4pt inside the chip's
-    /// leading edge (clear of the glyph), darker than the column's faint
-    /// tint (~0.08 below the chrome) but lighter than ink. The chip's corner
-    /// trims the run's ends equally, so its centre is the chip's.
-    private func selectedChip(_ r: Render) throws -> ClosedRange<CGFloat> {
+    /// The x of the selected chip's centre: the rail's centre, or, in the
+    /// expanded list, the leading glyph slot's (`SidebarListRowChrome`).
+    private func chipCentreX(_ r: Render, rail: Bool) -> CGFloat {
+        rail ? r.width / 2
+            : SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading()
+                + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
+    }
+
+    /// The selected chip: the run, down a line 4pt inside the chip's
+    /// leading edge (clear of the glyph), darker than the group card's or
+    /// column's faint tint (~0.08 below the chrome) but lighter than ink.
+    /// The chip's corner trims the run's ends equally, so its centre is the
+    /// chip's.
+    private func selectedChip(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
-        let px = Int((r.width / 2 - RailProjectColumn.chipSize / 2 + 4) * r.scale)
+        let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize / 2 + 4) * r.scale)
         var runs: [(Int, Int)] = []
         for y in 0..<r.rep.pixelsHigh {
             guard let c = r.rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { continue }
@@ -249,6 +259,6 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         }
         let chips = runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
             .filter { $0.upperBound - $0.lowerBound >= RailProjectColumn.chipSize - 10 }
-        return try XCTUnwrap(chips.first, "no selected chip found in the rail")
+        return try XCTUnwrap(chips.first, "no selected chip found (rail: \(rail))")
     }
 }
