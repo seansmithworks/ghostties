@@ -1557,20 +1557,16 @@ extension BaseTerminalController: NSMenuItemValidation {
     /// Calling ``ghostty_surface_set_color_scheme`` triggers
     /// ``syncAppearance(_:)`` via notification,
     /// so we avoid redundant calls.
-    func updateColorSchemeForSurfaceTree() {
+    func updateColorSchemeForSurfaceTree(force: Bool = false) {
         /// Derive the target scheme from `window-theme` or system appearance.
         /// We set the scheme on surfaces so they pick the correct theme
         /// and let ``syncAppearance(_:)`` update the window accordingly.
         ///
         /// Using App's effectiveAppearance here to prevent incorrect updates.
         let themeAppearance = NSApplication.shared.effectiveAppearance
-        let scheme: ghostty_color_scheme_e
-        if themeAppearance.isDark {
-            scheme = GHOSTTY_COLOR_SCHEME_DARK
-        } else {
-            scheme = GHOSTTY_COLOR_SCHEME_LIGHT
-        }
-        guard scheme != appliedColorScheme else {
+        let scheme = themeAppearance.ghosttyColorScheme
+        // Ghostties: `force` re-pushes even when the cached scheme matches.
+        guard force || scheme != appliedColorScheme else {
             return
         }
         for surfaceView in surfaceTree {

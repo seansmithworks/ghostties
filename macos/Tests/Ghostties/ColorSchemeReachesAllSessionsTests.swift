@@ -99,6 +99,50 @@ final class ColorSchemeReachesAllSessionsTests: XCTestCase {
         withExtendedLifetime(controller) {}
     }
 
+    /// View > Refresh Appearance: when a controller's cached scheme says
+    /// "already applied" but the surface has drifted, only `force` repairs it.
+    /// The controller is never put in a window, so this also covers the
+    /// hidden-window case.
+    func testForcedUpdateBypassesStaleAppliedSchemeGuard() async throws {
+        let app = try makeConditionalThemeApp()
+        let hostIsDark = NSApplication.shared.effectiveAppearance.isDark
+        let oldScheme = hostIsDark ? GHOSTTY_COLOR_SCHEME_LIGHT : GHOSTTY_COLOR_SCHEME_DARK
+        let newBackground = hostIsDark ? Self.darkBackground : Self.lightBackground
+        let oldBackground = hostIsDark ? Self.lightBackground : Self.darkBackground
+
+        var config = Ghostty.SurfaceConfiguration()
+        config.command = "/bin/cat"
+        config.workingDirectory = NSTemporaryDirectory()
+        let view = Ghostty.SurfaceView(try XCTUnwrap(app.app), baseConfig: config)
+        let surface = try XCTUnwrap(view.surface)
+        let controller = BaseTerminalController(app, surfaceTree: SplitTree(view: view))
+
+        // The controller records the host's scheme as applied.
+        controller.updateColorSchemeForSurfaceTree()
+        app.reloadConfig(surface: surface, soft: true)
+        let applied = await waitUntil { Self.hex(of: view) == newBackground }
+        XCTAssertTrue(applied, "setup: controller never applied the host scheme")
+
+        // The surface drifts behind the controller's back.
+        ghostty_surface_set_color_scheme(surface, oldScheme)
+        app.reloadConfig(surface: surface, soft: true)
+        let drifted = await waitUntil { Self.hex(of: view) == oldBackground }
+        XCTAssertTrue(drifted, "setup: surface never drifted")
+
+        // The guard thinks it is current, so a plain update does nothing.
+        controller.updateColorSchemeForSurfaceTree()
+        app.reloadConfig(surface: surface, soft: true)
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(Self.hex(of: view), oldBackground, "plain update should hit the stale guard")
+
+        controller.updateColorSchemeForSurfaceTree(force: true)
+        app.reloadConfig(surface: surface, soft: true)
+        let repaired = await waitUntil { Self.hex(of: view) == newBackground }
+        XCTAssertTrue(repaired, "forced update did not re-push the scheme")
+
+        withExtendedLifetime(controller) {}
+    }
+
     // MARK: - Helpers
 
     private func makeConditionalThemeApp() throws -> Ghostty.App {
