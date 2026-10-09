@@ -312,11 +312,28 @@ enum RailProjectColumn {
         return groups.first { group in group.sessions.contains { $0.id == selectedSessionId } }?.id
     }
 
+    /// How far the chip reaches past the tile on each side when the
+    /// chip-size dial makes it the wider of the two; 0 when the tile is.
+    static var chipOverhang: CGFloat { max(0, chipSize - RailProjectTile.size) / 2 }
+
+    /// The overhang the card's or column's side gaps are measured past the
+    /// tile slot: the chip's when the group shows rows; a header alone has
+    /// no chip, so the tile is the outer element.
+    static func sideOverhang(anchorCount: Int) -> CGFloat {
+        anchorCount > 1 ? chipOverhang : 0
+    }
+
+    /// The rail column's width: the wider of tile and chip, plus `inset`
+    /// on each side.
+    static func columnWidth(anchorCount: Int, inset: CGFloat) -> CGFloat {
+        RailProjectTile.size + (sideOverhang(anchorCount: anchorCount) + inset) * 2
+    }
+
     /// The column's or card's vertical extent around its anchors' union:
-    /// `inset` above the tile and `inset` below the last row's chip (the
-    /// tile, header alone), the same `inset` as beside them, so the card is
-    /// inset equally on all four sides (Sean, 2026-10-09, over option D's
-    /// "runs past the last row").
+    /// `inset` above the tile and `inset` below the last row's chip (below
+    /// the tile when the header is alone), so with the side gaps the card
+    /// is inset from the tile and chips on all four sides (Sean, 2026-10-09,
+    /// over option D's "runs past the last row").
     static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat) -> ClosedRange<CGFloat> {
         let tileTrim = max(0, (ProjectAccordionHeader.height - RailProjectTile.size) / 2)
         let chipTrim = max(0, (SidebarDialTuning.rowHeight() - chipSize) / 2)
@@ -361,7 +378,7 @@ private struct RailGroupColumn: View {
                 let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
                 let inset = RailProjectColumn.columnInset
                 let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchors.count, inset: inset)
-                let width = RailProjectTile.size + inset * 2
+                let width = RailProjectColumn.columnWidth(anchorCount: anchors.count, inset: inset)
                 RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
                     .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
                     .frame(width: width, height: extent.upperBound - extent.lowerBound)
@@ -374,10 +391,10 @@ private struct RailGroupColumn: View {
 }
 
 /// The expanded list's group card (option D): the rail column widened to
-/// the row width. `inset` beside the tile column (mirrored on the trailing
-/// side), above the tile and below the last row's chip, equal on all four
-/// sides, at the column's corner and tint, so collapsing reads as one shape
-/// narrowing to the column.
+/// the row width, inset from the tile and chips on all four sides: `inset`
+/// beside the wider of tile and chip (mirrored on the trailing side), above
+/// the tile and below the last row's chip, at the column's corner and tint,
+/// so collapsing reads as one shape narrowing to the column.
 struct ExpandedGroupCard: View {
     /// Re-renders on every dial write; the body reads the column dials.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
@@ -385,9 +402,10 @@ struct ExpandedGroupCard: View {
     let anchors: [Anchor<CGRect>]
 
     /// How far the card reaches past the row frames on each side: the
-    /// card inset, less the row's own leading padding before its tile.
-    static func horizontalOutset(cardInset: CGFloat, rowLeadingPadding: CGFloat) -> CGFloat {
-        cardInset - rowLeadingPadding
+    /// card inset, less the row's own leading padding before its tile slot,
+    /// plus the chip's overhang past that slot (`RailProjectColumn.sideOverhang`).
+    static func horizontalOutset(cardInset: CGFloat, rowLeadingPadding: CGFloat, chipOverhang: CGFloat) -> CGFloat {
+        cardInset - rowLeadingPadding + chipOverhang
     }
 
     var body: some View {
@@ -395,7 +413,11 @@ struct ExpandedGroupCard: View {
             if let first = anchors.first {
                 let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
                 let inset = SidebarDialTuning.groupCardInset()
-                let outset = Self.horizontalOutset(cardInset: inset, rowLeadingPadding: SidebarDialTuning.rowLeadingPadding())
+                let outset = Self.horizontalOutset(
+                    cardInset: inset,
+                    rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
+                    chipOverhang: RailProjectColumn.sideOverhang(anchorCount: anchors.count)
+                )
                 let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchors.count, inset: inset)
                 RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
                     .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))

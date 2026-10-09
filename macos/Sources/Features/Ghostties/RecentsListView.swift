@@ -300,11 +300,13 @@ struct RecentsListView: View {
     }
 
     /// The group card's overhang past the column's trailing edge
-    /// (`ExpandedGroupCard.horizontalOutset`), so it isn't clipped there.
+    /// (`ExpandedGroupCard.horizontalOutset`), so it isn't clipped there:
+    /// the widest it gets, with the chip's overhang.
     private var trailingBleed: CGFloat {
         max(0, ExpandedGroupCard.horizontalOutset(
             cardInset: SidebarDialTuning.groupCardInset(),
-            rowLeadingPadding: SidebarDialTuning.rowLeadingPadding()
+            rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
+            chipOverhang: RailProjectColumn.chipOverhang
         ))
     }
 

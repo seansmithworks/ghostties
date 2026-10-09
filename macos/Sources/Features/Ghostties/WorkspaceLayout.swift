@@ -406,7 +406,7 @@ enum WorkspaceLayout {
     static let recentsRowLeadingPadding: CGFloat = 4
 
     /// The selected project's group card in the expanded list (option D):
-    /// 6pt round the tile column and below the last row. Read it through
+    /// 6pt, inset from the tile and chips on all four sides. Read it through
     /// `SidebarDialTuning.groupCardInset()`.
     static let sidebarGroupCardInset: CGFloat = 6
 

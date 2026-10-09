@@ -156,8 +156,8 @@ enum SidebarDialTuning {
     static let rowGhostSizeKey = "ghostties.sidebarDial.rowGhostSize"
     static let rowLeadingPaddingKey = "ghostties.sidebarDial.rowLeadingPadding"
     static let rowTrailingPaddingKey = "ghostties.sidebarDial.rowTrailingPadding"
-    /// The selected project's group card (option D): its margin round the
-    /// tile column and past the last row (`ExpandedGroupCard`).
+    /// The selected project's group card (option D): its margin, inset from
+    /// the tile and chips on all four sides (`ExpandedGroupCard`).
     static let groupCardInsetKey = "ghostties.sidebarDial.groupCardInset"
 
     // MARK: Sidebar layout
