@@ -233,6 +233,19 @@ enum ProjectMonogram {
 
 // MARK: - Expanded header
 
+/// Keyboard-only focus stop: on macOS 14+ a mouse click doesn't take focus
+/// (so it can't pull it from the terminal or leave the mark lit) and the
+/// system ring is off so it doesn't stack on the custom mark.
+private struct HeaderFocusStop: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14, *) {
+            content.focusable(interactions: .activate).focusEffectDisabled()
+        } else {
+            content.focusable()
+        }
+    }
+}
+
 /// Space and Return fold the focused header. `onKeyPress` is macOS 14+; on 13
 /// the header is still a focus stop but the keys do nothing.
 private struct ToggleKeyActivation: ViewModifier {
@@ -301,13 +314,15 @@ struct ProjectAccordionHeader: View {
         // Keyboard: a tap gesture isn't a focus stop the way a `Button` is,
         // so the header opts in and folds on Space / Return (macOS 14+, as
         // the task rows do). The leading rule matches their focus mark.
-        .focusable()
+        .modifier(HeaderFocusStop())
         .focused($isFocused)
         .overlay(alignment: .leading) {
             if isFocused {
+                // The header's own ink, so the mark reads on the light and
+                // the dark sidebar alike.
                 Rectangle()
-                    .fill(Color.white.opacity(0.55))
-                    .frame(width: 1)
+                    .fill(ink)
+                    .frame(width: 2)
                     .allowsHitTesting(false)
             }
         }
