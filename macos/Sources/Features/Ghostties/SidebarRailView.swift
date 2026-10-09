@@ -313,13 +313,15 @@ enum RailProjectColumn {
     }
 
     /// The column's or card's vertical extent around its anchors' union:
-    /// `inset` above the tile (the header frame, less the space the tile
-    /// leaves in it) and `inset` below the last row's frame (option D: the
-    /// card runs past the last row, it doesn't hug its chip).
+    /// `inset` above the tile and `inset` below the last row's chip (the
+    /// tile, header alone), the same `inset` as beside them, so the card is
+    /// inset equally on all four sides (Sean, 2026-10-09, over option D's
+    /// "runs past the last row").
     static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat) -> ClosedRange<CGFloat> {
         let tileTrim = max(0, (ProjectAccordionHeader.height - RailProjectTile.size) / 2)
+        let chipTrim = max(0, (SidebarDialTuning.rowHeight() - chipSize) / 2)
         let top = union.minY + tileTrim - inset
-        let bottom = union.maxY - (anchorCount > 1 ? 0 : tileTrim) + inset
+        let bottom = union.maxY - (anchorCount > 1 ? chipTrim : tileTrim) + inset
         return top...max(top, bottom)
     }
 }
@@ -345,7 +347,8 @@ extension View {
 }
 
 /// The project column: one rounded, faintly tinted rect spanning the
-/// selected group's tile and rows, tile-width plus `columnInset`.
+/// selected group's tile and rows, `columnInset` from the tile and chips
+/// on all four sides.
 private struct RailGroupColumn: View {
     /// Re-renders on every dial write; the body reads the Rail column dials.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
@@ -371,10 +374,10 @@ private struct RailGroupColumn: View {
 }
 
 /// The expanded list's group card (option D): the rail column widened to
-/// the row width. `inset` round the tile column on its leading side and
-/// above the tile, mirrored on the trailing side, and `inset` below the
-/// last row, at the column's corner and tint, so collapsing reads as one
-/// shape narrowing to the column.
+/// the row width. `inset` beside the tile column (mirrored on the trailing
+/// side), above the tile and below the last row's chip, equal on all four
+/// sides, at the column's corner and tint, so collapsing reads as one shape
+/// narrowing to the column.
 struct ExpandedGroupCard: View {
     /// Re-renders on every dial write; the body reads the column dials.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
