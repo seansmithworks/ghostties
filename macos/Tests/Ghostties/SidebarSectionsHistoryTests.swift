@@ -384,24 +384,23 @@ final class SidebarSectionsHistoryTests: XCTestCase {
     }
 
     /// Same title/subtitle text in both rows, so the label column must
-    /// render pixel-identical, and the clock must sit inside the same
-    /// trailing glyph box as a status glyph.
+    /// render pixel-identical, and the clock must sit in the same leading
+    /// glyph slot as a status glyph (option D: centred in the tile column).
     func testHistoryRowRendersWithTheSessionRowsLayout() throws {
         let history = try XCTUnwrap(render(HistoryRowView(subtitle: "3 sessions · last 2h ago", isActive: false, onTap: {})))
         let sessionRow = try XCTUnwrap(render(SessionRowHarness()))
 
-        let labelsEnd = width - 60
-        let h = try XCTUnwrap(ink(history, fromX: 0, toX: labelsEnd), "history labels")
-        let s = try XCTUnwrap(ink(sessionRow, fromX: 0, toX: labelsEnd), "session labels")
+        let slotStart = SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading() + SidebarDialTuning.rowLeadingPadding()
+        let slotWidth = SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth
+        let labelsStart = slotStart + slotWidth + 4
+        let h = try XCTUnwrap(ink(history, fromX: labelsStart, toX: width), "history labels")
+        let s = try XCTUnwrap(ink(sessionRow, fromX: labelsStart, toX: width), "session labels")
         XCTAssertEqual(h.minX, s.minX, accuracy: 0.5)
         XCTAssertEqual(h.minY, s.minY, accuracy: 0.5)
         XCTAssertEqual(h.maxY, s.maxY, accuracy: 0.5)
 
-        let boxMaxX = width - SidebarDialTuning.windowMargin() - SidebarDialTuning.contentPaddingTrailing() - SidebarDialTuning.rowTrailingPadding()
-        let boxMinX = boxMaxX - SidebarDialTuning.rowGhostSize()
-        let clock = try XCTUnwrap(ink(history, fromX: labelsEnd, toX: width), "clock glyph")
-        XCTAssertGreaterThanOrEqual(clock.minX, boxMinX - 0.6)
-        XCTAssertLessThanOrEqual(clock.maxX, boxMaxX + 0.6)
+        let clock = try XCTUnwrap(ink(history, fromX: 0, toX: labelsStart), "clock glyph")
+        XCTAssertEqual((clock.minX + clock.maxX) / 2, slotStart + slotWidth / 2, accuracy: 1.0, "clock centred in the glyph slot")
         let rowMidY = rowHeight / 2
         XCTAssertEqual((clock.minY + clock.maxY) / 2, rowMidY, accuracy: 1.0, "clock is vertically centred like the status glyphs")
     }

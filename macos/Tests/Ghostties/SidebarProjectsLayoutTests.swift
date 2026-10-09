@@ -173,14 +173,16 @@ final class SidebarProjectsLayoutTests: XCTestCase {
 
     // MARK: - Rail column dials
 
-    /// Unset, every "Rail column" dial reads the value the column shipped
-    /// hard-coded (tint 0.04, inset 4, chip radius 9, chip = the 30pt tile,
-    /// full ink), so adding the dials changes nothing on screen.
-    func testRailColumnDialDefaultsAreTheShippedConstants() {
+    /// Unset, every "Rail column" dial reads option D's value (pen.dev
+    /// `p6osQ7`/`ZiGlb`: tint 6%, inset 4, chip radius 8 = the tile's, chip =
+    /// the 30pt tile, full ink).
+    func testRailColumnDialDefaultsAreOptionD() {
         withDials {
-            XCTAssertEqual(RailProjectColumn.columnTintOpacity, 0.04)
-            XCTAssertEqual(RailProjectColumn.columnInset, 8)
-            XCTAssertEqual(RailProjectColumn.chipCornerRadius, 9)
+            XCTAssertEqual(RailProjectColumn.columnTintOpacity, 0.06)
+            XCTAssertEqual(RailProjectColumn.columnInset, 4)
+            XCTAssertEqual(RailProjectColumn.chipCornerRadius, 8)
+            XCTAssertEqual(RailProjectColumn.chipCornerRadius, RailProjectTile.cornerRadius)
+            XCTAssertEqual(RailProjectColumn.columnCornerRadius, 12)
             XCTAssertEqual(RailProjectTile.size, 30)
             XCTAssertEqual(RailProjectColumn.chipSize, 30)
             XCTAssertEqual(RailProjectColumn.selectedTileFill, 1)
@@ -209,6 +211,33 @@ final class SidebarProjectsLayoutTests: XCTestCase {
             XCTAssertTrue(SidebarDialTuning.allKeys.contains(key), "Reset sidebar must clear \(key)")
             XCTAssertTrue(SidebarDialTuning.railKeys.contains(key), "Reset rail must clear \(key)")
         }
+    }
+
+    /// Option D's group geometry (pen.dev `T6FfX`, `p6osQ7`), from a
+    /// header at y 0 and four rows below it (last row ends at 238): the
+    /// expanded card runs 6 above the tile and 6 below the last row, 2 past
+    /// the row frames on each side (6 round the tile column, less the row's
+    /// 4pt leading padding); the rail column runs 4 round the tile and 4
+    /// below the last row, 38 wide. Both at radius 12.
+    func testOptionDGroupCardAndColumnGeometry() {
+        withDials {
+            let union = CGRect(x: 8, y: 0, width: 248, height: 238)
+            XCTAssertEqual(SidebarDialTuning.groupCardInset(), 6)
+            XCTAssertEqual(SidebarDialTuning.rowLeadingPadding(), 4)
+            XCTAssertEqual(ExpandedGroupCard.horizontalOutset(cardInset: 6, rowLeadingPadding: 4), 2)
+            XCTAssertEqual(RailProjectColumn.verticalExtent(union: union, anchorCount: 5, inset: 6), -6...244)
+            XCTAssertEqual(RailProjectColumn.verticalExtent(union: union, anchorCount: 5, inset: RailProjectColumn.columnInset), -4...242)
+            XCTAssertEqual(RailProjectTile.size + 2 * RailProjectColumn.columnInset, 38)
+            // A folded selected group: the header alone, the card round the tile.
+            let header = CGRect(x: 8, y: 0, width: 248, height: ProjectAccordionHeader.height)
+            XCTAssertEqual(RailProjectColumn.verticalExtent(union: header, anchorCount: 1, inset: 6), -6...36)
+            // Fills: tile 10%, selected chip 10%, card/column 6%.
+            XCTAssertEqual(RailProjectTile.tintOpacity, 0.10)
+            XCTAssertEqual(RailProjectTile.cornerRadius, 8)
+            XCTAssertEqual(RailProjectColumn.selectedChipTintOpacity, 0.10)
+        }
+        XCTAssertTrue(SidebarDialTuning.sidebarListKeys.contains(SidebarDialTuning.groupCardInsetKey))
+        XCTAssertTrue(SidebarDialTuning.railKeys.contains(SidebarDialTuning.railTrayPillSizeKey))
     }
 
     /// The focused panels own disjoint keys, all inside `allKeys` ("Reset
