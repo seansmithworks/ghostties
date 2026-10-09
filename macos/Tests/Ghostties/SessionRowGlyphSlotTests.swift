@@ -576,14 +576,12 @@ final class SessionRowGlyphSlotTests: XCTestCase {
     func testExpandedTrayFillStretchesCreateToTheGroupGapBeforeToggle() throws {
         let columnWidth: CGFloat = 300
         let button = SidebarDialTuning.trayHorizontalButtonSize()
-        let padding = SidebarDialTuning.trayInnerPadding()
         let gap = SidebarDialTuning.trayGroupGap()
         let margin = SidebarDialTuning.windowMargin()
         // The gutter the pinned app really has outside the column: the card's
         // leading inset. The column is `columnWidth` wide; the card starts
         // `gutter` past its edge.
         let gutter = WorkspaceLayout.sidebarTrailingGutter(for: .pinned)
-        _ = padding
         // Option D: no capsule padding across the bar; a one-button capsule
         // is its button.
         let toggleWidth = button

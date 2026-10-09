@@ -145,7 +145,7 @@ struct SidebarLockedDefaultsTests {
         #expect(dark == TrayGlassStyle.Look(
             variant: .identity, tintOpacity: 0.15, surfaceOpacity: 0.45,
             rimWidth: 0.25, rimOpacity: 0.12,
-            shadowOpacity: 0.298, shadowRadius: 8, shadowYOffset: 2.5,
+            shadowOpacity: 0.4, shadowRadius: 12, shadowYOffset: 4,
             chromaticIntensity: 0.15, chromaticWidth: 0.5, chromaticRotation: 72.9, chromaticBlur: 1.4,
             chromaticPalette: .pastel, chromaticBlend: .plusLighter,
             specularStrength: 0.1, specularAngle: 270
