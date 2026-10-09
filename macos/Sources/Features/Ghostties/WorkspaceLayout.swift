@@ -21,8 +21,9 @@ enum SidebarMode: Int, Codable {
 
 /// Shared layout constants for the workspace sidebar.
 enum WorkspaceLayout {
-    /// Width of the sidebar panel (Flow 01: 220 → 244).
-    static let sidebarWidth: CGFloat = 244
+    /// Width of the sidebar panel (Flow 01: 220 → 244; option D,
+    /// 2026-10-09: 256, the canvas card at 256 + the 8pt window margin).
+    static let sidebarWidth: CGFloat = 256
 
     /// Minimum width of the collapsed icon-only rail — a floor, not the
     /// applied width. Sized only so the 40pt vertical tray pill (32pt
@@ -395,13 +396,19 @@ enum WorkspaceLayout {
     /// Project-name subtitle text size in `RecentsRowView`.
     static let recentsRowSubtitleSize: CGFloat = 11
 
-    /// `RecentsRowView`'s trailing edge padding (leading uses
-    /// `sidebarRowLeadingPadding`, shared with every other sidebar row/header).
-    static let recentsRowTrailingPadding: CGFloat = 16
+    /// The expanded list's row and header trailing padding: option D's 16pt
+    /// label padding plus its 4pt group padding.
+    static let recentsRowTrailingPadding: CGFloat = 20
 
-    /// `RecentsRowView`'s leading edge padding. Its own value: the shared
-    /// `sidebarRowLeadingPadding` (8) still sets project rows and headers.
-    static let recentsRowLeadingPadding: CGFloat = 16
+    /// The expanded list's row and header leading padding, before the 30pt
+    /// tile/glyph column (option D's group padding). The legacy
+    /// `sidebarRowLeadingPadding` (8) still sets the Projects tab's rows.
+    static let recentsRowLeadingPadding: CGFloat = 4
+
+    /// The selected project's group card in the expanded list (option D):
+    /// 6pt round the tile column and below the last row. Read it through
+    /// `SidebarDialTuning.groupCardInset()`.
+    static let sidebarGroupCardInset: CGFloat = 6
 
     /// Top padding of the scrollable list content in both sidebar tabs
     /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s

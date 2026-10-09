@@ -27,8 +27,15 @@ enum SidebarDialTuning {
     /// Production never touches it (`.standard`). The test bundle swaps in a
     /// throwaway suite private to its process at load (`GhosttiesTestIsolation`)
     /// so a hosted test never reads the dial values tuned in the live Dev
-    /// app's domain.
-    nonisolated(unsafe) static var sharedStore: UserDefaults = .standard
+    /// app's domain. A capture-fixture launch (DEBUG) reads the fixture's
+    /// throwaway suite for the same reason: a capture shows the code
+    /// defaults, never the Dev app's tuning, and never writes to it.
+    nonisolated(unsafe) static var sharedStore: UserDefaults = {
+        #if DEBUG
+        if CaptureFixture.isActive { return CaptureFixture.defaults(fixtureActive: true) }
+        #endif
+        return .standard
+    }()
 
     /// A store bound for one scope only (`$scopedStore.withValue(suite) { … }`):
     /// a test that needs its own dial values binds a private suite around
@@ -149,6 +156,9 @@ enum SidebarDialTuning {
     static let rowGhostSizeKey = "ghostties.sidebarDial.rowGhostSize"
     static let rowLeadingPaddingKey = "ghostties.sidebarDial.rowLeadingPadding"
     static let rowTrailingPaddingKey = "ghostties.sidebarDial.rowTrailingPadding"
+    /// The selected project's group card (option D): its margin round the
+    /// tile column and past the last row (`ExpandedGroupCard`).
+    static let groupCardInsetKey = "ghostties.sidebarDial.groupCardInset"
 
     // MARK: Sidebar layout
     static let contentPaddingTopKey = "ghostties.sidebarDial.contentPaddingTop"
@@ -192,6 +202,9 @@ enum SidebarDialTuning {
     /// Between the two icons of the rail's stacked Create pill
     /// (`RailTrayGeometry.iconGap`).
     static let railTrayIconGapKey = "ghostties.sidebarDial.trayGlass.railIconGap"
+    /// The rail tray's square pill side (`RailTrayGeometry.cell`), capped
+    /// at the rail's width less its margins.
+    static let railTrayPillSizeKey = "ghostties.sidebarDial.trayGlass.railPillSize"
 
     // MARK: Rail column (one view's selected project, `RailProjectColumn`)
     static let railColumnTintOpacityKey = "ghostties.sidebarDial.railColumn.tintOpacity"
@@ -338,6 +351,10 @@ enum SidebarDialTuning {
     static func rowTrailingPadding(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(rowTrailingPaddingKey, default: WorkspaceLayout.recentsRowTrailingPadding, defaults: defaults)
     }
+    /// See `groupCardInsetKey`. Defaults to `WorkspaceLayout.sidebarGroupCardInset`.
+    static func groupCardInset(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        max(0, cgFloat(groupCardInsetKey, default: WorkspaceLayout.sidebarGroupCardInset, defaults: defaults))
+    }
 
 
     static func contentPaddingTop(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
@@ -393,6 +410,10 @@ enum SidebarDialTuning {
     static func railTrayIconGap(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(railTrayIconGapKey, default: TrayGlassStyle.railIconGap, defaults: defaults)
     }
+    /// See `railTrayPillSizeKey`. Defaults to `TrayGlassStyle.railPillSize`.
+    static func railTrayPillSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railTrayPillSizeKey, default: TrayGlassStyle.railPillSize, defaults: defaults)
+    }
 
     /// The project column's faint fill (`RailProjectColumn.columnTintOpacity`).
     static func railColumnTintOpacity(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
@@ -426,7 +447,7 @@ enum SidebarDialTuning {
         trayHorizontalIconSizeKey, trayGlassCornerStyleKey,
         selectedTitleWeightKey, tintShimmerDarkIntensityKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
-        rowLeadingPaddingKey, rowTrailingPaddingKey,
+        rowLeadingPaddingKey, rowTrailingPaddingKey, groupCardInsetKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         historyInSidebarKey, projectsLayoutKey
     ] + railKeys
@@ -435,7 +456,7 @@ enum SidebarDialTuning {
     /// "Reset rail" clears only these. Part of `allKeys`, so "Reset all
     /// panels" clears them too.
     static let railKeys: [String] = [
-        trayVerticalIconSizeKey, railTrayIconGapKey, railExtraWidthKey,
+        trayVerticalIconSizeKey, railTrayIconGapKey, railTrayPillSizeKey, railExtraWidthKey,
         lightGlassKeys.shadowOpacity, lightGlassKeys.shadowRadius, lightGlassKeys.shadowYOffset,
         darkGlassKeys.shadowOpacity, darkGlassKeys.shadowRadius, darkGlassKeys.shadowYOffset,
         railColumnTintOpacityKey, railColumnInsetKey, railChipCornerRadiusKey,
@@ -448,7 +469,7 @@ enum SidebarDialTuning {
     static let sidebarListKeys: [String] = [
         rowHeightKey, rowGapKey, selectedTitleWeightKey, tintShimmerDarkIntensityKey,
         trayHorizontalButtonSizeKey, trayGroupGapKey, trayWidthKey,
-        contentPaddingLeadingKey, contentPaddingTrailingKey
+        contentPaddingLeadingKey, contentPaddingTrailingKey, groupCardInsetKey
     ]
 
     /// Posted after either panel's Reset, so the other panel re-reads the
@@ -595,6 +616,7 @@ struct SidebarListDialKitTuningModel: Codable, Equatable {
     var trayWidth: String
     var contentPaddingLeading: Double
     var contentPaddingTrailing: Double
+    var groupCardInset: Double
 }
 
 /// The Rail panel's model: every knob that only changes the collapsed rail.
@@ -609,6 +631,7 @@ struct RailDialKitTuningModel: Codable, Equatable {
 
     var trayVerticalIconSize: Double
     var railTrayIconGap: Double
+    var railTrayPillSize: Double
     var shadowLight: Shadow
     var shadowDark: Shadow
     var railExtraWidth: Double
@@ -960,6 +983,7 @@ enum RailDialPanel: FocusedDialPanel {
         RailDialKitTuningModel(
             trayVerticalIconSize: Double(SidebarDialTuning.trayVerticalIconSize(defaults: defaults)),
             railTrayIconGap: Double(SidebarDialTuning.railTrayIconGap(defaults: defaults)),
+            railTrayPillSize: Double(SidebarDialTuning.railTrayPillSize(defaults: defaults)),
             shadowLight: shadow(SidebarDialTuning.trayGlass(for: .light, defaults: defaults)),
             shadowDark: shadow(SidebarDialTuning.trayGlass(for: .dark, defaults: defaults)),
             railExtraWidth: Double(SidebarDialTuning.railExtraWidth(defaults: defaults)),
@@ -974,6 +998,7 @@ enum RailDialPanel: FocusedDialPanel {
     static func write(_ defaults: UserDefaults, from previous: RailDialKitTuningModel, to model: RailDialKitTuningModel) {
         setIfChanged(defaults, SidebarDialTuning.trayVerticalIconSizeKey, previous.trayVerticalIconSize, model.trayVerticalIconSize)
         setIfChanged(defaults, SidebarDialTuning.railTrayIconGapKey, previous.railTrayIconGap, model.railTrayIconGap)
+        setIfChanged(defaults, SidebarDialTuning.railTrayPillSizeKey, previous.railTrayPillSize, model.railTrayPillSize)
         for (keys, old, new) in [
             (SidebarDialTuning.lightGlassKeys, previous.shadowLight, model.shadowLight),
             (SidebarDialTuning.darkGlassKeys, previous.shadowDark, model.shadowDark),
@@ -1012,6 +1037,7 @@ enum RailDialPanel: FocusedDialPanel {
             .group("railTray", label: "Tray", children: [
                 .slider("trayVerticalIconSize", keyPath: \.trayVerticalIconSize, label: "Pill icon size (rail)", range: 10...24, step: 0.5, unit: "pt"),
                 .slider("railTrayIconGap", keyPath: \.railTrayIconGap, label: "Tray icon gap (rail)", range: 0...40, step: 1, unit: "pt"),
+                .slider("railTrayPillSize", keyPath: \.railTrayPillSize, label: "Pill size (rail)", range: 28...82, step: 1, unit: "pt"),
             ]),
             // The tray pills' shadow, both trays (rail and expanded), per appearance.
             .group("trayShadowLight", label: "Tray shadow (both trays) — Light", children: shadowControls("light", \.shadowLight)),
@@ -1049,7 +1075,8 @@ enum SidebarListDialPanel: FocusedDialPanel {
             trayGroupGap: Double(SidebarDialTuning.trayGroupGap(defaults: defaults)),
             trayWidth: SidebarDialTuning.trayWidth(defaults: defaults).rawValue,
             contentPaddingLeading: Double(SidebarDialTuning.contentPaddingLeading(defaults: defaults)),
-            contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults))
+            contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
+            groupCardInset: Double(SidebarDialTuning.groupCardInset(defaults: defaults))
         )
     }
 
@@ -1063,6 +1090,7 @@ enum SidebarListDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.trayWidthKey, previous.trayWidth, model.trayWidth)
         setIfChanged(defaults, SidebarDialTuning.contentPaddingLeadingKey, previous.contentPaddingLeading, model.contentPaddingLeading)
         setIfChanged(defaults, SidebarDialTuning.contentPaddingTrailingKey, previous.contentPaddingTrailing, model.contentPaddingTrailing)
+        setIfChanged(defaults, SidebarDialTuning.groupCardInsetKey, previous.groupCardInset, model.groupCardInset)
     }
 
     static var controls: [DialControl<SidebarListDialKitTuningModel>] {
@@ -1082,6 +1110,10 @@ enum SidebarListDialPanel: FocusedDialPanel {
                 .slider("trayGroupGap", keyPath: \.trayGroupGap, label: "Tray group gap", range: 0...16, step: 0.5, unit: "pt"),
                 .select("trayWidth", keyPath: \.trayWidth, label: "Tray width",
                         options: TrayGlassStyle.TrayWidth.allCases.map(\.rawValue)),
+            ]),
+            // The selected project's group card (`ExpandedGroupCard`).
+            .group("groupCard", label: "Group card", children: [
+                .slider("groupCardInset", keyPath: \.groupCardInset, label: "Card inset", range: 0...16, step: 0.5, unit: "pt"),
             ]),
             // Inner side margins of the list column, inside the window margin.
             .group("sideMargins", label: "Side margins", children: [

@@ -200,7 +200,7 @@ struct HistoryRowView: View {
             redlineID: Self.redlineID
         ) {
             SidebarListRowTitle(text: "History", isActive: isActive)
-        } trailing: {
+        } glyph: {
             HistoryGlyph(size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }

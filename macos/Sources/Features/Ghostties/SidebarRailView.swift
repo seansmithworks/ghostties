@@ -257,25 +257,32 @@ private struct RailScrollToKeyboardSelection: ViewModifier {
 
 // MARK: - Project column
 
-/// One view's rail selection (Sean, 2026-10-08, strawman C): the selected
-/// session's project becomes a column, tile through its last row, its tile
-/// filled with ink; each grouped session is a tile-sized chip inside it.
-/// Pinned rows, and the rail outside one view, keep the wide row card.
+/// One view's selection (Sean, 2026-10-08, strawman C; option D,
+/// 2026-10-09): the selected session's project becomes a column on the rail,
+/// tile through its last row, its tile filled with ink, and a card the full
+/// row width in the expanded list (`ExpandedGroupCard`). Each grouped
+/// session is marked by a tile-sized chip behind its glyph, in both.
+/// Pinned rows, and the Sessions tab, keep the wide row card.
 ///
 /// Every value below is a "Rail column" dial (`SidebarDialTuning`); the
 /// `default…` constants are what ships, and what each dial reads unset.
 enum RailProjectColumn {
     /// The chip's side and corner default to the monogram tile's
-    /// (`RailProjectTile.size`, radius 9), so chip and tile read as one family.
+    /// (`RailProjectTile.size`, `RailProjectTile.cornerRadius`), so chip and
+    /// tile read as one family.
     static let defaultChipSizeOffset: CGFloat = 0
-    static let defaultChipCornerRadius: CGFloat = 9
-    /// The column: the tile plus this margin on every side (Sean,
-    /// 2026-10-08: more room around the tile and chip than 4).
-    static let defaultColumnInset: CGFloat = 8
-    /// The column's faint fill: a hovered row's tint.
-    static let defaultColumnTintOpacity: Double = SidebarRowCardBackground.hoverTintOpacity
+    static let defaultChipCornerRadius: CGFloat = RailProjectTile.cornerRadius
+    /// The rail column: the tile plus this margin on every side (option D:
+    /// 4, a 38pt column round the 30pt tile).
+    static let defaultColumnInset: CGFloat = 4
+    /// The column's and the expanded group card's faint fill (option D
+    /// `#0000000F`).
+    static let defaultColumnTintOpacity: Double = 0.06
     /// The selected project's tile: 1 is full ink, 0 the plain tile tint.
     static let defaultSelectedTileFill: Double = 1
+    /// The selected chip's fill (option D `#0000001A`). Flat: no chromatic
+    /// rim, unlike the wide selected row card.
+    static let selectedChipTintOpacity: Double = 0.10
 
     /// `RailProjectTile.size` plus the chip-size dial, clamped to the row
     /// height so the chip never spills out of its row.
@@ -286,6 +293,17 @@ enum RailProjectColumn {
     static var columnInset: CGFloat { max(SidebarDialTuning.railColumnInset(), 0) }
     static var columnTintOpacity: Double { min(max(SidebarDialTuning.railColumnTintOpacity(), 0), 1) }
     static var selectedTileFill: Double { min(max(SidebarDialTuning.railSelectedTileFill(), 0), 1) }
+    /// The column's corner, concentric with the chip inside it (option D:
+    /// 8 + 4 = 12). The expanded group card takes the same corner.
+    static var columnCornerRadius: CGFloat { chipCornerRadius + columnInset }
+
+    /// The ink the column, card and chip tints are laid in: solid black in
+    /// light, white in dark, so an opacity here is the canvas's alpha.
+    /// (`Color.primary` is 85% black in light, which drew option D's 10%
+    /// chip at 8.5%.)
+    static func tintInk(_ colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark ? .white : .black
+    }
 
     /// The group the column marks: the one holding the selected session,
     /// or none (nothing selected, or the selection is pinned).
@@ -293,17 +311,29 @@ enum RailProjectColumn {
         guard let selectedSessionId else { return nil }
         return groups.first { group in group.sessions.contains { $0.id == selectedSessionId } }?.id
     }
+
+    /// The column's or card's vertical extent around its anchors' union:
+    /// `inset` above the tile (the header frame, less the space the tile
+    /// leaves in it) and `inset` below the last row's frame (option D: the
+    /// card runs past the last row, it doesn't hug its chip).
+    static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat) -> ClosedRange<CGFloat> {
+        let tileTrim = max(0, (ProjectAccordionHeader.height - RailProjectTile.size) / 2)
+        let top = union.minY + tileTrim - inset
+        let bottom = union.maxY - (anchorCount > 1 ? 0 : tileTrim) + inset
+        return top...max(top, bottom)
+    }
 }
 
-/// The bounds of every item in the selected project's group.
-private struct RailGroupColumnKey: PreferenceKey {
+/// The bounds of every item in the selected project's group: the rail's
+/// column and the expanded list's group card both read it.
+struct RailGroupColumnKey: PreferenceKey {
     static var defaultValue: [Anchor<CGRect>] = []
     static func reduce(value: inout [Anchor<CGRect>], nextValue: () -> [Anchor<CGRect>]) {
         value += nextValue()
     }
 }
 
-private extension View {
+extension View {
     @ViewBuilder
     func railGroupColumn(_ isInColumn: Bool) -> some View {
         if isInColumn {
@@ -319,30 +349,81 @@ private extension View {
 private struct RailGroupColumn: View {
     /// Re-renders on every dial write; the body reads the Rail column dials.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @Environment(\.colorScheme) private var colorScheme
     let anchors: [Anchor<CGRect>]
 
     var body: some View {
         GeometryReader { proxy in
             if let first = anchors.first {
                 let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
-                // The column hugs the tile's top (inside the header frame)
-                // and the last chip's bottom (inside the last row's frame).
                 let inset = RailProjectColumn.columnInset
-                let topTrim = (ProjectAccordionHeader.height - RailProjectTile.size) / 2
-                let bottomTrim = anchors.count > 1
-                    ? (SidebarDialTuning.rowHeight() - RailProjectColumn.chipSize) / 2
-                    : topTrim
-                let top = union.minY + topTrim - inset
-                let bottom = union.maxY - bottomTrim + inset
+                let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchors.count, inset: inset)
                 let width = RailProjectTile.size + inset * 2
-                RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius + inset, style: .continuous)
-                    .fill(Color.primary.opacity(RailProjectColumn.columnTintOpacity))
-                    .frame(width: width, height: bottom - top)
-                    .position(x: union.midX, y: (top + bottom) / 2)
+                RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
+                    .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
+                    .frame(width: width, height: extent.upperBound - extent.lowerBound)
+                    .position(x: union.midX, y: (extent.lowerBound + extent.upperBound) / 2)
             }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// The expanded list's group card (option D): the rail column widened to
+/// the row width. `inset` round the tile column on its leading side and
+/// above the tile, mirrored on the trailing side, and `inset` below the
+/// last row, at the column's corner and tint, so collapsing reads as one
+/// shape narrowing to the column.
+struct ExpandedGroupCard: View {
+    /// Re-renders on every dial write; the body reads the column dials.
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @Environment(\.colorScheme) private var colorScheme
+    let anchors: [Anchor<CGRect>]
+
+    /// How far the card reaches past the row frames on each side: the
+    /// card inset, less the row's own leading padding before its tile.
+    static func horizontalOutset(cardInset: CGFloat, rowLeadingPadding: CGFloat) -> CGFloat {
+        cardInset - rowLeadingPadding
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let first = anchors.first {
+                let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
+                let inset = SidebarDialTuning.groupCardInset()
+                let outset = Self.horizontalOutset(cardInset: inset, rowLeadingPadding: SidebarDialTuning.rowLeadingPadding())
+                let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchors.count, inset: inset)
+                RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
+                    .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
+                    .frame(width: max(0, union.width + outset * 2), height: extent.upperBound - extent.lowerBound)
+                    .position(x: union.midX, y: (extent.lowerBound + extent.upperBound) / 2)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A grouped session's selection and hover mark (option D): a tile-sized
+/// chip behind its glyph, flat (`RailProjectColumn.selectedChipTintOpacity`),
+/// no chromatic rim; hover is the row's hover tint.
+struct SidebarRowChipBackground: View {
+    let isActive: Bool
+    let isHovered: Bool
+
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        // Hover keeps the row hover's `.primary` tint; selection is the
+        // canvas's alpha on solid ink.
+        let fill = isActive
+            ? RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.selectedChipTintOpacity)
+            : Color.primary.opacity(isHovered ? SidebarRowCardBackground.hoverTintOpacity : 0)
+        RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
+            .fill(fill)
+            .frame(width: RailProjectColumn.chipSize, height: RailProjectColumn.chipSize)
     }
 }
 
@@ -390,8 +471,7 @@ struct RailSessionRow: View {
                 .frame(width: glyphSize, height: glyphSize)
                 .background {
                     if inProjectColumn {
-                        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: RailProjectColumn.chipCornerRadius)
-                            .frame(width: RailProjectColumn.chipSize, height: RailProjectColumn.chipSize)
+                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered)
                     }
                 }
                 .frame(maxWidth: .infinity)

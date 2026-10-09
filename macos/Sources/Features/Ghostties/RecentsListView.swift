@@ -213,6 +213,10 @@ struct RecentsListView: View {
                 slotContent(slot, sections)
             }
         }
+        // Option D: the selected session's project group on one card.
+        .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
+            ExpandedGroupCard(anchors: anchors)
+        }
     }
 
     /// One slot of the section layout (`SidebarSessionSections.Slot`), the
@@ -269,12 +273,39 @@ struct RecentsListView: View {
                     .modifier(SidebarColumnPadding())
                     .animation(reflowAnimation, value: dragState)
                     .animation(reflowAnimation, value: projectDragState)
+                    // Room for the group card above a first-row header,
+                    // inside the clip; the scroll view reaches up the same
+                    // amount, so rows keep their y.
+                    .padding(.top, scrollBleed)
+                    // The card also reaches past the column's trailing edge
+                    // into the gutter before the canvas card.
+                    .padding(.trailing, trailingBleed)
             }
+            .padding(.top, -scrollBleed)
+            .padding(.trailing, -trailingBleed)
             .accessibilityLabel("Sessions")
             .redlineFrame(RedlineID.listViewport)
             .overlay(alignment: .top) { autoScrollEdgeZone(direction: -1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
             .overlay(alignment: .bottom) { autoScrollEdgeZone(direction: 1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
         }
+    }
+
+    /// How far the scroll region reaches above the first row, so the group
+    /// card's inset above a first header isn't clipped: the card inset, but
+    /// never into the traffic lights' row (centred at half the titlebar
+    /// inset, 16pt tall). Same rule as `SidebarRailView.scrollBleed`.
+    private var scrollBleed: CGFloat {
+        let titlebarInset = store.toolbarRowTopAnchorConstant * 2
+        return min(SidebarDialTuning.groupCardInset(), max(0, titlebarInset / 2 - 8))
+    }
+
+    /// The group card's overhang past the column's trailing edge
+    /// (`ExpandedGroupCard.horizontalOutset`), so it isn't clipped there.
+    private var trailingBleed: CGFloat {
+        max(0, ExpandedGroupCard.horizontalOutset(
+            cardInset: SidebarDialTuning.groupCardInset(),
+            rowLeadingPadding: SidebarDialTuning.rowLeadingPadding()
+        ))
     }
 
     // MARK: - Section Rows (drag-reflow aware)
@@ -313,6 +344,14 @@ struct RecentsListView: View {
         let gapBeforeId = groupedGapTarget(active)
         let projectGapBefore = projectGapTarget(groups)
         let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
+        // Option D: each header leads with its project's monogram tile (the
+        // rail's), and the group holding the selected session sits on one
+        // card (`ExpandedGroupCard`), its rows marked by chips.
+        let monograms = Dictionary(
+            zip(groups.map(\.id), ProjectMonogram.monograms(for: groups.map(\.name))),
+            uniquingKeysWith: { first, _ in first }
+        )
+        let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
         ForEach(items) { item in
             switch item {
             case .spacer:
@@ -323,8 +362,12 @@ struct RecentsListView: View {
                 if projectGapBefore == .some(group.id) {
                     ProjectDragGapView()
                 }
-                projectHeader(group, isCollapsed: isCollapsed, dropSlot: dropSlots[item.id])
-            case .row(let session, _):
+                projectHeader(
+                    group, isCollapsed: isCollapsed, dropSlot: dropSlots[item.id],
+                    monogram: monograms[group.id] ?? "?", isSelectedProject: group.id == selectedGroupId
+                )
+                .railGroupColumn(group.id == selectedGroupId)
+            case .row(let session, let group):
                 if session.id != dragState.draggingSessionId {
                     if gapBeforeId == .some(session.id) {
                         SessionDragGapView()
@@ -332,8 +375,10 @@ struct RecentsListView: View {
                     sessionRow(
                         for: session, section: .active, sectionList: active,
                         subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
+                        inProjectColumn: true,
                         projectDrop: dropSlots[item.id].map(projectDropTarget)
                     )
+                    .railGroupColumn(group.id == selectedGroupId)
                 }
             }
         }
@@ -349,8 +394,14 @@ struct RecentsListView: View {
     /// source and a project drop target, with Move Up/Down for VoiceOver;
     /// the "Unknown" group (no project) is neither.
     @ViewBuilder
-    private func projectHeader(_ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?) -> some View {
-        let header = ProjectAccordionHeader(name: group.name, count: group.sessions.count, isCollapsed: isCollapsed, isEmpty: group.isEmpty) {
+    private func projectHeader(
+        _ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?,
+        monogram: String, isSelectedProject: Bool
+    ) -> some View {
+        let header = ProjectAccordionHeader(
+            name: group.name, monogram: monogram, count: group.sessions.count,
+            isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject
+        ) {
             ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
                 ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
             }
@@ -692,7 +743,7 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil
+        subtitle: String? = nil, inProjectColumn: Bool = false, projectDrop: ProjectDropTarget? = nil
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
@@ -712,6 +763,7 @@ struct RecentsListView: View {
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
             subtitle: subtitle,
             isActive: coordinator.sidebarSelectedSessionId == session.id,
+            inProjectColumn: inProjectColumn,
             isEditing: editingSessionId == session.id,
             editingName: editingSessionId == session.id ? $editingName : .constant(""),
             isRenameFocused: $renameFieldFocused,
