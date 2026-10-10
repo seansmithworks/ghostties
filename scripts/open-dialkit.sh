@@ -25,13 +25,26 @@ case "$MODE" in
 esac
 [ $# -le 1 ] || { echo "usage: $0 [--build-only | --foreground]" >&2; exit 2; }
 
+BIN="$DIR/.build/out/Products/Release/dialkit-macos"
+LOG="$(dirname "$DIR")/inspector-$SHA.log"
+
+# Running guard first: nothing below may touch the cache while the inspector runs from it.
+if pgrep -f "$BIN" >/dev/null || lsof -nP -iTCP:44777 -sTCP:LISTEN >/dev/null 2>&1; then
+  if [ "$MODE" = "--build-only" ]; then
+    echo "Inspector is running; refusing to rebuild its cache. Stop it first." >&2
+    exit 1
+  fi
+  echo "Inspector already running (pid $(pgrep -f "$BIN" | head -1 || true)); not starting another."
+  exit 0
+fi
+
 mkdir -p "$DIR"
 [ -d "$DIR/.git" ] || git -C "$DIR" init -q
 git -C "$DIR" remote add origin "$REPO" 2>/dev/null || git -C "$DIR" remote set-url origin "$REPO"
 
 # Pristine pinned tree: wrong commit or any local change -> refetch from scratch.
 if [ "$(git -C "$DIR" rev-parse -q --verify HEAD 2>/dev/null || true)" != "$SHA" ] \
-   || [ -n "$(git -C "$DIR" status --porcelain)" ]; then
+   || [ -n "$(git -C "$DIR" status --porcelain --untracked-files=no)" ]; then
   rm -rf "$DIR"
   mkdir -p "$DIR"
   git -C "$DIR" init -q
@@ -41,7 +54,6 @@ if [ "$(git -C "$DIR" rev-parse -q --verify HEAD 2>/dev/null || true)" != "$SHA"
 fi
 
 (cd "$DIR" && swift build -c release --product dialkit-macos)
-BIN="$(cd "$DIR" && swift build -c release --product dialkit-macos --show-bin-path)/dialkit-macos"
 echo "DialKit inspector: $BIN"
 
 case "$MODE" in
@@ -51,10 +63,8 @@ case "$MODE" in
     exec "$BIN" ;;
 esac
 
-LOG="$DIR/inspector.log"
-if pgrep -f "$BIN" >/dev/null || lsof -nP -iTCP:44777 -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "Inspector already running (pid $(pgrep -f "$BIN" | head -1)); not starting another."
-  exit 0
-fi
+[ -x "$BIN" ] || { echo "build did not produce $BIN" >&2; exit 1; }
 nohup "$BIN" >"$LOG" 2>&1 &
-echo "Started inspector pid $! (log: $LOG). Launch Ghostties Dev now so its agent connects."
+PID=$!
+disown
+echo "Started inspector pid $PID (log: $LOG). Launch Ghostties Dev now so its agent connects."
