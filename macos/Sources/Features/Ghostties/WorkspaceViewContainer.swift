@@ -19,19 +19,24 @@ import GhosttiesCore
 final class SidebarWidthModel: ObservableObject {
     @Published var width: CGFloat
 
+    /// The sidebar ⇄ rail morph's progress: 0 = the expanded sidebar, 1 =
+    /// the rail (`SidebarMorphMetrics`). Written by
+    /// `WorkspaceViewContainer.transitionTo` inside the SAME `withAnimation`
+    /// block that drives the SwiftUI-side cross-fade, so `RecentsRowView`/the
+    /// transitional ZStack observe a SINGLE change and let SwiftUI's own
+    /// animation system interpolate the resulting opacity/offset modifiers.
+    /// Today's writers only write 0 or 1.
+    @Published var morph: CGFloat
+
     /// Flow 05 content choreography (sidebar-presence): which "presentation"
     /// the pinned⇄collapsed row content should render toward — `true` once a
     /// collapse has landed/is landing, `false` once an expand has
-    /// landed/is landing. Written by `WorkspaceViewContainer.transitionTo`
-    /// inside the SAME `withAnimation` block that drives the SwiftUI-side
-    /// cross-fade, so `RecentsRowView`/the transitional ZStack observe a
-    /// SINGLE change and let SwiftUI's own animation system interpolate the
-    /// resulting opacity/offset modifiers — never driven by a hand-rolled
-    /// per-frame progress value. Read unconditionally by `RecentsRowView`
-    /// (injected into every sidebar content tree, not just the transitional
-    /// one) so steady-state rendering (not mid-transition) still resolves to
-    /// the correct static appearance for whichever mode is settled.
-    @Published var isCollapsedPresentation: Bool
+    /// landed/is landing. Derived from `morph`. Read unconditionally by
+    /// `RecentsRowView` (injected into every sidebar content tree, not just
+    /// the transitional one) so steady-state rendering (not mid-transition)
+    /// still resolves to the correct static appearance for whichever mode is
+    /// settled.
+    var isCollapsedPresentation: Bool { morph >= 0.5 }
 
     /// The collapsed rail's width (`WorkspaceLayout.collapsedRailWidth(in:)`),
     /// kept current in every mode, not only while collapsed. The rail tray
@@ -41,9 +46,9 @@ final class SidebarWidthModel: ObservableObject {
     /// vertical, and animates through every width on the way.
     @Published var railWidth: CGFloat = WorkspaceLayout.sidebarRailWidth
 
-    init(width: CGFloat, isCollapsedPresentation: Bool = false) {
+    init(width: CGFloat, morph: CGFloat = 0) {
         self.width = width
-        self.isCollapsedPresentation = isCollapsedPresentation
+        self.morph = morph
     }
 }
 
@@ -1229,7 +1234,7 @@ class WorkspaceViewContainer: NSView {
         // writes this flag mid-animation, but it is the only other writer,
         // so a path that never crossfades (rail -> closed -> pinned) would
         // otherwise leave the previous mode's value behind.
-        widthModel.isCollapsedPresentation = sidebarMode == .collapsed
+        widthModel.morph = sidebarMode == .collapsed ? 1 : 0
 
         // Collapsed rail (Flow 01, sidebar-presence §02) replaces whichever
         // view mode (project-first/task-first) is otherwise active — it's a
@@ -1376,14 +1381,14 @@ class WorkspaceViewContainer: NSView {
             // directly (not animated) so the cross-fade animates FROM the
             // correct starting opacities, not from whatever the model was
             // last left at.
-            widthModel.isCollapsedPresentation = previousMode == .collapsed
+            widthModel.morph = previousMode == .collapsed ? 1 : 0
         }
 
         let animation = reduceMotion
             ? Animation.easeInOut(duration: WorkspaceLayout.sidebarTransitionAlphaDuration(reduceMotion: true, timing: timing))
             : WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
         withAnimation(animation) {
-            widthModel.isCollapsedPresentation = targetIsCollapsed
+            widthModel.morph = targetIsCollapsed ? 1 : 0
         }
     }
 
