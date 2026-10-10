@@ -7,7 +7,7 @@
 - [x] Working glyph: animated spinner; mid-spin stills explain the vertical dots. CLOSED.
 - [ ] Rendered geometry test on `test/option-d-rendered-geometry` @ c60e8544c, reviewed APPROVE; needs a PR after #205 merges.
 - [ ] Previously homeless, now homed:
-  - `fix/sidebar-spacing` (pushed 2026-10-10, 2 commits, backup only): decide fold or drop.
+  - `fix/sidebar-spacing` (pushed 2026-10-10, 2 commits, backup only): REDUNDANT with #205, not a fold-or-drop call. #205 already makes both goals: even 8pt trailing inset (bb543e52e) and the resize strip passing scroll through (fed6e15a9, fa2df2eb3). Merge test branch `trial/vnext-with-spacing` (812beffdc) had zero file diff vs #205. Close branch — pending Sean's OK to delete `fix/sidebar-spacing` and `trial/vnext-with-spacing`.
   - `build-badge-top-right` @ ede1da0f4: awaiting Sean's merge.
   - CEF browser-close fix `fix/cef-app-protocol` @ b552deadb: own PR after Sean's open/close click.
   - Refresh Appearance View-menu position check, after #205 merges.
@@ -22,6 +22,12 @@
   - [ ] Popover 0.98 scale and 150ms open, 100ms fade close.
   - [ ] Instant rail auto-scroll on keyboard selection.
   - [ ] Flow 01 opaque overlay (state 04) not built.
+- [x] Test parallelism: `fix/vnext-suite-contention` 9010b8d88 merged into #205 as b755b9829. Full run 1679 passed / 1 failed / 1 skipped / 1681; sole failure `WorkspacePersistenceTests.stateDirOverrideUnsetUsesBundleDerivedDirectory` (fix on `fix/persistence-test-capture-bundle` 62da4d8f3, awaiting Sean's OK to fold into #205).
+- [ ] Rail/sidebar tile-size + content dials and whole-app Preview appearance — in progress on `feat/rail-tile-size-dial`.
+- [ ] Sessions tab + pinned/history rows adopt Option D chip selection — strawman on `feat/sessions-view-option-d`; 3 forks for Sean in `~/.ghostties-evidence/vnext/sessions-port/port-spec.md`.
+- [ ] Worktree-launch tests await completion instead of 12s wall-clock polls — in progress on `test/worktree-launch-await-completion`.
+- [ ] Hover popover shows only for working / needs-approval sessions (`SessionPopoverContent.swift` make); Sean to confirm on a working session; design fork: show something for idle sessions?
+- [ ] DialKit inspector runs from `~/Code/_tools/dialkit-macos` @ cc305b4: `swift run dialkit-macos` in a separate terminal.
 
 ## 2026-10-10 — IDEA (beta.27 candidate): project overview canvas (session 7b48d66f)
 
@@ -43,11 +49,11 @@ State: all pushed to origin. Stack: `feat/sidebar-vnext` (PR #205 head 83780124d
 - [ ] Option D: hosted suite + independent review + Sean's Dev look (needs "Reset all panels" in DialKit first). | carried
 - [x] Corner radius: build uses concentric 8 (window measured 16pt); Sean's spec/D shows 12. DECIDE OR KILL — default stays 8. → CLOSED 2026-10-10: decided 12 (see top section). | carried
 - [ ] Merge stack into PR #205 after Sean OKs D → full `-only-testing:GhosttyTests` on final head → refresh PR body/stills. | carried
-- [ ] Known pre-existing test failure: `GhosttiesTestIsolation` dark glass shadow expects 0.298/8/2.5, code 0.4/12/4 (since 95f8d9ce9). → CLOSED 2026-10-10: expectation now 0.4/12/4, passes in hosted run. | carried
+- [x] Known pre-existing test failure: `GhosttiesTestIsolation` dark glass shadow expects 0.298/8/2.5, code 0.4/12/4 (since 95f8d9ce9). → CLOSED 2026-10-10: expectation now 0.4/12/4, passes in hosted run. | carried
 - [ ] Rail tiles drag-reorder (expanded headers only today). | parked
 - [ ] Custom character/icon on project tiles; persistent agents (pinning returns with them); idle/sleeping status. | parked
 - [ ] Ghostty "Configuration Errors" dialog appears when a capture passes `-ghostties.sidebarDial.*` launch args. | parked
-- [ ] DialKit inspector lives only in a /private/tmp scratchpad (fd55d575…/dkm-verify/tar/dialkit-macos-cc305b46…); move to ~/Code/_tools. | parked
+- [x] DialKit inspector lives only in a /private/tmp scratchpad (fd55d575…/dkm-verify/tar/dialkit-macos-cc305b46…); move to ~/Code/_tools. → DONE 2026-10-10: now at `~/Code/_tools/dialkit-macos` @ cc305b4. | parked
 
 ## 2026-10-08 — sidebar vnext decisions + overnight wave (session dd3c3085, "SideBar Tweaks")
 
