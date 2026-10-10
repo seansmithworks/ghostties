@@ -1,5 +1,16 @@
 # Ghostties — Backlog
 
+## 2026-10-10 — IDEA (beta.27 candidate): project overview canvas (session 7b48d66f)
+
+Sean: "if I click on the project head in the sidebar or rail, right now it only opens and closes. What if it actually had an overview of all the work happening?"
+
+- **Trigger:** click on a project header (sidebar) or project tile (rail) opens a per-project overview canvas instead of only collapse/expand.
+- **Content:** recent/active sessions and what each is doing; pre-populated/registered or live-updated on the fly.
+- **Layout:** a few supported layouts, e.g. four quadrants.
+- **Research first:** Claude Code's new project agent-manager layer as a possible structure (haven't checked what it exposes).
+- **Sibling idea, later:** a parent lead-orchestrator overlay across all projects.
+- Status: backlog only, not in beta.26 scope. Next: /impeccable shape pass + research, then pen.dev frames for Sean.
+
 ## 2026-10-09 — Sean's Dev pass round 2 (session b9bd1ac3, "SideBar Tweaks")
 
 State: all pushed to origin. Stack: `feat/sidebar-vnext` (PR #205 head 83780124d) ← `feat/rail-column` @ 95f8d9ce9 (C rail column + Rail column dials, session pinning hidden, dividers removed, rail tray 12pt icon gap, column inset 8, rail scrolls, concentric radius 16−8=8, tray shadow, DialKit panels Sidebar/Rail/Glass & Layout, + merged `feat/project-reorder` drag-reorder project groups w/ header keyboard focus) — each reviewer APPROVE, 342/342 targeted. ← `feat/sidebar-d` @ 4d8234b0a (Sean's pen.dev Option D: leading tiles/glyphs, group card, chips, 48pt rail pills, sidebar 256; NOT reviewed, hosted tests NOT run).
