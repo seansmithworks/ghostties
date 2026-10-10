@@ -77,8 +77,10 @@ Coordinates are pt, relative to the sidebar's leading edge (window x) unless not
 ### Sessions tab (no D frame; built to match D)
 
 Leading 30pt glyph slot at the same x as the one-view glyphs, project name as the
-subtitle, the full-row card for the selected row (no group, so no chip). The rail's
-Sessions tab is unchanged.
+subtitle, no monogram tile and no group card. The selected row is the same 30 × 30
+chip as Projects (r8, ink 10%, no rim; hover primary 4%), and so are Pinned and
+History rows in either tab: one rule, a selected row is a chip, and the group card
+only appears where a project group exists. The rail's Sessions tab is unchanged.
 
 ## DESIGN.md conflicts (D wins)
 

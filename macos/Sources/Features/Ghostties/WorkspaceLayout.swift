@@ -620,26 +620,10 @@ enum WorkspaceLayout {
     /// labels leave first, before the panel/glyph motion below even starts.
     static let sidebarRowLabelCollapseFadeDuration: TimeInterval = 0.1
 
-    /// Delay before a session row's glyph starts its inward travel on
-    /// COLLAPSE — the canvas's "glyph translateX +8 → +28px, window
-    /// 60-260ms" row. The panel itself is already moving at t=0 (driven by
-    /// `sidebarTransitionTiming`); the glyph's own small in-row shift waits
-    /// until the label has mostly cleared before it starts.
-    static let sidebarRowGlyphCollapseTravelDelay: TimeInterval = 0.06
-
-    /// Duration of the glyph's inward travel once it starts (260ms total
-    /// collapse window minus the 60ms delay above).
-    static let sidebarRowGlyphCollapseTravelDuration: TimeInterval = 0.2
-
-    /// Row corner radius on COLLAPSE — same 60-260ms window as the glyph
-    /// travel above. The canvas's own table names "8 → 16px", but this
-    /// row's EXISTING resting radius (`RecentsRowView.rowBackground`,
-    /// unrelated to Flow 05) is 6, not 8 — resting stays 6 so this
-    /// choreography never silently changes the settled row's appearance;
-    /// the traveled value keeps the canvas's ~2x ratio (6 → 12) rather than
-    /// importing its literal 16.
+    /// Corner radius of the wide row card (`SidebarRowCardBackground`),
+    /// which the rail's flat rows still draw. Expanded-list rows select with
+    /// the chip instead, so nothing animates this radius any more.
     static let sidebarRowCornerRadiusResting: CGFloat = 6
-    static let sidebarRowCornerRadiusTraveled: CGFloat = 12
 
     /// Duration a session row's glyph takes to travel back out on EXPAND —
     /// the canvas's reopen note: "reverse at 240ms on the drawer curve...

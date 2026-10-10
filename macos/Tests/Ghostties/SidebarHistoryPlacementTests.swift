@@ -8,10 +8,10 @@ import GhosttiesCore
 /// rail alike, outside the scrolling area. (The "History placement" dial
 /// and its `afterActive` option were removed at the vnext lock.)
 ///
-/// Geometry is read off pixels: History is selected (Tint + shimmer, its
-/// rim off so only the tint fill marks the card), so its card is the one
-/// marked run down the card's leading edge, and the opaque tray is the first
-/// marked pixel row below it. Dials are set only in a private suite bound
+/// Geometry is read off pixels: History is selected, so the rail marks it
+/// with its row card (Tint + shimmer, rim off so only the tint fill marks
+/// it) and the expanded list with the option D chip behind its glyph slot;
+/// the opaque tray is the first marked pixel row below it. Dials are set only in a private suite bound
 /// around each render (`withDials`).
 @MainActor
 final class SidebarHistoryPlacementTests: XCTestCase {
@@ -164,23 +164,36 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         return runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
     }
 
-    /// The x of a selected card's leading edge plus its corner radius: past
-    /// the corner curve, so the card's full height is marked there, and
-    /// still clear of the title ink.
-    private func cardProbeX(rail: Bool) -> CGFloat {
-        SidebarDialTuning.windowMargin() + (rail ? 0 : SidebarDialTuning.contentPaddingLeading())
-            + WorkspaceLayout.sidebarRowCornerRadiusResting
+    /// The x of the rail's selected card's leading edge plus its corner
+    /// radius: past the corner curve, so the card's full height is marked
+    /// there.
+    private func cardProbeX() -> CGFloat {
+        SidebarDialTuning.windowMargin() + WorkspaceLayout.sidebarRowCornerRadiusResting
     }
 
-    /// The selected card: the marked run one row tall, above the tray (a
-    /// tray capsule can be one row tall too).
+    /// The selected row's extent, top to bottom. The rail marks it with the
+    /// row card: the marked run one row tall, above the tray (a tray capsule
+    /// can be one row tall too). The expanded list marks it with the option D
+    /// chip behind the glyph slot, centred in the row: the lowest chip-sized
+    /// marked run there, grown to the row's height about its centre.
     private func selectedCard(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
         let rowHeight = SidebarDialTuning.rowHeight()
         let trayHeight = SidebarTray.reservedHeight(isVertical: rail) - (rail ? 0 : SidebarDialTuning.listToTrayGap())
-        let cards = runsDown(r, atX: cardProbeX(rail: rail)).filter {
-            abs(($0.upperBound - $0.lowerBound) - rowHeight) <= 1.5 && $0.upperBound <= r.height - trayHeight
+        guard !rail else {
+            let cards = runsDown(r, atX: cardProbeX()).filter {
+                abs(($0.upperBound - $0.lowerBound) - rowHeight) <= 1.5 && $0.upperBound <= r.height - trayHeight
+            }
+            return try XCTUnwrap(cards.first, "no selected card found (rail)")
         }
-        return try XCTUnwrap(cards.first, "no selected card found (rail: \(rail))")
+        let chip = RailProjectColumn.chipSize
+        let chips = runsDown(r, atX: chipCentreX(r, rail: false) - chip / 2 + 8).filter {
+            abs(($0.upperBound - $0.lowerBound) - chip) <= 1.5 && $0.upperBound <= r.height - trayHeight
+        }
+        // The last one: History sits at the bottom, and a project header's
+        // 30pt tile above it is chip-sized too.
+        let found = try XCTUnwrap(chips.last, "no selected chip found (expanded)")
+        let mid = (found.lowerBound + found.upperBound) / 2
+        return mid - rowHeight / 2...mid + rowHeight / 2
     }
 
     /// The tray's top edge: the first pixel row below `y` lifted off the
