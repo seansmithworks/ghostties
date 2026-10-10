@@ -10,19 +10,6 @@ import GhosttiesCore
 /// selected row still draws (no blank). Uses private suites only.
 @MainActor
 final class SidebarRetiredDialsTests: XCTestCase {
-    func testTintShimmerDarkIntensityDefaultsToLightAndRoundTrips() {
-        let name = "com.seansmithdesign.ghostties.tests.tint-shimmer-dark"
-        let d = UserDefaults(suiteName: name)!
-        d.removePersistentDomain(forName: name)
-        defer { d.removePersistentDomain(forName: name) }
-        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensityKey, "ghostties.sidebarDial.tintShimmerDarkIntensity")
-        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), TrayGlassStyle.light.chromaticIntensity)
-        XCTAssertGreaterThan(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), 0)
-        d.set(0.65, forKey: SidebarDialTuning.tintShimmerDarkIntensityKey)
-        XCTAssertEqual(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d), 0.65)
-        XCTAssertTrue(SidebarDialTuning.allKeys.contains(SidebarDialTuning.tintShimmerDarkIntensityKey))
-    }
-
     /// "Reset sidebar" clears the retired keys too, so a stale value can't
     /// linger in a Dev domain.
     func testResetClearsRetiredKeys() {

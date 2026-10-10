@@ -48,8 +48,7 @@ enum TrayIconTapEffect {
 }
 
 /// "Sidebar vnext" (pen.dev `CnDfN`): the sidebar tray, on both axes, is one
-/// white Liquid Glass surface, and the selected session row's rim
-/// (`SidebarRowCardBackground`) is its chromatic rim. Canvas values are
+/// white Liquid Glass surface. Canvas values are
 /// retina px (its traffic lights measure 28px, the built app's 14pt), so each
 /// value here is the canvas value / 2. These are the compiled defaults; every
 /// one is read through `SidebarDialTuning` so the DialKit inspector can tune
@@ -248,11 +247,6 @@ enum TrayGlassStyle {
     static let trayWidth: TrayWidth = .split
     /// Default selected-row title weight (see `SelectedTitleWeight`).
     static let selectedTitleWeight: SelectedTitleWeight = .regular
-    /// Default rim intensity of the Tint + shimmer selected row in dark: the
-    /// light look's, so the row reads the same across themes.
-    static let tintShimmerDarkIntensity: Double = light.chromaticIntensity
-    /// Selected rail glyph: canvas 35px (vs the 28px it replaces).
-    static let selectedGlyphSize: CGFloat = 17.5
     /// Tray icon weight: the canvas's lucide icons are 2px strokes on a 24px
     /// grid (~1.5pt at 17.5pt), which `.regular` matches.
     static let iconWeight: Font.Weight = .regular
@@ -448,8 +442,7 @@ struct RailTrayGeometry: Equatable {
     }
 }
 
-/// The iridescent edge, in either appearance: the tray glass's and the
-/// "Tint + shimmer" selected row's shared rim. Not in the tree at all at
+/// The iridescent edge of the tray glass, in either appearance. Not in the tree at all at
 /// intensity 0, so the default look is untouched.
 struct TrayChromaticRim: View {
     let look: TrayGlassStyle.Look
@@ -575,51 +568,6 @@ private struct TrayPillShadow: View {
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-    }
-}
-
-/// A sidebar row card's background, hover and selected alike, in the rail
-/// and the expanded list. Both states draw the same shape filling the row
-/// frame, so the selected card's footprint is the hover's by construction
-/// (Sean, 2026-10-07: "the size of the hover feels good to me, filling the
-/// space"). Selected is "Tint + shimmer" (Sean, 2026-10-08): a faint primary
-/// tint with the tray glass's chromatic rim; hover is a fainter tint, and
-/// the selected row ignores it.
-struct SidebarRowCardBackground: View {
-    let isActive: Bool
-    let isHovered: Bool
-    var cornerRadius: CGFloat = WorkspaceLayout.sidebarRowCornerRadiusResting
-
-    /// Tint behind the selected row.
-    static let selectedTintOpacity: Double = 0.075
-    /// Tint behind a hovered, unselected row: subordinate to the selected tint.
-    static let hoverTintOpacity: Double = 0.04
-
-    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius)
-        if isActive {
-            shape
-                .fill(Color.primary.opacity(Self.selectedTintOpacity))
-                .overlay {
-                    TrayChromaticRim(look: tintShimmerLook, shape: shape)
-                }
-        } else {
-            shape.fill(isHovered ? Color.primary.opacity(Self.hoverTintOpacity) : .clear)
-        }
-    }
-
-    /// The rim look. In dark the row takes its intensity from its own dial
-    /// ("Shimmer (dark)"), not the tray's fainter dark rim, so the row
-    /// shimmers the same in both themes.
-    private var tintShimmerLook: TrayGlassStyle.Look {
-        var look = SidebarDialTuning.trayGlass(for: colorScheme)
-        if colorScheme == .dark {
-            look.chromaticIntensity = SidebarDialTuning.tintShimmerDarkIntensity()
-        }
-        return look
     }
 }
 

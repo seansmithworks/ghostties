@@ -620,11 +620,6 @@ enum WorkspaceLayout {
     /// labels leave first, before the panel/glyph motion below even starts.
     static let sidebarRowLabelCollapseFadeDuration: TimeInterval = 0.1
 
-    /// Corner radius of the wide row card (`SidebarRowCardBackground`),
-    /// which the rail's flat rows still draw. Expanded-list rows select with
-    /// the chip instead, so nothing animates this radius any more.
-    static let sidebarRowCornerRadiusResting: CGFloat = 6
-
     /// Duration a session row's glyph takes to travel back out on EXPAND —
     /// the canvas's reopen note: "reverse at 240ms on the drawer curve...
     /// session glyphs fade in 40ms apart, labels land 60ms after their

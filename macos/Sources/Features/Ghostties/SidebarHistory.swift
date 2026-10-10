@@ -215,7 +215,7 @@ struct HistoryRowView: View {
 // MARK: - History Row (rail)
 
 /// The rail's History row: the clock centred in the same 48pt row and
-/// selected surface as `RailSessionRow`.
+/// chip as `RailSessionRow`.
 struct RailHistoryRow: View {
     /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
@@ -226,12 +226,16 @@ struct RailHistoryRow: View {
     @State private var isHovered = false
 
     var body: some View {
+        // Same glyph size and chip as `RailSessionRow`.
+        let glyphSize = RailProjectColumn.chipGlyphSize(.rail)
         Button(action: onTap) {
             HistoryGlyph(size: glyphSize)
                 .frame(width: glyphSize, height: glyphSize)
+                .background {
+                    SidebarRowChipBackground(context: .rail, isActive: isActive, isHovered: isHovered)
+                }
                 .frame(maxWidth: .infinity)
                 .frame(height: SidebarDialTuning.rowHeight())
-                .background(rowBackground)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -239,15 +243,6 @@ struct RailHistoryRow: View {
         .help("History — \(subtitle)")
         .accessibilityLabel("History, \(subtitle)")
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
-
-    /// Same sizing rule as `RailSessionRow.glyphSize`.
-    private var glyphSize: CGFloat {
-        isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
-    }
-
-    private var rowBackground: some View {
-        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered)
     }
 }
 

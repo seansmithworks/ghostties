@@ -109,7 +109,6 @@ struct SidebarLockedDefaultsTests {
         #expect(SidebarDialTuning.trayGlassCornerStyle(defaults: d) == .radius)
         #expect(SidebarDialTuning.trayCornerRadius(defaults: d) == WorkspaceLayout.windowCornerRadius - 8)
         #expect(SidebarDialTuning.selectedTitleWeight(defaults: d) == .regular)
-        #expect(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d) == 0.3)
         #expect(SidebarDialTuning.contentPaddingLeading(defaults: d) == 0)
         #expect(SidebarDialTuning.contentPaddingTop(defaults: d) == 0)
         #expect(SidebarDialTuning.listToTrayGap(defaults: d) == 0)

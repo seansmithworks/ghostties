@@ -80,7 +80,9 @@ Leading 30pt glyph slot at the same x as the one-view glyphs, project name as th
 subtitle, no monogram tile and no group card. The selected row is the same 30 × 30
 chip as Projects (r8, ink 10%, no rim; hover primary 4%), and so are Pinned and
 History rows in either tab: one rule, a selected row is a chip, and the group card
-only appears where a project group exists. The rail's Sessions tab is unchanged.
+only appears where a project group exists. The rail follows the same rule: every
+rail row, Pinned, Sessions tab and History included, selects with the 30 × 30 chip
+(Sean, 2026-10-10), so tile, chip and glyph are one piece in both modes.
 
 ## DESIGN.md conflicts (D wins)
 

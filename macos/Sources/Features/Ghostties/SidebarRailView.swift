@@ -196,13 +196,13 @@ struct SidebarRailView: View {
                 }
                 .railGroupColumn(group.id == selectedGroupId)
             case .row(let session, let group):
-                railRow(for: session, inProjectColumn: true)
+                railRow(for: session)
                     .railGroupColumn(group.id == selectedGroupId)
             }
         }
     }
 
-    private func railRow(for session: AgentSession, inProjectColumn: Bool = false) -> some View {
+    private func railRow(for session: AgentSession) -> some View {
         RailSessionRow(
             sessionId: session.id,
             name: session.name,
@@ -212,7 +212,6 @@ struct SidebarRailView: View {
             indicatorState: store.globalIndicatorStates[session.id] ?? .inactive,
             isActive: coordinator.sidebarSelectedSessionId == session.id,
             dialEpoch: SidebarDialTuning.epoch(),
-            inProjectColumn: inProjectColumn,
             onTap: { coordinator.focusSession(id: session.id) }
         )
         // `RailScrollToKeyboardSelection` scrolls to this id.
@@ -261,9 +260,9 @@ private struct RailScrollToKeyboardSelection: ViewModifier {
 /// One view's selection (Sean, 2026-10-08, strawman C; option D,
 /// 2026-10-09): the selected session's project becomes a column on the rail,
 /// tile through its last row, its tile filled with ink, and a card the full
-/// row width in the expanded list (`ExpandedGroupCard`). Each grouped
-/// session is marked by a tile-sized chip behind its glyph, in both.
-/// Pinned rows, and the Sessions tab, keep the wide row card.
+/// row width in the expanded list (`ExpandedGroupCard`). Every session row,
+/// grouped or not, and History, is marked by a tile-sized chip behind its
+/// glyph, in both.
 ///
 /// Every value below is a "Rail column" dial (`SidebarDialTuning`); the
 /// `default…` constants are what ships, and what each dial reads unset.
@@ -282,8 +281,10 @@ enum RailProjectColumn {
     /// The selected project's tile: 1 is full ink, 0 the plain tile tint.
     static let defaultSelectedTileFill: Double = 1
     /// The selected chip's fill (option D `#0000001A`). Flat: no chromatic
-    /// rim, unlike the wide selected row card.
+    /// rim.
     static let selectedChipTintOpacity: Double = 0.10
+    /// A hovered, unselected chip's fill: subordinate to the selected tint.
+    static let hoverChipTintOpacity: Double = 0.04
 
     /// `context`'s "Thread tile size", clamped to the row height so the
     /// chip never spills out of its row.
@@ -446,8 +447,8 @@ struct ExpandedGroupCard: View {
     }
 }
 
-/// A grouped session's selection and hover mark (option D): a tile-sized
-/// chip behind its glyph, flat (`RailProjectColumn.selectedChipTintOpacity`),
+/// A session row's (and History's) selection and hover mark (option D), in
+/// the expanded list and the rail alike: a tile-sized chip behind its glyph, flat (`RailProjectColumn.selectedChipTintOpacity`),
 /// no chromatic rim; hover is the row's hover tint.
 struct SidebarRowChipBackground: View {
     /// Which tile the chip is sized from (`RailProjectColumn.chipSize`).
@@ -465,7 +466,7 @@ struct SidebarRowChipBackground: View {
         // canvas's alpha on solid ink.
         let fill = isActive
             ? RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.selectedChipTintOpacity)
-            : Color.primary.opacity(isHovered ? SidebarRowCardBackground.hoverTintOpacity : 0)
+            : Color.primary.opacity(isHovered ? RailProjectColumn.hoverChipTintOpacity : 0)
         RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
             .fill(fill)
             .frame(width: RailProjectColumn.chipSize(context), height: RailProjectColumn.chipSize(context))
@@ -476,10 +477,12 @@ struct SidebarRowChipBackground: View {
 // MARK: - Rail Session Row
 
 /// A single rail row: the same status glyph as the expanded Sessions list,
-/// centered horizontally in the rail card, at the same row height as
+/// centered horizontally in the rail, at the same row height as
 /// `RecentsRowView` (Sean, 2026-10-05: rail icons centered; the expanded row
-/// keeps its glyph on the trailing edge). The label is dropped; the per-row
-/// tap target stays.
+/// keeps its glyph in the leading slot). The label is dropped; the per-row
+/// tap target stays. Selection and hover are the expanded list's chip
+/// (`SidebarRowChipBackground`) in every rail row, Pinned, grouped and
+/// Sessions tab alike: one piece in both modes.
 struct RailSessionRow: View {
     /// Subscribes this view to every dial write (`SidebarDialTuning.epochKey`):
     /// SwiftUI skips a body whose inputs are unchanged, and these views read
@@ -490,12 +493,9 @@ struct RailSessionRow: View {
     let projectName: String
     let indicatorState: SessionIndicatorState
     let isActive: Bool
-    /// `SidebarDialTuning.epoch()`: a live Tray glass dial change must
-    /// re-render the selected pill even when nothing else about the row did.
+    /// `SidebarDialTuning.epoch()`: a live chip dial change must re-render
+    /// the selected chip even when nothing else about the row did.
     var dialEpoch = 0
-    /// A one-view grouped row: marked by a tile-sized chip inside its
-    /// project's column (`RailProjectColumn`), not the wide row card.
-    var inProjectColumn = false
     let onTap: () -> Void
 
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -510,44 +510,25 @@ struct RailSessionRow: View {
     }
 
     var body: some View {
+        // The rail's "Thread tile icon", the same size selected or not: the
+        // chip marks selection, not a glyph size change.
+        let glyphSize = RailProjectColumn.chipGlyphSize(.rail)
         Button(action: onTap) {
-            // No side padding: the card spans the rail's content margins
-            // (symmetric), so centering in the card centers on the rail.
+            // No side padding: the row spans the rail's content margins
+            // (symmetric), so centering in the row centers on the rail.
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize)
                 .frame(width: glyphSize, height: glyphSize)
                 .background {
-                    if inProjectColumn {
-                        SidebarRowChipBackground(context: .rail, isActive: isActive, isHovered: isHovered, redlineID: RedlineID.railChip(sessionId))
-                    }
+                    SidebarRowChipBackground(context: .rail, isActive: isActive, isHovered: isHovered, redlineID: RedlineID.railChip(sessionId))
                 }
                 .frame(maxWidth: .infinity)
-            .frame(height: SidebarDialTuning.rowHeight())
-            .background {
-                if !inProjectColumn {
-                    rowBackground
-                }
-            }
-            .contentShape(Rectangle())
+                .frame(height: SidebarDialTuning.rowHeight())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .sessionPopoverAnchor(sessionId: sessionId, controller: coordinator.sessionPopover, showsName: true)
         .accessibilityLabel(Self.accessibilityLabel(name: name, projectName: projectName, kind: indicatorState.statusGlyphKind, isActive: isActive))
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
-
-    /// Sidebar vnext (pen.dev `CnDfN`): the selected glyph grows to the
-    /// canvas's 35px (17.5pt).
-    private var glyphSize: CGFloat {
-        // The chip marks selection in a project column, not a glyph size
-        // change, so every grouped row keeps the resting size.
-        guard !inProjectColumn else { return RailProjectColumn.chipGlyphSize(.rail) }
-        return isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
-    }
-
-    /// The selected card fills the hover card's footprint
-    /// (`SidebarRowCardBackground`).
-    private var rowBackground: some View {
-        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered)
     }
 }

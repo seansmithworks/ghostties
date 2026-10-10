@@ -4,10 +4,12 @@ import GhosttiesCore
 @testable import Ghostty
 
 /// The Sessions tab selects a row the way the Projects tab does (option D,
-/// one rule): a tile-sized chip behind the leading glyph slot, not the
-/// full-row card. Read off rendered pixels of the real `RecentsListView` with
-/// the tab pinned to Sessions, for a selected active row and a selected
-/// pinned row (Pinned renders through the same flat path in both tabs).
+/// one rule): a tile-sized chip behind the glyph, not the full-row card, in
+/// the expanded list (behind the leading glyph slot) and the rail (centred
+/// on the rail) alike. Read off rendered pixels of the real `RecentsListView`
+/// and `SidebarRailView` with the tab pinned to Sessions, for a selected
+/// active row and a selected pinned row (Pinned renders through the same
+/// flat path in both tabs).
 ///
 /// The chip is a 10% ink tint on the chrome; there is no group card behind
 /// it here. Measured down a line 8pt inside the chip's leading edge (past its
@@ -17,10 +19,21 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
     private struct Render {
         let rep: NSBitmapImageRep
         let scale: CGFloat
+        let width: CGFloat
         let height: CGFloat
     }
 
-    private func render(selectPinned: Bool) throws -> Render {
+    private func railWidth() throws -> CGFloat {
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: true)
+        let close = try XCTUnwrap(window.standardWindowButton(.closeButton))
+        let zoom = try XCTUnwrap(window.standardWindowButton(.zoomButton))
+        return WorkspaceLayout.collapsedRailWidth(
+            zoomButtonMaxX: zoom.convert(zoom.bounds, to: nil).maxX,
+            leadingInset: close.convert(close.bounds, to: nil).minX
+        )
+    }
+
+    private func render(selectPinned: Bool, rail: Bool = false) throws -> Render {
         try withDials {
             let project = Project(name: "atlas-api", rootPath: "~/Code/atlas-api")
             let sessions = (0..<3).map { i in
@@ -41,7 +54,7 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
             let coordinator = SessionCoordinator()
             coordinator.setActiveSessionIdForTesting(selectPinned ? sessions[0].id : sessions[2].id)
 
-            let width: CGFloat = 260
+            let width: CGFloat = rail ? try railWidth() : 260
             let height: CGFloat = 400
             let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
             // The list reads the tab from store-less `@AppStorage`; pin it to
@@ -50,10 +63,11 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
             let tabSuite = try XCTUnwrap(UserDefaults(suiteName: tabSuiteName))
             defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
             tabSuite.set(SidebarTab.sessions.rawValue, forKey: "ghostties.sidebarTab")
-            let root = VStack(spacing: 0) {
+            let column = rail ? AnyView(SidebarRailView()) : AnyView(VStack(spacing: 0) {
                 RecentsListView()
                 Spacer(minLength: 0)
-            }
+            })
+            let root = column
                 .frame(width: width, height: height)
                 .environment(\.sidebarTrailingGutter, 0)
                 .environmentObject(store)
@@ -73,7 +87,7 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
             hosting.layoutSubtreeIfNeeded()
             let rep = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
             hosting.cacheDisplay(in: hosting.bounds, to: rep)
-            return Render(rep: rep, scale: CGFloat(rep.pixelsWide) / width, height: height)
+            return Render(rep: rep, scale: CGFloat(rep.pixelsWide) / width, width: width, height: height)
         }
     }
 
@@ -119,6 +133,26 @@ final class SidebarSessionsTabSelectionTests: XCTestCase {
             let run = try XCTUnwrap(across.first { $0.contains(probeX) }, "\(tag): no mark across the slot")
             XCTAssertEqual(run.upperBound - run.lowerBound, chip, accuracy: 1.0, "\(tag): selected mark is chip-wide (~\(chip)pt), not the row's width")
             XCTAssertEqual(run.lowerBound, slotMidX - chip / 2, accuracy: 1.0, "\(tag): chip leading edge on the glyph slot")
+        }
+    }
+
+    /// The rail's Sessions tab marks the selected row with the rail chip,
+    /// centred on the rail, not the rail-wide row card.
+    func testSelectedRailSessionsTabRowIsTheChipNotTheRowCard() throws {
+        for selectPinned in [false, true] {
+            let tag = selectPinned ? "rail pinned" : "rail active"
+            let r = try render(selectPinned: selectPinned, rail: true)
+            let chip = RailProjectColumn.chipSize(.rail)
+            let midX = r.width / 2
+            let probeX = midX - chip / 2 + 8
+            let down = runs(r, alongX: false, at: probeX)
+            XCTAssertEqual(down.count, 1, "\(tag): one selected mark down the rail, got \(down)")
+            let mark = try XCTUnwrap(down.first, "\(tag): no selected mark")
+            XCTAssertEqual(mark.upperBound - mark.lowerBound, chip, accuracy: 1.0, "\(tag): selected mark is chip-tall, not a \(SidebarDialTuning.rowHeight())pt row card")
+            let across = runs(r, alongX: true, at: (mark.lowerBound + mark.upperBound) / 2)
+            let run = try XCTUnwrap(across.first { $0.contains(probeX) }, "\(tag): no mark across the rail")
+            XCTAssertEqual(run.upperBound - run.lowerBound, chip, accuracy: 1.0, "\(tag): selected mark is chip-wide (~\(chip)pt), not the rail's width")
+            XCTAssertEqual((run.lowerBound + run.upperBound) / 2, midX, accuracy: 1.0, "\(tag): chip centred on the rail")
         }
     }
 }
