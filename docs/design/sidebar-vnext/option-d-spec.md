@@ -56,7 +56,7 @@ Coordinates are pt, relative to the sidebar's leading edge (window x) unless not
 | Glyph → title gap | 10 (`K3oST` padding left) | 10 | `sidebarIconLabelSpacing` |
 | Row title | 14 regular `#000000D9` | 14 regular, `.primary` | `rowTitleSize` dial |
 | Row subtitle | 11 regular `#636363`, 1pt below title | same | `rowSubtitleSize` dial |
-| Selected row (grouped, expanded) | 30 × 30 chip behind the glyph, r8, `#0000001A`, no rim (`m6j5AS`) | full-row card, r8, primary 7.5% + chromatic rim | `SidebarRowCardBackground` |
+| Selected row (grouped, expanded) | 30 × 30 chip behind the glyph, r8, `#0000001A`, no rim (`m6j5AS`) | chip behind the glyph in every expanded row (grouped or not), no rim | `SidebarRowChipBackground` |
 | Selected group card (expanded) | list −2 / +2 horizontally, header top −6, last row bottom +6; r12; `#0000000F` (`T6FfX`) | not drawn | new (from `explore/expanded-tiles` C) |
 | Rail project column | tile ±4 (38 wide), tile top −4, last row bottom +3; r12; `#0000000F` (`p6osQ7`) | tile ±8 (46 wide), last chip bottom +8; r 9 + 8 = 17; 4% | `railColumnInset` (8), `railChipCornerRadius` (9), `railColumnTintOpacity` (0.04) dials |
 | Rail selected chip | 30 × 30, r8, `#0000001A`, no rim (`ZiGlb`) | r9, primary 7.5% + rim | `railChipCornerRadius` dial, `SidebarRowCardBackground` |

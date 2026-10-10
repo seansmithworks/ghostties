@@ -922,8 +922,9 @@ final class SidebarDialKitCoordinator: ObservableObject {
         // Not a dial either: spacing bands measured off the live layout.
         .toggle("redlines", keyPath: \.redlines, label: "Redlines"),
         // Colour and material, one group per appearance. Each drives the
-        // tray on both axes; its chromatic rim is also the selected session
-        // row's (`SidebarRowCardBackground`).
+        // tray on both axes; its chromatic rim is also the rail's selected
+        // flat row card's (`SidebarRowCardBackground`). The expanded list's
+        // selected chip has no rim.
         .group("glassLight", label: "Glass — Light", children: glassControls("light", \.glassLight)),
         .group("glassDark", label: "Glass — Dark", children: glassControls("dark", \.glassDark)),
         // Shape and behaviour, shared by both appearances.
@@ -1208,7 +1209,9 @@ enum SidebarListDialPanel: FocusedDialPanel {
                 .slider("rowHeight", keyPath: \.rowHeight, label: "Row height", range: 32...64, unit: "pt"),
                 .slider("rowGap", keyPath: \.rowGap, label: "Row gap", range: 0...12, unit: "pt"),
             ]),
-            // The selected row card (`SidebarRowCardBackground`).
+            // The selected row: its title weight, and the shimmer of the
+            // rail's flat row card (`SidebarRowCardBackground`); the expanded
+            // list marks it with the chip (`SidebarRowChipBackground`).
             .group("selectedRow", label: "Selected row", children: [
                 .select("selectedTitleWeight", keyPath: \.selectedTitleWeight, label: "Selected title weight",
                         options: TrayGlassStyle.SelectedTitleWeight.allCases.map(\.rawValue)),
