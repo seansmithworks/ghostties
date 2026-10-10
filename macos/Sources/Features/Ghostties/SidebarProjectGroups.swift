@@ -314,6 +314,7 @@ struct ProjectAccordionHeader: View {
                 isSelectedProject: isSelectedProject
             )
             .redlineFrame(redlineID.map { $0 + ".tile" })
+            .morphIdentityProbe(redlineID.map { $0 + ".tile" })
             .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
             Text(name.uppercased())
                 .font(.system(size: 11, weight: .semibold))

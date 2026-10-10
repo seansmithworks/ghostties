@@ -194,6 +194,7 @@ struct SidebarRailView: View {
                         ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
                     }
                 }
+                .morphIdentityProbe(RedlineID.header(group.id) + ".tile")
                 .railGroupColumn(group.id == selectedGroupId)
             case .row(let session, let group):
                 railRow(for: session)
@@ -403,6 +404,7 @@ private struct RailGroupColumn: View {
                     .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
                     .frame(width: width, height: extent.upperBound - extent.lowerBound)
                     .redlineFrame(RedlineID.railColumn)
+                    .morphIdentityProbe(RedlineID.groupCard)
                     .position(x: union.midX, y: (extent.lowerBound + extent.upperBound) / 2)
             }
         }
@@ -444,6 +446,7 @@ struct ExpandedGroupCard: View {
                     .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
                     .frame(width: max(0, union.width + outset * 2), height: extent.upperBound - extent.lowerBound)
                     .redlineFrame(RedlineID.groupCard)
+                    .morphIdentityProbe(RedlineID.groupCard)
                     .position(x: union.midX, y: (extent.lowerBound + extent.upperBound) / 2)
             }
         }
@@ -525,6 +528,7 @@ struct RailSessionRow: View {
                 .frame(width: glyphSize, height: glyphSize)
                 .background {
                     SidebarRowChipBackground(context: .rail, isActive: isActive, isHovered: isHovered, redlineID: RedlineID.railChip(sessionId))
+                        .morphIdentityProbe(RedlineID.row(sessionId) + ".chip")
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: SidebarDialTuning.rowHeight())

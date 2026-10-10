@@ -242,6 +242,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                     // glyph in every list (option D): one rule; the group
                     // card is drawn only around a project group.
                     SidebarRowChipBackground(context: .sidebar, isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
+                        .morphIdentityProbe(redlineID + ".chip")
                 }
                 .redlineFrame(redlineID + ".glyph")
 

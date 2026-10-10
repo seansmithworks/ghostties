@@ -202,6 +202,24 @@ class WorkspaceViewContainer: NSView {
     #if DEBUG
     /// Test-only: the container's own coordinator, for seeding live surfaces.
     var coordinatorForTesting: SessionCoordinator { coordinator }
+    /// The sidebar's mount and body counters (`MorphProbe`), read by the
+    /// morph gates.
+    let morphProbe = MorphProbe()
+    var redlineRegistryForTesting: RedlineRegistry { redlineOverlay.registry }
+
+    /// Holds the sidebar at one step of the sidebar ⇄ rail morph, with no
+    /// animation: the AppKit width and the SwiftUI width at
+    /// lerp(sidebar, rail, `progress`), and `widthModel.morph` at
+    /// `progress`. The sidebar mode is left alone. Drives the morph gates
+    /// and `GHOSTTIES_CAPTURE_MORPH_STEPS`.
+    func applyMorphStep(_ progress: CGFloat) {
+        let p = min(max(progress, 0), 1)
+        let width = SidebarMorphMetrics.lerp(currentSidebarWidth, WorkspaceLayout.collapsedRailWidth(in: self), p)
+        sidebarWidthConstraint.constant = width
+        widthModel.width = width
+        widthModel.morph = p
+        layoutSubtreeIfNeeded()
+    }
     #endif
 
     /// v0 task-first sidebar store. Loads `.ghostties/tasks/*.md` fixtures once.
@@ -1260,7 +1278,9 @@ class WorkspaceViewContainer: NSView {
         .environmentObject(store)
         .environmentObject(coordinator)
         #if DEBUG
-        return AnyView(root.environment(\.redlineRegistry, redlineOverlay.registry))
+        return AnyView(root
+            .environment(\.redlineRegistry, redlineOverlay.registry)
+            .environment(\.morphProbe, morphProbe))
         #else
         return AnyView(root)
         #endif

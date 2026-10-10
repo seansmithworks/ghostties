@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SwiftUI
 
 /// The one-object sidebar ⇄ rail morph's geometry (plan
 /// `vnext/morph/plan.md`, slice 1): every shared element's size and
@@ -171,5 +172,61 @@ struct SidebarMorphMetrics: Equatable {
             verticalInset: lerp(from.verticalInset, to.verticalInset),
             cornerRadius: lerp(from.cornerRadius, to.cornerRadius)
         )
+    }
+}
+
+// MARK: - Gate probes (DEBUG)
+
+#if DEBUG
+/// Counts, per sidebar element, how many times it mounted, and how many
+/// times `RecentsListView.body` ran (morph plan §4: the identity and perf
+/// gates). One per container, injected at the sidebar root, read by
+/// `SidebarMorphGateTests`; nothing in the app reads it.
+@MainActor
+final class MorphProbe {
+    private(set) var appearCounts: [String: Int] = [:]
+    private(set) var bodyCounts: [String: Int] = [:]
+
+    func appeared(_ id: String) { appearCounts[id, default: 0] += 1 }
+    func evaluated(_ name: String) { bodyCounts[name, default: 0] += 1 }
+}
+
+private struct MorphProbeKey: EnvironmentKey {
+    static let defaultValue: MorphProbe? = nil
+}
+
+extension EnvironmentValues {
+    /// The container's `MorphProbe`; nil outside a workspace sidebar.
+    var morphProbe: MorphProbe? {
+        get { self[MorphProbeKey.self] }
+        set { self[MorphProbeKey.self] = newValue }
+    }
+}
+
+private struct MorphIdentityProbeModifier: ViewModifier {
+    let id: String
+    @Environment(\.morphProbe) private var probe
+
+    func body(content: Content) -> some View {
+        content.onAppear { probe?.appeared(id) }
+    }
+}
+#endif
+
+extension View {
+    /// Counts this element's mounts under `id` in the container's
+    /// `MorphProbe` (DEBUG; a no-op in Release or when `id` is nil). The
+    /// same element carries the same id in every sidebar mode.
+    @ViewBuilder
+    func morphIdentityProbe(_ id: String?) -> some View {
+        #if DEBUG
+        if let id {
+            modifier(MorphIdentityProbeModifier(id: id))
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }

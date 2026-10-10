@@ -38,6 +38,11 @@ struct RecentsListView: View {
     @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
     @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
 
+    #if DEBUG
+    /// Counts body passes for the morph perf gate (`SidebarMorphGateTests`).
+    @Environment(\.morphProbe) private var morphProbe
+    #endif
+
     init() {
         #if DEBUG
         self.skipScrollViewForTesting = false
@@ -102,6 +107,9 @@ struct RecentsListView: View {
     }
 
     var body: some View {
+        #if DEBUG
+        let _ = morphProbe?.evaluated("RecentsListView.body")
+        #endif
         // Bound once per body pass — the section model filters the session
         // list into its buckets once (`SidebarSessionSections.make`).
         let sections = SidebarSessionSections.make(
