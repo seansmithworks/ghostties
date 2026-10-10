@@ -265,9 +265,9 @@ struct SessionComposerWorktreeLaunchTests {
         // `refreshWorktrees` has its own internal 2s race timeout (a
         // parallel-testing machine under load can occasionally trip it),
         // in which case it leaves `branchesWithoutWorktree` untouched and
-        // self-schedules a retry rather than blocking — poll with THIS
-        // call's own derived budget rather than trust a single `await` to
-        // have landed real data.
+        // self-schedules a retry rather than blocking — wait on the
+        // state itself rather than trust a single `await` to have landed
+        // real data.
         await Self.waitUntil { store.branchesWithoutWorktree.contains(branchName) }
 
         // Sanity: the offer really is live before creation — if this fails,

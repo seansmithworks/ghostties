@@ -1049,6 +1049,12 @@ final class SessionComposerStore: ObservableObject {
         case timedOut
     }
 
+    /// The Task `createWorktree` last started — its value resolves when that
+    /// creation has fully settled (success + `onSuccess`, failure, timeout, or
+    /// superseded). Tests await it instead of polling wall-clock deadlines.
+    /// Observation only; nothing in production reads it.
+    private(set) var worktreeCreationTaskForTesting: _Concurrency.Task<Void, Never>?
+
     /// Creates a worktree for `branchName` in `project`'s repo (the "+
     /// worktree for ..." / "+ new branch + worktree ..." rows in
     /// `WorktreeDropdownView`). Runs off the main actor with a 10-second
@@ -1077,12 +1083,6 @@ final class SessionComposerStore: ObservableObject {
     /// PALETTE can run its own, already-correct `commit(template:)` if it
     /// decides the field is launchable. This store has no opinion on
     /// whether to launch; it only reports that creation succeeded.
-    /// The Task `createWorktree` last started — its value resolves when that
-    /// creation has fully settled (success + `onSuccess`, failure, timeout, or
-    /// superseded). Tests await it instead of polling wall-clock deadlines.
-    /// Observation only; nothing in production reads it.
-    private(set) var worktreeCreationTaskForTesting: _Concurrency.Task<Void, Never>?
-
     @MainActor
     func createWorktree(named branchName: String, in project: Project, onSuccess: ((String) -> Void)? = nil) {
         // Blocker (review round 2): a SECOND Return/click while a creation
