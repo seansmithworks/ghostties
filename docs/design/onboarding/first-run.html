@@ -346,7 +346,7 @@ function ghostCanvas(name, size, color) {
   const pick = ['blinky','pinky','inky','clyde','specter','wisp','phantom','ember','jinx','howl','hex','dusk'];
   let w, h, t0 = performance.now();
   function size() { const d = devicePixelRatio || 1; w = cv.clientWidth; h = cv.clientHeight; cv.width = w * d; cv.height = h * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
-  size(); addEventListener('resize', size);
+  size(); addEventListener('resize', () => { size(); if (reduce) requestAnimationFrame(frame); });
   function frame(t) {
     ctx.clearRect(0, 0, w, h);
     const n = Math.max(5, Math.min(pick.length, Math.floor(w / 64)));
@@ -380,7 +380,7 @@ function row(label, ghost, opts = {}) {
   return `<div class="row ${opts.cls || ''}" data-g="${ghost || ''}" data-c="${opts.color || ''}">${label}${opts.st ? `<span class="st" style="background:${opts.st}"></span>` : ''}</div>`;
 }
 function hydrate(root) {
-  root.querySelectorAll('.row[data-g]').forEach(r => { if (!r.dataset.g) return; const s = Math.max(10, Math.round(r.getBoundingClientRect().height * .55)); r.prepend(ghostCanvas(r.dataset.g, s, r.dataset.c || undefined)); });
+  root.querySelectorAll('.row[data-g]').forEach(r => { if (!r.dataset.g || r.dataset.h) return; r.dataset.h = '1'; const s = Math.max(10, Math.round(r.getBoundingClientRect().height * .55)); r.prepend(ghostCanvas(r.dataset.g, s, r.dataset.c || undefined)); });
 }
 function ghostField(container, opts = {}) {
   const cv = document.createElement('canvas'); cv.className = 'ghostfield'; container.appendChild(cv);
