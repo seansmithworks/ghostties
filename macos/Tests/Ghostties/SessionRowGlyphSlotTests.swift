@@ -211,8 +211,8 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             XCTAssertLessThanOrEqual(e.maxX - e.minX, SidebarDialTuning.rowGhostSize() + 0.6, "expanded glyph fits its box, \(state)")
             // Rail: ink center x == rail center x.
             XCTAssertEqual((r.minX + r.maxX) / 2, width / 2, accuracy: 0.5, "rail glyph center x, \(state)")
-            XCTAssertEqual(e.minY, r.minY, accuracy: 0.6, "glyph top, \(state)")
-            XCTAssertEqual(e.maxY, r.maxY, accuracy: 0.6, "glyph bottom, \(state)")
+            // The rail's glyph is larger (26 vs 20); the two share a centre.
+            XCTAssertEqual((e.minY + e.maxY) / 2, (r.minY + r.maxY) / 2, accuracy: 1.0, "glyph centre y, \(state)")
         }
     }
 
@@ -313,8 +313,10 @@ final class SessionRowGlyphSlotTests: XCTestCase {
             let rIdle = try XCTUnwrap(renderWholeSidebar(expanded: false, state: .idle, appearance: appearance))
             let e = try XCTUnwrap(diffBounds(eNeeds, eIdle, fromX: leadingSlot.from, toX: leadingSlot.to), "expanded glyph not found")
             let r = try XCTUnwrap(diffBounds(rNeeds, rIdle, fromX: 0), "rail glyph not found")
-            XCTAssertEqual(e.minY, r.minY, accuracy: 0.6, "first session glyph top (\(appearance))")
-            XCTAssertEqual(e.maxY, r.maxY, accuracy: 0.6, "first session glyph bottom (\(appearance))")
+            // The rail's project header grows with its larger tile (40 vs
+            // 30), so the row under it sits that much lower on the rail.
+            let headerGrowth = ProjectAccordionHeader.height(.rail) - ProjectAccordionHeader.height(.sidebar)
+            XCTAssertEqual((e.minY + e.maxY) / 2 + headerGrowth, (r.minY + r.maxY) / 2, accuracy: 0.6, "first session glyph centre (\(appearance))")
         }
     }
 

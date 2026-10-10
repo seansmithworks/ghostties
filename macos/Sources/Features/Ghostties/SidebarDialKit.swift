@@ -471,22 +471,22 @@ enum SidebarDialTuning {
     static func railChipCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(railChipCornerRadiusKey, default: RailProjectColumn.defaultChipCornerRadius, defaults: defaults)
     }
-    /// See `railProjectTileSizeKey`. Defaults to `RailProjectTile.defaultSize`.
+    /// See `railProjectTileSizeKey`. Defaults to `RailProjectTile.defaultRailSize`.
     static func railProjectTileSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(railProjectTileSizeKey, default: RailProjectTile.defaultSize, defaults: defaults)
+        cgFloat(railProjectTileSizeKey, default: RailProjectTile.defaultRailSize, defaults: defaults)
     }
-    /// See `railProjectTileTextKey`. Defaults to `RailProjectTile.defaultTextSize`.
+    /// See `railProjectTileTextKey`. Defaults to `RailProjectTile.defaultRailTextSize`.
     static func railProjectTileText(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(railProjectTileTextKey, default: RailProjectTile.defaultTextSize, defaults: defaults)
+        cgFloat(railProjectTileTextKey, default: RailProjectTile.defaultRailTextSize, defaults: defaults)
     }
     /// See `railThreadTileSizeKey`; unclamped here, `RailProjectColumn.chipSize`
-    /// clamps it. Defaults to `RailProjectColumn.defaultThreadTileSize`.
+    /// clamps it. Defaults to `RailProjectColumn.defaultRailThreadTileSize`.
     static func railThreadTileSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(railThreadTileSizeKey, default: RailProjectColumn.defaultThreadTileSize, defaults: defaults)
+        cgFloat(railThreadTileSizeKey, default: RailProjectColumn.defaultRailThreadTileSize, defaults: defaults)
     }
-    /// See `railThreadTileIconKey`. Unset, it follows "Row ghost size".
+    /// See `railThreadTileIconKey`. Defaults to `RailProjectColumn.defaultRailThreadTileIcon`.
     static func railThreadTileIcon(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(railThreadTileIconKey, default: rowGhostSize(defaults: defaults), defaults: defaults)
+        cgFloat(railThreadTileIconKey, default: RailProjectColumn.defaultRailThreadTileIcon, defaults: defaults)
     }
     /// The selected project's tile fill, 0 (plain tile tint) to 1 (full ink).
     static func railSelectedTileFill(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
@@ -1147,7 +1147,7 @@ enum RailDialPanel: FocusedDialPanel {
                 .slider("railProjectTileSize", keyPath: \.railProjectTileSize, label: "Project tile size", range: 20...44, step: 1, unit: "pt"),
                 .slider("railProjectTileText", keyPath: \.railProjectTileText, label: "Project tile text", range: 8...20, step: 0.5, unit: "pt"),
                 .slider("railThreadTileSize", keyPath: \.railThreadTileSize, label: "Thread tile size", range: 20...44, step: 1, unit: "pt"),
-                .slider("railThreadTileIcon", keyPath: \.railThreadTileIcon, label: "Thread tile icon", range: 8...24, step: 0.5, unit: "pt"),
+                .slider("railThreadTileIcon", keyPath: \.railThreadTileIcon, label: "Thread tile icon", range: 8...32, step: 0.5, unit: "pt"),
             ]),
         ]
     }

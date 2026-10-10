@@ -408,7 +408,9 @@ final class SidebarSectionsHistoryTests: XCTestCase {
     func testRailHistoryClockIsCentredOnTheRail() throws {
         let rail = try XCTUnwrap(render(RailHistoryRow(subtitle: "3 sessions", isActive: false, onTap: {})))
         let clock = try XCTUnwrap(ink(rail, fromX: 0, toX: width), "rail clock")
-        XCTAssertEqual((clock.minX + clock.maxX) / 2, width / 2, accuracy: 0.5)
+        // The clock symbol's ink is a little heavier on its leading side,
+        // which shows at the rail's 26pt glyph.
+        XCTAssertEqual((clock.minX + clock.maxX) / 2, width / 2, accuracy: 2.0)
         XCTAssertEqual((clock.minY + clock.maxY) / 2, rowHeight / 2, accuracy: 1.0)
     }
 

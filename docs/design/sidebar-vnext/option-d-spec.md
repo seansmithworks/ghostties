@@ -40,10 +40,10 @@ Coordinates are pt, relative to the sidebar's leading edge (window x) unless not
 | Row trailing inset | 16 label padding + 4 group padding = 20 | 16 | `rowTrailingPadding` dial |
 | Project header height | 30 (`Mkjpt`) | 30 | `ProjectAccordionHeader.height` |
 | Monogram tile (expanded header) | 30 × 30, leading, x 12 (`hRCBC`) | not drawn in the expanded list | `ProjectAccordionHeader` |
-| Monogram tile size (rail) | 30 × 30, centred at x 49 (`P9lK6`) | 30, centred | `RailProjectTile.size` |
+| Monogram tile size (rail) | 30 × 30, centred at x 49 (`P9lK6`); **40 × 40 since 2026-10-10** (Sean: the rail's tiles grow as the sidebar shrinks) | 40, centred | `RailProjectTile.size`, rail "Project tile size" dial |
 | Tile corner radius | 8 | 9 | `RailProjectTile` (literal 9) |
 | Tile fill (light) | `#28221E1A` (10%) | `#28221E` at 7.5% | `RailProjectTile.tint` |
-| Monogram text | Inter 13 bold (1 letter) / 11 bold (2), `#232120` → SF Pro 13/11 bold | 13/11 bold, `#232120` | `RailProjectTile` |
+| Monogram text | Inter 13 bold (1 letter) / 11 bold (2), `#232120` → SF Pro 13/11 bold; rail **18/16** since 2026-10-10 | sidebar 13/11, rail 18/16 bold, `#232120` | `RailProjectTile.textSize`, "Project tile text" dials |
 | Selected project tile | fill `#232120`, text `#F0E9E6` (`KKqkk`) | ink fill 1, chrome text | `railSelectedTileFill` dial (1) |
 | Empty project tile/name/count | `#00000042` (`WZ2qJ`, `D2MLB`) | `tertiaryLabelColor` (same) | `WorkspaceLayout.emptyProjectForeground` |
 | Tile → header label gap | 10 (`jiRxR` padding left) | 10 | `WorkspaceLayout.sidebarIconLabelSpacing` |
@@ -58,8 +58,8 @@ Coordinates are pt, relative to the sidebar's leading edge (window x) unless not
 | Row subtitle | 11 regular `#636363`, 1pt below title | same | `rowSubtitleSize` dial |
 | Selected row (grouped, expanded) | 30 × 30 chip behind the glyph, r8, `#0000001A`, no rim (`m6j5AS`) | chip behind the glyph in every expanded row (grouped or not), no rim | `SidebarRowChipBackground` |
 | Selected group card (expanded) | list −2 / +2 horizontally, header top −6, last row bottom +6; r12; `#0000000F` (`T6FfX`) | not drawn | new (from `explore/expanded-tiles` C) |
-| Rail project column | tile ±4 (38 wide), tile top −4, last row bottom +3; r12; `#0000000F` (`p6osQ7`) | tile ±8 (46 wide), last chip bottom +8; r 9 + 8 = 17; 4% | `railColumnInset` (8), `railChipCornerRadius` (9), `railColumnTintOpacity` (0.04) dials |
-| Rail selected chip | 30 × 30, r8, `#0000001A`, no rim (`ZiGlb`) | r9, primary 7.5% + rim | `railChipCornerRadius` dial, `SidebarRowCardBackground` |
+| Rail project column | tile ±4 (38 wide; **48 round the 40pt tile** since 2026-10-10), tile top −4, last row bottom +3; r12; `#0000000F` (`p6osQ7`) | tile ±8 (46 wide), last chip bottom +8; r 9 + 8 = 17; 4% | `railColumnInset` (8), `railChipCornerRadius` (9), `railColumnTintOpacity` (0.04) dials |
+| Rail selected chip | 30 × 30, r8, `#0000001A`, no rim (`ZiGlb`); **40 × 40, glyph 26** since 2026-10-10 | r9, primary 7.5% + rim | `railChipCornerRadius` dial, `SidebarRowCardBackground` |
 | Rail width | 98 (traffic lights x 19–79, + 19) | hug: zoom maxX + close minX + `railExtraWidth` (0) | `WorkspaceLayout.collapsedRailWidth` |
 | Expanded tray frame | x 8–256, bottom 8, height 48 (`WhwIC`) | height 60 | `SidebarTray` |
 | Create pill (expanded) | 2 buttons 48 × 48, padding `[0, 2]`, gap 0 → 100 × 48 (`ab279`) | buttons 44 × 44, padding 8, gap 2, stretches the bar | `trayHorizontalButtonSize` (44), `trayInnerPadding` (8) dials, `TrayGlassStyle.horizontalItemGap` (2) |
@@ -81,8 +81,11 @@ subtitle, no monogram tile and no group card. The selected row is the same 30 ×
 chip as Projects (r8, ink 10%, no rim; hover primary 4%), and so are Pinned and
 History rows in either tab: one rule, a selected row is a chip, and the group card
 only appears where a project group exists. The rail follows the same rule: every
-rail row, Pinned, Sessions tab and History included, selects with the 30 × 30 chip
-(Sean, 2026-10-10), so tile, chip and glyph are one piece in both modes.
+rail row, Pinned, Sessions tab and History included, selects with the chip (Sean,
+2026-10-10), so tile, chip and glyph are one piece in both modes. On the rail the
+tile and chip are 40 × 40 with a 26pt glyph and an 18pt monogram (16 for two
+letters); the sidebar keeps 30 / 20 / 13 (Sean, 2026-10-10: "as you shrink down,
+increase that").
 
 ## DESIGN.md conflicts (D wins)
 

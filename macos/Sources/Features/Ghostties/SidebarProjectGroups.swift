@@ -425,8 +425,11 @@ struct ProjectMonogramTileFace: View {
 /// project); a folded tile carries its session count, and an empty
 /// project's tile is dimmed like its header.
 struct RailProjectTile: View {
-    /// Option D's 30pt tile: what both tile-size dials read unset.
+    /// Option D's 30pt tile: what the sidebar's tile-size dial reads unset.
     static let defaultSize: CGFloat = 30
+    /// The rail's tile, unset (Sean, 2026-10-10: the rail's tiles grow a third
+    /// as the sidebar shrinks to it, on the 8pt grid).
+    static let defaultRailSize: CGFloat = 40
     /// The tile's side in `context`: that context's "Project tile size" dial.
     static func size(_ context: SidebarTileContext) -> CGFloat {
         switch context {
@@ -434,11 +437,15 @@ struct RailProjectTile: View {
         case .rail: max(SidebarDialTuning.railProjectTileSize(), 0)
         }
     }
-    /// A one-letter monogram's font size: what both "Project tile text"
-    /// dials read unset.
+    /// A one-letter monogram's font size: what the sidebar's "Project tile
+    /// text" dial reads unset.
     static let defaultTextSize: CGFloat = 13
+    /// The rail's monogram, unset: scaled with the rail's tile (16 for two
+    /// letters).
+    static let defaultRailTextSize: CGFloat = 18
     /// The monogram's font size in `context` ("Project tile text"); a
-    /// two-letter monogram draws 2pt smaller (13 / 11 at the default).
+    /// two-letter monogram draws 2pt smaller (13 / 11 in the sidebar, 18 / 16
+    /// on the rail, at the defaults).
     static func textSize(_ context: SidebarTileContext, letters: Int) -> CGFloat {
         let text = switch context {
         case .sidebar: SidebarDialTuning.sidebarProjectTileText()

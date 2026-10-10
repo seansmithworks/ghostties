@@ -33,15 +33,17 @@ struct SidebarMorphMetricsTests {
         #expect(card.cornerRadius == 12)
     }
 
+    /// Option D's rail, with the rail's tiles a third larger (Sean,
+    /// 2026-10-10): 40pt tile and chip, 26pt glyph.
     @Test func railEndMatchesOptionD() {
         let m = metrics(1)
         #expect(m.tileCenterX == 49, "centred on the 98pt rail")
-        #expect(m.tileSize == 30)
-        #expect(m.chipSize == 30)
-        #expect(m.glyphSize == 20)
+        #expect(m.tileSize == 40)
+        #expect(m.chipSize == 40)
+        #expect(m.glyphSize == 26)
         #expect(m.labelOpacity == 0)
         let column = m.card(hasRows: true)
-        #expect(column.width == 38, "tile ±4")
+        #expect(column.width == 48, "tile ±4")
         #expect(column.midX == 49)
         #expect(column.verticalInset == 4)
         #expect(column.cornerRadius == 12)

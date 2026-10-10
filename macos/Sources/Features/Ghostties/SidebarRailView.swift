@@ -271,6 +271,11 @@ enum RailProjectColumn {
     /// corner (`RailProjectTile.defaultSize`, `RailProjectTile.cornerRadius`),
     /// so chip and tile read as one family.
     static let defaultThreadTileSize: CGFloat = RailProjectTile.defaultSize
+    /// The rail's chip, unset: the rail's tile (`RailProjectTile.defaultRailSize`).
+    static let defaultRailThreadTileSize: CGFloat = RailProjectTile.defaultRailSize
+    /// The rail's status glyph inside its chip, unset: the sidebar's 20pt
+    /// glyph scaled with the tile, 30 to 40.
+    static let defaultRailThreadTileIcon: CGFloat = 26
     static let defaultChipCornerRadius: CGFloat = RailProjectTile.cornerRadius
     /// The rail column: the tile plus this margin on every side (option D:
     /// 4, a 38pt column round the 30pt tile).
