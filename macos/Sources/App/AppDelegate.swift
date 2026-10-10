@@ -286,6 +286,19 @@ class AppDelegate: NSObject,
         applicationLaunchTime = ProcessInfo.processInfo.systemUptime
 
         #if DEBUG
+        CaptureFixture.applySidebarTabOverride()
+        // A background capture never activates, so the first window can't
+        // wait for `applicationDidBecomeActive` (`CaptureFixture.staysInBackground`).
+        if CaptureFixture.staysInBackground {
+            CaptureFixture.suppressActivation()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self, TerminalController.all.isEmpty else { return }
+                _ = TerminalController.newWindow(self.ghostty)
+            }
+        }
+        #endif
+
+        #if DEBUG
         // Sidebar dial panel -> floating DialkitmacOS inspector (loopback only).
         if #available(macOS 14, *) {
             SidebarDialInspector.start()

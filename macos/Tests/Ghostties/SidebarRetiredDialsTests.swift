@@ -36,6 +36,31 @@ final class SidebarRetiredDialsTests: XCTestCase {
         XCTAssertTrue(Set(SidebarDialTuning.retiredKeys).isDisjoint(with: SidebarDialTuning.allKeys))
     }
 
+    /// The tray pills and the canvas card sit the window margin inside the
+    /// window, so both are concentric with its corner: radius = window
+    /// radius − margin, at any margin. A value stored under the retired
+    /// tray corner-radius dial changes nothing.
+    func testTrayPillsAndCanvasAreConcentricWithTheWindowCorner() {
+        let name = "com.seansmithdesign.ghostties.tests.concentric-radius"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        defer { d.removePersistentDomain(forName: name) }
+        XCTAssertEqual(WorkspaceLayout.windowCornerRadius, 16, "measured on macOS 27, 2026-10-08")
+        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 8, "16 − the 8pt window margin")
+        d.set(20.0, forKey: SidebarDialTuning.retiredTrayCornerRadiusKey)
+        XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), 8, "the retired dial is ignored")
+        for margin in [0.0, 4.0, 12.0, 24.0] {
+            d.set(margin, forKey: SidebarDialTuning.windowMarginKey)
+            XCTAssertEqual(SidebarDialTuning.trayCornerRadius(defaults: d), max(0, 16 - CGFloat(margin)), "margin \(margin)")
+        }
+        withDials {
+            XCTAssertEqual(WorkspaceLayout.terminalCornerRadius, SidebarDialTuning.trayCornerRadius(), "card and pills share the rule")
+        }
+        withDials({ $0.set(4.0, forKey: SidebarDialTuning.windowMarginKey) }) {
+            XCTAssertEqual(WorkspaceLayout.terminalCornerRadius, 12, "the card follows the margin dial")
+        }
+    }
+
     /// Every removed option stored at once (the flat and glass selected
     /// rows, the bare tray, History after Active) renders pixel-identical to
     /// an empty store, in the expanded sidebar and the rail.
@@ -52,7 +77,10 @@ final class SidebarRetiredDialsTests: XCTestCase {
             XCTAssertEqual(survivor.pixelsWide, migrated.pixelsWide)
             XCTAssertEqual(survivor.pixelsHigh, migrated.pixelsHigh)
             XCTAssertEqual(differingPixels(survivor, migrated), 0, "stored removed options changed the render (rail: \(rail))")
-            XCTAssertGreaterThan(longestTintRun(migrated, width: rail ? 80 : 260), SidebarDialTuning.rowHeight() - 8, "the selected row is not blank (rail: \(rail))")
+            // The rail marks the selected session with a tile-sized chip in
+            // its project column (`RailProjectColumn`), not a row-tall card.
+            let minimum = rail ? RailProjectColumn.chipSize - 10 : SidebarDialTuning.rowHeight() - 8
+            XCTAssertGreaterThan(longestTintRun(migrated, width: rail ? 80 : 260, rail: rail), minimum, "the selected row is not blank (rail: \(rail))")
         }
     }
 
@@ -144,16 +172,20 @@ final class SidebarRetiredDialsTests: XCTestCase {
 
     /// The longest run, in points, of pixels the selected row's tint darkens
     /// below the chrome, down one column clear of the rim and the row's ink.
-    private func longestTintRun(_ rep: NSBitmapImageRep, width: CGFloat) -> CGFloat {
+    /// In the rail that line runs 4pt inside the selected chip, and the
+    /// floor sits above the project column's faint tint (~0.08).
+    private func longestTintRun(_ rep: NSBitmapImageRep, width: CGFloat, rail: Bool) -> CGFloat {
         guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB) else { return 0 }
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
         let scale = CGFloat(rep.pixelsWide) / width
-        let px = Int((SidebarDialTuning.windowMargin() + 6) * scale)
+        let x = rail ? width / 2 - RailProjectColumn.chipSize / 2 + 4 : SidebarDialTuning.windowMargin() + 6
+        let px = Int(x * scale)
+        let floor: CGFloat = rail ? 0.12 : 0.08
         var longest = 0, run = 0
         for y in 0..<rep.pixelsHigh {
             guard let c = rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { run = 0; continue }
             let delta = base - (c.redComponent + c.greenComponent + c.blueComponent)
-            run = (delta > 0.08 && delta < 0.5) ? run + 1 : 0
+            run = (delta > floor && delta < 0.5) ? run + 1 : 0
             longest = max(longest, run)
         }
         return CGFloat(longest) / scale

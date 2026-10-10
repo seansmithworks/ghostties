@@ -146,7 +146,7 @@ struct HistoryBrowserView: View {
         HStack(spacing: 24) {
             hint("↑↓", "move")
             hint("⏎", "resume")
-            hint("⌘P", "pin")
+            if SessionPinning.isAvailable { hint("⌘P", "pin") }
             hint("esc", "close")
         }
         .font(Style.font)
@@ -171,8 +171,10 @@ struct HistoryBrowserView: View {
                 .keyboardShortcut(.upArrow, modifiers: [])
             Button { handle(.down) } label: { Color.clear }
                 .keyboardShortcut(.downArrow, modifiers: [])
-            Button { handle(.togglePin) } label: { Color.clear }
-                .keyboardShortcut("p", modifiers: [.command])
+            if SessionPinning.isAvailable {
+                Button { handle(.togglePin) } label: { Color.clear }
+                    .keyboardShortcut("p", modifiers: [.command])
+            }
         }
         .buttonStyle(.plain)
         .frame(width: 0, height: 0)

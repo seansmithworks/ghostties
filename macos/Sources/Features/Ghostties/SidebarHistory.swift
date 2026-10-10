@@ -30,20 +30,23 @@ struct SidebarSessionSections: Equatable {
     static func make(
         sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
-        sessionIdsStartedThisLaunch: Set<UUID>
+        sessionIdsStartedThisLaunch: Set<UUID>,
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> SidebarSessionSections {
         SidebarSessionSections(
-            pinned: RecentsListView.pinnedSessions(from: sessions),
-            active: RecentsListView.activeSessions(from: sessions, statuses: statuses),
+            pinned: RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable),
+            active: RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: pinningAvailable),
             inactive: RecentsListView.inactiveSessions(
                 from: sessions,
                 statuses: statuses,
-                sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch
+                sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch,
+                pinningAvailable: pinningAvailable
             ),
             archived: RecentsListView.archiveSessions(
                 from: sessions,
                 statuses: statuses,
-                sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch
+                sessionIdsStartedThisLaunch: sessionIdsStartedThisLaunch,
+                pinningAvailable: pinningAvailable
             )
         )
     }
@@ -79,7 +82,7 @@ extension SidebarSessionSections {
     /// rail both render exactly these, in this order, so every row keeps
     /// the same y through the pinned⇄rail morph.
     enum Slot: Hashable {
-        case pinnedRows, pinnedEnd, pinnedHairline, activeRows, activeEnd, historyHairline, history
+        case pinnedRows, pinnedEnd, activeRows, activeEnd, history
     }
 
     /// `list` scrolls; `footer` is pinned below it, just above the tray. The
@@ -96,11 +99,9 @@ extension SidebarSessionSections {
     func layout(showsHistory: Bool) -> Layout {
         var list: [Slot] = []
         if !pinned.isEmpty { list += [.pinnedRows, .pinnedEnd] }
-        if !pinned.isEmpty && !active.isEmpty { list.append(.pinnedHairline) }
         list += [.activeRows, .activeEnd]
         guard showsHistory else { return Layout(list: list, footer: []) }
-        let history: [Slot] = rowSessions.isEmpty ? [.history] : [.historyHairline, .history]
-        return Layout(list: list, footer: history)
+        return Layout(list: list, footer: [.history])
     }
 
     /// The gap from the History row to the tray's top edge, in
@@ -151,7 +152,7 @@ extension HistoryEntry {
                 title: session.name,
                 lastActiveAt: session.displayTimestamp ?? .distantPast,
                 isArchived: archivedIds.contains(session.id),
-                isPinned: session.isPinned
+                isPinned: session.isPinnedForDisplay()
             )
         }
     }
@@ -199,7 +200,7 @@ struct HistoryRowView: View {
             redlineID: Self.redlineID
         ) {
             SidebarListRowTitle(text: "History", isActive: isActive)
-        } trailing: {
+        } glyph: {
             HistoryGlyph(size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
@@ -246,26 +247,6 @@ struct RailHistoryRow: View {
 
     private var rowBackground: some View {
         SidebarRowCardBackground(isActive: isActive, isHovered: isHovered)
-    }
-}
-
-/// The slot that carries a hairline between sidebar groups. One fixed height
-/// in both the expanded list (full width) and the rail (`width` = the pill
-/// width), so rows keep the same y through the pinned⇄rail morph.
-struct SidebarSectionHairlineSlot: View {
-    let width: CGFloat?
-
-    var body: some View {
-        Color.clear
-            .frame(height: WorkspaceLayout.sessionSectionHairlineSlotHeight)
-            .frame(maxWidth: .infinity)
-            .overlay {
-                Rectangle()
-                    .fill(WorkspaceLayout.railSectionHairline)
-                    .frame(width: width, height: 1)
-                    .padding(.horizontal, width == nil ? WorkspaceLayout.sidebarRowLeadingPadding : 0)
-            }
-            .accessibilityHidden(true)
     }
 }
 

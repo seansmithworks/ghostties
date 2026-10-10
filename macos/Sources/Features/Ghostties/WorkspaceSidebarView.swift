@@ -295,9 +295,11 @@ struct WorkspaceSidebarView: View {
     static func sessionsTabCycleOrder(
         sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
-        coordinator: SessionCoordinator
+        coordinator: SessionCoordinator,
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> [AgentSession] {
-        (RecentsListView.pinnedSessions(from: sessions) + RecentsListView.activeSessions(from: sessions, statuses: statuses))
+        (RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable)
+            + RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: pinningAvailable))
             .filter { coordinator.hasLiveSurface(id: $0.id) }
     }
 }

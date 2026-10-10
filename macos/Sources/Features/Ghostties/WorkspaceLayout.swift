@@ -21,8 +21,9 @@ enum SidebarMode: Int, Codable {
 
 /// Shared layout constants for the workspace sidebar.
 enum WorkspaceLayout {
-    /// Width of the sidebar panel (Flow 01: 220 → 244).
-    static let sidebarWidth: CGFloat = 244
+    /// Width of the sidebar panel (Flow 01: 220 → 244; option D,
+    /// 2026-10-09: 256, the canvas card at 256 + the 8pt window margin).
+    static let sidebarWidth: CGFloat = 256
 
     /// Minimum width of the collapsed icon-only rail — a floor, not the
     /// applied width. Sized only so the 40pt vertical tray pill (32pt
@@ -156,8 +157,25 @@ enum WorkspaceLayout {
     /// Height of the session-name title bar inside the terminal card.
     static let terminalTitleBarHeight: CGFloat = 28
 
-    /// Corner radius on the floating terminal panel (all four corners).
-    static let terminalCornerRadius: CGFloat = 12
+    /// The window's own corner radius: a titled Ghostties window on macOS
+    /// 26+ (no toolbar), measured from an uncropped capture on macOS 27
+    /// (2026-10-08), the same value `TerminalWindow` uses for this titlebar
+    /// style.
+    static let windowCornerRadius: CGFloat = 16
+
+    /// A surface inset `margin` from the window's edges is concentric with
+    /// the window corner: its radius is the window's less the margin (Sean,
+    /// 2026-10-08). The one rule for the canvas card and the tray pills.
+    static func concentricCornerRadius(margin: CGFloat) -> CGFloat {
+        max(0, windowCornerRadius - margin)
+    }
+
+    /// Corner radius on the floating terminal panel (all four corners), and
+    /// every card that shares its inset (browser, History): concentric with
+    /// the window at the live window margin.
+    static var terminalCornerRadius: CGFloat {
+        concentricCornerRadius(margin: SidebarDialTuning.windowMargin())
+    }
 
     /// Shadow color applied to canvas shadow hosts (terminal + browser cards).
     static let canvasShadowColor: CGColor = NSColor.black.cgColor
@@ -316,9 +334,6 @@ enum WorkspaceLayout {
     /// token clears: the dimming is the signal that nothing is running there.
     static let emptyProjectForeground = Color(nsColor: .tertiaryLabelColor)
 
-    /// The rail's hairline between Pinned, Active and History (mock H).
-    static let railSectionHairline = Color.primary.opacity(0.1)
-
     /// Foreground for the smaller in-row session group headers ("Active",
     /// "Recent", "Idle") inside an expanded project. One tier quieter than the
     /// top-level section headers since they're nested. Same `textSecondary`
@@ -381,18 +396,19 @@ enum WorkspaceLayout {
     /// Project-name subtitle text size in `RecentsRowView`.
     static let recentsRowSubtitleSize: CGFloat = 11
 
-    /// `RecentsRowView`'s trailing edge padding (leading uses
-    /// `sidebarRowLeadingPadding`, shared with every other sidebar row/header).
-    static let recentsRowTrailingPadding: CGFloat = 16
+    /// The expanded list's row and header trailing padding: option D's 16pt
+    /// label padding plus its 4pt group padding.
+    static let recentsRowTrailingPadding: CGFloat = 20
 
-    /// `RecentsRowView`'s leading edge padding. Its own value: the shared
-    /// `sidebarRowLeadingPadding` (8) still sets project rows and headers.
-    static let recentsRowLeadingPadding: CGFloat = 16
+    /// The expanded list's row and header leading padding, before the 30pt
+    /// tile/glyph column (option D's group padding). The legacy
+    /// `sidebarRowLeadingPadding` (8) still sets the Projects tab's rows.
+    static let recentsRowLeadingPadding: CGFloat = 4
 
-    /// Height of the slot that carries a hairline between sidebar groups
-    /// (Pinned / Active / History). Shared by the expanded list and the rail
-    /// so every row sits at the same y in both.
-    static let sessionSectionHairlineSlotHeight: CGFloat = 9
+    /// The selected project's group card in the expanded list (option D):
+    /// 6pt, inset from the tile and chips on all four sides. Read it through
+    /// `SidebarDialTuning.groupCardInset()`.
+    static let sidebarGroupCardInset: CGFloat = 6
 
     /// Top padding of the scrollable list content in both sidebar tabs
     /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s
@@ -434,7 +450,7 @@ enum WorkspaceLayout {
     /// Hit width of the sidebar drag handle on the rail: a strip over the
     /// rail's trailing edge, ending at the card's leading edge. Rail A2 has
     /// no sidebar-to-card gap for the handle to fill, and the tray capsules'
-    /// `railTrayCapsuleInset` already leaves this strip clear.
+    /// window-margin inset (`RailTrayGeometry`) already leaves this strip clear.
     static let railDragHandleHitWidth: CGFloat = 8
 
     /// Width of the sidebar drag handle, whose trailing edge always sits on
@@ -449,11 +465,6 @@ enum WorkspaceLayout {
         case .closed, .overlay: return 0
         }
     }
-
-    /// Inset of each rail tray capsule from the window's leading edge and
-    /// from the canvas card (rail A2): the capsules stretch to
-    /// `railWidth - 2 * railTrayCapsuleInset`, buttons centred inside.
-    static let railTrayCapsuleInset: CGFloat = 8
 
     /// Extra top padding on the bottom tray, opening a gap between the list
     /// above and the tray below. 0 = today's flush layout (the list's
@@ -832,7 +843,20 @@ private struct SidebarTrailingGutterKey: EnvironmentKey {
     static let defaultValue: CGFloat = 0
 }
 
+private struct SidebarRailWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = WorkspaceLayout.sidebarRailWidth
+}
+
 extension EnvironmentValues {
+    /// The collapsed rail's width (`SidebarWidthModel.railWidth`), injected
+    /// once at the sidebar root (`SidebarHostRoot`); the rail tray sizes its
+    /// square pills from it (`RailTrayGeometry`). The rail's floor width
+    /// (`WorkspaceLayout.sidebarRailWidth`) outside it.
+    var sidebarRailWidth: CGFloat {
+        get { self[SidebarRailWidthKey.self] }
+        set { self[SidebarRailWidthKey.self] = newValue }
+    }
+
     /// `WorkspaceLayout.sidebarTrailingGutter(for:)`, injected once at the
     /// sidebar root (`SidebarHostRoot`). 0 outside it, so a view hosted on
     /// its own (tests, previews) pads its full visible inset.

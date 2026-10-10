@@ -534,12 +534,15 @@ final class WorkspaceStore: ObservableObject {
     /// in the rail.
     /// In one view (`SidebarProjectsLayout.oneView`) Active is listed
     /// project by project, as the list and rail group it.
-    func railSessions(layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout()) -> [AgentSession] {
-        let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses)
+    func railSessions(
+        layout: SidebarProjectsLayout = SidebarDialTuning.projectsLayout(),
+        pinningAvailable: Bool = SessionPinning.isAvailable
+    ) -> [AgentSession] {
+        let active = RecentsListView.activeSessions(from: sessions, statuses: globalStatuses, pinningAvailable: pinningAvailable)
         let ordered = layout == .oneView
             ? SidebarProjectGroup.make(active: active, projects: projects).flatMap(\.sessions)
             : active
-        return RecentsListView.pinnedSessions(from: sessions) + ordered
+        return RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable) + ordered
     }
 
     #if DEBUG
@@ -779,6 +782,25 @@ final class WorkspaceStore: ObservableObject {
         // Project removal is a structural change — release any held freeze snapshot
         // so the deleted project disappears immediately and remaining projects re-bucket.
         releaseSnapshot()
+        persist()
+    }
+
+    /// Reposition a project so it sits immediately BEFORE `beforeId` — or
+    /// last, if `beforeId` is nil or not found. `projects` order is the
+    /// one-view list's group order and the rail's tile order
+    /// (`SidebarProjectGroup.make`), and it is persisted as-is, so this is
+    /// the whole reorder. `beforeId` is resolved after the moved project is
+    /// removed, the same rule as `moveSessionInSessionsView`. The tabs
+    /// layout's Projects list sorts alphabetically within its sections and
+    /// is unaffected.
+    func moveProject(id: UUID, before beforeId: UUID?) {
+        guard id != beforeId, let from = projects.firstIndex(where: { $0.id == id }) else { return }
+        var reordered = projects
+        let moved = reordered.remove(at: from)
+        let to = beforeId.flatMap { target in reordered.firstIndex(where: { $0.id == target }) } ?? reordered.count
+        reordered.insert(moved, at: to)
+        guard reordered.map(\.id) != projects.map(\.id) else { return }
+        projects = reordered
         persist()
     }
 

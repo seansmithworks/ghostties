@@ -125,8 +125,8 @@ struct SidebarPresenceTests {
     /// The floor only has to fit the tray pill — it must stay well under
     /// the typical hugged width, or it silently becomes a fixed width again.
     @Test func railFloorFitsTrayPillButStaysUnderTheHug() {
-        let trayPillWidth: CGFloat = TrayGlassStyle.verticalButtonSize + 2 * TrayGlassStyle.innerPadding
-        #expect(WorkspaceLayout.sidebarRailWidth >= trayPillWidth)
+        let atFloor = RailTrayGeometry(railWidth: WorkspaceLayout.sidebarRailWidth, margin: WorkspaceLayout.terminalInset, padding: TrayGlassStyle.innerPadding)
+        #expect(atFloor.buttonSize >= TrayGlassStyle.verticalIconSize)
         #expect(WorkspaceLayout.sidebarRailWidth < 98)
     }
 
@@ -163,7 +163,7 @@ struct SidebarPresenceTests {
         // `SessionCoordinator`/`seedEmptySessionTreeForTesting` involved) —
         // this is exactly the capture-fixture / closed-pinned-terminal case.
 
-        let rail = store.railSessions()
+        let rail = store.railSessions(pinningAvailable: true)
 
         #expect(rail.map(\.name) == ["pinned", "active"])
     }

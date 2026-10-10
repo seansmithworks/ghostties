@@ -99,17 +99,15 @@ struct SidebarLockedDefaultsTests {
         defer { d.removePersistentDomain(forName: name) }
 
         #expect(SidebarDialTuning.windowMargin(defaults: d) == 8)
-        #expect(SidebarDialTuning.trayHorizontalButtonSize(defaults: d) == 44)
-        #expect(SidebarDialTuning.trayVerticalButtonSize(defaults: d) == 44)
+        #expect(SidebarDialTuning.trayHorizontalButtonSize(defaults: d) == 48)
         #expect(SidebarDialTuning.trayHorizontalIconSize(defaults: d) == 18)
         #expect(SidebarDialTuning.trayVerticalIconSize(defaults: d) == 18)
-        #expect(SidebarDialTuning.trayInnerPadding(defaults: d) == 8)
+        #expect(SidebarDialTuning.trayInnerPadding(defaults: d) == 2)
         #expect(SidebarDialTuning.trayGroupGap(defaults: d) == 8)
-        #expect(SidebarDialTuning.trayWidth(defaults: d) == .fill)
+        #expect(SidebarDialTuning.trayWidth(defaults: d) == .split)
         #expect(SidebarDialTuning.trayGlassInteractive(defaults: d))
-        #expect(SidebarDialTuning.traySelectedPillWidth(defaults: d) == 44)
         #expect(SidebarDialTuning.trayGlassCornerStyle(defaults: d) == .radius)
-        #expect(SidebarDialTuning.trayGlassCornerRadius(defaults: d) == 20)
+        #expect(SidebarDialTuning.trayCornerRadius(defaults: d) == WorkspaceLayout.windowCornerRadius - 8)
         #expect(SidebarDialTuning.selectedTitleWeight(defaults: d) == .regular)
         #expect(SidebarDialTuning.tintShimmerDarkIntensity(defaults: d) == 0.3)
         #expect(SidebarDialTuning.contentPaddingLeading(defaults: d) == 0)
@@ -121,8 +119,12 @@ struct SidebarLockedDefaultsTests {
         #expect(SidebarDialTuning.rowTitleSize(defaults: d) == 14)
         #expect(SidebarDialTuning.rowSubtitleSize(defaults: d) == 11)
         #expect(SidebarDialTuning.rowGhostSize(defaults: d) == 20)
-        #expect(SidebarDialTuning.rowLeadingPadding(defaults: d) == 16)
-        #expect(SidebarDialTuning.rowTrailingPadding(defaults: d) == 16)
+        #expect(SidebarDialTuning.rowLeadingPadding(defaults: d) == 4)
+        #expect(SidebarDialTuning.rowTrailingPadding(defaults: d) == 20)
+        #expect(SidebarDialTuning.groupCardInset(defaults: d) == 6)
+        #expect(SidebarDialTuning.railTrayPillSize(defaults: d) == 48)
+        #expect(SidebarDialTuning.railTrayIconGap(defaults: d) == 30)
+        #expect(SidebarDialTuning.trayHoverInset(defaults: d) == 4)
         #expect(SidebarDialTuning.projectsLayout(defaults: d) == .oneView)
         #expect(!SidebarDialTuning.historyInSidebar(defaults: d))
         #expect(ComposerResumeLayout.current(defaults: d) == .list)
@@ -144,7 +146,7 @@ struct SidebarLockedDefaultsTests {
         #expect(dark == TrayGlassStyle.Look(
             variant: .identity, tintOpacity: 0.15, surfaceOpacity: 0.45,
             rimWidth: 0.25, rimOpacity: 0.12,
-            shadowOpacity: 0.298, shadowRadius: 8, shadowYOffset: 2.5,
+            shadowOpacity: 0.4, shadowRadius: 12, shadowYOffset: 4,
             chromaticIntensity: 0.15, chromaticWidth: 0.5, chromaticRotation: 72.9, chromaticBlur: 1.4,
             chromaticPalette: .pastel, chromaticBlend: .plusLighter,
             specularStrength: 0.1, specularAngle: 270

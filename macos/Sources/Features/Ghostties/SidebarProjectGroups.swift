@@ -233,55 +233,122 @@ enum ProjectMonogram {
 
 // MARK: - Expanded header
 
-/// A project's accordion header in the one-view list:
-/// `NAME ⌄ ———— count`. Clicking it folds or unfolds the project's rows.
-/// An empty project's header is dimmed, has no chevron (nothing to fold),
-/// and selects the project instead.
+/// Keyboard-only focus stop: on macOS 14+ a mouse click doesn't take focus
+/// (so it can't pull it from the terminal or leave the mark lit) and the
+/// system ring is off so it doesn't stack on the custom mark.
+private struct HeaderFocusStop: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14, *) {
+            content.focusable(interactions: .activate).focusEffectDisabled()
+        } else {
+            content.focusable()
+        }
+    }
+}
+
+/// Space and Return fold the focused header. `onKeyPress` is macOS 14+; on 13
+/// the header is still a focus stop but the keys do nothing.
+private struct ToggleKeyActivation: ViewModifier {
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(macOS 14, *) {
+            content.onKeyPress(keys: [.space, .return]) { _ in
+                action()
+                return .handled
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// A project's accordion header in the one-view list (option D):
+/// `[tile] NAME ⌄ ———— count`. The monogram tile leads, in the column the
+/// rows' status glyphs sit in, the rail's tile at the list's own inset.
+/// Clicking anywhere on it, tile included, folds or unfolds the project's
+/// rows. An empty project's header is dimmed, has no chevron (nothing to
+/// fold), and selects the project instead.
 struct ProjectAccordionHeader: View {
     static let height: CGFloat = 30
 
     let name: String
+    /// `ProjectMonogram.monograms`' entry for this project.
+    var monogram: String = "?"
     let count: Int
     let isCollapsed: Bool
     var isEmpty: Bool = false
+    /// The project holds the selected session: its tile fills with ink,
+    /// as on the rail.
+    var isSelectedProject: Bool = false
+    /// DEBUG Redlines tag (`RedlineID.header`).
+    var redlineID: String? = nil
     let onToggle: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         let ink = isEmpty ? WorkspaceLayout.emptyProjectForeground : WorkspaceLayout.sectionHeaderForeground(for: colorScheme)
-        Button(action: onToggle) {
-            HStack(spacing: 0) {
-                Text(name.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.5)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                    .frame(width: 14)
-                    .padding(.leading, 4)
-                    .opacity(isEmpty ? 0 : 1)
-                Rectangle()
-                    .fill(WorkspaceLayout.railSectionHairline)
-                    .frame(height: 1)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 8)
-                Text("\(count)")
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
-            }
-            .foregroundStyle(ink)
-            .padding(.leading, SidebarDialTuning.rowLeadingPadding())
-            .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-            .frame(height: Self.height)
-            .contentShape(Rectangle())
+        // A tap gesture, not a `Button`: the header is also the project's
+        // drag handle (`RecentsListView.groupedActiveRows`), and a macOS
+        // `Button` takes the mouse-down that `.onDrag` needs — the session
+        // rows tap the same way. VoiceOver keeps the button trait and gets
+        // the click as the default action.
+        HStack(spacing: 0) {
+            // The tile's face only: the whole header is the tap target and
+            // the drag handle, so the tile is not a button of its own.
+            ProjectMonogramTileFace(
+                monogram: monogram,
+                isEmpty: isEmpty,
+                isSelectedProject: isSelectedProject
+            )
+            .redlineFrame(redlineID.map { $0 + ".tile" })
+            .padding(.trailing, WorkspaceLayout.sidebarIconLabelSpacing)
+            Text(name.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .redlineFrame(redlineID.map { $0 + ".label" })
+                .layoutPriority(1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .bold))
+                .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                .frame(width: 18)
+                .redlineFrame(redlineID.map { $0 + ".chevron" })
+                .padding(.leading, 4)
+                .opacity(isEmpty ? 0 : 1)
+            Spacer(minLength: 8)
+            Text("\(count)")
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
         }
-        .buttonStyle(.plain)
+        .foregroundStyle(ink)
+        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+        .frame(height: Self.height)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onToggle)
+        // Keyboard: a tap gesture isn't a focus stop the way a `Button` is,
+        // so the header opts in and folds on Space / Return (macOS 14+, as
+        // the task rows do). The leading rule matches their focus mark.
+        .modifier(HeaderFocusStop())
+        .focused($isFocused)
+        .overlay(alignment: .leading) {
+            if isFocused {
+                // Full-strength header ink even on an empty (dimmed) project,
+                // so the mark clears 3:1 on the light and dark sidebar alike.
+                Rectangle()
+                    .fill(WorkspaceLayout.sectionHeaderForeground(for: colorScheme))
+                    .frame(width: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .modifier(ToggleKeyActivation(action: onToggle))
         .accessibilityElement(children: .ignore)
+        .accessibilityAction(.default, onToggle)
         .accessibilityLabel("\(name), \(count) \(count == 1 ? "session" : "sessions")")
         .accessibilityValue(isEmpty ? "" : (isCollapsed ? "collapsed" : "expanded"))
         .accessibilityAddTraits([.isHeader, .isButton])
@@ -297,51 +364,90 @@ struct ProjectAccordionHeader: View {
 
 // MARK: - Rail tile
 
+/// A project's monogram tile, as drawn: the rail's tile and the expanded
+/// header's leading tile are this one view (option D: 30pt, r8, 10% tint;
+/// solid ink when it heads the selected project).
+struct ProjectMonogramTileFace: View {
+    let monogram: String
+    var isEmpty: Bool = false
+    var isSelectedProject: Bool = false
+
+    /// Re-renders on every dial write; the fill reads "Selected tile fill".
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Ink laid over the tile tint: 0 unselected, the dial when selected.
+    private var inkFill: Double { isSelectedProject ? RailProjectColumn.selectedTileFill : 0 }
+    /// Past the midpoint the tile reads as ink, so its text flips to the
+    /// chrome colour to stay legible.
+    private var isFilled: Bool { inkFill > 0.5 }
+
+    // Option D (`hRCBC`: `#28221E1A`), per appearance.
+    private var tint: Color {
+        colorScheme == .dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(RailProjectTile.tintOpacity)
+    }
+    var body: some View {
+        Text(monogram)
+            .font(.system(size: monogram.count > 1 ? 11 : 13, weight: .bold))
+            .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
+            .frame(width: RailProjectTile.size, height: RailProjectTile.size)
+            .background {
+                let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius, style: .continuous)
+                // Tint fades out as ink fades in, so each end draws
+                // exactly one fill: the plain tile at 0, solid ink at 1.
+                shape.fill(tint.opacity(1 - inkFill)).overlay(shape.fill(RailProjectTile.ink(colorScheme).opacity(inkFill)))
+            }
+    }
+}
+
 /// A project's monogram tile in the one-view rail, at its header's y.
 /// Clicking it does what the header does (fold, or select an empty
 /// project); a folded tile carries its session count, and an empty
 /// project's tile is dimmed like its header.
 struct RailProjectTile: View {
     static let size: CGFloat = 30
+    /// Option D: 8 (was 9).
+    static let cornerRadius: CGFloat = 8
+    /// The tile's tint in light (option D `#28221E1A`; was 7.5%).
+    static let tintOpacity: Double = 0.10
+
+    /// DEBUG Redlines tag for the tile face (`RedlineID.railTile`).
+    var redlineID: String? = nil
 
     let name: String
     let monogram: String
     let count: Int
     let isCollapsed: Bool
     var isEmpty: Bool = false
+    /// This project holds the selected session: the tile heads the rail's
+    /// project column (`RailProjectColumn`), filled with ink.
+    var isSelectedProject: Bool = false
     let onToggle: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
-    // Mock B5 (`.mono` / `.mono .bd`), per appearance.
-    private var tint: Color {
-        colorScheme == .dark ? Color.white.opacity(0.07) : Color(red: 40 / 255, green: 34 / 255, blue: 30 / 255).opacity(0.075)
-    }
-    private var ink: Color {
+    static func ink(_ colorScheme: ColorScheme) -> Color {
         colorScheme == .dark
             ? Color(red: 0xF0 / 255, green: 0xEF / 255, blue: 0xED / 255)
             : Color(red: 0x23 / 255, green: 0x21 / 255, blue: 0x20 / 255)
     }
-    private var badgeText: Color {
+    static func badgeText(_ colorScheme: ColorScheme) -> Color {
         Color(nsColor: colorScheme == .dark ? WorkspaceLayout.chromeBackgroundDark : WorkspaceLayout.chromeBackgroundLight)
     }
 
     var body: some View {
         Button(action: onToggle) {
-            Text(monogram)
-                .font(.system(size: monogram.count > 1 ? 11 : 13, weight: .bold))
-                .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : ink)
-                .frame(width: Self.size, height: Self.size)
-                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint))
+            ProjectMonogramTileFace(monogram: monogram, isEmpty: isEmpty, isSelectedProject: isSelectedProject)
+                .redlineFrame(redlineID)
                 .overlay(alignment: .topTrailing) {
                     if isCollapsed {
                         Text("\(count)")
                             .font(.system(size: 9.5, weight: .bold))
                             .monospacedDigit()
-                            .foregroundStyle(badgeText)
+                            .foregroundStyle(Self.badgeText(colorScheme))
                             .padding(.horizontal, 3)
                             .frame(minWidth: 15, minHeight: 15)
-                            .background(Capsule().fill(ink))
+                            .background(Capsule().fill(Self.ink(colorScheme)))
                             .offset(x: 5, y: -5)
                     }
                 }

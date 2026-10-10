@@ -34,6 +34,9 @@ struct RecentsRowView: View, Equatable {
     /// Nil keeps the project name.
     var subtitle: String? = nil
     let isActive: Bool
+    /// A one-view grouped row (option D): selection is a tile-sized chip
+    /// behind the glyph, inside the group card, not the wide row card.
+    var inProjectColumn: Bool = false
     var isEditing: Bool = false
     @Binding var editingName: String
     var isRenameFocused: FocusState<Bool>.Binding
@@ -71,6 +74,7 @@ struct RecentsRowView: View, Equatable {
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.subtitle == rhs.subtitle
             && lhs.isActive == rhs.isActive
+            && lhs.inProjectColumn == rhs.inProjectColumn
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
             && lhs.dialEpoch == rhs.dialEpoch
@@ -83,6 +87,7 @@ struct RecentsRowView: View, Equatable {
         SidebarListRowChrome(
             subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
             isActive: isActive,
+            selection: inProjectColumn ? .chip : .card,
             staggerIndex: staggerIndex,
             redlineID: RedlineID.row(session.id)
         ) {
@@ -106,17 +111,17 @@ struct RecentsRowView: View, Equatable {
             } else {
                 SidebarListRowTitle(text: session.name, isActive: isActive)
             }
-        } trailing: {
+        } glyph: {
             // No timestamp — Flow 07 round 6 drops the relative-time label
             // from the row entirely. `relativeLabel` is kept (it still backs
             // the accessibility label below); only the visible `Text` is gone.
 
             // Per-session status glyph (spinner / ? / check / x) in the
-            // trailing slot (Sean, 2026-10-04). Selection is carried by the
-            // row's card background, not a glyph tint. The collapsed rail
-            // (`RailSessionRow`) draws the same glyph centered in the rail,
-            // so across the pinned⇄rail transition the glyph moves from this
-            // trailing slot to the center (it snaps under Reduce Motion).
+            // leading slot, under its project's tile (option D, 2026-10-09).
+            // Selection is the row's card or chip, not a glyph tint. The
+            // collapsed rail (`RailSessionRow`) draws the same glyph centered
+            // in the rail, so across the pinned⇄rail transition the glyph
+            // moves from this slot to the center (it snaps under Reduce Motion).
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
@@ -205,29 +210,54 @@ struct SidebarListRowTitle: View {
     }
 }
 
-/// The visual shell of a sidebar list row — title over subtitle on the
-/// leading side, one glyph in the trailing status slot, the row height and
-/// padding dials, the selected surface, hover fill, and the Flow 05 label
-/// choreography. Shared by session rows (`RecentsRowView`) and the History
-/// row (`HistoryRowView`) so both render identically by construction.
-/// Callers add tap, popover and accessibility on top.
-struct SidebarListRowChrome<Title: View, Trailing: View>: View {
+/// How a sidebar list row shows selection and hover.
+enum SidebarRowSelection: Equatable {
+    /// The wide row card (`SidebarRowCardBackground`): flat lists (the
+    /// Sessions tab, Pinned, History).
+    case card
+    /// A tile-sized chip behind the glyph (`SidebarRowChipBackground`): a
+    /// one-view grouped row, inside its project's group card (option D).
+    case chip
+}
+
+/// The visual shell of a sidebar list row (option D, 2026-10-09) — one glyph
+/// in the leading status slot, the column the one-view tiles sit in, then
+/// title over subtitle; the row height and padding dials, the selected
+/// surface, hover fill, and the Flow 05 label choreography. Shared by
+/// session rows (`RecentsRowView`) and the History row (`HistoryRowView`) so
+/// both render identically by construction. Callers add tap, popover and
+/// accessibility on top.
+struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     let subtitle: String
     let isActive: Bool
+    var selection: SidebarRowSelection = .card
     /// Position within the rendered section — feeds the Flow 05 expand
     /// stagger (`WorkspaceLayout.expandLabelDelay`).
     var staggerIndex: Int = 0
     let redlineID: String
     @ViewBuilder let title: () -> Title
-    @ViewBuilder let trailing: () -> Trailing
+    @ViewBuilder let glyph: () -> Glyph
 
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @State private var isHovered = false
     @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
 
+    /// The leading status slot: the monogram tile's width, so a row's
+    /// glyph centres under its project's tile.
+    static var glyphSlotWidth: CGFloat { RailProjectTile.size }
+
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+            glyph()
+                .frame(width: Self.glyphSlotWidth)
+                .background {
+                    if selection == .chip {
+                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
+                    }
+                }
+                .redlineFrame(redlineID + ".glyph")
+
             // Title + subtitle stacked
             VStack(alignment: .leading, spacing: 1) {
                 title()
@@ -237,27 +267,23 @@ struct SidebarListRowChrome<Title: View, Trailing: View>: View {
                     .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
                     .lineLimit(1)
             }
+            .redlineFrame(redlineID + ".label")
             .opacity(labelOpacity)
             .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
 
             Spacer(minLength: 4)
-
-            trailing()
         }
         .redlineFrame(redlineID + ".content")
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-        // 46pt + the enclosing `VStack(spacing: 2)`'s 2pt inter-row gap
-        // (`RecentsListView.sectionsContent`) = 48pt row-to-row pitch —
-        // measured directly off Flow 07's export (`mIi8b.png`): traffic-light
-        // diameter is 12px there and native traffic lights are a fixed 12pt,
-        // so design px IS pt (1:1, no export scaling to correct for).
-        // Consecutive row-icon centers measure 48px apart; the round-6 first
-        // pass used 40 (before that, 36), both too tight — Sean's round-6
-        // follow-up review called this out as ~30% tighter than the design.
+        // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch.
         .frame(height: SidebarDialTuning.rowHeight())
         .redlineFrame(redlineID)
-        .background(rowBackground)
+        .background {
+            if selection == .card {
+                rowBackground
+            }
+        }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }

@@ -4,7 +4,7 @@ import GhosttiesCore
 @testable import Ghostty
 
 /// Where the History row sits when "History in sidebar" is on: anchored
-/// (with its hairline) just above the tray, in the expanded list and the
+/// just above the tray, in the expanded list and the
 /// rail alike, outside the scrolling area. (The "History placement" dial
 /// and its `afterActive` option were removed at the vnext lock.)
 ///
@@ -22,8 +22,8 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let b = AgentSession(name: "b", templateId: UUID(), projectId: UUID())
         let sections = SidebarSessionSections(pinned: [a], active: [b], inactive: [], archived: [])
         let bottom = sections.layout(showsHistory: true)
-        XCTAssertEqual(bottom.list, [.pinnedRows, .pinnedEnd, .pinnedHairline, .activeRows, .activeEnd])
-        XCTAssertEqual(bottom.footer, [.historyHairline, .history])
+        XCTAssertEqual(bottom.list, [.pinnedRows, .pinnedEnd, .activeRows, .activeEnd])
+        XCTAssertEqual(bottom.footer, [.history])
     }
 
     // MARK: - Harness
@@ -102,6 +102,14 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             })
         }
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        // The list and rail read the sidebar tab from store-less
+        // `@AppStorage` (`.standard`, the Dev app's domain); pin it to the
+        // Projects tab in a private suite so the saved tab can't swap in the
+        // flat Sessions list.
+        let tabSuiteName = "com.seansmithdesign.ghostties.tests.sidebar-tab.\(UUID().uuidString)"
+        let tabSuite = try XCTUnwrap(UserDefaults(suiteName: tabSuiteName))
+        defer { tabSuite.removePersistentDomain(forName: tabSuiteName) }
+        tabSuite.set(SidebarTab.projects.rawValue, forKey: "ghostties.sidebarTab")
         let root = column
             .frame(width: width, height: height)
             .overlay(alignment: .bottom) {
@@ -111,6 +119,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             .environmentObject(store)
             .environmentObject(coordinator)
             .environmentObject(SidebarWidthModel(width: width))
+            .defaultAppStorage(tabSuite)
             .background(Color(nsColor: chrome))
         let hosting = NSHostingView(rootView: root)
         hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
@@ -135,6 +144,14 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let delta = (c.redComponent + c.greenComponent + c.blueComponent)
             - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent)
         return abs(delta) > 0.06
+    }
+
+    /// Lighter than the chrome: the opaque tray's white fill.
+    private func isLifted(_ r: Render, px x: Int, _ y: Int) -> Bool {
+        guard let chrome = WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB),
+              let c = r.rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
+        return (c.redComponent + c.greenComponent + c.blueComponent)
+            - (chrome.redComponent + chrome.greenComponent + chrome.blueComponent) > 0.06
     }
 
     /// Runs of marked pixels down one column, in points.
@@ -166,10 +183,12 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         return try XCTUnwrap(cards.first, "no selected card found (rail: \(rail))")
     }
 
-    /// The tray's top edge: the first pixel row below `y` with any marked pixel.
+    /// The tray's top edge: the first pixel row below `y` lifted off the
+    /// chrome by the opaque tray. Only lighter pixels count: the tray's
+    /// shadow darkens the chrome above the pill, and it is not the tray.
     private func trayTop(_ r: Render, below y: CGFloat) throws -> CGFloat {
         for py in Int(y * r.scale) + 1..<r.rep.pixelsHigh {
-            for px in 0..<r.rep.pixelsWide where isMarked(r, px: px, py) {
+            for px in 0..<r.rep.pixelsWide where isLifted(r, px: px, py) {
                 return CGFloat(py) / r.scale
             }
         }
@@ -179,13 +198,12 @@ final class SidebarHistoryPlacementTests: XCTestCase {
 
     /// Where History's card top would be directly after the active rows:
     /// the titlebar band, the column's top padding, `n` rows, the
-    /// zero-height end marker, the hairline slot, with one row gap between
+    /// zero-height end marker, with one row gap between
     /// each.
     private func directlyAfterActiveTop(store: WorkspaceStore, rows n: Int) -> CGFloat {
         store.toolbarRowTopAnchorConstant * 2 + SidebarDialTuning.contentPaddingTop()
             + CGFloat(n) * SidebarDialTuning.rowHeight()
-            + CGFloat(n + 2) * SidebarDialTuning.rowGap()
-            + WorkspaceLayout.sessionSectionHairlineSlotHeight
+            + CGFloat(n + 1) * SidebarDialTuning.rowGap()
     }
 
     // MARK: - Bottom
@@ -213,12 +231,53 @@ final class SidebarHistoryPlacementTests: XCTestCase {
 
     // MARK: - Morph alignment
 
-    /// The first session's card sits at the same y in the expanded list and
-    /// the rail.
+    /// The first session's row sits at the same y in the expanded list and
+    /// the rail. In one view both mark it with a tile-sized chip centred in
+    /// the row (option D): in the expanded list behind the leading glyph
+    /// slot, inside the group card; in the rail inside its project column
+    /// (`RailProjectColumn`). The two chips' centres must match.
     func testFirstRowSitsAtTheSameYInExpandedAndRail() throws {
-        let e = try selectedCard(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
-        let r = try selectedCard(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false), rail: true)
-        XCTAssertEqual(e.lowerBound, r.lowerBound, accuracy: 0.6, "first row top")
-        XCTAssertEqual(e.upperBound, r.upperBound, accuracy: 0.6, "first row bottom")
+        let e = try selectedChip(try render(rail: false, sessionCount: 3, height: 600, selectHistory: false), rail: false)
+        let r = try selectedChip(try render(rail: true, sessionCount: 3, height: 600, selectHistory: false), rail: true)
+        XCTAssertEqual((e.lowerBound + e.upperBound) / 2, (r.lowerBound + r.upperBound) / 2, accuracy: 0.6, "first row centre")
+    }
+
+    /// The x of the selected chip's centre: the rail's centre, or, in the
+    /// expanded list, the leading glyph slot's (`SidebarListRowChrome`).
+    private func chipCentreX(_ r: Render, rail: Bool) -> CGFloat {
+        rail ? r.width / 2
+            : SidebarDialTuning.windowMargin() + SidebarDialTuning.contentPaddingLeading()
+                + SidebarDialTuning.rowLeadingPadding() + SidebarListRowChrome<EmptyView, EmptyView>.glyphSlotWidth / 2
+    }
+
+    /// The selected chip: the run, down a line 4pt inside the chip's
+    /// leading edge (clear of the glyph), whose summed-RGB drop below the
+    /// chrome is the chip over the group card or column, not the card or
+    /// column alone. Both are black tints, so a tint of alpha `a` drops the
+    /// sum by `a * chromeSum`: the card/column (6%, ~0.165) sits below the
+    /// window and the chip over it (1 - 0.94 * 0.90 = 15.4%, ~0.424) inside
+    /// it, with the lower bound midway between them; ink is far darker. The
+    /// run must also be chip-sized (not the card's extent). The chip's
+    /// corner trims the run's ends equally, so its centre is the chip's.
+    private func selectedChip(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
+        let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
+        let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
+        let cardAlpha = RailProjectColumn.columnTintOpacity
+        let chipAlpha = RailProjectColumn.selectedChipTintOpacity
+        let cardDrop = base * cardAlpha
+        let chipOverCardDrop = base * (1 - (1 - cardAlpha) * (1 - chipAlpha))
+        let lowerBound = (cardDrop + chipOverCardDrop) / 2
+        let upperBound = chipOverCardDrop + (chipOverCardDrop - lowerBound)
+        let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize / 2 + 4) * r.scale)
+        var runs: [(Int, Int)] = []
+        for y in 0..<r.rep.pixelsHigh {
+            guard let c = r.rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { continue }
+            let delta = base - (c.redComponent + c.greenComponent + c.blueComponent)
+            guard delta > lowerBound && delta < upperBound else { continue }
+            if let last = runs.last, y - last.1 <= 1 { runs[runs.count - 1].1 = y } else { runs.append((y, y)) }
+        }
+        let chips = runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
+            .filter { abs(($0.upperBound - $0.lowerBound) - RailProjectColumn.chipSize) <= 4 }
+        return try XCTUnwrap(chips.first, "no selected chip found (rail: \(rail))")
     }
 }
