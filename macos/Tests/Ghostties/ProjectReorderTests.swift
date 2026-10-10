@@ -128,7 +128,7 @@ final class ProjectReorderTests: XCTestCase {
 
         let atlasHeader = try XCTUnwrap(slots["header-\(atlas.id.uuidString)"])
         XCTAssertEqual([atlasHeader.groupIndex, atlasHeader.slot, atlasHeader.slotCount], [0, 0, 3])
-        XCTAssertEqual(atlasHeader.height, ProjectAccordionHeader.height)
+        XCTAssertEqual(atlasHeader.height, ProjectAccordionHeader.height(.sidebar))
         let a2Slot = try XCTUnwrap(slots[a2.id.uuidString])
         XCTAssertEqual([a2Slot.groupIndex, a2Slot.slot, a2Slot.slotCount], [0, 2, 3])
         XCTAssertEqual(a2Slot.height, SessionDragReflow.rowHeight)

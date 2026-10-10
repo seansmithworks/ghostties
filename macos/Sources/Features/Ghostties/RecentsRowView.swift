@@ -122,8 +122,10 @@ struct RecentsRowView: View, Equatable {
             // collapsed rail (`RailSessionRow`) draws the same glyph centered
             // in the rail, so across the pinned⇄rail transition the glyph
             // moves from this slot to the center (it snaps under Reduce Motion).
-            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
-                .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
+            // A grouped row's glyph sits in its chip: "Thread tile icon".
+            let glyphSize = inProjectColumn ? RailProjectColumn.chipGlyphSize(.sidebar) : SidebarDialTuning.rowGhostSize()
+            SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize)
+                .frame(width: glyphSize, height: glyphSize)
         }
         .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
         .onTapGesture {
@@ -245,7 +247,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
 
     /// The leading status slot: the monogram tile's width, so a row's
     /// glyph centres under its project's tile.
-    static var glyphSlotWidth: CGFloat { RailProjectTile.size }
+    static var glyphSlotWidth: CGFloat { RailProjectTile.size(.sidebar) }
 
     var body: some View {
         HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
@@ -253,7 +255,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
                 .frame(width: Self.glyphSlotWidth)
                 .background {
                     if selection == .chip {
-                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
+                        SidebarRowChipBackground(context: .sidebar, isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
                     }
                 }
                 .redlineFrame(redlineID + ".glyph")

@@ -306,7 +306,7 @@ struct RecentsListView: View {
         max(0, ExpandedGroupCard.horizontalOutset(
             cardInset: SidebarDialTuning.groupCardInset(),
             rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
-            chipOverhang: RailProjectColumn.chipOverhang
+            chipOverhang: RailProjectColumn.chipOverhang(.sidebar)
         ))
     }
 
