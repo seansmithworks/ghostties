@@ -377,7 +377,6 @@ struct RecentsListView: View {
                     sessionRow(
                         for: session, section: .active, sectionList: active,
                         subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
-                        inProjectColumn: true,
                         projectDrop: dropSlots[item.id].map(projectDropTarget)
                     )
                     .railGroupColumn(group.id == selectedGroupId)
@@ -746,7 +745,7 @@ struct RecentsListView: View {
 
     private func sessionRow(
         for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
-        subtitle: String? = nil, inProjectColumn: Bool = false, projectDrop: ProjectDropTarget? = nil
+        subtitle: String? = nil, projectDrop: ProjectDropTarget? = nil
     ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
@@ -766,7 +765,6 @@ struct RecentsListView: View {
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
             subtitle: subtitle,
             isActive: coordinator.sidebarSelectedSessionId == session.id,
-            inProjectColumn: inProjectColumn,
             isEditing: editingSessionId == session.id,
             editingName: editingSessionId == session.id ? $editingName : .constant(""),
             isRenameFocused: $renameFieldFocused,

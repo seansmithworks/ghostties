@@ -34,9 +34,6 @@ struct RecentsRowView: View, Equatable {
     /// Nil keeps the project name.
     var subtitle: String? = nil
     let isActive: Bool
-    /// A one-view grouped row (option D): selection is a tile-sized chip
-    /// behind the glyph, inside the group card, not the wide row card.
-    var inProjectColumn: Bool = false
     var isEditing: Bool = false
     @Binding var editingName: String
     var isRenameFocused: FocusState<Bool>.Binding
@@ -74,7 +71,6 @@ struct RecentsRowView: View, Equatable {
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
             && lhs.subtitle == rhs.subtitle
             && lhs.isActive == rhs.isActive
-            && lhs.inProjectColumn == rhs.inProjectColumn
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
             && lhs.dialEpoch == rhs.dialEpoch
@@ -87,7 +83,6 @@ struct RecentsRowView: View, Equatable {
         SidebarListRowChrome(
             subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
             isActive: isActive,
-            selection: inProjectColumn ? .chip : .card,
             staggerIndex: staggerIndex,
             redlineID: RedlineID.row(session.id)
         ) {
@@ -118,12 +113,12 @@ struct RecentsRowView: View, Equatable {
 
             // Per-session status glyph (spinner / ? / check / x) in the
             // leading slot, under its project's tile (option D, 2026-10-09).
-            // Selection is the row's card or chip, not a glyph tint. The
+            // Selection is the row's chip, not a glyph tint. The
             // collapsed rail (`RailSessionRow`) draws the same glyph centered
             // in the rail, so across the pinned⇄rail transition the glyph
             // moves from this slot to the center (it snaps under Reduce Motion).
-            // A grouped row's glyph sits in its chip: "Thread tile icon".
-            let glyphSize = inProjectColumn ? RailProjectColumn.chipGlyphSize(.sidebar) : SidebarDialTuning.rowGhostSize()
+            // Every expanded row's glyph sits in its chip: "Thread tile icon".
+            let glyphSize = RailProjectColumn.chipGlyphSize(.sidebar)
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: glyphSize)
                 .frame(width: glyphSize, height: glyphSize)
         }
@@ -212,16 +207,6 @@ struct SidebarListRowTitle: View {
     }
 }
 
-/// How a sidebar list row shows selection and hover.
-enum SidebarRowSelection: Equatable {
-    /// The wide row card (`SidebarRowCardBackground`): flat lists (the
-    /// Sessions tab, Pinned, History).
-    case card
-    /// A tile-sized chip behind the glyph (`SidebarRowChipBackground`): a
-    /// one-view grouped row, inside its project's group card (option D).
-    case chip
-}
-
 /// The visual shell of a sidebar list row (option D, 2026-10-09) — one glyph
 /// in the leading status slot, the column the one-view tiles sit in, then
 /// title over subtitle; the row height and padding dials, the selected
@@ -232,7 +217,6 @@ enum SidebarRowSelection: Equatable {
 struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     let subtitle: String
     let isActive: Bool
-    var selection: SidebarRowSelection = .card
     /// Position within the rendered section — feeds the Flow 05 expand
     /// stagger (`WorkspaceLayout.expandLabelDelay`).
     var staggerIndex: Int = 0
@@ -254,9 +238,10 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
             glyph()
                 .frame(width: Self.glyphSlotWidth)
                 .background {
-                    if selection == .chip {
-                        SidebarRowChipBackground(context: .sidebar, isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
-                    }
+                    // Selection and hover are a tile-sized chip behind the
+                    // glyph in every list (option D): one rule; the group
+                    // card is drawn only around a project group.
+                    SidebarRowChipBackground(context: .sidebar, isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
                 }
                 .redlineFrame(redlineID + ".glyph")
 
@@ -281,11 +266,6 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch.
         .frame(height: SidebarDialTuning.rowHeight())
         .redlineFrame(redlineID)
-        .background {
-            if selection == .card {
-                rowBackground
-            }
-        }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
@@ -326,35 +306,5 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
             glyphLandDuration: WorkspaceLayout.sidebarRowGlyphExpandTravelDuration()
         )
         return .easeOut(duration: WorkspaceLayout.sidebarRowLabelExpandFadeDuration).delay(delay)
-    }
-
-    /// Row-background (corner radius) timing. COLLAPSE: waits for the label
-    /// to mostly clear (60ms delay), then runs for the rest of the 260ms
-    /// window. EXPAND: runs immediately over the whole expand window — every
-    /// row starts together; only labels are staggered.
-    private var glyphAnimation: Animation? {
-        guard choreographyEnabled else { return nil }
-        if widthModel.isCollapsedPresentation {
-            return .timingCurve(0.32, 0.72, 0, 1, duration: WorkspaceLayout.sidebarRowGlyphCollapseTravelDuration)
-                .delay(WorkspaceLayout.sidebarRowGlyphCollapseTravelDelay)
-        }
-        return .timingCurve(0.32, 0.72, 0, 1, duration: WorkspaceLayout.sidebarRowGlyphExpandTravelDuration())
-    }
-
-    // MARK: - Row Background
-
-    /// Hover and selected share one footprint (`SidebarRowCardBackground`):
-    /// the row frame, at `rowCornerRadius`.
-    private var rowBackground: some View {
-        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: rowCornerRadius)
-            .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
-    }
-
-    /// Row corner radius — the canvas's "8 → 16px" row, same window as the
-    /// glyph travel above.
-    private var rowCornerRadius: CGFloat {
-        widthModel.isCollapsedPresentation
-            ? WorkspaceLayout.sidebarRowCornerRadiusTraveled
-            : WorkspaceLayout.sidebarRowCornerRadiusResting
     }
 }

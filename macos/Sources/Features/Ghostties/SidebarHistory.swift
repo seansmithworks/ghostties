@@ -201,8 +201,9 @@ struct HistoryRowView: View {
         ) {
             SidebarListRowTitle(text: "History", isActive: isActive)
         } glyph: {
-            HistoryGlyph(size: SidebarDialTuning.rowGhostSize())
-                .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
+            // In its chip like every expanded row: "Thread tile icon".
+            HistoryGlyph(size: RailProjectColumn.chipGlyphSize(.sidebar))
+                .frame(width: RailProjectColumn.chipGlyphSize(.sidebar), height: RailProjectColumn.chipGlyphSize(.sidebar))
         }
         .onTapGesture(perform: onTap)
         .accessibilityElement(children: .combine)
