@@ -11,6 +11,8 @@ Sean: "if I click on the project head in the sidebar or rail, right now it only 
 - **Sibling idea, later:** a parent lead-orchestrator overlay across all projects.
 - Status: backlog only, not in beta.26 scope. Next: /impeccable shape pass + research, then pen.dev frames for Sean.
 
+- **Option D follow-ups (2026-10-10, from final review of feat/sidebar-d @ 60d0f7a4e, APPROVE):** (1) `SidebarProjectsLayoutTests` group-card/column geometry tests compute from helpers, not rendered views — add a rendered check; (2) confirm the "working" glyph's vertical dot cluster in captures is a mid-spin frame, not a shape change vs pen; (3) capture rig opens Dev at 1008×949pt, so 608×1410 crops cut off the tray — fix the crop or window size.
+
 ## 2026-10-09 — Sean's Dev pass round 2 (session b9bd1ac3, "SideBar Tweaks")
 
 State: all pushed to origin. Stack: `feat/sidebar-vnext` (PR #205 head 83780124d) ← `feat/rail-column` @ 95f8d9ce9 (C rail column + Rail column dials, session pinning hidden, dividers removed, rail tray 12pt icon gap, column inset 8, rail scrolls, concentric radius 16−8=8, tray shadow, DialKit panels Sidebar/Rail/Glass & Layout, + merged `feat/project-reorder` drag-reorder project groups w/ header keyboard focus) — each reviewer APPROVE, 342/342 targeted. ← `feat/sidebar-d` @ 4d8234b0a (Sean's pen.dev Option D: leading tiles/glyphs, group card, chips, 48pt rail pills, sidebar 256; NOT reviewed, hosted tests NOT run).
