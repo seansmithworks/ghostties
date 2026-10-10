@@ -26,6 +26,7 @@ shipped, or tested here.
 - **Launch built app**: `open macos/build/Build/Products/Release/Ghostties.app`
 - **Test (macOS app)**: open `macos/Ghostties.xcodeproj`, Cmd+U
 - **Test (Swift package)**: `cd cli && swift test --parallel`
+- **DialKit inspector** (live-tunes Dev; start it before Dev): `bash scripts/open-dialkit.sh`
 - **Browser (CEF)**: `bash scripts/download-cef.sh` — ~300MB, only needed for
   the embedded browser
 - **Formatting**: `zig fmt .` · `swiftlint lint --strict --fix` · `prettier -w .`
