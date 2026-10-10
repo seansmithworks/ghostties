@@ -127,10 +127,13 @@ final class SidebarOptionDRenderedGeometryTests: XCTestCase {
     private struct Edges {
         var cardLeading: CGFloat, cardTrailing: CGFloat
         var cardTop: CGFloat, cardBottom: CGFloat
-        var chipLeading: CGFloat, chipBottom: CGFloat
+        var chipLeading: CGFloat, chipTrailing: CGFloat, chipBottom: CGFloat
         var tileTop: CGFloat
     }
 
+    /// The probe line sits 8pt in, the end of the chip's 8pt corner curve; the
+    /// +/-1pt tolerance covers the continuous corner's small offset there.
+    ///
     /// Reads the card's (or column's) edges and the marks inside it: down a
     /// line 8pt inside the chip's leading edge (past the corner curve, clear
     /// of the tile's monogram) for the vertical edges; along the chip's
@@ -155,17 +158,18 @@ final class SidebarOptionDRenderedGeometryTests: XCTestCase {
         XCTAssertGreaterThan(chipBottom, tile, "no selected chip below the tile")
         // Across the chip's centre row.
         let midY = chipBottom - Int((chipSize / 2) * r.scale)
-        var chipLeading: Int?, cardLeading: Int?, cardTrailing = 0
+        var chipLeading: Int?, chipTrailing = 0, cardLeading: Int?, cardTrailing = 0
         for x in 0..<r.rep.pixelsWide {
             let m = mark(r, px: x, midY)
             if m != .none { if cardLeading == nil { cardLeading = x }; cardTrailing = x }
-            if m == .chip, chipLeading == nil { chipLeading = x }
+            if m == .chip { if chipLeading == nil { chipLeading = x }; chipTrailing = x }
         }
         return Edges(
             cardLeading: CGFloat(try XCTUnwrap(cardLeading)) / r.scale,
             cardTrailing: CGFloat(cardTrailing + 1) / r.scale,
             cardTop: CGFloat(top) / r.scale, cardBottom: CGFloat(cardBottom + 1) / r.scale,
             chipLeading: CGFloat(try XCTUnwrap(chipLeading, "no chip on the centre row")) / r.scale,
+            chipTrailing: CGFloat(chipTrailing + 1) / r.scale,
             chipBottom: CGFloat(chipBottom + 1) / r.scale,
             tileTop: CGFloat(tile) / r.scale
         )
@@ -188,7 +192,11 @@ final class SidebarOptionDRenderedGeometryTests: XCTestCase {
             XCTAssertEqual(e.cardBottom - e.chipBottom, inset, accuracy: 1.0, "bottom \(tag)")
             // The wider of tile and chip is the outer element at the sides.
             let outer = max(r.chipSize, RailProjectTile.size)
-            XCTAssertEqual(slotMidX - outer / 2 - e.cardLeading, inset, accuracy: 1.0, "leading \(tag)")
+            XCTAssertEqual(slotMidX - outer / 2 - e.cardLeading, inset, accuracy: 1.0, "leading (from constants) \(tag)")
+            // Pixel to pixel: the rendered chip's edge (the chip is the
+            // outer element at both offsets; its tile-sized slot has no
+            // chip on the trailing side in the expanded list).
+            XCTAssertEqual(e.chipLeading - e.cardLeading, inset, accuracy: 1.0, "leading (pixels) \(tag)")
             // Trailing: the rows' trailing edge is the column's, less the
             // trailing paddings; the mirrored slot ends `rowLeadingPadding`
             // inside it.
@@ -212,8 +220,11 @@ final class SidebarOptionDRenderedGeometryTests: XCTestCase {
             XCTAssertEqual(e.tileTop - e.cardTop, inset, accuracy: 1.0, "top \(tag)")
             XCTAssertEqual(e.cardBottom - e.chipBottom, inset, accuracy: 1.0, "bottom \(tag)")
             let outer = max(r.chipSize, RailProjectTile.size)
-            XCTAssertEqual(r.width / 2 - outer / 2 - e.cardLeading, inset, accuracy: 1.0, "leading \(tag)")
-            XCTAssertEqual(e.cardTrailing - (r.width / 2 + outer / 2), inset, accuracy: 1.0, "trailing \(tag)")
+            XCTAssertEqual(r.width / 2 - outer / 2 - e.cardLeading, inset, accuracy: 1.0, "leading (from constants) \(tag)")
+            XCTAssertEqual(e.cardTrailing - (r.width / 2 + outer / 2), inset, accuracy: 1.0, "trailing (from constants) \(tag)")
+            // Pixel to pixel: the rendered chip's edges.
+            XCTAssertEqual(e.chipLeading - e.cardLeading, inset, accuracy: 1.0, "leading (pixels) \(tag)")
+            XCTAssertEqual(e.cardTrailing - e.chipTrailing, inset, accuracy: 1.0, "trailing (pixels) \(tag)")
             XCTAssertEqual(e.cardTrailing - e.cardLeading, outer + 2 * inset, accuracy: 1.0, "width \(tag)")
             if chipOffset == 0 {
                 XCTAssertEqual(e.cardTrailing - e.cardLeading, RailProjectTile.size + 2 * inset, accuracy: 1.0)
