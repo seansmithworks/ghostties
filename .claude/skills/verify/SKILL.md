@@ -5,7 +5,7 @@ description: Verify a Ghostties (macOS Swift fork of Ghostty) sidebar or UI chan
 
 # verify (Ghostties)
 
-Surface: the macOS app, Debug "Ghostties Dev" (bundle id `com.seansmithdesign.ghostties.dev`, process name `ghostty`). Not simctl. Launched in fixture mode (`CaptureFixture.swift`): invented projects/sessions, canned terminal transcript, no real user data.
+Surface: the macOS app, Debug "Ghostties Dev" (built by `scripts/build-capture.sh` under its own bundle id `com.seansmithdesign.ghostties.capture`, so it never quits Sean's Dev; process name `ghostty`). Not simctl. Launched in fixture mode (`CaptureFixture.swift`): invented projects/sessions, canned terminal transcript, no real user data.
 
 All mechanics are in `.claude/skills/verify/run.sh`. Run it from the repo/worktree root.
 
@@ -55,8 +55,8 @@ Needs a new launch hook (see `docs/plans/headless-smoke-harness.html`) or Sean: 
 
 ## Gotchas
 - **No synthetic input, ever**: no keystrokes, clicks, AX actions, System Events. An agent once typed into Sean's live session, and Cmd+Q once hit his real Ghostties. Stop Dev with `kill <pid>` only (`down` does this).
-- Never `killall ghostty`: that is also Sean's daily-driver process name. `up` refuses if another Dev is running (it would occlude yours); ask Sean to quit it.
-- Never touch `/Applications/Ghostties.app`, the `com.seansmithdesign.ghostties` (Release) domain, or `com.mitchellh.ghostty`. Only the `.dev` domain is read/written, only for the sidebar tab, and restored by `down`.
+- Never `killall ghostty`: that is also Sean's daily-driver process name. `up` refuses only if another capture build (`.build-capture`, same bundle id) is running; Sean's Dev has a different id and is not affected.
+- Never touch `/Applications/Ghostties.app`, the `com.seansmithdesign.ghostties` (Release) domain, or `com.mitchellh.ghostty`. Only the `.capture` domain is read/written, only for the sidebar tab, and restored by `down`.
 - Tests: if you run any, use `xcodebuild test ... -only-testing:GhosttyTests`. Never the UI test target: it raises a password prompt that blocks all testing. Swift Testing filters need a trailing `()`.
 - Display asleep gives black captures; `up`/`shot` check for it.
 - Seen once in a collapsed capture (1 of 2 runs): whole terminal pane rendered with a blue selection highlight. Did not reproduce; if you see it, retake before reporting it as a bug.
