@@ -268,7 +268,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
         let chipOverCardDrop = base * (1 - (1 - cardAlpha) * (1 - chipAlpha))
         let lowerBound = (cardDrop + chipOverCardDrop) / 2
         let upperBound = chipOverCardDrop + (chipOverCardDrop - lowerBound)
-        let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize / 2 + 4) * r.scale)
+        let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize(rail ? .rail : .sidebar) / 2 + 4) * r.scale)
         var runs: [(Int, Int)] = []
         for y in 0..<r.rep.pixelsHigh {
             guard let c = r.rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { continue }
@@ -277,7 +277,7 @@ final class SidebarHistoryPlacementTests: XCTestCase {
             if let last = runs.last, y - last.1 <= 1 { runs[runs.count - 1].1 = y } else { runs.append((y, y)) }
         }
         let chips = runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
-            .filter { abs(($0.upperBound - $0.lowerBound) - RailProjectColumn.chipSize) <= 4 }
+            .filter { abs(($0.upperBound - $0.lowerBound) - RailProjectColumn.chipSize(rail ? .rail : .sidebar)) <= 4 }
         return try XCTUnwrap(chips.first, "no selected chip found (rail: \(rail))")
     }
 }

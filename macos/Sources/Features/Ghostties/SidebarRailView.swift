@@ -268,10 +268,10 @@ private struct RailScrollToKeyboardSelection: ViewModifier {
 /// Every value below is a "Rail column" dial (`SidebarDialTuning`); the
 /// `default…` constants are what ships, and what each dial reads unset.
 enum RailProjectColumn {
-    /// The chip's side and corner default to the monogram tile's
-    /// (`RailProjectTile.size`, `RailProjectTile.cornerRadius`), so chip and
-    /// tile read as one family.
-    static let defaultChipSizeOffset: CGFloat = 0
+    /// The chip (thread tile) defaults to the monogram tile's side and
+    /// corner (`RailProjectTile.defaultSize`, `RailProjectTile.cornerRadius`),
+    /// so chip and tile read as one family.
+    static let defaultThreadTileSize: CGFloat = RailProjectTile.defaultSize
     static let defaultChipCornerRadius: CGFloat = RailProjectTile.cornerRadius
     /// The rail column: the tile plus this margin on every side (option D:
     /// 4, a 38pt column round the 30pt tile).
@@ -285,10 +285,21 @@ enum RailProjectColumn {
     /// rim, unlike the wide selected row card.
     static let selectedChipTintOpacity: Double = 0.10
 
-    /// `RailProjectTile.size` plus the chip-size dial, clamped to the row
-    /// height so the chip never spills out of its row.
-    static var chipSize: CGFloat {
-        min(max(RailProjectTile.size + SidebarDialTuning.railChipSizeOffset(), 0), SidebarDialTuning.rowHeight())
+    /// `context`'s "Thread tile size", clamped to the row height so the
+    /// chip never spills out of its row.
+    static func chipSize(_ context: SidebarTileContext) -> CGFloat {
+        let size = switch context {
+        case .sidebar: SidebarDialTuning.sidebarThreadTileSize()
+        case .rail: SidebarDialTuning.railThreadTileSize()
+        }
+        return min(max(size, 0), SidebarDialTuning.rowHeight())
+    }
+    /// The status glyph inside a chip: `context`'s "Thread tile icon".
+    static func chipGlyphSize(_ context: SidebarTileContext) -> CGFloat {
+        switch context {
+        case .sidebar: max(SidebarDialTuning.sidebarThreadTileIcon(), 0)
+        case .rail: max(SidebarDialTuning.railThreadTileIcon(), 0)
+        }
     }
     static var chipCornerRadius: CGFloat { max(SidebarDialTuning.railChipCornerRadius(), 0) }
     static var columnInset: CGFloat { max(SidebarDialTuning.railColumnInset(), 0) }
@@ -314,20 +325,22 @@ enum RailProjectColumn {
     }
 
     /// How far the chip reaches past the tile on each side when the
-    /// chip-size dial makes it the wider of the two; 0 when the tile is.
-    static var chipOverhang: CGFloat { max(0, chipSize - RailProjectTile.size) / 2 }
+    /// thread tile is the wider of the two; 0 when the project tile is.
+    static func chipOverhang(_ context: SidebarTileContext) -> CGFloat {
+        max(0, chipSize(context) - RailProjectTile.size(context)) / 2
+    }
 
     /// The overhang the card's or column's side gaps are measured past the
     /// tile slot: the chip's when the group shows rows; a header alone has
     /// no chip, so the tile is the outer element.
-    static func sideOverhang(anchorCount: Int) -> CGFloat {
-        anchorCount > 1 ? chipOverhang : 0
+    static func sideOverhang(anchorCount: Int, context: SidebarTileContext) -> CGFloat {
+        anchorCount > 1 ? chipOverhang(context) : 0
     }
 
-    /// The rail column's width: the wider of tile and chip, plus `inset`
-    /// on each side.
+    /// The rail column's width: the wider of the rail's tile and chip, plus
+    /// `inset` on each side.
     static func columnWidth(anchorCount: Int, inset: CGFloat) -> CGFloat {
-        RailProjectTile.size + (sideOverhang(anchorCount: anchorCount) + inset) * 2
+        RailProjectTile.size(.rail) + (sideOverhang(anchorCount: anchorCount, context: .rail) + inset) * 2
     }
 
     /// The column's or card's vertical extent around its anchors' union:
@@ -335,9 +348,9 @@ enum RailProjectColumn {
     /// the tile when the header is alone), so with the side gaps the card
     /// is inset from the tile and chips on all four sides (Sean, 2026-10-09,
     /// over option D's "runs past the last row").
-    static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat) -> ClosedRange<CGFloat> {
-        let tileTrim = max(0, (ProjectAccordionHeader.height - RailProjectTile.size) / 2)
-        let chipTrim = max(0, (SidebarDialTuning.rowHeight() - chipSize) / 2)
+    static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat, context: SidebarTileContext) -> ClosedRange<CGFloat> {
+        let tileTrim = max(0, (ProjectAccordionHeader.height - RailProjectTile.size(context)) / 2)
+        let chipTrim = max(0, (SidebarDialTuning.rowHeight() - chipSize(context)) / 2)
         let top = union.minY + tileTrim - inset
         let bottom = union.maxY - (anchorCount > 1 ? chipTrim : tileTrim) + inset
         return top...max(top, bottom)
@@ -378,7 +391,7 @@ private struct RailGroupColumn: View {
             if let first = anchors.first {
                 let union = anchors.dropFirst().reduce(proxy[first]) { $0.union(proxy[$1]) }
                 let inset = RailProjectColumn.columnInset
-                let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchors.count, inset: inset)
+                let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchors.count, inset: inset, context: .rail)
                 let width = RailProjectColumn.columnWidth(anchorCount: anchors.count, inset: inset)
                 RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
                     .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
@@ -418,9 +431,9 @@ struct ExpandedGroupCard: View {
                 let outset = Self.horizontalOutset(
                     cardInset: inset,
                     rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
-                    chipOverhang: RailProjectColumn.sideOverhang(anchorCount: anchors.count)
+                    chipOverhang: RailProjectColumn.sideOverhang(anchorCount: anchors.count, context: .sidebar)
                 )
-                let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchors.count, inset: inset)
+                let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchors.count, inset: inset, context: .sidebar)
                 RoundedRectangle(cornerRadius: RailProjectColumn.columnCornerRadius, style: .continuous)
                     .fill(RailProjectColumn.tintInk(colorScheme).opacity(RailProjectColumn.columnTintOpacity))
                     .frame(width: max(0, union.width + outset * 2), height: extent.upperBound - extent.lowerBound)
@@ -437,6 +450,8 @@ struct ExpandedGroupCard: View {
 /// chip behind its glyph, flat (`RailProjectColumn.selectedChipTintOpacity`),
 /// no chromatic rim; hover is the row's hover tint.
 struct SidebarRowChipBackground: View {
+    /// Which tile the chip is sized from (`RailProjectColumn.chipSize`).
+    let context: SidebarTileContext
     let isActive: Bool
     let isHovered: Bool
     /// DEBUG Redlines tag for the chip's frame.
@@ -453,7 +468,7 @@ struct SidebarRowChipBackground: View {
             : Color.primary.opacity(isHovered ? SidebarRowCardBackground.hoverTintOpacity : 0)
         RoundedRectangle(cornerRadius: RailProjectColumn.chipCornerRadius, style: .continuous)
             .fill(fill)
-            .frame(width: RailProjectColumn.chipSize, height: RailProjectColumn.chipSize)
+            .frame(width: RailProjectColumn.chipSize(context), height: RailProjectColumn.chipSize(context))
             .redlineFrame(redlineID)
     }
 }
@@ -502,7 +517,7 @@ struct RailSessionRow: View {
                 .frame(width: glyphSize, height: glyphSize)
                 .background {
                     if inProjectColumn {
-                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered, redlineID: RedlineID.railChip(sessionId))
+                        SidebarRowChipBackground(context: .rail, isActive: isActive, isHovered: isHovered, redlineID: RedlineID.railChip(sessionId))
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -526,7 +541,7 @@ struct RailSessionRow: View {
     private var glyphSize: CGFloat {
         // The chip marks selection in a project column, not a glyph size
         // change, so every grouped row keeps the resting size.
-        guard !inProjectColumn else { return SidebarDialTuning.rowGhostSize() }
+        guard !inProjectColumn else { return RailProjectColumn.chipGlyphSize(.rail) }
         return isActive ? TrayGlassStyle.selectedGlyphSize : SidebarDialTuning.rowGhostSize()
     }
 

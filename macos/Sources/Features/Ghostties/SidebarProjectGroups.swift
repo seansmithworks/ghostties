@@ -301,6 +301,7 @@ struct ProjectAccordionHeader: View {
             // the drag handle, so the tile is not a button of its own.
             ProjectMonogramTileFace(
                 monogram: monogram,
+                context: .sidebar,
                 isEmpty: isEmpty,
                 isSelectedProject: isSelectedProject
             )
@@ -364,11 +365,22 @@ struct ProjectAccordionHeader: View {
 
 // MARK: - Rail tile
 
+/// The surface a project tile and its rows' thread tiles (chips) sit in.
+/// Each has its own "Tiles" dials, so the two are tuned independently.
+enum SidebarTileContext {
+    /// The expanded sidebar: the group header's tile and its rows.
+    case sidebar
+    /// The collapsed rail: the column's tile and its rows.
+    case rail
+}
+
 /// A project's monogram tile, as drawn: the rail's tile and the expanded
 /// header's leading tile are this one view (option D: 30pt, r8, 10% tint;
 /// solid ink when it heads the selected project).
 struct ProjectMonogramTileFace: View {
     let monogram: String
+    /// Which surface draws it: each has its own tile-size dial.
+    let context: SidebarTileContext
     var isEmpty: Bool = false
     var isSelectedProject: Bool = false
 
@@ -388,9 +400,9 @@ struct ProjectMonogramTileFace: View {
     }
     var body: some View {
         Text(monogram)
-            .font(.system(size: monogram.count > 1 ? 11 : 13, weight: .bold))
+            .font(.system(size: RailProjectTile.textSize(context, letters: monogram.count), weight: .bold))
             .foregroundStyle(isEmpty ? WorkspaceLayout.emptyProjectForeground : (isFilled ? RailProjectTile.badgeText(colorScheme) : RailProjectTile.ink(colorScheme)))
-            .frame(width: RailProjectTile.size, height: RailProjectTile.size)
+            .frame(width: RailProjectTile.size(context), height: RailProjectTile.size(context))
             .background {
                 let shape = RoundedRectangle(cornerRadius: RailProjectTile.cornerRadius, style: .continuous)
                 // Tint fades out as ink fades in, so each end draws
@@ -405,7 +417,27 @@ struct ProjectMonogramTileFace: View {
 /// project); a folded tile carries its session count, and an empty
 /// project's tile is dimmed like its header.
 struct RailProjectTile: View {
-    static let size: CGFloat = 30
+    /// Option D's 30pt tile: what both tile-size dials read unset.
+    static let defaultSize: CGFloat = 30
+    /// The tile's side in `context`: that context's "Project tile size" dial.
+    static func size(_ context: SidebarTileContext) -> CGFloat {
+        switch context {
+        case .sidebar: max(SidebarDialTuning.sidebarProjectTileSize(), 0)
+        case .rail: max(SidebarDialTuning.railProjectTileSize(), 0)
+        }
+    }
+    /// A one-letter monogram's font size: what both "Project tile text"
+    /// dials read unset.
+    static let defaultTextSize: CGFloat = 13
+    /// The monogram's font size in `context` ("Project tile text"); a
+    /// two-letter monogram draws 2pt smaller (13 / 11 at the default).
+    static func textSize(_ context: SidebarTileContext, letters: Int) -> CGFloat {
+        let text = switch context {
+        case .sidebar: SidebarDialTuning.sidebarProjectTileText()
+        case .rail: SidebarDialTuning.railProjectTileText()
+        }
+        return max(text - (letters > 1 ? 2 : 0), 1)
+    }
     /// Option D: 8 (was 9).
     static let cornerRadius: CGFloat = 8
     /// The tile's tint in light (option D `#28221E1A`; was 7.5%).
@@ -437,7 +469,7 @@ struct RailProjectTile: View {
 
     var body: some View {
         Button(action: onToggle) {
-            ProjectMonogramTileFace(monogram: monogram, isEmpty: isEmpty, isSelectedProject: isSelectedProject)
+            ProjectMonogramTileFace(monogram: monogram, context: .rail, isEmpty: isEmpty, isSelectedProject: isSelectedProject)
                 .redlineFrame(redlineID)
                 .overlay(alignment: .topTrailing) {
                     if isCollapsed {

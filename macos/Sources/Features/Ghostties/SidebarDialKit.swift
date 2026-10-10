@@ -159,6 +159,18 @@ enum SidebarDialTuning {
     /// The selected project's group card (option D): its margin, inset from
     /// the tile and chips on all four sides (`ExpandedGroupCard`).
     static let groupCardInsetKey = "ghostties.sidebarDial.groupCardInset"
+    // MARK: Tiles, per context (`SidebarTileContext`; "Tiles" in the Sidebar
+    // panel, "Rail tiles" in the Rail panel). A project tile is the monogram
+    // tile heading a group; a thread tile is a grouped session row's chip,
+    // with its status glyph inside.
+    /// The expanded group header's tile, and the row glyph slot under it.
+    static let sidebarProjectTileSizeKey = "ghostties.sidebarDial.sidebarTile.size"
+    /// The expanded tile's monogram font size (one letter; two letters draw 2pt smaller).
+    static let sidebarProjectTileTextKey = "ghostties.sidebarDial.sidebarTile.text"
+    /// A grouped expanded row's chip side.
+    static let sidebarThreadTileSizeKey = "ghostties.sidebarDial.sidebarTile.threadSize"
+    /// A grouped expanded row's status glyph size.
+    static let sidebarThreadTileIconKey = "ghostties.sidebarDial.sidebarTile.threadIcon"
 
     // MARK: Sidebar layout
     static let contentPaddingTopKey = "ghostties.sidebarDial.contentPaddingTop"
@@ -185,9 +197,12 @@ enum SidebarDialTuning {
     /// The tray pills' corner radius: concentric with the window corner
     /// (`trayCornerRadius`) since 2026-10-08.
     static let retiredTrayCornerRadiusKey = "ghostties.sidebarDial.trayGlass.cornerRadius"
+    /// The chip's size as an offset from the tile: an absolute "Thread tile
+    /// size" per context replaced it (2026-10-10).
+    static let retiredRailChipSizeOffsetKey = "ghostties.sidebarDial.railColumn.chipSizeOffset"
     static let retiredKeys: [String] = [
         retiredSelectedRowStyleKey, retiredLegacySelectedStyleKey, retiredTrayStyleKey, retiredHistoryPlacementKey,
-        retiredHairlineWidthKey, retiredTrayVerticalButtonSizeKey, retiredTrayCornerRadiusKey,
+        retiredHairlineWidthKey, retiredTrayVerticalButtonSizeKey, retiredTrayCornerRadiusKey, retiredRailChipSizeOffsetKey,
         // The flat selected row's shadow, per appearance.
         "ghostties.sidebarDial.trayGlass.selectedShadowOpacity",
         "ghostties.sidebarDial.trayGlass.selectedShadowRadius",
@@ -213,7 +228,14 @@ enum SidebarDialTuning {
     static let railColumnTintOpacityKey = "ghostties.sidebarDial.railColumn.tintOpacity"
     static let railColumnInsetKey = "ghostties.sidebarDial.railColumn.inset"
     static let railChipCornerRadiusKey = "ghostties.sidebarDial.railColumn.chipCornerRadius"
-    static let railChipSizeOffsetKey = "ghostties.sidebarDial.railColumn.chipSizeOffset"
+    /// The rail's project tile, and the column width and trims derived from it.
+    static let railProjectTileSizeKey = "ghostties.sidebarDial.railColumn.tileSize"
+    /// The rail tile's monogram font size (one letter; two letters draw 2pt smaller).
+    static let railProjectTileTextKey = "ghostties.sidebarDial.railColumn.tileText"
+    /// A grouped rail row's chip side (replaced the chip-size offset).
+    static let railThreadTileSizeKey = "ghostties.sidebarDial.railColumn.threadTileSize"
+    /// A grouped rail row's status glyph size.
+    static let railThreadTileIconKey = "ghostties.sidebarDial.railColumn.threadTileIcon"
     static let railSelectedTileFillKey = "ghostties.sidebarDial.railColumn.selectedTileFill"
 
     /// Bumped every time the panel writes any key (`SidebarDialKitCoordinator
@@ -358,6 +380,22 @@ enum SidebarDialTuning {
     static func groupCardInset(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         max(0, cgFloat(groupCardInsetKey, default: WorkspaceLayout.sidebarGroupCardInset, defaults: defaults))
     }
+    /// See `sidebarProjectTileSizeKey`. Defaults to `RailProjectTile.defaultSize`.
+    static func sidebarProjectTileSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(sidebarProjectTileSizeKey, default: RailProjectTile.defaultSize, defaults: defaults)
+    }
+    /// See `sidebarProjectTileTextKey`. Defaults to `RailProjectTile.defaultTextSize`.
+    static func sidebarProjectTileText(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(sidebarProjectTileTextKey, default: RailProjectTile.defaultTextSize, defaults: defaults)
+    }
+    /// See `sidebarThreadTileSizeKey`. Defaults to `RailProjectColumn.defaultThreadTileSize`.
+    static func sidebarThreadTileSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(sidebarThreadTileSizeKey, default: RailProjectColumn.defaultThreadTileSize, defaults: defaults)
+    }
+    /// See `sidebarThreadTileIconKey`. Unset, it follows "Row ghost size".
+    static func sidebarThreadTileIcon(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(sidebarThreadTileIconKey, default: rowGhostSize(defaults: defaults), defaults: defaults)
+    }
 
 
     static func contentPaddingTop(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
@@ -434,10 +472,22 @@ enum SidebarDialTuning {
     static func railChipCornerRadius(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         cgFloat(railChipCornerRadiusKey, default: RailProjectColumn.defaultChipCornerRadius, defaults: defaults)
     }
-    /// Added to `RailProjectTile.size` for the chip's side; unclamped here,
-    /// `RailProjectColumn.chipSize` clamps it.
-    static func railChipSizeOffset(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
-        cgFloat(railChipSizeOffsetKey, default: RailProjectColumn.defaultChipSizeOffset, defaults: defaults)
+    /// See `railProjectTileSizeKey`. Defaults to `RailProjectTile.defaultSize`.
+    static func railProjectTileSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railProjectTileSizeKey, default: RailProjectTile.defaultSize, defaults: defaults)
+    }
+    /// See `railProjectTileTextKey`. Defaults to `RailProjectTile.defaultTextSize`.
+    static func railProjectTileText(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railProjectTileTextKey, default: RailProjectTile.defaultTextSize, defaults: defaults)
+    }
+    /// See `railThreadTileSizeKey`; unclamped here, `RailProjectColumn.chipSize`
+    /// clamps it. Defaults to `RailProjectColumn.defaultThreadTileSize`.
+    static func railThreadTileSize(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railThreadTileSizeKey, default: RailProjectColumn.defaultThreadTileSize, defaults: defaults)
+    }
+    /// See `railThreadTileIconKey`. Unset, it follows "Row ghost size".
+    static func railThreadTileIcon(defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        cgFloat(railThreadTileIconKey, default: rowGhostSize(defaults: defaults), defaults: defaults)
     }
     /// The selected project's tile fill, 0 (plain tile tint) to 1 (full ink).
     static func railSelectedTileFill(defaults: UserDefaults = SidebarDialTuning.store) -> Double {
@@ -455,6 +505,7 @@ enum SidebarDialTuning {
         selectedTitleWeightKey, tintShimmerDarkIntensityKey,
         rowHeightKey, rowGapKey, rowTitleSizeKey, rowSubtitleSizeKey, rowGhostSizeKey,
         rowLeadingPaddingKey, rowTrailingPaddingKey, groupCardInsetKey,
+        sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey,
         contentPaddingTopKey, contentPaddingLeadingKey, contentPaddingTrailingKey, listToTrayGapKey,
         historyInSidebarKey, projectsLayoutKey
     ] + railKeys
@@ -467,7 +518,8 @@ enum SidebarDialTuning {
         lightGlassKeys.shadowOpacity, lightGlassKeys.shadowRadius, lightGlassKeys.shadowYOffset,
         darkGlassKeys.shadowOpacity, darkGlassKeys.shadowRadius, darkGlassKeys.shadowYOffset,
         railColumnTintOpacityKey, railColumnInsetKey, railChipCornerRadiusKey,
-        railChipSizeOffsetKey, railSelectedTileFillKey
+        railSelectedTileFillKey,
+        railProjectTileSizeKey, railProjectTileTextKey, railThreadTileSizeKey, railThreadTileIconKey
     ]
 
     /// The keys the "Sidebar" panel owns (`SidebarListDialPanel`): the
@@ -476,7 +528,8 @@ enum SidebarDialTuning {
     static let sidebarListKeys: [String] = [
         rowHeightKey, rowGapKey, selectedTitleWeightKey, tintShimmerDarkIntensityKey,
         trayHorizontalButtonSizeKey, trayGroupGapKey, trayWidthKey,
-        contentPaddingLeadingKey, contentPaddingTrailingKey, groupCardInsetKey
+        contentPaddingLeadingKey, contentPaddingTrailingKey, groupCardInsetKey,
+        sidebarProjectTileSizeKey, sidebarProjectTileTextKey, sidebarThreadTileSizeKey, sidebarThreadTileIconKey
     ]
 
     /// Posted after either panel's Reset, so the other panel re-reads the
@@ -624,6 +677,10 @@ struct SidebarListDialKitTuningModel: Codable, Equatable {
     var contentPaddingLeading: Double
     var contentPaddingTrailing: Double
     var groupCardInset: Double
+    var sidebarProjectTileSize: Double
+    var sidebarProjectTileText: Double
+    var sidebarThreadTileSize: Double
+    var sidebarThreadTileIcon: Double
 }
 
 /// The Rail panel's model: every knob that only changes the collapsed rail.
@@ -647,8 +704,11 @@ struct RailDialKitTuningModel: Codable, Equatable {
     var railColumnTintOpacity: Double
     var railColumnInset: Double
     var railChipCornerRadius: Double
-    var railChipSizeOffset: Double
     var railSelectedTileFill: Double
+    var railProjectTileSize: Double
+    var railProjectTileText: Double
+    var railThreadTileSize: Double
+    var railThreadTileIcon: Double
 }
 
 @available(macOS 14, *)
@@ -999,8 +1059,11 @@ enum RailDialPanel: FocusedDialPanel {
             railColumnTintOpacity: SidebarDialTuning.railColumnTintOpacity(defaults: defaults),
             railColumnInset: Double(SidebarDialTuning.railColumnInset(defaults: defaults)),
             railChipCornerRadius: Double(SidebarDialTuning.railChipCornerRadius(defaults: defaults)),
-            railChipSizeOffset: Double(SidebarDialTuning.railChipSizeOffset(defaults: defaults)),
-            railSelectedTileFill: SidebarDialTuning.railSelectedTileFill(defaults: defaults)
+            railSelectedTileFill: SidebarDialTuning.railSelectedTileFill(defaults: defaults),
+            railProjectTileSize: Double(SidebarDialTuning.railProjectTileSize(defaults: defaults)),
+            railProjectTileText: Double(SidebarDialTuning.railProjectTileText(defaults: defaults)),
+            railThreadTileSize: Double(SidebarDialTuning.railThreadTileSize(defaults: defaults)),
+            railThreadTileIcon: Double(SidebarDialTuning.railThreadTileIcon(defaults: defaults))
         )
     }
 
@@ -1021,8 +1084,11 @@ enum RailDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.railColumnTintOpacityKey, previous.railColumnTintOpacity, model.railColumnTintOpacity)
         setIfChanged(defaults, SidebarDialTuning.railColumnInsetKey, previous.railColumnInset, model.railColumnInset)
         setIfChanged(defaults, SidebarDialTuning.railChipCornerRadiusKey, previous.railChipCornerRadius, model.railChipCornerRadius)
-        setIfChanged(defaults, SidebarDialTuning.railChipSizeOffsetKey, previous.railChipSizeOffset, model.railChipSizeOffset)
         setIfChanged(defaults, SidebarDialTuning.railSelectedTileFillKey, previous.railSelectedTileFill, model.railSelectedTileFill)
+        setIfChanged(defaults, SidebarDialTuning.railProjectTileSizeKey, previous.railProjectTileSize, model.railProjectTileSize)
+        setIfChanged(defaults, SidebarDialTuning.railProjectTileTextKey, previous.railProjectTileText, model.railProjectTileText)
+        setIfChanged(defaults, SidebarDialTuning.railThreadTileSizeKey, previous.railThreadTileSize, model.railThreadTileSize)
+        setIfChanged(defaults, SidebarDialTuning.railThreadTileIconKey, previous.railThreadTileIcon, model.railThreadTileIcon)
     }
 
     private static func shadow(_ look: TrayGlassStyle.Look) -> RailDialKitTuningModel.Shadow {
@@ -1060,8 +1126,14 @@ enum RailDialPanel: FocusedDialPanel {
                 .slider("railColumnTintOpacity", keyPath: \.railColumnTintOpacity, label: "Column tint", range: 0...0.3, step: 0.005),
                 .slider("railColumnInset", keyPath: \.railColumnInset, label: "Column inset", range: 0...12, step: 0.5, unit: "pt"),
                 .slider("railChipCornerRadius", keyPath: \.railChipCornerRadius, label: "Chip corner radius", range: 0...20, step: 0.5, unit: "pt"),
-                .slider("railChipSizeOffset", keyPath: \.railChipSizeOffset, label: "Chip size (vs tile)", range: -12...12, step: 0.5, unit: "pt"),
                 .slider("railSelectedTileFill", keyPath: \.railSelectedTileFill, label: "Selected tile fill", range: 0...1, step: 0.05),
+            ]),
+            // The column's project tile and its rows' thread tiles (chips).
+            .group("railTiles", label: "Rail tiles", children: [
+                .slider("railProjectTileSize", keyPath: \.railProjectTileSize, label: "Project tile size", range: 20...44, step: 1, unit: "pt"),
+                .slider("railProjectTileText", keyPath: \.railProjectTileText, label: "Project tile text", range: 8...20, step: 0.5, unit: "pt"),
+                .slider("railThreadTileSize", keyPath: \.railThreadTileSize, label: "Thread tile size", range: 20...44, step: 1, unit: "pt"),
+                .slider("railThreadTileIcon", keyPath: \.railThreadTileIcon, label: "Thread tile icon", range: 8...24, step: 0.5, unit: "pt"),
             ]),
         ]
     }
@@ -1088,7 +1160,11 @@ enum SidebarListDialPanel: FocusedDialPanel {
             trayWidth: SidebarDialTuning.trayWidth(defaults: defaults).rawValue,
             contentPaddingLeading: Double(SidebarDialTuning.contentPaddingLeading(defaults: defaults)),
             contentPaddingTrailing: Double(SidebarDialTuning.contentPaddingTrailing(defaults: defaults)),
-            groupCardInset: Double(SidebarDialTuning.groupCardInset(defaults: defaults))
+            groupCardInset: Double(SidebarDialTuning.groupCardInset(defaults: defaults)),
+            sidebarProjectTileSize: Double(SidebarDialTuning.sidebarProjectTileSize(defaults: defaults)),
+            sidebarProjectTileText: Double(SidebarDialTuning.sidebarProjectTileText(defaults: defaults)),
+            sidebarThreadTileSize: Double(SidebarDialTuning.sidebarThreadTileSize(defaults: defaults)),
+            sidebarThreadTileIcon: Double(SidebarDialTuning.sidebarThreadTileIcon(defaults: defaults))
         )
     }
 
@@ -1103,6 +1179,10 @@ enum SidebarListDialPanel: FocusedDialPanel {
         setIfChanged(defaults, SidebarDialTuning.contentPaddingLeadingKey, previous.contentPaddingLeading, model.contentPaddingLeading)
         setIfChanged(defaults, SidebarDialTuning.contentPaddingTrailingKey, previous.contentPaddingTrailing, model.contentPaddingTrailing)
         setIfChanged(defaults, SidebarDialTuning.groupCardInsetKey, previous.groupCardInset, model.groupCardInset)
+        setIfChanged(defaults, SidebarDialTuning.sidebarProjectTileSizeKey, previous.sidebarProjectTileSize, model.sidebarProjectTileSize)
+        setIfChanged(defaults, SidebarDialTuning.sidebarProjectTileTextKey, previous.sidebarProjectTileText, model.sidebarProjectTileText)
+        setIfChanged(defaults, SidebarDialTuning.sidebarThreadTileSizeKey, previous.sidebarThreadTileSize, model.sidebarThreadTileSize)
+        setIfChanged(defaults, SidebarDialTuning.sidebarThreadTileIconKey, previous.sidebarThreadTileIcon, model.sidebarThreadTileIcon)
     }
 
     static var controls: [DialControl<SidebarListDialKitTuningModel>] {
@@ -1126,6 +1206,13 @@ enum SidebarListDialPanel: FocusedDialPanel {
             // The selected project's group card (`ExpandedGroupCard`).
             .group("groupCard", label: "Group card", children: [
                 .slider("groupCardInset", keyPath: \.groupCardInset, label: "Card inset", range: 0...16, step: 0.5, unit: "pt"),
+            ]),
+            // A group's project tile and its rows' thread tiles (chips).
+            .group("tiles", label: "Tiles", children: [
+                .slider("sidebarProjectTileSize", keyPath: \.sidebarProjectTileSize, label: "Project tile size", range: 20...44, step: 1, unit: "pt"),
+                .slider("sidebarProjectTileText", keyPath: \.sidebarProjectTileText, label: "Project tile text", range: 8...20, step: 0.5, unit: "pt"),
+                .slider("sidebarThreadTileSize", keyPath: \.sidebarThreadTileSize, label: "Thread tile size", range: 20...44, step: 1, unit: "pt"),
+                .slider("sidebarThreadTileIcon", keyPath: \.sidebarThreadTileIcon, label: "Thread tile icon", range: 8...24, step: 0.5, unit: "pt"),
             ]),
             // Inner side margins of the list column, inside the window margin.
             .group("sideMargins", label: "Side margins", children: [
