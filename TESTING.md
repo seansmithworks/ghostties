@@ -46,6 +46,14 @@ Two things that will bite you:
 - **`ONLY_ACTIVE_ARCH=YES ARCHS=arm64` is required** for any command-line
   `xcodebuild` invocation here.
 
+### Agents: never run hosted tests or launch Dev under the shared ID
+
+Every Debug build shares `com.seansmithdesign.ghostties.dev`, and launching a second
+instance quits Sean's running Dev. Agents use `scripts/build-capture.sh` (build) or
+`scripts/build-capture.sh test -only-testing:...` (hosted tests): it builds into
+`.build-capture` with `GHOSTTIES_DEV_BUNDLE_SUFFIX=.capture`, so it runs beside
+Sean's Dev. Its state folder is separate too (`WorkspacePersistence` maps unknown IDs to `Ghostties (<bundleId>)`); never use a suffix ending in `.dev`, which shares Sean's Dev workspace.
+
 ### Why CI doesn't run these
 
 CI builds this suite with `build-for-testing` but does not execute it. App-hosted
