@@ -9,8 +9,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 TREE="$(cd "$HERE/../../.." && pwd)"
 HASH="$(printf %s "$TREE" | shasum | cut -c1-8)"
 EV="/tmp/verify-ghostties-$HASH"
-DEV_DOMAIN="com.seansmithdesign.ghostties.dev"
-APP="$TREE/macos/build/Build/Products/Debug/Ghostties Dev.app"
+# Capture build: own bundle ID (scripts/build-capture.sh, suffix .capture) so launching it never quits Sean's Dev.
+DEV_DOMAIN="com.seansmithdesign.ghostties.capture"
+APP="$TREE/.build-capture/Build/Products/Debug/Ghostties Dev.app"
 BIN="$APP/Contents/MacOS/ghostty"
 ENGINE="$TREE/macos/GhosttyKit.xcframework/macos-arm64/libghostty-internal.a"
 
@@ -64,14 +65,14 @@ cmd_up() {
   alive && die "already running (pid $(pid)); run down first"
   [ -f "$EV/git-status.before" ] || status > "$EV/git-status.before"
   check_inputs
-  # Another Dev window at the default position occludes ours. Never kill it.
+  # Another capture build shares our bundle ID and would be quit by (or quit) ours. Sean's Dev is
+  # a different ID and is deliberately not matched. Never kill it.
   local other
-  other="$(ps -axo pid=,command= | grep "Ghostties Dev.app/Contents/MacOS" | grep -v grep | head -1 || true)"
-  [ -z "$other" ] || die "another Ghostties Dev is running ($other). Ask Sean to quit it; do not kill it"
+  other="$(ps -axo pid=,command= | grep "\.build-capture/Build/Products/Debug/Ghostties Dev.app/Contents/MacOS" | grep -v grep | head -1 || true)"
+  [ -z "$other" ] || die "another capture build is running ($other). Wait for its owner to run down; do not kill it"
   awake
   if [ -n "${VERIFY_BUILD:-1}" ] && [ "${VERIFY_BUILD:-1}" != 0 ]; then
-    ( cd "$TREE" && xcodebuild -project macos/Ghostties.xcodeproj -scheme Ghostties -configuration Debug \
-        -derivedDataPath macos/build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build ) > "$EV/build.log" 2>&1 \
+    "$TREE/scripts/build-capture.sh" > "$EV/build.log" 2>&1 \
       || { tail -20 "$EV/build.log"; die "build failed (full log $EV/build.log)"; }
     grep -q "BUILD SUCCEEDED" "$EV/build.log" || die "no BUILD SUCCEEDED in $EV/build.log"
   fi
