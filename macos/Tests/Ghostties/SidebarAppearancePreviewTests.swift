@@ -21,16 +21,21 @@ final class SidebarAppearancePreviewTests: XCTestCase {
 
     override func tearDown() {
         SidebarAppearancePreview.set(.auto)
-        NSApp.appearance = savedAppearance
+        // Hands the preview back the host's own appearance as its configured one.
+        SidebarAppearancePreview.applyAppAppearance(configured: savedAppearance)
         super.tearDown()
     }
 
     func testPreviewSetsTheWholeAppsAppearanceAndAutoHandsItBack() {
         XCTAssertEqual(SidebarAppearancePreview.mode, .auto)
-        let configured = NSApp.appearance?.name
-        // The opposite of the host's current look, so the effective
-        // appearance has to change and the terminal observer has to fire.
-        let target: SidebarAppearancePreview.Mode = NSApp.effectiveAppearance.isDark ? .light : .dark
+        // Seed the config's window-theme explicitly (light), the way
+        // `AppDelegate.syncAppearance` does on a config load, so the test
+        // doesn't depend on whether the host ever loaded a config.
+        SidebarAppearancePreview.applyAppAppearance(configured: NSAppearance(named: .aqua))
+        XCTAssertEqual(NSApp.appearance?.name, .aqua)
+        // The opposite look, so the effective appearance has to change and
+        // the terminal observer has to fire.
+        let target: SidebarAppearancePreview.Mode = .dark
         let terminalObserverFires = keyValueObservingExpectation(for: NSApp as Any, keyPath: "effectiveAppearance")
 
         SidebarAppearancePreview.set(target)
@@ -40,7 +45,7 @@ final class SidebarAppearancePreviewTests: XCTestCase {
         XCTAssertEqual(NSApp.effectiveAppearance.isDark, target == .dark)
 
         SidebarAppearancePreview.set(.auto)
-        XCTAssertEqual(NSApp.appearance?.name, configured, "auto must hand the app back to the config's window-theme")
+        XCTAssertEqual(NSApp.appearance?.name, .aqua, "auto must hand the app back to the config's window-theme")
     }
 
     /// The preview outranks the config's `window-theme`; `auto` passes it through.

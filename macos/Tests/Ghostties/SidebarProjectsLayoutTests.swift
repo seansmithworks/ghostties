@@ -260,7 +260,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         // The anchors as laid out: header, then rows at the row pitch.
         let width: CGFloat = 248, minX: CGFloat = 8, rows = 4
         let rowHeight = SidebarDialTuning.rowHeight(), gap = SidebarDialTuning.rowGap()
-        let header = CGRect(x: minX, y: 0, width: width, height: ProjectAccordionHeader.height)
+        let header = CGRect(x: minX, y: 0, width: width, height: ProjectAccordionHeader.height(.sidebar))
         let lastRow = CGRect(
             x: minX, y: header.maxY + gap + CGFloat(rows - 1) * (rowHeight + gap),
             width: width, height: rowHeight
@@ -415,6 +415,56 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         XCTAssertTrue(SidebarDialTuning.retiredKeys.contains(SidebarDialTuning.retiredRailChipSizeOffsetKey))
     }
 
+    /// A project tile past the 30pt header grows the header that hosts it
+    /// (in its own context only), so the group card and the rail column,
+    /// measured from the header's frame, still enclose the tile with their
+    /// inset on every side. Unset, both headers stay 30.
+    func testABigProjectTileGrowsItsHeaderAndStaysInsideTheCard() {
+        withDials {
+            XCTAssertEqual(ProjectAccordionHeader.height(.sidebar), 30)
+            XCTAssertEqual(ProjectAccordionHeader.height(.rail), 30)
+        }
+        for context in [SidebarTileContext.sidebar, .rail] {
+            let key = context == .sidebar ? SidebarDialTuning.sidebarProjectTileSizeKey : SidebarDialTuning.railProjectTileSizeKey
+            withDials({ $0.set(44.0, forKey: key) }) {
+                let other: SidebarTileContext = context == .sidebar ? .rail : .sidebar
+                XCTAssertEqual(ProjectAccordionHeader.height(context), 44, "\(context)")
+                XCTAssertEqual(ProjectAccordionHeader.height(other), 30, "\(context) moved \(other)")
+                let tile = RailProjectTile.size(context)
+                XCTAssertEqual(tile, 44)
+
+                let minX: CGFloat = 8, width: CGFloat = 248
+                let rowHeight = SidebarDialTuning.rowHeight(), gap = SidebarDialTuning.rowGap()
+                let header = CGRect(x: minX, y: 0, width: width, height: ProjectAccordionHeader.height(context))
+                let lastRow = CGRect(x: minX, y: header.maxY + gap + 3 * (rowHeight + gap), width: width, height: rowHeight)
+                let lead = SidebarDialTuning.rowLeadingPadding()
+                // The tile as laid out: centred in its header, and in the
+                // leading glyph slot (expanded) or on the rail's centre.
+                let tileMidX = context == .sidebar ? minX + lead + SidebarListRowChrome<Text, Text>.glyphSlotWidth / 2 : header.midX
+                let tileFrame = CGRect(x: tileMidX - tile / 2, y: header.midY - tile / 2, width: tile, height: tile)
+                let inset = context == .sidebar ? SidebarDialTuning.groupCardInset() : RailProjectColumn.columnInset
+
+                for (union, anchorCount) in [(header.union(lastRow), 5), (header, 1)] {
+                    let extent = RailProjectColumn.verticalExtent(union: union, anchorCount: anchorCount, inset: inset, context: context)
+                    let cardWidth: CGFloat
+                    if context == .sidebar {
+                        let outset = ExpandedGroupCard.horizontalOutset(
+                            cardInset: inset, rowLeadingPadding: lead,
+                            chipOverhang: RailProjectColumn.sideOverhang(anchorCount: anchorCount, context: context)
+                        )
+                        cardWidth = union.width + outset * 2
+                    } else {
+                        cardWidth = RailProjectColumn.columnWidth(anchorCount: anchorCount, inset: inset)
+                    }
+                    let card = CGRect(x: union.midX - cardWidth / 2, y: extent.lowerBound, width: cardWidth, height: extent.upperBound - extent.lowerBound)
+                    XCTAssertTrue(card.contains(tileFrame), "\(context), \(anchorCount) anchors: card \(card) must enclose tile \(tileFrame)")
+                    XCTAssertEqual(tileFrame.minY - card.minY, inset, "\(context), \(anchorCount) anchors: inset above the tile")
+                    XCTAssertEqual(tileFrame.minX - card.minX, inset, "\(context), \(anchorCount) anchors: inset beside the tile")
+                }
+            }
+        }
+    }
+
     // MARK: - One view is the Projects tab's layout only
 
     /// With the dial on One view, the Sessions tab still mounts the Sessions
@@ -526,7 +576,7 @@ final class SidebarProjectsLayoutTests: XCTestCase {
         let folded = height(.oneView, collapsed: [atlas.id])
 
         // Two headers, one spacer between groups, each with its row gap.
-        XCTAssertEqual(open - tabs, 2 * (ProjectAccordionHeader.height + gap) + SidebarProjectGroupItem.spacerHeight + gap, accuracy: 0.5)
+        XCTAssertEqual(open - tabs, 2 * (ProjectAccordionHeader.height(.sidebar) + gap) + SidebarProjectGroupItem.spacerHeight + gap, accuracy: 0.5)
         // Folding atlas-api removes its two rows.
         XCTAssertEqual(open - folded, 2 * (row + gap), accuracy: 0.5)
     }

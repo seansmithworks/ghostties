@@ -349,7 +349,7 @@ enum RailProjectColumn {
     /// is inset from the tile and chips on all four sides (Sean, 2026-10-09,
     /// over option D's "runs past the last row").
     static func verticalExtent(union: CGRect, anchorCount: Int, inset: CGFloat, context: SidebarTileContext) -> ClosedRange<CGFloat> {
-        let tileTrim = max(0, (ProjectAccordionHeader.height - RailProjectTile.size(context)) / 2)
+        let tileTrim = (ProjectAccordionHeader.height(context) - RailProjectTile.size(context)) / 2
         let chipTrim = max(0, (SidebarDialTuning.rowHeight() - chipSize(context)) / 2)
         let top = union.minY + tileTrim - inset
         let bottom = union.maxY - (anchorCount > 1 ? chipTrim : tileTrim) + inset

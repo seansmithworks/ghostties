@@ -270,7 +270,15 @@ private struct ToggleKeyActivation: ViewModifier {
 /// rows. An empty project's header is dimmed, has no chevron (nothing to
 /// fold), and selects the project instead.
 struct ProjectAccordionHeader: View {
-    static let height: CGFloat = 30
+    /// Option D's header height, which a tile at or under 30pt sits in.
+    static let baseHeight: CGFloat = 30
+    /// The header's height in `context` (the expanded header, or the rail's
+    /// tile row at the header's y): grows with that context's project tile,
+    /// so the tile never overflows it and the group card, measured from the
+    /// header's frame, always encloses the tile.
+    static func height(_ context: SidebarTileContext) -> CGFloat {
+        max(baseHeight, RailProjectTile.size(context))
+    }
 
     let name: String
     /// `ProjectMonogram.monograms`' entry for this project.
@@ -329,7 +337,7 @@ struct ProjectAccordionHeader: View {
         .foregroundStyle(ink)
         .padding(.leading, SidebarDialTuning.rowLeadingPadding())
         .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-        .frame(height: Self.height)
+        .frame(height: Self.height(.sidebar))
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
         // Keyboard: a tap gesture isn't a focus stop the way a `Button` is,
@@ -484,7 +492,7 @@ struct RailProjectTile: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: ProjectAccordionHeader.height)
+                .frame(height: ProjectAccordionHeader.height(.rail))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
