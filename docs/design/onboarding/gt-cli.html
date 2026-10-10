@@ -1,0 +1,154 @@
+<title>gt and ghostties-mcp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: single 780px column; terminal transcripts and the data-flow diagram are the visual anchors. */
+:root {
+  --page: #F6F1EE; --canvas: #FAF7F3; --fg: #1a1a1a; --fg2: #636363; --line: #e5ddd8;
+  --accent: #C97350; --ok: #2d7d46; --warn: #a8661b; --bad: #b8323f;
+  --term: #1f1e1d; --termfg: #e9e5e0; --termdim: #8d8780; --termok: #7cc48f; --termhl: #e39470;
+  --f-body: "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --f-mono: "Geist Mono", "SF Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #1d1c1b; --canvas: #262524; --fg: #f0efed; --fg2: #9a9a9a; --line: #353231;
+  --accent: #D9845F; --ok: #5fb57a; --warn: #d79a4a; --bad: #e0697a; --term: #141312; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --page: #1d1c1b; --canvas: #262524; --fg: #f0efed; --fg2: #9a9a9a; --line: #353231;
+  --accent: #D9845F; --ok: #5fb57a; --warn: #d79a4a; --bad: #e0697a; --term: #141312; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--page); color: var(--fg); font: 15px/1.6 var(--f-body); padding-inline: 20px; padding-block: 56px 96px }
+.col { max-width: 780px; margin: 0 auto; display: grid; gap: 0 }
+h1, h2, h3 { margin: 0; text-wrap: balance }
+h1 { font: 600 clamp(34px, 6vw, 52px)/1.05 var(--f-mono); letter-spacing: -0.03em }
+h2 { font: 600 24px/1.25 var(--f-body); letter-spacing: -0.015em; margin-top: 52px }
+h3 { font: 600 16px/1.3 var(--f-body) }
+p { margin: 0 }
+a { color: inherit; text-underline-offset: 2px }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.eyebrow { font: 500 11px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--fg2) }
+.muted { color: var(--fg2) }
+code { font: .88em var(--f-mono); background: color-mix(in srgb, var(--fg) 7%, transparent); padding: 1px 5px; border-radius: 4px }
+.lede { font-size: 18px; line-height: 1.5; margin-top: 14px; max-width: 640px }
+.verdict { margin-top: 30px; padding: 20px 22px; border-radius: 12px; background: var(--canvas); border: 1px solid var(--line); display: grid; gap: 10px }
+.verdict .big { font: 600 22px/1.3 var(--f-body) }
+.term { margin-top: 16px; background: var(--term); color: var(--termfg); border-radius: 10px; padding: 16px 18px; font: 13px/1.6 var(--f-mono); overflow-x: auto; white-space: pre }
+.term .d { color: var(--termdim) } .term .o { color: var(--termok) } .term .h { color: var(--termhl) }
+.diagram { margin-top: 18px; overflow-x: auto; background: var(--canvas); border: 1px solid var(--line); border-radius: 12px; padding: 12px }
+.diagram svg { display: block; min-width: 620px; width: 100% }
+.diagram text { font-family: var(--f-mono); font-size: 12px; fill: var(--fg) }
+.diagram .sub { fill: var(--fg2); font-size: 11px }
+.diagram .box { fill: var(--page); stroke: var(--line); stroke-width: 1.5 }
+.diagram .hub { fill: color-mix(in srgb, var(--accent) 14%, var(--page)); stroke: var(--accent); stroke-width: 1.5 }
+.diagram .ln { stroke: var(--fg2); stroke-width: 1.5; fill: none }
+.diagram .dead { stroke: var(--bad); stroke-dasharray: 4 4 }
+.diagram .arrow { fill: var(--fg2) }
+.tbl { overflow-x: auto; margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas) }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font: 500 11px/1.2 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg2) }
+td:first-child { font-family: var(--f-mono); font-size: 13px; white-space: nowrap }
+tr:last-child td { border-bottom: 0 }
+.score { display: grid; gap: 0; margin-top: 16px; border-top: 1px solid var(--line) }
+.score div { display: grid; grid-template-columns: 110px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 14px }
+.tag { font: 600 11px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; padding: 5px 7px; border-radius: 5px; justify-self: start; align-self: start }
+.tag.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent) }
+.tag.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent) }
+.tag.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent) }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-top: 16px }
+.opts > div { padding: 16px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 6px; align-content: start; font-size: 14px; min-width: 0 }
+.opts > div.pick { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--canvas)) }
+ul.list { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px }
+@media (max-width: 520px) { .score div { grid-template-columns: 1fr; gap: 6px } }
+</style>
+
+<main class="col">
+  <div class="eyebrow">Ghostties · cli/ package · audit 2026-10-10</div>
+  <h1 style="margin-top:12px">gt &amp; ghostties&#8209;mcp</h1>
+  <p class="lede">A small task system that lives in Markdown files. People use <code>gt</code>, agents use the MCP server, and the app watches the folder. The core is solid and well tested. Users can't install it, though, and nothing has shipped for it since May.</p>
+
+  <div class="verdict">
+    <div class="eyebrow">Verdict</div>
+    <p class="big">Keep it, stop promoting it for now, and reposition the MCP server as the part that matters.</p>
+    <p class="muted">The interesting user is the agent, not the person. "Your agent can file and update tasks in your sidebar" is a story. A human-facing <code>gt</code> CLI that duplicates the sidebar isn't, and the name collides with Graphite's widely used <code>gt</code> CLI.</p>
+  </div>
+
+  <h2>How it fits together</h2>
+  <p class="muted" style="margin-top:6px">No socket, XPC or URL scheme. Everything goes through files.</p>
+  <div class="diagram">
+    <svg viewBox="0 0 680 270" role="img" aria-label="gt and agents write task files; the app watches them">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+      <rect class="box" x="10" y="20" width="170" height="58" rx="8"/><text x="24" y="44">you, in a shell</text><text class="sub" x="24" y="63">gt new · list · done</text>
+      <rect class="box" x="10" y="110" width="170" height="58" rx="8"/><text x="24" y="134">Claude Code agent</text><text class="sub" x="24" y="153">via ghostties-mcp (12 tools)</text>
+      <rect class="box" x="10" y="200" width="170" height="58" rx="8"/><text x="24" y="224">Linear sync preset</text><text class="sub" x="24" y="243">expects mcp on PATH</text>
+      <rect class="hub" x="250" y="95" width="190" height="88" rx="10"/><text x="266" y="122">.ghostties/tasks/</text><text class="sub" x="266" y="142">&lt;slug&gt;-&lt;6hex&gt;.md</text><text class="sub" x="266" y="160">frontmatter: status, project…</text>
+      <rect class="box" x="510" y="95" width="160" height="88" rx="8"/><text x="524" y="122">Ghostties.app</text><text class="sub" x="524" y="142">TaskFileWatcher</text><text class="sub" x="524" y="160">task-first sidebar lanes</text>
+      <path class="ln" d="M180 49 C215 49 220 115 248 120" marker-end="url(#ah)"/>
+      <path class="ln" d="M180 139 L248 139" marker-end="url(#ah)"/>
+      <path class="ln" d="M180 229 C215 229 220 165 248 158" marker-end="url(#ah)"/>
+      <path class="ln" d="M440 139 L508 139" marker-end="url(#ah)"/>
+      <path class="ln" d="M508 128 L442 128" marker-end="url(#ah)"/>
+      <rect class="box" x="510" y="215" width="160" height="40" rx="8" style="stroke-dasharray:4 4"/><text x="524" y="240">.ghostties/.focus</text>
+      <path class="ln dead" d="M440 175 C480 200 480 232 508 235" marker-end="url(#ah)"/><text class="sub" x="440" y="262" style="fill:var(--bad)">gt focus writes it · nothing reads it</text>
+    </svg>
+  </div>
+
+  <h2>What it does</h2>
+  <div class="term"><span class="d">~/Code/pico-focus</span> <span class="o">main</span> ❯ gt new "Fix timer drift" --priority high
+.ghostties/tasks/fix-timer-drift-a3f9c1.md
+
+<span class="d">~/Code/pico-focus</span> ❯ gt list
+<span class="h">a3f9c1</span>          backlog     Fix timer drift  [project: pico-focus]
+<span class="h">7be20d</span>          running     Onboarding copy pass  [project: ghostties]
+
+<span class="d">~/Code/pico-focus</span> ❯ gt notes append a3f9 "repro on 60Hz displays only"
+<span class="d">~/Code/pico-focus</span> ❯ gt done a3f9
+<span class="o">✓</span> marked done: Fix timer drift (4ms)
+
+<span class="d">~/Code/pico-focus</span> ❯ gt mcp install --dry-run
+claude mcp add --scope user --transport stdio ghostties -- ghostties-mcp --tasks-dir ~/.ghostties/tasks</div>
+  <p class="muted" style="margin-top:8px; font-size:13px">Illustrative transcript built from the formats in cli/Sources/gt/Commands. IDs accept unambiguous prefixes. Exit codes: 0 ok, 1 usage, 2 not found, 3 ambiguous.</p>
+
+  <div class="tbl"><table>
+    <thead><tr><th>Command</th><th>Does</th><th>State</th></tr></thead>
+    <tbody>
+      <tr><td>gt new</td><td>Create a task file (lane, priority, project, template, branch)</td><td><span class="tag ok">works</span></td></tr>
+      <tr><td>gt list</td><td>List, sorted needs-you → running → review → inbox → backlog → done</td><td><span class="tag warn">untested</span></td></tr>
+      <tr><td>gt done</td><td>Mark done with a completion timestamp</td><td><span class="tag warn">untested</span></td></tr>
+      <tr><td>gt notes append</td><td>Timestamped bullet under ## Notes</td><td><span class="tag warn">untested</span></td></tr>
+      <tr><td>gt focus</td><td>Writes .ghostties/.focus</td><td><span class="tag bad">no-op</span></td></tr>
+      <tr><td>gt mcp install</td><td>Registers the MCP server with Claude Code (other targets stubbed)</td><td><span class="tag warn">untested</span></td></tr>
+      <tr><td>gt smoke</td><td>Create → done → verify → delete round trip</td><td><span class="tag warn">untested</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 style="margin-top:28px">MCP tools (12)</h3>
+  <p class="muted" style="margin-top:4px">list_tasks · get_task · create_task · update_task_status · get_active · get_needs_you · get_inbox · read_task_notes · append_task_notes · write_session_notes · set_task_project · set_task_fields. The README lists 10; <code>set_task_fields</code> uses camelCase <code>taskId</code> where every other tool uses snake_case.</p>
+
+  <h2>Health</h2>
+  <div class="score">
+    <div><span class="tag ok">solid</span><span>GhosttiesCore (frontmatter, task store, directory lookup) is shared with the app, and cross-surface tests check that the CLI, MCP and app agree on the file format. About 139 test cases in cli/Tests, run in CI.</span></div>
+    <div><span class="tag bad">blocked</span><span><b>Not distributed.</b> Neither binary is in the .app, the Homebrew cask, or the release workflow. <code>install-gt.sh</code> builds from source, hardcodes arm64, and skips ghostties-mcp.</span></div>
+    <div><span class="tag bad">broken</span><span>Onboarding's "Install gt" button only works from a repo checkout (OnboardingSheet.swift:176).</span></div>
+    <div><span class="tag warn">dormant</span><span>74 commits since 2026-04-23. 47 of them landed in April, and <code>Sources/gt</code> and <code>Sources/ghostties-mcp</code> haven't changed since 2026-05-18. Recent cli/ commits are composer-parser work.</span></div>
+    <div><span class="tag warn">drift</span><span>smoke-mcp.sh expects 11 tools (there are 12). TESTING.md says 110 tests. A test class the comments mention doesn't exist. MCP tests skip silently when the binary isn't built.</span></div>
+    <div><span class="tag warn">usage</span><span>One recorded real run (SESSION_NOTES, 23 Aug): 41 Linear issues synced, but ghostties-mcp wasn't on PATH and the build was stale. It was driven by hand over raw JSON-RPC.</span></div>
+    <div><span class="tag warn">risk</span><span>Atomic writes but no locking: the app, gt and an agent writing at the same moment can clobber each other.</span></div>
+  </div>
+
+  <h2>Options</h2>
+  <div class="opts">
+    <div class="pick"><span class="eyebrow">Recommended</span><h3>Keep quiet, fix the floor</h3><p>Remove it from onboarding. Fix the drift (tool count, docs, silent skips). Leave it as a power-user feature in the README.</p><p class="muted">~1 day</p></div>
+    <div><span class="eyebrow">Next</span><h3>Ship MCP inside the app</h3><p>Bundle <code>ghostties-mcp</code> in the .app. Add a "Let agents manage tasks" toggle in Settings that runs the registration. Fold it into onboarding's Connect Agents step once the task-first view is the bet.</p><p class="muted">~1 week</p></div>
+    <div><span class="eyebrow">If unused by beta 30</span><h3>Fold or cut gt</h3><p>Keep GhosttiesCore and the MCP server. Retire the human <code>gt</code> commands, or rename them to avoid the Graphite clash.</p><p class="muted">decision only</p></div>
+  </div>
+
+  <h2>Testing gaps to close first</h2>
+  <ul class="list">
+    <li>A binary-level test for every gt command, covering output format and exit codes.</li>
+    <li>Make MCP protocol tests fail rather than skip in CI when the binary is missing.</li>
+    <li>Tests for <code>set_task_fields</code> and <code>write_session_notes</code> beyond the tools/list check.</li>
+    <li>A concurrency test: app write and MCP write to the same task within 10ms.</li>
+  </ul>
+</main>

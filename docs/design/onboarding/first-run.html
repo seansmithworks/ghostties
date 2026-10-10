@@ -1,0 +1,551 @@
+<title>Ghostties First Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Pixelify+Sans:wght@500;700&display=swap">
+<style>
+/* Layout: one 760px reading column; prototypes break out to 1040px as live macOS windows. Ghostties tokens from DESIGN.md. */
+:root {
+  --chrome: #F0E9E6; --canvas: #FAF7F3; --page: #F6F1EE;
+  --fg: #1a1a1a; --fg2: #636363; --line: #e5ddd8;
+  --accent: #C97350; --blue: #5B8DEF; --ok: #2d7d46;
+  --term: #FBF9F6; --termfg: #2b2b2b;
+  --ghost: #1f1f1f; --shadow: rgba(40,20,10,.14);
+  --f-display: "Pixelify Sans", "Geist Mono", ui-monospace, monospace;
+  --f-body: "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --f-mono: "Geist Mono", "SF Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --chrome: #242424; --canvas: #2D2D2D; --page: #1d1c1b;
+  --fg: #f0efed; --fg2: #9a9a9a; --line: #353231;
+  --accent: #D9845F; --blue: #7aa4f5; --ok: #5fb57a;
+  --term: #262626; --termfg: #e6e3df; --ghost: #ece8e3; --shadow: rgba(0,0,0,.45); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --chrome: #242424; --canvas: #2D2D2D; --page: #1d1c1b;
+  --fg: #f0efed; --fg2: #9a9a9a; --line: #353231;
+  --accent: #D9845F; --blue: #7aa4f5; --ok: #5fb57a;
+  --term: #262626; --termfg: #e6e3df; --ghost: #ece8e3; --shadow: rgba(0,0,0,.45); color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--page); color: var(--fg); font: 15px/1.6 var(--f-body); padding-inline: 20px; padding-block: 0 96px }
+.col { max-width: 760px; margin: 0 auto }
+.wide { max-width: 1040px; margin: 0 auto }
+a { color: inherit; text-decoration-color: color-mix(in srgb, var(--fg) 35%, transparent); text-underline-offset: 2px }
+a:hover { text-decoration-color: var(--accent) }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px }
+h1, h2, h3 { text-wrap: balance; margin: 0 }
+h1 { font: 700 clamp(44px, 8vw, 76px)/0.95 var(--f-display); letter-spacing: -0.01em }
+h2 { font: 600 26px/1.2 var(--f-body); letter-spacing: -0.015em }
+h3 { font: 600 17px/1.3 var(--f-body) }
+p { margin: 0 }
+.eyebrow { font: 500 11px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--fg2) }
+.muted { color: var(--fg2) }
+code, .mono { font-family: var(--f-mono); font-size: .88em }
+code { background: color-mix(in srgb, var(--fg) 7%, transparent); padding: 1px 5px; border-radius: 4px }
+.stack { display: flex; flex-direction: column; gap: 14px }
+section { padding-block: 56px 0 }
+section > .col > h2 { margin-bottom: 6px }
+hr.sep { border: 0; border-top: 1px solid var(--line); margin: 0 }
+
+/* Hero */
+.hero { padding-block: 64px 8px }
+.hero canvas { width: 100%; height: 120px; display: block; margin-bottom: 28px }
+.hero .lede { font-size: 19px; line-height: 1.5; max-width: 620px; margin-top: 18px }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 18px; font: 12px/1.4 var(--f-mono); color: var(--fg2) }
+
+/* Rec box */
+.rec { margin-top: 36px; border: 1px solid var(--line); background: var(--canvas); border-radius: 12px; padding: 22px 24px; display: grid; gap: 12px }
+.rec ol { margin: 0; padding-left: 20px; display: grid; gap: 8px }
+
+/* Timeline */
+.timeline { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 0 }
+.timeline li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line) }
+.timeline .n { font: 500 12px/1.9 var(--f-mono); color: var(--fg2) }
+.timeline .flag { display: inline-block; font: 500 11px/1 var(--f-mono); padding: 3px 6px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); margin-left: 6px; vertical-align: 2px }
+
+/* Story grid */
+.story { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-top: 22px }
+.story > div { background: var(--canvas); padding: 18px 18px 20px; display: grid; gap: 8px; align-content: start; min-width: 0 }
+.story ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px }
+.quote { font: 500 22px/1.35 var(--f-body); letter-spacing: -0.01em; border-left: 3px solid var(--accent); padding-left: 16px; margin-top: 22px }
+
+/* Tables */
+.tbl { overflow-x: auto; margin-top: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--canvas) }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font: 500 11px/1.2 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg2) }
+tr:last-child td { border-bottom: 0 }
+.pill { display: inline-block; font: 500 11px/1 var(--f-mono); padding: 4px 7px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap }
+.pill.now { background: var(--fg); color: var(--page); border-color: var(--fg) }
+.pill.soon { border-color: var(--fg2) }
+
+/* Patterns */
+.patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 28px; margin-top: 22px }
+.patterns > div { display: grid; gap: 4px; min-width: 0 }
+.src { font: 12px/1.5 var(--f-mono); color: var(--fg2) }
+
+/* Concepts */
+.concept-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px }
+.dial { font: 700 15px/1 var(--f-display); letter-spacing: .02em; color: var(--accent) }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px }
+.facts div { display: grid; gap: 4px; align-content: start; font-size: 14px }
+
+/* Mock window */
+.stage { margin-top: 26px }
+.win { border-radius: 14px; background: var(--chrome); box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent), 0 24px 60px -20px var(--shadow); overflow: hidden; position: relative; aspect-ratio: 16 / 9.4; max-width: 100%; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", var(--f-body); container-type: inline-size }
+.win .bar { position: absolute; top: 0; left: 0; right: 0; height: 32px; display: flex; align-items: center; gap: 7px; padding-left: 13px; z-index: 5 }
+.win .bar i { width: 11px; height: 11px; border-radius: 50%; background: color-mix(in srgb, var(--fg) 18%, transparent) }
+.win .side { position: absolute; top: 32px; left: 0; bottom: 0; width: 21%; padding: 8px 6px; display: flex; flex-direction: column; gap: 1px; font-size: clamp(8px, 1.15cqw, 12px) }
+.win .card { position: absolute; top: 8px; right: 8px; bottom: 8px; left: 21%; background: var(--canvas); border-radius: 10px; box-shadow: 0 2px 8px var(--shadow); overflow: hidden }
+.win .term { position: absolute; inset: 26px 0 0; background: var(--term); color: var(--termfg); font: clamp(7px, 1.2cqw, 13px)/1.55 var(--f-mono); padding: 1.6cqw 2cqw; white-space: pre; overflow: hidden }
+.win .ttl { position: absolute; top: 0; left: 0; right: 0; height: 26px; display: grid; place-items: center; font-size: clamp(8px, 1.05cqw, 11px); color: var(--fg2) }
+.row { display: flex; align-items: center; gap: 6px; padding: .45em .6em; border-radius: 6px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.row.sub { padding-left: 1.9em; color: var(--fg2) }
+.row.sel { background: color-mix(in srgb, var(--fg) 8%, transparent) }
+.row canvas { flex: none }
+.row .st { margin-left: auto; width: .6em; height: .6em; border-radius: 50% }
+.sec { font: 500 .8em/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg2); padding: 1em .6em .4em }
+.scrim { position: absolute; inset: 0; display: grid; place-items: center; z-index: 8 }
+.sheet { width: min(46%, 440px); background: color-mix(in srgb, var(--canvas) 86%, transparent); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); border-radius: 14px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent), 0 8px 24px rgba(0,0,0,.18); padding: 2.4cqw; display: grid; gap: 1.2cqw; font-size: clamp(8px, 1.2cqw, 13px) }
+.sheet h4 { margin: 0; font-size: 1.55em; font-weight: 600; letter-spacing: -.01em }
+.sheet .opt { display: flex; align-items: center; gap: .7em; padding: .55em .7em; border-radius: 7px; background: color-mix(in srgb, var(--fg) 5%, transparent) }
+.sheet .opt small { color: var(--fg2); margin-left: auto; font-family: var(--f-mono); font-size: .85em }
+.chk { width: 1.1em; height: 1.1em; border-radius: 4px; background: var(--blue); display: grid; place-items: center; color: #fff; font-size: .8em; flex: none }
+.chk.off { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fg2) }
+.btn { justify-self: end; background: var(--fg); color: var(--canvas); border-radius: 7px; padding: .5em 1.1em; font-weight: 500 }
+.dots { display: flex; gap: .45em; justify-content: center }
+.dots b { width: .5em; height: .5em; border-radius: 50%; background: color-mix(in srgb, var(--fg) 20%, transparent) }
+.dots b.on { background: var(--fg) }
+.diff { font: .9em/1.5 var(--f-mono); background: var(--term); border-radius: 7px; padding: .7em .9em; white-space: pre; overflow: hidden }
+.diff .add { color: var(--ok) }
+.callout { margin: .6em .3em; padding: .7em .8em; border-radius: 8px; background: color-mix(in srgb, var(--accent) 12%, var(--canvas)); font-size: .95em; line-height: 1.35; white-space: normal; color: var(--fg) }
+.callout b { display: block; margin-bottom: .2em }
+.kbd { font: 500 .85em var(--f-mono); padding: .1em .4em; border-radius: 4px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 25%, transparent) }
+.hl { color: var(--accent) }
+.dim { color: var(--fg2) }
+.okc { color: var(--ok) }
+.cursor { display: inline-block; width: .6em; background: var(--termfg); animation: blink 1s steps(1) infinite }
+@keyframes blink { 50% { opacity: 0 } }
+.ghostfield { position: absolute; inset: 26px 0 0; width: 100%; height: calc(100% - 26px) }
+
+.ctrl { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px }
+.ctrl button { font: 500 13px/1 var(--f-body); color: var(--fg); background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; padding: 9px 13px; cursor: pointer }
+.ctrl button:hover { border-color: var(--fg2) }
+.ctrl button[aria-pressed="true"] { background: var(--fg); color: var(--page); border-color: var(--fg) }
+.ctrl .cap { font-size: 13px; color: var(--fg2); flex: 1 1 260px; min-width: 0 }
+.steps { display: flex; gap: 4px; flex-wrap: wrap }
+
+/* Glass */
+.glass-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 20px; align-items: center }
+.glass-wrap canvas { width: 100%; aspect-ratio: 1; max-width: 100%; border-radius: 14px; background: radial-gradient(120% 90% at 30% 20%, #3b4a63, #0f1520 70%) }
+@media (max-width: 640px) { .glass-wrap { grid-template-columns: 1fr } .sheet { width: 70% } }
+
+/* Funnel */
+.funnel { display: grid; gap: 6px; margin-top: 20px }
+.funnel div { display: grid; grid-template-columns: minmax(0, 210px) 1fr; gap: 12px; align-items: center; font-size: 14px }
+.funnel span.b { height: 10px; border-radius: 3px; background: var(--fg) }
+.funnel div:nth-child(n+4) span.b { background: var(--accent) }
+@media (max-width: 520px) { .funnel div { grid-template-columns: 1fr } }
+
+@media (prefers-reduced-motion: reduce) { .cursor { animation: none } }
+</style>
+
+<header class="hero col">
+  <canvas id="heroGhosts" aria-hidden="true"></canvas>
+  <div class="eyebrow">Ghostties · onboarding revamp · planning for beta 27+</div>
+  <h1 style="margin-top:14px">First run</h1>
+  <p class="lede">What a fresh install should promote, teach, and set up, and three concepts for how it could feel, from a better sheet to a terminal that onboards you itself.</p>
+  <div class="meta"><span>branch design/onboarding-revamp</span><span>2026-10-10</span><span>sources: repo at c238aa5 + web research</span></div>
+
+  <div class="rec">
+    <div class="eyebrow">Recommendation</div>
+    <ol>
+      <li><b>Beta 27: ship Mild plus the setup fixes.</b> Replace the welcome sheet with three short steps (add projects, connect agents, done). Remove the broken "Install gt" row. Make the Claude Code hook a one-click install.</li>
+      <li><b>Next: build Wild.</b> The empty window teaches by doing: a tutorial project in the sidebar and a real first session that reaches "needs you".</li>
+      <li><b>Explore Wilder as a launch moment.</b> A terminal-native greeting and glass ghosts in Metal. Treat it as a site/launch piece first and decide later if it belongs in the app.</li>
+    </ol>
+  </div>
+</header>
+
+<section><div class="col">
+  <div class="eyebrow">01 · Today</div>
+  <h2>What a fresh install sees now</h2>
+  <p class="muted">In launch order, traced through the code.</p>
+  <ol class="timeline">
+    <li><span class="n">1</span><div>Files are seeded with no UI: 6 agent presets and the status hook script into <code>~/.ghostties/</code>. <span class="muted">WorkspaceStore.swift:220</span></div></li>
+    <li><span class="n">2</span><div>Codex hooks register automatically. <b>Claude Code hooks do not.</b> The user has to paste JSON into <code>~/.claude/settings.json</code> or the status glyphs never show "needs you". <span class="flag">silent gap</span> <span class="muted">HookInstaller.swift:4</span></div></li>
+    <li><span class="n">3</span><div>The welcome sheet appears (420×480, one page): "Ghostty + workspace + agents", an "Install gt" row, a beta disclaimer, feedback links, Get started. <span class="muted">OnboardingSheet.swift</span></div></li>
+    <li><span class="n">4</span><div>"Install gt" runs <code>git -C ~ rev-parse</code> in Terminal. It only works from a repo checkout, so it fails for every DMG, Homebrew and npx install. <span class="flag">broken</span> <span class="muted">OnboardingSheet.swift:176</span></div></li>
+    <li><span class="n">5</span><div>The sheet only appears in project-first mode. A task-first user never sees it. <span class="flag">gap</span> <span class="muted">WorkspaceSidebarView.swift:182</span></div></li>
+    <li><span class="n">6</span><div>Empty sidebar: a grey ghost, "Add a project to get started", one button. The terminal card shows drifting physics ghosts until the first output.</div></li>
+    <li><span class="n">7</span><div>Nothing teaches Cmd+T, status glyphs, the menu bar item, the browser, or any shortcut. There's no tips system. <code>SidebarCalloutCard</code> exists and could carry them.</div></li>
+  </ol>
+</div></section>
+
+<section><div class="col">
+  <div class="eyebrow">02 · The story</div>
+  <h2>What we're actually onboarding people into</h2>
+  <p class="quote">Your agents, in a row. See what's running, what needs you, and click straight back in.</p>
+  <p class="muted" style="margin-top:12px">Built from mission.md's promise. The audience is moderately savvy: they installed a terminal on purpose and probably already run Claude Code or Codex. The terminal itself is upstream Ghostty, unchanged. That's a trust signal to state once, not a feature to teach.</p>
+  <div class="story">
+    <div><div class="eyebrow">Promote</div><ul><li>Many agents, one window</li><li>"Needs you" status at a glance</li><li>It's Ghostty underneath: fast, native, your config</li></ul></div>
+    <div><div class="eyebrow">Set up (do it for them)</div><ul><li>Add projects: detect from <code>~/.claude/projects</code> and repos you already have</li><li>Connect Claude Code + Codex hooks</li><li>Notification permission, asked when it's needed</li></ul></div>
+    <div><div class="eyebrow">Teach (first session)</div><ul><li>Project → sessions</li><li><span class="kbd">⌘T</span> composer: project › branch › template</li><li>Status glyphs and "needs you"</li><li><span class="kbd">⌘⇧[</span> <span class="kbd">⌘⇧]</span> to move between sessions</li></ul></div>
+    <div><div class="eyebrow">Later, when relevant</div><ul><li>Templates and presets</li><li>Browser <span class="kbd">⌘B</span></li><li>Menu bar status, task-first view</li><li>MCP sources, CLI (see the CLI page)</li></ul></div>
+  </div>
+
+  <div class="tbl"><table>
+    <thead><tr><th>Moment</th><th>Trigger</th><th>What it teaches</th><th>Ship</th></tr></thead>
+    <tbody>
+      <tr><td>First launch</td><td>No projects</td><td>Add projects, connect agents</td><td><span class="pill now">beta 27</span></td></tr>
+      <tr><td>First session started</td><td>Session count goes 0 → 1</td><td><span class="kbd">⌘T</span> and that each session lives under its project</td><td><span class="pill now">beta 27</span></td></tr>
+      <tr><td>First "needs you"</td><td>Hook reports waiting</td><td>The terracotta glyph, the menu bar, the notification</td><td><span class="pill soon">next</span></td></tr>
+      <tr><td>Third session</td><td>3 or more sessions</td><td>Session switching shortcuts, pinning</td><td><span class="pill soon">next</span></td></tr>
+      <tr><td>Opens a localhost URL</td><td>URL in terminal output</td><td>Browser <span class="kbd">⌘B</span></td><td><span class="pill">later</span></td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section><div class="col">
+  <div class="eyebrow">03 · Research</div>
+  <h2>What good dev-tool onboarding does</h2>
+  <p class="muted">Each pattern below is backed by a source. Ghostty and Warp pages couldn't be fetched directly, so those claims come from their own pages' search snippets. Mobbin covers mobile, not Mac apps, so it was no help here.</p>
+  <div class="patterns">
+    <div><h3>Win on the user's own code</h3><p>Claude Code's quickstart has you ask "what does this project do?" in your own repo. Codex app: sign in, pick a folder, send a message.</p><p class="src"><a href="https://code.claude.com/docs/en/quickstart">code.claude.com/docs/en/quickstart</a> · <a href="https://developers.openai.com/codex/app">developers.openai.com/codex/app</a></p></div>
+    <div><h3>Import, don't ask</h3><p>Cursor, Zed and Dia import existing settings, and each import can be re-run later. For us that means detecting projects Claude Code already knows about.</p><p class="src"><a href="https://zed.dev/docs/migrate/vs-code">zed.dev/docs/migrate/vs-code</a> · <a href="https://www.diabrowser.com/download/thanks">diabrowser.com</a></p></div>
+    <div><h3>Tutorials as real content</h3><p>Things ships "Meet Things" as an ordinary project you can recreate from Help. Linear's onboarding arrives as real issues.</p><p class="src"><a href="https://culturedcode.com/things/support/articles/2803553/">culturedcode.com</a></p></div>
+    <div><h3>One meaningful choice, early</h3><p>Raycast asks for your hotkey and nothing else. Ask only what changes daily muscle memory.</p><p class="src"><a href="https://manual.raycast.com/quickstart">manual.raycast.com/quickstart</a></p></div>
+    <div><h3>Detect, don't configure</h3><p>Claude Code says Ghostty, Kitty and iTerm2 need no terminal setup. Don't add setup steps for things that already work.</p><p class="src"><a href="https://code.claude.com/docs/en/terminal-config">code.claude.com/docs/en/terminal-config</a></p></div>
+    <div><h3>Zero-config is the upstream ethos</h3><p>Ghostty ships no onboarding and writes a comment-only default config. Ours should feel as light: skippable, re-openable, never repeated.</p><p class="src"><a href="https://ghostty.org/docs/install/release-notes/1-0-1">ghostty.org release notes 1.0.1</a></p></div>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Avoid</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Forced accounts at first launch</td><td>Warp removed its login requirement after backlash. <a href="https://www.warp.dev/blog/lifting-login-requirement">warp.dev/blog</a></td></tr>
+      <tr><td>Promoting AI features in a popup after an update</td><td>iTerm2 3.5's ChatGPT popup drew GitHub issues asking for the feature's removal. <a href="https://hn.svelte.dev/item/40458135">HN thread</a></td></tr>
+      <tr><td>Carousels and coach-mark tours</td><td>Linear's widely praised flow has none. <span class="muted">(third-party teardowns)</span></td></tr>
+      <tr><td>Liquid Glass on content</td><td>Apple's guidance puts glass on navigation layers (sheets, sidebars, toolbars) and expects Reduce Transparency to work. <span class="muted">(secondary summaries; the HIG page didn't render)</span></td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<section><div class="col">
+  <div class="eyebrow">04 · Concepts</div>
+  <h2>Mild, wild, wilder</h2>
+  <p class="muted">Each prototype is a click-through of the real window. All three share the setup work (detection, one-click hooks), so whichever wins, that work isn't wasted.</p>
+</div></section>
+
+<section style="padding-top:36px"><div class="col">
+  <div class="concept-head"><span class="dial">MILD</span><h3 style="font-size:22px">A sheet that does the setup</h3></div>
+  <p style="margin-top:8px">Replace <code>OnboardingSheet</code> with a three-step Liquid Glass sheet. Every step does something real: projects are pre-detected and checked, the hook install shows the exact JSON it adds, and the last step shows the three shortcuts that matter.</p>
+  <div class="facts">
+    <div><span class="eyebrow">Effort</span>~1 week. Swift, SwiftUI sheet, plus a hook installer that merges JSON safely.</div>
+    <div><span class="eyebrow">Risk</span>Low. It's still a modal. Has to keep the demo-capture launch flag that suppresses it.</div>
+    <div><span class="eyebrow">Ghosts</span>The row of ghosts on step 1 becomes the projects' assigned ghosts on step 2.</div>
+  </div>
+</div>
+<div class="wide stage"><div class="win" id="mildWin" role="img" aria-label="Mild concept prototype"></div>
+<div class="ctrl"><div class="steps" id="mildSteps"></div><span class="cap" id="mildCap"></span></div></div></section>
+
+<section style="padding-top:44px"><div class="col">
+  <div class="concept-head"><span class="dial">WILD</span><h3 style="font-size:22px">The window teaches</h3></div>
+  <p style="margin-top:8px">No modal. The empty terminal card's physics ghosts assemble the wordmark. A <b>Meet Ghostties</b> project appears in the sidebar (re-creatable from Help, like Things). Its sessions are the checklist, and the first one is a real agent session that reaches "needs you", so you learn the core loop by living it once.</p>
+  <div class="facts">
+    <div><span class="eyebrow">Effort</span>2–3 weeks. Reuses WordmarkPhysics (flag already exists), SidebarCalloutCard, ComposerWitness frames.</div>
+    <div><span class="eyebrow">Risk</span>Medium. A tutorial project must never feel like clutter: one click archives it.</div>
+    <div><span class="eyebrow">Aha moment</span>The first terracotta "needs you" glyph, plus the notification, within about 60 seconds.</div>
+  </div>
+</div>
+<div class="wide stage"><div class="win" id="wildWin" role="img" aria-label="Wild concept prototype"></div>
+<div class="ctrl"><div class="steps" id="wildSteps"></div><span class="cap" id="wildCap"></span></div></div></section>
+
+<section style="padding-top:44px"><div class="col">
+  <div class="concept-head"><span class="dial">WILDER</span><h3 style="font-size:22px">Ghost in the shell</h3></div>
+  <p style="margin-top:8px">The onboarding is a terminal program. On first launch the card runs <code>ghostties hello</code>: a half-block ghost greets you, arrow-key pickers handle choices, and an agent does the setup. It finds your repos, proposes projects, and writes the hook config after you approve the diff. At the end the sidebar fills in. A glass ghost rendered in Metal is the one hero moment.</p>
+  <div class="facts">
+    <div><span class="eyebrow">Effort</span>4–6 weeks. TUI script, agent prompt and preset, Metal shader, a reduced-motion path.</div>
+    <div><span class="eyebrow">Risk</span>High. It depends on an agent CLI being installed and signed in. Needs a no-agent fallback that becomes Mild.</div>
+    <div><span class="eyebrow">Why</span>It's the most "us": a terminal that onboards you in the terminal, with agents doing the work.</div>
+  </div>
+</div>
+<div class="wide stage"><div class="win" id="wilderWin" role="img" aria-label="Wilder concept prototype"></div>
+<div class="ctrl"><div class="steps" id="wilderSteps"></div><span class="cap" id="wilderCap"></span></div></div></section>
+
+<section><div class="col">
+  <div class="eyebrow">05 · Character</div>
+  <h2>Glass ghosts</h2>
+  <p class="muted">I couldn't find the glass robot ghost designs anywhere in the repo or its history. The renders below are a stand-in built from the real 12×12 grids with a glass treatment, to test whether glass reads at small sizes. Send the source files (Figma?) and I'll match them.</p>
+  <div class="glass-wrap">
+    <canvas id="glassHero" width="720" height="720" aria-label="Glass ghost render"></canvas>
+    <div class="stack">
+      <p><b>Where glass belongs.</b> Glass suits hero moments: the Wilder greeting, the Mild step-1 header, the website. Keep sidebar glyphs flat. They're 20pt and have to read at a glance.</p>
+      <p><b>Native path.</b> SwiftUI <code>Canvas</code> + <code>.layerEffect</code> with a Metal shader for refraction and specular highlights. Falls back to the flat grid under Reduce Transparency or Reduce Motion.</p>
+      <p><b>Personality, in budget.</b> Brand.md says the ghosts carry the personality so the copy doesn't have to. One ghost per project and one hero moment. No mascot chatter.</p>
+      <div class="ctrl"><button id="glassNext" type="button">Next ghost</button><span class="cap" id="glassName"></span></div>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="col">
+  <div class="eyebrow">06 · Measure</div>
+  <h2>The funnel to watch</h2>
+  <p class="muted">Adapted from the funnel idea in vnext-avenues (2026-09-29). Counts stay on-device unless the user opts in. The bars show the order of steps, not real data.</p>
+  <div class="funnel">
+    <div><span>Install</span><span class="b" style="width:100%"></span></div>
+    <div><span>First launch</span><span class="b" style="width:92%"></span></div>
+    <div><span>Project added</span><span class="b" style="width:78%"></span></div>
+    <div><span>First agent session</span><span class="b" style="width:60%"></span></div>
+    <div><span>First "needs you"</span><span class="b" style="width:46%"></span></div>
+    <div><span>Day-2 return</span><span class="b" style="width:34%"></span></div>
+  </div>
+</div></section>
+
+<section><div class="col">
+  <div class="eyebrow">07 · Beta 27</div>
+  <h2>Do now, whatever concept wins</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Fix</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Remove the "Install gt" row from the sheet</td><td>Broken for every non-checkout install</td></tr>
+      <tr><td>One-click Claude Code hook install, with a diff preview and undo</td><td>Without it "needs you", the core promise, silently never fires</td></tr>
+      <tr><td>Show onboarding in both sidebar modes</td><td>Task-first users skip it today</td></tr>
+      <tr><td>Detect projects from <code>~/.claude/projects</code></td><td>Turns "add a project" into "confirm these"</td></tr>
+      <tr><td>Help → Show Welcome again</td><td>Re-enterable, never repeated</td></tr>
+      <tr><td>Keep the demo-capture suppression flag (af54036)</td><td>Screenshot pipeline depends on it</td></tr>
+    </tbody>
+  </table></div>
+  <h3 style="margin-top:28px">Open questions for you</h3>
+  <ol style="padding-left:20px; display:grid; gap:6px; margin-top:8px">
+    <li>Where do the glass robot ghost designs live?</li>
+    <li>Default sidebar mode for new users: project-first or task-first?</li>
+    <li>Is a signed-in agent CLI a fair assumption for the target user? Wilder depends on it.</li>
+    <li>Any on-device funnel counting, or none at all?</li>
+  </ol>
+</div></section>
+
+<script>
+const GRIDS = {"blinky":["...XXXXXX...","..XXXXXXXX..",".XXXXXXXXXX.",".XX..XX..XX.",".XX..XX..XX.","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XX.XX..XX.XX","X...X..X...X"],"pinky":["....XXXX....","..XXXXXXXX..",".XXXXXXXXXX.",".X..XXXX..X.",".X..XXXX..X.","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXX..XX..XXX","X..........X"],"inky":["...XXXXXX...","..XXXXXXXX..",".XXXXXXXXXX.",".XXX....XXX.",".XXX....XXX.","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","X.XX.XX.XX.X","X..X....X..X"],"clyde":["..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","XX..XXXX..XX","XX..XXXX..XX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXX.XXXX.XXX","X....XX....X"],"specter":["...XXXXXX...",".XXXXXXXXXX.","XXXXXXXXXXXX","XX..XXXX..XX","X...XXXX...X","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XX..XXXX..XX","X....XX....X"],"wisp":["....XXXX....","..XXXXXXXX..",".XXXXXXXXXX.","XXX..XX..XXX","XXX..XX..XXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX",".XXXXXXXXXX.",".XXXXXXXXXX.","..XX.XX.XX..","...X....X..."],"phantom":["..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","XXX..X..XXXX","XXX..X..XXXX","XXXXXXXXXXXX","XXXX....XXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","X.XXX..XXX.X","X..X....X..X"],"shade":["...XXXXXX...","..XXXXXXXX..",".XXXXXXXXXX.","XX..XXXX..XX","XX..XXXX..XX","XXXXX..XXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XX.XXXXXX.XX","X...X..X...X"],"haunt":["...XXXXXX...",".XXXXXXXXXX.","XXXXXXXXXXXX","X..XXXXXX..X","X..XXXXXX..X","XXXXXXXXXXXX","XXXXXXXXXXXX","XXX..XX..XXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXX..XX..XXX","X..........X"],"wraith":["....XXXX....","..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","XX..XXXX..XX","XX..XXXX..XX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX",".XXXXXXXXXX.","..XXX..XXX..","...X....X..."],"banshee":["..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","X...XXXX...X","X...XXXX...X","XXXXXXXXXXXX","XXX......XXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XX..XXXX..XX","X....XX....X"],"polter":["...XXXXXX...",".XXXXXXXXXX.","XXXXXXXXXXXX","XXX..XX..XXX","XXX..XX..XXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXX....XXXX","X..........X"],"ember":["....XXXX....","..XXXXXXXX..",".XXXXXXXXXX.",".XX..XX..XX.",".XX..XX..XX.","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX",".XXXXXXXXXX.",".XX.XXXX.XX.","..X..XX..X..",".....XX....."],"gloom":["...XXXXXX...","..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","XX..XXXX..XX","XX..XXXX..XX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","X.XX.XX.XX.X","X..X....X..X"],"spike":["...XXXXXX...","..XXXXXXXX..",".XXXXXXXXXX.",".XX..XX..XX.",".XX..XX..XX.","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","X.XXXXXXXX.X","X..XXXXXX..X","X...XXXX...X"],"drift":[".....XXXXX..","...XXXXXXXX.","..XXXXXXXXXX",".XXXXXXXXXXX",".XX..XX..XXX",".XX..XX..XXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXX.",".XXXX..XXX..","...XX....X.."],"hex":["..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","XX.XX..XX.XX","XX.XX..XX.XX","XXXXXXXXXXXX","XXX.XX.XXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX",".X.XX..XX.X.","....X..X...."],"chill":["....XXXX....","..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","XXX..XX..XXX","XXX..XX..XXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX",".XXXXXXXXXX.","..XXXXXXXX..","....XXXX...."],"fang":["...XXXXXX...","..XXXXXXXX..",".XXXXXXXXXX.",".XX..XX..XX.",".XX..XX..XX.","XXXXXXXXXXXX","XXXXXXXXXXXX","XX.X....X.XX","XXXXXXXXXXXX","XXXXXXXXXXXX","XX.XX..XX.XX","X...X..X...X"],"flicker":[".....XX.....","...XXXXXX...","..XXXXXXXX..",".XXXXXXXXXX.",".XX..XX..XX.",".XX..XX..XX.",".XXXXXXXXXX.",".XXXXXXXXXX.","..XXXXXXXX..","..XXXXXXXX..","...XX..XX...","....X..X...."],"mist":["..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","XX..XXXX..XX","XX..XXXX..XX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX",".XXXXXXXXXX.","..XXX..XXX..","...XX..XX..."],"howl":["...XXXXXX...",".XXXXXXXXXX.",".XXXXXXXXXX.",".XX..XX..XX.",".XX..XX..XX.","XXXXXXXXXXXX","XXX......XXX","XX........XX","XXX......XXX","XXXXXXXXXXXX","XX.XX..XX.XX","X..........X"],"jinx":["...XXXXXX...","..XXXXXXXX..",".XXXXXXXXXX.",".XXX.XX..XX.",".XXX.XX..XX.",".XX..XX..XX.","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXX.XXXX.XXX","X....XX....X"],"dusk":["..XXXXXXXX..",".XXXXXXXXXX.","XXXXXXXXXXXX","XXX..XXXXXXX","XX...XXXXXXX","XXX..XXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XXXXXXXXXXXX","XX..XXXX..XX","X....XX....X"]};
+const NAMES = Object.keys(GRIDS);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function drawGhost(ctx, grid, x, y, px, color, eyesOpen = true) {
+  ctx.fillStyle = color;
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 12; c++)
+    if (grid[r][c] === 'X') ctx.fillRect(Math.round(x + c * px), Math.round(y + r * px), Math.ceil(px), Math.ceil(px));
+}
+function ghostCanvas(name, size, color) {
+  const c = document.createElement('canvas'); const d = devicePixelRatio || 1;
+  c.width = c.height = size * d; c.style.width = c.style.height = size + 'px';
+  const g = c.getContext('2d'); drawGhost(g, GRIDS[name], 0, 0, size * d / 12, color || css('--ghost'));
+  return c;
+}
+
+/* Hero ghost row */
+(function hero() {
+  const cv = document.getElementById('heroGhosts'); const ctx = cv.getContext('2d');
+  const pick = ['blinky','pinky','inky','clyde','specter','wisp','phantom','ember','jinx','howl','hex','dusk'];
+  let w, h, t0 = performance.now();
+  function size() { const d = devicePixelRatio || 1; w = cv.clientWidth; h = cv.clientHeight; cv.width = w * d; cv.height = h * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  size(); addEventListener('resize', size);
+  function frame(t) {
+    ctx.clearRect(0, 0, w, h);
+    const n = Math.max(5, Math.min(pick.length, Math.floor(w / 64)));
+    const gap = w / n; const px = Math.min(4, gap / 16);
+    for (let i = 0; i < n; i++) {
+      const bob = reduce ? 0 : Math.sin((t - t0) / 600 + i * .9) * 6;
+      const col = i === 3 ? css('--accent') : css('--ghost');
+      drawGhost(ctx, GRIDS[pick[i]], i * gap + (gap - px * 12) / 2, h / 2 - px * 6 + bob, px, col);
+    }
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* Prototype harness */
+function proto(id, steps) {
+  const win = document.getElementById(id + 'Win'), bar = document.getElementById(id + 'Steps'), cap = document.getElementById(id + 'Cap');
+  let i = 0, cleanup = null;
+  steps.forEach((s, k) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = s.label; b.onclick = () => go(k); bar.appendChild(b); });
+  function go(k) {
+    i = k; if (cleanup) cleanup(); cleanup = null;
+    [...bar.children].forEach((b, j) => b.setAttribute('aria-pressed', j === i));
+    cap.textContent = steps[i].cap;
+    win.innerHTML = '<div class="bar"><i></i><i></i><i></i></div>';
+    cleanup = steps[i].render(win) || null;
+  }
+  go(0);
+}
+const shell = (side, title, body) => `<div class="side">${side}</div><div class="card"><div class="ttl">${title}</div>${body}</div>`;
+function row(label, ghost, opts = {}) {
+  return `<div class="row ${opts.cls || ''}" data-g="${ghost || ''}" data-c="${opts.color || ''}">${label}${opts.st ? `<span class="st" style="background:${opts.st}"></span>` : ''}</div>`;
+}
+function hydrate(root) {
+  root.querySelectorAll('.row[data-g]').forEach(r => { if (!r.dataset.g) return; const s = Math.max(10, Math.round(r.getBoundingClientRect().height * .55)); r.prepend(ghostCanvas(r.dataset.g, s, r.dataset.c || undefined)); });
+}
+function ghostField(container, opts = {}) {
+  const cv = document.createElement('canvas'); cv.className = 'ghostfield'; container.appendChild(cv);
+  const ctx = cv.getContext('2d'); const d = devicePixelRatio || 1;
+  let W = cv.clientWidth, H = cv.clientHeight; cv.width = W * d; cv.height = H * d; ctx.scale(d, d);
+  const px = Math.max(1.5, W / 260);
+  const gs = Array.from({ length: opts.count || 9 }, (_, k) => ({ n: NAMES[(k * 5) % NAMES.length], x: Math.random() * (W - px * 12), y: Math.random() * (H - px * 12), vx: (Math.random() - .5) * .5, vy: (Math.random() - .5) * .5 }));
+  // Wordmark target: letters as ghosts in a line
+  const word = 'GHOSTTIES';
+  let raf, t0 = performance.now();
+  function frame(t) {
+    ctx.clearRect(0, 0, W, H);
+    const k = opts.assemble ? Math.min(1, (t - t0) / 2200) : 0;
+    const e = 1 - Math.pow(1 - k, 3);
+    gs.forEach((g, j) => {
+      if (!reduce) { g.x += g.vx; g.y += g.vy; if (g.x < 0 || g.x > W - px * 12) g.vx *= -1; if (g.y < 0 || g.y > H - px * 12) g.vy *= -1; }
+      const tx = W / 2 - (gs.length * px * 15) / 2 + j * px * 15, ty = H * .36;
+      const x = g.x + (tx - g.x) * e, y = g.y + (ty - g.y) * e;
+      drawGhost(ctx, GRIDS[g.n], x, y, px, color(j));
+    });
+    if (opts.assemble && k > .7) {
+      ctx.globalAlpha = Math.min(1, (k - .7) / .3); ctx.fillStyle = css('--termfg'); ctx.font = `600 ${px * 9}px ${css('--f-display')}`; ctx.textAlign = 'center';
+      ctx.fillText(word.split('').join(' '), W / 2, H * .36 + px * 30);
+      ctx.font = `${px * 5}px ${css('--f-mono')}`; ctx.fillStyle = css('--fg2'); ctx.fillText('Your agents, in a row.', W / 2, H * .36 + px * 40); ctx.globalAlpha = 1;
+    }
+    if (!reduce || opts.assemble) raf = requestAnimationFrame(frame);
+  }
+  function color(j) { return opts.accentIndex === j ? css('--accent') : css('--fg2'); }
+  if (reduce && opts.assemble) t0 = -1e9;
+  raf = requestAnimationFrame(frame);
+  return () => cancelAnimationFrame(raf);
+}
+function typeOut(el, lines, speed = 22) {
+  let timers = [], acc = 0;
+  if (reduce) { el.innerHTML = lines.map(l => l.html ?? l).join('\n') + ' <span class="cursor">&nbsp;</span>'; return () => {}; }
+  el.innerHTML = '';
+  lines.forEach((l, k) => { acc += (l.delay ?? 380); timers.push(setTimeout(() => { el.innerHTML = el.innerHTML.replace(/ ?<span class="cursor">.*?<\/span>$/, '') + (k ? '\n' : '') + (l.html ?? l) + ' <span class="cursor">&nbsp;</span>'; }, acc)); });
+  return () => timers.forEach(clearTimeout);
+}
+function halfBlock(name) {
+  const g = GRIDS[name]; let out = [];
+  for (let r = 0; r < 12; r += 2) { let s = ''; for (let c = 0; c < 12; c++) { const a = g[r][c] === 'X', b = g[r + 1][c] === 'X'; s += a && b ? '█' : a ? '▀' : b ? '▄' : ' '; } out.push(s); }
+  return out;
+}
+
+const projectsSide = (extra = '') => `<div class="sec">Projects</div>${row('ghostties', 'blinky')}${row('pico-focus', 'inky')}${row('annotie-web', 'clyde')}${row('portfolio', 'wisp')}${extra}`;
+
+/* MILD */
+proto('mild', [
+  { label: '1 · Welcome', cap: 'One screen of promise. The ghost row and one line, then Continue. Built on Ghostty is stated once as a trust signal. (To verify: the XDG config at ~/.config/ghostty is shared, but the App Support path differs by bundle ID.)', render: w => {
+    w.insertAdjacentHTML('beforeend', shell('<div class="sec">Projects</div>', '', '') + `<div class="scrim"><div class="sheet"><div id="mg" style="height:3.4em"></div><h4>Your agents, in a row.</h4><p class="dim">Ghostties is Ghostty with a sidebar that knows what your agents are doing. Same fast terminal underneath.</p><div class="dots"><b class="on"></b><b></b><b></b></div><span class="btn">Continue</span></div></div>`);
+    const m = w.querySelector('#mg'); const s = Math.round(m.clientHeight * .9);
+    ['blinky','pinky','inky','clyde','specter'].forEach((n, k) => { const c = ghostCanvas(n, s, k === 2 ? css('--accent') : undefined); c.style.marginRight = '.5em'; m.appendChild(c); });
+  }},
+  { label: '2 · Projects', cap: 'Pre-checked from ~/.claude/projects and recent git repos. Each gets its ghost now, so the sidebar is already full when the sheet closes.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell('<div class="sec">Projects</div>', '', '') + `<div class="scrim"><div class="sheet"><h4>Add your projects</h4><p class="dim">Found 5 folders you've used with Claude Code or Codex.</p>
+      ${[['ghostties','blinky','~/Code',1],['pico-focus','inky','~/Code',1],['annotie-web','clyde','~/Code',1],['portfolio','wisp','~/Sites',1],['scratch','phantom','~/tmp',0]].map(([n,g,p,on]) => `<div class="opt"><span class="chk ${on?'':'off'}">${on?'✓':''}</span><span data-gx="${g}"></span>${n}<small>${p}</small></div>`).join('')}
+      <p class="dim" style="font-size:.9em">Choose another folder…</p><div class="dots"><b></b><b class="on"></b><b></b></div><span class="btn">Add 4 projects</span></div></div>`);
+    w.querySelectorAll('[data-gx]').forEach(s => s.appendChild(ghostCanvas(s.dataset.gx, 14)));
+  }},
+  { label: '3 · Agents', cap: 'Shows the exact JSON added to ~/.claude/settings.json, with Undo in Settings. Codex is already connected. Notification permission is asked here, right after its purpose is explained.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell(projectsSide(), '', '') + `<div class="scrim"><div class="sheet"><h4>Connect your agents</h4><p class="dim">So the sidebar can show when an agent is working, done, or waiting on you.</p>
+      <div class="opt"><span class="chk">✓</span>Claude Code<small>7 hook events</small></div>
+      <div class="diff"><span class="dim">~/.claude/settings.json</span>
+<span class="add">+ "hooks": { "Stop", "Notification",</span>
+<span class="add">+   "PermissionRequest", … 4 more }</span></div>
+      <div class="opt"><span class="chk">✓</span>Codex<small class="okc">connected</small></div>
+      <div class="opt"><span class="chk off"></span>Notify me when an agent needs me</div>
+      <div class="dots"><b></b><b></b><b class="on"></b></div><span class="btn">Connect</span></div></div>`);
+    hydrate(w);
+  }},
+  { label: '4 · Done', cap: 'The sheet closes onto a full sidebar. A dismissible callout teaches the three shortcuts. Help → Show Welcome brings it back.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell(projectsSide(`<div class="callout"><b>Three keys</b><span class="kbd">⌘T</span> new session<br><span class="kbd">⌘⇧[</span> <span class="kbd">⌘⇧]</span> switch<br><span class="kbd">⌘S</span> sidebar</div>`), 'ghostties', '<div class="term"></div>'));
+    hydrate(w); const t = w.querySelector('.term');
+    return typeOut(t, ['<span class="dim">~/Code/ghostties</span> <span class="okc">main</span>', '❯']);
+  }},
+]);
+
+/* WILD */
+proto('wild', [
+  { label: '1 · Wake', cap: 'No sheet. Drifting ghosts assemble into the wordmark (WordmarkPhysics already exists behind a flag). One ghost is terracotta: it is about to need you.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell(`<div class="sec">Projects</div>${row('Meet Ghostties','pinky',{cls:'sel'})}`, '', ''));
+    hydrate(w); return ghostField(w.querySelector('.card'), { assemble: true, count: 9, accentIndex: 4 });
+  }},
+  { label: '2 · Meet project', cap: 'The tutorial is a real project, like Things\' "Meet Things". Its sessions are the checklist. Archive it in one click; recreate it from Help.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell(`<div class="sec">Projects</div>${row('Meet Ghostties','pinky',{cls:'sel'})}${row('Add your projects','',{cls:'sub'})}${row('Start an agent','',{cls:'sub'})}${row('Answer it when it waits','',{cls:'sub'})}${row('Switch sessions','',{cls:'sub'})}`, 'Meet Ghostties', `<div class="term"></div>`));
+    hydrate(w);
+    return typeOut(w.querySelector('.term'), ['<b>Meet Ghostties</b>', '<span class="dim">Four sessions in the sidebar. Each one is a step.</span>', '', 'We found <b>5</b> projects you use with Claude Code.', '  <span class="okc">✓</span> ghostties   <span class="okc">✓</span> pico-focus   <span class="okc">✓</span> annotie-web', '  <span class="okc">✓</span> portfolio   <span class="dim">· scratch</span>', '', 'Press <span class="hl">Return</span> to add them, or type a path to choose another.']);
+  }},
+  { label: '3 · First agent', cap: 'Step 2 opens the ⌘T composer pre-filled with "ghostties › main › Claude Code" and a starter prompt that runs on your own code, the Claude Code quickstart pattern.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell(projectsSide() + `<div class="sec">Active</div>${row('what does this do?','blinky',{st:css('--blue')})}`, 'ghostties · what does this do?', `<div class="term"></div>`));
+    hydrate(w);
+    return typeOut(w.querySelector('.term'), ['<span class="hl">✻</span> Claude Code', '', '<span class="dim">&gt;</span> what does this project do? summarise in 5 lines', '', '● Reading AGENTS.md, macos/Sources/Features/Ghostties…', '● Ghostties is a fork of Ghostty that adds a workspace', '  sidebar for running coding agents in parallel…']);
+  }},
+  { label: '4 · Needs you', cap: 'The aha moment. The agent asks for permission, the row turns terracotta, the menu bar ghost lights, and a notification arrives. A callout names what just happened, once.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell(projectsSide() + `<div class="sec">Needs you</div>${row('what does this do?','blinky',{st:css('--accent'), color: css('--accent')})}<div class="callout"><b>That's "needs you"</b>Any agent waiting on you shows here, in the menu bar, and as a notification.</div>`, 'ghostties · what does this do?', `<div class="term"></div>`));
+    hydrate(w);
+    return typeOut(w.querySelector('.term'), ['● Ghostties is a fork of Ghostty that adds a workspace…', '', '<span class="hl">Do you want to run</span> <b>swift test --parallel</b>?', '  ❯ 1. Yes', '    2. Yes, and don\'t ask again', '    3. No']);
+  }},
+]);
+
+/* WILDER */
+proto('wilder', [
+  { label: '1 · hello', cap: 'The first terminal runs "ghostties hello". A half-block ghost is drawn from the same 12×12 grid as the sidebar glyphs. One question, arrow keys.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell('', 'ghostties hello', `<div class="term"></div>`));
+    const art = halfBlock('blinky').map(l => '   <span class="hl">' + l + '</span>');
+    return typeOut(w.querySelector('.term'), [...art.map(h => ({ html: h, delay: 70 })), '', '   <b>Hey. Ghostties runs your agents in a row.</b>', '   <span class="dim">It\'s Ghostty underneath, unchanged.</span>', '', '   Which agents do you use?', '   ❯ <span class="okc">◉</span> Claude Code   <span class="okc">◉</span> Codex   ◯ Aider   ◯ none yet']);
+  }},
+  { label: '2 · Agent sets up', cap: 'An agent session (the preset system already supports this) scans for repos and proposes projects. Every write goes through a visible diff and an approval prompt.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell('', 'ghostties hello · setup agent', `<div class="term"></div>`));
+    return typeOut(w.querySelector('.term'), ['<span class="hl">✻</span> setup agent', '', '● Found 5 repos in ~/Code with Claude Code history', '● Proposing projects: ghostties, pico-focus, annotie-web, portfolio', '● Status hooks are missing from ~/.claude/settings.json', '', '  <span class="okc">+ "hooks": { "Stop": [ … ghostties-status.sh ] }</span>', '', '<span class="hl">Apply these changes?</span>  ❯ Yes   No   Show full diff']);
+  }},
+  { label: '3 · Sidebar arrives', cap: 'The session finishes and projects fly into the sidebar one by one, each with its ghost. The terminal stays as an ordinary shell. Nothing to dismiss.', render: w => {
+    const names = [['ghostties','blinky'],['pico-focus','inky'],['annotie-web','clyde'],['portfolio','wisp']];
+    w.insertAdjacentHTML('beforeend', shell('<div class="sec">Projects</div><div id="fly"></div>', 'ghostties', `<div class="term"></div>`));
+    const fly = w.querySelector('#fly'); const timers = [];
+    names.forEach(([n, g], k) => timers.push(setTimeout(() => { fly.insertAdjacentHTML('beforeend', row(n, g)); const r = fly.lastElementChild; hydrate(fly); r.animate?.([{ opacity: 0, transform: 'translateX(40px)' }, { opacity: 1, transform: 'none' }], { duration: reduce ? 0 : 380, easing: 'cubic-bezier(.2,.8,.2,1)' }); }, reduce ? 0 : 300 + k * 260)));
+    const stop = typeOut(w.querySelector('.term'), ['<span class="okc">✓</span> 4 projects added', '<span class="okc">✓</span> Claude Code + Codex connected', '', '<span class="dim">Press ⌘T to start your first agent.</span>', '<span class="dim">~/Code/ghostties</span> <span class="okc">main</span>', '❯']);
+    return () => { timers.forEach(clearTimeout); stop(); };
+  }},
+  { label: '4 · Glass hero', cap: 'Launch-moment variant: a glass ghost rendered in Metal floats over the empty card, then condenses into the sidebar\'s flat glyph. Not in the app\'s steady state.', render: w => {
+    w.insertAdjacentHTML('beforeend', shell(projectsSide(), '', ''));
+    hydrate(w); const card = w.querySelector('.card'); const cv = document.createElement('canvas'); cv.className = 'ghostfield'; cv.style.inset = '0'; cv.style.height = '100%'; card.appendChild(cv);
+    return glassLoop(cv, 'blinky', true);
+  }},
+]);
+
+/* Glass renderer (stand-in for a Metal shader) */
+function glassLoop(cv, name, dark) {
+  const ctx = cv.getContext('2d'); const d = devicePixelRatio || 1;
+  const W = cv.clientWidth || cv.width, H = cv.clientHeight || cv.height; cv.width = W * d; cv.height = H * d; ctx.scale(d, d);
+  let raf, t0 = performance.now();
+  function frame(t) {
+    const s = (t - t0) / 1000;
+    ctx.clearRect(0, 0, W, H);
+    if (dark) { const bg = ctx.createRadialGradient(W * .3, H * .2, 10, W * .5, H * .5, W * .8); bg.addColorStop(0, '#34425a'); bg.addColorStop(1, '#10151e'); ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H); }
+    const px = Math.min(W, H) / 20; const gx = W / 2 - px * 6, gy = H / 2 - px * 6 + (reduce ? 0 : Math.sin(s * 1.4) * px * .4);
+    const g = GRIDS[name];
+    for (let r = 0; r < 12; r++) for (let c = 0; c < 12; c++) {
+      if (g[r][c] !== 'X') continue;
+      const x = gx + c * px, y = gy + r * px;
+      const edge = [[0,-1],[0,1],[-1,0],[1,0]].some(([dr, dc]) => (g[r + dr]?.[c + dc] ?? '.') !== 'X');
+      const grad = ctx.createLinearGradient(x, y, x + px, y + px);
+      const sweep = reduce ? .5 : (Math.sin(s * 1.1 - (c + r) * .25) + 1) / 2;
+      grad.addColorStop(0, `rgba(235,245,255,${.42 + sweep * .25})`); grad.addColorStop(1, `rgba(160,190,230,${.18 + sweep * .1})`);
+      ctx.fillStyle = grad; ctx.fillRect(x, y, px + .5, px + .5);
+      if (edge) { ctx.strokeStyle = 'rgba(240,250,255,.85)'; ctx.lineWidth = Math.max(1, px * .12); ctx.strokeRect(x + ctx.lineWidth / 2, y + ctx.lineWidth / 2, px - ctx.lineWidth, px - ctx.lineWidth); }
+    }
+    // specular
+    const sx = gx + px * 2 + (reduce ? 0 : Math.sin(s * .7) * px), sy = gy + px * 1.5;
+    const sp = ctx.createRadialGradient(sx, sy, 0, sx, sy, px * 3); sp.addColorStop(0, 'rgba(255,255,255,.55)'); sp.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sp; ctx.globalCompositeOperation = 'lighter'; ctx.fillRect(gx, gy, px * 12, px * 12); ctx.globalCompositeOperation = 'source-over';
+    // soft shadow
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(W / 2, gy + px * 13.5, px * 4.5, px * .6, 0, 0, Math.PI * 2); ctx.fill();
+    if (!reduce) raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+  return () => cancelAnimationFrame(raf);
+}
+(function glassSection() {
+  const cv = document.getElementById('glassHero'); const label = document.getElementById('glassName');
+  const cast = ['blinky','specter','jinx','howl','ember','wisp'];
+  let k = 0, stop;
+  function show() { if (stop) stop(); stop = glassLoop(cv, cast[k], false); label.textContent = cast[k] + ' · from GhostCharacter.swift'; }
+  document.getElementById('glassNext').onclick = () => { k = (k + 1) % cast.length; show(); };
+  show();
+})();
+</script>
