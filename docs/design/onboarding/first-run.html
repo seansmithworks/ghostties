@@ -188,7 +188,8 @@ tr:last-child td { border-bottom: 0 }
   <p class="muted" style="margin-top:12px">Built from mission.md's promise. The audience is moderately savvy: they installed a terminal on purpose and probably already run Claude Code or Codex. The terminal itself is upstream Ghostty, unchanged. That's a trust signal to state once, not a feature to teach.</p>
   <div class="story">
     <div><div class="eyebrow">Promote</div><ul><li>Many agents, one window</li><li>"Needs you" status at a glance</li><li>It's Ghostty underneath: fast, native, your config</li></ul></div>
-    <div><div class="eyebrow">Set up (do it for them)</div><ul><li>Add projects: detect from <code>~/.claude/projects</code> and repos you already have</li><li>Connect Claude Code + Codex hooks</li><li>Notification permission, asked when it's needed</li></ul></div>
+    <div><div class="eyebrow">Set up (do it for them)</div><ul><li>Add projects: detect from <code>~/.claude/projects</code> and repos you already have</li><li>Check that Claude Code / Codex are installed and signed in, then connect their hooks</li>
+<li>Pick a layout: Projects (default) or Tasks</li><li>Notification permission, asked when it's needed</li></ul></div>
     <div><div class="eyebrow">Teach (first session)</div><ul><li>Project → sessions</li><li><span class="kbd">⌘T</span> composer: project › branch › template</li><li>Status glyphs and "needs you"</li><li><span class="kbd">⌘⇧[</span> <span class="kbd">⌘⇧]</span> to move between sessions</li></ul></div>
     <div><div class="eyebrow">Later, when relevant</div><ul><li>Templates and presets</li><li>Browser <span class="kbd">⌘B</span></li><li>Menu bar status, task-first view</li><li>MCP sources, CLI (see the CLI page)</li></ul></div>
   </div>
@@ -263,7 +264,7 @@ tr:last-child td { border-bottom: 0 }
   <p style="margin-top:8px">The onboarding is a terminal program. On first launch the card runs <code>ghostties hello</code>: a half-block ghost greets you, arrow-key pickers handle choices, and an agent does the setup. It finds your repos, proposes projects, and writes the hook config after you approve the diff. At the end the sidebar fills in. A glass ghost rendered in Metal is the one hero moment.</p>
   <div class="facts">
     <div><span class="eyebrow">Effort</span>4–6 weeks. TUI script, agent prompt and preset, Metal shader, a reduced-motion path.</div>
-    <div><span class="eyebrow">Risk</span>High. It depends on an agent CLI being installed and signed in. Needs a no-agent fallback that becomes Mild.</div>
+    <div><span class="eyebrow">Risk</span>High. It runs on Claude Code or Codex. The detection step from Mild runs first; with no signed-in agent it falls back to the Mild sheet.</div>
     <div><span class="eyebrow">Why</span>It's the most "us": a terminal that onboards you in the terminal, with agents doing the work.</div>
   </div>
 </div>
@@ -309,15 +310,21 @@ tr:last-child td { border-bottom: 0 }
       <tr><td>One-click Claude Code hook install, with a diff preview and undo</td><td>Without it "needs you", the core promise, silently never fires</td></tr>
       <tr><td>Show onboarding in both sidebar modes</td><td>Task-first users skip it today</td></tr>
       <tr><td>Detect projects from <code>~/.claude/projects</code></td><td>Turns "add a project" into "confirm these"</td></tr>
+      <tr><td>Detect <code>claude</code> and <code>codex</code> on PATH and check sign-in</td><td>Assumed for the target user, but verified in onboarding instead of failing on the first session</td></tr>
+      <tr><td>Default to project-first, offer a Projects / Tasks choice</td><td>One meaningful choice, made early (the Raycast pattern). Replaces the task-first gap</td></tr>
       <tr><td>Help → Show Welcome again</td><td>Re-enterable, never repeated</td></tr>
       <tr><td>Keep the demo-capture suppression flag (af54036)</td><td>Screenshot pipeline depends on it</td></tr>
     </tbody>
   </table></div>
-  <h3 style="margin-top:28px">Open questions for you</h3>
+  <h3 style="margin-top:28px">Decided 2026-10-10</h3>
+  <ul style="padding-left:20px; display:grid; gap:6px; margin-top:8px">
+    <li><b>Layout:</b> project-first by default, with a Projects / Tasks choice offered during onboarding.</li>
+    <li><b>Agent CLIs:</b> assume Claude Code or Codex is installed, and verify it as an onboarding step.</li>
+  </ul>
+  <h3 style="margin-top:28px">Still open</h3>
   <ol style="padding-left:20px; display:grid; gap:6px; margin-top:8px">
-    <li>Where do the glass robot ghost designs live?</li>
-    <li>Default sidebar mode for new users: project-first or task-first?</li>
-    <li>Is a signed-in agent CLI a fair assumption for the target user? Wilder depends on it.</li>
+    <li>Use the 9 shaded robot sprites from <code>web/assets/ghost-field.js</code> (the website cast) in onboarding instead of the 24 Pac-Man grids? Is there a separate glass version?</li>
+    
     <li>Any on-device funnel counting, or none at all?</li>
   </ol>
 </div></section>
@@ -441,13 +448,14 @@ proto('mild', [
       <p class="dim" style="font-size:.9em">Choose another folder…</p><div class="dots"><b></b><b class="on"></b><b></b></div><span class="btn">Add 4 projects</span></div></div>`);
     w.querySelectorAll('[data-gx]').forEach(s => s.appendChild(ghostCanvas(s.dataset.gx, 14)));
   }},
-  { label: '3 · Agents', cap: 'Shows the exact JSON added to ~/.claude/settings.json, with Undo in Settings. Codex is already connected. Notification permission is asked here, right after its purpose is explained.', render: w => {
+  { label: '3 · Agents', cap: 'Shows the exact JSON added to ~/.claude/settings.json, with Undo in Settings. Each agent CLI is detected on PATH first; a missing one shows its install command instead of failing later. Notification permission is asked here, right after its purpose is explained.', render: w => {
     w.insertAdjacentHTML('beforeend', shell(projectsSide(), '', '') + `<div class="scrim"><div class="sheet"><h4>Connect your agents</h4><p class="dim">So the sidebar can show when an agent is working, done, or waiting on you.</p>
-      <div class="opt"><span class="chk">✓</span>Claude Code<small>7 hook events</small></div>
+      <div class="opt"><span class="chk">✓</span>Claude Code<small>found · signed in · 7 hook events</small></div>
       <div class="diff"><span class="dim">~/.claude/settings.json</span>
 <span class="add">+ "hooks": { "Stop", "Notification",</span>
 <span class="add">+   "PermissionRequest", … 4 more }</span></div>
-      <div class="opt"><span class="chk">✓</span>Codex<small class="okc">connected</small></div>
+      <div class="opt"><span class="chk">✓</span>Codex<small class="okc">found · connected</small></div>
+      <div class="opt"><span class="chk off"></span>Aider<small>not found · how to install</small></div>
       <div class="opt"><span class="chk off"></span>Notify me when an agent needs me</div>
       <div class="dots"><b></b><b></b><b class="on"></b></div><span class="btn">Connect</span></div></div>`);
     hydrate(w);
