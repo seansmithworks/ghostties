@@ -567,31 +567,48 @@ enum SidebarDialTuning {
 // No macOS-13 fallback: the inspector package needs macOS 14; every dial
 // still has a working `defaults write` escape hatch via `SidebarDialTuning`.
 #if DEBUG
-/// DEBUG-only: forces the sidebar's colour scheme (tray, pills, rows, and the
-/// chrome behind them) to light or dark, so each glass set can be tuned
-/// without changing the system appearance or the terminal theme. `auto`
-/// follows the terminal theme, as a Release build always does. Held in
-/// memory only: every launch starts at `auto` (a capture-fixture launch can
-/// start elsewhere via `GHOSTTIES_CAPTURE_APPEARANCE`). Driven by the
-/// inspector's "Preview appearance" control; `WorkspaceViewContainer`
-/// applies it.
+/// DEBUG-only: forces the whole app light or dark (`NSApp.appearance`:
+/// windows, sidebar, chrome, and every terminal, which re-themes through
+/// AppDelegate's `effectiveAppearance` observer), so each glass set can be
+/// judged in context without changing the system appearance. `auto` hands
+/// the app back to the config's `window-theme` (nil follows the system), as
+/// a Release build always does. Held in memory only: every launch starts at
+/// `auto` (a capture-fixture launch can start elsewhere via
+/// `GHOSTTIES_CAPTURE_APPEARANCE`). Driven by the inspector's "Preview
+/// appearance" control; `AppDelegate.syncAppearance` hands it the config's
+/// appearance on every config load.
 @MainActor
 enum SidebarAppearancePreview {
     enum Mode: String, CaseIterable {
         case auto, light, dark
     }
 
-    static let didChangeNotification = Notification.Name("ghostties.sidebarAppearancePreviewDidChange")
-
     private(set) static var mode: Mode = CaptureFixture.appearancePreview.flatMap(Mode.init(rawValue:)) ?? .auto
+
+    /// The config's `window-theme` appearance (nil follows the system), as
+    /// last handed over by `AppDelegate.syncAppearance`: what `auto` restores.
+    private static var configuredAppearance: NSAppearance?
 
     static func set(_ newMode: Mode) {
         guard newMode != mode else { return }
         mode = newMode
-        NotificationCenter.default.post(name: didChangeNotification, object: nil)
+        NSApp.appearance = appAppearance(configured: configuredAppearance)
     }
 
-    /// The appearance to force, or nil to follow the terminal theme.
+    /// Called on every config load in place of setting `NSApp.appearance`
+    /// directly, so a config reload never drops a forced preview.
+    static func applyAppAppearance(configured: NSAppearance?) {
+        configuredAppearance = configured
+        NSApp.appearance = appAppearance(configured: configured)
+    }
+
+    /// The app's appearance: the forced preview, else `configured` (the
+    /// config's `window-theme`; nil follows the system).
+    static func appAppearance(configured: NSAppearance?) -> NSAppearance? {
+        forcedAppearance ?? configured
+    }
+
+    /// The appearance to force, or nil when not previewing.
     static var forcedAppearance: NSAppearance? {
         switch mode {
         case .auto: return nil

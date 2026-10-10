@@ -561,23 +561,14 @@ class WorkspaceViewContainer: NSView {
     private var activeTrackingArea: NSTrackingArea?
 
     private var isLightAppearance: Bool {
-        #if DEBUG
-        // The inspector's "Preview appearance" repaints the chrome behind the
-        // sidebar too, so the forced glass is judged on its real background.
-        if let forced = SidebarAppearancePreview.forcedAppearance {
-            return forced.bestMatch(from: [.aqua, .darkAqua]) == .aqua
-        }
-        #endif
         return effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
     }
 
-    /// `sidebarHostingView`'s appearance: the DEBUG preview when one is
-    /// forced; otherwise pinned to the overlay fill's luminance in overlay
-    /// mode, and nil (follow the window) in every other mode.
+    /// `sidebarHostingView`'s appearance: pinned to the overlay fill's
+    /// luminance in overlay mode, and nil (follow the window) in every other
+    /// mode. (The DEBUG appearance preview sets the whole app's appearance,
+    /// so the window carries it here.)
     private var sidebarAppearanceOverride: NSAppearance? {
-        #if DEBUG
-        if let forced = SidebarAppearancePreview.forcedAppearance { return forced }
-        #endif
         return sidebarMode == .overlay
             ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
             : nil
@@ -726,22 +717,7 @@ class WorkspaceViewContainer: NSView {
             name: SidebarDialTuning.didChangeNotification,
             object: nil
         )
-
-        #if DEBUG
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(sidebarAppearancePreviewChanged),
-            name: SidebarAppearancePreview.didChangeNotification,
-            object: nil
-        )
-        #endif
     }
-
-    #if DEBUG
-    @objc private func sidebarAppearancePreviewChanged() {
-        applyChromeColor()
-    }
-    #endif
 
     @objc private func sidebarDialsChanged() {
         // Constraints are main-thread only; the panel posts from the main
