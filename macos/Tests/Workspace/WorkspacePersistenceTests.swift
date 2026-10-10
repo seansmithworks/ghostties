@@ -633,7 +633,7 @@ struct WorkspacePersistenceTests {
         let resolved = WorkspacePersistence.directory(env: [:])
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         #expect(resolved.deletingLastPathComponent().path == appSupport.path)
-        #expect(resolved.lastPathComponent == "Ghostties" || resolved.lastPathComponent == "Ghostties Dev")
+        #expect(resolved.lastPathComponent == WorkspacePersistence.directoryName(forBundleId: Bundle.main.bundleIdentifier))
     }
 
     // MARK: - directoryName(forBundleId:)
