@@ -251,23 +251,33 @@ final class SidebarHistoryPlacementTests: XCTestCase {
     }
 
     /// The selected chip: the run, down a line 4pt inside the chip's
-    /// leading edge (clear of the glyph), darker than the group card's or
-    /// column's faint tint (~0.08 below the chrome) but lighter than ink.
-    /// The chip's corner trims the run's ends equally, so its centre is the
-    /// chip's.
+    /// leading edge (clear of the glyph), whose summed-RGB drop below the
+    /// chrome is the chip over the group card or column, not the card or
+    /// column alone. Both are black tints, so a tint of alpha `a` drops the
+    /// sum by `a * chromeSum`: the card/column (6%, ~0.165) sits below the
+    /// window and the chip over it (1 - 0.94 * 0.90 = 15.4%, ~0.424) inside
+    /// it, with the lower bound midway between them; ink is far darker. The
+    /// run must also be chip-sized (not the card's extent). The chip's
+    /// corner trims the run's ends equally, so its centre is the chip's.
     private func selectedChip(_ r: Render, rail: Bool) throws -> ClosedRange<CGFloat> {
         let chrome = try XCTUnwrap(WorkspaceLayout.chromeBackgroundLight.usingColorSpace(.sRGB))
         let base = chrome.redComponent + chrome.greenComponent + chrome.blueComponent
+        let cardAlpha = RailProjectColumn.columnTintOpacity
+        let chipAlpha = RailProjectColumn.selectedChipTintOpacity
+        let cardDrop = base * cardAlpha
+        let chipOverCardDrop = base * (1 - (1 - cardAlpha) * (1 - chipAlpha))
+        let lowerBound = (cardDrop + chipOverCardDrop) / 2
+        let upperBound = chipOverCardDrop + (chipOverCardDrop - lowerBound)
         let px = Int((chipCentreX(r, rail: rail) - RailProjectColumn.chipSize / 2 + 4) * r.scale)
         var runs: [(Int, Int)] = []
         for y in 0..<r.rep.pixelsHigh {
             guard let c = r.rep.colorAt(x: px, y: y)?.usingColorSpace(.sRGB) else { continue }
             let delta = base - (c.redComponent + c.greenComponent + c.blueComponent)
-            guard delta > 0.12 && delta < 0.5 else { continue }
+            guard delta > lowerBound && delta < upperBound else { continue }
             if let last = runs.last, y - last.1 <= 1 { runs[runs.count - 1].1 = y } else { runs.append((y, y)) }
         }
         let chips = runs.map { CGFloat($0.0) / r.scale...CGFloat($0.1 + 1) / r.scale }
-            .filter { $0.upperBound - $0.lowerBound >= RailProjectColumn.chipSize - 10 }
+            .filter { abs(($0.upperBound - $0.lowerBound) - RailProjectColumn.chipSize) <= 4 }
         return try XCTUnwrap(chips.first, "no selected chip found (rail: \(rail))")
     }
 }
