@@ -33,6 +33,14 @@ final class SidebarWidthModel: ObservableObject {
     /// the correct static appearance for whichever mode is settled.
     @Published var isCollapsedPresentation: Bool
 
+    /// The collapsed rail's width (`WorkspaceLayout.collapsedRailWidth(in:)`),
+    /// kept current in every mode, not only while collapsed. The rail tray
+    /// sizes its square pills from it (`RailTrayGeometry`), so it must hold
+    /// the rail's width before a collapse starts: `width` reaches the rail
+    /// only after `isCollapsedPresentation` has already flipped the tray
+    /// vertical, and animates through every width on the way.
+    @Published var railWidth: CGFloat = WorkspaceLayout.sidebarRailWidth
+
     init(width: CGFloat, isCollapsedPresentation: Bool = false) {
         self.width = width
         self.isCollapsedPresentation = isCollapsedPresentation
@@ -93,6 +101,58 @@ private struct SidebarCollapseCrossfade: View {
     }
 }
 
+/// The sidebar hosting view's one root type, in every mode. Only `content`
+/// swaps (expanded list, rail, or the Flow 05 cross-fade of both); the tray
+/// sits outside it, so `SidebarTray` keeps its identity across those swaps
+/// and morphs between its horizontal bar and vertical pill instead of being
+/// torn down with one tree and rebuilt with the other. `NSHostingView` keeps
+/// the subtree when the new `rootView` wraps the same type.
+private struct SidebarHostRoot: View {
+    @ObservedObject var model: SidebarWidthModel
+    @EnvironmentObject private var store: WorkspaceStore
+    let content: AnyView
+    /// The tray's axis in a settled mode (`true` = the rail's vertical pill).
+    /// `nil` while the pinned⇄collapsed transition is hosted: the axis then
+    /// follows `model.isCollapsedPresentation`, which `transitionTo` flips
+    /// inside the same `withAnimation` as the content cross-fade, so the
+    /// morph rides the Flow 05 curve and lands with the card's width.
+    let trayIsVertical: Bool?
+    /// False for the task-first view, which has no tray.
+    let showsTrayWhenExpanded: Bool
+    /// The mode this root was built for. Its
+    /// `WorkspaceLayout.sidebarTrailingGutter(for:)` — read live, so the
+    /// Window margin dial lands without a rebuild — is what the expanded
+    /// list and tray leave out of their own trailing padding.
+    let gutterMode: SidebarMode
+    /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
+    var body: some View {
+        let vertical = trayIsVertical ?? model.isCollapsedPresentation
+        let trailingGutter = WorkspaceLayout.sidebarTrailingGutter(for: gutterMode)
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                if vertical || showsTrayWhenExpanded {
+                    SidebarTray(isVertical: vertical, toggleLabel: toggleLabel, dialEpoch: SidebarDialTuning.epoch())
+                }
+            }
+            .environment(\.sidebarTrailingGutter, trailingGutter)
+            .environment(\.sidebarRailWidth, model.railWidth)
+    }
+
+    /// "Collapse Sidebar" while pinned (the toggle flips full width ↔ rail),
+    /// "Expand Sidebar" on the rail, "Open Sidebar" while overlaid — the
+    /// overlay's toggle promotes it to pinned.
+    private var toggleLabel: String {
+        switch store.sidebarMode {
+        case .collapsed: return "Expand Sidebar"
+        case .overlay: return "Open Sidebar"
+        default: return "Collapse Sidebar"
+        }
+    }
+}
+
 /// An NSView that contains the workspace sidebar alongside the existing terminal view.
 /// This replaces TerminalViewContainer as the window's contentView.
 ///
@@ -129,6 +189,15 @@ class WorkspaceViewContainer: NSView {
     private(set) var terminalContainer: TerminalViewContainer
     private let coordinator: SessionCoordinator
     private let ghostty: Ghostty.App
+    /// `WorkspaceStore.shared` in the app. Injectable so a test can host a
+    /// real container on a persistence-disabled store — the shared one
+    /// writes the Dev app's real `workspace.json`.
+    private let store: WorkspaceStore
+
+    #if DEBUG
+    /// Test-only: the container's own coordinator, for seeding live surfaces.
+    var coordinatorForTesting: SessionCoordinator { coordinator }
+    #endif
 
     /// v0 task-first sidebar store. Loads `.ghostties/tasks/*.md` fixtures once.
     /// Instantiated lazily on first access (always on the main thread via AppKit
@@ -220,6 +289,16 @@ class WorkspaceViewContainer: NSView {
     /// The browser panel content (navigation bar + content area placeholder).
     private let browserPanelView = BrowserPanelView()
 
+    #if DEBUG
+    /// DEBUG Redlines overlay (`SidebarRedlines.swift`): spacing bands over
+    /// the whole workspace, hidden unless the inspector's Redlines is on.
+    private lazy var redlineOverlay = RedlineOverlayView(
+        sidebarHost: sidebarHostingView,
+        cardHost: terminalShadowHost,
+        browserHost: browserShadowHost
+    )
+    #endif
+
     /// Diagnostic build/launch info badge — bottom-left corner of the window,
     /// click-to-copy. `@AppStorage`-gated; sizes itself to its content so it
     /// never intercepts clicks outside its own bounds. See `BuildInfoBadgeView.swift`.
@@ -243,6 +322,22 @@ class WorkspaceViewContainer: NSView {
         // pinned by four edge constraints, so its own intrinsic-size
         // reporting is unused work.
         view.sizingOptions = []
+        return view
+    }()
+
+    /// Hosting view for the history browser (mock I3), shown over the
+    /// terminal inside the canvas card while
+    /// `SessionCoordinator.isHistoryPresented` — see
+    /// `applyHistoryPresentation()`. The terminal stays mounted underneath,
+    /// so closing the browser returns to it untouched.
+    private lazy var historyHostingView: NSHostingView<AnyView> = {
+        let view = NSHostingView<AnyView>(rootView: AnyView(EmptyView()))
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.sizingOptions = []
+        view.wantsLayer = true
+        view.layer?.cornerRadius = WorkspaceLayout.terminalCornerRadius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = true
         return view
     }()
 
@@ -324,10 +419,10 @@ class WorkspaceViewContainer: NSView {
     /// also cancel our subscription whenever the active session changes.
     private weak var observedSurface: Ghostty.SurfaceView?
 
-    /// Current sidebar state — always kept in sync with `WorkspaceStore.shared.sidebarMode`.
+    /// Current sidebar state — always kept in sync with `store.sidebarMode`.
     private var sidebarMode: SidebarMode = .pinned
 
-    /// Last published value of `WorkspaceStore.shared.toolbarRowTopAnchorConstant`.
+    /// Last published value of `store.toolbarRowTopAnchorConstant`.
     /// Updated in layout() from the live close-button frame so the SwiftUI
     /// sidebar's own toolbar row (the "+" button) survives macOS version
     /// bumps and upstream titlebar refactors. There's no longer an AppKit
@@ -375,6 +470,19 @@ class WorkspaceViewContainer: NSView {
     /// — see that method's doc comment.
     private var isCollapseCrossfadeHosted = false
 
+    /// Test seam: what the pinned rows would render toward right now.
+    var isCollapsedPresentationForTesting: Bool { widthModel.isCollapsedPresentation }
+    var sidebarModeForTesting: SidebarMode { sidebarMode }
+    /// Test seam: the terminal card's and the sidebar's frames.
+    var cardFrameForTesting: NSRect { terminalShadowHost.frame }
+    var sidebarFrameForTesting: NSRect { sidebarHostingView.frame }
+    var sidebarHostingViewForTesting: NSView { sidebarHostingView }
+    var sidebarDragHandleFrameForTesting: NSRect { sidebarDragHandle.frame }
+    var sidebarDragHandleIsHiddenForTesting: Bool { sidebarDragHandle.isHidden }
+    /// Test seam: the live Window margin path, with the margin passed in
+    /// rather than written to the shared dial store.
+    func applyWindowMarginForTesting(_ inset: CGFloat) { applyWindowMargin(inset) }
+
     /// Stored constraints for animating sidebar show/hide and terminal insets.
     private var sidebarWidthConstraint: NSLayoutConstraint!
     private var shadowHostTopConstraint: NSLayoutConstraint!
@@ -389,6 +497,9 @@ class WorkspaceViewContainer: NSView {
     /// `.pinned`: terminal leading follows sidebar trailing (pushed right).
     /// `.closed`/`.overlay`: terminal leading follows superview leading (full-width).
     private var shadowHostLeadingToSidebar: NSLayoutConstraint!
+    /// `WorkspaceLayout.sidebarDragHandleWidth(for:margin:)`; the handle's
+    /// trailing edge is pinned to the card, so this alone places it.
+    private var sidebarDragHandleWidthConstraint: NSLayoutConstraint!
     private var shadowHostLeadingToSuperview: NSLayoutConstraint!
 
     /// Whether the browser panel is currently visible (expanded).
@@ -411,14 +522,21 @@ class WorkspaceViewContainer: NSView {
         return handle
     }()
 
-    /// Drag handle on the sidebar's trailing edge for resizing. Sits in the
-    /// same 8pt inset gap the browser drag handle sits in (proven pattern),
-    /// just on the other side of the terminal card. Visible when the
+    /// Drag handle on the sidebar's trailing edge for resizing. Pinned, it
+    /// sits in the same inset gap the browser drag handle sits in (proven
+    /// pattern), just on the other side of the terminal card; on the rail,
+    /// which has no gap, it is a strip over the rail's trailing edge
+    /// (`WorkspaceLayout.sidebarDragHandleWidth`). Visible when the
     /// sidebar is pinned or collapsed; hidden when closed or overlaid.
     private lazy var sidebarDragHandle: PanelDragHandleView = {
         let handle = PanelDragHandleView()
         handle.translatesAutoresizingMaskIntoConstraints = false
         handle.isHidden = true  // corrected to match initialMode in setup()
+        // On the rail the strip overlays the list's trailing edge: scrolling
+        // and the list's scroller pass through to the sidebar beneath.
+        handle.viewsBeneath = { [weak self] in
+            self.map { [$0.sidebarHostingView] } ?? []
+        }
         handle.onDragStart = { [weak self] in
             self?.beginSidebarDrag()
         }
@@ -443,7 +561,26 @@ class WorkspaceViewContainer: NSView {
     private var activeTrackingArea: NSTrackingArea?
 
     private var isLightAppearance: Bool {
-        effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+        #if DEBUG
+        // The inspector's "Preview appearance" repaints the chrome behind the
+        // sidebar too, so the forced glass is judged on its real background.
+        if let forced = SidebarAppearancePreview.forcedAppearance {
+            return forced.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+        }
+        #endif
+        return effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+    }
+
+    /// `sidebarHostingView`'s appearance: the DEBUG preview when one is
+    /// forced; otherwise pinned to the overlay fill's luminance in overlay
+    /// mode, and nil (follow the window) in every other mode.
+    private var sidebarAppearanceOverride: NSAppearance? {
+        #if DEBUG
+        if let forced = SidebarAppearancePreview.forcedAppearance { return forced }
+        #endif
+        return sidebarMode == .overlay
+            ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
+            : nil
     }
 
     /// Canvas palette color for the current OS appearance. The canvas layer
@@ -519,8 +656,9 @@ class WorkspaceViewContainer: NSView {
         return luminance < 0.5
     }
 
-    init<ViewModel: TerminalViewModel>(ghostty: Ghostty.App, viewModel: ViewModel, delegate: (any TerminalViewDelegate)? = nil) {
+    init<ViewModel: TerminalViewModel>(ghostty: Ghostty.App, viewModel: ViewModel, delegate: (any TerminalViewDelegate)? = nil, store: WorkspaceStore = .shared) {
         self.ghostty = ghostty
+        self.store = store
         self.terminalContainer = TerminalViewContainer {
             TerminalView(ghostty: ghostty, viewModel: viewModel, delegate: delegate)
         }
@@ -580,6 +718,77 @@ class WorkspaceViewContainer: NSView {
             name: NSApplication.didResignActiveNotification,
             object: nil
         )
+
+        // A live Window margin dial change re-applies the card insets.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sidebarDialsChanged),
+            name: SidebarDialTuning.didChangeNotification,
+            object: nil
+        )
+
+        #if DEBUG
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sidebarAppearancePreviewChanged),
+            name: SidebarAppearancePreview.didChangeNotification,
+            object: nil
+        )
+        #endif
+    }
+
+    #if DEBUG
+    @objc private func sidebarAppearancePreviewChanged() {
+        applyChromeColor()
+    }
+    #endif
+
+    @objc private func sidebarDialsChanged() {
+        // Constraints are main-thread only; the panel posts from the main
+        // actor, but a selector observer runs on the posting thread.
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.sidebarDialsChanged() }
+            return
+        }
+        applyWindowMargin()
+        #if DEBUG
+        redlineOverlay.refresh()
+        #endif
+    }
+
+    /// Re-applies the Window margin dial (`SidebarDialTuning.windowMargin`)
+    /// to every card inset constraint, so a live dial change lands without a
+    /// mode change or relaunch. The same constants `setup()` and
+    /// `applyTransitionConstraints` write; skipped mid-transition, where the
+    /// animator owns them — both transition completions call this again, so
+    /// a dial change made mid-flight lands when the motion settles.
+    private func applyWindowMargin(_ inset: CGFloat = SidebarDialTuning.windowMargin()) {
+        guard !isSidebarTransitionAnimating else { return }
+        shadowHostTopConstraint.constant = inset
+        shadowHostBottomConstraint.constant = -inset
+        shadowHostTrailingConstraint.constant = -inset
+        shadowHostTrailingToBrowser.constant = -inset
+        shadowHostLeadingToSidebar.constant = WorkspaceLayout.sidebarTrailingGutter(for: sidebarMode, margin: inset)
+        sidebarDragHandleWidthConstraint.constant = WorkspaceLayout.sidebarDragHandleWidth(for: sidebarMode, margin: inset)
+        shadowHostLeadingToSuperview.constant = inset
+        // Overlay collapses the browser to zero insets; leave it there.
+        if sidebarMode != .overlay {
+            browserShadowHostTopConstraint.constant = inset
+            browserShadowHostBottomConstraint.constant = -inset
+            browserShadowHostTrailingConstraint.constant = -inset
+        }
+        // The cards stay concentric with the window corner at the new
+        // margin (`WorkspaceLayout.terminalCornerRadius`); their shadow
+        // paths follow on the next layout pass.
+        let radius = WorkspaceLayout.concentricCornerRadius(margin: inset)
+        terminalContainer.layer?.cornerRadius = radius
+        terminalShadowHost.layer?.cornerRadius = radius
+        historyHostingView.layer?.cornerRadius = radius
+        if sidebarMode != .overlay {
+            browserShadowHost.layer?.cornerRadius = radius
+        }
+        needsLayout = true
+        invalidateIntrinsicContentSize()
     }
 
     @available(*, unavailable)
@@ -602,6 +811,12 @@ class WorkspaceViewContainer: NSView {
         NotificationCenter.default.removeObserver(self, name: NSWindow.didExitFullScreenNotification, object: fullScreenObservedWindow)
         NotificationCenter.default.removeObserver(self, name: .workspaceNewSession, object: nil)
         NotificationCenter.default.removeObserver(self, name: .workspaceNewSessionInstant, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceSelectNextSession, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceSelectPreviousSession, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceFocusSessionAtIndex, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceCloseSession, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceSelectNextProject, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .workspaceSelectPreviousProject, object: nil)
 
         guard let window = window else { return }
         // Give the coordinator a reference to this view so it can discover
@@ -680,9 +895,49 @@ class WorkspaceViewContainer: NSView {
             object: window
         )
 
+        // Cmd+Shift+]/[, Cmd+1-9, Cmd+W and Cmd+Ctrl+]/[ — here for the same
+        // reason as Cmd+T: the rail unmounts the expanded list that used to
+        // observe them.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCloseSession(_:)),
+            name: .workspaceCloseSession,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSelectNextProject(_:)),
+            name: .workspaceSelectNextProject,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSelectPreviousProject(_:)),
+            name: .workspaceSelectPreviousProject,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSelectNextSession(_:)),
+            name: .workspaceSelectNextSession,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSelectPreviousSession(_:)),
+            name: .workspaceSelectPreviousSession,
+            object: window
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleFocusSessionAtIndex(_:)),
+            name: .workspaceFocusSessionAtIndex,
+            object: window
+        )
+
         // If the window is already key when we move into it, freeze immediately.
         if window.isKeyWindow {
-            WorkspaceStore.shared.freezeSnapshot()
+            store.freezeSnapshot()
         }
 
         // Automated CEF browser crash repro (see scripts/debug/cef-repro.sh).
@@ -713,7 +968,7 @@ class WorkspaceViewContainer: NSView {
                     self.presentComposerOverlay(projectBinding: .open)
                 case .prefilled(let name):
                     // A project row's "+" (`ProjectDisclosureRow.handleNewSession`).
-                    let store = WorkspaceStore.shared
+                    let store = self.store
                     guard let project = store.projects.first(where: { $0.name == name }) else {
                         NSLog("[CaptureFixture] GHOSTTIES_CAPTURE_COMPOSER: no project named \(name)")
                         return
@@ -732,6 +987,12 @@ class WorkspaceViewContainer: NSView {
                 await CaptureScript.launch(scriptAt: path, host: self, stateDir: dir)
             }
         }
+        if let size = CaptureFixture.windowContentSize, CaptureFixture.claimHook("windowSize") {
+            // After the window's own restore/default sizing has run.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.window?.setContentSize(size)
+            }
+        }
         if let seconds = CaptureFixture.sidebarToggleAfter, CaptureFixture.claimHook("sidebarToggle") {
             // Cmd+S (`TerminalController.toggleWorkspaceSidebar`), twice:
             // pinned -> rail, then rail -> pinned.
@@ -740,6 +1001,19 @@ class WorkspaceViewContainer: NSView {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2 * seconds) { [weak self] in
                 self?.toggleSidebar()
+            }
+        }
+        if let seconds = CaptureFixture.sidebarRailClosePinAfter, CaptureFixture.claimHook("sidebarRailClosePin") {
+            // Cmd+S (pinned -> rail), Cmd+Shift+S (rail -> closed), then
+            // Cmd+Shift+S again (closed -> pinned).
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+                self?.toggleSidebar()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2 * seconds) { [weak self] in
+                self?.toggleSidebarFullyClosed()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3 * seconds) { [weak self] in
+                self?.toggleSidebarFullyClosed()
             }
         }
     }
@@ -786,19 +1060,20 @@ class WorkspaceViewContainer: NSView {
         guard termSize.width != NSView.noIntrinsicMetric else { return termSize }
         switch sidebarMode {
         case .pinned:
-            let inset = WorkspaceLayout.terminalInset
+            let inset = SidebarDialTuning.windowMargin()
             return NSSize(
                 width: termSize.width + currentSidebarWidth + inset * 2,
                 height: termSize.height + inset * 2
             )
         case .collapsed:
-            let inset = WorkspaceLayout.terminalInset
+            let inset = SidebarDialTuning.windowMargin()
             return NSSize(
-                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self) + inset * 2,
+                width: termSize.width + WorkspaceLayout.collapsedRailWidth(in: self)
+                    + WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset) + inset,
                 height: termSize.height + inset * 2
             )
         case .closed:
-            let inset = WorkspaceLayout.terminalInset
+            let inset = SidebarDialTuning.windowMargin()
             return NSSize(
                 width: termSize.width + inset * 2,
                 height: termSize.height + inset * 2
@@ -822,13 +1097,16 @@ class WorkspaceViewContainer: NSView {
     /// consumers here gate on `sidebarMode == .pinned` anyway.
     private var resizableWidth: CGFloat {
         let sidebarWidth = (sidebarMode == .pinned || sidebarMode == .collapsed) ? widthModel.width : 0
-        let inset = WorkspaceLayout.terminalInset
+        let inset = SidebarDialTuning.windowMargin()
         // Three inset slots: leading of terminal, gap between panels, trailing of browser.
         return bounds.width - sidebarWidth - inset * 3
     }
 
     override func layout() {
         super.layout()
+        #if DEBUG
+        if !redlineOverlay.isHidden { redlineOverlay.needsDisplay = true }
+        #endif
 
         // Re-clamp the sidebar width when the window shrinks. The sidebar
         // previously never re-clamped on resize, so a sidebar sitting near
@@ -867,7 +1145,7 @@ class WorkspaceViewContainer: NSView {
         // flight — the animation itself is already driving the constraint
         // to the right place.
         if sidebarMode == .pinned && bounds.width > 0 && !isSidebarTransitionAnimating {
-            let inset = WorkspaceLayout.terminalInset
+            let inset = SidebarDialTuning.windowMargin()
             let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
             let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
             let reclamped = min(max(currentSidebarWidth, WorkspaceLayout.sidebarMinWidth), upperBound)
@@ -933,21 +1211,27 @@ class WorkspaceViewContainer: NSView {
                 lastPublishedToolbarRowTopAnchorConstant = constant
             }
             // Publish to SwiftUI sidebar so the + button stays in sync.
-            if abs(WorkspaceStore.shared.toolbarRowTopAnchorConstant - constant) > 0.5 {
-                WorkspaceStore.shared.toolbarRowTopAnchorConstant = constant
+            if abs(store.toolbarRowTopAnchorConstant - constant) > 0.5 {
+                store.toolbarRowTopAnchorConstant = constant
             }
         }
 
         // Re-derive the collapsed rail width from the same live button
         // frames — the rail must clear the traffic-light cluster, which can
         // change width across macOS versions and titlebar layout passes
-        // (window attach, fullscreen enter/exit). Skipped mid-transition-
-        // animation for the same reason the sidebar resize reclamp above is:
-        // the animator drives `sidebarWidthConstraint` through intermediate
-        // values every frame, and reclamping against those would fight the
-        // open/collapse animation.
+        // (window attach, fullscreen enter/exit). The rail tray's copy
+        // (`SidebarWidthModel.railWidth`) tracks it in every mode, animating
+        // or not: it is the rail's settled width, never an intermediate one.
+        let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
+        if abs(widthModel.railWidth - railWidth) > 0.5 {
+            widthModel.railWidth = railWidth
+        }
+        // The constraint reclamp is skipped mid-transition-animation for the
+        // same reason the sidebar resize reclamp above is: the animator
+        // drives `sidebarWidthConstraint` through intermediate values every
+        // frame, and reclamping against those would fight the open/collapse
+        // animation.
         if sidebarMode == .collapsed && !isSidebarTransitionAnimating {
-            let railWidth = WorkspaceLayout.collapsedRailWidth(in: self)
             if abs(sidebarWidthConstraint.constant - railWidth) > 0.5 {
                 sidebarWidthConstraint.constant = railWidth
                 widthModel.width = railWidth
@@ -965,15 +1249,40 @@ class WorkspaceViewContainer: NSView {
     private func applySidebarView() {
         guard let hostingView = sidebarHostingView as? NSHostingView<AnyView> else { return }
 
+        // Every settled mode states its own presentation. The crossfade
+        // writes this flag mid-animation, but it is the only other writer,
+        // so a path that never crossfades (rail -> closed -> pinned) would
+        // otherwise leave the previous mode's value behind.
+        widthModel.isCollapsedPresentation = sidebarMode == .collapsed
+
         // Collapsed rail (Flow 01, sidebar-presence §02) replaces whichever
         // view mode (project-first/task-first) is otherwise active — it's a
         // width state, not a third view mode, so it takes priority here.
         if sidebarMode == .collapsed {
-            hostingView.rootView = railSidebarContent()
+            hostingView.rootView = hostRoot(content: railSidebarContent(), trayIsVertical: true)
             return
         }
 
-        hostingView.rootView = fullSidebarContent()
+        hostingView.rootView = hostRoot(content: fullSidebarContent(), trayIsVertical: false)
+    }
+
+    /// Wraps sidebar content in `SidebarHostRoot` — see that type for why
+    /// every mode shares one root.
+    private func hostRoot(content: AnyView, trayIsVertical: Bool?) -> AnyView {
+        let root = SidebarHostRoot(
+            model: widthModel,
+            content: content,
+            trayIsVertical: trayIsVertical,
+            showsTrayWhenExpanded: currentSidebarViewMode != "taskFirst",
+            gutterMode: sidebarMode
+        )
+        .environmentObject(store)
+        .environmentObject(coordinator)
+        #if DEBUG
+        return AnyView(root.environment(\.redlineRegistry, redlineOverlay.registry))
+        #else
+        return AnyView(root)
+        #endif
     }
 
     /// The collapsed rail's content (Flow 01, sidebar-presence §02),
@@ -984,7 +1293,7 @@ class WorkspaceViewContainer: NSView {
     /// swap.
     private func railSidebarContent() -> AnyView {
         let content = SidebarRailView()
-            .environmentObject(WorkspaceStore.shared)
+            .environmentObject(store)
             .environmentObject(coordinator)
             .environmentObject(widthModel)
             .ignoresSafeArea(.container, edges: .top)
@@ -1029,12 +1338,12 @@ class WorkspaceViewContainer: NSView {
                 // The store is observed so the row sees a current projects list.
                 .environmentObject(taskStore)
                 .environmentObject(coordinator)
-                .environmentObject(WorkspaceStore.shared)
+                .environmentObject(store)
                 .environmentObject(sessionDraftStore)
             return AnyView(view)
         } else {
             let content = WorkspaceSidebarView()
-                .environmentObject(WorkspaceStore.shared)
+                .environmentObject(store)
                 .environmentObject(coordinator)
                 .environmentObject(widthModel)
                 .ignoresSafeArea(.container, edges: .top)
@@ -1085,7 +1394,7 @@ class WorkspaceViewContainer: NSView {
                 full: fullSidebarContent(),
                 rail: railSidebarContent()
             )
-            hostingView.rootView = AnyView(view)
+            hostingView.rootView = hostRoot(content: AnyView(view), trayIsVertical: nil)
             isCollapseCrossfadeHosted = true
             // Starting presentation is whatever mode we're leaving — set
             // directly (not animated) so the cross-fade animates FROM the
@@ -1144,6 +1453,7 @@ class WorkspaceViewContainer: NSView {
         }, completionHandler: { [weak self] in
             guard let self, self.sidebarTransitionGeneration == generation else { return }
             self.isSidebarTransitionAnimating = false
+            self.applyWindowMargin()
             // The resize reclamp in `layout()` was deferred for the duration of
             // this animation. Force one more layout pass now that the flag is
             // clear, or a window shrink that happened mid-animation may never
@@ -1193,13 +1503,6 @@ class WorkspaceViewContainer: NSView {
         transitionTo(Self.nextSidebarMode(after: sidebarMode))
     }
 
-    /// Tray/rail Settings item (round 4) — thin wrapper so `SidebarTrayItems`
-    /// (a separate file) can reach the same action `AppDelegate.openConfig`
-    /// invokes, without exposing the `private let ghostty` property itself.
-    func openConfig() {
-        ghostty.openConfig()
-    }
-
     /// Full close ↔ reopen, bound to Cmd+Shift+S. Any visible mode (pinned,
     /// collapsed, overlay) goes to `.closed`; `.closed` reopens to `.pinned`.
     /// This is the toggle's only remaining path back into (and out of)
@@ -1235,8 +1538,8 @@ class WorkspaceViewContainer: NSView {
             if let manager = existingManager {
                 embedBrowserInPanel(manager)
                 animateBrowserPanel(visible: true)
-            } else if let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: WorkspaceStore.shared),
-                      let project = WorkspaceStore.shared.projects.first(where: { $0.id == projectId }) {
+            } else if let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
+                      let project = store.projects.first(where: { $0.id == projectId }) {
                 // Phase 4: use the composer's smart-default cascade instead
                 // of an arbitrary `.first` pick (see
                 // docs/plans/session-creation-unified.html).
@@ -1356,7 +1659,7 @@ class WorkspaceViewContainer: NSView {
         // Upper bound: the design-token max, but never wider than leaves room
         // for the terminal's minimum usable width (mirrors the browser drag
         // handle's clamp against `WorkspaceLayout.terminalMinWidth`).
-        let inset = WorkspaceLayout.terminalInset
+        let inset = SidebarDialTuning.windowMargin()
         let maxByAvailableSpace = bounds.width - WorkspaceLayout.terminalMinWidth - inset * 2
         let upperBound = min(WorkspaceLayout.sidebarMaxWidth, max(maxByAvailableSpace, WorkspaceLayout.sidebarMinWidth))
         let target = Self.sidebarDragTarget(
@@ -1601,7 +1904,7 @@ class WorkspaceViewContainer: NSView {
         // clear it and fall back to the OS appearance.
         applyChromeColor()
 
-        let inset = WorkspaceLayout.terminalInset
+        let inset = SidebarDialTuning.windowMargin()
 
         // Content differs by mode (rail vs. full sidebar). The pinned⇄
         // collapsed pair — the ONLY pair Flow 05's content choreography
@@ -1680,6 +1983,8 @@ class WorkspaceViewContainer: NSView {
         let animationCompletion: () -> Void = { [weak self] in
             guard let self, self.sidebarTransitionGeneration == generation else { return }
             self.isSidebarTransitionAnimating = false
+            // A Window margin change made mid-transition was skipped.
+            self.applyWindowMargin()
             // Settle the Flow 05 collapse cross-fade (if this transition
             // mounted one) back down to the cheap single-tree steady state —
             // see `applyCollapseCrossfadeSidebarView`'s doc comment on why
@@ -1802,7 +2107,7 @@ class WorkspaceViewContainer: NSView {
         }
 
         // 8. Persist (overlay is transient — store persists it as .closed).
-        WorkspaceStore.shared.updateSidebarMode(newMode)
+        store.updateSidebarMode(newMode)
 
         invalidateIntrinsicContentSize()
     }
@@ -1838,7 +2143,8 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, currentSidebarWidth)
             widthModel.width = currentSidebarWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, inset)
+            set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .pinned, margin: inset))
+            set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .pinned, margin: inset))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -1857,7 +2163,8 @@ class WorkspaceViewContainer: NSView {
             set(sidebarWidthConstraint, railWidth)
             widthModel.width = railWidth
             set(shadowHostTopConstraint, inset)
-            set(shadowHostLeadingToSidebar, inset)
+            set(shadowHostLeadingToSidebar, WorkspaceLayout.sidebarTrailingGutter(for: .collapsed, margin: inset))
+            set(sidebarDragHandleWidthConstraint, WorkspaceLayout.sidebarDragHandleWidth(for: .collapsed, margin: inset))
             if !isBrowserVisible {
                 set(shadowHostTrailingConstraint, -inset)
             }
@@ -2035,7 +2342,7 @@ class WorkspaceViewContainer: NSView {
         // in a hosting view. The window-key signal is coarser but bulletproof:
         // any time the user is interacting with this window, the sidebar's
         // bucketing is frozen.
-        WorkspaceStore.shared.releaseSnapshot()
+        store.releaseSnapshot()
     }
 
     /// Blocker 3 (Phase 3 review round 3): the genuine "user left the app"
@@ -2053,7 +2360,7 @@ class WorkspaceViewContainer: NSView {
         // Sidebar smart-sections freeze-on-focus (plan unit 4):
         // freeze the section layout while this window is the user's focus.
         // No-op if already frozen — `freezeSnapshot()` guards against clobber.
-        WorkspaceStore.shared.freezeSnapshot()
+        store.freezeSnapshot()
     }
 
     @objc private func windowDidEnterOrExitFullScreen() {
@@ -2087,6 +2394,132 @@ class WorkspaceViewContainer: NSView {
         instantCreateSession()
     }
 
+    // MARK: - Session Switching Shortcuts (Cmd+Shift+[/], Cmd+1-9)
+
+    /// Cmd+Shift+]. Handled here, not in a sidebar view, for the same reason
+    /// as Cmd+T: the container exists in every sidebar mode, while each
+    /// sidebar view is only mounted in some (the rail replaces the expanded
+    /// list when collapsed), and a shortcut observed by an unmounted view
+    /// silently does nothing.
+    @objc private func handleSelectNextSession(_ notification: Notification) {
+        focusShortcutTarget(coordinator.focusAdjacentLiveSession(offset: 1, in: shortcutSessions()))
+    }
+
+    /// Cmd+Shift+[. See `handleSelectNextSession(_:)`.
+    @objc private func handleSelectPreviousSession(_ notification: Notification) {
+        focusShortcutTarget(coordinator.focusAdjacentLiveSession(offset: -1, in: shortcutSessions()))
+    }
+
+    /// Cmd+1..8 focuses the Nth listed session; Cmd+9 always the last.
+    /// Out of range is a no-op. See `handleSelectNextSession(_:)`.
+    @objc private func handleFocusSessionAtIndex(_ notification: Notification) {
+        guard let index = notification.userInfo?["index"] as? Int else { return }
+        let sessions = shortcutSessions()
+        guard let target = index == 9
+            ? WorkspaceSidebarView.lastSession(in: sessions)
+            : WorkspaceSidebarView.session(at: index, in: sessions)
+        else { return }
+        coordinator.focusSession(id: target.id)
+        focusShortcutTarget(target)
+    }
+
+    /// Cmd+W. See `handleSelectNextSession(_:)` for why it's handled here.
+    @objc private func handleCloseSession(_ notification: Notification) {
+        coordinator.closeCurrentSessionWithConfirmation()
+    }
+
+    /// Next Project (Cmd+Ctrl+]). See `handleSelectNextSession(_:)`.
+    @objc private func handleSelectNextProject(_ notification: Notification) {
+        selectAdjacentProject(offset: 1)
+    }
+
+    /// Previous Project (Cmd+Ctrl+[). See `handleSelectNextSession(_:)`.
+    @objc private func handleSelectPreviousProject(_ notification: Notification) {
+        selectAdjacentProject(offset: -1)
+    }
+
+    /// Moves through the sidebar's projects in visual order, wrapping,
+    /// starting from THIS window's project: its active session's project,
+    /// else the last selected project, else none (selects the first). The
+    /// store is shared by every window, so its selection alone would make
+    /// one window step from another's project. Selecting a project focuses
+    /// its last session, as a click does, and records it in
+    /// `store.lastSelectedProjectId` (the list restores from it on mount);
+    /// the list mirrors it via `.workspaceDidSelectProjectFromShortcut`.
+    private func selectAdjacentProject(offset: Int) {
+        let order = store.flatProjectsInVisualOrder
+        guard !order.isEmpty else { return }
+        let activeProject = coordinator.activeSessionId.flatMap { id in
+            store.sessions.first(where: { $0.id == id })?.projectId
+        }
+        let target: UUID
+        if let current = activeProject ?? store.lastSelectedProjectId,
+           let index = order.firstIndex(where: { $0.id == current }) {
+            target = order[(index + offset + order.count) % order.count].id
+        } else {
+            target = order[0].id
+        }
+        ProjectSelection.select(target, store: store, coordinator: coordinator, window: window)
+    }
+
+    /// Lets the Projects tab expand and select the focused session's
+    /// project — that selection is the list view's own state.
+    private func focusShortcutTarget(_ target: AgentSession?) {
+        guard let target else { return }
+        NotificationCenter.default.post(
+            name: .workspaceDidFocusSessionFromShortcut,
+            object: window,
+            userInfo: ["projectId": target.projectId]
+        )
+    }
+
+    /// The sessions the switching shortcuts act on, for this container's
+    /// current state.
+    private func shortcutSessions() -> [AgentSession] {
+        let tab = UserDefaults.standard.string(forKey: "ghostties.sidebarTab").flatMap(SidebarTab.init(rawValue:)) ?? .projects
+        return Self.shortcutSessions(
+            sidebarMode: sidebarMode,
+            sidebarViewMode: currentSidebarViewMode,
+            sidebarTab: tab,
+            projectsLayout: SidebarProjectsLayout.effective(tab: tab),
+            store: store,
+            coordinator: coordinator
+        )
+    }
+
+    /// The live sessions in the order the mounted sidebar lists them, so the
+    /// shortcuts always agree with what's on screen:
+    /// - collapsed: the rail's rows (`WorkspaceStore.railSessions()`), in
+    ///   both view modes — the rail replaces whichever list is otherwise up;
+    /// - task-first, or the Projects tab: `sessionsInVisualOrder`;
+    /// - the Sessions tab: Pinned then Active, as `RecentsListView` renders.
+    /// Pinned, overlay and closed all host the full list, so they share it.
+    static func shortcutSessions(
+        sidebarMode: SidebarMode,
+        sidebarViewMode: String,
+        sidebarTab: SidebarTab,
+        projectsLayout: SidebarProjectsLayout = .tabs,
+        store: WorkspaceStore,
+        coordinator: SessionCoordinator
+    ) -> [AgentSession] {
+        if sidebarMode == .collapsed {
+            return store.railSessions(layout: projectsLayout).filter { coordinator.hasLiveSurface(id: $0.id) }
+        }
+        // One view lists exactly the rail's sessions: Pinned, then Active
+        // project by project.
+        if sidebarViewMode != "taskFirst" && projectsLayout == .oneView {
+            return store.railSessions(layout: .oneView).filter { coordinator.hasLiveSurface(id: $0.id) }
+        }
+        if sidebarViewMode == "taskFirst" || sidebarTab == .projects {
+            return store.sessionsInVisualOrder(coordinator: coordinator)
+        }
+        return WorkspaceSidebarView.sessionsTabCycleOrder(
+            sessions: store.sessions,
+            statuses: store.globalStatuses,
+            coordinator: coordinator
+        )
+    }
+
     /// Opens the centered session composer overlay. Called from Cmd+T
     /// (composer preference on, the default) and the sidebar's "+ New
     /// Session" affordances, which reach this via `coordinator.containerView`.
@@ -2118,7 +2551,7 @@ class WorkspaceViewContainer: NSView {
             let request = SessionComposerRequest(projectBinding: projectBinding)
             self.composerOverlayHostingView.rootView = AnyView(
                 SessionComposerOverlay(request: request, centeringModel: self.composerCenteringModel)
-                    .environmentObject(WorkspaceStore.shared)
+                    .environmentObject(store)
                     .environmentObject(self.coordinator)
             )
 
@@ -2135,7 +2568,7 @@ class WorkspaceViewContainer: NSView {
             // and when the store was already open this also sets
             // `focusSearchFieldTrigger`, so Cmd+T while open refocuses the
             // search field rather than doing nothing.
-            SessionComposerStore.shared.open(projectBinding: projectBinding, workspaceStore: WorkspaceStore.shared)
+            SessionComposerStore.shared.open(projectBinding: projectBinding, workspaceStore: store)
 
             // F7 follow-up: correct even if the composer opens while
             // already fullscreen, not just on a later enter/exit transition.
@@ -2313,7 +2746,7 @@ class WorkspaceViewContainer: NSView {
     /// `WorkspaceSidebarView.createNewSessionForSelectedProject()`, but uses
     /// the cascade pick instead of the sidebar's `selectedProjectId`.
     private func instantCreateSession() {
-        let store = WorkspaceStore.shared
+        let store = self.store
         guard let projectId = SessionComposerStore.shared.resolveCascadeProject(workspaceStore: store),
               let project = store.projects.first(where: { $0.id == projectId }) else { return }
 
@@ -2354,6 +2787,15 @@ class WorkspaceViewContainer: NSView {
         addSubview(browserDragHandle)
         addSubview(browserShadowHost)
         addSubview(buildInfoBadgeHostingView)
+        #if DEBUG
+        addSubview(redlineOverlay)
+        NSLayoutConstraint.activate([
+            redlineOverlay.topAnchor.constraint(equalTo: topAnchor),
+            redlineOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            redlineOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            redlineOverlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        #endif
 
         sidebarHostingView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -2393,7 +2835,7 @@ class WorkspaceViewContainer: NSView {
         browserShadowHost.addSubview(browserPanelView)
 
         // Read persisted sidebar mode.
-        let initialMode = WorkspaceStore.shared.sidebarMode
+        let initialMode = store.sidebarMode
         self.sidebarMode = initialMode
         let isPinned = initialMode == .pinned
         // Pinned and collapsed both push the terminal right and share space
@@ -2411,7 +2853,7 @@ class WorkspaceViewContainer: NSView {
         // mode (Sean's closed-state layout call — see `transitionTo`'s
         // `applyTransitionConstraints(for:.closed:)` doc comment); it is
         // never full bleed.
-        let inset: CGFloat = WorkspaceLayout.terminalInset
+        let inset: CGFloat = SidebarDialTuning.windowMargin()
         // Inset constraints target the shadow host, not the terminal directly.
         shadowHostTopConstraint = terminalShadowHost.topAnchor.constraint(
             equalTo: topAnchor, constant: inset)
@@ -2437,11 +2879,14 @@ class WorkspaceViewContainer: NSView {
 
         // Dual leading constraints (mutually exclusive).
         shadowHostLeadingToSidebar = terminalShadowHost.leadingAnchor.constraint(
-            equalTo: sidebarHostingView.trailingAnchor, constant: inset)
+            equalTo: sidebarHostingView.trailingAnchor,
+            constant: WorkspaceLayout.sidebarTrailingGutter(for: initialMode, margin: inset))
         shadowHostLeadingToSuperview = terminalShadowHost.leadingAnchor.constraint(
             equalTo: leadingAnchor, constant: hasCardInset ? inset : 0)
         shadowHostLeadingToSidebar.isActive = occupiesSpace
         shadowHostLeadingToSuperview.isActive = !occupiesSpace
+        sidebarDragHandleWidthConstraint = sidebarDragHandle.widthAnchor.constraint(
+            equalToConstant: WorkspaceLayout.sidebarDragHandleWidth(for: initialMode, margin: inset))
 
         // Terminal top offset inside the shadow host. Reference states 01-04
         // all show no terminal-card top bar, so every mode starts at 0 —
@@ -2498,14 +2943,14 @@ class WorkspaceViewContainer: NSView {
             browserDragHandle.leadingAnchor.constraint(equalTo: terminalShadowHost.trailingAnchor),
             browserDragHandle.trailingAnchor.constraint(equalTo: browserShadowHost.leadingAnchor),
 
-            // Sidebar drag handle sits in the 8pt gap between sidebar and terminal
-            // (same gap the shadowHostLeadingToSidebar inset constant reserves).
-            // In overlay mode `shadowHostLeadingToSuperview` is active instead, so
-            // this leading/trailing pair can resolve to a hidden negative-width
-            // frame — harmless, since the handle is hidden in overlay mode anyway.
+            // Sidebar drag handle: trailing edge on the card's leading edge,
+            // width from `sidebarDragHandleWidthConstraint`. Pinned, that is
+            // the sidebar-to-card gap; on the rail (no gap, rail A2) it is a
+            // strip over the rail's trailing edge. Never over the card.
+            // Hidden in overlay/closed.
             sidebarDragHandle.topAnchor.constraint(equalTo: sidebarHostingView.topAnchor),
             sidebarDragHandle.bottomAnchor.constraint(equalTo: sidebarHostingView.bottomAnchor),
-            sidebarDragHandle.leadingAnchor.constraint(equalTo: sidebarHostingView.trailingAnchor),
+            sidebarDragHandleWidthConstraint,
             sidebarDragHandle.trailingAnchor.constraint(equalTo: terminalShadowHost.leadingAnchor),
 
             // Build-info badge: bottom-left corner of the whole window, on top
@@ -2649,7 +3094,56 @@ class WorkspaceViewContainer: NSView {
         // Initial bind so we pick up whatever surface exists at launch before
         // the publisher fires.
         rebindFocusedSurfaceTheme()
+
+        // Show/hide the history browser in the canvas card. `@Published`
+        // emits in `willSet`; the main-queue hop lets the sink read the
+        // post-write value (same reasoning as the composer sink above).
+        coordinator.$isHistoryPresented
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.applyHistoryPresentation()
+            }
+            .store(in: &cancellables)
     }
+
+    /// Mounts the history browser over the terminal, inside the canvas card,
+    /// while History is selected; unmounts it otherwise. Focus goes to the
+    /// browser on open; on close `SessionCoordinator.dismissHistory()` hands
+    /// it back to the previously selected session's terminal.
+    private func applyHistoryPresentation() {
+        if coordinator.isHistoryPresented {
+            guard historyHostingView.superview == nil else { return }
+            historyHostingView.rootView = AnyView(
+                HistoryCanvasHost()
+                    .environmentObject(store)
+                    .environmentObject(coordinator)
+            )
+            terminalShadowHost.addSubview(historyHostingView, positioned: .above, relativeTo: terminalContainer)
+            NSLayoutConstraint.activate([
+                historyHostingView.topAnchor.constraint(equalTo: terminalContainer.topAnchor),
+                historyHostingView.leadingAnchor.constraint(equalTo: terminalContainer.leadingAnchor),
+                historyHostingView.trailingAnchor.constraint(equalTo: terminalContainer.trailingAnchor),
+                historyHostingView.bottomAnchor.constraint(equalTo: terminalContainer.bottomAnchor),
+            ])
+            window?.makeFirstResponder(historyHostingView)
+        } else {
+            guard historyHostingView.superview != nil else { return }
+            historyHostingView.removeFromSuperview()
+            historyHostingView.rootView = AnyView(EmptyView())
+        }
+    }
+
+    #if DEBUG
+    /// Test seam: whether the history browser is mounted in the canvas.
+    var isHistoryBrowserMountedForTesting: Bool { historyHostingView.superview != nil }
+
+    /// Test seam: whether the window's first responder (e.g. the query
+    /// field's editor) lives inside the mounted history browser.
+    var historyBrowserHasKeyFocusForTesting: Bool {
+        guard let responder = window?.firstResponder as? NSView else { return false }
+        return responder.isDescendant(of: historyHostingView)
+    }
+    #endif
 
     // MARK: - Focused Surface Theme Binding
 
@@ -2732,9 +3226,7 @@ class WorkspaceViewContainer: NSView {
     /// through.
     private func applyChromeColor() {
         sidebarOverlayBackground.layer?.backgroundColor = overlayBackgroundNSColor.cgColor
-        sidebarHostingView.appearance = sidebarMode == .overlay
-            ? NSAppearance(named: overlayBackgroundIsDark ? .darkAqua : .aqua)
-            : nil
+        sidebarHostingView.appearance = sidebarAppearanceOverride
         guard sidebarMode == .pinned || sidebarMode == .closed || sidebarMode == .collapsed else { return }
         terminalShadowHost.layer?.backgroundColor = cardBackgroundCGColor
         browserShadowHost.layer?.backgroundColor = browserCardBackgroundCGColor
@@ -2821,8 +3313,44 @@ private class PanelDragHandleView: NSView {
     /// persist the final width; unused (nil) by the browser handle.
     var onDragEnd: (() -> Void)?
 
+    /// Views the handle overlays, topmost first. Scrolling over the handle
+    /// is forwarded to the deepest hit view among them, and a click over a
+    /// scroller among them falls through to it. Empty for handles that
+    /// overlap nothing (the browser handle, the pinned sidebar handle).
+    var viewsBeneath: () -> [NSView] = { [] }
+
     /// Track the last mouse X position during a drag.
     private var lastDragX: CGFloat = 0
+
+    /// The deepest view beneath the handle at `point` (in the superview's
+    /// coordinates, the space `hitTest` receives), or nil.
+    private func viewBeneath(at point: NSPoint) -> NSView? {
+        for view in viewsBeneath() {
+            guard let parent = view.superview else { continue }
+            if let hit = view.hitTest(parent.convert(point, from: superview)) { return hit }
+        }
+        return nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        var view = viewBeneath(at: point)
+        while let current = view {
+            if current is NSScroller { return nil }
+            view = current.superview
+        }
+        return hit
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let superview else { return super.scrollWheel(with: event) }
+        let point = superview.convert(event.locationInWindow, from: nil)
+        if let target = viewBeneath(at: point) {
+            target.scrollWheel(with: event)
+        } else {
+            super.scrollWheel(with: event)
+        }
+    }
 
     /// Tracking area for cursor changes on hover.
     private var hoverTrackingArea: NSTrackingArea?
@@ -2884,7 +3412,7 @@ private class PanelDragHandleView: NSView {
 /// calls; keys go through `NSWindow.sendEvent`.
 extension WorkspaceViewContainer: CaptureScript.Host {
     var isReady: Bool {
-        (window?.isKeyWindow ?? false) && !WorkspaceStore.shared.projects.isEmpty
+        (window?.isKeyWindow ?? false) && !store.projects.isEmpty
     }
 
     func composerOpen() -> Bool {
@@ -2893,7 +3421,7 @@ extension WorkspaceViewContainer: CaptureScript.Host {
     }
 
     func rowPlus(project name: String, option: Bool) throws -> Bool {
-        let store = WorkspaceStore.shared
+        let store = self.store
         guard let project = store.projects.first(where: { $0.name == name }) else {
             throw CaptureScript.Failure("rowPlus: no project named '\(name)'")
         }

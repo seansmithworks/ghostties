@@ -128,9 +128,9 @@ struct SessionStatusGlyph: View {
                 }
             case .needsInput:
                 // The only emphasis glyph — primary text color, no accent.
-                glyph(kind.symbol ?? "", color: .primary)
+                glyph(kind.symbol ?? "", color: .primary, scale: 0.8, weight: .semibold)
             case .done:
-                glyph(kind.symbol ?? "", color: secondaryTextColor)
+                glyph(kind.symbol ?? "", color: secondaryTextColor, scale: 0.65)
             case .error:
                 glyph(kind.symbol ?? "", color: secondaryTextColor)
             case .stopped:
@@ -144,9 +144,12 @@ struct SessionStatusGlyph: View {
         colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight
     }
 
-    private func glyph(_ symbol: String, color: Color) -> some View {
+    /// Option D spec: `?` 16 semibold, `✓` 13 in the 20pt slot (scale 0.8 / 0.65).
+    private func glyph(
+        _ symbol: String, color: Color, scale: CGFloat = 0.8, weight: Font.Weight = .medium
+    ) -> some View {
         Text(symbol)
-            .font(.system(size: size * 0.8, weight: .medium, design: .monospaced))
+            .font(.system(size: size * scale, weight: weight, design: .monospaced))
             .foregroundStyle(color)
             .frame(width: size, height: size)
             .minimumScaleFactor(0.6)

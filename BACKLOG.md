@@ -1,5 +1,81 @@
 # Ghostties — Backlog
 
+## 2026-10-10 — sidebar audit: decisions, homes for stranded work, motion gaps
+
+- [x] DECIDED 2026-10-10: radius. Sean approved the Option D compare: 12 on group card and rail column, 8 on pills and tiles (concentric). Closes the "radius 8 vs 12 decide-or-kill" line and the dark-shadow known-failing line (expectation now 0.4/12/4, passes in the hosted run 2026-10-10).
+- [x] Option D: reviewed APPROVE, hosted suite green, merged into #205 @ 6abf243c9.
+- [x] Working glyph: animated spinner; mid-spin stills explain the vertical dots. CLOSED.
+- [ ] Rendered geometry test on `test/option-d-rendered-geometry` @ c60e8544c, reviewed APPROVE; needs a PR after #205 merges.
+- [ ] Previously homeless, now homed:
+  - `fix/sidebar-spacing` (pushed 2026-10-10, 2 commits, backup only): decide fold or drop.
+  - `build-badge-top-right` @ ede1da0f4: awaiting Sean's merge.
+  - CEF browser-close fix `fix/cef-app-protocol` @ b552deadb: own PR after Sean's open/close click.
+  - Refresh Appearance View-menu position check, after #205 merges.
+- Motion spec gaps (spec committed at `docs/design/sidebar-vnext/motion-spec.html`, not built):
+  - [ ] Single-object morph (group card narrows into the rail column, glyphs ride +22pt).
+  - [ ] `sidebarSnap` / `sidebarPop` / `sidebarFade` animation tokens.
+  - [ ] 60ms toggle debounce (replaces the 250ms guard that drops a second Cmd+S).
+  - [ ] Label stagger cap (100 + 12·i ms, i ≤ 8).
+  - [ ] Tray: remove symbol bounce and hover scale; add 0.96 press.
+  - [ ] Glyph swap crossfade and the needs-input pop.
+  - [ ] Reduce Motion 120ms fallbacks where today animates nothing (tray axis, accordion, view-mode width, browser, composer).
+  - [ ] Popover 0.98 scale and 150ms open, 100ms fade close.
+  - [ ] Instant rail auto-scroll on keyboard selection.
+  - [ ] Flow 01 opaque overlay (state 04) not built.
+
+## 2026-10-10 — IDEA (beta.27 candidate): project overview canvas (session 7b48d66f)
+
+Sean: "if I click on the project head in the sidebar or rail, right now it only opens and closes. What if it actually had an overview of all the work happening?"
+
+- **Trigger:** click on a project header (sidebar) or project tile (rail) opens a per-project overview canvas instead of only collapse/expand.
+- **Content:** recent/active sessions and what each is doing; pre-populated/registered or live-updated on the fly.
+- **Layout:** a few supported layouts, e.g. four quadrants.
+- **Research first:** Claude Code's new project agent-manager layer as a possible structure (haven't checked what it exposes).
+- **Sibling idea, later:** a parent lead-orchestrator overlay across all projects.
+- Status: backlog only, not in beta.26 scope. Next: /impeccable shape pass + research, then pen.dev frames for Sean.
+
+- **Option D follow-ups (2026-10-10, from final review of feat/sidebar-d @ 60d0f7a4e, APPROVE):** (1) `SidebarProjectsLayoutTests` group-card/column geometry tests compute from helpers, not rendered views — add a rendered check; (2) confirm the "working" glyph's vertical dot cluster in captures is a mid-spin frame, not a shape change vs pen; (3) capture rig opens Dev at 1008×949pt, so 608×1410 crops cut off the tray — fix the crop or window size.
+
+## 2026-10-09 — Sean's Dev pass round 2 (session b9bd1ac3, "SideBar Tweaks")
+
+State: all pushed to origin. Stack: `feat/sidebar-vnext` (PR #205 head 83780124d) ← `feat/rail-column` @ 95f8d9ce9 (C rail column + Rail column dials, session pinning hidden, dividers removed, rail tray 12pt icon gap, column inset 8, rail scrolls, concentric radius 16−8=8, tray shadow, DialKit panels Sidebar/Rail/Glass & Layout, + merged `feat/project-reorder` drag-reorder project groups w/ header keyboard focus) — each reviewer APPROVE, 342/342 targeted. ← `feat/sidebar-d` @ 4d8234b0a (Sean's pen.dev Option D: leading tiles/glyphs, group card, chips, 48pt rail pills, sidebar 256; NOT reviewed, hosted tests NOT run → superseded 2026-10-10: reviewed APPROVE, merged 6abf243c9).
+
+- [ ] Option D: hosted suite + independent review + Sean's Dev look (needs "Reset all panels" in DialKit first). | carried
+- [x] Corner radius: build uses concentric 8 (window measured 16pt); Sean's spec/D shows 12. DECIDE OR KILL — default stays 8. → CLOSED 2026-10-10: decided 12 (see top section). | carried
+- [ ] Merge stack into PR #205 after Sean OKs D → full `-only-testing:GhosttyTests` on final head → refresh PR body/stills. | carried
+- [ ] Known pre-existing test failure: `GhosttiesTestIsolation` dark glass shadow expects 0.298/8/2.5, code 0.4/12/4 (since 95f8d9ce9). → CLOSED 2026-10-10: expectation now 0.4/12/4, passes in hosted run. | carried
+- [ ] Rail tiles drag-reorder (expanded headers only today). | parked
+- [ ] Custom character/icon on project tiles; persistent agents (pinning returns with them); idle/sleeping status. | parked
+- [ ] Ghostty "Configuration Errors" dialog appears when a capture passes `-ghostties.sidebarDial.*` launch args. | parked
+- [ ] DialKit inspector lives only in a /private/tmp scratchpad (fd55d575…/dkm-verify/tar/dialkit-macos-cc305b46…); move to ~/Code/_tools. | parked
+
+## 2026-10-08 — sidebar vnext decisions + overnight wave (session dd3c3085, "SideBar Tweaks")
+
+State: PR #205 open (feat/sidebar-vnext); L1–L5 + bake + cwd-project fix + composer projects/show-more merged. Earlier: `feat/vnext-lock-it` @ `1d786120c` (Tray style, Selected row, Shimmer (dark) dials; reviewed). Options page https://claude.ai/artifact/DpXMtZJsPLdXH2JcrJKWNw; canvas `~/Documents/Pencil.Dev/Sidebar vnext – options 2026-10-08.pen`.
+
+- [x] L1 tray hover, Finder rule at radius 20 (single-button capsule fills; multi = shape concentric to 20). | carried, overnight
+- [x] L2 Cmd+T composer start-or-resume: A5 (one line, ↓ reveals Resume) + A4 two-column switch; History hidden from sidebar behind a dial (default hidden). Resume suggestions need mapping + iteration. | carried, overnight
+- [x] L3 B5 Projects: one view, no tabs, accordion `Project ⌄ ——— count`, behind a dial; rail as monogram tiles. After L2. | carried, overnight
+- [x] Bake Tint + shimmer as the selected-row default at lock-it. | carried
+- [x] Remove losing dial options before the PR (row styles, Bare tray, History placement). | carried
+- [ ] Delete `lock-it/.build-capture` + `.build-dev`…`.build-dev4` — Sean: "yes, once we pick". | parked
+- [ ] B1 collapsible headers as an alternative if B5 doesn't land. | parked
+- [ ] Bar/Type row styles force semibold; `selectedCardCornerRadius` dial only drives the rail hairline. | parked
+- [ ] Composer path completion: `/` or `~` completes folders on disk; Enter starts a session there (adds project). After beta.26. | parked
+- [x] Rail overflows at short window heights — rail scrolls between titlebar and tray (`feat/rail-column` bebb3ef6e). | carried
+- [ ] Composer doesn't open locked to a clicked empty project (tray + / Cmd+T pick the project themselves). | parked
+- [ ] Older suites write+restore Dev's defaults domain (CaptureFixtureDefaultsTests, WorkspaceWindowPredicateTests, ComposerFlowTests, WorkspaceStoreProjectPickerTests) — inject a suite instead. | carried
+- [ ] Session project only follows a shell `cd`; while Claude Code runs, Claude's reported cwd isn't wired. | parked
+- [ ] Empty-project header uses tertiaryLabelColor (<4.5:1 in light) — check legibility. | carried
+- [ ] Highlight-steal: a project whose name starts like a template alias (e.g. "cc-site") takes `cc` + Return with the list closed. | parked
+- [ ] VoiceOver: "Show N more" expansion doesn't announce/move focus to new rows. | parked
+- [x] Rail selected-vs-project hierarchy — Sean picked C (project column), built on `feat/rail-column`. | carried
+- [ ] CRASH closing the embedded browser in Dev @ 5758e6e13 (2026-10-08 11:42:17): uncaught NSInvalidArgumentException raised inside Chromium Embedded Framework. Log: ~/.ghostties-evidence/vnext/browser-close-crash-2026-10-08-1142.log. Pre-existing on main. FIXED on `fix/cef-app-protocol` @ b552deadb (principal NSApplication conforms to CefAppProtocol; reviewer APPROVE) — awaits Sean's open/close check, then its own PR. | carried
+- [ ] Project tiles: a custom character or icon per project instead of the monogram (Sean, later). | parked
+- [ ] Persistent agents: find a place for them in the sidebar/rail (Sean, later). | parked
+- [ ] Browser panel Auto Layout conflict (unrelated to the crash, same log `browser-close-crash-2026-10-08-1142.log`): two NSViews both pinned to `WorkspaceViewContainer.trailing - 8` around `PanelDragHandleView`, conflicting with `width == 695`. | parked
+- [ ] idle/sleeping status: exited sessions (e.g. formerly-pinned Chief of Staff) draw no status glyph; design an idle/sleeping state, likely alongside persistent agents. | parked
+
 ## 2026-10-06 — beta.26 contract run 1 (session 71606cce): tag still gated
 
 State: main @ `5e3641da2` (#198 launch hooks, #199 harness Phase 1 merged). Contract run 1: 23 PASS / 3 FAIL / 10 PENDING / 11 SEAN (`beta26-test-harness/status.json`, verifier `verifier-run1.json`, mutation proof 13/13 `mutation-proof-run1.json`). Sean's page: https://claude.ai/artifact/PunkoB6rxhP2mtEivCkN9k
@@ -61,7 +137,7 @@ Decided by Claude 2026-10-05 (Sean: "just get it done"). Defaults shipped; revis
 
 ## 2026-09-30 — sidebar-presence round 7: popover build + Sean's review (carried)
 
-State: `feat/sidebar-presence` @ `8f90cd5be`, pushed, no PR. Round 6 landed and was reviewed (PASS WITH NOTES):
+State: `feat/sidebar-presence` @ `8f90cd5be`, pushed, no PR (→ DONE via #190). Round 6 landed and was reviewed (PASS WITH NOTES):
 Flow 07 visuals, ghost glyphs, rail › rows, badge menu toggle, tray icon animations, rail tray fills rail,
 sidebar DialKit panel, Release-compile fix. Design canvas saved to `~/Code/ghostties/3-edff08ac-5MB.pen`
 (Flow 07 = `t4XvdY`, Flow 09 popover options = `b8Wi6z`).
@@ -155,7 +231,7 @@ spec `docs/design/sidebar-presence/flow-01-sidebar-presence.md`). Session transc
 - [x] S3 Full suite @ c66692ede: 1430/6/1 (Light); all 6 = known load-timeout flakes, pass in isolation. (carried) Re-run full suite on 840301a9a
 - [x] S4 Reviews: first @ 9884fef8e (pass), second @ c66692ede (reject → fixed 1b4c999d9..d32041cfd). (carried) Review 1b4c999d9..840301a9a (motion + rail 128 + glyph trailing) — not yet reviewed
 - [ ] S5 (carried) Screenshots of pinned/rail/closed @ 840301a9a — blocked last round: displays asleep. Motion needs Sean's hands-on pass
-- [ ] (carried) PR `feat/sidebar-presence` → main on the fork, with before/after screenshots, after S3–S5 re-run + Sean's motion feel-check
+- [ ] (carried) PR `feat/sidebar-presence` → main on the fork, with before/after screenshots, after S3–S5 re-run + Sean's motion feel-check (→ DONE via #190)
 - [ ] (carried) Known compromise: Flow 05 glyphs don't travel 1:1 into the rail (sections vs flat list); crossfade + small inward shift instead. Tray pill + Projects tab only crossfade
 - [ ] (carried) Restore 4 missing rig memory notes (dev-builds-share-a-bundle-id, dev-process-name-is-ghostty, demo-capture-rig-gotchas, visual-pass-rig-facts) — indexed in MEMORY.md, absent on disk
 - [ ] (parked) Resolve the one remaining open artifact comment thread (toggle/closed) on https://claude.ai/artifact/7L6zZaXrEw1WjyYEq1rS28 — answered by Cmd+Shift+S
@@ -3181,3 +3257,45 @@ All ten are written up worst-first on the canvas's **Unsolved** page; not duplic
   listed at the end of the spec. Canvas `mkJau`. | craft | new
 
 - [ ] Tab title sometimes misses the Claude thread name set via /rename (seen 2026-09-25, "Jev adoption" thread). Statusline now reads `session_name` reliably; tab-title path should use the same source.
+
+- [x] **Faded row labels after rail → closed → pinned** (found in vnext review, 2026-10-06; also on main `3468b7028`): `isCollapsedPresentation` is written only in `applyCollapseCrossfadeSidebarView`, so a closed→pinned swap can leave `RecentsRowView` labels faded until the next Cmd+S. Fix: reset the flag in `applySidebarView`.
+
+- [x] **Sidebar tests read the live Dev dial defaults** (found 2026-10-06; also on main `3468b7028`): `SessionRowGlyphSlotTests/testRailTrayPillHugsItsIconsAndIsCenteredOnTheRail` reads `SidebarDialTuning.*` from `UserDefaults.standard` (the Dev domain in the hosted test process) and compares against code constants, so it fails whenever Sean has tuned `trayInnerPadding`. Fix: tests inject a throwaway defaults suite (same rule as the injected state dir), never read Dev's domain.
+
+- [x] **Light/dark switch only refreshes some sessions** (Sean, 2026-10-06, installed app): after macOS flipped appearance, the sidebar chrome went light but some session terminals stayed dark (e.g. "pen.dev pickup") while others updated. Fixing on its own branch off main.
+
+- [x] **Session-switch shortcuts dead in the rail** (Sean, 2026-10-06, `feat/sidebar-vnext` Dev build): Cmd+Shift+[ / ] and Cmd+1…9 don't move between sessions when the sidebar is collapsed to the rail; they work in the expanded sidebar. Unknown yet whether main has it too.
+
+- [ ] **New-session template menu has no side padding** (Sean, 2026-10-06, `Ghostties Demo.app` installed 15:47 by another thread): rows and the "Templates · shared across projects" header touch the popover edges, the top field renders as an empty band, and the "Changes here apply immediately." footer is clipped at the bottom.
+
+## 2026-10-06 — Sidebar vnext checkpoint (session fd55d575)
+
+Status of the items above: faded labels → fixed on `fix/faded-row-labels` @`14203326d` (approved); tests read live dials → fixed on `fix/sidebar-tests-isolated-defaults` @`3a7637d0c` (approved); appearance switch → fixed on `fix/appearance-refresh-all-sessions` @`b8ad26f42` (approved, targets main); rail shortcuts → fixed on `fix/rail-session-shortcuts` @`020554b39` (multi-window fix awaiting re-review). All pushed, none merged.
+
+- [x] *carried* Re-review `fix/rail-session-shortcuts` (per-window project stepping, 2-window test), then merge into vnext on Sean's go.
+- [x] *carried* Merge the three approved fix branches on Sean's go. The test-isolation merge conflicts in `SidebarDialKit.swift`: every dial accessor (incl. `trayGroupGap`, `selectedStyle`, `selectedTitleWeight`) must default to `SidebarDialTuning.store`.
+- [ ] *carried* "Lock it": bake Sean's live Dev dial values (`defaults read com.seansmithdesign.ghostties.dev | grep sidebarDial`) into code defaults; expanded button default 36→44.
+- [ ] *carried* Full unfiltered suite on vnext after merges, then PR with before/after images and Merge Danger.
+- [ ] *parked* Retire native Liquid Glass for a plain "pill" component (Sean's light variant is already `identity`; he's "not a huge Liquid Glass fan"). Sean's call after layout B.
+- [ ] *parked* Layout B morph: Create capsule passes under Toggle for ~30ms mid-flight (`scratchpad/vnext/layout-b-morph.png`). Sean to judge live.
+- [ ] *parked* Save pen.dev frame `bA1y9` "Tray layout options" (unsaved in `3-edff08ac-5MB.pen`).
+
+- Test runs leak one `~/Library/Preferences/ghostties.capture.<pid>.plist` per unfiltered suite run (26 stale as of 2026-10-07); `CaptureFixtureDefaultsTests.cleanupRemovesTheSuite` is flaky on the cfprefsd flush race. Also flaky: `SidebarSettledPresentationTests.railThenClosedThenPinnedSettlesWithFullLabels` (fixed 400ms settle against the 0.25s transition debounce; fails under load) and the 3 `SessionComposerWorktreeLaunchTests` (failed on the pre-merge baseline too).
+- Also flaky: `SessionRowGlyphSlotTests.testExpandedTrayHugCapsulesHugTheirIconsAndSitLeadingSideBySide` rendered as Fill once (235 vs 82) in a full run. Reviewer suggests injecting `trayWidth` into `SidebarTray` like `dialEpoch` instead of reading the shared store at render.
+
+## 2026-10-07 — Sidebar vnext: fixes merged, Fill, Window margin, Redlines (session 8244cd3e)
+
+Done: all four fix branches merged (appearance → main as #204; others into vnext); tray Fill + Fill/Hug dial; Window margin dial (card + sidebar outer edges, trayMargin retired); DEBUG Redlines overlay; rail centring fix; DialkitmacOS gated out of Release. vnext pushed @`fe97d9272`, every commit reviewer-APPROVED.
+
+- [ ] *carried* Sean tunes in Dev (`devbuild2` build has the rail fix), sets Content padding leading → 0, then "lock it": bake `defaults read com.seansmithdesign.ghostties.dev | grep sidebarDial` into code defaults (expanded button 36→44), full suite, PR to main with before/after + Merge Danger.
+- [ ] *parked* Global `running-claim-gate` stop hook probes `pgrep -xi dev`, which never matches (Dev's process is `ghostty`); it blocks every turn that mentions Dev. Probe `pgrep -f "Ghostties Dev.app"` instead. Lives in `~/.claude/hooks/`, not this repo.
+- [ ] *parked* Redline bands can flicker for ~0.3s during the pinned⇄rail crossfade (both trees share tag ids).
+
+- [ ] **Spacing on 8pt grid across rail + expanded** (Sean, 2026-10-07): redlines show mismatched spacing (rail tray 19/27). Strawman: 8 outer margin / 8 gutter / 8 canvas margin; 48 buttons, 64 capsules (8 padding), 8 gaps; rail 80 (or 88), expanded 248. Measure stock traffic-light maxX before locking 80. Folds into "lock it".
+- [ ] **Sidebar shows only active (+pinned) sessions; history moves behind a tray icon** (Sean, 2026-10-07) — *parked, separate branch*. Drop Inactive/Archive sections (at least in the rail) and the top chevron; add a History icon to the Create capsule that opens a terminal-style history browser to find and bring back inactive/archived sessions. Pinning becomes how persistent agents/threads stay visible. Today's sections: pinned, active, inactive, archive (`SidebarSection` enum).
+  - **Spec picked 2026-10-07: mock I3** (`scratchpad/mocks/I3.png`, session 8244cd3e; copy to `docs/design/` when the branch starts). Sections stack: Pinned (label + count) → Active (label + count) → one History row directly after the active rows. History reuses the normal session row exactly (48pt, title "History", subtitle "N sessions · last Xd ago", clock in the trailing status-glyph slot, 16/16 padding). Selecting it shows the flat selected card and opens the fzf-style history picker in the canvas (⏎ resume via existing resume flow, ⌘P pin, esc close). Rail: clock glyph row after a hairline. Inactive/Archive sections and the top chevron go away. Build after rail A2 spacing merges.
+- [ ] **Hosted test host re-saved Dev's workspace.json** (2026-10-07, rail A2 full suite run): `~/Library/Application Support/Ghostties Dev/workspace.json` hash 9d734d4a → 01b3c976 at 10:26:39 while Dev was not running; content still Sean's 4 projects (13 KB), so re-saved not clobbered — unverified against a pre-run copy. Same class as the setenv(GHOSTTIES_STATE_DIR) incident: the test host (bundle "Ghostties Dev") shares Dev's state dir. Fix: test host must never resolve Dev's real state dir; sha-guard it around every hosted run meanwhile. *parked*
+- [ ] **History picker: chronological grouping** (Sean, 2026-10-07) — *parked, design later*. Group the in-canvas history list by time (e.g. Today / Yesterday / This week / Earlier). Strawman when picked up: group headers as dim `── today ──` rules in the fzf list, groups collapse while a query is typed.
+- [ ] **Parallel test processes share the sidebar dial UserDefaults suite** (2026-10-07) — a process starting up clears it, so a dial can vanish mid-render in another process's test. Fixed only in the History placement tests; existing dial tests are open to the same race. Fix: per-process suite name. *parked*
+- [ ] **Rail has no scroll view** (2026-10-07) — a very long rail list overflows (pre-existing). *parked*
+- [ ] **Lock it → PR for beta.26** (carried 2026-10-07) — `feat/vnext-lock-it` @ 4fa72730b (pushed, unmerged): first-pass baked defaults + selected row = hover footprint + History placement dial (default bottom), all reviewer-APPROVED. On Sean's "done tuning": re-snapshot `defaults read com.seansmithdesign.ghostties.dev | grep sidebarDial` and re-bake (his tuning moved after the first snapshot), merge into feat/sidebar-vnext, full unfiltered suite on the combined tree, PR to main with before/after captures + Merge Danger, then message the "Ghostties Clean Up" thread (beta.26 tag owner) that it merged.

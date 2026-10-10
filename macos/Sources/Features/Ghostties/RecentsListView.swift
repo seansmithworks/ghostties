@@ -4,13 +4,13 @@ import UniformTypeIdentifiers
 
 /// The Sessions tab content: a flat, time-sorted list of all sessions across projects.
 ///
-/// Layout:
-///   + New Session (full-width row → native flyout menu for project selection)
-///   ─────────────────────────────────
-///   PINNED    (isPinned — hidden when empty; stays pinned whether open or closed)
-///   ACTIVE    (the session's terminal is open — see `SessionBucket.membership`)
-///   INACTIVE  (started at some point this launch, currently not active — ran, then stopped)
-///   ARCHIVE   (restored from disk, never started this launch)
+/// Layout (mock I3, `SidebarSessionSections`):
+///   Pinned 2  (isPinned — hidden when empty; stays pinned whether open or closed)
+///   Active 5  (the session's terminal is open — see `SessionBucket.membership`)
+///   History   (one row standing in for every inactive + archived session;
+///              selecting it opens the history browser in the canvas),
+///              pinned above the tray; hidden unless "History in sidebar" is on
+/// Section labels are quiet, non-collapsible headers — no chevrons.
 struct RecentsListView: View {
     @EnvironmentObject private var store: WorkspaceStore
     @EnvironmentObject private var coordinator: SessionCoordinator
@@ -26,10 +26,17 @@ struct RecentsListView: View {
     /// on Escape — see `SessionDragState.cancel()` and
     /// `installDragEndMonitors()`.
     @State private var dragState = SessionDragState()
+    /// The one-view project drag (`ProjectDragState`) — same lifecycle as
+    /// `dragState`, and never set at the same time as it.
+    @State private var projectDragState = ProjectDragState()
     @State private var escapeMonitor: Any?
     @State private var mouseUpMonitor: Any?
     @State private var autoScrollTimer: Timer?
     @State private var autoScrollAnchorId: String?
+
+    /// Folded projects in the one-view list (`ProjectAccordionState`).
+    @AppStorage(ProjectAccordionState.collapsedKey, store: SidebarDialTuning.store) private var collapsedProjectsRaw = ""
+    @AppStorage("ghostties.sidebarTab") private var sidebarTab: SidebarTab = .projects
 
     init() {
         #if DEBUG
@@ -82,14 +89,6 @@ struct RecentsListView: View {
     /// `PendingLaunchHold`.
     @State private var pendingLaunchGenerations: [UUID: Int] = [:]
 
-    /// Section-collapse state, persisted across launches. Active and
-    /// Inactive default open (sessions the user is working with today, or
-    /// just stopped); Archive defaults closed.
-    @AppStorage("ghostties.sessionsSection.pinned") private var isPinnedExpanded = true
-    @AppStorage("ghostties.sessionsSection.active") private var isActiveExpanded = true
-    @AppStorage("ghostties.sessionsSection.inactive") private var isInactiveExpanded = true
-    @AppStorage("ghostties.sessionsSection.archive") private var isArchiveExpanded = false
-
     /// Whether the system's Reduce Motion accessibility setting is on — the
     /// reflow gap and section transitions still update instantly, just
     /// without animation, when this is true (item 5).
@@ -103,108 +102,70 @@ struct RecentsListView: View {
     }
 
     var body: some View {
-        // Bound once per body pass — `activeSessions`/`inactiveSessions`/
-        // `archiveSessions` each filter + build a Dictionary internally, and
-        // were previously evaluated twice (once for an `isEmpty` check, once
-        // for `ForEach`).
-        let pinned = pinnedSessions
-        let active = activeSessions
-        let inactive = inactiveSessions
-        let archive = archiveSessions
-        let selectedId = coordinator.activeSessionId
+        // Bound once per body pass — the section model filters the session
+        // list into its buckets once (`SidebarSessionSections.make`).
+        let sections = SidebarSessionSections.make(
+            sessions: store.sessions,
+            statuses: store.globalStatuses,
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
+        )
 
         // Item 6: hold a just-relaunched session in Active's drop slot until
         // its terminal actually comes up (or the timeout fires) — render-time
         // only, never touches `SessionBucket.membership`. See
         // `applyPendingLaunchOverride`.
-        let displayed = applyPendingLaunchOverride(active: active, inactive: inactive, archive: archive)
-        let displayActive = displayed.active
-        let displayInactive = displayed.inactive
-        let displayArchive = displayed.archive
+        let displayed = applyPendingLaunchOverride(active: sections.active, inactive: sections.inactive, archive: sections.archived)
+        let displaySections = SidebarSessionSections(
+            pinned: sections.pinned,
+            active: displayed.active,
+            inactive: displayed.inactive,
+            archived: displayed.archive
+        )
 
-        // The full cross-section id order, used only to walk the list one
-        // row at a time during edge auto-scroll (item 4) — never used for
-        // membership or persistence.
-        let orderedRowIds = rowScrollIds(pinned: pinned, active: displayActive, inactive: displayInactive, archive: displayArchive)
+        // The full row id order, used only to walk the list one row at a
+        // time during edge auto-scroll (item 4) — never used for membership
+        // or persistence.
+        let orderedRowIds = displaySections.rowSessions.map { $0.id.uuidString }
+
+        // History (when shown) is pinned below the list as `layout.footer`.
+        // The rail renders the same layout (`SidebarRailView`).
+        let layout = displaySections.layout(showsHistory: SidebarDialTuning.historyInSidebar())
 
         VStack(spacing: 0) {
             if store.sessions.isEmpty {
                 emptyState
             } else {
-                // Render-time-ONLY overrides — never written back to the
-                // persisted `@AppStorage` preference below, so the user's
-                // stored preference reapplies untouched once the condition
-                // clears. See `effectiveExpanded(...)`.
-                let pinnedExpanded = Self.effectiveExpanded(
-                    storedPreference: isPinnedExpanded,
-                    section: .pinned,
-                    sectionContainsSelectedSession: selectedId.map { id in pinned.contains { $0.id == id } } ?? false
-                )
-                let activeExpanded = Self.effectiveExpanded(
-                    storedPreference: isActiveExpanded,
-                    section: .active,
-                    sectionContainsSelectedSession: selectedId.map { id in displayActive.contains { $0.id == id } } ?? false
-                )
-                let inactiveExpanded = Self.effectiveExpanded(
-                    storedPreference: isInactiveExpanded,
-                    section: .inactive,
-                    sectionContainsSelectedSession: selectedId.map { id in displayInactive.contains { $0.id == id } } ?? false
-                )
-                let archiveExpanded = Self.effectiveExpanded(
-                    storedPreference: isArchiveExpanded,
-                    section: .archive,
-                    sectionContainsSelectedSession: selectedId.map { id in displayArchive.contains { $0.id == id } } ?? false
-                )
-
                 #if DEBUG
                 if skipScrollViewForTesting {
                     // See the doc comment on the `previewDragState` init.
-                    sectionsContent(
-                        pinned: pinned,
-                        displayActive: displayActive,
-                        displayInactive: displayInactive,
-                        displayArchive: displayArchive,
-                        pinnedExpanded: true,
-                        activeExpanded: true,
-                        inactiveExpanded: true,
-                        archiveExpanded: true
-                    )
-                    .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-                    .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
-                    .padding(.top, SidebarDialTuning.contentPaddingTop())
-                    .padding(.bottom, 4)
+                    sectionsContent(displaySections, slots: layout.list)
+                        .modifier(SidebarColumnPadding())
                 } else {
-                    sessionsScrollView(
-                        pinned: pinned,
-                        displayActive: displayActive,
-                        displayInactive: displayInactive,
-                        displayArchive: displayArchive,
-                        pinnedExpanded: pinnedExpanded,
-                        activeExpanded: activeExpanded,
-                        inactiveExpanded: inactiveExpanded,
-                        archiveExpanded: archiveExpanded,
-                        orderedRowIds: orderedRowIds
-                    )
+                    sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds)
                 }
                 #else
-                sessionsScrollView(
-                    pinned: pinned,
-                    displayActive: displayActive,
-                    displayInactive: displayInactive,
-                    displayArchive: displayArchive,
-                    pinnedExpanded: pinnedExpanded,
-                    activeExpanded: activeExpanded,
-                    inactiveExpanded: inactiveExpanded,
-                    archiveExpanded: archiveExpanded,
-                    orderedRowIds: orderedRowIds
-                )
+                sessionsScrollView(displaySections, slots: layout.list, orderedRowIds: orderedRowIds)
                 #endif
             }
 
             Spacer(minLength: 0)
+
+            // History and its hairline, outside the scrolling
+            // area, so a long list never scrolls it away. The tray's
+            // reserved space (`WorkspaceSidebarView`) already holds the
+            // list-to-tray gap; this adds the row gap above it.
+            if !store.sessions.isEmpty && !layout.footer.isEmpty {
+                VStack(spacing: SidebarDialTuning.rowGap()) {
+                    ForEach(layout.footer, id: \.self) { slot in
+                        slotContent(slot, displaySections)
+                    }
+                }
+                .modifier(SidebarColumnPadding(horizontalOnly: true))
+                .padding(.bottom, SidebarSessionSections.historyToTrayGap() - SidebarDialTuning.listToTrayGap())
+            }
         }
         .background(.clear)
-        .onChange(of: dragState.isDragging) { isDragging in
+        .onChange(of: dragState.isDragging || projectDragState.isDragging) { isDragging in
             if isDragging {
                 installDragEndMonitors()
             } else {
@@ -220,23 +181,14 @@ struct RecentsListView: View {
 
     // MARK: - Sections Content
 
-    /// The Sessions tab's actual section list — headers, rows, the
-    /// live-reflow gap, and every drop zone. Factored out of `sessionsScrollView`
-    /// so `body` can also render it unwrapped by `ScrollView` under
-    /// `skipScrollViewForTesting` (`#if DEBUG` only) — see that flag's doc
-    /// comment. Nothing here is test-only: production's `ScrollView` wraps
-    /// this exact same content.
+    /// The Sessions tab's actual section list — rows, hairlines, the History
+    /// row, the live-reflow gap, and every drop zone. Factored out of
+    /// `sessionsScrollView` so `body` can also render it unwrapped by
+    /// `ScrollView` under `skipScrollViewForTesting` (`#if DEBUG` only) — see
+    /// that flag's doc comment. Nothing here is test-only: production's
+    /// `ScrollView` wraps this exact same content.
     @ViewBuilder
-    private func sectionsContent(
-        pinned: [AgentSession],
-        displayActive: [AgentSession],
-        displayInactive: [AgentSession],
-        displayArchive: [AgentSession],
-        pinnedExpanded: Bool,
-        activeExpanded: Bool,
-        inactiveExpanded: Bool,
-        archiveExpanded: Bool
-    ) -> some View {
+    private func sectionsContent(_ sections: SidebarSessionSections, slots: [SidebarSessionSections.Slot]) -> some View {
         // Deliberately a plain VStack, NOT `LazyVStack`. A lazy
         // container realizes each row once and retains it — when
         // a session's fields (e.g. name) change but its `\.id`
@@ -247,98 +199,66 @@ struct RecentsListView: View {
         // creation, never on rename). Switching this back to
         // `LazyVStack` reintroduces the frozen-name bug — rows
         // will stop picking up renames, activity changes, and
-        // timestamp updates. If eager rendering of ~37 archive
-        // rows (each carrying a `.contextMenu`) ever becomes a
-        // measured perf problem, the fix is a lazy container that
-        // still re-invokes its content closure on element change
-        // (e.g. `LazyVStack` keyed with `.id` forced to include a
-        // content hash), not a plain revert.
+        // timestamp updates.
         VStack(spacing: SidebarDialTuning.rowGap()) {
             // Pinned is the one section that's hidden entirely
-            // when empty — it's an opt-in section, not one of
-            // the three lifecycle buckets every session always
-            // belongs to. An in-progress drag renders an
-            // explicit "Drop to pin" zone here instead (item 2)
-            // so pinning a first session no longer requires the
-            // context menu.
-            if !pinned.isEmpty {
-                SessionSectionHeader(
-                    title: "Pinned",
-                    count: pinned.count,
-                    isExpanded: $isPinnedExpanded,
-                    isEffectivelyExpanded: pinnedExpanded
-                )
-                if pinnedExpanded {
-                    sectionRows(pinned, section: .pinned)
-                    endDropZone(section: .pinned, sectionList: pinned)
-                }
-            } else if dragState.isDragging {
-                SessionSectionHeader(
-                    title: "Pinned",
-                    count: 0,
-                    isExpanded: $isPinnedExpanded,
-                    isEffectivelyExpanded: true
-                )
+            // when empty — it's an opt-in section. An in-progress
+            // drag renders an explicit "Drop to pin" zone here
+            // instead (item 2) so pinning a first session no
+            // longer requires the context menu.
+            if SessionPinning.isAvailable && sections.pinned.isEmpty && dragState.isDragging {
                 emptyPinnedDropZone
             }
-
-            // All three lifecycle headers always render (when
-            // there's at least one session anywhere) —
-            // membership adapts, but the ACTIVE/INACTIVE/ARCHIVE
-            // headers themselves never disappear. Every header
-            // carries a count; a collapsed header with no count
-            // is illegible.
-            SessionSectionHeader(
-                title: "Active",
-                count: displayActive.count,
-                isExpanded: $isActiveExpanded,
-                isEffectivelyExpanded: activeExpanded
-            )
-            if activeExpanded {
-                // Keyed on the stable `\.id` (default Identifiable) —
-                // NOT `\.self`. `\.self` was tried and reverted: it makes
-                // row identity churn on every `lastActiveAt` write (see
-                // `AgentSession.lastActiveAt`, rewritten every few seconds
-                // for running sessions), which tears down and rebuilds the
-                // row — resetting `RecentsRowView`'s hover state and
-                // killing the inline-rename `TextField`/`FocusState`
-                // mid-edit. Freshness on that stable identity comes from
-                // this container being a non-lazy `VStack` (see the
-                // comment above it) — `.equatable()` on `RecentsRowView`
-                // in `sessionRow(for:)` is a body-re-execution perf gate
-                // layered on top, not what makes rows fresh.
-                sectionRows(displayActive, section: .active)
-                endDropZone(section: .active, sectionList: displayActive)
+            ForEach(slots, id: \.self) { slot in
+                slotContent(slot, sections)
             }
+        }
+        // Option D: the selected session's project group on one card.
+        .backgroundPreferenceValue(RailGroupColumnKey.self) { anchors in
+            ExpandedGroupCard(anchors: anchors)
+        }
+    }
 
-            SessionSectionHeader(
-                title: "Inactive",
-                count: displayInactive.count,
-                isExpanded: $isInactiveExpanded,
-                isEffectivelyExpanded: inactiveExpanded
-            )
-            if inactiveExpanded {
-                // See the identity comment on the Active ForEach
-                // above — same reasoning applies here.
-                sectionRows(displayInactive, section: .inactive)
-                endDropZone(section: .inactive, sectionList: displayInactive)
+    /// One slot of the section layout (`SidebarSessionSections.Slot`), the
+    /// same sequence `SidebarRailView` renders.
+    @ViewBuilder
+    private func slotContent(_ slot: SidebarSessionSections.Slot, _ sections: SidebarSessionSections) -> some View {
+        switch slot {
+        case .pinnedRows:
+            sectionRows(sections.pinned, section: .pinned)
+        case .pinnedEnd:
+            endDropZone(section: .pinned, sectionList: sections.pinned)
+        case .activeRows:
+            // Keyed on the stable `\.id` (default Identifiable) —
+            // NOT `\.self`. `\.self` was tried and reverted: it makes
+            // row identity churn on every `lastActiveAt` write (see
+            // `AgentSession.lastActiveAt`, rewritten every few seconds
+            // for running sessions), which tears down and rebuilds the
+            // row — resetting `RecentsRowView`'s hover state and
+            // killing the inline-rename `TextField`/`FocusState`
+            // mid-edit. Freshness on that stable identity comes from
+            // this container being a non-lazy `VStack` (see the
+            // comment above it) — `.equatable()` on `RecentsRowView`
+            // in `sessionRow(for:)` is a body-re-execution perf gate
+            // layered on top, not what makes rows fresh.
+            if SidebarProjectsLayout.effective(tab: sidebarTab) == .oneView {
+                groupedActiveRows(sections.active)
+            } else {
+                sectionRows(sections.active, section: .active)
             }
-
-            SessionSectionHeader(
-                title: "Archive",
-                count: displayArchive.count,
-                isExpanded: $isArchiveExpanded,
-                isEffectivelyExpanded: archiveExpanded
+        case .activeEnd:
+            endDropZone(section: .active, sectionList: sections.active)
+        case .history:
+            // Inactive and archived sessions never render as rows — one
+            // History row stands in for them (mock I3) and opens the
+            // history browser in the canvas.
+            HistoryRowView(
+                subtitle: HistorySummary.subtitle(count: sections.historyCount, lastActiveAt: sections.historyLastActiveAt),
+                isActive: coordinator.isHistoryPresented,
+                staggerIndex: sections.active.count,
+                dialEpoch: SidebarDialTuning.epoch(),
+                onTap: { coordinator.presentHistory() }
             )
-            if archiveExpanded {
-                // See the identity comment on the Active ForEach
-                // above — same reasoning applies here. Archive is
-                // never a reflow/drop target (item 1) — plain rows,
-                // no gap, no end zone.
-                ForEach(displayArchive) { session in
-                    sessionRow(for: session, section: .archive, sectionList: displayArchive)
-                }
-            }
         }
     }
 
@@ -346,39 +266,48 @@ struct RecentsListView: View {
     /// animation, accessibility label, and the auto-scroll edge zones (item
     /// 4), which need `scrollProxy` and so make no sense outside a
     /// `ScrollViewReader`.
-    private func sessionsScrollView(
-        pinned: [AgentSession],
-        displayActive: [AgentSession],
-        displayInactive: [AgentSession],
-        displayArchive: [AgentSession],
-        pinnedExpanded: Bool,
-        activeExpanded: Bool,
-        inactiveExpanded: Bool,
-        archiveExpanded: Bool,
-        orderedRowIds: [String]
-    ) -> some View {
+    private func sessionsScrollView(_ sections: SidebarSessionSections, slots: [SidebarSessionSections.Slot], orderedRowIds: [String]) -> some View {
         ScrollViewReader { scrollProxy in
             ScrollView {
-                sectionsContent(
-                    pinned: pinned,
-                    displayActive: displayActive,
-                    displayInactive: displayInactive,
-                    displayArchive: displayArchive,
-                    pinnedExpanded: pinnedExpanded,
-                    activeExpanded: activeExpanded,
-                    inactiveExpanded: inactiveExpanded,
-                    archiveExpanded: archiveExpanded
-                )
-                .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-                .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
-                .padding(.top, SidebarDialTuning.contentPaddingTop())
-                .padding(.bottom, 4)
-                .animation(reflowAnimation, value: dragState)
+                sectionsContent(sections, slots: slots)
+                    .modifier(SidebarColumnPadding())
+                    .animation(reflowAnimation, value: dragState)
+                    .animation(reflowAnimation, value: projectDragState)
+                    // Room for the group card above a first-row header,
+                    // inside the clip; the scroll view reaches up the same
+                    // amount, so rows keep their y.
+                    .padding(.top, scrollBleed)
+                    // The card also reaches past the column's trailing edge
+                    // into the gutter before the canvas card.
+                    .padding(.trailing, trailingBleed)
             }
+            .padding(.top, -scrollBleed)
+            .padding(.trailing, -trailingBleed)
             .accessibilityLabel("Sessions")
+            .redlineFrame(RedlineID.listViewport)
             .overlay(alignment: .top) { autoScrollEdgeZone(direction: -1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
             .overlay(alignment: .bottom) { autoScrollEdgeZone(direction: 1, orderedRowIds: orderedRowIds, scrollProxy: scrollProxy) }
         }
+    }
+
+    /// How far the scroll region reaches above the first row, so the group
+    /// card's inset above a first header isn't clipped: the card inset, but
+    /// never into the traffic lights' row (centred at half the titlebar
+    /// inset, 16pt tall). Same rule as `SidebarRailView.scrollBleed`.
+    private var scrollBleed: CGFloat {
+        let titlebarInset = store.toolbarRowTopAnchorConstant * 2
+        return min(SidebarDialTuning.groupCardInset(), max(0, titlebarInset / 2 - 8))
+    }
+
+    /// The group card's overhang past the column's trailing edge
+    /// (`ExpandedGroupCard.horizontalOutset`), so it isn't clipped there:
+    /// the widest it gets, with the chip's overhang.
+    private var trailingBleed: CGFloat {
+        max(0, ExpandedGroupCard.horizontalOutset(
+            cardInset: SidebarDialTuning.groupCardInset(),
+            rowLeadingPadding: SidebarDialTuning.rowLeadingPadding(),
+            chipOverhang: RailProjectColumn.chipOverhang
+        ))
     }
 
     // MARK: - Section Rows (drag-reflow aware)
@@ -397,6 +326,154 @@ struct RecentsListView: View {
                 SessionDragGapView()
             }
         }
+    }
+
+    /// One view (`SidebarProjectsLayout.oneView`, mock B5): Active's rows
+    /// under one accordion header per project. Drag and drop still act on
+    /// the whole Active list (`sectionList`), so a reorder lands at the
+    /// same place in every layout; the live gap shows before the row it
+    /// targets, or after the last row for a drop at the end.
+    ///
+    /// A header is also its project's drag handle: the whole group (header
+    /// and rows) leaves the list while in flight, and a group-sized gap
+    /// opens where it would land (`ProjectDragReflow`). Every header and row
+    /// is a project drop target; which drag is live decides what a drop does.
+    @ViewBuilder
+    private func groupedActiveRows(_ active: [AgentSession]) -> some View {
+        let groups = SidebarProjectGroup.make(active: active, projects: store.projects)
+            .filter { $0.projectId == nil || $0.projectId != projectDragState.draggingProjectId }
+        let items = SidebarProjectGroupItem.items(groups, collapsed: ProjectAccordionState.decode(collapsedProjectsRaw))
+        let gapBeforeId = groupedGapTarget(active)
+        let projectGapBefore = projectGapTarget(groups)
+        let dropSlots = ProjectDragReflow.slots(groups: groups, items: items)
+        // Option D: each header leads with its project's monogram tile (the
+        // rail's), and the group holding the selected session sits on one
+        // card (`ExpandedGroupCard`), its rows marked by chips.
+        let monograms = Dictionary(
+            zip(groups.map(\.id), ProjectMonogram.monograms(for: groups.map(\.name))),
+            uniquingKeysWith: { first, _ in first }
+        )
+        let selectedGroupId = RailProjectColumn.selectedGroupId(groups, selectedSessionId: coordinator.sidebarSelectedSessionId)
+        ForEach(items) { item in
+            switch item {
+            case .spacer:
+                Color.clear
+                    .frame(height: SidebarProjectGroupItem.spacerHeight)
+                    .accessibilityHidden(true)
+            case .header(let group, let isCollapsed):
+                if projectGapBefore == .some(group.id) {
+                    ProjectDragGapView()
+                }
+                projectHeader(
+                    group, isCollapsed: isCollapsed, dropSlot: dropSlots[item.id],
+                    monogram: monograms[group.id] ?? "?", isSelectedProject: group.id == selectedGroupId
+                )
+                .railGroupColumn(group.id == selectedGroupId)
+            case .row(let session, let group):
+                if session.id != dragState.draggingSessionId {
+                    if gapBeforeId == .some(session.id) {
+                        SessionDragGapView()
+                    }
+                    sessionRow(
+                        for: session, section: .active, sectionList: active,
+                        subtitle: (store.globalIndicatorStates[session.id] ?? .inactive).statusGlyphKind.groupedRowSubtitle,
+                        inProjectColumn: true,
+                        projectDrop: dropSlots[item.id].map(projectDropTarget)
+                    )
+                    .railGroupColumn(group.id == selectedGroupId)
+                }
+            }
+        }
+        if gapBeforeId == .some(nil) {
+            SessionDragGapView()
+        }
+        if projectGapBefore == .some(nil) {
+            ProjectDragGapView()
+        }
+    }
+
+    /// One project's accordion header. A real project's header is a drag
+    /// source and a project drop target, with Move Up/Down for VoiceOver;
+    /// the "Unknown" group (no project) is neither.
+    @ViewBuilder
+    private func projectHeader(
+        _ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?,
+        monogram: String, isSelectedProject: Bool
+    ) -> some View {
+        let header = ProjectAccordionHeader(
+            name: group.name, monogram: monogram, count: group.sessions.count,
+            isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
+            redlineID: RedlineID.header(group.id)
+        ) {
+            ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
+                ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
+            }
+        }
+        if let projectId = group.projectId, let dropSlot {
+            let movable = header
+                .accessibilityAction(named: Text("Move Up")) { moveProject(projectId, by: -1) }
+                .accessibilityAction(named: Text("Move Down")) { moveProject(projectId, by: 1) }
+            if dragInteractionsEnabledForRendering {
+                movable
+                    .onDrag {
+                        // Set synchronously at drag start, like a session
+                        // row's `.onDrag`, so every delegate can tell a
+                        // project drag from a session drag on its first
+                        // callback.
+                        projectDragState.draggingProjectId = projectId
+                        return NSItemProvider(object: projectId.uuidString as NSString)
+                    } preview: {
+                        Text(group.name.uppercased())
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(0.5)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .onDrop(of: [.text], delegate: ProjectSlotDropDelegate(target: projectDropTarget(dropSlot), session: nil))
+            } else {
+                movable
+            }
+        } else {
+            header
+        }
+    }
+
+    private func projectDropTarget(_ slot: ProjectDropSlot) -> ProjectDropTarget {
+        ProjectDropTarget(slot: slot, state: $projectDragState) { [self] draggedId, gapIndex in
+            let beforeId = ProjectDragReflow.beforeId(gapIndex: gapIndex, order: store.projects.map(\.id), dragged: draggedId)
+            store.moveProject(id: draggedId, before: beforeId)
+            return true
+        }
+    }
+
+    /// Where the project gap sits: before the group returned, or at the end
+    /// for `.some(nil)`. Nil when no project drag has a gap. `groups` is
+    /// the rendered list, dragged group already removed — the same indices
+    /// `ProjectDragReflow` counts in.
+    private func projectGapTarget(_ groups: [SidebarProjectGroup]) -> String?? {
+        guard projectDragState.isDragging, let gap = projectDragState.gapIndex else { return nil }
+        return .some(groups.indices.contains(gap) ? groups[gap].id : nil)
+    }
+
+    /// VoiceOver/keyboard counterpart to dragging a project: swap with the
+    /// neighbour above (-1) or below (+1); a no-op past either end.
+    private func moveProject(_ id: UUID, by direction: Int) {
+        let order = store.projects.map(\.id)
+        guard let index = order.firstIndex(of: id), order.indices.contains(index + direction) else { return }
+        let beforeId = direction < 0 ? order[index - 1] : (order.indices.contains(index + 2) ? order[index + 2] : nil)
+        store.moveProject(id: id, before: beforeId)
+    }
+
+    /// Where the live drag gap sits among Active's rows: before the session
+    /// returned, or at the end for `.some(nil)`. Nil when no gap targets
+    /// Active. Same index rule as `rowSlots`.
+    private func groupedGapTarget(_ active: [AgentSession]) -> UUID?? {
+        guard let gap = dragState.gap, gap.section == .active else { return nil }
+        let working = active.filter { $0.id != dragState.draggingSessionId }
+        let index = min(gap.index ?? working.count, working.count)
+        return .some(index < working.count ? working[index].id : nil)
     }
 
     private struct SessionRowSlot: Identifiable {
@@ -419,14 +496,6 @@ struct RecentsListView: View {
             slots.insert(SessionRowSlot(id: "gap-\(section.rawValue)", kind: .gap), at: insertAt)
         }
         return slots
-    }
-
-    /// Every rendered row id across all four sections, in visual order —
-    /// used only to walk the list one row at a time during edge auto-scroll
-    /// (item 4). Rebuilt each body pass from the same lists already being
-    /// rendered, so it always matches what auto-scroll can actually see.
-    private func rowScrollIds(pinned: [AgentSession], active: [AgentSession], inactive: [AgentSession], archive: [AgentSession]) -> [String] {
-        (pinned + active + inactive + archive).map { $0.id.uuidString }
     }
 
     // MARK: - Drop Zones
@@ -497,7 +566,7 @@ struct RecentsListView: View {
             status: store.globalStatuses[id],
             startedThisLaunch: coordinator.sessionIdsStartedThisLaunch.contains(id)
         )
-        let section = SessionSection.section(isPinned: session.isPinned, bucket: bucket)
+        let section = SessionSection.section(isPinned: session.isPinnedForDisplay(), bucket: bucket)
         let isOpen = store.globalStatuses[id]?.isAlive == true
         return (section, isOpen)
     }
@@ -540,6 +609,7 @@ struct RecentsListView: View {
             escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard event.keyCode == 53 /* Escape */ else { return event }
                 dragState.cancel()
+                projectDragState.cancel()
                 return nil
             }
         }
@@ -547,6 +617,7 @@ struct RecentsListView: View {
             mouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
                 DispatchQueue.main.async {
                     if dragState.isDragging { dragState.cancel() }
+                    if projectDragState.isDragging { projectDragState.cancel() }
                 }
                 return event
             }
@@ -673,7 +744,10 @@ struct RecentsListView: View {
 
     // MARK: - Session Row
 
-    private func sessionRow(for session: AgentSession, section: SessionSection, sectionList: [AgentSession]) -> some View {
+    private func sessionRow(
+        for session: AgentSession, section: SessionSection, sectionList: [AgentSession],
+        subtitle: String? = nil, inProjectColumn: Bool = false, projectDrop: ProjectDropTarget? = nil
+    ) -> some View {
         let project = store.projects.first { $0.id == session.projectId }
         let projectName = project?.name ?? "Unknown"
         let indicatorState = store.globalIndicatorStates[session.id] ?? .inactive
@@ -690,7 +764,9 @@ struct RecentsListView: View {
             projectName: projectName,
             indicatorState: indicatorState,
             hookUnconfirmed: coordinator.codexHookUnconfirmed(for: session),
-            isActive: coordinator.activeSessionId == session.id,
+            subtitle: subtitle,
+            isActive: coordinator.sidebarSelectedSessionId == session.id,
+            inProjectColumn: inProjectColumn,
             isEditing: editingSessionId == session.id,
             editingName: editingSessionId == session.id ? $editingName : .constant(""),
             isRenameFocused: $renameFieldFocused,
@@ -706,10 +782,12 @@ struct RecentsListView: View {
                 beginRename(session: session)
             }
             Divider()
-            Button(session.isPinned ? "Unpin" : "Pin") {
-                store.toggleSessionPin(id: session.id)
+            if SessionPinning.isAvailable {
+                Button(session.isPinned ? "Unpin" : "Pin") {
+                    store.toggleSessionPin(id: session.id)
+                }
+                Divider()
             }
-            Divider()
             if coordinator.isRunning(id: session.id) {
                 Button("Stop") {
                     // A stopped session must never keep rendering as Active
@@ -745,7 +823,8 @@ struct RecentsListView: View {
             hoveredSession: session,
             dragState: $dragState,
             draggedContext: { [self] id in draggedContext(for: id) },
-            performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) }
+            performDrop: { [self] draggedId, gap in performGapDrop(draggedId: draggedId, gap: gap, targetList: sectionList) },
+            projectDrop: projectDrop
         ))
         .accessibilityAction(named: Text("Move Up")) {
             guard supportsReorder else { return }
@@ -835,55 +914,6 @@ struct RecentsListView: View {
         .accessibilityLabel("No sessions yet")
     }
 
-    // MARK: - Data
-
-    /// Sessions pinned to the top of the Sessions tab — see `SessionSection`.
-    /// Pinning wins over bucket membership entirely; a pinned session never
-    /// appears in `activeSessions`/`inactiveSessions`/`archiveSessions`
-    /// regardless of whether its terminal is open.
-    var pinnedSessions: [AgentSession] {
-        Self.pinnedSessions(from: store.sessions)
-    }
-
-    /// Sessions whose terminal is open — see `SessionBucket.membership`, the
-    /// one rule shared with project view. Membership does NOT move when the
-    /// user selects a row. Visibility of a selected-but-inactive session is
-    /// guaranteed instead by the auto-expand override in `body`
-    /// (`effectiveExpanded`), which expands whichever section actually
-    /// contains the selection without relocating the row itself. A
-    /// selection-based membership guard here would make rows jump between
-    /// sections — and everything below them shift ~38pt — the instant the
-    /// user clicks an Inactive/Archive row, reintroducing exactly the "rows
-    /// reshuffling under the cursor" problem this feature set removed.
-    var activeSessions: [AgentSession] {
-        Self.activeSessions(from: store.sessions, statuses: store.globalStatuses)
-    }
-
-    /// Sessions whose terminal closed THIS launch but were started at some
-    /// point this launch — `coordinator.sessionIdsStartedThisLaunch`
-    /// contains the id. This is the "ran, then stopped" bucket: a session
-    /// the user actually interacted with this run, as opposed to one
-    /// restored from disk that never started. See `archiveSessions` for the
-    /// complement.
-    var inactiveSessions: [AgentSession] {
-        Self.inactiveSessions(
-            from: store.sessions,
-            statuses: store.globalStatuses,
-            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
-        )
-    }
-
-    /// Sessions whose terminal is not open AND never started this launch —
-    /// restored from `workspace.json`, never started this run. Exact
-    /// complement of `activeSessions` + `inactiveSessions` combined.
-    var archiveSessions: [AgentSession] {
-        Self.archiveSessions(
-            from: store.sessions,
-            statuses: store.globalStatuses,
-            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
-        )
-    }
-
     // MARK: - Rename
 
     private func beginRename(session: AgentSession) {
@@ -943,17 +973,23 @@ struct RecentsListView: View {
     /// `SessionSection.section(isPinned:bucket:)`) — a pinned session is
     /// excluded from `activeSessions`/`inactiveSessions`/`archiveSessions`
     /// below regardless of its bucket.
-    static func pinnedSessions(from sessions: [AgentSession]) -> [AgentSession] {
-        orderedBySessionViewOrder(sorted(sessions: sessions.filter(\.isPinned)))
+    static func pinnedSessions(
+        from sessions: [AgentSession],
+        pinningAvailable: Bool = SessionPinning.isAvailable
+    ) -> [AgentSession] {
+        orderedBySessionViewOrder(sorted(sessions: sessions.filter {
+            $0.isPinnedForDisplay(pinningAvailable: pinningAvailable)
+        }))
     }
 
     /// Pure, testable variant of the `activeSessions` instance property.
     static func activeSessions(
         from sessions: [AgentSession],
-        statuses: [UUID: SessionStatus]
+        statuses: [UUID: SessionStatus],
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> [AgentSession] {
         orderedBySessionViewOrder(sorted(sessions: sessions.filter {
-            !$0.isPinned && SessionBucket.membership(status: statuses[$0.id], startedThisLaunch: false) == .active
+            !$0.isPinnedForDisplay(pinningAvailable: pinningAvailable) && SessionBucket.membership(status: statuses[$0.id], startedThisLaunch: false) == .active
         }))
     }
 
@@ -965,10 +1001,11 @@ struct RecentsListView: View {
     static func inactiveSessions(
         from sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
-        sessionIdsStartedThisLaunch: Set<UUID>
+        sessionIdsStartedThisLaunch: Set<UUID>,
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> [AgentSession] {
         orderedBySessionViewOrder(sorted(sessions: sessions.filter {
-            !$0.isPinned && SessionBucket.membership(
+            !$0.isPinnedForDisplay(pinningAvailable: pinningAvailable) && SessionBucket.membership(
                 status: statuses[$0.id],
                 startedThisLaunch: sessionIdsStartedThisLaunch.contains($0.id)
             ) == .inactive
@@ -986,54 +1023,16 @@ struct RecentsListView: View {
     static func archiveSessions(
         from sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
-        sessionIdsStartedThisLaunch: Set<UUID>
+        sessionIdsStartedThisLaunch: Set<UUID>,
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> [AgentSession] {
         let archived = sorted(sessions: sessions.filter {
-            !$0.isPinned && SessionBucket.membership(
+            !$0.isPinnedForDisplay(pinningAvailable: pinningAvailable) && SessionBucket.membership(
                 status: statuses[$0.id],
                 startedThisLaunch: sessionIdsStartedThisLaunch.contains($0.id)
             ) == .archive
         })
         return AgentSession.sortedNewestFirst(archived)
-    }
-
-    // MARK: - Auto-Expand Override (static so tests can call without a view instance)
-
-    /// One of the four Sessions-tab sections. Used only to decide which
-    /// sections get the selected-session force-expand override below — not
-    /// a membership concept (see `belongsInActive`, `inactiveSessions`,
-    /// `archiveSessions` for that).
-    enum Section {
-        case pinned, active, inactive, archive
-    }
-
-    /// Whether a section renders expanded. This is a RENDER-TIME override
-    /// only — callers must never write the result back into the persisted
-    /// `@AppStorage` preference, or a temporary condition (e.g. the selected
-    /// session moving) would permanently clobber the user's stored choice.
-    ///
-    /// Expands, regardless of `storedPreference`, when `section` is
-    /// `.inactive` or `.archive` AND `sectionContainsSelectedSession` is
-    /// true — a session that drops into a collapsed Inactive or Archive
-    /// section stays visible, without relocating the session itself (see
-    /// `belongsInActive`). This override excludes `.active`: a selected,
-    /// running session lives in Active essentially all the time during
-    /// normal use, so applying the override there would make the Active
-    /// header a dead control.
-    ///
-    /// Otherwise falls through to `storedPreference` unchanged — including
-    /// when another section is empty. An empty section is not, by itself, a
-    /// reason to force a different section open; the user's
-    /// collapsed/expanded choice is honored either way. (This "expand
-    /// because another section is empty" rule was deliberately removed in
-    /// PR #106 — do not reintroduce it.)
-    static func effectiveExpanded(
-        storedPreference: Bool,
-        section: Section,
-        sectionContainsSelectedSession: Bool
-    ) -> Bool {
-        if section != .active && sectionContainsSelectedSession { return true }
-        return storedPreference
     }
 
     // MARK: - Sorting (static so tests can call without a view instance)
@@ -1084,69 +1083,6 @@ struct RecentsListView: View {
                 return lhs.offset < rhs.offset
             }
             .map(\.element)
-    }
-}
-
-// MARK: - Section Header
-
-private struct SessionSectionHeader: View {
-    let title: String
-    let count: Int
-    /// Persisted preference — toggled on tap. The header may render expanded
-    /// even when this is `false` (see `isEffectivelyExpanded`); tapping always
-    /// toggles the user's real stored preference, which reapplies once any
-    /// override condition clears.
-    @Binding var isExpanded: Bool
-    /// What actually renders right now (stored preference, possibly
-    /// overridden — see `RecentsListView.effectiveExpanded`). Drives the
-    /// chevron direction and the accessibility state.
-    let isEffectivelyExpanded: Bool
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        Button {
-            let animation: Animation? = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                ? nil
-                : .easeInOut(duration: 0.2)
-            withAnimation(animation) {
-                isExpanded.toggle()
-            }
-        } label: {
-            HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-                // Sentence case, title + muted count in parens, chevron
-                // TRAILING (Flow 07 round 6, layer `YFjju`/"Active Header":
-                // `Title` "Active" + `Count` "(5)" on the left, `Chevron Col`
-                // on the right) — supersedes the old leading-chevron,
-                // all-caps "ACTIVE 5" layout.
-                (Text(title)
-                    .font(.system(size: SidebarDialTuning.headerTextSize(), weight: .medium))
-                    .foregroundColor(Color.primary)
-                 + Text(" (\(count))")
-                    .font(.system(size: SidebarDialTuning.headerTextSize(), weight: .regular))
-                    .foregroundColor(WorkspaceLayout.sectionHeaderForeground(for: colorScheme)))
-
-                Spacer(minLength: 0)
-
-                // Sized from `sessionSectionHeaderChevronSize` so this
-                // chevron's x-center lines up with session-row ghosts
-                // directly below it — `PixelChevronView` already pins its own
-                // internal content to a 16pt frame, so the outer frame here
-                // must match that, not shrink it.
-                PixelChevronView(isExpanded: isEffectivelyExpanded)
-                    .frame(width: SidebarDialTuning.headerChevronSize(), height: SidebarDialTuning.headerChevronSize())
-            }
-            .padding(.leading, WorkspaceLayout.sidebarRowLeadingPadding)
-            .padding(.trailing, WorkspaceLayout.sessionSectionHeaderTrailingPadding)
-            .padding(.top, SidebarDialTuning.headerTopPadding())
-            .padding(.bottom, SidebarDialTuning.headerBottomPadding())
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityLabel("\(title), \(count), \(isEffectivelyExpanded ? "expanded" : "collapsed")")
-        .accessibilityHint("Double-tap to \(isEffectivelyExpanded ? "collapse" : "expand")")
     }
 }
 

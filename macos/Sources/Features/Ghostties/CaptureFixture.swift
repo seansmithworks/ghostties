@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Marketing-capture fixture mode — the data source for automated screenshots
@@ -214,7 +215,7 @@ enum CaptureFixture {
 
     /// Round 6 follow-up: the one session the fixture marks focused, so a
     /// capture actually exercises the sidebar's selected-row styling
-    /// (raised card — see `WorkspaceLayout.selectedRowCornerRadius`)
+    /// (`SidebarRowCardBackground`)
     /// instead of leaving every row in its resting state. The first entry ("Claude Code 4", switchboard, top of
     /// Active) — same row position Flow 07's own "portfolio" occupies.
     /// Wired in by `SessionCoordinator.applyCaptureFixtureFocusIfNeeded()`,
@@ -276,7 +277,18 @@ enum CaptureFixture {
         if let mode = initialSidebarMode {
             store.updateSidebarMode(mode)
         }
+        // Listed projects first, in the given order, through the same
+        // `moveProject` a header drop calls; the rest keep their order.
+        for name in projectOrder(ProcessInfo.processInfo.environment["GHOSTTIES_CAPTURE_PROJECT_ORDER"]).reversed() {
+            guard let id = store.projects.first(where: { $0.name == name })?.id else { continue }
+            store.moveProject(id: id, before: store.projects.first?.id)
+        }
         return store
+    }
+
+    /// `GHOSTTIES_CAPTURE_PROJECT_ORDER`: comma-separated project names.
+    static func projectOrder(_ raw: String?) -> [String] {
+        (raw ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     // MARK: - Coordinator seeding (D2)
@@ -480,6 +492,12 @@ enum CaptureFixture {
         raw.flatMap(parsePositiveSeconds)
     }
 
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_RAIL_CLOSE_PIN_AFTER=<seconds>` — drives
+    /// pinned -> rail -> closed -> pinned, one step per interval.
+    static func parseSidebarRailClosePinAfter(_ raw: String?) -> TimeInterval? {
+        raw.flatMap(parsePositiveSeconds)
+    }
+
     private static func parsePositiveSeconds(_ raw: String) -> TimeInterval? {
         guard let value = Double(raw), value.isFinite, value > 0 else { return nil }
         return value
@@ -495,8 +513,58 @@ enum CaptureFixture {
         parseProjectSettingsHook(env("GHOSTTIES_CAPTURE_PROJECT_SETTINGS"))
     }
     static var expandProjectName: String? { parseExpandProject(env("GHOSTTIES_CAPTURE_EXPAND_PROJECT")) }
+    static var sidebarRailClosePinAfter: TimeInterval? {
+        parseSidebarRailClosePinAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_RAIL_CLOSE_PIN_AFTER"))
+    }
     static var sidebarToggleAfter: TimeInterval? {
         parseSidebarToggleAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER"))
+    }
+    /// `GHOSTTIES_CAPTURE_TRAY_HOVER=<SidebarTrayItem.id>` (e.g. `newSession`):
+    /// draws that tray button's hover highlight without a pointer, so the
+    /// hovered state can be captured without synthetic input.
+    static var trayHoverItemId: String? { env("GHOSTTIES_CAPTURE_TRAY_HOVER").flatMap { $0.isEmpty ? nil : $0 } }
+    /// `GHOSTTIES_CAPTURE_BACKGROUND=1`: the capture app never activates
+    /// itself (`suppressActivation`), and opens its first window at launch
+    /// instead of on first activation (`AppDelegate`), so a capture launched
+    /// with `open -g` never takes focus or keystrokes from the app in use.
+    static var staysInBackground: Bool { env("GHOSTTIES_CAPTURE_BACKGROUND") == "1" }
+
+    /// Turns every `NSApp.activate(ignoringOtherApps:)` into a no-op for
+    /// this process. Called once at launch, only when `staysInBackground`.
+    @MainActor static func suppressActivation() {
+        guard let original = class_getInstanceMethod(NSApplication.self, #selector(NSApplication.activate(ignoringOtherApps:))),
+              let replacement = class_getInstanceMethod(NSApplication.self, #selector(NSApplication.captureBackground_activate(ignoringOtherApps:)))
+        else { return }
+        method_exchangeImplementations(original, replacement)
+    }
+
+    /// `GHOSTTIES_CAPTURE_WINDOW_SIZE=<width>x<height>` (points, e.g.
+    /// `900x500`): the content size the first workspace window is set to
+    /// once it is up, so a capture can show a short window.
+    static var windowContentSize: CGSize? { parseWindowContentSize(env("GHOSTTIES_CAPTURE_WINDOW_SIZE")) }
+
+    static func parseWindowContentSize(_ raw: String?) -> CGSize? {
+        guard let parts = raw?.lowercased().split(separator: "x"), parts.count == 2,
+              let width = Double(parts[0]), let height = Double(parts[1]),
+              width > 0, height > 0 else { return nil }
+        return CGSize(width: width, height: height)
+    }
+    /// `GHOSTTIES_CAPTURE_APPEARANCE=light|dark`: the launch value of
+    /// `SidebarAppearancePreview`, so a capture can show either glass set
+    /// regardless of the terminal theme.
+    static var appearancePreview: String? { env("GHOSTTIES_CAPTURE_APPEARANCE") }
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_TAB=projects|sessions`: the sidebar tab
+    /// for this launch. Set in the process's volatile argument domain, which
+    /// outranks the persistent one and is never written to disk, so the
+    /// capture shows the tab without touching the Dev app's saved tab.
+    static func applySidebarTabOverride() {
+        guard isActive, let raw = env("GHOSTTIES_CAPTURE_SIDEBAR_TAB"),
+              let tab = SidebarTab(rawValue: raw) else { return }
+        var arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
+        arguments["ghostties.sidebarTab"] = tab.rawValue
+        // Setting a volatile domain that already exists raises; replace it.
+        UserDefaults.standard.removeVolatileDomain(forName: UserDefaults.argumentDomain)
+        UserDefaults.standard.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
     }
 
     /// Each hook fires once per process. The views that host them re-appear
@@ -596,3 +664,10 @@ enum CaptureFixture {
         exec cat > /dev/null
         """#
 }
+
+#if DEBUG
+extension NSApplication {
+    /// `CaptureFixture.suppressActivation`: activation does nothing.
+    @objc fileprivate func captureBackground_activate(ignoringOtherApps flag: Bool) {}
+}
+#endif

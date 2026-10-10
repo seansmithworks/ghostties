@@ -82,19 +82,32 @@ struct SessionComposerPalette: View {
     /// falls through to `.standard`, unchanged.
     let tuningDefaultsForTesting: UserDefaults?
 
+    /// Test seams for the Resume list: the relaunch call
+    /// `HistoryActions.make(relaunch:)` already takes, and a fixed clock
+    /// so captured row ages don't drift. `nil` in production.
+    let resumeRelaunchForTesting: ((AgentSession, SessionCoordinator.RelaunchMode) -> Void)?
+    let nowForTesting: Date?
+
     init(
         isPresented: Binding<Bool>,
         request: SessionComposerRequest,
         composerStore: SessionComposerStore = .shared,
-        tuningDefaultsForTesting: UserDefaults? = nil
+        tuningDefaultsForTesting: UserDefaults? = nil,
+        resumeRelaunchForTesting: ((AgentSession, SessionCoordinator.RelaunchMode) -> Void)? = nil,
+        nowForTesting: Date? = nil
     ) {
         self._isPresented = isPresented
         self.request = request
         self.composerStore = composerStore
         self.tuningDefaultsForTesting = tuningDefaultsForTesting
+        self.resumeRelaunchForTesting = resumeRelaunchForTesting
+        self.nowForTesting = nowForTesting
     }
 
     @State private var selectedIndex: UInt?
+    /// The Resume list's keyboard state (`ComposerResumeState`): revealed
+    /// (A5), resume column focused (A4), highlighted row.
+    @State private var resumeState = ComposerResumeState()
     /// Blocker 2 fix (Slice B review round 2): debounced re-refresh when a
     /// typed command resolves a DIFFERENT project than whatever the
     /// composer's worktree cache currently describes — see
@@ -1075,7 +1088,43 @@ struct SessionComposerPalette: View {
            let index = options.firstIndex(where: { $0.id == resolvedTemplateId }) {
             return UInt(index)
         }
+        if let index = Self.projectWordIndex(
+            in: options,
+            projectIds: Set(filteredProjectOptions.map(\.id)),
+            rawQuery: composerStore.searchText,
+            currentProjectName: currentProject?.name
+        ) {
+            return UInt(index)
+        }
         return UInt(SessionComposerRanking.bestMatchIndex(in: options, query: templateFilterQuery, title: { $0.title }, subtitle: { $0.subtitle }))
+    }
+
+    /// The first word sits in the grammar's project slot (`repo cco -n
+    /// "x"`), so while it is the only word and prefixes a project's name,
+    /// that project's row takes the highlight — and with it the ghost,
+    /// which previews the highlighted row's path. Beta.26 bug: "Code" tied
+    /// the "Codex" template (both exact prefix), the template ranked first,
+    /// its ghost path ("atlas-api > … > Codex") didn't start with "Code",
+    /// so no ghost showed and the project was unreachable by typing.
+    ///
+    /// Skipped when the word also prefixes the current project's name:
+    /// template rows already ghost "<current project> > …" then, so the
+    /// name completes without moving the highlight off the templates.
+    static func projectWordIndex(
+        in options: [ComposerOption],
+        projectIds: Set<UUID>,
+        rawQuery: String,
+        currentProjectName: String?
+    ) -> Int? {
+        guard !rawQuery.isEmpty, rawQuery.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
+        if let currentProjectName,
+           currentProjectName.range(of: rawQuery, options: [.caseInsensitive, .anchored]) != nil {
+            return nil
+        }
+        return options.firstIndex { option in
+            projectIds.contains(option.id)
+                && option.title.range(of: rawQuery, options: [.caseInsensitive, .anchored]) != nil
+        }
     }
 
     private var reduceMotionEnabled: Bool {
@@ -1090,10 +1139,11 @@ struct SessionComposerPalette: View {
         // Shake-clearance wrapper: an 8pt clear inset on all four sides
         // (DESIGN.md §5 Layout Tokens — the nearest valid step above the
         // ±6pt shake amplitude) so the lateral translation has room.
-        singleLineComposerCard
+        anchoredComposerCard
             .padding(8)
             .environment(\.colorScheme, scheme)
             .onAppear {
+                resumeState.reset()
                 composerStore.open(projectBinding: request.projectBinding, workspaceStore: store)
                 // S5: row 0 is the project's default template (Phase 1's
                 // default-first ordering) and the legend reads "↵ start" —
@@ -1138,7 +1188,10 @@ struct SessionComposerPalette: View {
             // branch, not a project name) fires either — this is the only
             // trigger that subsumes every case, since `searchText` changes
             // on every keystroke `query` does plus every one it drops.
-            .onChange(of: composerStore.searchText) { _ in reselectBestMatch() }
+            .onChange(of: composerStore.searchText) { _ in
+                reselectBestMatch()
+                resumeState.collapseSections()
+            }
             .onChange(of: composerStore.selectedProjectId) { _ in
                 // N5: changing the project via the dropdown or a project row
                 // changes `flattenedOptions.count` with `query` unchanged, so
@@ -1238,12 +1291,168 @@ struct SessionComposerPalette: View {
                 // itself, which SwiftUI's `.onChange` won't re-fire on since
                 // it stays `true` across the whole re-open.
                 guard triggered else { return }
+                resumeState.reset()
                 clampSelectedIndex()
                 // R14: open beat, fast-re-open path — mirrors `onAppear`'s
                 // seed above for the same reason (`onAppear` doesn't
                 // reliably re-fire on a fast re-present).
                 witnessBeat = witnessBeat.next(.open)
             }
+    }
+
+    // MARK: - Resume surfaces
+
+    /// A5 lays out at the one-line card's height and lets the Resume list
+    /// hang below it, so revealing the list never moves the field. A4 is
+    /// always open and centres as a whole.
+    @ViewBuilder
+    private var anchoredComposerCard: some View {
+        if resumeLayout == .list {
+            singleLineComposerCard
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: newStyleFieldLineHeight + 2 * singleLineVerticalPadding, alignment: .top)
+        } else {
+            singleLineComposerCard
+        }
+    }
+
+    private static let resumeRowCap = 5
+    private static let resumeListInset: CGFloat = 8
+
+    /// A5's resting hint: the newest past session and a ↓ key cap. Only on
+    /// an empty field with the list closed.
+    @ViewBuilder
+    private var resumeHint: some View {
+        if resumeLayout == .list, !resumeState.isRevealed, composerStore.searchText.isEmpty,
+           let newest = resumeRows.first {
+            ComposerResumeHint(entry: newest, size: rowTitleSize * 0.72, now: resumeNow)
+        }
+    }
+
+    private var rowTitleSize: CGFloat {
+        ComposerSingleLineTuning.rowSize(defaults: tuningDefaults)
+    }
+
+    @ViewBuilder
+    private var resumeSurface: some View {
+        switch resumeLayout {
+        case .list:
+            if resumeState.isRevealed {
+                ComposerCardHairline()
+                    .padding(.horizontal, Self.resumeListInset + 4)
+                downListView
+                    .padding(Self.resumeListInset)
+            }
+        case .columns:
+            ComposerCardHairline()
+                .padding(.horizontal, Self.resumeListInset + 4)
+            HStack(alignment: .top, spacing: 0) {
+                startColumn
+                    .padding(Self.resumeListInset)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                ComposerCardHairline(vertical: true)
+                resumeListView(isFocused: resumeState.isResumeColumnFocused)
+                    .padding(Self.resumeListInset)
+                    .frame(maxWidth: .infinity, alignment: .top)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            ComposerCardHairline()
+            ComposerKeyLegend(
+                items: resumeState.isResumeColumnFocused
+                    ? [("↩", "Resume"), ("←", "Start column"), ("esc", "Close")]
+                    : [("↩", "Start"), ("→", "Resume column"), ("esc", "Close")],
+                size: rowTitleSize * 0.66
+            )
+        }
+    }
+
+    private func resumeListView(isFocused: Bool) -> some View {
+        ComposerResumeListView(
+            rows: resumeRows,
+            selectedID: resumeState.selection(in: resumeKeyboardRowIDs),
+            isFocused: isFocused,
+            hasHistory: !historyEntries.isEmpty,
+            cap: Self.resumeRowCap,
+            titleSize: rowTitleSize,
+            now: resumeNow,
+            onResume: { resumeSession($0) }
+        )
+    }
+
+    /// A5's ↓ list: RESUME, TEMPLATES, PROJECTS, scrolling as one.
+    private var downListView: some View {
+        ComposerDownListView(
+            rows: resumeRows,
+            templates: downListTemplateOptions.map(templateRow),
+            projects: downListProjectOptions.map(templateRow),
+            expanded: resumeState.expandedSections,
+            selectedID: resumeState.selection(in: resumeKeyboardRowIDs),
+            hasHistory: !historyEntries.isEmpty,
+            titleSize: rowTitleSize,
+            maxHeight: ComposerDownListView.maxHeight(titleSize: rowTitleSize),
+            now: resumeNow,
+            onResume: { resumeSession($0) },
+            onShowMore: { showMore($0) }
+        )
+    }
+
+    /// A4's left column: the options Return starts, highlighted while the
+    /// start column holds the keyboard.
+    private var startColumn: some View {
+        let options = flattenedOptions
+        let selected = selectedIndex.map { min(Int($0), max(options.count - 1, 0)) }
+        let window = ComposerResumeRows.window(count: options.count, selected: selected, cap: Self.resumeRowCap)
+        return VStack(alignment: .leading, spacing: 0) {
+            ComposerResumeSectionHeader(
+                systemImage: "plus",
+                title: currentProject.map { "Start in \($0.name)" } ?? "Start",
+                size: rowTitleSize * 0.62
+            )
+            ForEach(Array(window), id: \.self) { index in
+                let option = options[index]
+                ComposerListRow(
+                    systemImage: option.leadingIcon ?? "sparkle",
+                    title: option.title,
+                    meta: Self.startRowMeta(option),
+                    isSelected: !resumeState.isResumeColumnFocused && selected == index,
+                    showsReturnGlyph: true,
+                    titleSize: rowTitleSize,
+                    action: { option.action() }
+                )
+            }
+        }
+    }
+
+    /// A start row's trailing meta: the template command's first word.
+    private static func startRowMeta(_ option: ComposerOption) -> String? {
+        option.template?.command.flatMap { $0.split(separator: " ").first.map(String.init) }
+    }
+
+    /// A5's TEMPLATES section: the template rows the composer already
+    /// offers for the current project (pinned, recent, then the rest),
+    /// filtered by the typed text. Each row's action is the option's own
+    /// `commit(template:)`. A4 keeps its start column instead.
+    private var downListTemplateOptions: [ComposerOption] {
+        guard resumeLayout == .list else { return [] }
+        return (lane1Options + lane2Options).filter { $0.template != nil }
+    }
+
+    /// A5's PROJECTS section: the composer's own project rows, filtered by
+    /// the typed text. Each row's action is the option's own
+    /// `selectProject` — the same path a project row has always taken.
+    private var downListProjectOptions: [ComposerOption] {
+        guard resumeLayout == .list else { return [] }
+        return filteredProjectOptions
+    }
+
+    private func templateRow(_ option: ComposerOption) -> ComposerTemplateRow {
+        ComposerTemplateRow(
+            id: option.id,
+            systemImage: option.leadingIcon ?? "sparkle",
+            title: option.title,
+            meta: Self.startRowMeta(option),
+            action: option.action
+        )
     }
 
     // MARK: - Single-line field
@@ -1283,7 +1492,13 @@ struct SessionComposerPalette: View {
     /// width that makes the padded stack's ideal width exactly
     /// `newStyleFieldWidth` again.
     private var newStyleFieldRenderWidth: CGFloat {
-        newStyleFieldWidth - (2 * singleLineHorizontalPadding)
+        composerCardWidth - (2 * singleLineHorizontalPadding)
+    }
+
+    /// The card's width: the width dial, widened by a quarter for A4's two
+    /// columns so a resume row's title and meta both fit.
+    private var composerCardWidth: CGFloat {
+        resumeLayout == .columns ? (newStyleFieldWidth * 1.25).rounded() : newStyleFieldWidth
     }
 
     private var newStyleField: some View {
@@ -1308,8 +1523,11 @@ struct SessionComposerPalette: View {
                 fontWeight: .regular,
                 rowHeight: newStyleFieldLineHeight,
                 focusTrigger: $composerStore.focusSearchFieldTrigger,
-                hasSelection: selectedOption != nil,
-                ghostFullPath: query.isEmpty ? "" : ghostFullPathForField
+                hasSelection: fieldHasSelection,
+                ghostFullPath: query.isEmpty ? "" : ghostFullPathForField,
+                horizontalArrowClaim: resumeLayout == .columns
+                    ? (resumeState.isResumeColumnFocused ? .left : .rightAtEnd)
+                    : .none
             ) { event in
                 handle(event)
             }
@@ -1399,13 +1617,17 @@ struct SessionComposerPalette: View {
     /// `decision_align-to-upstream-degrade-gracefully`).
     private var singleLineComposerCard: some View {
         let backgroundColor = Color(nsColor: .windowBackgroundColor)
-        let content = VStack(alignment: .leading, spacing: 8) {
-            newStyleField
-            newStyleStatusStrip
+        let content = VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                newStyleField
+                    .overlay(alignment: .trailing) { resumeHint }
+                newStyleStatusStrip
+            }
+            .padding(.vertical, singleLineVerticalPadding)
+            .padding(.horizontal, singleLineHorizontalPadding)
+            resumeSurface
         }
-        .padding(.vertical, singleLineVerticalPadding)
-        .padding(.horizontal, singleLineHorizontalPadding)
-        .frame(width: newStyleFieldWidth)
+        .frame(width: composerCardWidth)
 
         let materialBackground = content
             .background(
@@ -1656,6 +1878,11 @@ struct SessionComposerPalette: View {
     /// that contradicted the plan's own legend (`↵ start · ⌥↵ start +
     /// reveal · esc cancel`) — deleted, not kept as a fallback.
     private func handle(_ event: ComposerGhostTextField.KeyboardEvent) {
+        // Resume keys first (↓ reveals the list, Return on a resume row
+        // resumes it); anything the resume state passes through falls to
+        // the start handling below, unchanged.
+        if let key = ComposerResumeState.Key(event), routeToResume(key) { return }
+
         switch event {
         case .exit:
             dismissComposer()
@@ -1689,6 +1916,97 @@ struct SessionComposerPalette: View {
         case .acceptedGhost:
             witnessBeat = witnessBeat.next(.tabAccept)
         }
+    }
+
+    // MARK: - Resume
+
+    private var resumeLayout: ComposerResumeLayout {
+        ComposerResumeLayout.current(defaults: tuningDefaults)
+    }
+
+    private var resumeNow: Date { nowForTesting ?? .now }
+
+    /// Every past session — the set the sidebar's History row stood for —
+    /// built the way the history browser builds it.
+    private var historyEntries: [HistoryEntry] {
+        let sections = SidebarSessionSections.make(
+            sessions: store.sessions,
+            statuses: store.globalStatuses,
+            sessionIdsStartedThisLaunch: coordinator.sessionIdsStartedThisLaunch
+        )
+        return HistoryEntry.entries(from: sections, projects: store.projects)
+    }
+
+    private var resumeRows: [HistoryEntry] {
+        ComposerResumeRows.rows(entries: historyEntries, query: composerStore.searchText)
+    }
+
+    /// The rows ↓/↑ walk: A5's resume rows, template rows, then project
+    /// rows; A4's resume column alone.
+    private var resumeKeyboardRowIDs: [UUID] {
+        guard resumeLayout == .list else { return resumeRows.map(\.id) }
+        return ComposerDownList.keyboardIDs(ComposerDownList.items(
+            resume: resumeRows.map(\.id),
+            templates: downListTemplateOptions.map(\.id),
+            projects: downListProjectOptions.map(\.id),
+            expanded: resumeState.expandedSections
+        ))
+    }
+
+    /// "Show N more" (Return or click): expands the section in place and
+    /// highlights the first row it revealed.
+    private func showMore(_ section: ComposerDownList.Section) {
+        let ids: [UUID]
+        switch section {
+        case .resume: ids = resumeRows.map(\.id)
+        case .templates: ids = downListTemplateOptions.map(\.id)
+        case .projects: ids = downListProjectOptions.map(\.id)
+        }
+        resumeState.expand(section, selecting: ComposerDownList.firstRevealed(in: ids))
+    }
+
+    /// Feeds one key to the resume state. `true` when it took the key.
+    /// Return on a template row runs that option's own start action; on a
+    /// project row, the option's own project selection, after which the
+    /// list closes onto the newly scoped field.
+    private func routeToResume(_ key: ComposerResumeState.Key) -> Bool {
+        switch resumeState.handle(key, layout: resumeLayout, rowIDs: resumeKeyboardRowIDs) {
+        case .passThrough:
+            return false
+        case .handled:
+            return true
+        case .resume(let id):
+            if let section = ComposerDownList.showMoreSection(for: id) {
+                showMore(section)
+            } else if let template = downListTemplateOptions.first(where: { $0.id == id }) {
+                template.action()
+            } else if let project = downListProjectOptions.first(where: { $0.id == id }) {
+                resumeState.reset()
+                project.action()
+            } else {
+                resumeSession(id)
+            }
+            return true
+        }
+    }
+
+    /// The existing relaunch flow (`SessionCoordinator.resumeFromHistory`,
+    /// via `HistoryActions`), the same one the history browser resumes
+    /// through. The composer closes first so the relaunched session takes
+    /// focus after it.
+    private func resumeSession(_ id: UUID) {
+        let actions = HistoryActions.make(store: store, coordinator: coordinator, relaunch: resumeRelaunchForTesting)
+        resumeState.reset()
+        isPresented = false
+        actions.resume(id)
+    }
+
+    /// Return is live whenever whichever list owns the keyboard has a row.
+    private var fieldHasSelection: Bool {
+        if resumeState.ownsKeyboard {
+            return resumeState.selection(in: resumeKeyboardRowIDs) != nil
+        }
+        return selectedOption != nil
     }
 
     /// Esc dismisses the composer. Guarded against a same-turn double-fire,

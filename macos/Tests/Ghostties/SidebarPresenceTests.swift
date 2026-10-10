@@ -70,24 +70,22 @@ struct SidebarPresenceTests {
 
     // MARK: - Tray Items — Single Source of Truth
 
-    /// `sidebarTrayItems` is the one ordered list both `SidebarBottomTray`
-    /// (expanded/overlay) and `RailTray` (collapsed) render from. Cover its
-    /// order/ids directly — adding a Settings entry later should only ever
-    /// require inserting into this list, not touching two views.
+    /// `sidebarTrayItems` is the one ordered list `SidebarTray` renders on
+    /// both axes (expanded/overlay and collapsed). Cover its
+    /// order/ids directly. Settings is not in the tray (layout B); it lives
+    /// in the app menu.
     @Test func trayItemsAreOrderedNewSessionThenToggle() {
         let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "Collapse Sidebar")
-        #expect(items.map(\.id) == ["newSession", "newProject", "settings", "toggleSidebar"])
-        #expect(items.map(\.systemName) == ["plus", "folder.badge.plus", "gearshape", "sidebar.left"])
+        #expect(items.map(\.id) == ["newSession", "newProject", "toggleSidebar"])
+        #expect(items.map(\.systemName) == ["plus", "folder.badge.plus", "sidebar.left"])
     }
 
-    /// Round 4: Settings sits between `+` and the sidebar toggle (matching
-    /// the design), and its accessibility label ("Settings") is distinct
-    /// from its tooltip, which names the concrete action ("Open Config").
-    @Test func trayItemsIncludeSettingsWithDistinctAccessibilityLabelAndTooltip() {
+    /// Layout B splits the tray into two capsules: Create (new session, new
+    /// project) and the sidebar toggle on its own, in that order.
+    @Test func trayItemsSplitIntoCreateThenToggleCapsules() {
         let items = WorkspaceViewContainer.sidebarTrayItems(container: nil, toggleLabel: "Collapse Sidebar")
-        let settings = items.first(where: { $0.id == "settings" })
-        #expect(settings?.label == "Settings")
-        #expect(settings?.helpText == "Open Config")
+        #expect(items.map(\.group) == [.create, .create, .toggle])
+        #expect(SidebarTray.groupItemCounts() == [2, 1])
     }
 
     /// The toggle item's label is the one piece of state callers still
@@ -127,8 +125,8 @@ struct SidebarPresenceTests {
     /// The floor only has to fit the tray pill — it must stay well under
     /// the typical hugged width, or it silently becomes a fixed width again.
     @Test func railFloorFitsTrayPillButStaysUnderTheHug() {
-        let trayPillWidth: CGFloat = 32 + 4 * 2
-        #expect(WorkspaceLayout.sidebarRailWidth >= trayPillWidth)
+        let atFloor = RailTrayGeometry(railWidth: WorkspaceLayout.sidebarRailWidth, margin: WorkspaceLayout.terminalInset, padding: TrayGlassStyle.innerPadding)
+        #expect(atFloor.buttonSize >= TrayGlassStyle.verticalIconSize)
         #expect(WorkspaceLayout.sidebarRailWidth < 98)
     }
 
@@ -165,7 +163,7 @@ struct SidebarPresenceTests {
         // `SessionCoordinator`/`seedEmptySessionTreeForTesting` involved) —
         // this is exactly the capture-fixture / closed-pinned-terminal case.
 
-        let rail = store.railSessions()
+        let rail = store.railSessions(pinningAvailable: true)
 
         #expect(rail.map(\.name) == ["pinned", "active"])
     }
@@ -258,25 +256,26 @@ struct SidebarPresenceTests {
 
     /// Sean's closed-state layout call (overrides Flow 05's own "card
     /// padding-left 8 → 0"): the terminal card keeps an 8pt margin on ALL
-    /// four sides in closed mode — it is never full bleed. `terminalInset`
-    /// is the single token every mode's card inset derives from, so this
-    /// pins the value the closed-state constraints in `WorkspaceViewContainer`
-    /// use on every side.
+    /// four sides in closed mode — it is never full bleed. The Window margin
+    /// dial (`SidebarDialTuning.windowMargin`, default `terminalInset`) is the
+    /// single value every mode's card inset reads, so this pins the default
+    /// the closed-state constraints in `WorkspaceViewContainer` use on every side.
     @Test func closedStateInsetIsEightPointsOnAllSides() {
         #expect(WorkspaceLayout.terminalInset == 8)
+        #expect(SidebarDialTuning.windowMargin() == WorkspaceLayout.terminalInset)
     }
 
     /// Sean's follow-up decision (sidebar-presence review round 2): confirm
     /// the card's LEFT gap is the same 8pt in every state, not just closed —
     /// pinned, collapsed (rail), and closed all read their leading inset
-    /// from this one `terminalInset` token in `WorkspaceViewContainer`
+    /// from this one Window margin dial in `WorkspaceViewContainer`
     /// (`applyTransitionConstraints`'s `.pinned`/`.collapsed`/`.closed`
     /// branches and `setup()`'s cold-launch path), so there is exactly one
     /// number to retune, not three that can drift apart.
     @Test func cardLeftGapIsTheSameEightPointsAcrossEveryMode() {
-        let pinnedGap = WorkspaceLayout.terminalInset
-        let collapsedGap = WorkspaceLayout.terminalInset
-        let closedGap = WorkspaceLayout.terminalInset
+        let pinnedGap = SidebarDialTuning.windowMargin()
+        let collapsedGap = SidebarDialTuning.windowMargin()
+        let closedGap = SidebarDialTuning.windowMargin()
         #expect(pinnedGap == 8)
         #expect(collapsedGap == 8)
         #expect(closedGap == 8)

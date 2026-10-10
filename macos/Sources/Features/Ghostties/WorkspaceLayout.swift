@@ -21,8 +21,9 @@ enum SidebarMode: Int, Codable {
 
 /// Shared layout constants for the workspace sidebar.
 enum WorkspaceLayout {
-    /// Width of the sidebar panel (Flow 01: 220 → 244).
-    static let sidebarWidth: CGFloat = 244
+    /// Width of the sidebar panel (Flow 01: 220 → 244; option D,
+    /// 2026-10-09: 256, the canvas card at 256 + the 8pt window margin).
+    static let sidebarWidth: CGFloat = 256
 
     /// Minimum width of the collapsed icon-only rail — a floor, not the
     /// applied width. Sized only so the 40pt vertical tray pill (32pt
@@ -34,16 +35,6 @@ enum WorkspaceLayout {
     /// whatever width is applied.
     static let sidebarRailWidth: CGFloat = 60
 
-    /// Horizontal margin between the sidebar tray pill and the edges of its
-    /// container — shared by the expanded bottom tray (`SidebarBottomTray`,
-    /// full sidebar width) and the collapsed rail's vertical tray (`RailTray`,
-    /// rail width), so both states apply one rule: tray width = container
-    /// width − 2×margin. Previously hand-picked only at the expanded call
-    /// site; named here once the rail tray needed to match it (Sean,
-    /// sidebar-presence review: the rail pill read too narrow at its old
-    /// intrinsic 44pt width).
-    static let trayHorizontalMargin: CGFloat = 8
-
     /// Pure width calculation for the collapsed rail: hugs the macOS
     /// traffic-light cluster — the cluster's rightmost edge (zoom button
     /// `maxX`) plus a trailing gap equal to its leading inset (close button
@@ -51,7 +42,7 @@ enum WorkspaceLayout {
     /// visually centered in the rail. Native (AppKit-default) inset lands
     /// around ~94pt on macOS 26. Never returns less than `sidebarRailWidth`,
     /// so a narrow or unusual cluster never squeezes the tray pill.
-    static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat, defaults: UserDefaults = .standard) -> CGFloat {
+    static func collapsedRailWidth(zoomButtonMaxX: CGFloat, leadingInset: CGFloat, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
         max(sidebarRailWidth, zoomButtonMaxX + leadingInset + SidebarDialTuning.railExtraWidth(defaults: defaults))
     }
 
@@ -166,8 +157,25 @@ enum WorkspaceLayout {
     /// Height of the session-name title bar inside the terminal card.
     static let terminalTitleBarHeight: CGFloat = 28
 
-    /// Corner radius on the floating terminal panel (all four corners).
-    static let terminalCornerRadius: CGFloat = 12
+    /// The window's own corner radius: a titled Ghostties window on macOS
+    /// 26+ (no toolbar), measured from an uncropped capture on macOS 27
+    /// (2026-10-08), the same value `TerminalWindow` uses for this titlebar
+    /// style.
+    static let windowCornerRadius: CGFloat = 16
+
+    /// A surface inset `margin` from the window's edges is concentric with
+    /// the window corner: its radius is the window's less the margin (Sean,
+    /// 2026-10-08). The one rule for the canvas card and the tray pills.
+    static func concentricCornerRadius(margin: CGFloat) -> CGFloat {
+        max(0, windowCornerRadius - margin)
+    }
+
+    /// Corner radius on the floating terminal panel (all four corners), and
+    /// every card that shares its inset (browser, History): concentric with
+    /// the window at the live window margin.
+    static var terminalCornerRadius: CGFloat {
+        concentricCornerRadius(margin: SidebarDialTuning.windowMargin())
+    }
 
     /// Shadow color applied to canvas shadow hosts (terminal + browser cards).
     static let canvasShadowColor: CGColor = NSColor.black.cgColor
@@ -183,6 +191,9 @@ enum WorkspaceLayout {
 
     /// Inset around the terminal panel when sidebar is visible (floating card effect).
     /// The design uses 8pt on all four sides (top, bottom, left, right).
+    /// The compiled default of the "Window margin" dial — read it through
+    /// `SidebarDialTuning.windowMargin()`, which also drives the sidebar's
+    /// outer edge, so every outer gutter in the window stays one value.
     static let terminalInset: CGFloat = 8
 
     /// Width of the invisible hover trigger strip at the left edge (closed mode).
@@ -208,18 +219,11 @@ enum WorkspaceLayout {
     /// Background for active session row (light mode): 4% black.
     static let activeRowLight = Color.black.opacity(0.04)
 
-    // MARK: - Round 6 (Flow 07 pen.dev match, sidebar-presence)
-
-    /// Selected session row: a raised card, not a tint — Flow 07 frame
-    /// `t4XvdY`, layer `XHBC1`/`OEpEM` ("Bottom Group"): `background-color`
-    /// reads as the app's own canvas surface, `box-shadow: 0px 2px 10px
-    /// #00000014`. Reuses `canvasBackgroundLight/Dark` (the terminal-card
-    /// token) rather than inventing a third background — same "raised
-    /// surface" role.
-    static let selectedRowCornerRadius: CGFloat = 12
-    static let selectedRowShadowOpacity: Double = 0.078 // #00000014 -> alpha 0x14/255
-    static let selectedRowShadowRadius: CGFloat = 10
-    static let selectedRowShadowYOffset: CGFloat = 2
+    /// The highlighted row in the Cmd+T composer's lists (Resume, A4's start
+    /// column), and its key caps. Heavier than `activeRowLight/Dark`: the
+    /// composer floats over live terminal output, not the quiet sidebar.
+    static let composerRowSelectedLight = Color.black.opacity(0.06)
+    static let composerRowSelectedDark = Color.white.opacity(0.10)
 
     /// Chrome background (light mode). Covers the left sidebar column and the
     /// gutter padding around the terminal card. The outer of the two Ghostties
@@ -324,6 +328,12 @@ enum WorkspaceLayout {
         colorScheme == .dark ? textSecondaryDark : textSecondaryLight
     }
 
+    /// An empty project's header and rail monogram in the one-view sidebar
+    /// (Sean, 2026-10-08: shown dimmed, count 0). One tier below
+    /// `sectionHeaderForeground` on purpose, so it sits under the 4.5:1 that
+    /// token clears: the dimming is the signal that nothing is running there.
+    static let emptyProjectForeground = Color(nsColor: .tertiaryLabelColor)
+
     /// Foreground for the smaller in-row session group headers ("Active",
     /// "Recent", "Idle") inside an expanded project. One tier quieter than the
     /// top-level section headers since they're nested. Same `textSecondary`
@@ -354,7 +364,7 @@ enum WorkspaceLayout {
     /// Render size of the per-session ghost glyph in `RecentsRowView` (Sessions
     /// tab). Smaller than `sidebarIconColumnWidth` — the ghost sits centered
     /// inside that column, not filling it.
-    static let sessionGhostSize: CGFloat = 14
+    static let sessionGhostSize: CGFloat = 20
 
     /// Padding between the session popover card's edge and its content. The
     /// card used to nest a grey block (14pt inner padding) inside a 10pt
@@ -372,57 +382,89 @@ enum WorkspaceLayout {
     // never re-derive a literal at a second call site. Grouped by the same
     // sections the DialKit panel presents them in.
 
-    /// `RecentsRowView` row height — 46pt + the 2pt inter-row gap
-    /// (`recentsRowGap`) below gives the 48pt row-to-row pitch measured off
-    /// Flow 07's export. See `RecentsRowView.body`'s `.frame(height:)` comment.
-    static let recentsRowHeight: CGFloat = 46
+    /// `RecentsRowView` row height. With the 4pt inter-row gap
+    /// (`recentsRowGap`) below, the row-to-row pitch is 52pt. See `RecentsRowView.body`'s `.frame(height:)` comment.
+    static let recentsRowHeight: CGFloat = 48
 
     /// Inter-row gap in the Sessions tab's section `VStack`
     /// (`RecentsListView.sectionsContent`).
-    static let recentsRowGap: CGFloat = 2
+    static let recentsRowGap: CGFloat = 4
 
     /// Session name / inline-rename field text size in `RecentsRowView`.
-    static let recentsRowTitleSize: CGFloat = 12
+    static let recentsRowTitleSize: CGFloat = 14
 
     /// Project-name subtitle text size in `RecentsRowView`.
-    static let recentsRowSubtitleSize: CGFloat = 10
+    static let recentsRowSubtitleSize: CGFloat = 11
 
-    /// `RecentsRowView`'s trailing edge padding (leading uses
-    /// `sidebarRowLeadingPadding`, shared with every other sidebar row/header).
-    static let recentsRowTrailingPadding: CGFloat = 10
+    /// The expanded list's row and header trailing padding: option D's 16pt
+    /// label padding plus its 4pt group padding.
+    static let recentsRowTrailingPadding: CGFloat = 20
 
-    /// Section header ("Pinned"/"Active"/"Inactive"/"Archive") title/count
-    /// text size in `RecentsListView`'s `SessionSectionHeader`.
-    static let sessionSectionHeaderTextSize: CGFloat = 11
+    /// The expanded list's row and header leading padding, before the 30pt
+    /// tile/glyph column (option D's group padding). The legacy
+    /// `sidebarRowLeadingPadding` (8) still sets the Projects tab's rows.
+    static let recentsRowLeadingPadding: CGFloat = 4
 
-    /// Section header top padding (`SessionSectionHeader`).
-    static let sessionSectionHeaderTopPadding: CGFloat = 8
-
-    /// Section header bottom padding (`SessionSectionHeader`).
-    static let sessionSectionHeaderBottomPadding: CGFloat = 4
-
-    /// Section header chevron size (`SessionSectionHeader`'s `PixelChevronView`
-    /// frame). A dial independent of `sidebarIconColumnWidth`, even though it
-    /// defaults to the same 16pt value — the two are visually related, not
-    /// structurally tied.
-    static let sessionSectionHeaderChevronSize: CGFloat = 16
-
-    /// Trailing padding of a Sessions-list section header (and the rail's
-    /// chevron rows, which mirror it).
-    static let sessionSectionHeaderTrailingPadding: CGFloat = 12
+    /// The selected project's group card in the expanded list (option D):
+    /// 6pt, inset from the tile and chips on all four sides. Read it through
+    /// `SidebarDialTuning.groupCardInset()`.
+    static let sidebarGroupCardInset: CGFloat = 6
 
     /// Top padding of the scrollable list content in both sidebar tabs
     /// (`WorkspaceSidebarView`'s Projects `LazyVStack` and `RecentsListView`'s
     /// Sessions `sectionsContent` — both currently `.padding(.vertical, 4)`,
     /// split here into a dialable top value; bottom stays the fixed 4pt this
     /// replaces).
-    static let sidebarContentPaddingTop: CGFloat = 4
+    static let sidebarContentPaddingTop: CGFloat = 0
 
-    /// Leading padding of the scrollable list content in both sidebar tabs.
-    static let sidebarContentPaddingLeading: CGFloat = 8
+    /// INNER leading padding of the scrollable list content (both tabs and
+    /// the rail), inside the window margin (`SidebarDialTuning.windowMargin`)
+    /// that already sets the content's outer edge. 0 = content sits at the
+    /// window margin, the same gutter as the terminal card's.
+    static let sidebarContentPaddingLeading: CGFloat = 0
 
-    /// Trailing padding of the scrollable list content in both sidebar tabs.
-    static let sidebarContentPaddingTrailing: CGFloat = 8
+    /// INNER trailing padding of the scrollable list content, inside the
+    /// window-margin gutter to the next surface (`sidebarTrailingGutter`
+    /// plus `SidebarDialTuning.contentColumnTrailingPadding`).
+    static let sidebarContentPaddingTrailing: CGFloat = 0
+
+    /// Space outside the sidebar column's trailing edge before the next
+    /// visible surface: the one source for the sidebar-to-card gap, read by
+    /// both the card's leading constraint and the column's own padding.
+    /// Pinned: the window margin (the gap the sidebar drag handle sits in),
+    /// so that much of a visible trailing inset is already there and the
+    /// column pads only the rest. Without this the expanded list and tray
+    /// sat 8pt from the window edge but 16pt from the card. Collapsed (rail
+    /// A2): 0, the card butts the rail, whose own width already ends a
+    /// `leadingInset` past the traffic lights (`collapsedRailWidth`).
+    /// Overlay/closed: the column's trailing edge IS the panel edge, so 0.
+    static func sidebarTrailingGutter(for mode: SidebarMode, defaults: UserDefaults = SidebarDialTuning.store) -> CGFloat {
+        sidebarTrailingGutter(for: mode, margin: SidebarDialTuning.windowMargin(defaults: defaults))
+    }
+
+    /// `sidebarTrailingGutter(for:)` at an explicit window margin.
+    static func sidebarTrailingGutter(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
+        mode == .pinned ? margin : 0
+    }
+
+    /// Hit width of the sidebar drag handle on the rail: a strip over the
+    /// rail's trailing edge, ending at the card's leading edge. Rail A2 has
+    /// no sidebar-to-card gap for the handle to fill, and the tray capsules'
+    /// window-margin inset (`RailTrayGeometry`) already leaves this strip clear.
+    static let railDragHandleHitWidth: CGFloat = 8
+
+    /// Width of the sidebar drag handle, whose trailing edge always sits on
+    /// the card's leading edge. Pinned: the sidebar-to-card gap it sits in
+    /// (`sidebarTrailingGutter`). Collapsed: `railDragHandleHitWidth`, over
+    /// the rail, so the handle never depends on the gap. Overlay/closed: 0
+    /// (the handle is hidden there).
+    static func sidebarDragHandleWidth(for mode: SidebarMode, margin: CGFloat) -> CGFloat {
+        switch mode {
+        case .pinned: return sidebarTrailingGutter(for: .pinned, margin: margin)
+        case .collapsed: return railDragHandleHitWidth
+        case .closed, .overlay: return 0
+        }
+    }
 
     /// Extra top padding on the bottom tray, opening a gap between the list
     /// above and the tray below. 0 = today's flush layout (the list's
@@ -674,24 +716,26 @@ extension Animation {
 // MARK: - Workspace Notifications
 
 extension Notification.Name {
-    /// Posted by TerminalController when the user presses Cmd+Shift+].
-    /// The notification object is the originating NSWindow.
+    /// Posted by TerminalController for Next Project (Cmd+Ctrl+]). The
+    /// notification object is the originating NSWindow. Observed by
+    /// `WorkspaceViewContainer`, in every sidebar mode.
     static let workspaceSelectNextProject = Notification.Name("com.seansmithdesign.ghostties.workspace.selectNextProject")
 
-    /// Posted by TerminalController when the user presses Cmd+Shift+[.
-    /// The notification object is the originating NSWindow.
+    /// Posted by TerminalController for Previous Project (Cmd+Ctrl+[). The
+    /// notification object is the originating NSWindow. Observed by
+    /// `WorkspaceViewContainer`, in every sidebar mode.
     static let workspaceSelectPreviousProject = Notification.Name("com.seansmithdesign.ghostties.workspace.selectPreviousProject")
 
-    /// Posted by TerminalController when the user presses Cmd+Shift+] in
-    /// project-first sidebar mode. The notification object is the originating
-    /// NSWindow. `WorkspaceSidebarView` observes this to cycle focus forward
-    /// through live (running) sessions in sidebar visual order.
+    /// Posted by TerminalController when the user presses Cmd+Shift+]. The
+    /// notification object is the originating NSWindow. `WorkspaceViewContainer`
+    /// observes this, in every sidebar mode, to cycle focus forward through
+    /// live sessions in the order the mounted sidebar lists them.
     static let workspaceSelectNextSession = Notification.Name("com.seansmithdesign.ghostties.workspace.selectNextSession")
 
-    /// Posted by TerminalController when the user presses Cmd+Shift+[ in
-    /// project-first sidebar mode. The notification object is the originating
-    /// NSWindow. `WorkspaceSidebarView` observes this to cycle focus backward
-    /// through live (running) sessions in sidebar visual order.
+    /// Posted by TerminalController when the user presses Cmd+Shift+[. The
+    /// notification object is the originating NSWindow. `WorkspaceViewContainer`
+    /// observes this, in every sidebar mode, to cycle focus backward through
+    /// live sessions in the order the mounted sidebar lists them.
     static let workspaceSelectPreviousSession = Notification.Name("com.seansmithdesign.ghostties.workspace.selectPreviousSession")
 
     /// Posted by TerminalController when the user presses Cmd+Shift+] in
@@ -739,17 +783,30 @@ extension Notification.Name {
     /// Posted by AppDelegate's Cmd+W local-event monitor, project-first
     /// workspace mode only (see `AppDelegate.isProjectFirstWorkspaceWindow(_:)`).
     /// The notification object is the originating NSWindow.
-    /// `WorkspaceSidebarView` observes this and calls
-    /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`.
+    /// `WorkspaceViewContainer` observes this, in every sidebar mode, and
+    /// calls `SessionCoordinator.closeCurrentSessionWithConfirmation()`.
     static let workspaceCloseSession = Notification.Name("com.seansmithdesign.ghostties.workspace.closeSession")
 
     /// Posted by AppDelegate's Cmd+1-9 local-event monitor, project-first
     /// workspace mode only. The notification object is the originating
     /// NSWindow; `userInfo["index"]` carries the digit pressed (1-9, where 9
     /// always means "last visible session", not literally the 9th).
-    /// `WorkspaceSidebarView` resolves the index against whichever list the
-    /// active sidebar tab renders.
+    /// `WorkspaceViewContainer` resolves the index against whichever list the
+    /// mounted sidebar renders (the rail's rows when collapsed).
     static let workspaceFocusSessionAtIndex = Notification.Name("com.seansmithdesign.ghostties.workspace.focusSessionAtIndex")
+
+    /// Posted by `WorkspaceViewContainer` after Cmd+Shift+[/] or Cmd+1-9
+    /// focuses a session. The notification object is the window;
+    /// `userInfo["projectId"]` is the session's project `UUID`.
+    /// `WorkspaceSidebarView` observes this to expand and select that
+    /// project on the Projects tab.
+    static let workspaceDidFocusSessionFromShortcut = Notification.Name("com.seansmithdesign.ghostties.workspace.didFocusSessionFromShortcut")
+
+    /// Posted by `WorkspaceViewContainer` after Next/Previous Project moves
+    /// the selection. The notification object is the window;
+    /// `userInfo["projectId"]` is the selected project's `UUID`.
+    /// `WorkspaceSidebarView` observes this to expand and select it.
+    static let workspaceDidSelectProjectFromShortcut = Notification.Name("com.seansmithdesign.ghostties.workspace.didSelectProjectFromShortcut")
 
     /// Posted by MenuBarDropdownView when the user clicks a session row.
     /// userInfo contains "sessionId" (UUID). SessionCoordinators observe this
@@ -780,4 +837,71 @@ extension Notification.Name {
     /// `RowClickRouter.shared.handleRowClick` through their existing SwiftUI
     /// environment, preserving correct window-scoped coordinator references.
     static let ghosttiesActivateFocusedTaskRow = Notification.Name("com.seansmithdesign.ghostties.activateFocusedTaskRow")
+}
+
+private struct SidebarTrailingGutterKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+private struct SidebarRailWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = WorkspaceLayout.sidebarRailWidth
+}
+
+extension EnvironmentValues {
+    /// The collapsed rail's width (`SidebarWidthModel.railWidth`), injected
+    /// once at the sidebar root (`SidebarHostRoot`); the rail tray sizes its
+    /// square pills from it (`RailTrayGeometry`). The rail's floor width
+    /// (`WorkspaceLayout.sidebarRailWidth`) outside it.
+    var sidebarRailWidth: CGFloat {
+        get { self[SidebarRailWidthKey.self] }
+        set { self[SidebarRailWidthKey.self] = newValue }
+    }
+
+    /// `WorkspaceLayout.sidebarTrailingGutter(for:)`, injected once at the
+    /// sidebar root (`SidebarHostRoot`). 0 outside it, so a view hosted on
+    /// its own (tests, previews) pads its full visible inset.
+    var sidebarTrailingGutter: CGFloat {
+        get { self[SidebarTrailingGutterKey.self] }
+        set { self[SidebarTrailingGutterKey.self] = newValue }
+    }
+}
+
+/// The sidebar list column's padding, for both expanded tabs and the rail.
+/// Tagged for the DEBUG Redlines overlay before and after each layer, so it
+/// can measure both.
+///
+/// Expanded (`symmetric: false`): the window margin
+/// (`SidebarDialTuning.windowMargin`) sets the column's outer edge — leading
+/// from the window edge; trailing so the visible gap to the next surface,
+/// gutter included, is the same margin — and the content-padding dials add
+/// inner spacing inside it.
+///
+/// Rail (`symmetric: true`): one inset, the window margin, on BOTH sides of
+/// the rail column, and no inner horizontal dials. The rail's row cards and
+/// its tray pill (`SidebarTray`, centred on the full rail) then share one
+/// centre by construction, whatever the leading/trailing dials hold.
+///
+/// `horizontalOnly`: the pinned History footer below the list
+/// (`SidebarSessionSections.Layout.footer`) takes the column's horizontal
+/// insets but none of the list's vertical padding or redline frames.
+struct SidebarColumnPadding: ViewModifier {
+    /// Re-renders on every dial write; see `SidebarDialTuning.epochKey`.
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+    /// See `EnvironmentValues.sidebarTrailingGutter`.
+    @Environment(\.sidebarTrailingGutter) private var trailingGutter
+    var symmetric = false
+    var horizontalOnly = false
+
+    func body(content: Content) -> some View {
+        let margin = SidebarDialTuning.windowMargin()
+        content
+            .redlineFrame(horizontalOnly ? nil : RedlineID.listContent)
+            .padding(.leading, symmetric ? 0 : SidebarDialTuning.contentPaddingLeading())
+            .padding(.trailing, symmetric ? 0 : SidebarDialTuning.contentPaddingTrailing())
+            .padding(.top, horizontalOnly ? 0 : SidebarDialTuning.contentPaddingTop())
+            .redlineFrame(horizontalOnly ? nil : RedlineID.listInner)
+            .padding(.leading, margin)
+            .padding(.trailing, symmetric ? margin : SidebarDialTuning.contentColumnTrailingPadding(gutter: trailingGutter))
+            .padding(.bottom, horizontalOnly ? 0 : 4)
+    }
 }

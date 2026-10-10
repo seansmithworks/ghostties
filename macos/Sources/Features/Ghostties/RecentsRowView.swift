@@ -29,7 +29,14 @@ struct RecentsRowView: View, Equatable {
     /// Replaces the project-name subtitle with an explanatory hint; false is
     /// the default so every other call site is unaffected.
     var hookUnconfirmed: Bool = false
+    /// Replaces the project-name subtitle — the one-view list, where the
+    /// project is the header above the row (`SidebarProjectsLayout.oneView`).
+    /// Nil keeps the project name.
+    var subtitle: String? = nil
     let isActive: Bool
+    /// A one-view grouped row (option D): selection is a tile-sized chip
+    /// behind the glyph, inside the group card, not the wide row card.
+    var inProjectColumn: Bool = false
     var isEditing: Bool = false
     @Binding var editingName: String
     var isRenameFocused: FocusState<Bool>.Binding
@@ -54,10 +61,7 @@ struct RecentsRowView: View, Equatable {
     /// every Release build, where the key is never written) is unaffected.
     var dialEpoch: Int = 0
 
-    @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var widthModel: SidebarWidthModel
     @EnvironmentObject private var coordinator: SessionCoordinator
-    @State private var isHovered = false
 
     /// Every field that affects rendered output. Deliberately excludes
     /// `editingName`/`isRenameFocused`/the closures — those are live
@@ -68,77 +72,59 @@ struct RecentsRowView: View, Equatable {
             && lhs.projectName == rhs.projectName
             && lhs.indicatorState == rhs.indicatorState
             && lhs.hookUnconfirmed == rhs.hookUnconfirmed
+            && lhs.subtitle == rhs.subtitle
             && lhs.isActive == rhs.isActive
+            && lhs.inProjectColumn == rhs.inProjectColumn
             && lhs.isEditing == rhs.isEditing
             && lhs.staggerIndex == rhs.staggerIndex
             && lhs.dialEpoch == rhs.dialEpoch
     }
 
     var body: some View {
-        HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
-            // Session name + project name stacked
-            VStack(alignment: .leading, spacing: 1) {
-                if isEditing {
-                    TextField("Session name", text: $editingName)
-                        .font(.system(size: SidebarDialTuning.rowTitleSize()))
-                        .textFieldStyle(.plain)
-                        .focused(isRenameFocused)
-                        .onSubmit { onCommitRename() }
-                        .onExitCommand { onCancelRename() }
-                        .onChange(of: isRenameFocused.wrappedValue) { focused in
-                            // Deferred: Esc can drop focus (firing this) before
-                            // SwiftUI's onExitCommand runs cancelRename(). Dispatching
-                            // async lets cancelRename() clear editingSessionId first,
-                            // so the id guard in commitRename(session:) rejects this
-                            // call instead of writing a stale name to the store.
-                            if !focused, isEditing {
-                                DispatchQueue.main.async { onCommitRename() }
-                            }
+        // The row's visuals (layout, padding, height, selected surface,
+        // hover, Flow 05 label choreography) live in `SidebarListRowChrome`,
+        // shared with the History row so the two can never drift.
+        SidebarListRowChrome(
+            subtitle: hookUnconfirmed ? "Approve the Ghostties hook in Codex" : (subtitle ?? projectName),
+            isActive: isActive,
+            selection: inProjectColumn ? .chip : .card,
+            staggerIndex: staggerIndex,
+            redlineID: RedlineID.row(session.id)
+        ) {
+            if isEditing {
+                TextField("Session name", text: $editingName)
+                    .font(.system(size: SidebarDialTuning.rowTitleSize()))
+                    .textFieldStyle(.plain)
+                    .focused(isRenameFocused)
+                    .onSubmit { onCommitRename() }
+                    .onExitCommand { onCancelRename() }
+                    .onChange(of: isRenameFocused.wrappedValue) { focused in
+                        // Deferred: Esc can drop focus (firing this) before
+                        // SwiftUI's onExitCommand runs cancelRename(). Dispatching
+                        // async lets cancelRename() clear editingSessionId first,
+                        // so the id guard in commitRename(session:) rejects this
+                        // call instead of writing a stale name to the store.
+                        if !focused, isEditing {
+                            DispatchQueue.main.async { onCommitRename() }
                         }
-                } else {
-                    Text(session.name)
-                        .font(.system(size: SidebarDialTuning.rowTitleSize()))
-                        .foregroundStyle(Color.primary)
-                        .lineLimit(1)
-                }
-
-                Text(hookUnconfirmed ? "Approve the Ghostties hook in Codex" : projectName)
-                    .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
-                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
-                    .lineLimit(1)
+                    }
+            } else {
+                SidebarListRowTitle(text: session.name, isActive: isActive)
             }
-            .opacity(labelOpacity)
-            .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
-
-            Spacer(minLength: 4)
-
+        } glyph: {
             // No timestamp — Flow 07 round 6 drops the relative-time label
             // from the row entirely. `relativeLabel` is kept (it still backs
             // the accessibility label below); only the visible `Text` is gone.
 
             // Per-session status glyph (spinner / ? / check / x) in the
-            // trailing slot (Sean, 2026-10-04). Selection is carried by the
-            // row's card background, not a glyph tint. The collapsed rail
-            // (`RailSessionRow`) draws the same glyph centered in the rail,
-            // so across the pinned⇄rail transition the glyph moves from this
-            // trailing slot to the center (it snaps under Reduce Motion).
+            // leading slot, under its project's tile (option D, 2026-10-09).
+            // Selection is the row's card or chip, not a glyph tint. The
+            // collapsed rail (`RailSessionRow`) draws the same glyph centered
+            // in the rail, so across the pinned⇄rail transition the glyph
+            // moves from this slot to the center (it snaps under Reduce Motion).
             SessionStatusGlyph(kind: indicatorState.statusGlyphKind, size: SidebarDialTuning.rowGhostSize())
                 .frame(width: SidebarDialTuning.rowGhostSize(), height: SidebarDialTuning.rowGhostSize())
         }
-        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
-        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
-        // 46pt + the enclosing `VStack(spacing: 2)`'s 2pt inter-row gap
-        // (`RecentsListView.sectionsContent`) = 48pt row-to-row pitch —
-        // measured directly off Flow 07's export (`mIi8b.png`): traffic-light
-        // diameter is 12px there and native traffic lights are a fixed 12pt,
-        // so design px IS pt (1:1, no export scaling to correct for).
-        // Consecutive row-icon centers measure 48px apart; the round-6 first
-        // pass used 40 (before that, 36), both too tight — Sean's round-6
-        // follow-up review called this out as ~30% tighter than the design.
-        .frame(height: SidebarDialTuning.rowHeight())
-        .background(rowBackground)
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
         .sessionPopoverAnchor(sessionId: session.id, controller: coordinator.sessionPopover)
         .onTapGesture {
             guard !isEditing else { return }
@@ -147,6 +133,159 @@ struct RecentsRowView: View, Equatable {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
+    // MARK: - Accessibility
+
+    private var accessibilityLabel: String {
+        // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
+        // renders from — this row previously stated no status at all.
+        var parts = [session.name, "in \(projectName)", indicatorState.statusGlyphKind.spokenStatus]
+        if hookUnconfirmed {
+            parts.append("Approve the Ghostties hook in Codex")
+        }
+        if let ts = session.displayTimestamp {
+            // "last output" — not a bare relative token — so a screen reader
+            // has a noun for what this measures. Browsing (focus/selection)
+            // no longer advances this value; without the noun, "2m" reads as
+            // an event the user didn't cause. A11y string only — the visual
+            // row keeps the bare relative label. See RecentsRowView.body.
+            parts.append("last output \(Self.relativeLabel(ts))")
+        }
+        if isActive { parts.append("active") }
+        return parts.joined(separator: ", ")
+    }
+
+    // MARK: - Relative Time
+
+    /// Formats a past date as a compact relative string.
+    /// - "just now" for < 1 min
+    /// - "2m", "45m" for < 1 hr
+    /// - "3h" for < 24 hr
+    /// - Day abbreviation ("Mon") for < 7 days
+    /// - "May 5" for older
+    static func relativeLabel(_ date: Date) -> String {
+        let elapsed = Date.now.timeIntervalSince(date)
+        if elapsed < 60 { return "just now" }
+        if elapsed < 3600 { return "\(Int(elapsed / 60))m" }
+        if elapsed < 86400 { return "\(Int(elapsed / 3600))h" }
+        if elapsed < 604800 { return dayFormatter.string(from: date) }
+        return monthDayFormatter.string(from: date)
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "EEE"
+        return f
+    }()
+
+    private static let monthDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MMM d"
+        return f
+    }()
+}
+
+// MARK: - Shared Row Chrome
+
+/// A sidebar list row's title line: the row title size, and the "Selected
+/// title weight" dial on the selected row (macOS 27 sidebar selection:
+/// semibold).
+struct SidebarListRowTitle: View {
+    let text: String
+    let isActive: Bool
+
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
+    var body: some View {
+        Text(text)
+            .font(.system(
+                size: SidebarDialTuning.rowTitleSize(),
+                weight: isActive ? SidebarDialTuning.selectedTitleWeight().fontWeight : .regular
+            ))
+            .foregroundStyle(Color.primary)
+            .lineLimit(1)
+    }
+}
+
+/// How a sidebar list row shows selection and hover.
+enum SidebarRowSelection: Equatable {
+    /// The wide row card (`SidebarRowCardBackground`): flat lists (the
+    /// Sessions tab, Pinned, History).
+    case card
+    /// A tile-sized chip behind the glyph (`SidebarRowChipBackground`): a
+    /// one-view grouped row, inside its project's group card (option D).
+    case chip
+}
+
+/// The visual shell of a sidebar list row (option D, 2026-10-09) — one glyph
+/// in the leading status slot, the column the one-view tiles sit in, then
+/// title over subtitle; the row height and padding dials, the selected
+/// surface, hover fill, and the Flow 05 label choreography. Shared by
+/// session rows (`RecentsRowView`) and the History row (`HistoryRowView`) so
+/// both render identically by construction. Callers add tap, popover and
+/// accessibility on top.
+struct SidebarListRowChrome<Title: View, Glyph: View>: View {
+    let subtitle: String
+    let isActive: Bool
+    var selection: SidebarRowSelection = .card
+    /// Position within the rendered section — feeds the Flow 05 expand
+    /// stagger (`WorkspaceLayout.expandLabelDelay`).
+    var staggerIndex: Int = 0
+    let redlineID: String
+    @ViewBuilder let title: () -> Title
+    @ViewBuilder let glyph: () -> Glyph
+
+    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var widthModel: SidebarWidthModel
+    @State private var isHovered = false
+    @AppStorage(SidebarDialTuning.epochKey, store: SidebarDialTuning.store) private var dialEpochTick = 0
+
+    /// The leading status slot: the monogram tile's width, so a row's
+    /// glyph centres under its project's tile.
+    static var glyphSlotWidth: CGFloat { RailProjectTile.size }
+
+    var body: some View {
+        HStack(spacing: WorkspaceLayout.sidebarIconLabelSpacing) {
+            glyph()
+                .frame(width: Self.glyphSlotWidth)
+                .background {
+                    if selection == .chip {
+                        SidebarRowChipBackground(isActive: isActive, isHovered: isHovered, redlineID: redlineID + ".chip")
+                    }
+                }
+                .redlineFrame(redlineID + ".glyph")
+
+            // Title + subtitle stacked
+            VStack(alignment: .leading, spacing: 1) {
+                title()
+
+                Text(subtitle)
+                    .font(.system(size: SidebarDialTuning.rowSubtitleSize()))
+                    .foregroundStyle(colorScheme == .dark ? WorkspaceLayout.textSecondaryDark : WorkspaceLayout.textSecondaryLight)
+                    .lineLimit(1)
+            }
+            .redlineFrame(redlineID + ".label")
+            .opacity(labelOpacity)
+            .animation(labelAnimation, value: widthModel.isCollapsedPresentation)
+
+            Spacer(minLength: 4)
+        }
+        .redlineFrame(redlineID + ".content")
+        .padding(.leading, SidebarDialTuning.rowLeadingPadding())
+        .padding(.trailing, SidebarDialTuning.rowTrailingPadding())
+        // 48pt + the enclosing `VStack`'s 4pt row gap = a 52pt pitch.
+        .frame(height: SidebarDialTuning.rowHeight())
+        .redlineFrame(redlineID)
+        .background {
+            if selection == .card {
+                rowBackground
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
     }
 
     // MARK: - Flow 05 Content Choreography (sidebar-presence)
@@ -202,92 +341,18 @@ struct RecentsRowView: View, Equatable {
 
     // MARK: - Row Background
 
-    /// The selected row is a raised card (Flow 07 round 6, layer
-    /// `XHBC1`/"Bottom Group"): opaque canvas-surface fill at a fixed 12pt
-    /// radius plus a soft drop shadow, not a flat tint at the width-driven
-    /// resting/traveled radius every other row uses. Unselected rows are
-    /// unchanged — same `rowCornerRadius`/hover fill as before.
-    @ViewBuilder
+    /// Hover and selected share one footprint (`SidebarRowCardBackground`):
+    /// the row frame, at `rowCornerRadius`.
     private var rowBackground: some View {
-        if isActive {
-            RoundedRectangle(cornerRadius: SidebarDialTuning.selectedCardCornerRadius())
-                .fill(colorScheme == .dark ? Color(WorkspaceLayout.canvasBackgroundDark) : Color(WorkspaceLayout.canvasBackgroundLight))
-                .shadow(
-                    color: Color.black.opacity(SidebarDialTuning.selectedCardShadowOpacity()),
-                    radius: SidebarDialTuning.selectedCardShadowRadius(),
-                    y: SidebarDialTuning.selectedCardShadowYOffset()
-                )
-        } else {
-            RoundedRectangle(cornerRadius: rowCornerRadius)
-                .fill(rowFill)
-                .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
-        }
+        SidebarRowCardBackground(isActive: isActive, isHovered: isHovered, cornerRadius: rowCornerRadius)
+            .animation(glyphAnimation, value: widthModel.isCollapsedPresentation)
     }
 
     /// Row corner radius — the canvas's "8 → 16px" row, same window as the
-    /// glyph travel above. Unselected rows only — see `rowBackground`.
+    /// glyph travel above.
     private var rowCornerRadius: CGFloat {
         widthModel.isCollapsedPresentation
             ? WorkspaceLayout.sidebarRowCornerRadiusTraveled
             : WorkspaceLayout.sidebarRowCornerRadiusResting
     }
-
-    private var rowFill: Color {
-        if isHovered {
-            return Color.primary.opacity(0.05)
-        }
-        return Color.clear
-    }
-
-    // MARK: - Accessibility
-
-    private var accessibilityLabel: String {
-        // Same `SessionStatusGlyphKind.spokenStatus` the visible glyph
-        // renders from — this row previously stated no status at all.
-        var parts = [session.name, "in \(projectName)", indicatorState.statusGlyphKind.spokenStatus]
-        if hookUnconfirmed {
-            parts.append("Approve the Ghostties hook in Codex")
-        }
-        if let ts = session.displayTimestamp {
-            // "last output" — not a bare relative token — so a screen reader
-            // has a noun for what this measures. Browsing (focus/selection)
-            // no longer advances this value; without the noun, "2m" reads as
-            // an event the user didn't cause. A11y string only — the visual
-            // row keeps the bare relative label. See RecentsRowView.body.
-            parts.append("last output \(Self.relativeLabel(ts))")
-        }
-        if isActive { parts.append("active") }
-        return parts.joined(separator: ", ")
-    }
-
-    // MARK: - Relative Time
-
-    /// Formats a past date as a compact relative string.
-    /// - "just now" for < 1 min
-    /// - "2m", "45m" for < 1 hr
-    /// - "3h" for < 24 hr
-    /// - Day abbreviation ("Mon") for < 7 days
-    /// - "May 5" for older
-    static func relativeLabel(_ date: Date) -> String {
-        let elapsed = Date.now.timeIntervalSince(date)
-        if elapsed < 60 { return "just now" }
-        if elapsed < 3600 { return "\(Int(elapsed / 60))m" }
-        if elapsed < 86400 { return "\(Int(elapsed / 3600))h" }
-        if elapsed < 604800 { return dayFormatter.string(from: date) }
-        return monthDayFormatter.string(from: date)
-    }
-
-    private static let dayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "EEE"
-        return f
-    }()
-
-    private static let monthDayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "MMM d"
-        return f
-    }()
 }

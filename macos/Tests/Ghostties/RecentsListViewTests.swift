@@ -186,14 +186,10 @@ final class RecentsListViewTests: XCTestCase {
 
     // MARK: - Active/Inactive/Archive Sessions (pure helpers)
 
-    /// Sean hit this directly: at cold launch every session has no
-    /// `globalStatuses` entry yet (no live surface), Active is empty, nothing
-    /// is selected, and Archive's stored preference is `false` (its default).
-    /// Archive must render COLLAPSED — an empty Active section is not a
-    /// reason to override the user's collapsed/expanded choice for Archive.
-    /// A bare sidebar in this state is the accepted outcome; it is not this
-    /// helper's job to prevent it.
-    func testColdLaunchArchiveStaysCollapsedWhenActiveIsEmpty() {
+    /// At cold launch every session has no `globalStatuses` entry yet (no
+    /// live surface): Active is empty and every session is archived (shown
+    /// through the History row).
+    func testColdLaunchPutsEverySessionInArchive() {
         let sessions = (0..<14).map { session(name: "s\($0)") }
 
         let active = RecentsListView.activeSessions(from: sessions, statuses: [:])
@@ -203,19 +199,11 @@ final class RecentsListViewTests: XCTestCase {
         XCTAssertTrue(active.isEmpty)
         XCTAssertTrue(inactive.isEmpty)
         XCTAssertEqual(archive.count, 14)
-
-        let archiveExpanded = RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .archive,
-            sectionContainsSelectedSession: false
-        )
-        XCTAssertFalse(archiveExpanded, "Archive must honor the collapsed stored preference even when Active is empty")
     }
 
     /// FIX 6: a selected session that belongs in Archive stays in Archive
-    /// (no promotion) — but its section renders expanded via the auto-expand
-    /// override, so it's still visible without moving.
-    func testSelectedArchiveSessionStaysInArchiveButSectionExpands() {
+    /// (no promotion into Active).
+    func testSelectedArchiveSessionStaysInArchive() {
         let selected = session(name: "selected")
         let other = session(name: "other")
         let sessions = [selected, other]
@@ -226,23 +214,12 @@ final class RecentsListViewTests: XCTestCase {
 
         XCTAssertTrue(archive.contains { $0.id == selected.id }, "selected session must stay in Archive")
         XCTAssertFalse(active.contains { $0.id == selected.id }, "selected session must NOT be promoted into Active")
-
-        let archiveExpanded = RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .archive,
-            sectionContainsSelectedSession: archive.contains { $0.id == selected.id }
-        )
-        XCTAssertTrue(archiveExpanded, "Archive must expand because it contains the selected session")
     }
 
-    /// Same as above, but for the new INACTIVE section: a selected session
-    /// that ran-then-stopped (started at some point this launch) stays in
-    /// Inactive — no promotion into Active, no relocation into Archive — but
-    /// its section force-expands so it's visible without moving. This is the
-    /// exact case Sean hit: stop a running session, expect it somewhere
-    /// other than Archive, and it must be reachable even if Inactive were
-    /// collapsed.
-    func testSelectedInactiveSessionStaysInInactiveButSectionExpands() {
+    /// Same as above, but for INACTIVE: a selected session that
+    /// ran-then-stopped (started at some point this launch) stays in
+    /// Inactive — no promotion into Active, no relocation into Archive.
+    func testSelectedInactiveSessionStaysInInactive() {
         let selected = session(name: "selected")
         let other = session(name: "other")
         let sessions = [selected, other]
@@ -261,45 +238,6 @@ final class RecentsListViewTests: XCTestCase {
 
         XCTAssertTrue(inactive.contains { $0.id == selected.id }, "stopped-but-started-this-launch session must land in Inactive")
         XCTAssertFalse(archive.contains { $0.id == selected.id }, "must NOT be lumped into Archive")
-
-        let inactiveExpanded = RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .inactive,
-            sectionContainsSelectedSession: true
-        )
-        XCTAssertTrue(inactiveExpanded, "Inactive must expand because it contains the selected session")
-    }
-
-    /// The auto-expand override is render-time only — it must never depend on
-    /// (or imply writing to) the stored `@AppStorage` preference. Passing a
-    /// `storedPreference` of `false` still yields `true` under the override
-    /// condition, proving the override doesn't require/mutate storage.
-    func testEffectiveExpandedOverrideIgnoresStoredPreferenceWhenTriggered() {
-        XCTAssertTrue(RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .archive,
-            sectionContainsSelectedSession: true
-        ))
-        // No override condition met — falls through to the stored preference.
-        XCTAssertFalse(RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .archive,
-            sectionContainsSelectedSession: false
-        ))
-    }
-
-    /// FIX (dead ACTIVE header): the selected-session override must exclude
-    /// `.active`. A selected, running session lives in Active essentially
-    /// all the time during normal use, so applying the override there would
-    /// make the ACTIVE header collapse control permanently dead — tapping it
-    /// while a session is selected must actually collapse the section, honoring
-    /// the stored preference the same way as when nothing is selected.
-    func testActiveSectionRespectsStoredPreferenceEvenWhenItContainsSelectedSession() {
-        XCTAssertFalse(RecentsListView.effectiveExpanded(
-            storedPreference: false,
-            section: .active,
-            sectionContainsSelectedSession: true
-        ), "Active must not force-expand for the selected session — only Inactive/Archive get that override")
     }
 
     /// The three static buckets must be an EXACT partition: every session
@@ -677,7 +615,8 @@ final class RecentsListViewTests: XCTestCase {
         let liveSessions = WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: [a, b, c],
             statuses: statuses,
-            coordinator: coordinator
+            coordinator: coordinator,
+            pinningAvailable: true
         )
         XCTAssertEqual(liveSessions.map(\.name), ["a", "c"], "b has no live surface and must be excluded from the cycle")
 
@@ -756,7 +695,8 @@ final class RecentsListViewTests: XCTestCase {
         let visible = WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: [a, b, archived],
             statuses: statuses,
-            coordinator: coordinator
+            coordinator: coordinator,
+            pinningAvailable: true
         )
 
         XCTAssertEqual(WorkspaceSidebarView.session(at: 1, in: visible)?.name, "a")
@@ -807,10 +747,10 @@ final class RecentsListViewTests: XCTestCase {
         let sessions = [pinnedAndRunning, pinnedAndClosed]
         let statuses: [UUID: SessionStatus] = [pinnedAndRunning.id: .running]
 
-        let pinned = RecentsListView.pinnedSessions(from: sessions)
-        let active = RecentsListView.activeSessions(from: sessions, statuses: statuses)
-        let inactive = RecentsListView.inactiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: [])
-        let archive = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: [])
+        let pinned = RecentsListView.pinnedSessions(from: sessions, pinningAvailable: true)
+        let active = RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: true)
+        let inactive = RecentsListView.inactiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: [], pinningAvailable: true)
+        let archive = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: [], pinningAvailable: true)
 
         XCTAssertEqual(pinned.map(\.name).sorted(), ["pinnedClosed", "pinnedRunning"], "both pinned sessions land in Pinned regardless of live status")
         XCTAssertTrue(active.isEmpty, "a pinned+running session must not also appear in Active")
@@ -831,16 +771,46 @@ final class RecentsListViewTests: XCTestCase {
         let statuses: [UUID: SessionStatus] = [active.id: .running]
         let startedThisLaunch: Set<UUID> = [inactive.id]
 
-        let pinnedList = RecentsListView.pinnedSessions(from: sessions)
-        let activeList = RecentsListView.activeSessions(from: sessions, statuses: statuses)
-        let inactiveList = RecentsListView.inactiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch)
-        let archiveList = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch)
+        let pinnedList = RecentsListView.pinnedSessions(from: sessions, pinningAvailable: true)
+        let activeList = RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: true)
+        let inactiveList = RecentsListView.inactiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch, pinningAvailable: true)
+        let archiveList = RecentsListView.archiveSessions(from: sessions, statuses: statuses, sessionIdsStartedThisLaunch: startedThisLaunch, pinningAvailable: true)
 
         for s in sessions {
             let memberships = [pinnedList, activeList, inactiveList, archiveList].filter { bucket in bucket.contains { $0.id == s.id } }
             XCTAssertEqual(memberships.count, 1, "\(s.name) must land in exactly one section")
         }
         XCTAssertEqual(pinnedList.count + activeList.count + inactiveList.count + archiveList.count, sessions.count)
+    }
+
+    /// While `SessionPinning.isAvailable` is false (beta.26), a persisted pin
+    /// changes nothing on screen: the session lands in its normal bucket in
+    /// the sections model and the rail, and the data is untouched so the pin
+    /// returns when the flag does.
+    @MainActor
+    func testPinnedSessionRendersInItsNormalBucketWhilePinningIsUnavailable() {
+        XCTAssertFalse(SessionPinning.isAvailable, "the shipped default hides session pinning")
+        let project = Project(name: "p", rootPath: "~/p")
+        var pinnedLive = AgentSession(name: "pinnedLive", templateId: UUID(), projectId: project.id)
+        pinnedLive.isPinned = true
+        var pinnedClosed = AgentSession(name: "pinnedClosed", templateId: UUID(), projectId: project.id)
+        pinnedClosed.isPinned = true
+        let statuses: [UUID: SessionStatus] = [pinnedLive.id: .running]
+
+        let sections = SidebarSessionSections.make(
+            sessions: [pinnedLive, pinnedClosed], statuses: statuses, sessionIdsStartedThisLaunch: []
+        )
+        XCTAssertTrue(sections.pinned.isEmpty, "no Pinned section while pinning is unavailable")
+        XCTAssertEqual(sections.active.map(\.name), ["pinnedLive"], "a pinned running session shows in Active")
+        XCTAssertEqual(sections.archived.map(\.name), ["pinnedClosed"], "a pinned closed session shows in its History bucket")
+        XCTAssertFalse(HistoryEntry.entries(from: sections, projects: [project]).contains { $0.isPinned }, "History shows no pin glyph")
+        XCTAssertFalse(pinnedLive.isPinnedForDisplay())
+        XCTAssertTrue(pinnedLive.isPinned, "the persisted pin is untouched")
+
+        let store = WorkspaceStore(testingProjects: [project], testingSessions: [pinnedLive, pinnedClosed])
+        store.updateSessionStatus(id: pinnedLive.id, status: .running)
+        XCTAssertEqual(store.railSessions().map(\.name), ["pinnedLive"], "the rail lists it with the active rows")
+        XCTAssertEqual(store.railSessions(pinningAvailable: true).map(\.name), ["pinnedLive", "pinnedClosed"], "flipping the flag brings the pin back")
     }
 
     /// `orderedBySessionViewOrder` sorts ascending on `sessionViewOrder`,
@@ -900,7 +870,8 @@ final class RecentsListViewTests: XCTestCase {
         let cycleOrder = WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: [activeOpen, pinnedOpen],
             statuses: statuses,
-            coordinator: coordinator
+            coordinator: coordinator,
+            pinningAvailable: true
         )
 
         XCTAssertEqual(cycleOrder.map(\.name), ["pinnedOpen", "activeOpen"], "Pinned must cycle before Active")
@@ -925,7 +896,8 @@ final class RecentsListViewTests: XCTestCase {
         let cycleOrder = WorkspaceSidebarView.sessionsTabCycleOrder(
             sessions: [pinnedClosed, activeOpen],
             statuses: statuses,
-            coordinator: coordinator
+            coordinator: coordinator,
+            pinningAvailable: true
         )
 
         XCTAssertEqual(cycleOrder.map(\.name), ["activeOpen"], "pinned-but-closed must not be cycled to")

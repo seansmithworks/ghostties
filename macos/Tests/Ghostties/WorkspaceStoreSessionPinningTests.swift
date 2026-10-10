@@ -155,7 +155,7 @@ struct WorkspaceStoreSessionPinningTests {
         store.setSessionPinned(id: newlyPinned.id, true)
         store.moveSessionInSessionsView(id: newlyPinned.id, before: pinnedB.id, within: [pinnedA, pinnedB])
 
-        let pinnedOrder = RecentsListView.pinnedSessions(from: store.sessions)
+        let pinnedOrder = RecentsListView.pinnedSessions(from: store.sessions, pinningAvailable: true)
         #expect(pinnedOrder.map(\.name) == ["pinnedA", "newlyPinned", "pinnedB"])
     }
 

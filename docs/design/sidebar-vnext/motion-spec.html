@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sidebar vnext — motion spec (strawman)</title>
+<style>
+:root{
+  --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --page:#F6F3F0; --paper:#FFFFFF; --rule:#E4DDD8; --doc:#1F1D1B; --doc2:#6A645F; --acc:#C97350;
+  --chrome:#F0E9E6; --canvas:#FAF7F3; --ink:#232120; --tint:40,34,30; --prim:0,0,0;
+  --text:rgba(0,0,0,.85); --text2:#636363; --pill:rgba(255,255,255,.78); --rim:rgba(255,255,255,.55);
+  --shadow:0 2px 8px rgba(0,0,0,.15);
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme=light]){
+  --page:#161514; --paper:#1F1E1D; --rule:#34312F; --doc:#EDE8E4; --doc2:#A39C96;
+  --chrome:#242424; --canvas:#2E2E2E; --ink:#F0E9E6; --tint:240,233,230; --prim:255,255,255;
+  --text:rgba(255,255,255,.88); --text2:#A0A0A0; --pill:rgba(255,255,255,.09); --rim:rgba(255,255,255,.14);
+  --shadow:0 2px 8px rgba(0,0,0,.45);
+}}
+:root[data-theme=dark]{
+  --page:#161514; --paper:#1F1E1D; --rule:#34312F; --doc:#EDE8E4; --doc2:#A39C96;
+  --chrome:#242424; --canvas:#2E2E2E; --ink:#F0E9E6; --tint:240,233,230; --prim:255,255,255;
+  --text:rgba(255,255,255,.88); --text2:#A0A0A0; --pill:rgba(255,255,255,.09); --rim:rgba(255,255,255,.14);
+  --shadow:0 2px 8px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--doc);font:15px/1.5 var(--ui);-webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:19px;margin:0 0 4px;letter-spacing:-.005em}
+h3{font-size:14px;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.06em;color:var(--doc2)}
+p{margin:6px 0}
+code,.mono{font-family:var(--mono);font-size:.86em}
+a{color:inherit}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.sub{color:var(--doc2);font-size:13px}
+.thesis{background:var(--paper);border:1px solid var(--rule);border-radius:14px;padding:18px 20px;margin:16px 0}
+.thesis .line{font-size:18px;font-weight:600;margin:0 0 10px}
+.tokens{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:10px 0 4px}
+.tok{border:1px solid var(--rule);border-radius:10px;padding:10px 12px}
+.tok b{display:block;font-size:13px}
+.tok code{display:block;margin-top:2px}
+.tok span{display:block;color:var(--doc2);font-size:12.5px;margin-top:4px}
+ul.tight{margin:6px 0;padding-left:18px} ul.tight li{margin:3px 0}
+section.m{background:var(--paper);border:1px solid var(--rule);border-radius:14px;padding:18px 20px;margin:18px 0}
+.why{color:var(--doc2);margin:2px 0 12px}
+.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+.ctrl{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+button{font:500 12.5px var(--ui);color:var(--doc);background:transparent;border:1px solid var(--rule);border-radius:8px;padding:6px 10px;cursor:pointer;transition:transform 160ms cubic-bezier(.23,1,.32,1),background 120ms ease}
+button:active{transform:scale(.97)}
+button[aria-pressed=true]{background:var(--doc);color:var(--paper);border-color:var(--doc)}
+button.go{border-color:var(--acc);color:var(--acc)}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0}
+.stage-wrap{position:relative;width:100%;overflow:hidden;border-radius:12px;background:repeating-linear-gradient(45deg,transparent 0 10px,rgba(var(--prim),.02) 10px 20px)}
+.stage{position:absolute;left:0;top:0;transform-origin:0 0;user-select:none}
+.cap{font-size:12px;color:var(--doc2);margin-top:6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;vertical-align:top;padding:6px 8px;border-bottom:1px solid var(--rule);overflow-wrap:anywhere}
+@media (max-width:600px){.spec td:first-child{white-space:normal}th,td{padding:5px 4px}}
+th{font-weight:600;color:var(--doc2);font-size:12px}
+td code{font-size:12px}
+.spec td:first-child{color:var(--doc2);white-space:nowrap}
+section.m[data-mode=today] .spec td.p, section.m[data-mode=proposed] .spec td.t, section.m[data-mode=reduced] .spec td.t{opacity:.45}
+.rm{margin-top:10px;font-size:13.5px}
+.rm b{color:var(--acc)}
+.note{font-size:13px;border-left:3px solid var(--acc);padding:4px 10px;margin:10px 0;color:var(--doc)}
+details{margin:12px 0}
+summary{cursor:pointer;font-weight:600}
+.forks{background:var(--paper);border:2px solid var(--acc);border-radius:14px;padding:18px 20px;margin:24px 0}
+.forks h2{color:var(--acc)}
+.theme{display:inline-flex}
+
+/* ---------- mock primitives (1px = 1pt) ---------- */
+.win{position:absolute;left:0;top:0;background:var(--chrome);border-radius:16px;overflow:hidden;box-shadow:0 0 0 1px rgba(var(--prim),.08)}
+.tl{position:absolute;left:19px;top:19px;display:flex;gap:9px;z-index:3}
+.tl i{width:14px;height:14px;border-radius:50%;display:block}
+.tl i:nth-child(1){background:#FF5F57}.tl i:nth-child(2){background:#FEBC2E}.tl i:nth-child(3){background:#28C840}
+.panel{position:absolute;top:0;background:var(--chrome);border-radius:12px;overflow:hidden}
+.clip{position:absolute;left:0;top:0;bottom:0;overflow:hidden}
+.layer{position:absolute;left:0;top:0;width:264px;height:100%}
+.item{position:absolute;left:0;top:0;width:264px}
+.hdr{height:30px;cursor:pointer}
+.row{height:48px;cursor:default}
+.tile{position:absolute;left:12px;top:0;width:30px;height:30px;border-radius:8px;background:rgba(var(--tint),.10);display:grid;place-items:center;font:700 13px/1 var(--ui);color:var(--ink);overflow:hidden}
+.tile .ink{position:absolute;inset:0;background:var(--ink);color:var(--chrome);display:grid;place-items:center;opacity:0}
+.hname{position:absolute;left:52px;top:0;line-height:30px;font:600 11px/30px var(--ui);letter-spacing:.5px;color:var(--text2);text-transform:uppercase;white-space:nowrap}
+.chev{display:inline-block;margin-left:4px;width:9px;height:9px;vertical-align:-1px}
+.chev svg{display:block}
+.hcount{position:absolute;right:28px;top:0;line-height:30px;font:500 11px/30px var(--ui);color:var(--text2)}
+.chip{position:absolute;left:12px;top:9px;width:30px;height:30px;border-radius:8px;background:rgba(var(--tint),.10);opacity:0}
+.hov{position:absolute;left:12px;top:9px;width:30px;height:30px;border-radius:8px;background:rgba(var(--prim),.04);opacity:0}
+.wcard{position:absolute;left:8px;top:0;width:248px;height:48px;border-radius:8px;opacity:0;border:1px solid transparent;
+  background:linear-gradient(rgba(var(--prim),.075),rgba(var(--prim),.075)) padding-box,linear-gradient(var(--chrome),var(--chrome)) padding-box,conic-gradient(from 203deg,rgba(255,140,140,.55),rgba(140,200,255,.55),rgba(170,255,160,.5),rgba(255,220,140,.5),rgba(255,140,140,.55)) border-box}
+.gl{position:absolute;left:17px;top:14px;width:20px;height:20px;display:grid;place-items:center;font-family:var(--mono);line-height:1}
+.k-working{color:var(--text2);font-size:18px}.k-needs{color:var(--text);font-weight:700;font-size:16px;font-family:var(--ui)}
+.k-done{color:var(--text2);font-size:13px}.k-error{color:var(--text2);font-size:12px}
+.rlab{position:absolute;left:52px;top:7px;right:28px;white-space:nowrap}
+.rtitle{font:400 14px/18px var(--ui);color:var(--text);overflow:hidden;text-overflow:ellipsis}
+.rsub{position:relative;height:14px;margin-top:1px}
+.rsub>div{position:absolute;left:0;top:0;font:400 11px/14px var(--ui);color:var(--text2);white-space:nowrap}
+.gcard{position:absolute;border-radius:12px;background:rgba(var(--tint),.06)}
+.tcard{position:absolute;top:8px;right:8px;bottom:8px;border-radius:8px;background:var(--canvas);box-shadow:var(--shadow);padding:14px 16px;font:12px/1.65 var(--mono);color:var(--text2);overflow:hidden;white-space:nowrap}
+.tcard b{color:var(--text);font-weight:500}
+.pill{position:absolute;border-radius:8px;background:var(--pill);box-shadow:0 3px 8px rgba(0,0,0,.15),inset 0 0 0 1.25px var(--rim);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.tbtn{position:absolute;width:48px;height:48px;color:var(--text2);cursor:pointer}
+.tbtn .hc{position:absolute;inset:6px;border-radius:6px;background:rgba(var(--prim),.10);opacity:0}
+.tbtn .ic{position:absolute;inset:0;display:grid;place-items:center}
+.tbtn svg{display:block}
+.toast{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:var(--acc);color:#fff;font:600 12px var(--ui);padding:5px 10px;border-radius:8px;opacity:0;transition:opacity 120ms ease;pointer-events:none;z-index:9;white-space:nowrap}
+.toast.on{opacity:1}
+.cursor{position:absolute;width:14px;height:14px;margin:-2px 0 0 -2px;pointer-events:none;z-index:8;opacity:0}
+.label{position:absolute;font:600 10px var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--doc2)}
+.pop{position:absolute;width:240px;border-radius:12px;background:var(--canvas);box-shadow:0 8px 24px rgba(0,0,0,.18),0 0 0 1px rgba(var(--prim),.06);padding:12px 14px;opacity:0;transform-origin:0 24px;z-index:5}
+.pop .k{font:500 11px var(--ui);color:var(--text2);margin-bottom:6px}
+.pop .cmd{font:12px/1.5 var(--mono);color:var(--text);background:rgba(var(--prim),.05);border-radius:6px;padding:6px 8px;white-space:pre;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+<main>
+<div class="top">
+  <div>
+    <h1>Sidebar vnext — motion spec</h1>
+    <div class="sub">Strawman for Sean · branch <code>feat/sidebar-d</code> @ 092267f7b · 2026-10-09 · builds on the Flow 05 canvas frame (<code>uTvGd</code>)</div>
+  </div>
+  <div class="seg theme" role="group" aria-label="Theme">
+    <button data-theme-set="auto" aria-pressed="true">Auto</button><button data-theme-set="light">Light</button><button data-theme-set="dark">Dark</button>
+  </div>
+</div>
+
+<div class="thesis">
+  <p class="line">Pushed, not dragged. The sidebar arrives fast, leaves faster, and only moves the thing you touched. The one moment that carries the identity is the group card narrowing into the rail column, with the glyphs riding inside it.</p>
+  <div class="tokens">
+    <div class="tok"><b>panel</b><code>drawer cubic-bezier(.32,.72,0,1)</code><code>close cubic-bezier(.23,1,.32,1)</code><span>Flow 05's values, unchanged: 260 collapse · 240 expand · 180 close · 240 reopen. AppKit drives the width and SwiftUI follows on the same curve, so they land on the same frame.</span></div>
+    <div class="tok"><b>snap</b><code>.spring(response: 0.24, dampingFraction: 1.0)</code><span>Every layout reflow: accordion, chevron, rows in and out, drag gap, group card height. No bounce, and it keeps its velocity when you click again.</span></div>
+    <div class="tok"><b>pop</b><code>.spring(response: 0.32, dampingFraction: 0.8)</code><span>One use only: a glyph turning into <code>?</code>. It is the only overshoot in the sidebar.</span></div>
+    <div class="tok"><b>fade</b><code>ease-out cubic-bezier(.23,1,.32,1)</code><span>Durations 80 · 100 · 120 · 150 ms. An exit is never slower than its entrance. Reduce Motion always gets a 120ms opacity crossfade, never nothing.</span></div>
+  </div>
+  <h3>What changes most</h3>
+  <ul class="tight">
+    <li><b>The morph becomes one object.</b> Today two complete lists crossfade, so glyphs and cards show double mid-flight. Proposed, the card narrows into the column and the glyphs slide 22pt inward with it.</li>
+    <li><b>Presses stop disappearing.</b> A 250ms guard silently drops a second ⌘S that lands while the 180–260ms transition is still running. Proposed: a 60ms key-repeat guard, and the panel retargets from wherever it is.</li>
+    <li><b>Expanded labels land at about 310ms, not 750ms.</b> Today each label waits for the full 240ms panel, plus 60ms, plus 40ms per row, with no cap.</li>
+    <li><b>Hard cuts get one honest move.</b> Glyph state swaps, rows arriving and leaving, and selection now each have a defined transition. Tab switches and row hover stay instant on purpose.</li>
+  </ul>
+</div>
+
+<!-- ============ 1. MORPH ============ -->
+<section class="m" id="morph" data-mode="proposed">
+  <h2>1 · Pinned ↔ rail (⌘S): the group card becomes the column</h2>
+  <p class="why">Why: this is the moment that says "same things, less room". It only reads that way if the card and glyphs are the same objects before and after.</p>
+  <div class="grid">
+    <div>
+      <div class="ctrl">
+        <button data-act="replay" class="go">Replay</button>
+        <span class="seg"><button data-mode="today">Today</button><button data-mode="proposed" aria-pressed="true">Proposed</button><button data-mode="reduced">Reduce Motion</button></span>
+        <button data-act="slow">0.25×</button>
+        <button data-act="toggle">Toggle ⌘S</button>
+        <button data-act="double">Double-tap</button>
+      </div>
+      <div class="stage-wrap"></div>
+      <div class="cap">600×570pt window: 264pt expanded column (list 8–256), 98pt rail, 48pt rows, 30pt tiles and chips, 48pt pills. To test interruption, press Double-tap. Today the second press is dropped.</div>
+    </div>
+    <div>
+      <table class="spec">
+        <tr><th></th><th>Today</th><th>Proposed</th></tr>
+        <tr><td>Panel width</td><td class="t">drawer 260 / 240</td><td class="p">same (Flow 05)</td></tr>
+        <tr><td>Content</td><td class="t">two trees crossfade, drawer 260 / 240</td><td class="p">one tree. No crossfade</td></tr>
+        <tr><td>Group card</td><td class="t">fades out while the rail column fades in</td><td class="p">frame morphs, x 6–258 → 30–68, drawer 260 / 240</td></tr>
+        <tr><td>Glyphs, tiles, chip</td><td class="t">crossfade between two x positions</td><td class="p">translateX 0 → +22. Collapse: drawer 220 after 40ms. Expand: drawer 240</td></tr>
+        <tr><td>Labels out</td><td class="t">easeOut 100</td><td class="p">fade 90, translateX −4</td></tr>
+        <tr><td>Labels in</td><td class="t">easeOut 120 after 300 + 40·i ms, no cap</td><td class="p">fade 140 after 100 + 12·i ms (i ≤ 8)</td></tr>
+        <tr><td>Tray pills</td><td class="t">axis morph on the panel curve</td><td class="p">same. Already right</td></tr>
+        <tr><td>Second press</td><td class="t">dropped if under 250ms</td><td class="p">accepted after 60ms. Retargets from the presentation value</td></tr>
+      </table>
+      <p class="rm"><b>Reduce Motion:</b> width, card and glyphs snap. The two layouts crossfade over 120ms easeInOut (as today). The tray fades in at its new axis over 120ms instead of snapping.</p>
+      <p class="note">Flow 05 asked for "glyph translateX +8 → +28". The code never built it: glyphs crossfade between two positions. The proposed travel is the D geometry (tile centre 27 → 49).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. CLOSE ============ -->
+<section class="m" id="close" data-mode="proposed">
+  <h2>2 · Full close ↔ reopen (⌘⇧S)</h2>
+  <p class="why">Why: you're leaving, so there's nothing to read on the way out. Opacity leads, a short drift says "it went left", and the card takes the room.</p>
+  <div class="grid">
+    <div>
+      <div class="ctrl">
+        <button data-act="replay" class="go">Replay</button>
+        <span class="seg"><button data-mode="today">Today</button><button data-mode="proposed" aria-pressed="true">Proposed</button><button data-mode="reduced">Reduce Motion</button></span>
+        <button data-act="slow">0.25×</button>
+        <button data-act="toggle">Toggle ⌘⇧S</button>
+      </div>
+      <div class="stage-wrap"></div>
+    </div>
+    <div>
+      <table class="spec">
+        <tr><th></th><th>Today</th><th>Proposed</th></tr>
+        <tr><td>Card leading edge</td><td class="t">close 180 / drawer 240</td><td class="p">same (Flow 05)</td></tr>
+        <tr><td>Sidebar opacity, out</td><td class="t">close 180</td><td class="p">fade 120 (opacity leads)</td></tr>
+        <tr><td>Sidebar drift, out</td><td class="t">none</td><td class="p">translateX 0 → −16, close 180</td></tr>
+        <tr><td>Sidebar in</td><td class="t">drawer 240</td><td class="p">fade 160 after 60ms. translateX −16 → 0, drawer 240</td></tr>
+        <tr><td>Traffic lights</td><td class="t">with the sidebar alpha</td><td class="p">with the sidebar alpha</td></tr>
+        <tr><td>Hot zone</td><td class="t">24pt, arms at 180ms</td><td class="p">same</td></tr>
+      </table>
+      <p class="rm"><b>Reduce Motion:</b> no change from today. The card snaps and the sidebar crossfades over 120ms.</p>
+      <p class="note">The drift is 16pt, not Flow 05's −72px. Anything over about 40pt reads as slow, and the card sliding over the column already carries the direction.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. SELECTION ============ -->
+<section class="m" id="select" data-mode="proposed">
+  <h2>3 · Selection moving between rows</h2>
+  <p class="why">Why: you do this tens of times a day, and often from the keyboard. The new selection has to be there on the first frame. Only the old one gets a 100ms trailing fade, so your eye catches where you came from.</p>
+  <div class="grid">
+    <div>
+      <div class="ctrl">
+        <button data-act="replay" class="go">Replay</button>
+        <span class="seg"><button data-mode="today">Today</button><button data-mode="proposed" aria-pressed="true">Proposed</button><button data-mode="reduced">Reduce Motion</button></span>
+        <button data-act="slow">0.25×</button>
+      </div>
+      <div class="stage-wrap"></div>
+      <div class="cap">Click any row in any of the three columns. Left: one view (chip and group card). Middle: rail (chip and column). Right: Sessions tab (wide card).</div>
+    </div>
+    <div>
+      <table class="spec">
+        <tr><th></th><th>Today</th><th>Proposed</th></tr>
+        <tr><td>New chip, card, ink tile</td><td class="t">instant</td><td class="p">instant</td></tr>
+        <tr><td>Old chip / wide card</td><td class="t">instant off</td><td class="p">fade 100</td></tr>
+        <tr><td>Old group card / column</td><td class="t">instant off</td><td class="p">fade 120</td></tr>
+        <tr><td>Chip travel</td><td class="t">none</td><td class="p">none. No sliding highlight</td></tr>
+      </table>
+      <p class="rm"><b>Reduce Motion:</b> the same as proposed. It is opacity only.</p>
+      <p class="note">There's no sliding selection pill. Rows are 52pt apart and project jumps cross 200pt or more, so a slide would mean long travel on a high-frequency action.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. ACCORDION ============ -->
+<section class="m" id="accordion" data-mode="proposed">
+  <h2>4 · Project accordion and chevron</h2>
+  <p class="why">Why: rows below have to move, so this is honest layout motion. A spring lets a quick second click reverse mid-flight, and the chevron rides the same spring so it can never disagree with the list.</p>
+  <div class="grid">
+    <div>
+      <div class="ctrl">
+        <button data-act="replay" class="go">Replay</button>
+        <span class="seg"><button data-mode="today">Today</button><button data-mode="proposed" aria-pressed="true">Proposed</button><button data-mode="reduced">Reduce Motion</button></span>
+        <button data-act="slow">0.25×</button>
+        <button data-act="interrupt">Click twice fast</button>
+      </div>
+      <div class="stage-wrap"></div>
+      <div class="cap">Click a project header.</div>
+    </div>
+    <div>
+      <table class="spec">
+        <tr><th></th><th>Today</th><th>Proposed</th></tr>
+        <tr><td>Rows below, group card</td><td class="t">easeInOut 200 (built-in)</td><td class="p">snap spring</td></tr>
+        <tr><td>Chevron −90°</td><td class="t">easeInOut 200, same transaction</td><td class="p">snap spring, same transaction</td></tr>
+        <tr><td>Rows in</td><td class="t">opacity, easeInOut 200</td><td class="p">fade 150, y −4 → 0, 15ms stagger (cap 6)</td></tr>
+        <tr><td>Rows out</td><td class="t">opacity, easeInOut 200</td><td class="p">fade 90, no stagger</td></tr>
+      </table>
+      <p class="rm"><b>Reduce Motion:</b> rows crossfade (120 in, 100 out) and positions snap. On collapse the rows fade before the list closes, so they never overlap the header that moves up.</p>
+      <p class="note">The 90ms exit is faster than the spring on purpose. Departing rows are gone before the next header slides over them. Today they overlap for about 100ms.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. TRAY ============ -->
+<section class="m" id="tray" data-mode="proposed">
+  <h2>5 · Tray buttons: hover, press and tap</h2>
+  <p class="why">Why: a press should feel like it was heard. Hover should arrive softly and leave at once. Today's symbol bounce plays on all three buttons, including Toggle, where it competes with the whole panel morph.</p>
+  <div class="grid">
+    <div>
+      <div class="ctrl">
+        <button data-act="replay" class="go">Replay</button>
+        <span class="seg"><button data-mode="today">Today</button><button data-mode="proposed" aria-pressed="true">Proposed</button><button data-mode="reduced">Reduce Motion</button></span>
+        <button data-act="slow">0.25×</button>
+      </div>
+      <div class="stage-wrap"></div>
+      <div class="cap">Hover and press the buttons. Left: the expanded tray (100×48 Create pill, 48×48 Toggle). Right: the rail's stacked pills.</div>
+    </div>
+    <div>
+      <table class="spec">
+        <tr><th></th><th>Today</th><th>Proposed</th></tr>
+        <tr><td>Hover chip in</td><td class="t">easeInOut 150</td><td class="p">ease 120</td></tr>
+        <tr><td>Hover chip out</td><td class="t">easeInOut 150</td><td class="p">ease 80</td></tr>
+        <tr><td>Icon on hover</td><td class="t">scale 1.06</td><td class="p">none</td></tr>
+        <tr><td>Press</td><td class="t">none (glass <code>.interactive()</code> only)</td><td class="p">scale 0.96, ease-out 100. Release on snap</td></tr>
+        <tr><td>Tap</td><td class="t"><code>symbolEffect(.bounce)</code> on all 3</td><td class="p">removed</td></tr>
+      </table>
+      <p class="rm"><b>Reduce Motion:</b> no scale. A press deepens the chip from 10% to 16% fill over 100ms.</p>
+      <p class="note">If the macOS 26 glass <code>.interactive()</code> already scales on press, keep that on the glass path and use the 0.96 scale only on the opaque fallback. It needs one look in Dev. Haven't checked.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. GLYPH ============ -->
+<section class="m" id="glyph" data-mode="proposed">
+  <h2>6 · Status glyph swap (spinner → ? → ✓ → ✕)</h2>
+  <p class="why">Why: a hard cut in peripheral vision reads as a flicker. A 150ms blur-scale crossfade reads as "changed". Only "needs you" gets the pop, because it's the only state that asks you to act.</p>
+  <div class="grid">
+    <div>
+      <div class="ctrl">
+        <button data-act="replay" class="go">Replay</button>
+        <span class="seg"><button data-mode="today">Today</button><button data-mode="proposed" aria-pressed="true">Proposed</button><button data-mode="reduced">Reduce Motion</button></span>
+        <button data-act="slow">0.25×</button>
+        <button data-act="advance">Advance states</button>
+      </div>
+      <div class="stage-wrap"></div>
+      <div class="cap">Click a row to advance it.</div>
+    </div>
+    <div>
+      <table class="spec">
+        <tr><th></th><th>Today</th><th>Proposed</th></tr>
+        <tr><td>Glyph swap</td><td class="t">hard cut</td><td class="p">crossfade 150. Old → scale 0.85, blur 2px. New ← scale 0.85, blur 2px</td></tr>
+        <tr><td>Into <code>?</code></td><td class="t">hard cut</td><td class="p">pop spring, scale 0.8 → 1. Opacity 120</td></tr>
+        <tr><td>Subtitle text</td><td class="t">hard cut</td><td class="p">fade 150, old y −4, new y +4 → 0</td></tr>
+        <tr><td>Spinner</td><td class="t">80ms per frame</td><td class="p">same</td></tr>
+      </table>
+      <p class="rm"><b>Reduce Motion:</b> a 120ms opacity crossfade with no scale, blur or travel. The spinner stays a static <code>…</code> (DESIGN.md).</p>
+      <p class="note">DESIGN.md says "no other state animates". I read that as no ambient loops, and this is a one-shot swap. If it means no transitions at all, this section shrinks to the Reduce Motion crossfade.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7. ROWS IN/OUT ============ -->
+<section class="m" id="rows" data-mode="proposed">
+  <h2>7 · Rows arriving and leaving</h2>
+  <p class="why">Why: today a new session pushes every row down 52pt in one frame and you lose your place. The space should open first and the row settle into it. On close, the row goes first and then the gap closes.</p>
+  <div class="grid">
+    <div>
+      <div class="ctrl">
+        <button data-act="replay" class="go">Replay</button>
+        <span class="seg"><button data-mode="today">Today</button><button data-mode="proposed" aria-pressed="true">Proposed</button><button data-mode="reduced">Reduce Motion</button></span>
+        <button data-act="slow">0.25×</button>
+        <button data-act="add">New session</button>
+        <button data-act="remove">Close session</button>
+      </div>
+      <div class="stage-wrap"></div>
+    </div>
+    <div>
+      <table class="spec">
+        <tr><th></th><th>Today</th><th>Proposed</th></tr>
+        <tr><td>Neighbours, group card</td><td class="t">jump</td><td class="p">snap spring</td></tr>
+        <tr><td>Row in</td><td class="t">appears</td><td class="p">fade 180 after 40ms. Scale 0.98 → 1 from the leading edge</td></tr>
+        <tr><td>Row out</td><td class="t">vanishes</td><td class="p">fade 100. The gap closes on snap from 60ms</td></tr>
+        <tr><td>Drag reflow gap</td><td class="t">spring(0.2, 1.0)</td><td class="p">snap (one value)</td></tr>
+      </table>
+      <p class="rm"><b>Reduce Motion:</b> neighbours snap. The row fades in over 120ms, or out over 100ms before its gap snaps shut.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 8. POPOVER ============ -->
+<section class="m" id="popover" data-mode="proposed">
+  <h2>8 · Session popover</h2>
+  <p class="why">Why: the card should grow out of the row it describes and leave the moment you do. Once it's open, moving between rows is instant, because the delay only guards the first hover.</p>
+  <div class="grid">
+    <div>
+      <div class="ctrl">
+        <button data-act="replay" class="go">Replay</button>
+        <span class="seg"><button data-mode="today">Today</button><button data-mode="proposed" aria-pressed="true">Proposed</button><button data-mode="reduced">Reduce Motion</button></span>
+        <button data-act="slow">0.25×</button>
+      </div>
+      <div class="stage-wrap"></div>
+      <div class="cap">Hover the rows. A done row has no card. Replay drives a scripted pointer.</div>
+    </div>
+    <div>
+      <table class="spec">
+        <tr><th></th><th>Today</th><th>Proposed</th></tr>
+        <tr><td>Hover delay / grace</td><td class="t">350 / 250</td><td class="p">same</td></tr>
+        <tr><td>Open</td><td class="t">CA easeOut 140. Opacity, x −4</td><td class="p">ease-out 150. Opacity, x −4, scale 0.98 from the row edge</td></tr>
+        <tr><td>Close</td><td class="t">140, no curve set</td><td class="p">fade 100, no movement</td></tr>
+        <tr><td>Row to row</td><td class="t">instant</td><td class="p">instant</td></tr>
+      </table>
+      <p class="rm"><b>Reduce Motion:</b> fade 120 in, 100 out, no travel or scale (as today, plus the faster exit).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STILL ============ -->
+<section class="m" id="still">
+  <h2>Stays still, on purpose</h2>
+  <ul class="tight">
+    <li><b>Projects ↔ Sessions tab switch</b> stays instant, today and proposed. It's only reachable by keyboard and menu (⌘⇧1 / ⌘⇧2), and keyboard actions don't animate.</li>
+    <li><b>Row hover tint</b> stays instant both ways. You see it tens of times a minute.</li>
+    <li><b>Rail auto-scroll on keyboard selection</b> becomes instant instead of easeInOut 200 (<code>SidebarRailView.swift:248</code>). The keyboard rule wins.</li>
+    <li><b>The popover moving between rows</b> stays an instant jump. A 52pt glide on every row would trail the pointer.</li>
+    <li><b>The spinner</b> keeps a fixed 80ms frame step with no easing. Under Reduce Motion it's a static <code>…</code>.</li>
+    <li><b>Colour and theme changes</b> never blur or travel.</li>
+    <li><b>Terracotta</b> never animates in the sidebar. It is reserved for <code>waiting</code>.</li>
+  </ul>
+</section>
+
+<!-- ============ IMPLEMENTATION MAP ============ -->
+<section class="m" id="impl">
+  <h2>Implementation map</h2>
+  <table>
+    <tr><th>Moment</th><th>Where</th><th>Change</th></tr>
+    <tr><td>Tokens</td><td><code>WorkspaceLayout.swift</code> "Animation Tokens (D18)": add <code>Animation.sidebarSnap</code>, <code>.sidebarPop</code>, <code>.sidebarFade(_:)</code></td><td>Token swap</td></tr>
+    <tr><td>Morph: shared element</td><td><code>WorkspaceViewContainer.SidebarCollapseCrossfade</code>, <code>applyCollapseCrossfadeSidebarView</code>, <code>ExpandedGroupCard</code>, <code>RailProjectColumn</code></td><td><b>Structural.</b> Hoist the group card into <code>SidebarHostRoot</code>, the same way the tray already survives the swap, and drive its frame from <code>isCollapsedPresentation</code>. Give glyphs and tiles a +22 offset on that progress instead of crossfading two trees.</td></tr>
+    <tr><td>Morph: label timing</td><td><code>RecentsRowView.labelAnimation</code>, <code>WorkspaceLayout.expandLabelDelay</code></td><td>Token swap (delay 100 + 12·i, cap 8. Out 90)</td></tr>
+    <tr><td>Dropped presses</td><td><code>WorkspaceViewContainer.transitionTo</code> :1896 (<code>> 0.25</code>)</td><td>Token swap → 0.06. The animator already retargets.</td></tr>
+    <tr><td>Close drift</td><td><code>applyTransitionAlphas</code> plus a 16pt translate on the sidebar hosting layer</td><td>Small structural (a layer transform, not a constraint)</td></tr>
+    <tr><td>Selection trailing fade</td><td><code>SidebarRowChipBackground</code>, <code>SidebarRowCardBackground</code>, <code>ExpandedGroupCard</code>, rail chip</td><td>Small structural: asymmetric <code>.transition</code> (insertion <code>.identity</code>, removal fade 100)</td></tr>
+    <tr><td>Accordion + chevron</td><td><code>ProjectAccordionState.toggleAnimation</code>; row transitions in <code>RecentsListView</code> grouped <code>ForEach</code></td><td>Token swap + a row <code>.transition</code></td></tr>
+    <tr><td>Tray</td><td><code>TrayIconButton</code>; <code>sidebarTrayItems</code> <code>tapEffect</code>; the <code>SidebarTray</code> Reduce Motion transaction</td><td>Token swap + a press <code>ButtonStyle</code>. Drop <code>.bounce</code></td></tr>
+    <tr><td>Glyph swap</td><td><code>SessionStatusGlyph</code> body</td><td>Small structural: <code>.id(kind)</code> + transition (blur, scale, opacity). Pop on <code>.needsInput</code></td></tr>
+    <tr><td>Rows in/out</td><td><code>RecentsListView.sectionsContent</code></td><td>Small structural: <code>.animation(.sidebarSnap, value: rowIds)</code> + row transition. <code>reflowAnimation</code> → snap</td></tr>
+    <tr><td>Popover</td><td><code>SessionPopoverController.present/dismiss</code>, <code>SessionPopoverLayout</code></td><td>Token swap + a 0.98 layer scale anchored at the row edge</td></tr>
+    <tr><td>View-mode width, browser, composer</td><td><code>WorkspaceViewContainer.swift</code> :1440, :1573, :2626</td><td>Token swap: their Reduce Motion duration is 0. Give them the 120ms alpha.</td></tr>
+  </table>
+  <h3>DialKit dials worth exposing</h3>
+  <ul class="tight">
+    <li><b>Snap response</b> (0.24, range 0.16–0.40) and <b>Snap damping</b> (1.0, range 0.7–1.0) cover every reflow at once.</li>
+    <li><b>Pop damping</b> (0.8, range 0.6–1.0). Set it to 1.0 and the <code>?</code> stops bouncing.</li>
+    <li><b>Label return delay</b> (100ms) and <b>stagger</b> (12ms) set how the expand lands.</li>
+    <li><b>Animation speed</b> (1×, 0.25×, debug only) multiplies every duration and spring response so you can watch the real app in slow motion.</li>
+  </ul>
+</section>
+
+<!-- ============ INVENTORY ============ -->
+<section class="m" id="inventory">
+  <details>
+    <summary>Today's inventory: every sidebar animation on feat/sidebar-d @ 092267f7b</summary>
+    <table>
+      <tr><th>Moment</th><th>Today</th><th>file:line</th><th>Reduce Motion</th></tr>
+      <tr><td>Pinned ↔ rail width</td><td>AppKit constraint animator, drawer (.32,.72,0,1), 260 collapse / 240 expand</td><td>WorkspaceViewContainer.swift:2029, WorkspaceLayout.swift:566</td><td>Yes: geometry snaps, alpha 120</td></tr>
+      <tr><td>Full close / reopen</td><td>close (.23,1,.32,1) 180 / drawer 240. Hot zone arms at 180</td><td>WorkspaceLayout.swift:574, WorkspaceViewContainer.swift:2230</td><td>Yes</td></tr>
+      <tr><td>Toggle debounce</td><td>drops any transition within 250ms of the last</td><td>WorkspaceViewContainer.swift:1896</td><td>n/a</td></tr>
+      <tr><td>List ↔ rail content</td><td>both trees mounted, opacity crossfade on the panel curve</td><td>WorkspaceViewContainer.swift:91, :1387</td><td>Yes: easeInOut 120</td></tr>
+      <tr><td>Row labels / radius</td><td>out easeOut 100. In easeOut 120 after 240+60+40·i. Radius 6→12 drawer 200 after 60</td><td>RecentsRowView.swift:316–339, WorkspaceLayout.swift:613–681</td><td>Yes: skipped</td></tr>
+      <tr><td>Group card → rail column</td><td>no own animation. Card (list tree) and column (rail tree) crossfade</td><td>SidebarRailView.swift:400</td><td>via the crossfade</td></tr>
+      <tr><td>Tray horizontal ↔ stacked</td><td>AnyLayout axis flip rides the panel transaction</td><td>SidebarTrayItems.swift:741</td><td>Partly: snaps (:804)</td></tr>
+      <tr><td>View-mode width change</td><td>easeInEaseOut 200</td><td>WorkspaceViewContainer.swift:1440</td><td>No: duration 0</td></tr>
+      <tr><td>Selection (chip, wide card, rail chip, group card, ink tile)</td><td>no animation</td><td>SidebarRailView.swift:439, SidebarTrayItems.swift:588</td><td>n/a</td></tr>
+      <tr><td>Accordion + chevron</td><td>withAnimation easeInOut 200. Chevron rotation in the same transaction. Default opacity row transition</td><td>SidebarProjectGroups.swift:147, :160, :318</td><td>Partly: instant</td></tr>
+      <tr><td>Legacy Projects-tabs disclosure</td><td>easeInOut 200 (rows + pixel chevron)</td><td>ProjectDisclosureRow.swift:340, :589; PixelChevronView.swift:38</td><td>Yes</td></tr>
+      <tr><td>Tray hover</td><td>easeInOut 150 both ways. Icon scale 1.06</td><td>SidebarTrayItems.swift:883, :918</td><td>Yes</td></tr>
+      <tr><td>Tray tap</td><td>symbolEffect(.bounce) on New Session, New Project, Toggle. No press scale</td><td>SidebarTrayItems.swift:952, :1012–1034</td><td>Yes: off</td></tr>
+      <tr><td>Status glyph</td><td>spinner 80ms frames. Kind change is a hard cut</td><td>SessionStatusGlyph.swift:115–140</td><td>Yes: static …</td></tr>
+      <tr><td>Rows insert / remove</td><td>none</td><td>RecentsListView.swift:200</td><td>n/a</td></tr>
+      <tr><td>Drag reflow gap</td><td>spring(0.2, 1.0). Gap transition scale 0.01</td><td>RecentsListView.swift:101, :274; SessionDragReflow.swift:105</td><td>Yes</td></tr>
+      <tr><td>Drag auto-scroll / rail key scroll</td><td>linear 120 / easeInOut 200</td><td>RecentsListView.swift:678; SidebarRailView.swift:248</td><td>Yes</td></tr>
+      <tr><td>Tab switch</td><td>instant (UserDefaults write from menu)</td><td>TerminalController.swift:1445, :1452</td><td>n/a</td></tr>
+      <tr><td>Popover</td><td>delay 350, grace 250. Open CA easeOut 140 + 4pt slide. Close 140, no curve</td><td>SessionPopoverController.swift:182, :273; SessionPopoverCard.swift:19–26</td><td>Yes: fade 120</td></tr>
+      <tr><td>Legacy list section reorder</td><td>.default on sectionSignature</td><td>WorkspaceSidebarView.swift:89</td><td>Yes</td></tr>
+    </table>
+    <h3>Inconsistencies</h3>
+    <ul class="tight">
+      <li><b>Five vocabularies</b> are in use: Flow 05 béziers, built-in <code>.easeInOut(0.2)</code>, <code>.easeInOut(0.15)</code>, <code>spring(0.2, 1.0)</code> and CA <code>.easeOut</code>. D18's <code>sidebarCollapse</code> is <code>.easeIn</code>, which the rules forbid. It's used by the composer and triage, not this sidebar.</li>
+      <li><b>The debounce contradicts the code's own comment</b> that a second toggle "redirects smoothly". It never reaches the animator.</li>
+      <li><b>The expand stagger is uncapped.</b> It is 40ms per row on top of 300ms, so a 10-row list lands its last label at about 0.78s.</li>
+      <li><b>Two trees crossfade instead of one morph</b>, so the glyphs, tiles and group card are drawn twice at partial opacity mid-flight. Inferred from the code. A frame capture would confirm it.</li>
+      <li><b><code>widthModel.width</code> is written to the target at t=0</b> while AppKit animates the hosting view's width. The content is laid out at the final width from the first frame. Inferred, not captured.</li>
+      <li><b>The row-radius tween (6 → 12) only applies to the wide selected card.</b> Grouped rows in D use the chip, so it rarely shows.</li>
+      <li><b>Several Reduce Motion paths animate nothing:</b> the tray axis, the accordion, the view-mode width, the browser and the composer. Reduce Motion should be gentler, not empty.</li>
+      <li><b>The popover's exit is as long as its entrance</b> (140 / 140) and has no curve set.</li>
+      <li><b>The drag gap uses scale 0.01.</b> It's harmless only because the spacer is clear.</li>
+    </ul>
+  </details>
+</section>
+
+<!-- ============ FORKS ============ -->
+<section class="forks" id="forks">
+  <h2>Two calls that are yours</h2>
+  <p><b>1. Morph: one object (recommended) or a tuned crossfade.</b> One object means the group card narrows into the column and the glyphs slide 22pt with it. That's a structural change to how the sidebar hosts its two layouts, about one PR. A tuned crossfade keeps today's two-list fade with the new label timing, as token swaps only. It's cheaper, but you'll still see doubled glyphs mid-flight. Compare <i>Today</i> and <i>Proposed</i> in section 1 at 0.25×.</p>
+  <p><b>2. Should "needs you" pop?</b> Recommended: yes, a <code>pop</code> spring with about 20% bounce, and the only overshoot anywhere in the sidebar. It's the one state that wants your eyes. The alternative is the same 150ms blur-scale swap every other glyph uses. That's calmer, but it's easy to miss in peripheral vision.</p>
+</section>
+<p class="sub">Demoted below the fold: the full inventory and the inconsistency list (collapsed above) and the implementation map. The Flow 05 numbers are kept as written. Elevation comes from structure, interruptibility and the missing transitions, not from retuning Sean's curves.</p>
+</main>
+
+<script>
+(()=>{
+/* ---------- theme ---------- */
+document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{
+  const v=b.dataset.themeSet; if(v==='auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme=v;
+  document.querySelectorAll('[data-theme-set]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+});
+
+/* ---------- easing + springs ---------- */
+const BZ={drawer:[.32,.72,0,1],close:[.23,1,.32,1],out:[.23,1,.32,1],inout:[.42,0,.58,1],easeOut:[0,0,.58,1],ease:[.25,.1,.25,1],linear:null};
+function bez(p){ if(!p) return t=>t; const [x1,y1,x2,y2]=p;
+  const cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  const X=t=>((ax*t+bx)*t+cx)*t, Y=t=>((ay*t+by)*t+cy)*t;
+  return x=>{ if(x<=0) return 0; if(x>=1) return 1; let lo=0,hi=1,t=x;
+    for(let i=0;i<40;i++){ const v=X(t); if(Math.abs(v-x)<1e-6) break; if(v<x) lo=t; else hi=t; t=(lo+hi)/2; } return Y(t); }; }
+const EZ={}; for(const k in BZ) EZ[k]=bez(BZ[k]);
+const IN={k:'instant'};
+const CV=(c,d,delay=0)=>({k:'curve',c,d,delay});
+const SP=(r,z,delay=0)=>({k:'spring',r,z,delay});
+const KEYS=(f)=>({k:'keys',f});
+const SNAP=()=>SP(.24,1), POP=()=>SP(.32,.8);
+
+class Ch{
+  constructor(v){this.v=v;this.vel=0;this.a=null;}
+  to(tg,s=IN){
+    if(s.k==='instant'){this.v=tg;this.vel=0;this.a=null;return this;}
+    const a={...s,from:this.v,tg,e:0,delay:(s.delay||0)/1000,d:(s.d||1)/1000};
+    if(s.k==='spring'){a.K=Math.pow(2*Math.PI/s.r,2);a.C=4*Math.PI*s.z/s.r;}
+    if(s.k==='curve') a.ease=EZ[s.c];
+    if(s.k==='keys'){a.tg=s.f[s.f.length-1][1];a.d=s.f[s.f.length-1][0]/1000;}
+    if(s.k!=='spring') this.vel=0;
+    this.a=a; return this;
+  }
+  step(dt){
+    const a=this.a; if(!a) return; a.e+=dt; if(a.e<a.delay) return;
+    const t=a.e-a.delay;
+    if(a.k==='curve'){ const p=Math.min(1,t/a.d); this.v=a.from+(a.tg-a.from)*a.ease(p); if(p>=1){this.v=a.tg;this.a=null;} }
+    else if(a.k==='keys'){ const f=a.f, ms=t*1000; let i=1; while(i<f.length-1&&ms>f[i][0]) i++;
+      const [t0,v0]=f[i-1],[t1,v1]=f[i]; const p=Math.min(1,Math.max(0,(ms-t0)/(t1-t0))); this.v=v0+(v1-v0)*EZ.inout(p); if(ms>=f[f.length-1][0]){this.v=a.tg;this.a=null;} }
+    else { const n=Math.max(1,Math.ceil(dt/0.002)), h=dt/n;
+      for(let i=0;i<n;i++){ const x=this.v-a.tg; this.vel+=(-a.K*x-a.C*this.vel)*h; this.v+=this.vel*h; }
+      const sc=Math.max(Math.abs(a.from-a.tg),0.01);
+      if(Math.abs(this.v-a.tg)<sc*1e-3&&Math.abs(this.vel)<sc*1e-2){this.v=a.tg;this.vel=0;this.a=null;} }
+  }
+}
+
+/* ---------- DOM helpers ---------- */
+function el(p,cls,css,txt){const e=document.createElement('div'); if(cls) e.className=cls; if(css) Object.assign(e.style,css); if(txt!=null) e.textContent=txt; if(p) p.appendChild(e); return e;}
+const lerp=(a,b,t)=>a+(b-a)*t;
+const px=v=>v+'px';
+function rect(e,x,y,w,h){e.style.left=px(x);e.style.top=px(y);e.style.width=px(Math.max(0,w));e.style.height=px(Math.max(0,h));}
+const CHEV='<svg viewBox="0 0 10 10" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5l3 3 3-3"/></svg>';
+const ICON={
+  plus:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M3 7.5A2 2 0 0 1 5 5.5h4l2 2h8a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg>',
+  sidebar:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M9.5 5v14"/></svg>'};
+const SUB={working:'working',needs:'needs you',done:'done',error:'error'};
+const SPIN='⠋⠙⠹⠸⠼⠴⠦⠧';
+function glyphText(k,t,rm){ if(k==='working') return rm?'…':SPIN[Math.floor(t/0.08)%8]; return {needs:'?',done:'✓',error:'✕'}[k]||''; }
+const CURSOR='<svg viewBox="0 0 14 14" width="14" height="14"><path d="M1 1l11 5-5 1.5L5 13z" fill="#111" stroke="#fff" stroke-width="1"/></svg>';
+
+const GROUPS=[
+  {name:'Ghostties',mono:'G',rows:[{t:'sidebar motion spec',k:'working'},{t:'fix tray glass',k:'needs'},{t:'release beta.26',k:'done'}]},
+  {name:'Website',mono:'W',rows:[{t:'deploy preview',k:'error'},{t:'hero copy pass',k:'done'}]}
+];
+function layoutItems(groups,top,collapsed=new Set()){
+  const out=[]; let y=top;
+  groups.forEach((g,gi)=>{ if(gi>0) y+=17; out.push({type:'h',g:gi,y}); y+=34;
+    g.rows.forEach((r,ri)=>{ const vis=!collapsed.has(gi); out.push({type:'r',g:gi,i:ri,row:r,y:vis?y:null}); if(vis) y+=52; });
+  }); return out;
+}
+function mkHeader(p,g){ const r=el(p,'item hdr'); r.tile=el(r,'tile',null,g.mono); r.ink=el(r.tile,'ink',null,g.mono);
+  const n=el(r,'hname'); n.innerHTML=g.name+'<span class="chev">'+CHEV+'</span>'; r.name=n; r.chev=n.querySelector('.chev'); r.count=el(r,'hcount',null,String(g.rows.length)); return r; }
+function mkRow(p,row){ const r=el(p,'item row'); r.wcard=el(r,'wcard'); r.hov=el(r,'hov'); r.chip=el(r,'chip'); r.gl=el(r,'gl k-'+row.k); r.kind=row.k;
+  r.lab=el(r,'rlab'); r.title=el(r.lab,'rtitle',null,row.t); const s=el(r.lab,'rsub'); r.subA=el(s,null); r.subA.style.position='absolute'; r.subA.textContent=SUB[row.k]; r.subEl=s; return r; }
+function windowFrame(stage,w,h){ const win=el(stage,'win',{width:px(w),height:px(h)}); const tl=el(win,'tl'); tl.innerHTML='<i></i><i></i><i></i>'; return {win,tl}; }
+function termCard(p){ const c=el(p,'tcard'); c.innerHTML='<b>~/Code/ghostties</b> on feat/sidebar-d<br>$ zig build run<br>Build complete (12.4s)<br>$ claude<br>&gt; tighten the rail morph<br>⠋ Reading SidebarRailView.swift<br>$ _'; return c; }
+function buildTray(p){ const t={cp:el(p,'pill'),tp:el(p,'pill'),b:[]}; ['plus','folder','sidebar'].forEach(k=>{ const b=el(p,'tbtn'); b.hc=el(b,'hc'); b.ic=el(b,'ic'); b.ic.innerHTML=ICON[k]; t.b.push(b); }); return t; }
+function trayGeo(H,ox=0,rx=0){ const y=H-56; return {
+  exp:{cp:[ox+8,y,100,48],tp:[ox+208,y,48,48],b:[[ox+10,y],[ox+58,y],[ox+208,y]]},
+  rail:{cp:[rx+25,y-108,48,100],tp:[rx+25,y,48,48],b:[[rx+25,y-106],[rx+25,y-58],[rx+25,y]]}}; }
+function placeTray(t,G,p){ const L=(a,b)=>a.map((v,i)=>lerp(v,b[i],p));
+  rect(t.cp,...L(G.exp.cp,G.rail.cp)); rect(t.tp,...L(G.exp.tp,G.rail.tp));
+  t.b.forEach((b,i)=>{ const [x,y]=L(G.exp.b[i],G.rail.b[i]); b.style.left=px(x); b.style.top=px(y); }); }
+
+/* ---------- mock base ---------- */
+const mocks=[];
+class Mock{
+  constructor(sec,w,h){
+    this.sec=sec; this.w=w; this.h=h; this.mode='proposed'; this.speed=1; this.t=0; this.chs=[]; this.timers=[];
+    this.wrap=sec.querySelector('.stage-wrap'); this.stage=el(this.wrap,'stage',{width:px(w),height:px(h)});
+    this.toastEl=el(this.stage,'toast'); this.cur=el(this.stage,'cursor'); this.cur.innerHTML=CURSOR;
+    sec.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>this.setMode(b.dataset.mode));
+    sec.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{ const a=b.dataset.act;
+      if(a==='replay') this.replay(); else if(a==='slow'){ this.speed=this.speed===1?.25:1; b.setAttribute('aria-pressed',this.speed!==1); } else this.act(a); });
+    mocks.push(this); this.fit();
+  }
+  ch(v){const c=new Ch(v); this.chs.push(c); return c;}
+  after(ms,fn){this.timers.push({at:this.t+ms/1000,fn});}
+  fit(){ const s=Math.min(1,this.wrap.clientWidth/this.w); this.stage.style.transform=`scale(${s})`; this.wrap.style.height=px(this.h*s); this.scale=s; }
+  tick(dt){ dt*=this.speed; this.t+=dt; if(this.timers.length){ const due=this.timers.filter(x=>x.at<=this.t); if(due.length){ this.timers=this.timers.filter(x=>x.at>this.t); due.forEach(x=>x.fn()); } }
+    for(const c of this.chs) c.step(dt); this.render(); }
+  setMode(m){ this.mode=m; this.sec.dataset.mode=m; this.sec.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===m)); this.timers=[]; this.reset(); }
+  replay(){ this.timers=[]; this.reset(); this.after(250,()=>this.demo()); }
+  toast(msg){ this.toastEl.textContent=msg; this.toastEl.classList.add('on'); clearTimeout(this._tt); this._tt=setTimeout(()=>this.toastEl.classList.remove('on'),1100); }
+  pointAt(x,y,show=true){ this.cur.style.left=px(x); this.cur.style.top=px(y); this.cur.style.opacity=show?1:0; }
+  get rm(){ return this.mode==='reduced'; }
+  act(){} demo(){} reset(){} render(){}
+}
+
+/* ---------- 1. Morph ---------- */
+class Morph extends Mock{
+  constructor(sec){ super(sec,600,570); const {win,tl}=windowFrame(this.stage,600,570); this.win=win; this.tl=tl;
+    this.clip=el(win,'clip'); this.full=el(this.clip,'layer'); this.rail=el(this.clip,'layer');
+    this.items=layoutItems(GROUPS,52);
+    const g0=this.items.filter(i=>i.g===0), last=g0[g0.length-1];
+    this.cardExp=[6,g0[0].y-6,252,last.y+54-(g0[0].y-6)]; this.cardRail=[30,g0[0].y-4,38,last.y+51-(g0[0].y-4)];
+    this.fCard=el(this.full,'gcard'); this.rCard=el(this.rail,'gcard'); rect(this.rCard,...this.cardRail);
+    this.f=[]; this.labels=[]; let li=0;
+    for(const it of this.items){
+      if(it.type==='h'){ const h=mkHeader(this.full,GROUPS[it.g]); h.style.transform=`translateY(${it.y}px)`; if(it.g===0) h.ink.style.opacity=1;
+        const hr=mkHeader(this.rail,GROUPS[it.g]); hr.style.transform=`translateY(${it.y}px)`; hr.tile.style.left='34px'; hr.name.style.display=hr.count.style.display='none'; if(it.g===0) hr.ink.style.opacity=1;
+        const L=this.ch(1); this.labels.push(L); this.f.push({el:h,move:[h.tile],labs:[h.name,h.count],L,isRow:false}); }
+      else { const r=mkRow(this.full,it.row); r.style.transform=`translateY(${it.y}px)`; const sel=it.g===0&&it.i===1; if(sel) r.chip.style.opacity=1;
+        r.gl.textContent=glyphText(it.row.k,0);
+        const rr=mkRow(this.rail,it.row); rr.style.transform=`translateY(${it.y}px)`; rr.lab.style.display='none'; rr.chip.style.left='34px'; rr.gl.style.left='39px'; if(sel) rr.chip.style.opacity=1;
+        const L=this.ch(1); this.labels.push(L); this.f.push({el:r,move:[r.chip,r.gl],labs:[r.lab],L,isRow:true,k:it.row.k,gl:r.gl,rgl:rr.gl,rowIdx:it.i+(it.g?GROUPS[0].rows.length:0)}); }
+      li++;
+    }
+    this.tray=buildTray(win); this.geo=trayGeo(570); this.card=termCard(win);
+    this.Wc=this.ch(264); this.cardP=this.ch(0); this.glyphP=this.ch(0); this.trayP=this.ch(0); this.trayO=this.ch(1); this.fullO=this.ch(1); this.railO=this.ch(0);
+    this.reset();
+  }
+  reset(){ this.collapsed=false; this.last=-9; [this.Wc.to(264),this.cardP.to(0),this.glyphP.to(0),this.trayP.to(0),this.trayO.to(1),this.fullO.to(1),this.railO.to(0)]; this.labels.forEach(l=>l.to(1)); this.render(); }
+  press(){
+    const guard=this.mode==='today'?.25:.06;
+    if(this.t-this.last<guard){ this.toast('Second press dropped (250ms debounce)'); return; }
+    this.last=this.t; const c=this.collapsed=!this.collapsed; const d=c?260:240, W=c?98:264;
+    if(this.mode==='reduced'){
+      this.Wc.to(W); this.cardP.to(0); this.glyphP.to(0); this.trayP.to(c?1:0); this.trayO.to(0).to(1,CV('inout',120));
+      this.labels.forEach(l=>l.to(1)); this.fullO.to(c?0:1,CV('inout',120)); this.railO.to(c?1:0,CV('inout',120)); return; }
+    if(this.mode==='today'){
+      this.Wc.to(W,CV('drawer',d)); this.trayP.to(c?1:0,CV('drawer',d)); this.fullO.to(c?0:1,CV('drawer',d)); this.railO.to(c?1:0,CV('drawer',d));
+      this.f.forEach(x=>{ if(!x.isRow) return; x.L.to(c?0:1, c?CV('easeOut',100):CV('easeOut',120,240+60+40*x.rowIdx)); }); return; }
+    this.fullO.to(1); this.railO.to(0);
+    this.Wc.to(W,CV('drawer',d)); this.cardP.to(c?1:0,CV('drawer',d)); this.trayP.to(c?1:0,CV('drawer',d));
+    this.glyphP.to(c?1:0, c?CV('drawer',220,40):CV('drawer',240));
+    this.labels.forEach((l,i)=>l.to(c?0:1, c?CV('out',90):CV('out',140,100+12*Math.min(i,8))));
+  }
+  act(a){ if(a==='toggle') this.press(); if(a==='double'){ this.press(); this.after(120,()=>this.press()); } }
+  demo(){ this.press(); this.after(1100,()=>this.press()); }
+  render(){
+    const W=this.Wc.v; this.clip.style.width=px(W); this.card.style.left=px(W);
+    const L=(a,b,t)=>a.map((v,i)=>lerp(v,b[i],t));
+    rect(this.fCard,...L(this.cardExp,this.cardRail,this.cardP.v));
+    const dx=22*this.glyphP.v;
+    for(const x of this.f){ x.move.forEach(m=>m.style.transform=`translateX(${dx}px)`);
+      const o=this.mode==='today'&&!x.isRow?1:x.L.v; x.labs.forEach(lb=>{ lb.style.opacity=o; lb.style.transform=this.mode==='proposed'?`translateX(${-4*(1-o)}px)`:''; });
+      if(x.k==='working'){ const s=glyphText('working',this.t,this.rm); x.gl.textContent=s; x.rgl.textContent=s; } }
+    this.full.style.opacity=this.fullO.v; this.rail.style.opacity=this.railO.v;
+    placeTray(this.tray,this.geo,this.trayP.v); [this.tray.cp,this.tray.tp,...this.tray.b].forEach(e=>e.style.opacity=this.trayO.v);
+  }
+}
+
+/* ---------- 2. Close ---------- */
+class Close extends Mock{
+  constructor(sec){ super(sec,600,520); const {win,tl}=windowFrame(this.stage,600,520); this.tl=tl;
+    this.side=el(win,'layer',{width:'264px'}); const items=layoutItems(GROUPS,52); const g0=items.filter(i=>i.g===0), last=g0[g0.length-1];
+    const gc=el(this.side,'gcard'); rect(gc,6,g0[0].y-6,252,last.y+54-(g0[0].y-6));
+    items.forEach(it=>{ if(it.type==='h'){ const h=mkHeader(this.side,GROUPS[it.g]); h.style.transform=`translateY(${it.y}px)`; if(it.g===0) h.ink.style.opacity=1; }
+      else { const r=mkRow(this.side,it.row); r.style.transform=`translateY(${it.y}px)`; r.gl.textContent=glyphText(it.row.k,0); if(it.g===0&&it.i===1) r.chip.style.opacity=1; if(it.row.k==='working') this.spin=r.gl; } });
+    const tr=buildTray(this.side); placeTray(tr,trayGeo(520),0);
+    this.card=termCard(win); this.left=this.ch(264); this.o=this.ch(1); this.x=this.ch(0); this.reset(); }
+  reset(){ this.closed=false; this.last=-9; this.left.to(264); this.o.to(1); this.x.to(0); this.render(); }
+  press(){ const guard=this.mode==='today'?.25:.06; if(this.t-this.last<guard){ this.toast('Second press dropped (250ms debounce)'); return; }
+    this.last=this.t; const c=this.closed=!this.closed; const L=c?8:264;
+    if(this.mode==='reduced'){ this.left.to(L); this.x.to(0); this.o.to(c?0:1,CV('inout',120)); return; }
+    if(this.mode==='today'){ this.x.to(0); if(c){ this.left.to(L,CV('close',180)); this.o.to(0,CV('close',180)); } else { this.left.to(L,CV('drawer',240)); this.o.to(1,CV('drawer',240)); } return; }
+    if(c){ this.left.to(L,CV('close',180)); this.o.to(0,CV('out',120)); this.x.to(-16,CV('close',180)); }
+    else { this.left.to(L,CV('drawer',240)); this.o.to(1,CV('out',160,60)); this.x.to(0,CV('drawer',240)); }
+  }
+  act(a){ if(a==='toggle') this.press(); }
+  demo(){ this.press(); this.after(1000,()=>this.press()); }
+  render(){ this.card.style.left=px(this.left.v); this.side.style.opacity=this.o.v; this.tl.style.opacity=this.o.v; this.side.style.transform=`translateX(${this.x.v}px)`;
+    if(this.spin) this.spin.textContent=glyphText('working',this.t,this.rm); }
+}
+
+/* ---------- 3. Selection ---------- */
+class Select extends Mock{
+  constructor(sec){ super(sec,650,384); const top=28; this.items=layoutItems(GROUPS,top);
+    const A=el(this.stage,'panel',{left:'0',width:'264px',height:'384px'}), B=el(this.stage,'panel',{left:'276px',width:'98px',height:'384px'}), C=el(this.stage,'panel',{left:'386px',width:'264px',height:'384px'});
+    el(A,'label',{left:'12px',top:'8px'},'One view'); el(B,'label',{left:'12px',top:'8px'},'Rail'); el(C,'label',{left:'12px',top:'8px'},'Sessions tab');
+    this.sel=null; this.g={}; this.r={};
+    [0,1].forEach(gi=>{ const its=this.items.filter(i=>i.g===gi), last=its[its.length-1];
+      const ga=el(A,'gcard'); rect(ga,6,its[0].y-6,252,last.y+54-(its[0].y-6)); const gb=el(B,'gcard'); rect(gb,30,its[0].y-4,38,last.y+51-(its[0].y-4));
+      this.g[gi]={o:this.ch(0),els:[ga,gb],inks:[]}; });
+    let ci=0;
+    this.items.forEach(it=>{ if(it.type==='h'){ const h=mkHeader(A,GROUPS[it.g]); h.style.transform=`translateY(${it.y}px)`; const hb=mkHeader(B,GROUPS[it.g]); hb.style.transform=`translateY(${it.y}px)`; hb.tile.style.left='34px'; hb.name.style.display=hb.count.style.display='none'; this.g[it.g].inks.push(h.ink,hb.ink); return; }
+      const key=it.g+'-'+it.i; const ra=mkRow(A,it.row); ra.style.transform=`translateY(${it.y}px)`; const rb=mkRow(B,it.row); rb.style.transform=`translateY(${it.y}px)`; rb.lab.style.display='none'; rb.chip.style.left='34px'; rb.gl.style.left='39px'; rb.hov.style.left='34px';
+      const rc=mkRow(C,it.row); rc.style.transform=`translateY(${top+52*ci++}px)`; rc.subA.textContent=GROUPS[it.g].name;
+      [ra,rb,rc].forEach(r=>{ r.gl.textContent=glyphText(it.row.k,0); r.style.cursor='pointer'; r.onpointerdown=()=>this.select(key); r.onpointerenter=()=>{ (r===rc?r.wcard:r.hov).style.opacity=r===rc?.5:1; }; r.onpointerleave=()=>{ r.hov.style.opacity=0; this.render(); }; });
+      this.r[key]={o:this.ch(0),chips:[ra.chip,rb.chip],card:rc.wcard,spins:it.row.k==='working'?[ra.gl,rb.gl,rc.gl]:[]}; });
+    this.reset(); }
+  reset(){ Object.values(this.r).forEach(x=>x.o.to(0)); Object.values(this.g).forEach(x=>x.o.to(0)); this.sel=null; this.select('0-1'); }
+  select(key){ if(key===this.sel) return; const prev=this.sel; this.sel=key; const outR=this.mode==='today'?IN:CV('out',100), outG=this.mode==='today'?IN:CV('out',120);
+    this.r[key].o.to(1); if(prev) this.r[prev].o.to(0,outR);
+    const g=+key[0], pg=prev?+prev[0]:null; this.g[g].o.to(1); if(pg!==null&&pg!==g) this.g[pg].o.to(0,outG); this.render(); }
+  demo(){ const seq=['0-2','1-0','1-1','0-0','0-1']; seq.forEach((k,i)=>this.after(i*450,()=>this.select(k))); }
+  render(){ for(const k in this.r){ const x=this.r[k]; x.chips.forEach(c=>c.style.opacity=x.o.v); x.card.style.opacity=x.o.v; x.spins.forEach(s=>s.textContent=glyphText('working',this.t,this.rm)); }
+    for(const g in this.g){ const x=this.g[g]; x.els.forEach(e=>e.style.opacity=x.o.v); x.inks.forEach(e=>e.style.opacity=x.o.v); } }
+}
+
+/* ---------- 4. Accordion ---------- */
+class Accordion extends Mock{
+  constructor(sec){ super(sec,264,372); const P=el(this.stage,'panel',{left:'0',width:'264px',height:'372px'}); this.top=16;
+    this.gc=el(P,'gcard'); this.els=[]; const base=layoutItems(GROUPS,this.top);
+    base.forEach(it=>{ const e=it.type==='h'?mkHeader(P,GROUPS[it.g]):mkRow(P,it.row); if(it.type==='r'){ e.gl.textContent=glyphText(it.row.k,0); if(it.g===0&&it.i===1) e.chip.style.opacity=1; }
+      else { if(it.g===0) e.ink.style.opacity=1; e.onpointerdown=()=>this.toggle(it.g); }
+      this.els.push({it,e,y:this.ch(it.y),o:this.ch(1),dy:this.ch(0)}); });
+    this.rot=[this.ch(0),this.ch(0)]; this.cardB=this.ch(0); this.reset(); }
+  cardBottom(col){ const L=layoutItems(GROUPS,this.top,col).filter(i=>i.g===0&&i.y!==null); const l=L[L.length-1]; return l.y+(l.type==='h'?36:54); }
+  reset(){ this.col=new Set(); const L=layoutItems(GROUPS,this.top); this.els.forEach((x,i)=>{ x.y.to(L[i].y); x.o.to(1); x.dy.to(0); }); this.rot.forEach(r=>r.to(0)); this.cardB.to(this.cardBottom(this.col)); this.render(); }
+  toggle(g){ const was=this.col.has(g); if(was) this.col.delete(g); else this.col.add(g); const collapsing=!was; const L=layoutItems(GROUPS,this.top,this.col); const m=this.mode;
+    const ySpec=m==='today'?CV('inout',200):SNAP(), rotSpec=m==='today'?CV('inout',200):SNAP();
+    const apply=(spec)=>{ this.els.forEach((x,i)=>{ if(L[i].y!==null) x.y.to(L[i].y, (x.it.g===g&&x.it.type==='r')?IN:spec); }); this.cardB.to(this.cardBottom(this.col),spec); };
+    if(m==='reduced'){
+      this.rot[g].to(collapsing?-90:0);
+      if(collapsing){ this.els.forEach(x=>{ if(x.it.g===g&&x.it.type==='r') x.o.to(0,CV('inout',100)); }); this.after(100,()=>apply(IN)); }
+      else { apply(IN); this.els.forEach(x=>{ if(x.it.g===g&&x.it.type==='r'){ x.dy.to(0); x.o.to(0).to(1,CV('inout',120)); } }); }
+      return; }
+    this.rot[g].to(collapsing?-90:0,rotSpec); apply(ySpec);
+    let k=0; this.els.forEach(x=>{ if(!(x.it.g===g&&x.it.type==='r')) return;
+      if(collapsing) x.o.to(0, m==='today'?CV('inout',200):CV('out',90));
+      else if(m==='today') x.o.to(1,CV('inout',200));
+      else { const d=15*Math.min(k++,6); x.o.to(0).to(1,CV('out',150,d)); x.dy.to(-4).to(0,CV('out',150,d)); } });
+  }
+  act(a){ if(a==='interrupt'){ this.toggle(0); this.after(110,()=>this.toggle(0)); } }
+  demo(){ this.toggle(0); this.after(800,()=>this.toggle(0)); this.after(1600,()=>this.toggle(1)); this.after(2300,()=>this.toggle(1)); }
+  render(){ this.els.forEach(x=>{ x.e.style.transform=`translateY(${x.y.v+x.dy.v}px)`; if(x.it.type==='r'){ x.e.style.opacity=x.o.v; x.e.style.visibility=x.o.v<0.01?'hidden':'visible'; if(x.it.row.k==='working') x.e.gl.textContent=glyphText('working',this.t,this.rm); } else x.e.chev.style.transform=`rotate(${this.rot[x.it.g].v}deg)`; });
+    const top=this.els[0].y.v-6; rect(this.gc,6,top,252,this.cardB.v-top); }
+}
+
+/* ---------- 5. Tray ---------- */
+class Tray extends Mock{
+  constructor(sec){ super(sec,382,172); el(this.stage,'panel',{left:'0',width:'264px',height:'172px'}); el(this.stage,'panel',{left:'284px',width:'98px',height:'172px'});
+    const G=trayGeo(172,0,284); this.btns=[];
+    [0,1].forEach(side=>{ const t=buildTray(this.stage); placeTray(t,G,side); t.b.forEach((b,i)=>{ const s={b,chip:this.ch(0),iconS:this.ch(1),press:this.ch(1),bounce:this.ch(1),bounces:true}; this.btns.push(s);
+      b.onpointerenter=()=>this.hover(s,true); b.onpointerleave=()=>{ this.release(s,false); this.hover(s,false); }; b.onpointerdown=()=>this.down(s); b.onpointerup=()=>this.release(s,true); }); });
+    this.reset(); }
+  reset(){ this.btns.forEach(s=>{ s.chip.to(0); s.iconS.to(1); s.press.to(1); s.bounce.to(1); s.down=false; }); this.pointAt(0,0,false); this.render(); }
+  hover(s,on){ const m=this.mode; if(m==='today'){ s.chip.to(on?1:0,CV('inout',150)); s.iconS.to(on?1.06:1,CV('inout',150)); } else s.chip.to(on?1:0,CV('ease',on?120:80)); }
+  down(s){ s.down=true; if(this.mode==='proposed') s.press.to(.96,CV('out',100)); if(this.mode==='reduced') s.chip.to(1.6,CV('out',100)); }
+  release(s,click){ if(!s.down) return; s.down=false; const m=this.mode;
+    if(m==='proposed') s.press.to(1,SNAP()); if(m==='reduced') s.chip.to(1,CV('out',100));
+    if(click&&m==='today') s.bounce.to(1,KEYS([[0,1],[90,.82],[230,1.12],[380,.97],[480,1]])); }
+  demo(){ const seq=[1,2,4]; seq.forEach((bi,n)=>{ const s=this.btns[bi], T=n*1300; const x=parseFloat(s.b.style.left)+28, y=parseFloat(s.b.style.top)+26;
+      this.after(T,()=>{ this.pointAt(x,y); this.hover(s,true); }); this.after(T+450,()=>this.down(s)); this.after(T+590,()=>this.release(s,true)); this.after(T+1050,()=>{ this.hover(s,false); this.pointAt(x+40,y+30); }); });
+    this.after(3*1300+300,()=>this.pointAt(0,0,false)); }
+  render(){ this.btns.forEach(s=>{ s.b.hc.style.opacity=Math.min(1,s.chip.v); s.b.hc.style.background=`rgba(var(--prim),${(.10*s.chip.v).toFixed(3)})`; s.b.hc.style.opacity=s.chip.v>0.001?1:0;
+      s.b.ic.style.transform=`scale(${s.iconS.v*s.bounce.v})`; s.b.style.transform=`scale(${s.press.v})`; }); }
+}
+
+/* ---------- 6. Glyph ---------- */
+class Glyph extends Mock{
+  constructor(sec){ super(sec,264,214); const P=el(this.stage,'panel',{left:'0',width:'264px',height:'214px'});
+    const g={name:'Ghostties',mono:'G',rows:[{t:'sidebar motion spec',k:'working'},{t:'fix tray glass',k:'needs'},{t:'release beta.26',k:'working'}]};
+    const its=layoutItems([g],16); const gc=el(P,'gcard'); rect(gc,6,10,252,its[its.length-1].y+54-10);
+    const h=mkHeader(P,g); h.style.transform='translateY(16px)'; h.ink.style.opacity=1;
+    this.cycles=[['working','needs','done'],['needs','done','working'],['working','error','working']]; this.rows=[];
+    its.filter(i=>i.type==='r').forEach((it,ri)=>{ const r=mkRow(P,it.row); r.style.transform=`translateY(${it.y}px)`; r.gl.remove(); if(ri===1) r.chip.style.opacity=1;
+      const slots=[0,1].map(()=>{ const e=el(r,'gl'); return {e,k:null,o:this.ch(0),s:this.ch(1),b:this.ch(0)}; });
+      r.subA.remove(); const subs=[0,1].map(()=>{ const e=el(r.subEl,null); e.style.position='absolute'; return {e,o:this.ch(0),y:this.ch(0)}; });
+      r.style.cursor='pointer'; r.onpointerdown=()=>this.advance(ri); this.rows.push({r,slots,subs,cur:0,step:0}); });
+    this.reset(); }
+  setSlot(sl,k){ sl.k=k; sl.e.className='gl k-'+k; }
+  reset(){ this.rows.forEach((x,ri)=>{ x.step=0; x.cur=0; const k=this.cycles[ri][0]; this.setSlot(x.slots[0],k); x.slots[0].o.to(1); x.slots[0].s.to(1); x.slots[0].b.to(0); x.slots[1].o.to(0); x.slots[1].k=null;
+      x.subs[0].e.textContent=SUB[k]; x.subs[0].o.to(1); x.subs[0].y.to(0); x.subs[1].o.to(0); }); this.render(); }
+  advance(ri){ const x=this.rows[ri]; x.step=(x.step+1)%3; const k=this.cycles[ri][x.step]; const o=x.slots[x.cur], n=x.slots[1-x.cur], so=x.subs[x.cur], sn=x.subs[1-x.cur]; x.cur=1-x.cur;
+    this.setSlot(n,k); sn.e.textContent=SUB[k]; const m=this.mode;
+    if(m==='today'){ o.o.to(0); n.o.to(1); n.s.to(1); n.b.to(0); so.o.to(0); sn.o.to(1); sn.y.to(0); return; }
+    if(m==='reduced'){ o.o.to(0,CV('inout',120)); n.s.to(1); n.b.to(0); n.o.to(0).to(1,CV('inout',120)); so.o.to(0,CV('inout',120)); sn.y.to(0); sn.o.to(0).to(1,CV('inout',120)); return; }
+    o.o.to(0,CV('out',150)); o.s.to(.85,CV('out',150)); o.b.to(2,CV('out',150));
+    if(k==='needs'){ n.o.to(0).to(1,CV('out',120)); n.s.to(.8).to(1,POP()); n.b.to(2).to(0,CV('out',120)); }
+    else { n.o.to(0).to(1,CV('out',150)); n.s.to(.85).to(1,CV('out',150)); n.b.to(2).to(0,CV('out',150)); }
+    so.o.to(0,CV('out',150)); so.y.to(-4,CV('out',150)); sn.o.to(0).to(1,CV('out',150)); sn.y.to(4).to(0,CV('out',150)); }
+  act(a){ if(a==='advance') [0,1,2].forEach(i=>this.advance(i)); }
+  demo(){ [0,1,2].forEach(i=>this.after(i*120,()=>this.advance(i))); [0,1,2].forEach(i=>this.after(1300+i*120,()=>this.advance(i))); [0,1,2].forEach(i=>this.after(2600+i*120,()=>this.advance(i))); }
+  render(){ this.rows.forEach(x=>{ x.slots.forEach(sl=>{ if(sl.k) sl.e.textContent=glyphText(sl.k,this.t,this.rm); sl.e.style.opacity=sl.o.v; sl.e.style.transform=`scale(${sl.s.v})`; sl.e.style.filter=sl.b.v>0.05?`blur(${sl.b.v.toFixed(2)}px)`:'none'; });
+      x.subs.forEach(s=>{ s.e.style.opacity=s.o.v; s.e.style.transform=`translateY(${s.y.v}px)`; }); }); }
+}
+
+/* ---------- 7. Rows in/out ---------- */
+class Rows extends Mock{
+  constructor(sec){ super(sec,264,330); this.P=el(this.stage,'panel',{left:'0',width:'264px',height:'330px'}); this.gc=el(this.P,'gcard');
+    const h=mkHeader(this.P,{name:'Ghostties',mono:'G',rows:[]}); h.style.transform='translateY(16px)'; h.ink.style.opacity=1; this.count=h.count;
+    this.names=['review PR #212','explore glass rim','tune snap spring','write release notes','profile morph frames']; this.ni=0; this.rows=[]; this.cardB=this.ch(0); this.reset(); }
+  slotY(i){ return 16+34+52*i; }
+  mk(row,i,o=1){ const e=mkRow(this.P,row); e.gl.textContent=glyphText(row.k,0); const x={e,row,y:this.ch(this.slotY(i)),o:this.ch(o),s:this.ch(1),dead:false}; this.rows.push(x); return x; }
+  live(){ return this.rows.filter(r=>!r.dead); }
+  reset(){ this.rows.forEach(r=>r.e.remove()); this.rows=[]; this.ni=0;
+    [{t:'sidebar motion spec',k:'working'},{t:'fix tray glass',k:'needs'},{t:'release beta.26',k:'done'}].forEach((r,i)=>this.mk(r,i));
+    this.cardB.to(this.slotY(3)-4+6); this.render(); }
+  relayout(spec){ this.live().forEach((r,i)=>r.y.to(this.slotY(i),spec)); this.cardB.to(this.slotY(this.live().length)-4+6,spec); }
+  add(){ if(this.live().length>=5){ this.toast('Mock holds 5 rows'); return; } const m=this.mode; const row={t:this.names[this.ni++%this.names.length],k:'working'};
+    const x=this.mk(row,0,0); this.rows.splice(this.rows.indexOf(x),1); this.rows.unshift(x);
+    if(m==='today'){ x.o.to(1); this.relayout(IN); }
+    else if(m==='reduced'){ this.relayout(IN); x.o.to(1,CV('inout',120)); }
+    else { this.relayout(SNAP()); x.y.to(this.slotY(0)); x.o.to(1,CV('out',180,40)); x.s.to(.98).to(1,CV('out',180,40)); } }
+  remove(){ const L=this.live(); if(L.length<=1) return; const x=L[Math.min(1,L.length-1)]; x.dead=true; const m=this.mode;
+    const kill=()=>{ x.e.remove(); this.rows.splice(this.rows.indexOf(x),1); };
+    if(m==='today'){ kill(); this.relayout(IN); }
+    else if(m==='reduced'){ x.o.to(0,CV('inout',100)); this.after(100,()=>{ kill(); this.relayout(IN); }); }
+    else { x.o.to(0,CV('out',100)); this.after(60,()=>this.relayout(SNAP())); this.after(110,kill); } }
+  act(a){ if(a==='add') this.add(); if(a==='remove') this.remove(); }
+  demo(){ this.add(); this.after(900,()=>this.remove()); this.after(1800,()=>this.add()); this.after(2700,()=>this.remove()); }
+  render(){ this.rows.forEach(r=>{ r.e.style.transform=`translateY(${r.y.v}px) scale(${r.s.v})`; r.e.style.transformOrigin='12px 24px'; r.e.style.opacity=r.o.v; if(r.row.k==='working') r.e.gl.textContent=glyphText('working',this.t,this.rm); });
+    this.count.textContent=this.live().length; rect(this.gc,6,10,252,this.cardB.v-10); }
+}
+
+/* ---------- 8. Popover ---------- */
+class Popover extends Mock{
+  constructor(sec){ super(sec,540,280); const win=el(this.stage,'win',{width:'540px',height:'280px'}); const tc=termCard(win); tc.style.left='264px';
+    const rows=[{t:'sidebar motion spec',k:'working'},{t:'fix tray glass',k:'needs'},{t:'release beta.26',k:'done'},{t:'deploy preview',k:'working'}];
+    const g={name:'Ghostties',mono:'G',rows}; const h=mkHeader(win,g); h.style.transform='translateY(16px)';
+    this.content={working:['Last prompt · now reading','tighten the rail morph\n⠋ SidebarRailView.swift'],needs:['Wants to run','swift test --parallel']};
+    this.rowEls=rows.map((r,i)=>{ const e=mkRow(win,r); const y=16+34+52*i; e.style.transform=`translateY(${y}px)`; e.gl.textContent=glyphText(r.k,0); e.y=y; e.k=r.k;
+      e.onpointerenter=()=>{ e.hov.style.opacity=1; this.rowEnter(i); }; e.onpointerleave=()=>{ e.hov.style.opacity=0; this.rowLeave(i); }; return e; });
+    this.pop=el(win,'pop'); this.pk=el(this.pop,'k'); this.pc=el(this.pop,'cmd');
+    this.pop.onpointerenter=()=>{ this.cardHover=true; this.tok++; }; this.pop.onpointerleave=()=>{ this.cardHover=false; this.scheduleHide(); };
+    this.o=this.ch(0); this.x=this.ch(0); this.s=this.ch(1); this.tok=0; this.reset(); }
+  reset(){ this.vis=false; this.curRow=null; this.hovered=null; this.cardHover=false; this.tok++; this.o.to(0); this.x.to(0); this.s.to(1); this.rowEls.forEach(e=>e.hov.style.opacity=0); this.pointAt(0,0,false); this.render(); }
+  fill(i){ const e=this.rowEls[i], c=this.content[e.k]; this.pk.textContent=c[0]; this.pc.textContent=c[1]; this.pop.style.top=px(e.y); this.curRow=i; }
+  show(i){ if(!this.content[this.rowEls[i].k]){ this.hide(); return; } const warm=this.vis; this.fill(i); this.vis=true; if(warm) return; const m=this.mode;
+    if(m==='today'){ this.x.to(-4).to(0,CV('easeOut',140)); this.o.to(1,CV('easeOut',140)); this.s.to(1); }
+    else if(m==='reduced'){ this.x.to(0); this.s.to(1); this.o.to(1,CV('inout',120)); }
+    else { this.x.to(-4).to(0,CV('out',150)); this.s.to(.98).to(1,CV('out',150)); this.o.to(1,CV('out',150)); } }
+  hide(){ if(!this.vis) return; this.vis=false; this.curRow=null; const m=this.mode; this.o.to(0, m==='today'?CV('linear',140):m==='reduced'?CV('inout',100):CV('out',100)); }
+  rowEnter(i){ this.hovered=i; const t=++this.tok; if(this.vis){ if(this.curRow!==i) this.show(i); } else this.after(350,()=>{ if(t===this.tok&&this.hovered===i) this.show(i); }); }
+  rowLeave(i){ if(this.hovered===i) this.hovered=null; this.scheduleHide(); }
+  scheduleHide(){ const t=++this.tok; this.after(250,()=>{ if(t===this.tok&&this.hovered===null&&!this.cardHover) this.hide(); }); }
+  sim(i){ const prev=this.hovered; if(prev!==null&&prev!==undefined){ this.rowEls[prev].hov.style.opacity=0; } if(i===null){ this.pointAt(200,262); this.rowLeave(prev); return; }
+    const e=this.rowEls[i]; e.hov.style.opacity=1; this.pointAt(150,e.y+22); this.rowEnter(i); }
+  demo(){ this.after(0,()=>this.sim(1)); this.after(1100,()=>this.sim(0)); this.after(1800,()=>this.sim(3)); this.after(2500,()=>this.sim(2)); this.after(3300,()=>this.sim(null)); this.after(4200,()=>this.pointAt(0,0,false)); }
+  render(){ this.pop.style.left=px(272+this.x.v); this.pop.style.opacity=this.o.v; this.pop.style.transform=`scale(${this.s.v})`; this.pop.style.pointerEvents=this.o.v>.5?'auto':'none';
+    this.rowEls.forEach(e=>{ if(e.k==='working') e.gl.textContent=glyphText('working',this.t,this.rm); }); }
+}
+
+/* ---------- boot ---------- */
+const C={morph:Morph,close:Close,select:Select,accordion:Accordion,tray:Tray,glyph:Glyph,rows:Rows,popover:Popover};
+for(const id in C){ const s=document.getElementById(id); try{ if(s) new C[id](s); }catch(err){ document.body.dataset.mockerr=(document.body.dataset.mockerr||'')+id+': '+err.message+' | '; } }
+document.addEventListener('mockctl',e=>{ const d=JSON.parse(document.body.dataset.mockctl); const m=mocks[d.i]; m.speed=1; if(d.mode) m.setMode(d.mode);
+  (d.calls||[]).forEach(c=>{ if(typeof c==='number') { for(let k=0;k<c;k++) m.tick(0.016); } else if(typeof m[c]==='function') m[c](); else m.act(c); }); m.speed=d.freeze?0:1; document.body.dataset.mockout=JSON.stringify({t:m.t,mode:m.mode,v:m.chs.slice(-8).map(c=>+c.v.toFixed(2))}); });
+const vis=new Set(); const io=new IntersectionObserver(es=>es.forEach(e=>{ const m=mocks.find(x=>x.sec===e.target); if(e.isIntersecting) vis.add(m); else vis.delete(m); }));
+mocks.forEach(m=>io.observe(m.sec));
+addEventListener('resize',()=>mocks.forEach(m=>m.fit()));
+let last=performance.now();
+function frame(now){ const dt=Math.min(0.05,(now-last)/1000); last=now; vis.forEach(m=>m.tick(dt)); requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
