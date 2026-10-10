@@ -54,6 +54,16 @@ instance quits Sean's running Dev. Agents use `scripts/build-capture.sh` (build)
 `.build-capture` with `GHOSTTIES_DEV_BUNDLE_SUFFIX=.capture`, so it runs beside
 Sean's Dev. Its state folder is separate too (`WorkspacePersistence` maps unknown IDs to `Ghostties (<bundleId>)`); never use a suffix ending in `.dev`, which shares Sean's Dev workspace.
 
+### Why `GhosttyTests` runs serially
+
+`macos/Ghostty.xctestplan` sets `parallelizable: false` for `GhosttyTests`. The suite
+has ~100 hosted render tests that all run on the main actor; in parallel they flood
+it, and main-actor hops (including a test's own `await`s) stall 10-28s even though the
+work they wait on, like `git worktree add`, takes under half a second. Tests that
+wait on a fixed wall-clock deadline then fail every full run. Serial runs fix the
+flooding. Tests should still await a real completion signal (a Task's value, a state
+change) with a 60s hang guard, never a short deadline that decides pass/fail.
+
 ### Why CI doesn't run these
 
 CI builds this suite with `build-for-testing` but does not execute it. App-hosted

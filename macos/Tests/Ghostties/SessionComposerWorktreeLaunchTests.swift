@@ -75,59 +75,51 @@ struct SessionComposerWorktreeLaunchTests {
         try? FileManager.default.removeItem(atPath: path)
     }
 
-    /// Polls a MainActor condition instead of a fixed sleep — `createWorktree`
-    /// dispatches its git shell-out from an unstructured `Task`, so nothing
-    /// in this test can `await` it directly.
-    private static func waitUntil(timeout: TimeInterval, _ condition: @escaping () -> Bool) async {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition(), Date() < deadline {
-            try? await _Concurrency.Task.sleep(for: .milliseconds(20))
+    /// Hang guard only — never the pass condition. Every wait below returns
+    /// the moment its completion signal fires; this just bounds a genuine
+    /// hang. Sized far above anything main-actor contention produces.
+    private static let hangGuardSeconds: TimeInterval = 60
+
+    /// Awaits the real completion of the last `createWorktree` call: the
+    /// store's own Task (`worktreeCreationTaskForTesting`), which settles
+    /// after git, the follow-up refresh, and `onSuccess`. No wall-clock
+    /// deadline decides pass/fail; a hang guard only reports a stuck Task.
+    private static func awaitCreation(of store: SessionComposerStore, sourceLocation: SourceLocation = #_sourceLocation) async {
+        guard let task = store.worktreeCreationTaskForTesting else {
+            Issue.record("createWorktree started no Task to await", sourceLocation: sourceLocation)
+            return
+        }
+        // A task group would deadlock here: `task.value` ignores
+        // cancellation, so the group could not exit once the guard won.
+        // First finisher resumes the continuation; the loser's result is dropped.
+        let finished = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            var resumed = false
+            _Concurrency.Task { @MainActor in
+                await task.value
+                if !resumed { resumed = true; cont.resume(returning: true) }
+            }
+            _Concurrency.Task { @MainActor in
+                try? await _Concurrency.Task.sleep(for: .seconds(hangGuardSeconds))
+                if !resumed { resumed = true; cont.resume(returning: false) }
+            }
+        }
+        if !finished {
+            Issue.record("createWorktree's Task did not settle within the \(Int(hangGuardSeconds))s hang guard", sourceLocation: sourceLocation)
         }
     }
 
-    /// Every poll that waits on `createWorktree` finishing MUST use this.
-    /// `SessionComposerStore.createWorktree` races its `git worktree add`
-    /// against its OWN internal 10-second timeout (`Self.race(gitTask,
-    /// timeoutSeconds: 10)`, production code, never touched here) — a poll
-    /// with a shorter budget than that can observe genuine MID-FLIGHT state
-    /// (still creating, not yet success/failure) under load and misread it
-    /// as a broken fix. Proven in practice: under the full unfiltered
-    /// suite's parallel CPU contention, real `git` shell-outs here landed
-    /// between 5-10s, comfortably inside production's 10s ceiling but
-    /// outside a shorter poll — a false negative in the TEST, not a defect
-    /// in `createWorktree`. `12`, strictly above the 10s it's timed
-    /// against, not a round number picked for comfort.
-    private static let createWorktreeCompletionTimeout: TimeInterval = 12
-
-    /// A shared budget used everywhere this file waits on
-    /// `refreshWorktrees` settling — the setup poll (`:272`), the
-    /// post-creation poll (`:302`), and two unconditional `Task.sleep`s
-    /// (`:433`, `:787`) — needs its OWN, separately-derived budget from
-    /// `createWorktreeCompletionTimeout` above, which is timed against a
-    /// different, longer-running call (`createWorktree`'s 10s
-    /// git-shell-out ceiling). `refreshWorktrees` races its own 2-second
-    /// deadline (`SessionComposerStore.swift`'s `raceAny(listTask,
-    /// timeoutSeconds: 2)`) and, on a timeout, schedules a retry after
-    /// ANOTHER 2-second sleep that RE-ENTERS `refreshWorktrees` itself
-    /// (`SessionComposerStore.swift:389-393`). That re-entrant call bumps
-    /// `worktreeRefreshToken` at its own entry AND re-captures it
-    /// (`SessionComposerStore.swift:263-264`) before racing again, so it
-    /// never invalidates itself — the chain only dies when an OUTSIDE
-    /// caller (`open()`, `cancel()`, `changeProjectChip`) bumps the token
-    /// first. There is NO bound on this while the token holds —
-    /// production's own comment (`SessionComposerStore.swift:384-388`)
-    /// says the composer "keeps retrying on its own every ~4s while it
-    /// stays open on this project." Measured from when a poll here starts
-    /// (not from when `refreshWorktrees` was first called — the setup
-    /// site `await`s the initial call to completion before its poll
-    /// begins, and the post-creation poll starts right at the timeout
-    /// instant): retry 1 resolves by +4s, retry 2 by +8s. So `8` covers
-    /// TWO retry cycles from the poll's own start, with the second
-    /// landing exactly on the deadline — it is a settle window sized to
-    /// the common case, not a ceiling. A THIRD consecutive timeout will
-    /// exceed it, so a red at the post-creation poll below may be a
-    /// contention flake rather than proof of a defect.
-    private static let refreshWorktreesSetupTimeout: TimeInterval = 8
+    /// For state with no awaitable owner (`refreshWorktrees`' internal
+    /// self-scheduled retry): returns as soon as the condition holds; the
+    /// hang guard only bounds a condition that never becomes true.
+    private static func waitUntil(_ condition: @escaping () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
+        let deadline = Date().addingTimeInterval(hangGuardSeconds)
+        while !condition(), Date() < deadline {
+            try? await _Concurrency.Task.sleep(for: .milliseconds(20))
+        }
+        if !condition() {
+            Issue.record("condition never became true within the \(Int(hangGuardSeconds))s hang guard", sourceLocation: sourceLocation)
+        }
+    }
 
     // MARK: - 1. onSuccess fires exactly once, with the new worktree's path
 
@@ -152,7 +144,7 @@ struct SessionComposerWorktreeLaunchTests {
             capturedPath = path
         }
 
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
+        await Self.awaitCreation(of: store)
 
         #expect(successCount == 1, "expected exactly one onSuccess call, got \(successCount)")
         #expect(capturedPath == expectedPath)
@@ -187,7 +179,7 @@ struct SessionComposerWorktreeLaunchTests {
         store.createWorktree(named: branchName, in: project) { successPath = $0 }
         store.selectedWorktreePath = userPick
 
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
+        await Self.awaitCreation(of: store)
 
         // Prove creation actually SUCCEEDED before asserting the survival —
         // without this, the assertion below also holds if creation failed or
@@ -231,7 +223,7 @@ struct SessionComposerWorktreeLaunchTests {
 
         store.createWorktree(named: branchName, in: project)
 
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
+        await Self.awaitCreation(of: store)
 
         #expect(store.selectedWorktreePath == expectedPath)
         #expect(store.writeError == nil)
@@ -276,7 +268,7 @@ struct SessionComposerWorktreeLaunchTests {
         // self-schedules a retry rather than blocking — poll with THIS
         // call's own derived budget rather than trust a single `await` to
         // have landed real data.
-        await Self.waitUntil(timeout: Self.refreshWorktreesSetupTimeout) { store.branchesWithoutWorktree.contains(branchName) }
+        await Self.waitUntil { store.branchesWithoutWorktree.contains(branchName) }
 
         // Sanity: the offer really is live before creation — if this fails,
         // the test below isn't exercising the bug it claims to.
@@ -284,30 +276,11 @@ struct SessionComposerWorktreeLaunchTests {
 
         store.createWorktree(named: branchName, in: project)
 
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
+        await Self.awaitCreation(of: store)
 
-        // Round 3 deleted the `branchesWithoutWorktree.removeAll` line from
-        // production (correctly — it caused a worse bug), which leaves this
-        // assertion depending entirely on the post-creation `refreshWorktrees`
-        // beating its hardcoded 2s race. Poll it like the setup poll above
-        // rather than reading state once. This is NOT racing the success
-        // branch's own ordering — `await refreshWorktrees(...)` at
-        // `SessionComposerStore.swift:1192` already completes before
-        // `isCreatingWorktree = false` at `:1204`, and both the store's Task
-        // and this @MainActor test body run on the main actor, so a single
-        // read after `!isCreatingWorktree` can never observe the stale
-        // pre-refresh list from THAT call. What the poll actually covers:
-        // `refreshWorktrees` can lose its own internal
-        // `raceAny(listTask, timeoutSeconds: 2)` (`:348`), leaving
-        // `branchesWithoutWorktree` untouched and scheduling a retry after a
-        // 2s sleep that RE-ENTERS `refreshWorktrees` itself (`:389-393`) —
-        // this poll's window is what catches that retry landing after
-        // `isCreatingWorktree` already flipped false.
-        // `refreshWorktreesSetupTimeout` covers exactly one retry cycle, not
-        // an arbitrary number of them; a SECOND consecutive timeout on this
-        // same call can still outlast it.
-        await Self.waitUntil(timeout: Self.refreshWorktreesSetupTimeout) { !store.branchesWithoutWorktree.contains(branchName) }
-
+        // `awaitCreation` returns only after the creation Task settled, and
+        // that Task reconciles `branchesWithoutWorktree` itself, so one
+        // read is enough — no retry-window guessing.
         #expect(!store.branchesWithoutWorktree.contains(branchName), "the branch must stop offering a create row once the worktree exists")
     }
 
@@ -356,15 +329,10 @@ struct SessionComposerWorktreeLaunchTests {
         store.createWorktree(named: firstBranch, in: project) { _ in successCount += 1 }
         store.createWorktree(named: secondBranch, in: project) { _ in successCount += 1 }
 
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
-        // Give a WOULD-BE-BLOCKED second creation the same generous budget
-        // to have actually run and finished, if the guard were missing —
-        // `isCreatingWorktree` going false only proves the FIRST creation
-        // settled; without this, a real second `git worktree add` that
-        // started anyway could still be mid-flight when the assertions
-        // below run.
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { successCount >= 1 }
-
+        await Self.awaitCreation(of: store)
+        // Only the first creation has a Task: the guard rejects the second
+        // before it starts one. A missing guard would have replaced the
+        // Task, and the second directory would then exist.
         #expect(successCount == 1, "exactly one creation must proceed, got \(successCount) onSuccess calls")
         #expect(!FileManager.default.fileExists(atPath: secondExpectedPath), "the second call must never even start its own git worktree add — its directory must not exist on disk")
     }
@@ -415,32 +383,11 @@ struct SessionComposerWorktreeLaunchTests {
         store.createWorktree(named: branchName, in: project) { _ in successCount += 1 }
         store.cancel()
 
-        // `cancel()` clears `isCreatingWorktree` synchronously, so polling
-        // IT proves nothing here — poll the FILESYSTEM instead: `git
-        // worktree add` is a synchronous, durable operation once it exits,
-        // so the directory existing is proof the background creation
-        // genuinely finished, independent of anything the store's own
-        // (now-reset) state says.
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) {
-            FileManager.default.fileExists(atPath: expectedPath)
-        }
-        // Directory-exists proves `git worktree add` itself finished, NOT
-        // that the outer `Task`'s `.completed(.success)` case has run —
-        // that case still `await`s a full `refreshWorktrees`, which can
-        // still be mid-retry-chain (see `refreshWorktreesSetupTimeout`'s
-        // doc comment — the 8s budget is a settle window sized to the
-        // common case, not a ceiling) AFTER the directory already exists,
-        // before it would ever reach `onSuccess?(path)`. An earlier draft
-        // asserted immediately after the file-exists poll and stayed GREEN
-        // even with BOTH token guards deleted
-        // (`SessionComposerStore.swift:1163`/`1200`) — not because the
-        // guards didn't matter, but because the assertion ran before the
-        // stale Task could possibly have reached them either way, a false
-        // negative in the TEST. Waiting the SAME settle budget here,
-        // unconditionally, is what makes deleting either guard alone
-        // observable under normal timing — under a repeated retry chain
-        // (see above) this can still miss.
-        try? await _Concurrency.Task.sleep(for: .seconds(Self.refreshWorktreesSetupTimeout))
+        // `cancel()` clears `isCreatingWorktree` synchronously, so that flag
+        // proves nothing. The creation Task settling is the signal: it runs
+        // past git, the follow-up refresh and both token guards, so a
+        // deleted guard would have fired onSuccess before it returns.
+        await Self.awaitCreation(of: store)
 
         #expect(successCount == 0, "a creation superseded by cancel() must never fire its onSuccess into the new (reset) context")
         #expect(store.selectedWorktreePath == nil, "cancel()'s reset must not be silently overwritten by the stale creation's own success handler")
@@ -525,7 +472,7 @@ struct SessionComposerWorktreeLaunchTests {
             _ = store.precommit(template: AgentTemplate.shell, coordinator: coordinator, workspaceStore: workspaceStore)
         }
 
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) { !store.isCreatingWorktree }
+        await Self.awaitCreation(of: store)
 
         #expect(capturedProject?.id == projectB.id, "the session must land in the project the worktree was actually created in (B), not the stale prefilled selection (A)")
     }
@@ -763,14 +710,8 @@ struct SessionComposerWorktreeLaunchTests {
     /// this fix's `worktreeCreationToken += 1` line from
     /// `cascadeProjectChange` and this goes red.
     ///
-    /// Same synchronous-race guarantee as test 5 above: `selectedProjectId`'s
-    /// write happens right after `createWorktree` returns, no `await`
-    /// between them, so the Task cannot have started before the cascade
-    /// runs — same 8s settle budget for the same reason (see
-    /// `refreshWorktreesSetupTimeout`'s doc comment for why a shorter wait
-    /// produced a false negative here during this file's own review, and
-    /// for why that budget is a settle window rather than a worst-case
-    /// bound).
+    /// Same synchronous-race guarantee as test 5 above: no `await` between
+    /// `createWorktree` and the cascade, so the Task cannot have started.
     @Test func projectSwitchMidCreationInvalidatesTheStaleCreation() async {
         let repoA = Self.makeThrowawayRepo()
         let repoB = Self.makeThrowawayRepo()
@@ -793,10 +734,7 @@ struct SessionComposerWorktreeLaunchTests {
         // scenario, distinct from test 5's `cancel()` path.
         store.selectedProjectId = projectB.id
 
-        await Self.waitUntil(timeout: Self.createWorktreeCompletionTimeout) {
-            FileManager.default.fileExists(atPath: expectedPath)
-        }
-        try? await _Concurrency.Task.sleep(for: .seconds(Self.refreshWorktreesSetupTimeout))
+        await Self.awaitCreation(of: store)
 
         #expect(successCount == 0, "a creation superseded by a project switch must never fire its onSuccess into the new project's context")
         #expect(store.selectedWorktreePath == nil, "the project switch's reset must not be silently overwritten by the stale creation's own success handler")

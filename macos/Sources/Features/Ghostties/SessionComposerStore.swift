@@ -1077,6 +1077,12 @@ final class SessionComposerStore: ObservableObject {
     /// PALETTE can run its own, already-correct `commit(template:)` if it
     /// decides the field is launchable. This store has no opinion on
     /// whether to launch; it only reports that creation succeeded.
+    /// The Task `createWorktree` last started — its value resolves when that
+    /// creation has fully settled (success + `onSuccess`, failure, timeout, or
+    /// superseded). Tests await it instead of polling wall-clock deadlines.
+    /// Observation only; nothing in production reads it.
+    private(set) var worktreeCreationTaskForTesting: _Concurrency.Task<Void, Never>?
+
     @MainActor
     func createWorktree(named branchName: String, in project: Project, onSuccess: ((String) -> Void)? = nil) {
         // Blocker (review round 2): a SECOND Return/click while a creation
@@ -1144,7 +1150,7 @@ final class SessionComposerStore: ObservableObject {
             return result
         }
 
-        _Concurrency.Task {
+        worktreeCreationTaskForTesting = _Concurrency.Task {
             let outcome = await Self.race(gitTask, timeoutSeconds: 10)
 
             // Discard if superseded — see `worktreeCreationToken`'s doc

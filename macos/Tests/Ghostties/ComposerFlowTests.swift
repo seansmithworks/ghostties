@@ -459,8 +459,10 @@ struct ComposerFlowTests {
         let rig = Rig(projects: [project], binding: .prefilled(project))
         await rig.waitForFocus()
         // The branch list loads from git asynchronously; an unknown branch
-        // reads as `.pending` (rejected) until it has.
-        let loaded = await rig.settle(timeout: 12) { rig.composer.isGitRepo && rig.composer.worktreesProjectId == project.id }
+        // reads as `.pending` (rejected) until it has. `settle` returns the
+        // moment the condition holds; 60s is a hang guard, not the pass
+        // condition (a short deadline starves under main-actor contention).
+        let loaded = await rig.settle(timeout: 60) { rig.composer.isGitRepo && rig.composer.worktreesProjectId == project.id }
         #expect(loaded, "worktree list never loaded")
         let before = Self.git(["worktree", "list", "--porcelain"], in: repo)
         #expect(!before.contains("feat-x"))
@@ -469,7 +471,7 @@ struct ComposerFlowTests {
         rig.pressReturn()
 
         // The FIRST Return must create the worktree and spawn in it — no retry.
-        let spawned = await rig.settle(timeout: 12) { rig.dispatched.count >= 1 }
+        let spawned = await rig.settle(timeout: 60) { rig.dispatched.count >= 1 }
         #expect(spawned, "no spawn; writeError=\(rig.composer.writeError ?? "nil") creating=\(rig.composer.isCreatingWorktree) text=\(rig.composer.searchText.debugDescription)")
         let after = Self.git(["worktree", "list", "--porcelain"], in: repo)
         #expect(after.contains("branch refs/heads/feat-x"))
