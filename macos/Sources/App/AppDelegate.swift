@@ -422,30 +422,8 @@ class AppDelegate: NSObject,
         self.appearanceObserver = NSApplication.shared.observe(
             \.effectiveAppearance,
              options: [.new, .initial]
-        ) { _, change in
-            guard let appearance = change.newValue else { return }
-            guard let app = self.ghostty.app else { return }
-            let scheme: ghostty_color_scheme_e
-            if appearance.isDark {
-                scheme = GHOSTTY_COLOR_SCHEME_DARK
-            } else {
-                scheme = GHOSTTY_COLOR_SCHEME_LIGHT
-            }
-
-            ghostty_app_set_color_scheme(app, scheme)
-
-            // MARK: - Ghostties fork fence (color scheme reaches every surface)
-            // The call above only re-themes the app-level config and surfaces
-            // created from now on. Each existing surface keeps its own
-            // light/dark state in libghostty, and upstream only pushes it to
-            // the tree currently shown in a window. The sidebar keeps every
-            // other session alive off-window, so broadcast to all of them.
-            NotificationCenter.default.post(
-                name: .ghosttyColorSchemeDidChange,
-                object: self.ghostty,
-                userInfo: [Notification.Name.GhosttyColorSchemeKey: scheme]
-            )
-            // MARK: - End Ghostties fork fence (color scheme reaches every surface)
+        ) { [weak self] _, _ in
+            self?.applyAppearanceToAllSurfaces(force: false)
         }
 
         // Setup our menu
@@ -892,8 +870,18 @@ class AppDelegate: NSObject,
         viewMenu.insertItem(sidebarViewParent, at: 9)
         viewMenu.insertItem(NSMenuItem.separator(), at: 10)
 
+        // MARK: - Ghostties fork fence (color scheme reaches every surface)
+        let refreshAppearanceItem = NSMenuItem(
+            title: "Refresh Appearance",
+            action: #selector(refreshAppearance(_:)),
+            keyEquivalent: ""
+        )
+        refreshAppearanceItem.target = self
+        viewMenu.insertItem(refreshAppearanceItem, at: 11)
+        // MARK: - End Ghostties fork fence (color scheme reaches every surface)
+
         #if DEBUG
-        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 11)
+        viewMenu.insertItem(makeBuildInfoBadgeToggleMenuItem(), at: 12)
         #endif
     }
 
@@ -1682,6 +1670,45 @@ class AppDelegate: NSObject,
     @IBAction func reloadConfig(_ sender: Any?) {
         ghostty.reloadConfig()
     }
+
+    // MARK: - Ghostties fork fence (color scheme reaches every surface)
+    /// View > Refresh Appearance: re-push the system light/dark scheme to every
+    /// surface, ignoring each controller's cached "already applied" scheme.
+    @IBAction func refreshAppearance(_ sender: Any?) {
+        applyAppearanceToAllSurfaces(force: true)
+    }
+
+    /// Every terminal controller that can own surfaces: all windows (visible
+    /// or not) plus the quick terminal if it has been created.
+    var allSurfaceControllers: [BaseTerminalController] {
+        var controllers: [BaseTerminalController] = TerminalController.all
+        if case .initialized(let quick) = quickTerminalControllerState {
+            controllers.append(quick)
+        }
+        return controllers
+    }
+
+    /// Single entry point for "the system appearance changed" (the
+    /// `effectiveAppearance` observer) and View > Refresh Appearance.
+    /// The app-level call only re-themes the config and future surfaces, and
+    /// upstream pushes the scheme to a surface only when its window syncs, so
+    /// this also reaches every controller's tree directly and broadcasts for
+    /// the sidebar's off-window sessions. `force` bypasses each controller's
+    /// applied-scheme guard.
+    func applyAppearanceToAllSurfaces(force: Bool) {
+        guard let app = ghostty.app else { return }
+        let scheme = NSApplication.shared.effectiveAppearance.ghosttyColorScheme
+        ghostty_app_set_color_scheme(app, scheme)
+        NotificationCenter.default.post(
+            name: .ghosttyColorSchemeDidChange,
+            object: ghostty,
+            userInfo: [Notification.Name.GhosttyColorSchemeKey: scheme]
+        )
+        for controller in allSurfaceControllers {
+            controller.updateColorSchemeForSurfaceTree(force: force)
+        }
+    }
+    // MARK: - End Ghostties fork fence (color scheme reaches every surface)
 
     @IBAction func checkForUpdates(_ sender: Any?) {
         updateController.checkForUpdates()
