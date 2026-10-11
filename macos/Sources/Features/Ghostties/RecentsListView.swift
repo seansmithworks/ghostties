@@ -446,7 +446,7 @@ struct RecentsListView: View {
         _ group: SidebarProjectGroup, isCollapsed: Bool, dropSlot: ProjectDropSlot?,
         monogram: String, isSelectedProject: Bool, staggerIndex: Int
     ) -> some View {
-        let header = ProjectAccordionHeader(
+        let header = withProjectContextMenu(projectId: group.projectId) { ProjectAccordionHeader(
             name: group.name, monogram: monogram, count: group.sessions.count,
             isCollapsed: isCollapsed, isEmpty: group.isEmpty, isSelectedProject: isSelectedProject,
             redlineID: RedlineID.header(group.id), staggerIndex: staggerIndex
@@ -454,7 +454,7 @@ struct RecentsListView: View {
             ProjectAccordionState.headerClicked(group, collapsedRaw: $collapsedProjectsRaw) { projectId in
                 ProjectSelection.select(projectId, store: store, coordinator: coordinator, window: coordinator.containerView?.window)
             }
-        }
+        } }
         if let projectId = group.projectId, let dropSlot {
             let movable = header
                 .accessibilityAction(named: Text("Move Up")) { moveProject(projectId, by: -1) }
@@ -483,6 +483,17 @@ struct RecentsListView: View {
             }
         } else {
             header
+        }
+    }
+
+    /// Gives a real project's header the shared project menu and Settings
+    /// popover (`projectContextMenu`); the "Unknown" group has no project.
+    @ViewBuilder
+    private func withProjectContextMenu<Header: View>(projectId: UUID?, @ViewBuilder _ header: () -> Header) -> some View {
+        if let projectId, let project = store.projects.first(where: { $0.id == projectId }) {
+            header().projectContextMenu(project)
+        } else {
+            header()
         }
     }
 
