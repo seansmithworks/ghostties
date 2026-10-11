@@ -99,7 +99,13 @@ enum CaptureFixture {
     /// writes Sean's real Dev settings (composer state, the Cmd+T pref).
     static var defaultsSuiteName: String { "ghostties.capture.\(ProcessInfo.processInfo.processIdentifier)" }
 
-    private static let fixtureDefaults: UserDefaults? = UserDefaults(suiteName: defaultsSuiteName)
+    private static let fixtureDefaults: UserDefaults? = {
+        let suite = UserDefaults(suiteName: defaultsSuiteName)
+        // `GHOSTTIES_CAPTURE_REVEAL_STYLE`: seed the reveal style dial so the
+        // rail reveal uses it from the first frame.
+        if let style = revealStyle { suite?.set(style.rawValue, forKey: SidebarDialTuning.hoverRevealStyleKey) }
+        return suite
+    }()
 
     /// The defaults the composer store and the Cmd+T pref read/write:
     /// the throwaway suite in fixture mode, `.standard` otherwise.
@@ -582,6 +588,56 @@ enum CaptureFixture {
     static var railRevealAfter: TimeInterval? {
         env("GHOSTTIES_CAPTURE_RAIL_REVEAL_AFTER").flatMap(parsePositiveSeconds)
     }
+    /// `GHOSTTIES_CAPTURE_REVEAL_STYLE=push|overlay`: seeds the rail reveal's
+    /// style dial in the fixture's throwaway suite (`fixtureDefaults`).
+    static func parseRevealStyle(_ raw: String?) -> RailRevealStyle? {
+        raw.flatMap(RailRevealStyle.init(rawValue:))
+    }
+    static var revealStyle: RailRevealStyle? { parseRevealStyle(env("GHOSTTIES_CAPTURE_REVEAL_STYLE")) }
+
+    /// `GHOSTTIES_CAPTURE_RAIL_REVEAL_COLLAPSE_AFTER=<seconds>`: that long
+    /// after the `RAIL_REVEAL_AFTER` reveal, the pointer "leaves"
+    /// (`RailHoverReveal.pointerExited`: exit grace, then the collapse).
+    static var railRevealCollapseAfter: TimeInterval? {
+        env("GHOSTTIES_CAPTURE_RAIL_REVEAL_COLLAPSE_AFTER").flatMap(parsePositiveSeconds)
+    }
+
+    /// `GHOSTTIES_CAPTURE_SELECT_SEQUENCE=<seconds>:<steps>`: every
+    /// `interval` seconds, focus the session `steps` places along the
+    /// shortcut order (Cmd+Shift+], wrapping), in any sidebar mode.
+    struct SelectSequence: Equatable {
+        let interval: TimeInterval
+        let steps: Int
+    }
+
+    static func parseSelectSequence(_ raw: String?) -> SelectSequence? {
+        guard let parts = raw?.split(separator: ":", omittingEmptySubsequences: false), parts.count == 2,
+              let interval = parsePositiveSeconds(String(parts[0])),
+              let steps = Int(parts[1]), steps != 0 else { return nil }
+        return SelectSequence(interval: interval, steps: steps)
+    }
+
+    static var selectSequence: SelectSequence? { parseSelectSequence(env("GHOSTTIES_CAPTURE_SELECT_SEQUENCE")) }
+
+    /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE=<project>:<seconds>`: every `interval`
+    /// seconds (`foldToggleCycles` times), toggle that project's accordion
+    /// fold as its header click does. Projects tab.
+    struct FoldToggle: Equatable {
+        let projectName: String
+        let interval: TimeInterval
+    }
+
+    static let foldToggleCycles = 6
+
+    static func parseFoldToggle(_ raw: String?) -> FoldToggle? {
+        guard let raw, let split = raw.lastIndex(of: ":") else { return nil }
+        let name = String(raw[..<split]).trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, let interval = parsePositiveSeconds(String(raw[raw.index(after: split)...])) else { return nil }
+        return FoldToggle(projectName: name, interval: interval)
+    }
+
+    static var foldToggle: FoldToggle? { parseFoldToggle(env("GHOSTTIES_CAPTURE_FOLD_TOGGLE")) }
+
     /// `GHOSTTIES_CAPTURE_TRAY_HOVER=<SidebarTrayItem.id>` (e.g. `newSession`):
     /// draws that tray button's hover highlight without a pointer, so the
     /// hovered state can be captured without synthetic input.

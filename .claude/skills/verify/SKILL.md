@@ -26,6 +26,11 @@ Launch-state hooks (DEBUG only, `CaptureFixture.swift`; each calls the action it
 - `VERIFY_FIXTURE_PROJECTS=none`: seeds 0 projects and 0 sessions (contract X3: with any project the Run row accepts any text). `VERIFY_COMPOSER=open` still works. Don't combine with hooks that name a project.
 - `VERIFY_FIXTURE_TEMPLATE_IN_USE=1`: seeds one user template, "Mine", used by two trove sessions ("build fix", "release notes"). With `VERIFY_PROJECT_SETTINGS=<project>:templates-delete` the alert reads "Used by build fix and release notes. Sessions using "Mine" will keep...". Templates are global, so any project's settings show it (contract T6).
 - `VERIFY_SIDEBAR_TOGGLE_AFTER=<s>`: runs Cmd+S's action after N s (pinned to rail), again after 2N s (back).
+- `VERIFY_RAIL_REVEAL_AFTER=<s>`: on the rail (`MODE=collapsed`), reveals the sidebar as a hover dwell would.
+- `VERIFY_REVEAL_STYLE=push|overlay`: the reveal style, seeded into the fixture's throwaway dial suite.
+- `VERIFY_RAIL_REVEAL_COLLAPSE_AFTER=<s>`: s seconds after the reveal, the pointer-exit path runs (exit grace, then the collapse). Needs `RAIL_REVEAL_AFTER`.
+- `VERIFY_SELECT_SEQUENCE=<s>:<n>`: every s seconds, focuses the session n places along (Cmd+Shift+] order, wrapping; negative goes back), pinned or rail.
+- `VERIFY_FOLD_TOGGLE=<project>:<s>`: every s seconds, 6 times, toggles that project's accordion fold as its header click does (implies `TAB=projects`).
 `up` launches the binary directly (not `open`, which only focuses a running Dev build sharing the bundle id), strips `GHOSTTIES_SESSION_ID`/`GHOSTTIES_LAUNCHER`, sets `GHOSTTIES_STATE_DIR` to the evidence dir, records the pid, and records the old `ghostties.sidebarTab` value if a tab was requested. Mode is fixed at launch: one flow = one `up`/`down` cycle.
 
 ## Doctor

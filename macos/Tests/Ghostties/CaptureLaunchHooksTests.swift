@@ -79,4 +79,40 @@ struct CaptureLaunchHooksTests {
             #expect(CaptureFixture.parseSidebarToggleAfter(raw) == nil, "\(raw ?? "nil")")
         }
     }
+
+    // MARK: - Motion hooks (reveal style, collapse, select sequence, fold toggle)
+
+    @Test func revealStyleParses() {
+        #expect(CaptureFixture.parseRevealStyle("push") == .push)
+        #expect(CaptureFixture.parseRevealStyle("overlay") == .overlay)
+        for raw in [nil, "", "Push", "slide"] {
+            #expect(CaptureFixture.parseRevealStyle(raw) == nil, "\(raw ?? "nil")")
+        }
+    }
+
+    @Test func selectSequenceParses() {
+        #expect(CaptureFixture.parseSelectSequence("2:1") == .init(interval: 2, steps: 1))
+        #expect(CaptureFixture.parseSelectSequence("1.5:-2") == .init(interval: 1.5, steps: -2))
+        for raw in [nil, "", "2", "2:", ":1", "0:1", "2:0", "x:1", "2:x", "2:1:1"] {
+            #expect(CaptureFixture.parseSelectSequence(raw) == nil, "\(raw ?? "nil")")
+        }
+    }
+
+    @Test func foldToggleParses() {
+        #expect(CaptureFixture.parseFoldToggle("atlas-api:2") == .init(projectName: "atlas-api", interval: 2))
+        #expect(CaptureFixture.parseFoldToggle("wren:0.5") == .init(projectName: "wren", interval: 0.5))
+        for raw in [nil, "", "wren", "wren:", ":2", "wren:0", "wren:x"] {
+            #expect(CaptureFixture.parseFoldToggle(raw) == nil, "\(raw ?? "nil")")
+        }
+    }
+
+    @Test func motionHooksAreNilWithoutFixtureGate() {
+        // The env hooks read nothing unless GHOSTTIES_CAPTURE_FIXTURE=1; the
+        // test process doesn't set it, so even a stray env value stays inert.
+        guard !CaptureFixture.isActive else { return }
+        #expect(CaptureFixture.revealStyle == nil)
+        #expect(CaptureFixture.railRevealCollapseAfter == nil)
+        #expect(CaptureFixture.selectSequence == nil)
+        #expect(CaptureFixture.foldToggle == nil)
+    }
 }

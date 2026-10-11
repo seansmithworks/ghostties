@@ -126,6 +126,7 @@ struct WorkspaceSidebarView: View {
             #if DEBUG
             coordinator.applyCaptureFixtureFocusIfNeeded()
             applyCaptureExpandProjectIfNeeded()
+            applyCaptureFoldToggleIfNeeded()
             #endif
         }
         .onChange(of: selectedProjectId) { newId in
@@ -236,6 +237,25 @@ struct WorkspaceSidebarView: View {
               CaptureFixture.claimHook("expand") else { return }
         expandedBinding(for: project.id).wrappedValue = true
         selectedProjectId = project.id
+    }
+
+    /// `GHOSTTIES_CAPTURE_FOLD_TOGGLE`: the project header's click action
+    /// (`ProjectDisclosureRow`: the fold spring around `isExpanded.toggle()`),
+    /// repeated on a timer. Projects tab only.
+    private func applyCaptureFoldToggleIfNeeded() {
+        guard sidebarTab == .projects,
+              let hook = CaptureFixture.foldToggle,
+              let project = store.projects.first(where: { $0.name == hook.projectName }),
+              CaptureFixture.claimHook("foldToggle") else { return }
+        let binding = expandedBinding(for: project.id)
+        _Concurrency.Task { @MainActor in
+            for _ in 0..<CaptureFixture.foldToggleCycles {
+                try? await _Concurrency.Task.sleep(nanoseconds: UInt64(hook.interval * 1_000_000_000))
+                withAnimation(SidebarUISpring.fold.animation(entering: !binding.wrappedValue)) {
+                    binding.wrappedValue.toggle()
+                }
+            }
+        }
     }
     #endif
 

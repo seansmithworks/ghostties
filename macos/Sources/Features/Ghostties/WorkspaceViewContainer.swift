@@ -1183,7 +1183,26 @@ class WorkspaceViewContainer: NSView {
             DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
                 guard let self, self.sidebarMode == .collapsed else { return }
                 self.railHover.revealNow()
+                guard let collapse = CaptureFixture.railRevealCollapseAfter else { return }
+                // The pointer leaving: the exit grace, then the same collapse.
+                DispatchQueue.main.asyncAfter(deadline: .now() + collapse) { [weak self] in
+                    self?.railHover.pointerExited()
+                }
             }
+        }
+        if let sequence = CaptureFixture.selectSequence, CaptureFixture.claimHook("selectSequence") {
+            // Cmd+Shift+] / [ (`handleSelectNextSession`), repeating; the
+            // shortcut order follows the mounted sidebar, so it works pinned
+            // and on the rail.
+            func tick() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
+                    guard let self else { return }
+                    let sessions = self.shortcutSessions()
+                    self.focusShortcutTarget(self.coordinator.focusAdjacentLiveSession(offset: sequence.steps, in: sessions))
+                    tick()
+                }
+            }
+            tick()
         }
         if let steps = CaptureFixture.morphSteps, CaptureFixture.claimHook("morphSteps") {
             // After the window has taken its capture size (0.5s, above).

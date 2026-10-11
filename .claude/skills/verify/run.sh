@@ -57,6 +57,21 @@ cmd_up() {
   if [ -n "${VERIFY_SIDEBAR_TOGGLE_AFTER:-}" ]; then
     [[ "$VERIFY_SIDEBAR_TOGGLE_AFTER" =~ ^[0-9]+(\.[0-9]+)?$ ]] && [ "$VERIFY_SIDEBAR_TOGGLE_AFTER" != 0 ] || die "VERIFY_SIDEBAR_TOGGLE_AFTER must be seconds > 0"
   fi
+  if [ -n "${VERIFY_REVEAL_STYLE:-}" ]; then
+    [[ "$VERIFY_REVEAL_STYLE" =~ ^(push|overlay)$ ]] || die "VERIFY_REVEAL_STYLE must be push|overlay"
+  fi
+  for knob in VERIFY_RAIL_REVEAL_AFTER VERIFY_RAIL_REVEAL_COLLAPSE_AFTER; do
+    if [ -n "${!knob:-}" ]; then
+      [[ "${!knob}" =~ ^[0-9]+(\.[0-9]+)?$ ]] && [ "${!knob}" != 0 ] || die "$knob must be seconds > 0"
+    fi
+  done
+  if [ -n "${VERIFY_SELECT_SEQUENCE:-}" ]; then
+    [[ "$VERIFY_SELECT_SEQUENCE" =~ ^[0-9]+(\.[0-9]+)?:-?[0-9]+$ ]] || die "VERIFY_SELECT_SEQUENCE must be <seconds>:<steps>"
+  fi
+  if [ -n "${VERIFY_FOLD_TOGGLE:-}" ]; then
+    [[ "$VERIFY_FOLD_TOGGLE" =~ ^$name:[0-9]+(\.[0-9]+)?$ ]] || die "VERIFY_FOLD_TOGGLE must be <project>:<seconds>"
+    VERIFY_SIDEBAR_TAB=projects
+  fi
   if [ -n "${VERIFY_FIXTURE_PROJECTS:-}" ]; then
     [ "$VERIFY_FIXTURE_PROJECTS" = none ] || die "VERIFY_FIXTURE_PROJECTS must be none"
   fi
@@ -99,6 +114,11 @@ cmd_up() {
   if [ -n "${VERIFY_COMPOSER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_COMPOSER=$VERIFY_COMPOSER"); fi
   if [ -n "${VERIFY_PROJECT_SETTINGS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_PROJECT_SETTINGS=$VERIFY_PROJECT_SETTINGS"); fi
   if [ -n "${VERIFY_SIDEBAR_TOGGLE_AFTER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER=$VERIFY_SIDEBAR_TOGGLE_AFTER"); fi
+  if [ -n "${VERIFY_REVEAL_STYLE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_REVEAL_STYLE=$VERIFY_REVEAL_STYLE"); fi
+  if [ -n "${VERIFY_RAIL_REVEAL_AFTER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_RAIL_REVEAL_AFTER=$VERIFY_RAIL_REVEAL_AFTER"); fi
+  if [ -n "${VERIFY_RAIL_REVEAL_COLLAPSE_AFTER:-}" ]; then extra+=("GHOSTTIES_CAPTURE_RAIL_REVEAL_COLLAPSE_AFTER=$VERIFY_RAIL_REVEAL_COLLAPSE_AFTER"); fi
+  if [ -n "${VERIFY_SELECT_SEQUENCE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SELECT_SEQUENCE=$VERIFY_SELECT_SEQUENCE"); fi
+  if [ -n "${VERIFY_FOLD_TOGGLE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_FOLD_TOGGLE=$VERIFY_FOLD_TOGGLE"); fi
   if [ -n "${VERIFY_FIXTURE_PROJECTS:-}" ]; then extra+=("GHOSTTIES_CAPTURE_FIXTURE_PROJECTS=$VERIFY_FIXTURE_PROJECTS"); fi
   if [ -n "${VERIFY_FIXTURE_TEMPLATE_IN_USE:-}" ]; then extra+=("GHOSTTIES_CAPTURE_FIXTURE_TEMPLATE_IN_USE=$VERIFY_FIXTURE_TEMPLATE_IN_USE"); fi
   if [ -n "${VERIFY_SCRIPT:-}" ]; then extra+=("GHOSTTIES_CAPTURE_SCRIPT=$VERIFY_SCRIPT"); fi
@@ -280,5 +300,5 @@ case "${1:-}" in
   script) shift; cmd_script "$@" ;;
   report) shift; cmd_report "$@" ;;
   down) cmd_down ;;
-  *) echo "usage: run.sh up|doctor|shot <name>|video <name> <seconds> [--focus x,y,w,h]|script <file.json>|report <contract.md>|down  (env: VERIFY_SCRIPT_TIMEOUT, VERIFY_SIDEBAR_MODE, VERIFY_POPOVER, VERIFY_SIDEBAR_TAB, VERIFY_EXPAND_PROJECT, VERIFY_COMPOSER, VERIFY_PROJECT_SETTINGS, VERIFY_SIDEBAR_TOGGLE_AFTER, VERIFY_BUILD=0)"; exit 2 ;;
+  *) echo "usage: run.sh up|doctor|shot <name>|video <name> <seconds> [--focus x,y,w,h]|script <file.json>|report <contract.md>|down  (env: VERIFY_SCRIPT_TIMEOUT, VERIFY_SIDEBAR_MODE, VERIFY_POPOVER, VERIFY_SIDEBAR_TAB, VERIFY_EXPAND_PROJECT, VERIFY_COMPOSER, VERIFY_PROJECT_SETTINGS, VERIFY_SIDEBAR_TOGGLE_AFTER, VERIFY_REVEAL_STYLE, VERIFY_RAIL_REVEAL_AFTER, VERIFY_RAIL_REVEAL_COLLAPSE_AFTER, VERIFY_SELECT_SEQUENCE, VERIFY_FOLD_TOGGLE, VERIFY_BUILD=0)"; exit 2 ;;
 esac
