@@ -39,7 +39,7 @@ The sidebar gets a third state, a narrow rail that morphs from the full list and
 - **Smaller sidebar motion is spring-driven too.** Folding a project and its chevron, the count badge on a folded project, the hover lift on tray buttons, and the gap that opens as you drag to reorder all settle with a light spring. Opacity never bounces.
 - **Terminals now have 20pt of padding by default.** Your own `window-padding-x` and `window-padding-y` settings still win.
 - **A fully closed sidebar stays closed.** Resting the pointer at the window's left edge no longer reopens it. Reopen it with Cmd+S, Cmd+Shift+S or the View menu. Resting on the rail still opens the full list.
-- **Rounder, nested corners.** Terminal, browser and History cards and the tray pills now share corners that nest inside the window's corner (12pt at the default margin). The tray's shadow is lighter and sits lower in light appearance.
+- **Rounder corners.** Terminal, browser and History cards and the tray pills now share 12pt corners. The tray's shadow is lighter and sits lower in light appearance.
 
 ### Removed
 
