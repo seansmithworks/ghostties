@@ -12,7 +12,7 @@ import GhosttiesCore
 ///      GLOBAL `-C`/`--cd` flag (verified against `codex --help` /
 ///      `codex resume --help`, codex-cli 0.153.0 — `-C` is NOT a `resume`
 ///      subcommand flag).
-///   2. `.claude` launched via `cco`/`ccob` — `cco --resume '<id>'`. `cco`
+///   2. `.claude` launched via `cco`/`devdesk` — `cco --resume '<id>'`. `cco`
 ///      forwards extra args to `claude` (verified in `~/.claude/shell/zshrc`).
 ///   3. `.claude`, current template is Claude Code — the template's own
 ///      built command (model, system prompt, etc.) plus `--resume '<id>'`,
@@ -21,9 +21,9 @@ import GhosttiesCore
 ///      — bare `claude --resume '<id>'`.
 ///   5. No record — nil (caller falls back to a fresh launch).
 enum ResumePlan {
-    /// Launcher markers that resume through the `cco`/`ccob` wrapper rather
+    /// Launcher markers that resume through the `cco` wrapper (`devdesk` runs `cco`) rather
     /// than a bare `claude` invocation.
-    private static let ccoLaunchers: Set<String> = ["cco", "ccob"]
+    private static let ccoLaunchers: Set<String> = ["cco", "devdesk"]
 
     static func command(resume: AgentResume?, template: AgentTemplate) -> String? {
         guard let resume, !resume.sessionId.isEmpty else { return nil }
@@ -35,13 +35,11 @@ enum ResumePlan {
 
         case .claude:
             if let launcher = resume.launcher, ccoLaunchers.contains(launcher) {
-                // Always resume through `cco`, never `ccob` — `ccob` always
-                // appends `/orchestrator-boot` as a final positional prompt
-                // (`~/.claude/shell/zshrc:598`), which would re-run the boot
-                // sequence into an already-resumed conversation. `cco`
-                // forwards extra args straight to `claude` when any are
-                // given (`:537-541`), so `cco --resume '<id>'` alone is a
-                // clean resume for a session launched by either wrapper.
+                // Always resume through `cco`. `devdesk` exports
+                // `GHOSTTIES_LAUNCHER=devdesk` and runs `cco` with
+                // `--name desk`, so `cco --resume '<id>'` is a clean resume
+                // for a session launched by either. `cco` forwards extra
+                // args straight to `claude` when any are given.
                 return "cco --resume \(shellQuote(resume.sessionId))"
             }
             if template.kind == .claudeCode {

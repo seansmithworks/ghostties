@@ -21,12 +21,18 @@ struct ResumePlanTests {
         #expect(ResumePlan.command(resume: resume, template: .claudeCode) == "cco --resume 'abc-123'")
     }
 
-    /// A session launched by `ccob` still resumes through `cco`, never
-    /// `ccob` — `ccob` always appends `/orchestrator-boot`, which would
-    /// re-run the boot sequence into an already-resumed conversation.
-    @Test func ccobLauncherAlsoResumesThroughCcoNeverCcob() {
-        let resume = AgentResume(agent: .claude, sessionId: "abc-123", transcriptPath: nil, cwd: nil, launcher: "ccob")
+    /// A session launched by `devdesk` (which runs `cco --name desk`)
+    /// resumes through `cco`, exactly like a `cco` session.
+    @Test func devdeskLauncherResumesThroughCco() {
+        let resume = AgentResume(agent: .claude, sessionId: "abc-123", transcriptPath: nil, cwd: nil, launcher: "devdesk")
         #expect(ResumePlan.command(resume: resume, template: .claudeCode) == "cco --resume 'abc-123'")
+    }
+
+    /// An unrecognized launcher falls through to the
+    /// template path rather than `cco`.
+    @Test func unknownLauncherDoesNotTakeCcoPath() {
+        let resume = AgentResume(agent: .claude, sessionId: "abc-123", transcriptPath: nil, cwd: nil, launcher: "unknown-launcher")
+        #expect(ResumePlan.command(resume: resume, template: .claudeCode) == "'claude' --resume 'abc-123'")
     }
 
     @Test func claudeCodeTemplateWithNoLauncherUsesBuiltCommand() {

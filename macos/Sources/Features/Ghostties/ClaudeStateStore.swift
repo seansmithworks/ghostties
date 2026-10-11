@@ -16,7 +16,7 @@ struct ClaudeHookWrapper: Decodable {
     /// field existed, which is always a Claude session.
     let agent: String?
 
-    /// `$GHOSTTIES_LAUNCHER` at spawn time (e.g. `cco`, `ccob`), written by
+    /// `$GHOSTTIES_LAUNCHER` at spawn time (e.g. `cco`, `devdesk`), written by
     /// `ghostties-status.sh`. Absent for a shell-hosted `claude` with no
     /// wrapper, or a state file predating this field.
     let launcher: String?
