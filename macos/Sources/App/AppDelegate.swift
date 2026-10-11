@@ -285,6 +285,26 @@ class AppDelegate: NSObject,
         // Store our start time
         applicationLaunchTime = ProcessInfo.processInfo.systemUptime
 
+        #if DEBUG
+        CaptureFixture.applySidebarTabOverride()
+        // A background capture never activates, so the first window can't
+        // wait for `applicationDidBecomeActive` (`CaptureFixture.staysInBackground`).
+        if CaptureFixture.staysInBackground {
+            CaptureFixture.suppressActivation()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self, TerminalController.all.isEmpty else { return }
+                _ = TerminalController.newWindow(self.ghostty)
+            }
+        }
+        #endif
+
+        #if DEBUG
+        // Sidebar dial panel -> floating DialkitmacOS inspector (loopback only).
+        if #available(macOS 14, *) {
+            SidebarDialInspector.start()
+        }
+        #endif
+
         // Sweep stale per-session launcher scripts (>24h old) left behind by
         // crashes or force-quits that skipped normal session teardown. Each
         // script can carry session context, so they shouldn't accumulate.
@@ -1116,7 +1136,7 @@ class AppDelegate: NSObject,
     /// overriding Ghostty's native `close_surface` binding (which closes the
     /// terminal surface with its own "Close Terminal?" confirmation and no
     /// notion of a sidebar session). Posts `.workspaceCloseSession`;
-    /// `WorkspaceSidebarView` observes it and calls
+    /// `WorkspaceViewContainer` observes it and calls
     /// `SessionCoordinator.closeCurrentSessionWithConfirmation()`, which owns
     /// the confirm / focus-neighbor / close-window logic.
     private func setupCloseSessionShortcut() {
@@ -1137,9 +1157,9 @@ class AppDelegate: NSObject,
     /// (which act on real NSWindow tabs — irrelevant here, the sidebar IS
     /// the tab strip; see `TerminalController.relabelTabs()`). Posts
     /// `.workspaceFocusSessionAtIndex` with the pressed digit in `userInfo`;
-    /// `WorkspaceSidebarView` resolves it against whichever list the current
-    /// sidebar tab renders. ⌘9 always means "last visible session", not
-    /// literally the 9th.
+    /// `WorkspaceViewContainer` resolves it against whichever list the
+    /// mounted sidebar renders (the rail's rows when collapsed). ⌘9 always
+    /// means "last visible session", not literally the 9th.
     private func setupSessionIndexShortcuts() {
         _ = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection([.command, .shift, .control, .option]) == [.command],

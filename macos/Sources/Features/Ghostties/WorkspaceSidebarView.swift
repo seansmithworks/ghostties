@@ -44,10 +44,15 @@ struct WorkspaceSidebarView: View {
             // Titlebar toolbar: action buttons right of traffic lights
             titlebarToolbar
 
-            if sidebarTab == .sessions {
+            switch SidebarBodyKind.resolve(tab: sidebarTab, dial: SidebarDialTuning.projectsLayout()) {
+            case .oneViewAccordion:
+                // One view (mock B5), the Projects tab's layout: Pinned, then
+                // each project's sessions under its accordion header.
+                RecentsListView()
+            case .sessionsList:
                 // Sessions tab: flat recents list across all projects.
                 RecentsListView()
-            } else {
+            case .projectsList:
                 // Projects tab: existing disclosure list.
 
                 // One-time pin-semantics migration banner.
@@ -80,10 +85,7 @@ struct WorkspaceSidebarView: View {
                                 }
                             }
                         }
-                        .padding(.leading, SidebarDialTuning.contentPaddingLeading())
-                        .padding(.trailing, SidebarDialTuning.contentPaddingTrailing())
-                        .padding(.top, SidebarDialTuning.contentPaddingTop())
-                        .padding(.bottom, 4)
+                        .modifier(SidebarColumnPadding())
                         .animation(
                             NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
                                 ? nil
@@ -92,28 +94,19 @@ struct WorkspaceSidebarView: View {
                         )
                     }
                     .accessibilityLabel("Projects")
+                    .redlineFrame(RedlineID.listViewport)
                 }
             }
 
             Spacer(minLength: 0)
 
-            SidebarBottomTray()
+            // The tray itself is hosted once at the sidebar root
+            // (`SidebarTray`), over both this list and the rail, so it can
+            // morph between them; this reserves its space.
+            Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: false))
         }
         .background(.clear)
         .ignoresSafeArea(.container, edges: .top)
-        #if DEBUG
-        // DEBUG-only live tuning control (session-8 brief) — same mount
-        // pattern as `SessionComposerOverlay`'s `ComposerDebugTuningControl`.
-        // Compiled out of Release entirely; every symbol it touches lives in
-        // `SidebarDialKit.swift`'s `#if DEBUG` block.
-        .overlay(alignment: .topTrailing) {
-            SidebarDebugTuningControl(
-                defaults: .standard,
-                onChange: { store.objectWillChange.send() }
-            )
-            .padding(12)
-        }
-        #endif
         .onAppear {
             // Restore persisted project selection, or default to the first project.
             if selectedProjectId == nil {
@@ -143,30 +136,24 @@ struct WorkspaceSidebarView: View {
                 coordinator.focusLastSession(forProject: projectId)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectNextProject)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceDidSelectProjectFromShortcut)) { notification in
+            // Next/Previous Project is handled by `WorkspaceViewContainer`
+            // (it exists in every sidebar mode; this view doesn't), which
+            // owns the selection in `store.lastSelectedProjectId`. Mirror it.
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            selectAdjacentProject(offset: 1)
+            guard let projectId = notification.userInfo?["projectId"] as? UUID else { return }
+            expandedProjectIds.insert(projectId)
+            selectedProjectId = projectId
         }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectPreviousProject)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: .workspaceDidFocusSessionFromShortcut)) { notification in
+            // Cmd+Shift+[/] and Cmd+1-9 are handled by `WorkspaceViewContainer`
+            // (it exists in every sidebar mode; this view doesn't). The
+            // project expand/select is this view's own state, so it stays here.
             guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            selectAdjacentProject(offset: -1)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectNextSession)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            selectAdjacentLiveSession(offset: 1)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceSelectPreviousSession)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            selectAdjacentLiveSession(offset: -1)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceCloseSession)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            coordinator.closeCurrentSessionWithConfirmation()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .workspaceFocusSessionAtIndex)) { notification in
-            guard notification.object as? NSWindow === coordinator.containerView?.window else { return }
-            guard let index = notification.userInfo?["index"] as? Int else { return }
-            focusVisibleSession(atIndex: index)
+            guard sidebarTab == .projects,
+                  let projectId = notification.userInfo?["projectId"] as? UUID else { return }
+            expandedProjectIds.insert(projectId)
+            selectedProjectId = projectId
         }
         .onReceive(NotificationCenter.default.publisher(for: .workspaceDidCreateSessionInProject)) { notification in
             // F1 (Phase 3 review): auto-expand the project a session was
@@ -179,6 +166,7 @@ struct WorkspaceSidebarView: View {
             guard let projectId = notification.userInfo?["projectId"] as? UUID else { return }
             expandedProjectIds.insert(projectId)
         }
+        .modifier(ProjectAccordionAutoExpand(window: { [coordinator] in coordinator.containerView?.window }))
         .sheet(isPresented: Binding(
             get: { !hasSeenOnboarding },
             set: { _ in }
@@ -196,10 +184,12 @@ struct WorkspaceSidebarView: View {
             Spacer()
             // Projects keeps its header action (no tray equivalent exists
             // for "New Project"). Sessions no longer does — Flow 01's
-            // bottom tray (`SidebarBottomTray`) owns "New Session" now, and
+            // bottom tray (`SidebarTray`) owns "New Session" now, and
             // this header button duplicated it (spec §01: top group is
             // traffic lights → section header → rows, no header strip).
-            if sidebarTab == .projects {
+            // One view has no Projects tab; the tray's New Project button
+            // covers it.
+            if sidebarTab == .projects && SidebarDialTuning.projectsLayout() == .tabs {
                 ToolbarLabelButton(systemName: "plus", label: "New Project", action: presentFolderPicker)
             }
         }
@@ -269,92 +259,6 @@ struct WorkspaceSidebarView: View {
         expandedProjectIds.insert(id)
     }
 
-    /// Move selection to the next or previous project in the flattened section
-    /// order (the visual order the user sees on screen), auto-expanding the
-    /// target project.
-    private func selectAdjacentProject(offset: Int) {
-        let visualOrder = store.flatProjectsInVisualOrder
-        guard !visualOrder.isEmpty else { return }
-
-        guard let currentId = selectedProjectId,
-              let currentIndex = visualOrder.firstIndex(where: { $0.id == currentId }) else {
-            selectedProjectId = visualOrder.first?.id
-            if let id = visualOrder.first?.id { expandedProjectIds.insert(id) }
-            return
-        }
-
-        let newIndex = (currentIndex + offset + visualOrder.count) % visualOrder.count
-        let targetId = visualOrder[newIndex].id
-        selectedProjectId = targetId
-        expandedProjectIds.insert(targetId)
-    }
-
-    /// Cmd+Shift+]/[ in Projects/Sessions tabs. Cycles focus through the
-    /// sessions visible in whichever tab is active, wrapping at both ends.
-    /// No-ops (no beep, no crash) when there are zero live sessions; is a
-    /// no-op when there is exactly one.
-    ///
-    /// - Projects tab: every session with a live surface
-    ///   (`store.sessionsInVisualOrder(coordinator:)` — not just `.running`
-    ///   ones, so cycling matches the browser-tab mental model and what's
-    ///   actually visible in the sidebar).
-    /// - Sessions tab: the ACTIVE zone only, in exactly the order
-    ///   `RecentsListView` renders it (`RecentsListView.activeSessions`) —
-    ///   the same static both use, so render order and cycle order can never
-    ///   drift apart. Archive rows are skipped.
-    ///
-    /// `expandedProjectIds`/`selectedProjectId` are Projects-tab-only
-    /// concepts. On the Sessions tab, writing them would be inert: nothing
-    /// there reads either — `RecentsListView` derives row highlight and
-    /// auto-expand from `coordinator.activeSessionId`. On the Projects tab,
-    /// writing them is redundant with `focusSession`, which already updates
-    /// `lastActiveSessionPerProject`. Scoped to the Projects-tab branch only.
-    private func selectAdjacentLiveSession(offset: Int) {
-        let liveSessions = currentTabLiveSessions()
-        guard let target = coordinator.focusAdjacentLiveSession(offset: offset, in: liveSessions) else { return }
-        if sidebarTab == .projects {
-            expandedProjectIds.insert(target.projectId)
-            selectedProjectId = target.projectId
-        }
-    }
-
-    /// The visible session list for whichever sidebar tab is showing right
-    /// now — shared by Cmd+Shift+[/] cycling (`selectAdjacentLiveSession`)
-    /// and Cmd+1-9 positional focus (`focusVisibleSession(atIndex:)`) so
-    /// both shortcuts always agree with what's actually on screen. See
-    /// `selectAdjacentLiveSession`'s doc comment for why the two tabs pull
-    /// from different sources.
-    private func currentTabLiveSessions() -> [AgentSession] {
-        if sidebarTab == .sessions {
-            return Self.sessionsTabCycleOrder(
-                sessions: store.sessions,
-                statuses: store.globalStatuses,
-                coordinator: coordinator
-            )
-        } else {
-            return store.sessionsInVisualOrder(coordinator: coordinator)
-        }
-    }
-
-    /// Cmd+1..8 focuses the Nth visible session (1-indexed); Cmd+9 always
-    /// focuses the LAST visible session regardless of how many there are.
-    /// Out-of-range (e.g. Cmd+7 with 4 sessions visible) is a no-op — no
-    /// wrap, no clamp, matching browser-tab convention. `index` is the raw
-    /// digit pressed (1-9).
-    private func focusVisibleSession(atIndex index: Int) {
-        let liveSessions = currentTabLiveSessions()
-        guard let target = index == 9
-            ? Self.lastSession(in: liveSessions)
-            : Self.session(at: index, in: liveSessions)
-        else { return }
-
-        coordinator.focusSession(id: target.id)
-        if sidebarTab == .projects {
-            expandedProjectIds.insert(target.projectId)
-            selectedProjectId = target.projectId
-        }
-    }
-
     /// Pure index lookup for Cmd+1..8 — static so tests can call it without
     /// a view instance, same pattern as `sessionsTabCycleOrder`. `index` is
     /// 1-indexed; anything outside `1...liveSessions.count` is a no-op.
@@ -373,7 +277,7 @@ struct WorkspaceSidebarView: View {
     /// render order — Pinned renders above Active in `RecentsListView`, so
     /// cycling matches what's on screen — filtered to sessions that still
     /// have a live surface. Extracted as a static so tests can call the
-    /// exact composition `selectAdjacentLiveSession` uses without
+    /// exact composition `WorkspaceViewContainer.shortcutSessions` uses without
     /// instantiating a view inside SwiftUI's environment.
     ///
     /// `RecentsListView.pinnedSessions`/`activeSessions` never overlap
@@ -391,9 +295,11 @@ struct WorkspaceSidebarView: View {
     static func sessionsTabCycleOrder(
         sessions: [AgentSession],
         statuses: [UUID: SessionStatus],
-        coordinator: SessionCoordinator
+        coordinator: SessionCoordinator,
+        pinningAvailable: Bool = SessionPinning.isAvailable
     ) -> [AgentSession] {
-        (RecentsListView.pinnedSessions(from: sessions) + RecentsListView.activeSessions(from: sessions, statuses: statuses))
+        (RecentsListView.pinnedSessions(from: sessions, pinningAvailable: pinningAvailable)
+            + RecentsListView.activeSessions(from: sessions, statuses: statuses, pinningAvailable: pinningAvailable))
             .filter { coordinator.hasLiveSurface(id: $0.id) }
     }
 }
@@ -530,48 +436,6 @@ private struct EmptyStateAddButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(isHovered ? .primary : .secondary)
         .onHover { isHovered = $0 }
-    }
-}
-
-// MARK: - Bottom Tray
-
-/// The sidebar's bottom tray (Flow 01, sidebar-presence §01): a horizontal
-/// `SidebarTrayPill` of icon buttons — "New Session" and the sidebar
-/// toggle — centered in the sidebar's bottom area, same shared item list
-/// and pill component the collapsed rail's vertical tray uses. Decision 4
-/// (spec): no account row — no account model exists in the sidebar sources
-/// today, so the pill omits the "Sean Smith" affordance from the design
-/// canvas.
-private struct SidebarBottomTray: View {
-    @EnvironmentObject private var store: WorkspaceStore
-    @EnvironmentObject private var coordinator: SessionCoordinator
-
-    var body: some View {
-        // Full-width bar (Flow 07 round 6, layer `OEpEM`) — no longer a
-        // centered capsule between two `Spacer`s. Horizontal padding matches
-        // `RecentsRowView`/`SessionSectionHeader`'s leading inset so the
-        // tray's edges line up with row content above it.
-        SidebarTrayPill(axis: .horizontal) {
-            ForEach(WorkspaceViewContainer.sidebarTrayItems(
-                container: coordinator.containerView as? WorkspaceViewContainer,
-                toggleLabel: toggleLabel
-            )) { item in
-                TrayIconButton(systemName: item.systemName, label: item.label, helpText: item.helpText, stretch: true, tapEffect: item.tapEffect, action: item.action)
-            }
-        }
-        .padding(.horizontal, SidebarDialTuning.trayMargin())
-        .padding(.top, SidebarDialTuning.listToTrayGap())
-        .padding(.bottom, 8)
-    }
-
-    /// "Collapse Sidebar" while pinned (toggle now flips full width ↔ rail,
-    /// not closed), "Open Sidebar" while overlaid — the overlay's toggle
-    /// promotes it to pinned (existing behavior, unchanged by Flow 01).
-    /// `store.sidebarMode` covers `.collapsed` too, but the collapsed rail
-    /// hosts `RailTray`, not this view, so that case never actually renders
-    /// here.
-    private var toggleLabel: String {
-        store.sidebarMode == .overlay ? "Open Sidebar" : "Collapse Sidebar"
     }
 }
 
