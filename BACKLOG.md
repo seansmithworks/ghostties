@@ -3339,9 +3339,17 @@ State: `feat/sidebar-morph` @ 41d5c842d pushed. Stacked on integrate/vnext-dials
 ### 2026-10-11 night — sidebar morph #214 + hover-reveal/springs #215 handed to the Beta 26 thread
 
 - [ ] #214 needs before/after screenshots. The agent upload was classifier-blocked; images are in session d50f2d3b's scratchpad. | carried 1×, Sean's hands
-- [ ] Dev check: does the selection chip slide cleanly with Cmd+1–9 / next session in rail mode (off-screen row, History footer outside the ScrollView)? | carried
-- [ ] Dev check: under an Overlay reveal, does the terminal still get hover and cursor changes? | carried
+- [x] Dev check: does the selection chip slide cleanly with Cmd+1–9 / next session in rail mode (off-screen row, History footer outside the ScrollView)? | passed in Dev (Sean, 2026-10-11)
+- [x] Dev check: under an Overlay reveal, does the terminal still get hover and cursor changes? | passed (Sean, 2026-10-11): typing reaches the terminal with the overlay open; the overlay closes on exit, so there is no hover-under-overlay state
 - [ ] A spring channel joining mid-flight starts at the shared progress speed (e.g. the card when Cmd+S pins an overlay reveal mid-flight). Fixing it needs per-channel spring state. | parked
 - [ ] The rail-tile hover popover card still slides with `NSAnimationContext`, not a spring. | parked
 - [ ] Cosmetic: the `// MARK: Motion` source comment should match the "Morph springs" DialKit label. | parked
-- [ ] Remove the worktrees hover-reveal, ui-springs, bisect-tray, one-clock and glass-bake once #214 and #215 merge. | carried
+- [ ] Overlay can stay open in a background window if the window resigns key within 0.25s of the reveal (resign-key close is debounced, `WorkspaceViewContainer.swift` ~:3100 on `fix/closed-edge-reveal`). Pre-existing; found in review 2026-10-11. | parked
+- [ ] Unexplained: overlay row clicks reach the sidebar although the terminal card is later in subview order (two reviewers could not find why). Understand before touching overlay hit-testing again. | parked
+- [x] PR #224 vs #223: resolved 2026-10-11 (Sean: move). #224 closed; the radii and tray-shadow work is ported to PR #226 `fix/tray-radii-shadow` (reviewer APPROVE, hosted tests not run). #226 and #222 conflict on the tray hover-chip rule and its tests; whichever merges second reconciles. Measure the real window corner radius (20 vs upstream's 16) before tagging. | resolved
+- [ ] Hover-bar tray hover highlights resolve to 0pt radius (parent − gap rule on 4pt pills): keep square, or add a floor? Strawman: keep. Decide or kill. | open
+- [ ] Tray shadows shipped on defaults (light 0.10/r8/y+6); per-state DialKit tuning was never done because a running Ghostties Demo held the inspector's only connection. Tune after quitting Demo, then bake (Sidebar and Rail sets on #226). | open
+- [ ] Review nit: `SidebarProjectColumn.swift` ~145 comment claims a missing named coordinate space falls back to `.global`; confirm render-test hosts don't depend on `originX`. | parked
+- [ ] Open the `feat/capture-motion-hooks` PR after the beta.26 tag (merge main first; 2 behind at wrap). | carried 1×
+- [ ] Delete `wip/morph-one-clock` (superseded experiment) and the `sidebar-d-bisect` worktree (clean, in main): `git worktree remove .claude/worktrees/sidebar-d-bisect && git branch -D wip/morph-one-clock`. Agents are permission-blocked. | Sean's hands
+- [x] Remove the worktrees hover-reveal, ui-springs, bisect-tray, one-clock and glass-bake once #214 and #215 merge. | done 2026-10-11; local feat/sidebar-ui-springs, feat/glass-bake, feat/morph-one-clock deleted (wip/morph-one-clock and the sidebar-d-bisect worktree remain, unchecked)
