@@ -261,7 +261,7 @@ struct RailHoverRevealContainerTests {
         let rail = container.sidebarFrameForTesting.width
 
         reveal(container, .overlay)
-        for _ in 0..<20 {
+        for _ in 0..<50 {
             spin(0.02)
             #expect(container.cardFrameForTesting == card)
         }
@@ -272,7 +272,7 @@ struct RailHoverRevealContainerTests {
         #expect(container.sidebarFrameForTesting.maxX > card.minX)
 
         container.railHoverForTesting.dismiss(pointerInside: false)
-        for _ in 0..<20 {
+        for _ in 0..<50 {
             spin(0.02)
             #expect(container.cardFrameForTesting == card)
         }
@@ -289,19 +289,19 @@ struct RailHoverRevealContainerTests {
         defer { rig.close() }
         let container = rig.container
         reveal(container, .overlay)
-        spin(0.4)
+        spin(1.0)
         let revealedSidebar = container.sidebarFrameForTesting
 
         container.toggleSidebar()
         spin(0.05)
         #expect(container.sidebarFrameForTesting == revealedSidebar)
-        spin(0.4)
+        spin(1.0)
         #expect(container.sidebarModeForTesting == .pinned)
         #expect(container.sidebarFrameForTesting == revealedSidebar)
         #expect(!container.isRailRevealedForTesting)
         // Pinned: never auto-collapsed, and the card sits past the sidebar.
         container.railHoverForTesting.pointerExited()
-        spin(0.5)
+        spin(1.0)
         #expect(container.sidebarModeForTesting == .pinned)
         #expect(container.cardFrameForTesting.minX >= revealedSidebar.maxX)
     }
@@ -316,7 +316,7 @@ struct RailHoverRevealContainerTests {
         let rail = container.sidebarFrameForTesting.width
 
         reveal(container, .push)
-        spin(0.5)
+        spin(1.0)
         let sidebar = container.sidebarFrameForTesting
         let pushed = container.cardFrameForTesting
         #expect(container.isRailRevealedForTesting)
@@ -327,7 +327,7 @@ struct RailHoverRevealContainerTests {
         #expect(pushed.width < card.width - 100)
 
         container.railHoverForTesting.dismiss(pointerInside: false)
-        spin(0.5)
+        spin(1.0)
         #expect(!container.isRailRevealedForTesting)
         #expect(abs(container.sidebarFrameForTesting.width - rail) < 0.5)
         #expect(container.cardFrameForTesting == card)
@@ -339,7 +339,7 @@ struct RailHoverRevealContainerTests {
         defer { rig.close() }
         let container = rig.container
         reveal(container, .push)
-        spin(0.5)
+        spin(1.0)
         let sidebar = container.sidebarFrameForTesting
         let card = container.cardFrameForTesting
 

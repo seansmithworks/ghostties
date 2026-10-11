@@ -170,18 +170,43 @@ struct SidebarPresenceTests {
 
     // MARK: - Flow 05 Transition Timing Table
 
-    /// Collapse (244pt → rail) runs 260ms on the drawer curve — Sean's
-    /// canvas, "Flow 05 · Collapse and close."
-    @Test func collapseTimingIs260msOnDrawerCurve() {
-        let timing = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .collapsed)
-        #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.26, curve: .drawer))
+    /// Collapse (sidebar → rail) runs on a spring with no overshoot —
+    /// motion-standards: "never bounce a close" — and a quicker response
+    /// than the expand (exit faster than enter). Was 260ms on the drawer
+    /// curve; Sean asked for a spring (2026-10-11).
+    @Test func collapseRunsOnACrispSpringWithNoOvershoot() {
+        withDials {
+            let collapse = WorkspaceLayout.sidebarMorphSpring(collapsing: true)
+            let open = WorkspaceLayout.sidebarMorphSpring(collapsing: false)
+            #expect(collapse == WorkspaceLayout.sidebarMorphCollapseSpring)
+            #expect(collapse.bounce == 0)
+            #expect(collapse.response < open.response)
+        }
     }
 
-    /// Expand (rail → 244pt) runs 240ms on the drawer curve — faster than
-    /// collapse's 260ms, since expand has no separate label-fade phase.
-    @Test func expandTimingIs240msOnDrawerCurve() {
-        let timing = WorkspaceLayout.sidebarTransitionTiming(from: .collapsed, to: .pinned)
-        #expect(timing == WorkspaceLayout.SidebarTransitionTiming(duration: 0.24, curve: .drawer))
+    /// Expand (rail → sidebar) runs on a spring with a subtle bounce:
+    /// emil's "keep bounce subtle (0.1–0.3)", and a response under the
+    /// 300–400ms a panel may take.
+    @Test func expandRunsOnASubtlyBouncySpring() {
+        withDials {
+            let open = WorkspaceLayout.sidebarMorphSpring(collapsing: false)
+            #expect(open == WorkspaceLayout.sidebarMorphOpenSpring)
+            #expect(open.bounce > 0 && open.bounce <= 0.3)
+            #expect(open.response <= 0.4)
+        }
+    }
+
+    /// The Motion dials reach the springs.
+    @Test func motionDialsDriveTheSprings() {
+        withDials({
+            $0.set(0.5, forKey: SidebarDialTuning.motionOpenResponseKey)
+            $0.set(0.2, forKey: SidebarDialTuning.motionOpenBounceKey)
+            $0.set(0.4, forKey: SidebarDialTuning.motionCollapseResponseKey)
+            $0.set(0.05, forKey: SidebarDialTuning.motionCollapseBounceKey)
+        }) {
+            #expect(WorkspaceLayout.sidebarMorphSpring(collapsing: false) == SidebarSpring(response: 0.5, bounce: 0.2))
+            #expect(WorkspaceLayout.sidebarMorphSpring(collapsing: true) == SidebarSpring(response: 0.4, bounce: 0.05))
+        }
     }
 
     /// Full close runs 180ms on the close curve regardless of which visible
@@ -284,52 +309,68 @@ struct SidebarPresenceTests {
 
     // MARK: - Label choreography (motion spec §1)
 
-    /// Expanding, the first label starts 90ms into the 240ms expand and
-    /// each one below 16ms later, capped at the sixth, so a long list lands
-    /// its last label by 290ms (keyframe spec; was 100 + 12·i to the ninth).
-    @Test func expandLabelDelayStartsAtNinetyMsAndStaggersSixteenPerRowToTheSixth() {
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 0).isApproximatelyEqual(to: 0.09))
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 1).isApproximatelyEqual(to: 0.106))
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 5).isApproximatelyEqual(to: 0.17))
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: 20) == WorkspaceLayout.expandLabelDelay(rowIndex: 5))
-        #expect(WorkspaceLayout.expandLabelDelay(rowIndex: -3) == WorkspaceLayout.expandLabelDelay(rowIndex: 0))
-        let lastLands = WorkspaceLayout.expandLabelDelay(rowIndex: 5) + WorkspaceLayout.sidebarRowLabelExpandFadeDuration
-        #expect(lastLands.isApproximatelyEqual(to: 0.29))
+    /// Expanding, the labels arrive in reading order: the first's fade
+    /// ends at half the travel, each below 5% of the travel later, capped
+    /// at the sixth, and every one has landed when the sidebar has
+    /// (keyframe spec's 90 + 16·i ms cascade, now on the spring's progress).
+    @Test func expandCascadeArrivesInReadingOrderCappedAtTheSixth() {
+        func end(_ i: Int) -> CGFloat { WorkspaceLayout.morphFadeWindow(element: .names, staggerIndex: i).end }
+        #expect(abs(end(0) - 0.5) < 0.0005)
+        #expect(abs(end(1) - 0.45) < 0.0005)
+        #expect(abs(end(5) - 0.25) < 0.0005)
+        #expect(end(20) == end(5))
+        #expect(end(-3) == end(0))
+        for i in 0..<8 {
+            #expect(WorkspaceLayout.morphFadeOpacity(element: .names, progress: 0, staggerIndex: i) == 1)
+            #expect(WorkspaceLayout.morphFadeOpacity(element: .names, progress: 0.5, staggerIndex: i) == 0)
+        }
     }
 
-    /// Leaving is faster than arriving, and never delayed: 90ms and a 4pt
-    /// drift left, against a 120ms arrival.
+    /// Leaving is faster than arriving: on the collapse spring the first
+    /// label is gone well before, on the open spring, the last one lands —
+    /// the labels go in the spring's fast start and arrive in its tail.
+    /// The drift is 4pt left.
     @Test func labelsLeaveFasterThanTheyArrive() {
-        #expect(WorkspaceLayout.sidebarRowLabelCollapseFadeDuration == 0.09)
-        #expect(WorkspaceLayout.sidebarRowLabelExpandFadeDuration == 0.12)
+        /// Seconds until `spring`, travelling 0 -> 1, first satisfies `done`.
+        func time(_ spring: SidebarSpring, until done: (CGFloat) -> Bool) -> Double {
+            var x = -1.0, v = 0.0, t = 0.0
+            while t < 2 {
+                (x, v) = spring.advance(x: x, v: v, dt: 0.001)
+                t += 0.001
+                if done(CGFloat(1 + x)) { return t }
+            }
+            return t
+        }
+        let leave = time(WorkspaceLayout.sidebarMorphCollapseSpring) {
+            WorkspaceLayout.morphFadeOpacity(element: .names, progress: $0) == 0
+        }
+        // Expand runs morph 1 -> 0: travel p puts morph at 1 - p.
+        let arrive = time(WorkspaceLayout.sidebarMorphOpenSpring) {
+            WorkspaceLayout.morphFadeOpacity(element: .names, progress: 1 - $0, staggerIndex: 5) == 1
+        }
+        #expect(leave < arrive, "leave \(leave)s, arrive \(arrive)s")
         #expect(WorkspaceLayout.sidebarRowLabelCollapseTravel == -4)
-        #expect(WorkspaceLayout.sidebarRowLabelCollapseFadeDuration < WorkspaceLayout.sidebarRowLabelExpandFadeDuration)
     }
 
-    /// The SwiftUI-side content cross-fade animation must share its
-    /// duration with the AppKit width animation it runs alongside — this is
-    /// the one seam that would desync the panel's geometry motion from the
-    /// content's label/glyph motion if it drifted.
-    @Test func collapseCrossfadeSwiftUIAnimationMatchesTheAppKitTimingDuration() {
-        let timing = WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .collapsed)
-        // `Animation` isn't directly inspectable, but constructing it must
-        // not crash and the function must be pure (called twice with the
-        // same input yields the same duration, checked indirectly by the
-        // duration table itself already being covered above); this proves
-        // it's callable from a curve with real control points (the drawer
-        // curve, not `.legacyEaseInOut`, which has none).
-        _ = WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
-        #expect(timing.curve.swiftUIAnimation != nil)
+    /// The content cross-fade and the morph must not drift from the width:
+    /// both now play on the width constraint's own progress
+    /// (`SidebarMorphClock`), overshoot included.
+    @MainActor @Test func morphClockReadsTheWidthConstraint() {
+        let constraint = NSView().widthAnchor.constraint(equalToConstant: 256)
+        let clock = SidebarMorphClock(constraint: constraint, from: 256, to: 60)
+        #expect(clock.progress == 0)
+        constraint.constant = 158
+        #expect(clock.progress == 0.5)
+        constraint.constant = 58
+        #expect(clock.progress! > 1)
+        clock.land()
+        #expect(clock.progress == nil)
     }
 
-    /// The legacy (overlay) curve pair has no named control points — the
-    /// content cross-fade doesn't apply to overlay transitions at all, but
-    /// the fallback (`.easeInOut`) path must still resolve without a crash
-    /// if ever called on one.
+    /// The legacy (overlay) curve pair has no named control points.
     @Test func legacyEaseCurveHasNoSwiftUIControlPoints() {
         let timing = WorkspaceLayout.sidebarTransitionTiming(from: .closed, to: .overlay)
         #expect(timing.curve.swiftUIAnimation == nil)
-        _ = WorkspaceLayout.sidebarTransitionSwiftUIAnimation(timing)
     }
 
     // MARK: - Drag Snaps Between Rail and Expanded

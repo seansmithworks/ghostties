@@ -43,7 +43,7 @@ struct RecentsRowView: View, Equatable {
 
     /// This row's place in the expand cascade: one index through every
     /// section and project header in reading order (`SidebarLabelCascade`)
-    /// — decorative only, feeds `WorkspaceLayout.expandLabelDelay`. Defaults
+    /// — decorative only, feeds `WorkspaceLayout.morphFadeWindow`. Defaults
     /// to 0 so every other call site (unaffected by the stagger) is
     /// unchanged.
     var staggerIndex: Int = 0
@@ -231,7 +231,7 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     let isActive: Bool
     /// The row's place in the expand cascade, one index across every
     /// section and header (`SidebarLabelCascade`) — feeds
-    /// `WorkspaceLayout.expandLabelDelay`.
+    /// `WorkspaceLayout.morphFadeWindow`.
     var staggerIndex: Int = 0
     let redlineID: String
     /// The session whose hover card this row shows, if any. Sidebar only:
