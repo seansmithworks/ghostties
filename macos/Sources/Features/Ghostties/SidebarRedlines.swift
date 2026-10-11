@@ -249,11 +249,6 @@ final class RedlineOverlayView: NSView {
         if top.intersects(viewport) || top.height < 0.25 {
             bands.append(Band(rect: top, kind: .padding, horizontal: false))
         }
-        // List-to-tray gap: the list's bottom edge to the tray's top.
-        if let tray = rects[RedlineID.trayGroup] {
-            let listBottom = rects[RedlineID.listViewport]?.maxY ?? inner.maxY
-            bands.append(Band(rect: CGRect(x: tray.minX, y: listBottom, width: tray.width, height: tray.minY - listBottom), kind: .margin, horizontal: false, showsZero: true))
-        }
     }
 
     private func appendTrayBands(_ rects: [String: CGRect], sidebar: CGRect, nextSurfaceX: CGFloat, into bands: inout [Band]) {

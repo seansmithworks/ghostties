@@ -332,9 +332,8 @@ final class SidebarHistoryDialTests: XCTestCase {
             ? AnyView(SidebarRailColumn().asRail(width: width))
             : AnyView(VStack(spacing: 0) {
                 Color.clear.frame(height: store.toolbarRowTopAnchorConstant * 2)
+                // Runs to the bottom and insets itself for the tray.
                 RecentsListView()
-                Spacer(minLength: 0)
-                Color.clear.frame(height: SidebarTray.reservedHeight(isVertical: false))
             })
         let root = column
             .frame(width: width, height: height)
