@@ -208,11 +208,14 @@ enum TrayGlassStyle {
         // Canvas `u_edgeWidth` was 3px (1.25pt); tuned to 1pt.
         rimWidth: 1,
         rimOpacity: 0.6,
-        // Option D (`ab279`): 15%, blur 16, y 3. A canvas blur is twice a
-        // SwiftUI shadow radius, as on the canvas card (blur 16 = radius 8).
-        shadowOpacity: 0.15,
+        // Option D (`ab279`) was 15%, blur 16, y 3. A canvas blur is twice
+        // a SwiftUI shadow radius, as on the canvas card (blur 16 = radius
+        // 8). Sean (2026-10-11): too heavy and riding high, and light-mode
+        // shadows stay at or under 20% — lightened to 10% and dropped 3pt
+        // (SwiftUI's positive y is down), so less of it shows above the pill.
+        shadowOpacity: 0.10,
         shadowRadius: 8,
-        shadowYOffset: 3,
+        shadowYOffset: 6,
         // Tuned in the Dev DialKit (re-baked 2026-10-11, second export).
         chromaticIntensity: 0.15,
         chromaticWidth: 1.5,
