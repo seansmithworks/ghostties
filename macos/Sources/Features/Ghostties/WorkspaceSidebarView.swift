@@ -248,12 +248,14 @@ struct WorkspaceSidebarView: View {
               let project = store.projects.first(where: { $0.name == hook.projectName }),
               CaptureFixture.claimHook("foldToggle") else { return }
         let binding = expandedBinding(for: project.id)
+        let projectId = project.id
         _Concurrency.Task { @MainActor in
             for _ in 0..<CaptureFixture.foldToggleCycles {
                 try? await _Concurrency.Task.sleep(nanoseconds: UInt64(hook.interval * 1_000_000_000))
                 withAnimation(SidebarUISpring.fold.animation(entering: !binding.wrappedValue)) {
                     binding.wrappedValue.toggle()
                 }
+                selectedProjectId = projectId
             }
         }
     }

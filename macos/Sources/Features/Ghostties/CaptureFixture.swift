@@ -103,9 +103,16 @@ enum CaptureFixture {
         let suite = UserDefaults(suiteName: defaultsSuiteName)
         // `GHOSTTIES_CAPTURE_REVEAL_STYLE`: seed the reveal style dial so the
         // rail reveal uses it from the first frame.
-        if let style = revealStyle { suite?.set(style.rawValue, forKey: SidebarDialTuning.hoverRevealStyleKey) }
+        if let suite { seedRevealStyle(revealStyle, into: suite) }
         return suite
     }()
+
+    /// Writes the reveal style dial into `suite` (the fixture's per-pid one,
+    /// never `.standard`); nil leaves the code default.
+    static func seedRevealStyle(_ style: RailRevealStyle?, into suite: UserDefaults) {
+        guard let style else { return }
+        suite.set(style.rawValue, forKey: SidebarDialTuning.hoverRevealStyleKey)
+    }
 
     /// The defaults the composer store and the Cmd+T pref read/write:
     /// the throwaway suite in fixture mode, `.standard` otherwise.
@@ -566,8 +573,14 @@ enum CaptureFixture {
     }
 
     private static func env(_ key: String) -> String? {
-        guard isActive else { return nil }
-        return ProcessInfo.processInfo.environment[key]
+        gatedEnv(key, active: isActive, in: ProcessInfo.processInfo.environment)
+    }
+
+    /// The fixture gate: a hook's env value is visible only when fixture
+    /// mode is active. Takes the environment so a test can inject it.
+    static func gatedEnv(_ key: String, active: Bool, in environment: [String: String]) -> String? {
+        guard active else { return nil }
+        return environment[key]
     }
 
     static var composerHook: ComposerHook? { parseComposerHook(env("GHOSTTIES_CAPTURE_COMPOSER")) }
@@ -599,7 +612,11 @@ enum CaptureFixture {
     /// after the `RAIL_REVEAL_AFTER` reveal, the pointer "leaves"
     /// (`RailHoverReveal.pointerExited`: exit grace, then the collapse).
     static var railRevealCollapseAfter: TimeInterval? {
-        env("GHOSTTIES_CAPTURE_RAIL_REVEAL_COLLAPSE_AFTER").flatMap(parsePositiveSeconds)
+        parseRailRevealCollapseAfter(env("GHOSTTIES_CAPTURE_RAIL_REVEAL_COLLAPSE_AFTER"))
+    }
+
+    static func parseRailRevealCollapseAfter(_ raw: String?) -> TimeInterval? {
+        raw.flatMap(parsePositiveSeconds)
     }
 
     /// `GHOSTTIES_CAPTURE_SELECT_SEQUENCE=<seconds>:<steps>`: every
@@ -609,6 +626,8 @@ enum CaptureFixture {
         let interval: TimeInterval
         let steps: Int
     }
+
+    static let selectSequenceTicks = 12
 
     static func parseSelectSequence(_ raw: String?) -> SelectSequence? {
         guard let parts = raw?.split(separator: ":", omittingEmptySubsequences: false), parts.count == 2,

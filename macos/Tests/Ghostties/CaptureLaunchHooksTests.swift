@@ -106,13 +106,44 @@ struct CaptureLaunchHooksTests {
         }
     }
 
-    @Test func motionHooksAreNilWithoutFixtureGate() {
-        // The env hooks read nothing unless GHOSTTIES_CAPTURE_FIXTURE=1; the
-        // test process doesn't set it, so even a stray env value stays inert.
-        guard !CaptureFixture.isActive else { return }
-        #expect(CaptureFixture.revealStyle == nil)
-        #expect(CaptureFixture.railRevealCollapseAfter == nil)
-        #expect(CaptureFixture.selectSequence == nil)
-        #expect(CaptureFixture.foldToggle == nil)
+    /// Mutant check: deleting `guard active` in `CaptureFixture.gatedEnv`
+    /// (the only gate `env(_:)` goes through) makes the inactive assertions
+    /// below return non-nil, failing this test.
+    @Test func motionHooksAreInertWithoutFixtureGate() {
+        let environment = [
+            "GHOSTTIES_CAPTURE_REVEAL_STYLE": "overlay",
+            "GHOSTTIES_CAPTURE_RAIL_REVEAL_COLLAPSE_AFTER": "2",
+            "GHOSTTIES_CAPTURE_SELECT_SEQUENCE": "2:1",
+            "GHOSTTIES_CAPTURE_FOLD_TOGGLE": "wren:2",
+        ]
+        for (key, value) in environment {
+            #expect(CaptureFixture.gatedEnv(key, active: false, in: environment) == nil, "\(key)")
+            #expect(CaptureFixture.gatedEnv(key, active: true, in: environment) == value, "\(key)")
+        }
+        #expect(CaptureFixture.parseRevealStyle(CaptureFixture.gatedEnv("GHOSTTIES_CAPTURE_REVEAL_STYLE", active: true, in: environment)) == .overlay)
+        #expect(CaptureFixture.parseSelectSequence(CaptureFixture.gatedEnv("GHOSTTIES_CAPTURE_SELECT_SEQUENCE", active: false, in: environment)) == nil)
+    }
+
+    @Test func railRevealCollapseAfterParsesSeconds() {
+        #expect(CaptureFixture.parseRailRevealCollapseAfter("3") == 3)
+        #expect(CaptureFixture.parseRailRevealCollapseAfter("1.5") == 1.5)
+        for raw in [nil, "", "0", "-1", "x", "inf"] {
+            #expect(CaptureFixture.parseRailRevealCollapseAfter(raw) == nil, "\(raw ?? "nil")")
+        }
+    }
+
+    @Test func revealStyleSeedsOnlyTheGivenSuite() {
+        let name = "ghostties.test.revealSeed.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: name)!
+        defer { suite.removePersistentDomain(forName: name) }
+        let key = SidebarDialTuning.hoverRevealStyleKey
+        let standardBefore = UserDefaults.standard.object(forKey: key) as? String
+
+        CaptureFixture.seedRevealStyle(nil, into: suite)
+        #expect(suite.object(forKey: key) == nil)
+        CaptureFixture.seedRevealStyle(.overlay, into: suite)
+        #expect(suite.string(forKey: key) == "overlay")
+        #expect(SidebarDialTuning.hoverRevealStyle(defaults: suite) == .overlay)
+        #expect(UserDefaults.standard.object(forKey: key) as? String == standardBefore)
     }
 }

@@ -66,10 +66,11 @@ cmd_up() {
     fi
   done
   if [ -n "${VERIFY_SELECT_SEQUENCE:-}" ]; then
-    [[ "$VERIFY_SELECT_SEQUENCE" =~ ^[0-9]+(\.[0-9]+)?:-?[0-9]+$ ]] || die "VERIFY_SELECT_SEQUENCE must be <seconds>:<steps>"
+    [[ "$VERIFY_SELECT_SEQUENCE" =~ ^[0-9]+(\.[0-9]+)?:-?[0-9]+$ ]] && [[ "${VERIFY_SELECT_SEQUENCE#*:}" =~ [1-9] ]] || die "VERIFY_SELECT_SEQUENCE must be <seconds>:<steps>, steps nonzero"
   fi
   if [ -n "${VERIFY_FOLD_TOGGLE:-}" ]; then
     [[ "$VERIFY_FOLD_TOGGLE" =~ ^$name:[0-9]+(\.[0-9]+)?$ ]] || die "VERIFY_FOLD_TOGGLE must be <project>:<seconds>"
+    [ "${VERIFY_SIDEBAR_TAB:-projects}" = projects ] || die "VERIFY_FOLD_TOGGLE needs VERIFY_SIDEBAR_TAB=projects"
     VERIFY_SIDEBAR_TAB=projects
   fi
   if [ -n "${VERIFY_FIXTURE_PROJECTS:-}" ]; then

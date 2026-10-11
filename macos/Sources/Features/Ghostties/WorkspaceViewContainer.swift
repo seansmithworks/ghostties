@@ -1194,15 +1194,16 @@ class WorkspaceViewContainer: NSView {
             // Cmd+Shift+] / [ (`handleSelectNextSession`), repeating; the
             // shortcut order follows the mounted sidebar, so it works pinned
             // and on the rail.
-            func tick() {
+            func tick(_ remaining: Int) {
+                guard remaining > 0 else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + sequence.interval) { [weak self] in
                     guard let self else { return }
                     let sessions = self.shortcutSessions()
                     self.focusShortcutTarget(self.coordinator.focusAdjacentLiveSession(offset: sequence.steps, in: sessions))
-                    tick()
+                    tick(remaining - 1)
                 }
             }
-            tick()
+            tick(CaptureFixture.selectSequenceTicks)
         }
         if let steps = CaptureFixture.morphSteps, CaptureFixture.claimHook("morphSteps") {
             // After the window has taken its capture size (0.5s, above).
