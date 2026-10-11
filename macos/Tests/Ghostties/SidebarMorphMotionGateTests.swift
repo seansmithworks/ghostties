@@ -107,17 +107,21 @@ struct SidebarMorphMotionGateTests {
 
     // MARK: - Defect 3: one continuous cascade
 
-    /// RED: today `expandLabelDelay` is 100 + 12·min(i, 8) ms.
-    @Test func expandDelayIs90Plus16CappedAtFive() {
+    /// The cascade steps 5% of the travel per label, capped at the sixth
+    /// (was 90 + 16·min(i, 5) ms; the spring has no fixed duration, so the
+    /// step is in progress).
+    @Test func expandCascadeStepsFivePercentCappedAtFive() {
         for i in 0..<10 {
-            let expected = 0.090 + 0.016 * Double(min(i, 5))
-            #expect(abs(WorkspaceLayout.expandLabelDelay(rowIndex: i) - expected) < 0.0005, "delay(\(i)) = \(WorkspaceLayout.expandLabelDelay(rowIndex: i))")
+            let expected = 0.5 - 0.05 * CGFloat(min(i, 5))
+            let end = WorkspaceLayout.morphFadeWindow(element: .names, staggerIndex: i).end
+            #expect(abs(end - expected) < 0.0005, "end(\(i)) = \(end)")
         }
     }
 
-    /// RED: the expand fade is 140ms today.
-    @Test func expandFadeDurationIs120ms() {
-        #expect(abs(WorkspaceLayout.sidebarRowLabelExpandFadeDuration - 0.120) < 0.0005)
+    /// Each name fades over a quarter of the travel (was 120ms).
+    @Test func nameFadeSpansAQuarterOfTheTravel() {
+        let w = WorkspaceLayout.morphFadeWindow(element: .names, staggerIndex: 2)
+        #expect(abs((w.end - w.start) - 0.25) < 0.0005)
     }
 
     /// RED (compile): one index runs through every section and header, in
@@ -128,13 +132,15 @@ struct SidebarMorphMotionGateTests {
         #expect(out.map(\.rows) == [[1, 2], [4, 5, 6], [8]])
     }
 
-    // MARK: - Defect 4: drift on collapse only
+    // MARK: - Defect 4: drift
 
-    /// RED (compile): expand 0, collapse 4pt (left), Reduce Motion never.
-    @Test func labelDriftIsZeroOnExpandAndFourOnCollapse() {
-        #expect(WorkspaceLayout.sidebarLabelDriftTravel(appearing: true, reduceMotion: false) == 0)
-        #expect(WorkspaceLayout.sidebarLabelDriftTravel(appearing: false, reduceMotion: false) == -4)
-        #expect(WorkspaceLayout.sidebarLabelDriftTravel(appearing: false, reduceMotion: true) == 0)
+    /// A shown label sits in place; a hidden one is 4pt left; Reduce Motion
+    /// never drifts. The drift follows the fade, so it reverses with the
+    /// spring instead of jumping when a toggle turns round.
+    @Test func labelDriftIsZeroShownAndFourHidden() {
+        #expect(WorkspaceLayout.sidebarLabelDrift(opacity: 1, reduceMotion: false) == 0)
+        #expect(WorkspaceLayout.sidebarLabelDrift(opacity: 0, reduceMotion: false) == -4)
+        #expect(WorkspaceLayout.sidebarLabelDrift(opacity: 0, reduceMotion: true) == 0)
     }
 
     // MARK: - Defect 5: trailing count is not clipped mid-fade
@@ -149,40 +155,47 @@ struct SidebarMorphMotionGateTests {
 
     // MARK: - Timings
 
-    /// RED (compile): collapse count+chevron 0–60, names 0–90, badge 110–270
-    /// with scale 0.9 -> 1.
-    @Test func collapseTimings() {
-        let cluster = WorkspaceLayout.morphFadeWindow(element: .trailingCluster, direction: .collapse, reduceMotion: false)
-        #expect(abs(cluster.start - 0) < 0.0005 && abs(cluster.end - 0.060) < 0.0005, "cluster \(cluster.start)–\(cluster.end)")
-        let names = WorkspaceLayout.morphFadeWindow(element: .names, direction: .collapse, reduceMotion: false)
-        #expect(abs(names.start - 0) < 0.0005 && abs(names.end - 0.090) < 0.0005, "names \(names.start)–\(names.end)")
-        let badge = WorkspaceLayout.morphFadeWindow(element: .badge, direction: .collapse, reduceMotion: false)
-        #expect(abs(badge.start - 0.110) < 0.0005 && abs(badge.end - 0.270) < 0.0005, "badge \(badge.start)–\(badge.end)")
+    /// On the way to the rail the count and chevron go before the names,
+    /// and the folded count badge arrives only once both have gone, growing
+    /// 0.9 -> 1 (was cluster 0–60ms, names 0–90ms, badge 110–270ms).
+    @Test func collapseOrder() {
+        let cluster = WorkspaceLayout.morphFadeWindow(element: .trailingCluster)
+        let names = WorkspaceLayout.morphFadeWindow(element: .names)
+        let badge = WorkspaceLayout.morphFadeWindow(element: .badge)
+        #expect(cluster.start == names.start && cluster.end < names.end, "cluster \(cluster.start)–\(cluster.end)")
+        #expect(badge.start > names.end, "badge \(badge.start)–\(badge.end)")
         #expect(badge.scaleFrom == 0.9 && badge.scaleTo == 1)
+        #expect(WorkspaceLayout.morphFadeOpacity(element: .badge, progress: 1) == 1)
+        #expect(WorkspaceLayout.morphFadeOpacity(element: .badge, progress: 0.5) == 0)
     }
 
-    /// RED (compile): expand badge out 0–50ms.
-    @Test func expandBadgeFadesOutIn50ms() {
-        let badge = WorkspaceLayout.morphFadeWindow(element: .badge, direction: .expand, reduceMotion: false)
-        #expect(abs(badge.start - 0) < 0.0005 && abs(badge.end - 0.050) < 0.0005, "badge \(badge.start)–\(badge.end)")
+    /// On the way out of the rail the badge has gone before the first name
+    /// starts to arrive (was badge out 0–50ms).
+    @Test func expandBadgeLeavesBeforeTheNamesArrive() {
+        let badge = WorkspaceLayout.morphFadeWindow(element: .badge)
+        let first = WorkspaceLayout.morphFadeWindow(element: .names, staggerIndex: 0)
+        #expect(badge.start > first.end)
     }
 
     // MARK: - Reduce Motion
 
-    /// RED (compile): geometry snaps (0); every fade is 120ms.
-    @Test func reduceMotionSnapsGeometryAndFadesIn120ms() {
-        for timing in [
-            WorkspaceLayout.sidebarTransitionTiming(from: .pinned, to: .collapsed),
-            WorkspaceLayout.sidebarTransitionTiming(from: .collapsed, to: .pinned),
-        ] {
-            #expect(WorkspaceLayout.sidebarGeometryDuration(reduceMotion: true, timing: timing) == 0)
-            #expect(WorkspaceLayout.sidebarGeometryDuration(reduceMotion: false, timing: timing) == timing.duration)
-        }
-        for element in [SidebarMorphElement.trailingCluster, .names, .badge] {
-            for direction in [SidebarMorphDirection.collapse, .expand] {
-                let w = WorkspaceLayout.morphFadeWindow(element: element, direction: direction, reduceMotion: true)
-                #expect(abs((w.end - w.start) - 0.120) < 0.0005, "\(element) \(direction) fades \(w.end - w.start)")
+    /// Reduce Motion: the morph's progress moves over the 120ms crossfade
+    /// (the geometry snaps; there is no spring), and every label and the
+    /// badge fade across all of it — the whole 0–1 window, no cascade, no
+    /// drift — so nothing pops in a fraction of those 120ms.
+    @Test func reduceMotionFadesIn120msWithNoDrift() {
+        #expect(WorkspaceLayout.sidebarReducedMotionCrossfadeDuration == 0.12)
+        for element in [SidebarMorphElement.names, .trailingCluster, .badge] {
+            for index in 0..<8 {
+                let window = WorkspaceLayout.morphFadeWindow(element: element, staggerIndex: index, reduceMotion: true)
+                #expect(window.start == 0 && window.end == 1, "\(element) #\(index): \(window.start)–\(window.end)")
+                // Half way through the crossfade, half faded, every index alike.
+                let half = WorkspaceLayout.morphFadeOpacity(element: element, progress: 0.5, staggerIndex: index, reduceMotion: true)
+                #expect(abs(half - 0.5) < 0.0001, "\(element) #\(index) at 60ms: \(half)")
             }
+        }
+        for opacity in [0.0, 0.5, 1.0] {
+            #expect(WorkspaceLayout.sidebarLabelDrift(opacity: opacity, reduceMotion: true) == 0)
         }
     }
 

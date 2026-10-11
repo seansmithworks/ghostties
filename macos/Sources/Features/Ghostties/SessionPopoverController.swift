@@ -23,8 +23,9 @@ final class SessionPopoverHostingView: TransparentHostingView<AnyView> {
 
 /// Owns the session popover for one window: hover timing, placement,
 /// dismissal, and the live content. One instance per `SessionCoordinator`
-/// (`coordinator.sessionPopover`); rows and rail ghosts feed it hover events
-/// through `SessionPopoverAnchor`.
+/// (`coordinator.sessionPopover`); expanded sidebar rows feed it hover events
+/// through `SessionPopoverAnchor`. The rail has no card: resting there
+/// reveals the sidebar instead (`RailHoverReveal`).
 ///
 /// The card is a sibling view added to the window's `WorkspaceViewContainer`
 /// (topmost), not a child of the sidebar's hosting view, because it has to
@@ -194,7 +195,7 @@ final class SessionPopoverController {
 
     private func present(sessionId: UUID, anchor: NSView) {
         guard let container = coordinator?.containerView, anchor.window != nil else { return }
-        guard let content = makeContent(for: sessionId, showsName: Self.showsName(anchor)) else {
+        guard let content = makeContent(for: sessionId) else {
             // Nothing essential to show for this row: don't leave the previous
             // row's card up over it.
             if isVisible { dismiss() }
@@ -291,23 +292,15 @@ final class SessionPopoverController {
 
     // MARK: - Content
 
-    private static func showsName(_ anchor: NSView?) -> Bool {
-        (anchor as? SessionPopoverAnchor.AnchorView)?.showsName ?? false
-    }
-
     /// nil when there is nothing essential to show for this session.
-    private func makeContent(for id: UUID, showsName: Bool) -> SessionPopoverContent? {
+    private func makeContent(for id: UUID) -> SessionPopoverContent? {
         let store = workspace
-        guard let session = store.sessions.first(where: { $0.id == id }) else { return nil }
-        var title = session.name
-        var project = store.projects.first { $0.id == session.projectId }?.name
+        guard store.sessions.contains(where: { $0.id == id }) else { return nil }
         var approval = claudeState.state(for: id)
         var summary = claudeState.summary(for: id)
         var indicator = store.globalIndicatorStates[id] ?? .inactive
         #if DEBUG
         if let override = CaptureFixture.popoverOverride(for: id) {
-            title = override.title
-            project = override.project
             approval = override.approval
             summary = override.summary
             if let forced = override.indicator { indicator = forced }
@@ -315,9 +308,6 @@ final class SessionPopoverController {
         #endif
         return SessionPopoverContent.make(
             sessionId: id,
-            name: title,
-            project: project,
-            showsName: showsName,
             indicator: indicator,
             approval: approval,
             summary: summary
@@ -329,7 +319,7 @@ final class SessionPopoverController {
     /// was answered, the run finished), dismisses the card.
     private func refresh() {
         guard let id = currentSessionId else { return }
-        guard let content = makeContent(for: id, showsName: Self.showsName(currentAnchor)) else { dismiss(); return }
+        guard let content = makeContent(for: id) else { dismiss(); return }
         guard content != model.content else { return }
         model.content = content
         // SwiftUI applies the new content on its next layout pass.
@@ -345,8 +335,8 @@ final class SessionPopoverController {
 
     #if DEBUG
     /// Test seams: drive the content path with no window or GUI.
-    func openForTesting(sessionId: UUID, showsName: Bool = false) {
-        guard let content = makeContent(for: sessionId, showsName: showsName) else { return }
+    func openForTesting(sessionId: UUID) {
+        guard let content = makeContent(for: sessionId) else { return }
         currentSessionId = sessionId
         model.content = content
     }
@@ -456,19 +446,17 @@ private final class LiveUpdates {
 
 // MARK: - Hover anchor
 
-/// Invisible view placed behind a session row / rail ghost. It reports the
+/// Invisible view placed behind an expanded session row. It reports the
 /// row's hover to the popover controller and lends it the row's on-screen
 /// frame. An AppKit tracking area (not `.onHover`) so the frame comes from the
 /// real view, in window coordinates, with no SwiftUI coordinate guessing.
 struct SessionPopoverAnchor: NSViewRepresentable {
     let sessionId: UUID
     let controller: SessionPopoverController
-    let showsName: Bool
 
     func makeNSView(context: Context) -> AnchorView {
         let view = AnchorView()
         view.sessionId = sessionId
-        view.showsName = showsName
         view.controller = controller
         controller.register(anchor: view, for: sessionId)
         return view
@@ -480,9 +468,6 @@ struct SessionPopoverAnchor: NSViewRepresentable {
             view.sessionId = sessionId
             controller.register(anchor: view, for: sessionId)
         }
-        // The same row is on the sidebar and the rail; only the rail's
-        // card names the session.
-        view.showsName = showsName
         view.controller = controller
     }
 
@@ -492,7 +477,6 @@ struct SessionPopoverAnchor: NSViewRepresentable {
 
     final class AnchorView: NSView {
         var sessionId = UUID()
-        var showsName = false
         weak var controller: SessionPopoverController?
         private var area: NSTrackingArea?
 
@@ -523,8 +507,7 @@ struct SessionPopoverAnchor: NSViewRepresentable {
 
 extension View {
     /// Shows the session popover while the pointer rests over this view.
-    /// `showsName`: the rail shows glyphs only, so its card names the session.
-    func sessionPopoverAnchor(sessionId: UUID, controller: SessionPopoverController, showsName: Bool = false) -> some View {
-        background(SessionPopoverAnchor(sessionId: sessionId, controller: controller, showsName: showsName))
+    func sessionPopoverAnchor(sessionId: UUID, controller: SessionPopoverController) -> some View {
+        background(SessionPopoverAnchor(sessionId: sessionId, controller: controller))
     }
 }

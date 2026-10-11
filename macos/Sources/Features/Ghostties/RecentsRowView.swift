@@ -43,7 +43,7 @@ struct RecentsRowView: View, Equatable {
 
     /// This row's place in the expand cascade: one index through every
     /// section and project header in reading order (`SidebarLabelCascade`)
-    /// — decorative only, feeds `WorkspaceLayout.expandLabelDelay`. Defaults
+    /// — decorative only, feeds `WorkspaceLayout.morphFadeWindow`. Defaults
     /// to 0 so every other call site (unaffected by the stagger) is
     /// unchanged.
     var staggerIndex: Int = 0
@@ -231,11 +231,12 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
     let isActive: Bool
     /// The row's place in the expand cascade, one index across every
     /// section and header (`SidebarLabelCascade`) — feeds
-    /// `WorkspaceLayout.expandLabelDelay`.
+    /// `WorkspaceLayout.morphFadeWindow`.
     var staggerIndex: Int = 0
     let redlineID: String
-    /// The session whose hover card this row shows, if any. On the rail
-    /// the card names the session, since the row's title is gone.
+    /// The session whose hover card this row shows, if any. Sidebar only:
+    /// on the rail, resting the pointer reveals the whole sidebar instead
+    /// (`RailHoverReveal`).
     var popover: (sessionId: UUID, controller: SessionPopoverController)? = nil
     /// The tooltip the row shows on the rail, where its labels are gone.
     var railHelp: String? = nil
@@ -299,8 +300,8 @@ struct SidebarListRowChrome<Title: View, Glyph: View>: View {
         .onHover { isHovered = $0 }
         .help(progress >= 0.5 ? (railHelp ?? "") : "")
         .background {
-            if let popover {
-                Color.clear.sessionPopoverAnchor(sessionId: popover.sessionId, controller: popover.controller, showsName: progress >= 0.5)
+            if let popover, progress < 0.5, !widthModel.isOverlaid {
+                Color.clear.sessionPopoverAnchor(sessionId: popover.sessionId, controller: popover.controller)
             }
         }
         // Mid-morph the row is in flight: no clicks, drags or drops land.

@@ -388,11 +388,12 @@ struct MorphGlyphSlot<Glyph: View>: View, Animatable {
 }
 
 /// Fades row and header labels out on the way to the rail and back in on
-/// the way out of it, on their own direction-aware clocks
-/// (`WorkspaceLayout.morphFadeWindow`): on collapse names fade 0–90ms and a
-/// header's count and chevron 0–60ms, drifting 4pt left; on expand each
-/// fades in place over 120ms on the cascade (`SidebarLabelCascade`).
-/// Reduce Motion: a 120ms fade, no drift. Off the expanded sidebar, labels
+/// the way out of it, as a function of the morph's progress
+/// (`WorkspaceLayout.morphFadeWindow`), so they play on the spring's clock
+/// and reverse with it: names go by 0.5 of the travel, drifting 4pt left;
+/// on the way back they arrive in reading order (`SidebarLabelCascade`),
+/// drifting back into place. Reduce Motion: the morph snaps, so the labels
+/// fade over 120ms instead, with no drift. Off the expanded sidebar, labels
 /// take no clicks.
 struct MorphLabelFade: ViewModifier {
     var element: SidebarMorphElement = .names
@@ -403,53 +404,80 @@ struct MorphLabelFade: ViewModifier {
     @Environment(\.sidebarMorphOverride) private var override
 
     func body(content: Content) -> some View {
-        let progress = override ?? widthModel.morph
-        let opacity = SidebarMorphMetrics.labelOpacity(progress)
-        let appearing = opacity > 0
+        let target = override ?? widthModel.morph
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let window = WorkspaceLayout.morphFadeWindow(
-            element: element, direction: appearing ? .expand : .collapse,
-            reduceMotion: reduceMotion, staggerIndex: staggerIndex
-        )
-        let fade = WorkspaceLayout.morphFadeAnimation(window, reduceMotion: reduceMotion)
-        let drift = WorkspaceLayout.sidebarLabelDriftTravel(appearing: appearing, reduceMotion: reduceMotion)
-        content
-            // The drift plays only where it is non-zero (collapse); on the
-            // way back the label returns to its place at once, hidden, and
-            // fades in there.
-            .offset(x: appearing ? 0 : drift)
-            .animation(drift == 0 ? nil : fade, value: appearing)
-            .opacity(opacity)
-            .animation(fade, value: opacity)
-            // `morph` is the target as soon as a toggle starts, so labels
-            // fading back in stay unclickable until the morph has landed.
-            .allowsHitTesting(progress == 0 && !widthModel.isMorphing)
+        let effect = Effect(progress: target, element: element, staggerIndex: staggerIndex, reduceMotion: reduceMotion)
+        Group {
+            if reduceMotion {
+                content.modifier(effect)
+                    .animation(.easeInOut(duration: WorkspaceLayout.sidebarReducedMotionCrossfadeDuration), value: target)
+            } else {
+                content.modifier(effect)
+            }
+        }
+        // `morph` is the target as soon as a toggle starts, so labels
+        // fading back in stay unclickable until the morph has landed.
+        .allowsHitTesting(target == 0 && !widthModel.isMorphing)
+    }
+
+    /// The fade at one frame of the morph's progress.
+    private struct Effect: ViewModifier, Animatable {
+        var progress: CGFloat
+        let element: SidebarMorphElement
+        let staggerIndex: Int
+        let reduceMotion: Bool
+
+        var animatableData: CGFloat {
+            get { progress }
+            set { progress = newValue }
+        }
+
+        func body(content: Content) -> some View {
+            let opacity = WorkspaceLayout.morphFadeOpacity(element: element, progress: progress, staggerIndex: staggerIndex, reduceMotion: reduceMotion)
+            content
+                .offset(x: WorkspaceLayout.sidebarLabelDrift(opacity: opacity, reduceMotion: reduceMotion))
+                .opacity(opacity)
+        }
     }
 }
 
 /// A folded project's count badge on its rail tile: the labels' fade
-/// reversed, on the badge's own clock (`WorkspaceLayout.morphFadeWindow`):
-/// it arrives 110–270ms into a collapse, growing 0.9 → 1, and leaves in the
-/// first 50ms of an expand.
+/// reversed, as a function of the morph's progress
+/// (`WorkspaceLayout.morphFadeWindow`): it shows over 0.55–0.85 of the way
+/// to the rail, growing 0.9 → 1, and goes the same way back.
 struct MorphRailOnlyFade: ViewModifier {
     @EnvironmentObject private var widthModel: SidebarWidthModel
     @Environment(\.sidebarMorphOverride) private var override
 
     func body(content: Content) -> some View {
-        let progress = override ?? widthModel.morph
-        let opacity = Double(min(max(progress * 2 - 1, 0), 1))
-        let appearing = opacity > 0
+        let target = override ?? widthModel.morph
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let window = WorkspaceLayout.morphFadeWindow(element: .badge, direction: appearing ? .collapse : .expand, reduceMotion: reduceMotion)
-        let fade = WorkspaceLayout.morphFadeAnimation(window, reduceMotion: reduceMotion)
-        // The arrival's scale; leaving, the badge only fades, and is back
-        // at the arrival's start once hidden.
-        let arrival = WorkspaceLayout.morphFadeWindow(element: .badge, direction: .collapse, reduceMotion: reduceMotion)
-        content
-            .scaleEffect(appearing ? arrival.scaleTo : arrival.scaleFrom)
-            .animation(appearing ? fade : nil, value: appearing)
-            .opacity(opacity)
-            .animation(fade, value: opacity)
+        let effect = Effect(progress: target, reduceMotion: reduceMotion)
+        if reduceMotion {
+            content.modifier(effect)
+                .animation(.easeInOut(duration: WorkspaceLayout.sidebarReducedMotionCrossfadeDuration), value: target)
+        } else {
+            content.modifier(effect)
+        }
+    }
+
+    private struct Effect: ViewModifier, Animatable {
+        var progress: CGFloat
+        let reduceMotion: Bool
+
+        var animatableData: CGFloat {
+            get { progress }
+            set { progress = newValue }
+        }
+
+        func body(content: Content) -> some View {
+            let opacity = WorkspaceLayout.morphFadeOpacity(element: .badge, progress: progress, reduceMotion: reduceMotion)
+            let window = WorkspaceLayout.morphFadeWindow(element: .badge)
+            let scale = reduceMotion ? 1 : window.scaleFrom + (window.scaleTo - window.scaleFrom) * CGFloat(opacity)
+            content
+                .scaleEffect(scale)
+                .opacity(opacity)
+        }
     }
 }
 

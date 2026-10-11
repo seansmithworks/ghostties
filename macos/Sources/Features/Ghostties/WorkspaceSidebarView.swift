@@ -87,12 +87,9 @@ struct WorkspaceSidebarView: View {
                             }
                         }
                         .modifier(SidebarColumnPadding())
-                        .animation(
-                            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                                ? nil
-                                : .default,
-                            value: store.sectionSignature
-                        )
+                        // A section reorder travels on the `.move` spring
+                        // (`SidebarUISpring`). Reduce Motion: instant.
+                        .animation(SidebarUISpring.move.animation(), value: store.sectionSignature)
                     }
                     // Runs under the floating tray; the inset clears it.
                     .modifier(MorphTrayReserve(scrolls: true))

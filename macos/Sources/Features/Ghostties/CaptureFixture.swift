@@ -398,8 +398,6 @@ enum CaptureFixture {
     /// Invented card content for the target session — never the fixture
     /// project's real temp-directory path or any real session data.
     struct PopoverOverride {
-        let title: String
-        let project: String
         let approval: ClaudeState?
         var summary: SessionSummary? = nil
         var indicator: SessionIndicatorState? = nil
@@ -419,22 +417,22 @@ enum CaptureFixture {
         }
         switch scenario {
         case .needsBash:
-            return PopoverOverride(title: "DAB", project: "dab", approval: permission(
+            return PopoverOverride(approval: permission(
                 tool: "Bash",
                 input: ToolInputSummary(command: "rm -rf build/", description: "Clean stale artifacts before rebuild")
             ))
         case .needsEdit:
-            return PopoverOverride(title: "DAB", project: "dab", approval: permission(
+            return PopoverOverride(approval: permission(
                 tool: "Edit",
                 input: ToolInputSummary(description: "Raise the request timeout to 30s", filePath: "src/server/config.ts")
             ))
         case .running:
-            return PopoverOverride(title: "DAB", project: "dab", approval: nil, summary: SessionSummary(
+            return PopoverOverride(approval: nil, summary: SessionSummary(
                 prompt: "fix the flaky router tests",
                 currentStep: "running npm test"
             ), indicator: .processing)
         case .done:
-            return PopoverOverride(title: "DAB", project: "dab", approval: nil, summary: SessionSummary(
+            return PopoverOverride(approval: nil, summary: SessionSummary(
                 prompt: "fix the flaky router tests",
                 isDone: true
             ), indicator: .idle)
@@ -576,6 +574,13 @@ enum CaptureFixture {
     }
     static var sidebarToggleAfter: TimeInterval? {
         parseSidebarToggleAfter(env("GHOSTTIES_CAPTURE_SIDEBAR_TOGGLE_AFTER"))
+    }
+    /// `GHOSTTIES_CAPTURE_RAIL_REVEAL_AFTER=<seconds>`: on the rail, reveal
+    /// the sidebar as a completed hover dwell would (`RailHoverReveal.revealNow`),
+    /// so the revealed state can be captured without a pointer. Pair with
+    /// `GHOSTTIES_CAPTURE_SIDEBAR_MODE=collapsed`.
+    static var railRevealAfter: TimeInterval? {
+        env("GHOSTTIES_CAPTURE_RAIL_REVEAL_AFTER").flatMap(parsePositiveSeconds)
     }
     /// `GHOSTTIES_CAPTURE_TRAY_HOVER=<SidebarTrayItem.id>` (e.g. `newSession`):
     /// draws that tray button's hover highlight without a pointer, so the

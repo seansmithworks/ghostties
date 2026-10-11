@@ -375,10 +375,6 @@ enum WorkspaceLayout {
     /// inset; with the block gone, content keeps the same 24pt it sat at.
     static let sessionPopoverContentPadding: CGFloat = 24
 
-    /// Gap between the popover's rail-mode name line and the content under it
-    /// (the content's top padding when a name line is present).
-    static let sessionPopoverNameGap: CGFloat = 6
-
     // MARK: - Sidebar DialKit Tunables (sidebar-presence, session-8 brief)
     //
     // Named constants lifted from prior inline literals so `SidebarDialTuning`
@@ -562,19 +558,16 @@ enum WorkspaceLayout {
     }
 
     /// The Flow 05 motion spec's named transition table, as a pure
-    /// `from → to` lookup (Sean's canvas, "Flow 05 · Collapse and close"):
-    /// collapse 244→rail 260ms, expand rail→244 240ms, full close 180ms,
-    /// reopen 240ms — all on `drawer` except the full close, which runs the
-    /// steeper `close` curve. Pairs the spec doesn't name (anything routing
-    /// through `.overlay`) keep the pre-Flow-05 generic 200ms
-    /// `legacyEaseInOut` — the brief says the reveal overlay "keeps its
-    /// current animation unless it conflicts."
+    /// `from → to` lookup (Sean's canvas, "Flow 05 · Collapse and close"),
+    /// for the transitions that are not the sidebar ⇄ rail morph: full
+    /// close 180ms on the steeper `close` curve, reopen 240ms on `drawer`.
+    /// The pinned ⇄ collapsed pair (the Cmd+S toggle and the hover reveal)
+    /// has no duration: it runs on the spring (`sidebarMorphSpring`), and
+    /// falls to the default row here only for Reduce Motion's crossfade
+    /// length. Pairs the spec doesn't name (anything routing through
+    /// `.overlay`) keep the pre-Flow-05 generic 200ms `legacyEaseInOut`.
     static func sidebarTransitionTiming(from: SidebarMode, to: SidebarMode) -> SidebarTransitionTiming {
         switch (from, to) {
-        case (.pinned, .collapsed):
-            return SidebarTransitionTiming(duration: 0.26, curve: .drawer)
-        case (.collapsed, .pinned):
-            return SidebarTransitionTiming(duration: 0.24, curve: .drawer)
         case (_, .closed):
             return SidebarTransitionTiming(duration: 0.18, curve: .close)
         case (.closed, .pinned), (.closed, .collapsed):
@@ -584,17 +577,27 @@ enum WorkspaceLayout {
         }
     }
 
-    /// SwiftUI `Animation` matching a `SidebarTransitionTiming` row, for the
-    /// content cross-fade described above `SidebarTransitionCurveKind.
-    /// swiftUIAnimation`. Centralized here (not hand-built at each call
-    /// site) so the content cross-fade can never silently drift from the
-    /// AppKit width animation's own duration/curve.
-    static func sidebarTransitionSwiftUIAnimation(_ timing: SidebarTransitionTiming) -> Animation {
-        guard let points = timing.curve.swiftUIAnimation else {
-            return .easeInOut(duration: timing.duration)
-        }
-        return .timingCurve(points.0, points.1, points.2, points.3, duration: timing.duration)
+    // MARK: - Springs (the sidebar ⇄ rail morph)
+
+    /// Rail -> sidebar (the Cmd+S expand and the hover reveal): a visible
+    /// overshoot (~4.6% of the travel), Sean's "bounce/spring ... fluidity"
+    /// (2026-10-11); 0.15 (~0.6%) read as no bounce at all. The top of
+    /// emil's 0.1–0.3 "keep bounce subtle".
+    static let sidebarMorphOpenSpring = SidebarSpring(response: 0.35, bounce: 0.3)
+
+    /// Sidebar -> rail: crisper, and no overshoot — motion-standards:
+    /// "overshoot belongs to entrances only; never bounce a close".
+    static let sidebarMorphCollapseSpring = SidebarSpring(response: 0.30, bounce: 0)
+
+    /// The morph's spring for this direction, from the "Morph springs" dials.
+    static func sidebarMorphSpring(collapsing: Bool, defaults: UserDefaults = SidebarDialTuning.store) -> SidebarSpring {
+        collapsing
+            ? SidebarSpring(response: SidebarDialTuning.motionCollapseResponse(defaults: defaults),
+                            bounce: SidebarDialTuning.motionCollapseBounce(defaults: defaults))
+            : SidebarSpring(response: SidebarDialTuning.motionOpenResponse(defaults: defaults),
+                            bounce: SidebarDialTuning.motionOpenBounce(defaults: defaults))
     }
+
 
     /// Reduced-motion crossfade duration replacing every translation-based
     /// sidebar transition (Flow 05 "Reduced motion": drop the translate,
@@ -616,84 +619,75 @@ enum WorkspaceLayout {
     /// before the card has reached the edge.
     static let closedHotZoneActivationDelay: TimeInterval = 0.18
 
-    /// The geometry's share of a sidebar ⇄ rail morph (width, tile, chip,
-    /// card): the panel's own duration, or 0 under Reduce Motion, where the
-    /// geometry snaps and only the fades play.
-    static func sidebarGeometryDuration(reduceMotion: Bool, timing: SidebarTransitionTiming) -> TimeInterval {
-        reduceMotion ? 0 : timing.duration
-    }
+    /// Rail hover-reveal (`RailHoverReveal`): how long the pointer rests on
+    /// the rail before the full sidebar reveals over the terminal, and how
+    /// long after it leaves the revealed sidebar before it morphs back.
+    /// Dial defaults ("Hover reveal" in the Sidebar panel).
+    static let railHoverRevealDwell: TimeInterval = 1.2
+    static let railHoverRevealExitGrace: TimeInterval = 0.3
+
+    /// The revealed sidebar's lift off the terminal it covers: DESIGN.md §6
+    /// "Overlay" (0.20, radius 12, no offset).
+    static let railRevealShadowOpacity: Float = 0.20
+    static let railRevealShadowRadius: CGFloat = 12
 
     // MARK: - Label choreography (keyframe spec, sidebar ⇄ rail)
+    //
+    // Every fade is a window of the morph's progress (0 = sidebar, 1 =
+    // rail), not of time, so it plays on the spring's clock: it overshoots
+    // and reverses with the panel, and a toggle reversing mid-flight walks
+    // each label back from exactly where it is.
 
-    /// A label's fade on the way to the rail: it leaves first, from the
-    /// very start of the collapse, before the panel has moved far.
-    static let sidebarRowLabelCollapseFadeDuration: TimeInterval = 0.09
-
-    /// How far a label drifts left as it fades on the way to the rail.
+    /// How far a label drifts left as it fades out (toward the rail); it
+    /// drifts back as it fades in.
     static let sidebarRowLabelCollapseTravel: CGFloat = -4
 
-    /// A label's fade-in on the way out of the rail, once its delay
-    /// (`expandLabelDelay`) has passed.
-    static let sidebarRowLabelExpandFadeDuration: TimeInterval = 0.12
+    /// The expand cascade's step: each label in reading order (headers
+    /// included, `SidebarLabelCascade`) arrives this much later in the
+    /// expand's travel, capped at the sixth.
+    static let sidebarLabelCascadeStep: CGFloat = 0.05
 
-    /// The expand cascade: the first label starts 90ms into the 240ms
-    /// expand, each later one 16ms after the one above it in reading order
-    /// (headers included, one index across every section,
-    /// `SidebarLabelCascade`), capped at the sixth so everything has landed
-    /// by 290ms.
-    static func expandLabelDelay(rowIndex: Int) -> TimeInterval {
-        0.09 + 0.016 * TimeInterval(min(max(rowIndex, 0), 5))
-    }
+    /// A name's fade, as a share of the travel.
+    static let sidebarLabelFadeSpan: CGFloat = 0.25
 
-    /// How far a label drifts while it fades: 4pt left on the way to the
-    /// rail, none on the way back (it fades in where it sits), none under
-    /// Reduce Motion.
-    static func sidebarLabelDriftTravel(appearing: Bool, reduceMotion: Bool) -> CGFloat {
-        appearing || reduceMotion ? 0 : sidebarRowLabelCollapseTravel
-    }
-
-    /// When one morph element fades, in seconds from the start of the
-    /// toggle, and the scale it grows through while it does. Collapse: the
-    /// header's count and chevron 0–60ms, names 0–90ms, the folded count
-    /// badge 110–270ms growing 0.9 → 1. Expand: the badge 0–50ms, names and
-    /// the count/chevron on the cascade (`expandLabelDelay`, 120ms each).
-    /// Reduce Motion: every fade 0–120ms, nothing scales.
-    static func morphFadeWindow(
-        element: SidebarMorphElement,
-        direction: SidebarMorphDirection,
-        reduceMotion: Bool,
-        staggerIndex: Int = 0
-    ) -> MorphFadeWindow {
-        if reduceMotion {
-            return MorphFadeWindow(start: 0, end: sidebarReducedMotionCrossfadeDuration)
-        }
-        switch (element, direction) {
-        case (.trailingCluster, .collapse):
-            return MorphFadeWindow(start: 0, end: 0.06)
-        case (.names, .collapse):
-            return MorphFadeWindow(start: 0, end: sidebarRowLabelCollapseFadeDuration)
-        case (.badge, .collapse):
-            return MorphFadeWindow(start: 0.11, end: 0.27, scaleFrom: 0.9, scaleTo: 1)
-        case (.badge, .expand):
-            return MorphFadeWindow(start: 0, end: 0.05)
-        case (.names, .expand), (.trailingCluster, .expand):
-            let start = expandLabelDelay(rowIndex: staggerIndex)
-            return MorphFadeWindow(start: start, end: start + sidebarRowLabelExpandFadeDuration)
+    /// The progress window over which `element` fades: fully shown below
+    /// `start`, gone above `end` (the badge the other way round). Names: the
+    /// first label's window ends at 0.5, each later one 0.05 lower to the
+    /// sixth, so on the way out of the rail they arrive in reading order and
+    /// all have landed at 0. The count and chevron go a little sooner and
+    /// arrive a little later. The folded count badge shows over 0.55–0.85,
+    /// growing 0.9 → 1. Reduce Motion: the whole 0–1 for every element, no
+    /// cascade and no scale — the morph's progress then moves over the
+    /// 120ms crossfade, so each fade takes all of it.
+    static func morphFadeWindow(element: SidebarMorphElement, staggerIndex: Int = 0, reduceMotion: Bool = false) -> MorphFadeWindow {
+        if reduceMotion { return MorphFadeWindow(start: 0, end: 1) }
+        let end = 0.5 - sidebarLabelCascadeStep * CGFloat(min(max(staggerIndex, 0), 5))
+        switch element {
+        case .names:
+            return MorphFadeWindow(start: end - sidebarLabelFadeSpan, end: end)
+        case .trailingCluster:
+            return MorphFadeWindow(start: end - sidebarLabelFadeSpan, end: end - 0.05)
+        case .badge:
+            return MorphFadeWindow(start: 0.55, end: 0.85, scaleFrom: 0.9, scaleTo: 1)
         }
     }
 
-    /// The animation that plays `window`: ease-out (`.close`'s curve),
-    /// delayed to its start. Reduce Motion: a plain ease-in-out.
-    static func morphFadeAnimation(_ window: MorphFadeWindow, reduceMotion: Bool) -> Animation {
-        let animation: Animation = reduceMotion
-            ? .easeInOut(duration: window.duration)
-            : .timingCurve(0.23, 1, 0.32, 1, duration: window.duration)
-        return window.start > 0 ? animation.delay(window.start) : animation
+    /// `element`'s opacity at morph `progress`.
+    static func morphFadeOpacity(element: SidebarMorphElement, progress: CGFloat, staggerIndex: Int = 0, reduceMotion: Bool = false) -> Double {
+        let window = morphFadeWindow(element: element, staggerIndex: staggerIndex, reduceMotion: reduceMotion)
+        let t = Double(min(max((progress - window.start) / (window.end - window.start), 0), 1))
+        return element == .badge ? t : 1 - t
+    }
+
+    /// A label's drift at `opacity`: none shown, the full travel hidden.
+    /// Reduce Motion: none.
+    static func sidebarLabelDrift(opacity: Double, reduceMotion: Bool) -> CGFloat {
+        reduceMotion ? 0 : sidebarRowLabelCollapseTravel * CGFloat(1 - opacity)
     }
 }
 
-/// The parts of the sidebar ⇄ rail morph that fade on their own clocks
-/// (`WorkspaceLayout.morphFadeWindow`).
+/// The parts of the sidebar ⇄ rail morph that fade on their own windows of
+/// its progress (`WorkspaceLayout.morphFadeWindow`).
 enum SidebarMorphElement {
     /// A project header's chevron and session count.
     case trailingCluster
@@ -703,22 +697,13 @@ enum SidebarMorphElement {
     case badge
 }
 
-/// Which way a sidebar ⇄ rail morph runs.
-enum SidebarMorphDirection {
-    /// Sidebar to rail.
-    case collapse
-    /// Rail to sidebar.
-    case expand
-}
-
-/// One element's fade: `start` and `end` in seconds from the toggle, and the
-/// scale it grows from and to over the same window.
+/// One element's fade: `start` and `end` as morph progress (0 = sidebar,
+/// 1 = rail), and the scale it grows from and to over the same window.
 struct MorphFadeWindow: Equatable {
-    var start: TimeInterval
-    var end: TimeInterval
+    var start: CGFloat
+    var end: CGFloat
     var scaleFrom: CGFloat = 1
     var scaleTo: CGFloat = 1
-    var duration: TimeInterval { end - start }
 }
 
 /// The expand cascade's order (keyframe spec, defect 3): one index running
@@ -727,7 +712,7 @@ struct MorphFadeWindow: Equatable {
 enum SidebarLabelCascade {
     /// Each section's header index and its rows' indices, from `start`
     /// (the labels above the first section). Uncapped:
-    /// `WorkspaceLayout.expandLabelDelay` caps the delay.
+    /// `WorkspaceLayout.morphFadeWindow` caps the step.
     static func indices(rowsPerSection: [Int], start: Int = 0) -> [(header: Int, rows: [Int])] {
         var next = start
         return rowsPerSection.map { count in

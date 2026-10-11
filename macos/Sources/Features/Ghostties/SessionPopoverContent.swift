@@ -11,12 +11,6 @@ import Foundation
 /// `ClaudeState`. Anything else, or a permission state older than
 /// `ClaudeStateStore.staleInterval`, yields no approval block.
 struct SessionPopoverContent: Equatable {
-    /// The rail shows ghosts only, so its card names the session.
-    struct NameLine: Equatable {
-        let name: String
-        let project: String?
-    }
-
     enum Block: Equatable {
         /// Bash approval: "$ <command>" plus an optional description.
         case command(command: String, description: String?)
@@ -28,8 +22,6 @@ struct SessionPopoverContent: Equatable {
     }
 
     let sessionId: UUID
-    /// Non-nil only in rail mode.
-    let nameLine: NameLine?
     let block: Block
 
     var isApproval: Bool {
@@ -41,20 +33,15 @@ struct SessionPopoverContent: Equatable {
 
     static func make(
         sessionId: UUID,
-        name: String,
-        project: String?,
-        showsName: Bool,
         indicator: SessionIndicatorState,
         approval: ClaudeState?,
         summary: SessionSummary? = nil,
         now: Date = Date()
     ) -> SessionPopoverContent? {
-        let nameLine = showsName ? NameLine(name: name, project: project) : nil
-
         if let approval, isFreshApproval(approval, now: now) {
             guard let prompt = approval.structuredPrompt,
                   let block = approvalBlock(toolName: prompt.toolName, input: prompt.toolInput) else { return nil }
-            return SessionPopoverContent(sessionId: sessionId, nameLine: nameLine, block: block)
+            return SessionPopoverContent(sessionId: sessionId, block: block)
         }
 
         switch indicator {
@@ -62,7 +49,7 @@ struct SessionPopoverContent: Equatable {
             guard let summary, let prompt = summary.prompt, !summary.isDone,
                   now.timeIntervalSince(summary.updatedAt) <= ClaudeStateStore.staleInterval else { return nil }
             return SessionPopoverContent(
-                sessionId: sessionId, nameLine: nameLine,
+                sessionId: sessionId,
                 block: .running(prompt: prompt, step: summary.currentStep)
             )
         default:
