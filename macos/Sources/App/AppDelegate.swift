@@ -737,8 +737,8 @@ class AppDelegate: NSObject,
 
         // "Close Sidebar" — Cmd+Shift+S: full close ↔ reopen. Any visible
         // mode (pinned/collapsed/overlay) goes to `.closed`; `.closed`
-        // reopens to `.pinned`. The hot-zone reveal from `.closed` is
-        // unaffected.
+        // reopens to `.pinned`. Reopening a closed sidebar is
+        // keyboard / menu only; there is no edge hot zone.
         let sidebarCloseItem = NSMenuItem(
             title: "Close Sidebar",
             action: #selector(TerminalController.toggleWorkspaceSidebarFullyClosed(_:)),

@@ -8,7 +8,7 @@ Source of truth: pen.dev frame `mkJau` in `~/.pencil/documents/edff08ac-9284-4e0
 |---|---|---|---|---|---|
 | 01 | Expanded | 244pt, pinned | in sidebar top | inset card | `state-01-expanded-244.png` |
 | 02 | Collapsed | 72pt rail | in sidebar top | inset card | `state-02-collapsed-72.png` |
-| 03 | Closed | 0pt + 24pt hot zone | hidden | full bleed, no chrome | `state-03-closed-0.png` |
+| 03 | Closed | 0pt, no hot zone | hidden | full bleed, no chrome | `state-03-closed-0.png` |
 | 04 | Revealed | 244pt opaque overlay | in overlay top | full bleed underneath | `state-04-revealed.png` |
 
 ## What actually changes in code
@@ -17,7 +17,7 @@ Grounded in `macos/Sources/Features/Ghostties/`. Verify each before building —
 
 - **`SidebarMode` gains a fourth case** (`WorkspaceLayout.swift:10`). Today: `pinned / closed / overlay`. The 72pt rail is new. It is `Codable` by `Int` raw value and persisted in `WorkspaceStore`, so **append `case collapsed = 3`** — do not renumber.
 - **`sidebarWidth` 220 → 244**, and add `sidebarRailWidth: CGFloat = 72` (`WorkspaceLayout.swift:19`). `sidebarMinWidth`/`sidebarMaxWidth` (180/480) still govern drag in expanded mode only; the rail is not drag-resizable.
-- **`overlayTriggerWidth` 10 → 24** (`WorkspaceLayout.swift:116`, used at `WorkspaceViewContainer.swift:1436`). The hot zone is invisible in the app — the `#ffffff08` fill on the canvas is a diagram device only.
+- **`overlayTriggerWidth` removed (2026-10-11).** The 24pt closed-state hot zone this once widened is gone; closed has no hover affordance.
 - **The reveal overlay goes opaque.** The sidebar today sits on an `NSVisualEffectView` with material `.sidebar`, blending `.behindWindow` (`WorkspaceViewContainer.swift:74-79`). State 04 is a hard-edged opaque panel — no background blur. This supersedes DESIGN.md §4 "Overlay sidebar".
 - **The bottom tray is new.** `WorkspaceSidebarView.swift` has no footer today — no New Session, toggle or account row below the list. All three are new construction in both expanded and rail form.
 - **Traffic lights already behave correctly** for closed (`setTrafficLightsHidden(sidebarMode == .closed)`, `WorkspaceViewContainer.swift:545`). Rail and overlay must keep showing them.
@@ -52,7 +52,7 @@ Grounded in `macos/Sources/Features/Ghostties/`. Verify each before building —
 
 ### 03 — Closed, 0pt
 - No chrome at all: no header, no band, no floating buttons, no traffic lights. Terminal is full bleed at radius 18.
-- A 24pt invisible hot zone on the window's left edge is the only affordance.
+- No hot zone (decided 2026-10-11, reverses the earlier 24pt edge strip): a closed sidebar stays closed. Reopening is keyboard only (Cmd+S / Cmd+Shift+S, View menu).
 
 ### 04 — Revealed
 - 244pt opaque panel, fill `#1c1c1c`, radius 18, inset 4pt from the window edges, 1pt stroke `#00000026`.
@@ -62,7 +62,7 @@ Grounded in `macos/Sources/Features/Ghostties/`. Verify each before building —
 
 ## Decisions for Sean
 
-1. **How do you reach the rail?** Nothing on the canvas says. Recommended: toggle cycles `pinned → collapsed → closed → pinned`, so one control walks all three persistent widths and the hot zone stays the only way back from closed.
+1. **How do you reach the rail?** Nothing on the canvas says. Recommended: toggle cycles `pinned → collapsed → closed → pinned`, so one control walks all three persistent widths. Reopening from closed is keyboard only (Cmd+Shift+S, View menu) — there is no hot zone (decided 2026-10-11).
 2. **Does the rail get its own hover-reveal?** Recommended no — reveal at 244 from any non-pinned state, so there is one reveal, not two.
 3. **DESIGN.md §5 conflicts with this canvas.** §5 allows only `4, 8, 12, 16, 24, 32, 48, 64`; the sidebar internals here use 2, 6, 10, 14, 34, 42. Recommended: amend §5 to admit a 2pt sub-scale for sidebar internals and record 244/72/24 as tokens — the canvas is the newer decision and the rows were tuned to it.
 4. **Is there an account entity?** The footer shows "Sean Smith" with an initial avatar; nothing in the sidebar sources reads a user today. If there is no account model, this row is a settings/profile affordance and needs a destination.
